@@ -1,31 +1,31 @@
 # Tipbox Backend
 
-Bu repo, Tipbox uygulamasının Node.js, Express ve TypeScript ile yazılmış backend API'sini içerir. Mimari olarak Domain-Driven Design (DDD) ve Modular Monolith yaklaşımı benimsenmiştir.
+This repository contains the backend API for the Tipbox application, built with Node.js, Express, and TypeScript. The architecture follows Domain-Driven Design (DDD) and Modular Monolith principles.
 
-## Başlangıç
+## Getting Started
 
-### Gereksinimler
-- Node.js (18+ önerilir)
+### Requirements
+- Node.js (18+ recommended)
 - PostgreSQL
 
-### Kurulum
+### Installation
 
 ```bash
 npm install
 cp .env.example .env
-# .env dosyasını doldurun
+# Fill in the .env file
 npx prisma migrate dev --name init
 npm run dev
 ```
 
-### Scriptler
-- `npm run dev` — Geliştirme sunucusu (nodemon ile)
-- `npm run build` — TypeScript derlemesi
-- `npm run start` — Derlenmiş kodu başlatır
-- `npm run lint` — ESLint ile kodu kontrol eder
-- `npm run format` — Prettier ile kodu formatlar
+### Scripts
+- `npm run dev` — Development server (with nodemon)
+- `npm run build` — TypeScript build
+- `npm run start` — Runs the compiled code
+- `npm run lint` — Checks code with ESLint
+- `npm run format` — Formats code with Prettier
 
-## Dizin Yapısı
+## Directory Structure
 
 ```
 src/
@@ -35,6 +35,6 @@ src/
   interfaces/
 ```
 
-## Katkı
+## Contribution
 
-PR'lar ve katkılar memnuniyetle karşılanır!
+Pull requests and contributions are welcome!
