@@ -1,0 +1,9 @@
+# Ortam dosyası örneği
+# Geliştirme için Docker PostgreSQL
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/tipbox_dev
+# Test için Supabase
+# DATABASE_URL=postgresql://supabase_user:supabase_pass@db.supabase.co:5432/tipbox_test
+# Prod için AWS RDS
+# DATABASE_URL=postgresql://aws_user:aws_pass@rds.amazonaws.com:5432/tipbox_prod
+PORT=3000
+NODE_ENV=development 
