@@ -1,0 +1,26 @@
+# Prisma & Migration Rules
+
+- All database schema changes must be defined only in the `prisma/schema.prisma` file.
+- Migrations must be created exclusively using the Prisma CLI; never edit migration files manually.
+- Both migration files and `schema.prisma` must be tracked in git.
+- Never make manual changes directly in the database.
+- Every schema change (new table, field, modification, or removal) must be followed by a migration, and all team members must apply migrations locally.
+- Domain models and Prisma models do not have to be identical; use a mapping layer if needed.
+- Use the Repository Pattern to separate domain and persistence layers.
+- For production, always use `npx prisma migrate deploy` to apply migrations.
+- Migration names should be descriptive and atomic (e.g., `add-user-profile`, `add-tip-entity`).
+- Test all migrations in a development environment before deploying to production.
+
+---
+
+**Workflow Example:**
+1. Design or update your domain model (e.g., in `src/domain/`).
+2. Reflect changes in `prisma/schema.prisma`.
+3. Run `npx prisma migrate dev --name <descriptive-name>` to generate and apply a migration.
+4. Commit both the migration and schema changes.
+5. All team members run `npx prisma migrate dev` to stay in sync.
+6. For production, use `npx prisma migrate deploy`.
+
+---
+
+> This document is the single source of truth for database and migration management in this project. All contributors must follow these rules to ensure consistency, reliability, and maintainability. 

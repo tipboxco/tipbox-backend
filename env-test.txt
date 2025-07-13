@@ -1,3 +1,0 @@
-DATABASE_URL=postgresql://supabase_user:supabase_pass@db.supabase.co:5432/tipbox_test
-PORT=3001
-NODE_ENV=test 

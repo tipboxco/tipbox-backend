@@ -15,9 +15,18 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  name      String
-  email     String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            Int        @id @default(autoincrement())
+  email         String?    @unique
+  name          String?
+  auth0Id       String?    @unique
+  walletAddress String?    @unique
+  kycStatus     KycStatus @default(PENDING)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+enum KycStatus {
+  PENDING
+  VERIFIED
+  REJECTED
 }
