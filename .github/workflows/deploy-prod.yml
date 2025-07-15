@@ -1,0 +1,35 @@
+# Prod ortamı için Elastic Beanstalk deploy workflow'u
+# Bu workflow, 'prod' branch'ine push olduğunda tetiklenir ve AWS Elastic Beanstalk'a deploy eder.
+
+name: Deploy to AWS Elastic Beanstalk (Prod)
+
+on:
+  push:
+    branches:
+      - prod
+
+jobs:
+  deploy:
+    name: Deploy to Elastic Beanstalk Prod
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Repo'yu checkout et
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Projeyi zip'le (node_modules, .git, vs. hariç)
+      - name: Zip project files
+        run: |
+          zip -r deploy.zip . -x "node_modules/*" ".git/*" ".github/*" "logs/*" "*.log" "*.md"
+
+      # 3. Elastic Beanstalk'a deploy et
+      - name: Deploy to Elastic Beanstalk
+        uses: einaregilsson/beanstalk-deploy@v21
+        with:
+          aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
+          aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
+          application_name: tipbox-backend-prod
+          environment_name: tipbox-backend-prod-env
+          region: eu-central-1
+          version_label: ${{ github.sha }}
+          deployment_package: deploy.zip 
