@@ -18,12 +18,26 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Projeyi zip'le (node_modules, .git, vs. hariç)
+      # 2. Node.js'i kur
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # 3. Bağımlılıkları yükle
+      - name: Install dependencies
+        run: npm ci
+
+      # 4. Projeyi build et
+      - name: Build project
+        run: npm run build
+
+      # 5. Projeyi zip'le (sadece gerekli dosyalar)
       - name: Zip project files
         run: |
-          zip -r deploy.zip . -x "node_modules/*" ".git/*" ".github/*" "logs/*" "*.log" "*.md"
+          zip -r deploy.zip dist node_modules package.json package-lock.json .env.production
 
-      # 3. Elastic Beanstalk'a deploy et
+      # 6. Elastic Beanstalk'a deploy et
       - name: Deploy to Elastic Beanstalk
         uses: einaregilsson/beanstalk-deploy@v21
         with:
