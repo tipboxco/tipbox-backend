@@ -28,6 +28,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # 3.5. Prisma Client'ı generate et
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
       # 4. Projeyi build et
       - name: Build project
         run: npm run build
@@ -35,7 +39,7 @@ jobs:
       # 5. Projeyi zip'le (sadece gerekli dosyalar)
       - name: Zip project files
         run: |
-          zip -r deploy.zip dist node_modules package.json package-lock.json .env.production
+          zip -r deploy.zip dist node_modules package.json package-lock.json src/generated .env.production
 
       # 6. Elastic Beanstalk'a deploy et
       - name: Deploy to Elastic Beanstalk
