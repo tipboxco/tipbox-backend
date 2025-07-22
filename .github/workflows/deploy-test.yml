@@ -48,7 +48,7 @@ jobs:
           aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID_TEST }}
           aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY_TEST }}
           application_name: tipbox-backend-test
-          environment_name: tipbox-backend-test-env
+          environment_name: app-backend-test-env
           region: eu-central-1
           version_label: ${{ github.sha }}
           deployment_package: deploy.zip 
