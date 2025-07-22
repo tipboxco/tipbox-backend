@@ -29,7 +29,7 @@ jobs:
           aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
           aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
           application_name: tipbox-backend-prod
-          environment_name: tipbox-backend-prod-env
+          environment_name: app-backend-prod-env
           region: eu-central-1
           version_label: ${{ github.sha }}
           deployment_package: deploy.zip 

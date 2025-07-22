@@ -1,13 +1,29 @@
   # Test ortamı için Elastic Beanstalk deploy workflow'u
   # Bu workflow, 'test' branch'ine push olduğunda tetiklenir ve AWS Elastic Beanstalk'a deploy eder.
+  # Test ortamı için Elastic Beanstalk deploy workflow'u
+  # Bu workflow, 'test' branch'ine push olduğunda tetiklenir ve AWS Elastic Beanstalk'a deploy eder.
 
+  name: Deploy to AWS Elastic Beanstalk (Test)
   name: Deploy to AWS Elastic Beanstalk (Test)
 
   on:
     push:
       branches:
         - test
+  on:
+    push:
+      branches:
+        - test
 
+  jobs:
+    deploy:
+      name: Deploy to Elastic Beanstalk Test
+      runs-on: ubuntu-latest
+      environment: test
+      steps:
+        # 1. Repo'yu checkout et
+        - name: Checkout repository
+          uses: actions/checkout@v4
   jobs:
     deploy:
       name: Deploy to Elastic Beanstalk Test
@@ -23,7 +39,15 @@
           uses: actions/setup-node@v4
           with:
             node-version: '20'
+        # 2. Node.js'i kur
+        - name: Set up Node.js
+          uses: actions/setup-node@v4
+          with:
+            node-version: '20'
 
+        # 3. Bağımlılıkları yükle
+        - name: Install dependencies
+          run: npm ci
         # 3. Bağımlılıkları yükle
         - name: Install dependencies
           run: npm ci
@@ -31,11 +55,21 @@
         # 3.5. Prisma Client'ı generate et
         - name: Generate Prisma Client
           run: npx prisma generate
+        # 3.5. Prisma Client'ı generate et
+        - name: Generate Prisma Client
+          run: npx prisma generate
 
         # 4. Projeyi build et
         - name: Build project
           run: npm run build
+        # 4. Projeyi build et
+        - name: Build project
+          run: npm run build
 
+        # 5. Projeyi zip'le (sadece gerekli dosyalar)
+        - name: Zip project files
+          run: |
+            zip -r deploy.zip dist node_modules package.json package-lock.json .env.production
         # 5. Projeyi zip'le (sadece gerekli dosyalar)
         - name: Zip project files
           run: |
