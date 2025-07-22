@@ -4,26 +4,11 @@
   # Bu workflow, 'test' branch'ine push olduğunda tetiklenir ve AWS Elastic Beanstalk'a deploy eder.
 
   name: Deploy to AWS Elastic Beanstalk (Test)
-  name: Deploy to AWS Elastic Beanstalk (Test)
 
   on:
     push:
       branches:
         - test
-  on:
-    push:
-      branches:
-        - test
-
-  jobs:
-    deploy:
-      name: Deploy to Elastic Beanstalk Test
-      runs-on: ubuntu-latest
-      environment: test
-      steps:
-        # 1. Repo'yu checkout et
-        - name: Checkout repository
-          uses: actions/checkout@v4
   jobs:
     deploy:
       name: Deploy to Elastic Beanstalk Test
