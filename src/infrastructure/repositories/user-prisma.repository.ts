@@ -1,4 +1,4 @@
-import { PrismaClient, User as PrismaUser } from '../../generated/prisma';
+import { PrismaClient } from '@prisma/client';
 import { User } from '../../domain/user/user.entity';
 import { KycStatus } from '../../domain/user/kyc-status.enum';
 import { EmailAlreadyExistsError } from '../errors/custom-errors';
@@ -60,7 +60,7 @@ export class UserPrismaRepository {
     return users.map(this.toDomain);
   }
 
-  private toDomain(prismaUser: PrismaUser): User {
+  private toDomain(prismaUser: any): User {
     return new User(
       prismaUser.id,
       prismaUser.email,
