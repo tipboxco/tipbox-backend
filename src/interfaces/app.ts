@@ -8,6 +8,9 @@ import { requestLogger } from '../infrastructure/logger/request-logger.middlewar
 import { errorHandler } from '../infrastructure/logger/error-handler.middleware';
 import logger from '../infrastructure/logger/logger';
 
+const swaggerServerUrl =
+  process.env.SWAGGER_SERVER_URL || 'http://localhost:3000';
+
 const swaggerOptions = {
   definition: {
     openapi: '3.0.0',
@@ -17,9 +20,8 @@ const swaggerOptions = {
       description: 'Tipbox servisleri için API dokümantasyonu',
     },
     servers: [
-      {
-        url: 'http://localhost:3000',
-      },
+      { url: 'http://localhost:3000', description: 'Local' },
+      { url: 'http://app-backend-test-env.eba-iyvqk4cj.eu-central-1.elasticbeanstalk.com', description: 'Test' }
     ],
     components: {
       securitySchemes: {
@@ -32,7 +34,10 @@ const swaggerOptions = {
     },
     security: [{ bearerAuth: [] }],
   },
-  apis: ['./src/interfaces/**/*.ts'], // Router ve controller dosyalarını otomatik tarar
+  apis: [
+    './src/interfaces/**/*.ts', // local geliştirme için
+    './dist/interfaces/**/*.js' // test için
+  ],
 };
 
 const swaggerSpec = swaggerJSDoc(swaggerOptions);
