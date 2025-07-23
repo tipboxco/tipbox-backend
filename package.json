@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "nodemon src/index.ts",
     "build": "tsc",
-    "start": "node dist/interfaces/server.js",
+    "start:prod": "dotenv -e .env.production -- node dist/interfaces/server.js",
+    "start:test": "dotenv -e .env.test -- node dist/interfaces/server.js",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -29,7 +30,9 @@
     "@types/node": "^24.0.10",
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "^4.1.8",
+    "@types/uuid": "^10.0.0",
     "cross-env": "^7.0.3",
+    "dotenv-cli": "^9.0.0",
     "eslint": "^9.30.1",
     "eslint-plugin-react": "^7.37.5",
     "globals": "^16.3.0",
@@ -43,7 +46,7 @@
     "typescript-eslint": "^8.36.0"
   },
   "dependencies": {
-    "@prisma/client": "^6.11.1",
+    "@prisma/client": "^6.12.0",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^17.1.0",
