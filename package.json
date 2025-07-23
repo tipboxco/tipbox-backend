@@ -6,11 +6,13 @@
   "scripts": {
     "dev": "nodemon src/index.ts",
     "build": "tsc",
+    "start": "npm run start:test",
     "start:prod": "dotenv -e .env.production -- node dist/interfaces/server.js",
     "start:test": "dotenv -e .env.test -- node dist/interfaces/server.js",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "postinstall": "npm run build"
   },
   "repository": {
     "type": "git",
