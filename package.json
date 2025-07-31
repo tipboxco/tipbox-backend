@@ -4,9 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "nodemon src/index.ts",
+    "dev": "nodemon",
     "build": "tsc",
-    "start": "npm run start:test",
+    "start": "dotenv -e .env -- node dist/interfaces/server.js",
     "start:prod": "dotenv -e .env.production -- node dist/interfaces/server.js",
     "start:test": "dotenv -e .env.test -- node dist/interfaces/server.js",
     "lint": "eslint . --ext .ts,.tsx",

@@ -9,8 +9,9 @@ import { requestLogger } from '../infrastructure/logger/request-logger.middlewar
 import { errorHandler } from '../infrastructure/logger/error-handler.middleware';
 import logger from '../infrastructure/logger/logger';
 
+const PORT = process.env.PORT || 3000;
 const swaggerServerUrl =
-  process.env.SWAGGER_SERVER_URL || 'http://localhost:3000';
+  process.env.SWAGGER_SERVER_URL || `http://localhost:${PORT}`;
 
 const swaggerOptions = {
   definition: {
@@ -21,7 +22,7 @@ const swaggerOptions = {
       description: 'Tipbox servisleri için API dokümantasyonu',
     },
     servers: [
-      { url: 'http://localhost:3000', description: 'Local' },
+      { url: `http://localhost:${PORT}`, description: 'Local' },
       { url: 'http://app-backend-test-env.eba-iyvqk4cj.eu-central-1.elasticbeanstalk.com', description: 'Test' }
     ],
     components: {
@@ -49,7 +50,6 @@ const app = express();
 const corsOptions = {
   origin: process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : [
     'http://localhost:3000',
-    'http://localhost:3001',
     'http://app-backend-test-env.eba-iyvqk4cj.eu-central-1.elasticbeanstalk.com'
   ],
   credentials: true,
