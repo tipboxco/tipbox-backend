@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import userRouter from './user/user.router';
 import authRouter from './auth/auth.router';
+import walletRouter from './wallet/wallet.router';
 import { authMiddleware } from './auth/auth.middleware';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJSDoc from 'swagger-jsdoc';
@@ -65,6 +66,7 @@ app.use(requestLogger);
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use('/auth', authRouter);
 app.use('/users', authMiddleware, userRouter);
+app.use('/wallets', authMiddleware, walletRouter);
 
 // Error handler middleware (en sona eklenmeli)
 app.use(errorHandler);

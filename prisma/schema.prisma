@@ -13,19 +13,1659 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ===== USER RELATED MODELS =====
+
 model User {
-  id            Int        @id @default(autoincrement())
-  email         String?    @unique
-  name          String?
-  auth0Id       String?    @unique
-  walletAddress String?    @unique
-  kycStatus     KycStatus @default(PENDING)
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  id           Int      @id @default(autoincrement())
+  email        String?  @unique
+  passwordHash String?  @map("password_hash")
+  status       String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  profile              Profile?
+  settings             UserSettings?
+  trustRelationsAsTarget TrustRelation[] @relation("TrusterRelation")
+  trustRelationsAsTrusted TrustRelation[] @relation("TrustedUserRelation")
+  trustScores          UserTrustScore[]
+  roles                UserRole[]
+  feedPreferences      UserFeedPreferences?
+  avatars              UserAvatar[]
+  titles               UserTitle[]
+  collections          UserCollection[]
+  loginAttempts        LoginAttempt[]
+  passwordResetTokens  PasswordResetToken[]
+  productSuggestions   ProductSuggestion[]
+  reviewedSuggestions  ProductSuggestion[] @relation("ProductSuggestionReviewer")
+  inventories          Inventory[]
+  contentPosts         ContentPost[]
+  contentComments      ContentComment[]
+  contentLikes         ContentLike[]
+  contentFavorites     ContentFavorite[]
+  contentCollections   ContentCollection[]
+  contentRatings       ContentRating[]
+  contentCommentVotes  ContentCommentVote[]
+  contentPostViews     ContentPostView[]
+  userBadges           UserBadge[]
+  userAchievements     UserAchievement[]
+  rewardClaims         RewardClaim[]
+  bridgePosts          BridgePost[]
+  brandSurveyAnswers   BrandSurveyAnswer[]
+  bridgeFollowers      BridgeFollower[]
+  bridgeUserStats      BridgeUserStats[]
+  bridgeLeaderboards   BridgeLeaderboard[]
+  bridgeRewards        BridgeReward[]
+  wallets              Wallet[]
+  sentTips             TipsTokenTransfer[] @relation("SentTips")
+  receivedTips         TipsTokenTransfer[] @relation("ReceivedTips")
+  nftTransactionsSent  NFTTransaction[] @relation("NFTSender")
+  nftTransactionsReceived NFTTransaction[] @relation("NFTReceiver")
+  nftMarketListings    NFTMarketListing[]
+  lootboxes            Lootbox[]
+  nftClaims            NFTClaim[]
+  scenarioChoices      ScenarioChoice[]
+  choiceComments       ChoiceComment[]
+  wishboxStats         WishboxStats[]
+  wishboxRewards       WishboxReward[]
+  dmThreadsAsUserOne   DMThread[] @relation("DMThreadUserOne")
+  dmThreadsAsUserTwo   DMThread[] @relation("DMThreadUserTwo")
+  dmMessages           DMMessage[]
+  dmRequestsSent       DMRequest[] @relation("DMRequestSender")
+  dmRequestsReceived   DMRequest[] @relation("DMRequestReceiver")
+  dmSupportSessions    DMSupportSession[]
+  feeds                Feed[]
+  adminLogs            AdminLog[]
+  moderatorActions     ModerationAction[] @relation("ModeratorActions")
+  moderatedActions     ModerationAction[] @relation("ModeratedActions")
+  manualReviewFlags    ManualReviewFlag[]
+  userKycRecords       UserKycRecord[]
+
+  @@map("users")
 }
 
-enum KycStatus {
+model Profile {
+  id          Int       @id @default(autoincrement())
+  userId      Int       @unique @map("user_id")
+  displayName String?   @map("display_name")
+  bio         String?
+  country     String?
+  birthDate   DateTime? @map("birth_date") @db.Date
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+model UserSettings {
+  id                   Int                @id @default(autoincrement())
+  userId               Int                @unique @map("user_id")
+  themeId              Int?               @map("theme_id")
+  receiveNotifications Boolean?           @map("receive_notifications")
+  visibility           UserVisibility?
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+
+  // Relations
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  theme UserTheme? @relation(fields: [themeId], references: [id])
+
+  @@map("user_settings")
+}
+
+model TrustRelation {
+  id            Int      @id @default(autoincrement())
+  trusterId     Int      @map("truster_id")
+  trustedUserId Int      @map("trusted_user_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  truster     User @relation("TrusterRelation", fields: [trusterId], references: [id], onDelete: Cascade)
+  trustedUser User @relation("TrustedUserRelation", fields: [trustedUserId], references: [id], onDelete: Cascade)
+
+  @@unique([trusterId, trustedUserId])
+  @@map("trust_relations")
+}
+
+model UserTrustScore {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @map("user_id")
+  score        Float
+  reason       String?
+  calculatedAt DateTime @default(now()) @map("calculated_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_trust_scores")
+}
+
+model UserRole {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  role      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_roles")
+}
+
+model UserFeedPreferences {
+  id                     Int      @id @default(autoincrement())
+  userId                 Int      @unique @map("user_id")
+  preferredCategories    String?  @map("preferred_categories")
+  preferredContentTypes  String?  @map("preferred_content_types")
+  language               String?
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_feed_preferences")
+}
+
+model UserAvatar {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  imageUrl  String   @map("image_url")
+  isActive  Boolean  @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_avatars")
+}
+
+model UserKycRecord {
+  id                Int           @id @default(autoincrement())
+  userId            Int           @map("user_id")
+  sumsubApplicantId String        @unique @map("sumsub_applicant_id")
+  reviewStatus      KycReviewStatus @map("review_status") @default(INIT)
+  reviewResult      KycReviewResult @map("review_result") @default(NULL)
+  reviewReason      String?       @map("review_reason")
+  kycLevel          String?       @map("kyc_level")
+  provider          KycProvider   @default(SUMSUB)
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+  lastUpdatedAt     DateTime      @default(now()) @map("last_updated_at")
+  lastSyncedAt      DateTime?     @map("last_synced_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_kyc_records")
+}
+
+model UserTheme {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  userSettings UserSettings[]
+
+  @@map("user_themes")
+}
+
+model UserTitle {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  title     String
+  earnedAt  DateTime @default(now()) @map("earned_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_titles")
+}
+
+model UserCollection {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_collections")
+}
+
+model LoginAttempt {
+  id          Int               @id @default(autoincrement())
+  userId      Int?              @map("user_id")
+  ipAddress   String            @map("ip_address")
+  userAgent   String            @map("user_agent")
+  status      LoginAttemptStatus
+  attemptedAt DateTime          @default(now()) @map("attempted_at")
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("login_attempts")
+}
+
+model PasswordResetToken {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  token     String   @unique
+  isUsed    Boolean  @default(false) @map("is_used")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
+}
+
+// ===== ENUMS =====
+
+enum KycReviewStatus {
+  INIT
   PENDING
-  VERIFIED
+  COMPLETED
+  DECLINED
+  ON_HOLD
+
+  @@map("kyc_review_status")
+}
+
+enum KycReviewResult {
+  NULL
+  GREEN
+  YELLOW
+  RED
+
+  @@map("kyc_review_result")
+}
+
+enum KycProvider {
+  SUMSUB
+
+  @@map("kyc_provider")
+}
+
+enum UserVisibility {
+  PUBLIC
+  PRIVATE
+  FRIENDS_ONLY
+
+  @@map("user_visibility")
+}
+
+enum LoginAttemptStatus {
+  SUCCESS
+  FAILED  
+  LOCKED
+
+  @@map("login_attempt_status")
+}
+
+// ===== CATEGORY & PRODUCT MODELS =====
+
+model MainCategory {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  subCategories SubCategory[]
+  contentPosts  ContentPost[]
+
+  @@map("main_categories")
+}
+
+model SubCategory {
+  id             Int      @id @default(autoincrement())
+  mainCategoryId Int      @map("main_category_id")
+  name           String
+  description    String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  mainCategory  MainCategory  @relation(fields: [mainCategoryId], references: [id], onDelete: Cascade)
+  productGroups ProductGroup[]
+  contentPosts  ContentPost[]
+
+  @@map("sub_categories")
+}
+
+model ProductGroup {
+  id            Int      @id @default(autoincrement())
+  subCategoryId Int      @map("sub_category_id")
+  name          String
+  description   String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  subCategory SubCategory @relation(fields: [subCategoryId], references: [id], onDelete: Cascade)
+  products    Product[]
+  contentPosts ContentPost[]
+
+  @@map("product_groups")
+}
+
+model Product {
+  id          Int      @id @default(autoincrement())
+  name        String
+  brand       String?
+  description String?
+  groupId     Int?     @map("group_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  group                ProductGroup? @relation(fields: [groupId], references: [id])
+  inventories          Inventory[]
+  contentPosts         ContentPost[]
+  questionPosts        PostQuestion[]
+  comparisonProduct1   PostComparison[] @relation("ComparisonProduct1")
+  comparisonProduct2   PostComparison[] @relation("ComparisonProduct2")
+
+  @@map("products")
+}
+
+model ProductSuggestion {
+  id            Int                        @id @default(autoincrement())
+  userId        Int                        @map("user_id")
+  suggestedName String                     @map("suggested_name")
+  suggestedBrand String?                   @map("suggested_brand")
+  description   String?
+  reason        String?
+  status        ProductSuggestionStatus    @default(PENDING)
+  createdAt     DateTime                   @default(now()) @map("created_at")
+  updatedAt     DateTime                   @updatedAt @map("updated_at")
+  reviewedAt    DateTime?                  @map("reviewed_at")
+  reviewedBy    Int?                       @map("reviewed_by")
+
+  // Relations
+  user     User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewer User? @relation("ProductSuggestionReviewer", fields: [reviewedBy], references: [id])
+
+  @@map("product_suggestions")
+}
+
+// ===== UPDATED ENUMS =====
+
+enum ProductSuggestionStatus {
+  PENDING
+  APPROVED
   REJECTED
+
+  @@map("product_suggestion_status")
+}
+
+// ===== INVENTORY SYSTEM MODELS =====
+
+model Inventory {
+  id                Int      @id @default(autoincrement())
+  userId            Int      @map("user_id")
+  productId         Int      @map("product_id")
+  hasOwned          Boolean  @map("has_owned")
+  experienceSummary String?  @map("experience_summary")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product            Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productExperiences ProductExperience[]
+  media              InventoryMedia[]
+
+  @@unique([userId, productId])
+  @@map("inventories")
+}
+
+model ProductExperience {
+  id             Int      @id @default(autoincrement())
+  inventoryId    Int      @map("inventory_id")
+  title          String
+  experienceText String   @map("experience_text")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  inventory Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+
+  @@map("product_experiences")
+}
+
+model InventoryMedia {
+  id          Int              @id @default(autoincrement())
+  inventoryId Int              @map("inventory_id")
+  mediaUrl    String           @map("media_url")
+  type        InventoryMediaType
+  uploadedAt  DateTime         @default(now()) @map("uploaded_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  inventory Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+
+  @@map("inventory_media")
+}
+
+// ===== UPDATED ENUMS =====
+
+enum InventoryMediaType {
+  IMAGE
+  VIDEO
+
+  @@map("inventory_media_type")
+}
+
+// ===== CONTENT SYSTEM MODELS =====
+
+model ContentPost {
+  id               Int             @id @default(autoincrement())
+  userId           Int             @map("user_id")
+  type             ContentPostType
+  title            String
+  body             String
+  mainCategoryId   Int?            @map("main_category_id")
+  subCategoryId    Int?            @map("sub_category_id")
+  productGroupId   Int?            @map("product_group_id")
+  productId        Int?            @map("product_id")
+  inventoryRequired Boolean        @map("inventory_required")
+  isBoosted        Boolean         @map("is_boosted")
+  boostedUntil     DateTime?       @map("boosted_until")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  // Relations
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mainCategory  MainCategory?    @relation(fields: [mainCategoryId], references: [id])
+  subCategory   SubCategory?     @relation(fields: [subCategoryId], references: [id])
+  productGroup  ProductGroup?    @relation(fields: [productGroupId], references: [id])
+  product       Product?         @relation(fields: [productId], references: [id])
+  question            PostQuestion?
+  comparison          PostComparison?
+  tip                 PostTip?
+  tags                PostTag[]
+  comments            ContentComment[]
+  likes               ContentLike[]
+  favorites           ContentFavorite[]
+  views               ContentPostView[]
+  topCommunityChoices TopCommunityChoice[]
+  feeds               Feed[]
+  feedHighlights      FeedHighlight[]
+  trendingPosts       TrendingPost[]
+  contentPostTags     ContentPostTag[]
+
+  @@map("content_posts")
+}
+
+model PostQuestion {
+  id                   Int                    @id @default(autoincrement())
+  postId               Int                    @unique @map("post_id")
+  expectedAnswerFormat QuestionAnswerFormat   @map("expected_answer_format")
+  relatedProductId     Int?                   @map("related_product_id")
+  createdAt            DateTime               @default(now()) @map("created_at")
+  updatedAt            DateTime               @updatedAt @map("updated_at")
+
+  // Relations
+  post           ContentPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  relatedProduct Product?    @relation(fields: [relatedProductId], references: [id])
+
+  @@map("post_questions")
+}
+
+model PostComparison {
+  id                Int      @id @default(autoincrement())
+  postId            Int      @unique @map("post_id")
+  product1Id        Int      @map("product_1_id")
+  product2Id        Int      @map("product_2_id")
+  comparisonSummary String?  @map("comparison_summary")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  post     ContentPost              @relation(fields: [postId], references: [id], onDelete: Cascade)
+  product1 Product                  @relation("ComparisonProduct1", fields: [product1Id], references: [id])
+  product2 Product                  @relation("ComparisonProduct2", fields: [product2Id], references: [id])
+  scores   PostComparisonScore[]
+
+  @@map("post_comparisons")
+}
+
+model ComparisonMetric {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  comparisonScores PostComparisonScore[]
+
+  @@map("comparison_metrics")
+}
+
+model PostComparisonScore {
+  id           Int      @id @default(autoincrement())
+  comparisonId Int      @map("comparison_id")
+  metricId     Int      @map("metric_id")
+  scoreProduct1 Int     @map("score_product_1")
+  scoreProduct2 Int     @map("score_product_2")
+  comment      String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  comparison PostComparison   @relation(fields: [comparisonId], references: [id], onDelete: Cascade)
+  metric     ComparisonMetric @relation(fields: [metricId], references: [id])
+
+  @@unique([comparisonId, metricId])
+  @@map("post_comparison_scores")
+}
+
+model PostTip {
+  id          Int         @id @default(autoincrement())
+  postId      Int         @unique @map("post_id")
+  tipCategory TipCategory @map("tip_category")
+  isVerified  Boolean     @map("is_verified")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  post ContentPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@map("post_tips")
+}
+
+model PostTag {
+  id        Int      @id @default(autoincrement())
+  postId    Int      @map("post_id")
+  tag       String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  post ContentPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@map("post_tags")
+}
+
+model ContentPostTag {
+  id        Int      @id @default(autoincrement())
+  postId    Int      @map("post_id")
+  tag       String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  post ContentPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@map("content_post_tags")
+}
+
+// ===== UPDATED ENUMS =====
+
+enum ContentPostType {
+  FREE
+  TIPS
+  COMPARE
+  QUESTION
+
+  @@map("content_post_type")
+}
+
+enum QuestionAnswerFormat {
+  SHORT
+  LONG
+  POLL
+  CHOICE
+
+  @@map("question_answer_format")
+}
+
+enum TipCategory {
+  USAGE
+  PURCHASE
+  CARE
+  OTHER
+
+  @@map("tip_category")
+}
+
+// ===== CONTENT INTERACTION MODELS =====
+
+model ContentComment {
+  id        Int      @id @default(autoincrement())
+  postId    Int      @map("post_id")
+  userId    Int      @map("user_id")
+  parentId  Int?     @map("parent_id")
+  comment   String
+  isAnswer  Boolean  @map("is_answer")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  post     ContentPost      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent   ContentComment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies  ContentComment[] @relation("CommentReplies")
+  likes    ContentLike[]
+  votes    ContentCommentVote[]
+  ratings  ContentRating[]
+
+  @@map("content_comments")
+}
+
+model ContentLike {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  postId    Int?     @map("post_id")
+  commentId Int?     @map("comment_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post    ContentPost?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment ContentComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@unique([userId, commentId])
+  @@map("content_likes")
+}
+
+model ContentFavorite {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  postId    Int      @map("post_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post ContentPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@map("content_favorites")
+}
+
+model ContentCollection {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("content_collections")
+}
+
+model ContentRating {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  commentId Int      @map("comment_id")
+  rating    Int
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment ContentComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, commentId])
+  @@map("content_ratings")
+}
+
+model ContentCommentVote {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  commentId Int      @map("comment_id")
+  voteType  VoteType @map("vote_type")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment ContentComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, commentId])
+  @@map("content_comment_votes")
+}
+
+model ContentPostView {
+  id        Int      @id @default(autoincrement())
+  postId    Int      @map("post_id")
+  userId    Int?     @map("user_id")
+  viewedAt  DateTime @default(now()) @map("viewed_at")
+  viewerIp  String   @map("viewer_ip")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  post ContentPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("content_post_views")
+}
+
+model TopCommunityChoice {
+  id         Int      @id @default(autoincrement())
+  postId     Int      @map("post_id")
+  reason     String?
+  badgeLabel String   @map("badge_label")
+  awardedAt  DateTime @default(now()) @map("awarded_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  post ContentPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@map("top_community_choices")
+}
+
+// ===== UPDATED ENUMS =====
+
+enum VoteType {
+  UPVOTE
+  DOWNVOTE
+
+  @@map("vote_type")
+}
+
+// ===== BADGE & ACHIEVEMENT SYSTEM MODELS =====
+
+model Badge {
+  id              Int              @id @default(autoincrement())
+  name            String
+  description     String?
+  imageUrl        String?          @map("image_url")
+  type            BadgeType
+  rarity          BadgeRarity
+  boostMultiplier Float?           @map("boost_multiplier")
+  rewardMultiplier Float?          @map("reward_multiplier")
+  categoryId      Int              @map("category_id")
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  // Relations
+  category      BadgeCategory     @relation(fields: [categoryId], references: [id])
+  userBadges    UserBadge[]
+  achievementGoals AchievementGoal[]
+  rewardClaims  RewardClaim[]
+  bridgeRewards BridgeReward[]
+
+  @@map("badges")
+}
+
+model BadgeCategory {
+  id          Int     @id @default(autoincrement())
+  name        String
+  description String?
+
+  // Relations
+  badges Badge[]
+
+  @@map("badge_categories")
+}
+
+model UserBadge {
+  id           Int            @id @default(autoincrement())
+  userId       Int            @map("user_id")
+  badgeId      Int            @map("badge_id")
+  isVisible    Boolean        @map("is_visible")
+  displayOrder Int?           @map("display_order")
+  visibility   BadgeVisibility
+  claimed      Boolean        @default(false)
+  claimedAt    DateTime?      @map("claimed_at")
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badgeId], references: [id])
+
+  @@unique([userId, badgeId])
+  @@map("user_badges")
+}
+
+model AchievementChain {
+  id          Int    @id @default(autoincrement())
+  name        String
+  description String?
+  category    String
+
+  // Relations
+  goals AchievementGoal[]
+
+  @@map("achievement_chains")
+}
+
+model AchievementGoal {
+  id             Int                  @id @default(autoincrement())
+  chainId        Int                  @map("chain_id")
+  title          String
+  requirement    String
+  rewardBadgeId  Int?                 @map("reward_badge_id")
+  pointsRequired Int                  @map("points_required")
+  difficulty     AchievementDifficulty
+
+  // Relations
+  chain           AchievementChain  @relation(fields: [chainId], references: [id], onDelete: Cascade)
+  rewardBadge     Badge?            @relation(fields: [rewardBadgeId], references: [id])
+  userAchievements UserAchievement[]
+
+  @@map("achievement_goals")
+}
+
+model UserAchievement {
+  id          Int       @id @default(autoincrement())
+  userId      Int       @map("user_id")
+  goalId      Int       @map("goal_id")
+  progress    Int
+  completed   Boolean   @default(false)
+  completedAt DateTime? @map("completed_at")
+
+  // Relations
+  user User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goal AchievementGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, goalId])
+  @@map("user_achievements")
+}
+
+model RewardClaim {
+  id           Int           @id @default(autoincrement())
+  userId       Int           @map("user_id")
+  badgeId      Int           @map("badge_id")
+  amount       Float
+  claimedAt    DateTime      @default(now()) @map("claimed_at")
+  vestingStatus VestingStatus @map("vesting_status")
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badgeId], references: [id])
+
+  @@map("reward_claims")
+}
+
+// ===== UPDATED ENUMS =====
+
+enum BadgeType {
+  ACHIEVEMENT
+  EVENT
+  COSMETIC
+
+  @@map("badge_type")
+}
+
+enum BadgeRarity {
+  COMMON
+  RARE
+  EPIC
+
+  @@map("badge_rarity")
+}
+
+enum BadgeVisibility {
+  PUBLIC
+  FRIENDS
+  TRUSTERS
+  PRIVATE
+
+  @@map("badge_visibility")
+}
+
+enum AchievementDifficulty {
+  EASY
+  MEDIUM
+  HARD
+
+  @@map("achievement_difficulty")
+}
+
+enum VestingStatus {
+  PENDING
+  PARTIAL
+  COMPLETED
+
+  @@map("vesting_status")
+}
+
+// ===== BRAND & BRIDGE SYSTEM MODELS =====
+
+model Brand {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  logoUrl     String?  @map("logo_url")
+  category    String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  bridgePosts      BridgePost[]
+  surveys          BrandSurvey[]
+  followers        BridgeFollower[]
+  userStats        BridgeUserStats[]
+  leaderboards     BridgeLeaderboard[]
+  rewards          BridgeReward[]
+
+  @@map("brands")
+}
+
+model BridgePost {
+  id        Int      @id @default(autoincrement())
+  brandId   Int      @map("brand_id")
+  userId    Int      @map("user_id")
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("bridge_posts")
+}
+
+model BrandSurvey {
+  id          Int      @id @default(autoincrement())
+  brandId     Int      @map("brand_id")
+  title       String
+  description String?
+  startsAt    DateTime @map("starts_at")
+  endsAt      DateTime @map("ends_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  brand     Brand                 @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  questions BrandSurveyQuestion[]
+
+  @@map("brand_surveys")
+}
+
+model BrandSurveyQuestion {
+  id           Int              @id @default(autoincrement())
+  surveyId     Int              @map("survey_id")
+  questionText String           @map("question_text")
+  type         SurveyQuestionType
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  survey  BrandSurvey           @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  answers BrandSurveyAnswer[]
+
+  @@map("brand_survey_questions")
+}
+
+model BrandSurveyAnswer {
+  id         Int      @id @default(autoincrement())
+  questionId Int      @map("question_id")
+  userId     Int      @map("user_id")
+  answerText String   @map("answer_text")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  question BrandSurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, userId])
+  @@map("brand_survey_answers")
+}
+
+model BridgeFollower {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @map("user_id")
+  brandId    Int      @map("brand_id")
+  followedAt DateTime @default(now()) @map("followed_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, brandId])
+  @@map("bridge_followers")
+}
+
+model BridgeUserStats {
+  id                   Int       @id @default(autoincrement())
+  userId               Int       @map("user_id")
+  brandId              Int       @map("brand_id")
+  commentsCount        Int       @map("comments_count")
+  surveysParticipated  Int       @map("surveys_participated")
+  trustScore           Float     @map("trust_score")
+  lastInteractionAt    DateTime? @map("last_interaction_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, brandId])
+  @@map("bridge_user_stats")
+}
+
+model BridgeLeaderboard {
+  id         Int                    @id @default(autoincrement())
+  brandId    Int                    @map("brand_id")
+  userId     Int                    @map("user_id")
+  period     LeaderboardPeriod
+  rank       Int
+  score      Float
+  recordedAt DateTime               @default(now()) @map("recorded_at")
+  createdAt  DateTime               @default(now()) @map("created_at")
+  updatedAt  DateTime               @updatedAt @map("updated_at")
+
+  // Relations
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([brandId, userId, period])
+  @@map("bridge_leaderboards")
+}
+
+model BridgeReward {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  brandId   Int      @map("brand_id")
+  badgeId   Int      @map("badge_id")
+  awardedAt DateTime @default(now()) @map("awarded_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@map("bridge_rewards")
+}
+
+// ===== UPDATED ENUMS =====
+
+enum SurveyQuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TEXT
+
+  @@map("survey_question_type")
+}
+
+enum LeaderboardPeriod {
+  WEEKLY
+  MONTHLY
+
+  @@map("leaderboard_period")
+}
+
+// ===== CRYPTO & NFT SYSTEM MODELS =====
+
+model Wallet {
+  id            Int           @id @default(autoincrement())
+  userId        Int           @map("user_id")
+  publicAddress String        @map("public_address")
+  provider      WalletProvider
+  isConnected   Boolean       @map("is_connected")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+  @@map("wallets")
+}
+
+model TipsTokenTransfer {
+  id         Int      @id @default(autoincrement())
+  fromUserId Int      @map("from_user_id")
+  toUserId   Int      @map("to_user_id")
+  amount     Float
+  reason     String?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  fromUser User @relation("SentTips", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser   User @relation("ReceivedTips", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@map("tips_token_transfers")
+}
+
+model NFT {
+  id             Int       @id @default(autoincrement())
+  name           String
+  description    String?
+  imageUrl       String    @map("image_url")
+  type           NFTType
+  rarity         NFTRarity
+  isTransferable Boolean   @map("is_transferable")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  transactions   NFTTransaction[]
+  marketListings NFTMarketListing[]
+  attributes     NFTAttribute[]
+  claims         NFTClaim[]
+
+  @@map("nfts")
+}
+
+model NFTTransaction {
+  id              Int                 @id @default(autoincrement())
+  nftId           Int                 @map("nft_id")
+  fromUserId      Int?                @map("from_user_id")
+  toUserId        Int                 @map("to_user_id")
+  price           Float?
+  transactionType NFTTransactionType  @map("transaction_type")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  // Relations
+  nft      NFT   @relation(fields: [nftId], references: [id], onDelete: Cascade)
+  fromUser User? @relation("NFTSender", fields: [fromUserId], references: [id])
+  toUser   User  @relation("NFTReceiver", fields: [toUserId], references: [id])
+
+  @@map("nft_transactions")
+}
+
+model NFTMarketListing {
+  id            Int                    @id @default(autoincrement())
+  nftId         Int                    @map("nft_id")
+  listedByUserId Int                   @map("listed_by_user_id")
+  price         Float
+  status        NFTMarketListingStatus @default(ACTIVE)
+  listedAt      DateTime               @default(now()) @map("listed_at")
+  createdAt     DateTime               @default(now()) @map("created_at")
+  updatedAt     DateTime               @updatedAt @map("updated_at")
+
+  // Relations
+  nft          NFT  @relation(fields: [nftId], references: [id], onDelete: Cascade)
+  listedByUser User @relation(fields: [listedByUserId], references: [id], onDelete: Cascade)
+
+  @@map("nft_market_listings")
+}
+
+model NFTAttribute {
+  id        Int      @id @default(autoincrement())
+  nftId     Int      @map("nft_id")
+  key       String
+  value     String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  nft NFT @relation(fields: [nftId], references: [id], onDelete: Cascade)
+
+  @@map("nft_attributes")
+}
+
+model Lootbox {
+  id          Int           @id @default(autoincrement())
+  userId      Int           @map("user_id")
+  tipsLocked  Float         @map("tips_locked")
+  status      LootboxStatus @default(LOCKED)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("lootboxes")
+}
+
+model NFTClaim {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  nftId       Int?     @map("nft_id")
+  tipsAmount  Float    @map("tips_amount")
+  claimedAt   DateTime @default(now()) @map("claimed_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nft  NFT? @relation(fields: [nftId], references: [id])
+
+  @@map("nft_claims")
+}
+
+// ===== UPDATED ENUMS =====
+
+enum WalletProvider {
+  METAMASK
+  WALLETCONNECT
+  CUSTOM
+
+  @@map("wallet_provider")
+}
+
+enum NFTType {
+  BADGE
+  COSMETIC
+  LOOTBOX
+
+  @@map("nft_type")
+}
+
+enum NFTRarity {
+  COMMON
+  RARE
+  EPIC
+
+  @@map("nft_rarity")
+}
+
+enum NFTTransactionType {
+  MINT
+  TRANSFER
+  PURCHASE
+
+  @@map("nft_transaction_type")
+}
+
+enum NFTMarketListingStatus {
+  ACTIVE
+  SOLD
+  CANCELLED
+
+  @@map("nft_market_listing_status")
+}
+
+enum LootboxStatus {
+  LOCKED
+  OPENABLE
+  CLAIMED
+
+  @@map("lootbox_status")
+}
+
+// ===== WISHBOX SYSTEM MODELS =====
+
+model WishboxEvent {
+  id          Int              @id @default(autoincrement())
+  title       String
+  description String?
+  startDate   DateTime         @map("start_date")
+  endDate     DateTime         @map("end_date")
+  status      WishboxEventStatus @default(DRAFT)
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  scenarios WishboxScenario[]
+  stats     WishboxStats[]
+  rewards   WishboxReward[]
+
+  @@map("wishbox_events")
+}
+
+model WishboxScenario {
+  id          Int      @id @default(autoincrement())
+  eventId     Int      @map("event_id")
+  title       String
+  description String?
+  orderIndex  Int      @map("order_index")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  event   WishboxEvent    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  choices ScenarioChoice[]
+
+  @@map("wishbox_scenarios")
+}
+
+model ScenarioChoice {
+  id         Int      @id @default(autoincrement())
+  scenarioId Int      @map("scenario_id")
+  userId     Int      @map("user_id")
+  choiceText String   @map("choice_text")
+  isSelected Boolean  @map("is_selected")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  scenario WishboxScenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comments ChoiceComment[]
+
+  @@unique([scenarioId, userId])
+  @@map("scenario_choices")
+}
+
+model ChoiceComment {
+  id       Int      @id @default(autoincrement())
+  choiceId Int      @map("choice_id")
+  userId   Int      @map("user_id")
+  comment  String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  choice ScenarioChoice @relation(fields: [choiceId], references: [id], onDelete: Cascade)
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("choice_comments")
+}
+
+model WishboxStats {
+  id                    Int      @id @default(autoincrement())
+  userId                Int      @map("user_id")
+  eventId               Int      @map("event_id")
+  totalParticipated     Int      @map("total_participated")
+  totalComments         Int      @map("total_comments")
+  helpfulVotesReceived  Int      @map("helpful_votes_received")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event WishboxEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventId])
+  @@map("wishbox_stats")
+}
+
+model WishboxReward {
+  id         Int                 @id @default(autoincrement())
+  userId     Int                 @map("user_id")
+  eventId    Int                 @map("event_id")
+  rewardType WishboxRewardType   @map("reward_type")
+  rewardId   Int                 @map("reward_id")
+  amount     Float?
+  awardedAt  DateTime            @default(now()) @map("awarded_at")
+  createdAt  DateTime            @default(now()) @map("created_at")
+  updatedAt  DateTime            @updatedAt @map("updated_at")
+
+  // Relations
+  user  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event WishboxEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@map("wishbox_rewards")
+}
+
+// ===== UPDATED ENUMS =====
+
+enum WishboxEventStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+
+  @@map("wishbox_event_status")
+}
+
+enum WishboxRewardType {
+  TIPS
+  BADGE
+  TITLE
+
+  @@map("wishbox_reward_type")
+}
+
+// ===== DM & MESSAGING SYSTEM MODELS =====
+
+model DMThread {
+  id        Int      @id @default(autoincrement())
+  userOneId Int      @map("user_one_id")
+  userTwoId Int      @map("user_two_id")
+  isActive  Boolean  @map("is_active")
+  startedAt DateTime @default(now()) @map("started_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  userOne         User               @relation("DMThreadUserOne", fields: [userOneId], references: [id], onDelete: Cascade)
+  userTwo         User               @relation("DMThreadUserTwo", fields: [userTwoId], references: [id], onDelete: Cascade)
+  messages        DMMessage[]
+  supportSessions DMSupportSession[]
+
+  @@unique([userOneId, userTwoId])
+  @@map("dm_threads")
+}
+
+model DMMessage {
+  id       Int      @id @default(autoincrement())
+  threadId Int      @map("thread_id")
+  senderId Int      @map("sender_id")
+  message  String
+  sentAt   DateTime @default(now()) @map("sent_at")
+  isRead   Boolean  @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  thread DMThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sender User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@map("dm_messages")
+}
+
+model DMRequest {
+  id          Int              @id @default(autoincrement())
+  fromUserId  Int              @map("from_user_id")
+  toUserId    Int              @map("to_user_id")
+  status      DMRequestStatus  @default(PENDING)
+  sentAt      DateTime         @default(now()) @map("sent_at")
+  respondedAt DateTime?        @map("responded_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  fromUser User @relation("DMRequestSender", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser   User @relation("DMRequestReceiver", fields: [toUserId], references: [id], onDelete: Cascade)
+
+  @@unique([fromUserId, toUserId])
+  @@map("dm_requests")
+}
+
+model DMSupportSession {
+  id          Int      @id @default(autoincrement())
+  threadId    Int      @map("thread_id")
+  helperId    Int      @map("helper_id")
+  tipsAmount  Float    @map("tips_amount")
+  supportedAt DateTime @default(now()) @map("supported_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  thread    DMThread     @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  helper    User         @relation(fields: [helperId], references: [id], onDelete: Cascade)
+  feedbacks DMFeedback[]
+
+  @@map("dm_support_sessions")
+}
+
+model DMFeedback {
+  id          Int      @id @default(autoincrement())
+  sessionId   Int      @map("session_id")
+  rating      Int
+  comment     String?
+  submittedAt DateTime @default(now()) @map("submitted_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  session DMSupportSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("dm_feedbacks")
+}
+
+// ===== UPDATED ENUMS =====
+
+enum DMRequestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+
+  @@map("dm_request_status")
+}
+
+// ===== FEED & ADMIN SYSTEM MODELS =====
+
+model Feed {
+  id        Int        @id @default(autoincrement())
+  userId    Int        @map("user_id")
+  postId    Int        @map("post_id")
+  source    FeedSource
+  seen      Boolean    @default(false)
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  user User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post ContentPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@map("feeds")
+}
+
+model FeedHighlight {
+  id            Int                 @id @default(autoincrement())
+  postId        Int                 @map("post_id")
+  reason        FeedHighlightReason
+  highlightedAt DateTime            @default(now()) @map("highlighted_at")
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
+
+  // Relations
+  post ContentPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@map("feed_highlights")
+}
+
+model TrendingPost {
+  id           Int            @id @default(autoincrement())
+  postId       Int            @map("post_id")
+  score        Float
+  trendPeriod  TrendPeriod    @map("trend_period")
+  calculatedAt DateTime       @default(now()) @map("calculated_at")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  // Relations
+  post ContentPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, trendPeriod])
+  @@map("trending_posts")
+}
+
+model AdminLog {
+  id          Int      @id @default(autoincrement())
+  adminId     Int      @map("admin_id")
+  action      String
+  description String?
+  entityType  String   @map("entity_type")
+  entityId    Int      @map("entity_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  admin User @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@map("admin_logs")
+}
+
+model ModerationAction {
+  id           Int              @id @default(autoincrement())
+  moderatorId  Int              @map("moderator_id")
+  targetUserId Int              @map("target_user_id")
+  reason       String
+  actionType   ModerationActionType @map("action_type")
+  contentType  String?          @map("content_type")
+  contentId    Int?             @map("content_id")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  moderator  User @relation("ModeratorActions", fields: [moderatorId], references: [id], onDelete: Cascade)
+  targetUser User @relation("ModeratedActions", fields: [targetUserId], references: [id], onDelete: Cascade)
+
+  @@map("moderation_actions")
+}
+
+model ManualReviewFlag {
+  id              Int                    @id @default(autoincrement())
+  flaggedByUserId Int                    @map("flagged_by_user_id")
+  contentType     String                 @map("content_type")
+  contentId       Int                    @map("content_id")
+  reason          String
+  status          ManualReviewFlagStatus @default(OPEN)
+  createdAt       DateTime               @default(now()) @map("created_at")
+  updatedAt       DateTime               @updatedAt @map("updated_at")
+
+  // Relations
+  flaggedByUser User @relation(fields: [flaggedByUserId], references: [id], onDelete: Cascade)
+
+  @@map("manual_review_flags")
+}
+
+// ===== UPDATED ENUMS =====
+
+enum FeedSource {
+  TRUSTER
+  CATEGORY_MATCH
+  TRENDING
+  NEW_USER
+  BOOSTED
+
+  @@map("feed_source")
+}
+
+enum FeedHighlightReason {
+  MOST_LIKED
+  STAFF_PICK
+  BOOSTED
+
+  @@map("feed_highlight_reason")
+}
+
+enum TrendPeriod {
+  DAILY
+  WEEKLY
+
+  @@map("trend_period")
+}
+
+enum ModerationActionType {
+  BAN
+  WARN
+  MUTE
+  CONTENT_REMOVED
+
+  @@map("moderation_action_type")
+}
+
+enum ManualReviewFlagStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+
+  @@map("manual_review_flag_status")
 }

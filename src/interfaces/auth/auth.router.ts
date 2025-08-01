@@ -129,9 +129,10 @@ router.get('/me', asyncHandler(async (req: Request, res: Response) => {
     id: user.id,
     email: user.email,
     name: user.name,
-    auth0Id: user.auth0Id,
-    walletAddress: user.walletAddress,
-    kycStatus: user.kycStatus,
+    status: user.status || 'ACTIVE',
+    auth0Id: user.auth0Id || null,
+    walletAddress: user.walletAddress || null,
+    kycStatus: user.kycStatus || '',
     createdAt: user.createdAt,
     updatedAt: user.updatedAt
   });

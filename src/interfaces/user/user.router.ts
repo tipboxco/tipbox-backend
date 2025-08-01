@@ -26,15 +26,16 @@ const userService = new UserService();
  *               $ref: '#/components/schemas/UserResponse'
  */
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
-  const { email, name } = req.body as CreateUserRequest;
-  const user = await userService.createUser(email ?? '', name ?? undefined);
+  const { email, displayName, bio } = req.body as CreateUserRequest;
+  const user = await userService.createUser(email, displayName);
   const response: UserResponse = {
     id: user.id,
     email: user.email ?? '',
     name: user.name ?? '',
-    auth0Id: user.auth0Id,
-    walletAddress: user.walletAddress,
-    kycStatus: user.kycStatus,
+    status: user.status || 'ACTIVE',
+    auth0Id: user.auth0Id || null,
+    walletAddress: user.walletAddress || null,
+    kycStatus: user.kycStatus || '',
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString()
   };
@@ -71,9 +72,10 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
     id: user.id,
     email: user.email ?? '',
     name: user.name ?? '',
-    auth0Id: user.auth0Id,
-    walletAddress: user.walletAddress,
-    kycStatus: user.kycStatus,
+    status: user.status || 'ACTIVE',
+    auth0Id: user.auth0Id || null,
+    walletAddress: user.walletAddress || null,
+    kycStatus: user.kycStatus || '',
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString()
   };
@@ -101,9 +103,10 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
     id: user.id,
     email: user.email ?? '',
     name: user.name ?? '',
-    auth0Id: user.auth0Id,
-    walletAddress: user.walletAddress,
-    kycStatus: user.kycStatus,
+    status: user.status || 'ACTIVE',
+    auth0Id: user.auth0Id || null,
+    walletAddress: user.walletAddress || null,
+    kycStatus: user.kycStatus || '',
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString()
   })));
@@ -144,16 +147,17 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  */
 router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
   const id = Number(req.params.id);
-  const { email, name } = req.body;
-  const user = await userService.updateUser(id, { email, name });
+  const { email, status } = req.body;
+  const user = await userService.updateUser(id, { email, status });
   if (!user) return res.status(404).json({ message: 'User not found' });
   res.json({
     id: user.id,
     email: user.email ?? '',
     name: user.name ?? '',
-    auth0Id: user.auth0Id,
-    walletAddress: user.walletAddress,
-    kycStatus: user.kycStatus,
+    status: user.status || 'ACTIVE',
+    auth0Id: user.auth0Id || null,
+    walletAddress: user.walletAddress || null,
+    kycStatus: user.kycStatus || '',
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString()
   });
