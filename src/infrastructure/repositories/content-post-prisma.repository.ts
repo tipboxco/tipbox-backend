@@ -251,6 +251,31 @@ export class ContentPostPrismaRepository {
     return posts.map(post => this.toDomain(post));
   }
 
+  async incrementLikeCount(postId: number): Promise<void> {
+    // Like count is calculated from ContentLike table, no need to update
+    // This method is kept for compatibility but does nothing
+  }
+
+  async decrementLikeCount(postId: number): Promise<void> {
+    // Like count is calculated from ContentLike table, no need to update
+    // This method is kept for compatibility but does nothing
+  }
+
+  async incrementViewCount(postId: number): Promise<void> {
+    // View count is calculated from ContentPostView table, no need to update
+    // This method is kept for compatibility but does nothing
+  }
+
+  async incrementCommentCount(postId: number): Promise<void> {
+    // Comment count is calculated from ContentComment table, no need to update
+    // This method is kept for compatibility but does nothing
+  }
+
+  async decrementCommentCount(postId: number): Promise<void> {
+    // Comment count is calculated from ContentComment table, no need to update
+    // This method is kept for compatibility but does nothing
+  }
+
   private toDomain(prismaPost: any): ContentPost {
     return new ContentPost(
       prismaPost.id,

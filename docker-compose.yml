@@ -27,6 +27,32 @@ services:
     volumes:
       - pgadmin_data:/var/lib/pgadmin
 
+  minio:
+    image: minio/minio:latest
+    container_name: tipbox_minio
+    restart: always
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"  # API için
+      - "9001:9001"  # Web arayüzü için
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+
+  redis:
+    image: redis:latest
+    container_name: tipbox_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
 volumes:
   pgdata:
-  pgadmin_data: 
+  pgadmin_data:
+  minio_data:
+  redis_data: 
