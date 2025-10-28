@@ -94,7 +94,7 @@
  *         passwordHash:
  *           type: string
  *           description: Hashed password (internal use only)
- *     WalletResponse:
+ *     ProfileResponse:
  *       type: object
  *       properties:
  *         id:
@@ -103,16 +103,23 @@
  *         userId:
  *           type: integer
  *           example: 1
- *         publicAddress:
+ *         displayName:
  *           type: string
- *           example: 0x742d35Cc6632C0532c718cF7Bc9f1ba3d1c7F3EA
- *         provider:
+ *           nullable: true
+ *           example: "Ömer Faruk"
+ *         bio:
  *           type: string
- *           enum: [METAMASK, WALLETCONNECT, CUSTOM]
- *           example: METAMASK
- *         isConnected:
- *           type: boolean
- *           example: true
+ *           nullable: true
+ *           example: "Tipbox topluluk üyesi"
+ *         country:
+ *           type: string
+ *           nullable: true
+ *           example: "Turkey"
+ *         birthDate:
+ *           type: string
+ *           format: date
+ *           nullable: true
+ *           example: "1990-01-01"
  *         createdAt:
  *           type: string
  *           format: date-time
@@ -121,23 +128,6 @@
  *           type: string
  *           format: date-time
  *           example: 2025-08-01T10:00:00.000Z
- *     CreateWalletRequest:
- *       type: object
- *       required:
- *         - publicAddress
- *         - provider
- *       properties:
- *         publicAddress:
- *           type: string
- *           example: 0x742d35Cc6632C0532c718cF7Bc9f1ba3d1c7F3EA
- *         provider:
- *           type: string
- *           enum: [METAMASK, WALLETCONNECT, CUSTOM]
- *           example: METAMASK
- *         isConnected:
- *           type: boolean
- *           default: true
- *           example: true
  *     UserFullResponse:
  *       allOf:
  *         - $ref: '#/components/schemas/UserResponse'

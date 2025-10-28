@@ -1,7 +1,10 @@
 import { UserBadge } from '../../domain/gamification/user-badge.entity';
 import { Badge } from '../../domain/gamification/badge.entity';
 import { UserAchievement } from '../../domain/gamification/user-achievement.entity';
-import { QueueProvider } from '../../infrastructure/queue/queue.provider';
+import { BadgeRarity } from '../../domain/gamification/badge-rarity.enum';
+import { BadgeType } from '../../domain/gamification/badge-type.enum';
+import { BadgeVisibility } from '../../domain/gamification/badge-visibility.enum';
+import QueueProvider from '../../infrastructure/queue/queue.provider';
 import logger from '../../infrastructure/logger/logger';
 
 export class GamificationService {
@@ -21,28 +24,29 @@ export class GamificationService {
     try {
       // Bu kısımda gerçek veritabanı işlemleri yapılacak
       // Şimdilik mock data döndürüyoruz
-      const mockBadge: Badge = {
-        id: badgeId,
-        name: 'İlk Post',
-        description: 'İlk postunuzu paylaştınız',
-        icon: '🎯',
-        category: 'content',
-        rarity: 'common',
-        type: 'achievement',
-        visibility: 'public',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+      const mockBadge = new Badge(
+        badgeId,
+        'İlk Post',
+        'İlk postunuzu paylaştınız',
+        null, // imageUrl
+        BadgeType.ACHIEVEMENT,
+        BadgeRarity.COMMON,
+        null, // boostMultiplier
+        null, // rewardMultiplier
+        1, // categoryId
+        new Date()
+      );
 
-      const mockUserBadge: UserBadge = {
-        id: 1,
+      const mockUserBadge = new UserBadge(
+        1,
         userId,
         badgeId,
-        earnedAt: new Date(),
-        badge: mockBadge,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+        true, // isVisible
+        null, // displayOrder
+        BadgeVisibility.PUBLIC,
+        true, // claimed
+        new Date() // claimedAt
+      );
 
       logger.info(`Badge ${mockBadge.name} granted to user ${userId}`);
 
@@ -50,14 +54,14 @@ export class GamificationService {
       await this.queueProvider.addNotificationJob({
         type: 'NEW_BADGE',
         userId,
-        badgeName: mockBadge.name,
-        badgeIcon: mockBadge.icon,
+        badgeName: mockBadge.getName(),
+        badgeIcon: mockBadge.hasImage() ? mockBadge.imageUrl : '🏆',
         badgeId: mockBadge.id,
-        badgeCategory: mockBadge.category,
+        badgeCategory: mockBadge.categoryId,
         badgeRarity: mockBadge.rarity,
       });
 
-      logger.info(`Notification job added for badge ${mockBadge.name} to user ${userId}`);
+      logger.info(`Notification job added for badge ${mockBadge.getName()} to user ${userId}`);
 
       return mockUserBadge;
     } catch (error) {
@@ -75,15 +79,14 @@ export class GamificationService {
   async grantAchievementToUser(userId: number, achievementId: number): Promise<UserAchievement | null> {
     try {
       // Mock achievement data
-      const mockUserAchievement: UserAchievement = {
-        id: 1,
+      const mockUserAchievement = new UserAchievement(
+        1,
         userId,
         achievementId,
-        unlockedAt: new Date(),
-        progress: 100,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+        100, // progress
+        true, // completed
+        new Date() // completedAt
+      );
 
       logger.info(`Achievement ${achievementId} granted to user ${userId}`);
 

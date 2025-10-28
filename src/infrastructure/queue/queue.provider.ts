@@ -1,5 +1,5 @@
 import { Queue, QueueOptions } from 'bullmq';
-import { RedisConfigManager } from '../config/redis.config';
+import RedisConfigManager from '../config/redis.config';
 import logger from '../logger/logger';
 
 export interface JobData {
@@ -86,21 +86,7 @@ class QueueProvider {
       logger.error(`Queue ${queueName} error:`, error);
     });
 
-    queue.on('waiting', (job) => {
-      logger.debug(`Job ${job.id} waiting in queue ${queueName}`);
-    });
-
-    queue.on('active', (job) => {
-      logger.debug(`Job ${job.id} started in queue ${queueName}`);
-    });
-
-    queue.on('completed', (job) => {
-      logger.debug(`Job ${job.id} completed in queue ${queueName}`);
-    });
-
-    queue.on('failed', (job, err) => {
-      logger.error(`Job ${job?.id} failed in queue ${queueName}:`, err);
-    });
+    // Event listeners removed for BullMQ compatibility
 
     logger.info(`Queue ${queueName} created successfully`);
     return queue;

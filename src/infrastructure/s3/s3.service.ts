@@ -18,9 +18,9 @@ export class S3Service {
     });
 
     // Servis başladığında bucket'ı kontrol et ve oluştur
-    this.checkAndCreateBucket().catch((error) => {
-      logger.error('S3 bucket kontrolü/oluşturma hatası:', error);
-    });
+    // this.checkAndCreateBucket().catch((error) => {
+    //   logger.error('S3 bucket kontrolü/oluşturma hatası:', error);
+    // });
   }
 
   /**

@@ -1,0 +1,18 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Package files'ları kopyala
+COPY package*.json ./
+
+# Dependencies'leri yükle
+RUN npm install
+
+# Source code'u kopyala
+COPY . .
+
+# Port'u expose et
+EXPOSE 3000
+
+# Development için nodemon ile başlat
+CMD ["npm", "run", "dev"]

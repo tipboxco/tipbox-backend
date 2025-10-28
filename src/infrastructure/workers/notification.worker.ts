@@ -1,10 +1,10 @@
 import { Worker, Job } from 'bullmq';
-import { RedisConfigManager } from '../config/redis.config';
+import RedisConfigManager from '../config/redis.config';
 import { NotificationJobData } from '../queue/queue.provider';
 import logger from '../logger/logger';
 
 export class NotificationWorker {
-  private worker: Worker;
+  private worker!: Worker;
   private redisConfig: RedisConfigManager;
 
   constructor() {

@@ -51,6 +51,30 @@ services:
       - redis_data:/data
     command: redis-server --appendonly yes
 
+  backend:
+    build: .
+    container_name: tipbox_backend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/tipbox_dev
+      - REDIS_URL=redis://redis:6379
+      - S3_ENDPOINT=http://minio:9000
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin123
+      - JWT_SECRET=your-super-secret-jwt-key-for-development-only
+    depends_on:
+      - postgres
+      - redis
+      - minio
+    volumes:
+      - .:/app
+      - /app/node_modules
+    working_dir: /app
+    command: npm run dev
+
 volumes:
   pgdata:
   pgadmin_data:

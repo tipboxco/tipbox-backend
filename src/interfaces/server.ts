@@ -8,7 +8,7 @@ import RedisConfigManager from '../infrastructure/config/redis.config';
 import SocketConfigManager from '../infrastructure/config/socket.config';
 import SocketManager from '../infrastructure/realtime/socket-manager';
 import { CacheService } from '../infrastructure/cache/cache.service';
-import { QueueProvider } from '../infrastructure/queue/queue.provider';
+import QueueProvider from '../infrastructure/queue/queue.provider';
 
 const PORT = process.env.PORT || 3000;
 

@@ -63,6 +63,21 @@ app.use(express.json());
 
 // Request logger middleware
 app.use(requestLogger);
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'Tipbox Backend API çalışıyor!',
+    swagger: 'http://localhost:3000/api-docs',
+    version: '1.0.0',
+    endpoints: {
+      'GET /api-docs': 'Swagger API dokümantasyonu',
+      'POST /auth/login': 'Kullanıcı girişi',
+      'GET /users': 'Kullanıcı listesi',
+      'GET /wallets': 'Cüzdan bilgileri'
+    }
+  });
+});
+
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use('/auth', authRouter);
 app.use('/users', authMiddleware, userRouter);
