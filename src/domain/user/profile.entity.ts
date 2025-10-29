@@ -3,6 +3,7 @@ export class Profile {
     public readonly id: number,
     public readonly userId: number,
     public readonly displayName: string | null,
+    public readonly userName: string | null,
     public readonly bio: string | null,
     public readonly country: string | null,
     public readonly birthDate: Date | null,

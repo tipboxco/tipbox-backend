@@ -14,11 +14,12 @@ export class ProfilePrismaRepository {
     return profile ? this.toDomain(profile) : null;
   }
 
-  async create(userId: number, displayName?: string, bio?: string, country?: string, birthDate?: Date): Promise<Profile> {
+  async create(userId: number, displayName?: string, userName?: string, bio?: string, country?: string, birthDate?: Date): Promise<Profile> {
     const profile = await this.prisma.profile.create({
       data: {
         userId,
         displayName,
+        userName,
         bio,
         country,
         birthDate
@@ -27,7 +28,7 @@ export class ProfilePrismaRepository {
     return this.toDomain(profile);
   }
 
-  async update(id: number, data: { displayName?: string; bio?: string; country?: string; birthDate?: Date }): Promise<Profile | null> {
+  async update(id: number, data: { displayName?: string; userName?: string; bio?: string; country?: string; birthDate?: Date }): Promise<Profile | null> {
     const profile = await this.prisma.profile.update({
       where: { id },
       data
@@ -35,11 +36,16 @@ export class ProfilePrismaRepository {
     return profile ? this.toDomain(profile) : null;
   }
 
-  async updateByUserId(userId: number, data: { displayName?: string; bio?: string; country?: string; birthDate?: Date }): Promise<Profile | null> {
+  async updateByUserId(userId: number, data: { displayName?: string; userName?: string; bio?: string; country?: string; birthDate?: Date }): Promise<Profile | null> {
     const profile = await this.prisma.profile.update({
       where: { userId },
       data
     });
+    return profile ? this.toDomain(profile) : null;
+  }
+
+  async findByUserName(userName: string): Promise<Profile | null> {
+    const profile = await this.prisma.profile.findUnique({ where: { userName } });
     return profile ? this.toDomain(profile) : null;
   }
 
@@ -62,6 +68,7 @@ export class ProfilePrismaRepository {
       prismaProfile.id,
       prismaProfile.userId,
       prismaProfile.displayName,
+      prismaProfile.userName,
       prismaProfile.bio,
       prismaProfile.country,
       prismaProfile.birthDate,

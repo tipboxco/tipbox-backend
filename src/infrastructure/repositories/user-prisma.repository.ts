@@ -131,6 +131,8 @@ export class UserPrismaRepository {
       null,
       // KYC - şimdilik null (ayrı tablo)
       null,
+      // Email verified status
+      prismaUser.emailVerified ?? false,
       // Wallet'lar - relation'dan gelen data
       wallets
     );

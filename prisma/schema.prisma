@@ -20,6 +20,7 @@ model User {
   email        String?  @unique
   passwordHash String?  @map("password_hash")
   status       String?
+  emailVerified Boolean  @default(false) @map("email_verified")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
@@ -36,6 +37,7 @@ model User {
   collections          UserCollection[]
   loginAttempts        LoginAttempt[]
   passwordResetTokens  PasswordResetToken[]
+  emailVerificationCodes EmailVerificationCode[]
   productSuggestions   ProductSuggestion[]
   reviewedSuggestions  ProductSuggestion[] @relation("ProductSuggestionReviewer")
   inventories          Inventory[]
@@ -88,6 +90,7 @@ model Profile {
   id          Int       @id @default(autoincrement())
   userId      Int       @unique @map("user_id")
   displayName String?   @map("display_name")
+  userName    String?   @unique @map("user_name")
   bio         String?
   country     String?
   birthDate   DateTime? @map("birth_date") @db.Date
@@ -276,6 +279,24 @@ model PasswordResetToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("password_reset_tokens")
+}
+
+model EmailVerificationCode {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  email     String
+  code      String   @db.VarChar(6)
+  isUsed    Boolean  @default(false) @map("is_used")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, code])
+  @@index([email, code])
+  @@map("email_verification_codes")
 }
 
 // ===== ENUMS =====

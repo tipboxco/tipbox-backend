@@ -20,6 +20,8 @@ export class User {
     public readonly auth0Id?: string | null,
     // KYC status - ayrı tablo olacak, şimdilik null
     public readonly kycStatus?: string | null,
+    // Email verification status
+    public readonly emailVerified?: boolean | null,
     // Wallet'lar - ayrı Wallet entity'leri array'i (relation)
     public readonly wallets?: Wallet[]
   ) {}

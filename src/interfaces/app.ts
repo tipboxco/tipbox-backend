@@ -39,12 +39,15 @@ const swaggerOptions = {
     security: [{ bearerAuth: [] }],
   },
   apis: [
-    './src/interfaces/**/*.ts', // local geliştirme için
-    './dist/interfaces/**/*.js' // test için
+    './dist/interfaces/**/*.js', // Docker/Production için compiled JavaScript dosyaları (ÖNCELIK)
+    './src/interfaces/**/*.ts', // Local development için TypeScript dosyaları
   ],
 };
 
-const swaggerSpec = swaggerJSDoc(swaggerOptions);
+// Swagger spec'i her seferinde dinamik olarak oluştur (cache sorunlarını önlemek için)
+function getSwaggerSpec() {
+  return swaggerJSDoc(swaggerOptions);
+}
 
 const app = express();
 
@@ -80,7 +83,30 @@ app.get('/', (req, res) => {
   });
 });
 
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+// Swagger JSON endpoint (Swagger UI middleware'lerinden önce tanımlanmalı)
+app.get('/api-docs/swagger.json', (req, res) => {
+  const swaggerSpec = getSwaggerSpec();
+  // Cache'i devre dışı bırak (her zaman fresh spec için)
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.send(swaggerSpec);
+});
+
+app.use('/api-docs', swaggerUi.serve);
+app.get('/api-docs', swaggerUi.setup(getSwaggerSpec(), {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'Tipbox API Documentation',
+  swaggerOptions: {
+    persistAuthorization: true, // Token'ı tarayıcıda sakla
+    displayRequestDuration: true, // İstek süresini göster
+    filter: true, // Endpoint filtreleme özelliğini etkinleştir
+    showExtensions: true, // Extension'ları göster
+    showCommonExtensions: true,
+    tryItOutEnabled: true, // "Try it out" butonunu her zaman göster
+  },
+}));
 app.use('/auth', authRouter);
 app.use('/users', authMiddleware, userRouter);
 app.use('/wallets', authMiddleware, walletRouter);
