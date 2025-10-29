@@ -23,8 +23,9 @@ const swaggerOptions = {
       description: 'Tipbox servisleri için API dokümantasyonu',
     },
     servers: [
-      { url: `http://localhost:${PORT}`, description: 'Local' },
-      { url: 'http://app-backend-test-env.eba-iyvqk4cj.eu-central-1.elasticbeanstalk.com', description: 'Test' }
+      { url: `http://localhost:${PORT}`, description: 'Local' }
+      // Elastic Beanstalk test environment disabled for developer branch
+      // { url: 'http://app-backend-test-env.eba-iyvqk4cj.eu-central-1.elasticbeanstalk.com', description: 'Test' }
     ],
     components: {
       securitySchemes: {
@@ -50,8 +51,9 @@ const app = express();
 // CORS configuration
 const corsOptions = {
   origin: process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : [
-    'http://localhost:3000',
-    'http://app-backend-test-env.eba-iyvqk4cj.eu-central-1.elasticbeanstalk.com'
+    'http://localhost:3000'
+    // Elastic Beanstalk test environment disabled for developer branch
+    // 'http://app-backend-test-env.eba-iyvqk4cj.eu-central-1.elasticbeanstalk.com'
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
