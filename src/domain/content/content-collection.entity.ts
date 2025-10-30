@@ -1,6 +1,6 @@
 export class ContentCollection {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly userId: number,
     public readonly name: string,
     public readonly description: string | null,

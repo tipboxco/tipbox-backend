@@ -1,6 +1,6 @@
 export class ProductExperience {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly inventoryId: number,
     public readonly title: string,
     public readonly experienceText: string,

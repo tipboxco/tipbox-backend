@@ -2,7 +2,7 @@ import { InventoryMediaType } from './inventory-media-type.enum';
 
 export class InventoryMedia {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly inventoryId: number,
     public readonly mediaUrl: string,
     public readonly type: InventoryMediaType,

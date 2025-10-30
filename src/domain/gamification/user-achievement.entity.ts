@@ -1,6 +1,6 @@
 export class UserAchievement {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly userId: number,
     public readonly goalId: number,
     public readonly progress: number,

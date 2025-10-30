@@ -1,6 +1,6 @@
 export class PasswordResetToken {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly userId: number,
     public readonly token: string,
     public readonly isUsed: boolean,

@@ -1,6 +1,6 @@
 export class BrandSurveyAnswer {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly questionId: number,
     public readonly userId: number,
     public readonly answerText: string,

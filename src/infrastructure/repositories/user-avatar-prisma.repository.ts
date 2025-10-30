@@ -4,12 +4,12 @@ import { UserAvatar } from '../../domain/user/user-avatar.entity';
 export class UserAvatarPrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<UserAvatar | null> {
+  async findById(id: string): Promise<UserAvatar | null> {
     const avatar = await this.prisma.userAvatar.findUnique({ where: { id } });
     return avatar ? this.toDomain(avatar) : null;
   }
 
-  async findByUserId(userId: number): Promise<UserAvatar[]> {
+  async findByUserId(userId: string): Promise<UserAvatar[]> {
     const avatars = await this.prisma.userAvatar.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' }
@@ -17,7 +17,7 @@ export class UserAvatarPrismaRepository {
     return avatars.map(avatar => this.toDomain(avatar));
   }
 
-  async findActiveByUserId(userId: number): Promise<UserAvatar | null> {
+  async findActiveByUserId(userId: string): Promise<UserAvatar | null> {
     const avatar = await this.prisma.userAvatar.findFirst({
       where: { 
         userId,
@@ -27,7 +27,7 @@ export class UserAvatarPrismaRepository {
     return avatar ? this.toDomain(avatar) : null;
   }
 
-  async create(userId: number, imageUrl: string, isActive: boolean = false): Promise<UserAvatar> {
+  async create(userId: string, imageUrl: string, isActive: boolean = false): Promise<UserAvatar> {
     // If setting as active, deactivate other avatars
     if (isActive) {
       await this.prisma.userAvatar.updateMany({
@@ -46,7 +46,7 @@ export class UserAvatarPrismaRepository {
     return this.toDomain(avatar);
   }
 
-  async update(id: number, data: { imageUrl?: string; isActive?: boolean }): Promise<UserAvatar | null> {
+  async update(id: string, data: { imageUrl?: string; isActive?: boolean }): Promise<UserAvatar | null> {
     const avatar = await this.prisma.userAvatar.findUnique({ where: { id } });
     
     // If setting as active, deactivate other avatars for same user
@@ -68,7 +68,7 @@ export class UserAvatarPrismaRepository {
     return updatedAvatar ? this.toDomain(updatedAvatar) : null;
   }
 
-  async setActiveAvatar(userId: number, avatarId: number): Promise<UserAvatar | null> {
+  async setActiveAvatar(userId: string, avatarId: string): Promise<UserAvatar | null> {
     // Deactivate all avatars for user
     await this.prisma.userAvatar.updateMany({
       where: { userId, isActive: true },
@@ -83,7 +83,7 @@ export class UserAvatarPrismaRepository {
     return avatar ? this.toDomain(avatar) : null;
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.userAvatar.delete({ where: { id } });
       return true;

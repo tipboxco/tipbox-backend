@@ -3,7 +3,7 @@ import { NFTRarity } from './nft-rarity.enum';
 
 export class NFT {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly name: string,
     public readonly description: string | null,
     public readonly imageUrl: string,

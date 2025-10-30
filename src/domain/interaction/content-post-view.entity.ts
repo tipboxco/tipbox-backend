@@ -1,6 +1,6 @@
 export class ContentPostView {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly postId: number,
     public readonly userId: number | null,
     public readonly viewedAt: Date,

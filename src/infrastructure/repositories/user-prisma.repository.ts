@@ -6,7 +6,7 @@ import { EmailAlreadyExistsError } from '../errors/custom-errors';
 export class UserPrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<User | null> {
+  async findById(id: string): Promise<User | null> {
     const user = await this.prisma.user.findUnique({ 
       where: { id },
       include: { 
@@ -75,7 +75,7 @@ export class UserPrismaRepository {
     }
   }
 
-  async update(id: number, data: { email?: string; passwordHash?: string; status?: string }): Promise<User | null> {
+  async update(id: string, data: { email?: string; passwordHash?: string; status?: string }): Promise<User | null> {
     const user = await this.prisma.user.update({
       where: { id },
       data,
@@ -87,7 +87,7 @@ export class UserPrismaRepository {
     return user ? this.toDomain(user) : null;
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.user.delete({ where: { id } });
       return true;

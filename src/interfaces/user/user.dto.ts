@@ -43,8 +43,8 @@
  *       type: object
  *       properties:
  *         id:
- *           type: integer
- *           example: 1
+ *           type: string
+ *           example: "c01h2z5k7m9p3r6t8v0x2b4n6q"
  *         email:
  *           type: string
  *           format: email
@@ -98,11 +98,11 @@
  *       type: object
  *       properties:
  *         id:
- *           type: integer
- *           example: 1
+ *           type: string
+ *           example: "01J9Y4NQSW3KZV9W0F7B6C2D1E"
  *         userId:
- *           type: integer
- *           example: 1
+ *           type: string
+ *           example: "01J9Y4NQSW3KZV9W0F7B6C2D1E"
  *         displayName:
  *           type: string
  *           nullable: true
@@ -160,7 +160,7 @@ export interface UpdateUserRequest {
 }
 
 export interface UserResponse {
-  id: number;
+  id: string;
   email: string | null;
   name: string | null; // displayName için backward compatibility
   status: string | null;
@@ -173,8 +173,8 @@ export interface UserResponse {
 
 // Profile için ayrı DTO 
 export interface ProfileResponse {
-  id: number;
-  userId: number;
+  id: string;
+  userId: string;
   displayName: string | null;
   bio: string | null;
   country: string | null;

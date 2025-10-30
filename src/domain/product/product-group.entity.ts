@@ -1,6 +1,6 @@
 export class ProductGroup {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly subCategoryId: number,
     public readonly name: string,
     public readonly description: string | null,

@@ -2,7 +2,7 @@ import { BadgeVisibility } from './badge-visibility.enum';
 
 export class UserBadge {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly userId: number,
     public readonly badgeId: number,
     public readonly isVisible: boolean,

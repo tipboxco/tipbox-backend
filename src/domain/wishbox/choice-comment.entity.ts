@@ -1,6 +1,6 @@
 export class ChoiceComment {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly choiceId: number,
     public readonly userId: number,
     public readonly comment: string,

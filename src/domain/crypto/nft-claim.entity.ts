@@ -1,6 +1,6 @@
 export class NFTClaim {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly userId: number,
     public readonly nftId: number | null,
     public readonly tipsAmount: number,

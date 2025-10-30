@@ -1,6 +1,6 @@
 export class ContentRating {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly userId: number,
     public readonly commentId: number,
     public readonly rating: number,

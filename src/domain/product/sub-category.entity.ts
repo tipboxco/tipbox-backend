@@ -1,6 +1,6 @@
 export class SubCategory {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly mainCategoryId: number,
     public readonly name: string,
     public readonly description: string | null,

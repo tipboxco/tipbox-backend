@@ -2,7 +2,7 @@ import { KycReviewStatus, KycReviewResult, KycProvider } from './kyc-enums';
 
 export class UserKycRecord {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly userId: number,
     public readonly sumsubApplicantId: string,
     public readonly reviewStatus: KycReviewStatus,

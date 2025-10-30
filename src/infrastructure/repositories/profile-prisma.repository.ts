@@ -4,54 +4,55 @@ import { Profile } from '../../domain/user/profile.entity';
 export class ProfilePrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<Profile | null> {
-    const profile = await this.prisma.profile.findUnique({ where: { id } });
+  async findById(id: string): Promise<Profile | null> {
+    const profile = await this.prisma.profile.findUnique({ where: { id } as any });
     return profile ? this.toDomain(profile) : null;
   }
 
-  async findByUserId(userId: number): Promise<Profile | null> {
-    const profile = await this.prisma.profile.findUnique({ where: { userId } });
+  async findByUserId(userId: string): Promise<Profile | null> {
+    const profile = await this.prisma.profile.findUnique({ where: { userId } as any });
     return profile ? this.toDomain(profile) : null;
   }
 
-  async create(userId: number, displayName?: string, userName?: string, bio?: string, country?: string, birthDate?: Date): Promise<Profile> {
+  async create(userId: string, displayName?: string, userName?: string, bio?: string, country?: string, birthDate?: Date): Promise<Profile> {
     const profile = await this.prisma.profile.create({
       data: {
         userId,
         displayName,
         userName,
         bio,
+        bannerUrl: undefined,
         country,
         birthDate
-      }
+      } as any
     });
     return this.toDomain(profile);
   }
 
-  async update(id: number, data: { displayName?: string; userName?: string; bio?: string; country?: string; birthDate?: Date }): Promise<Profile | null> {
+  async update(id: string, data: { displayName?: string; userName?: string; bio?: string; bannerUrl?: string | null; country?: string; birthDate?: Date }): Promise<Profile | null> {
     const profile = await this.prisma.profile.update({
-      where: { id },
-      data
+      where: { id } as any,
+      data: data as any
     });
     return profile ? this.toDomain(profile) : null;
   }
 
-  async updateByUserId(userId: number, data: { displayName?: string; userName?: string; bio?: string; country?: string; birthDate?: Date }): Promise<Profile | null> {
+  async updateByUserId(userId: string, data: { displayName?: string; userName?: string; bio?: string; bannerUrl?: string | null; country?: string; birthDate?: Date }): Promise<Profile | null> {
     const profile = await this.prisma.profile.update({
-      where: { userId },
-      data
+      where: { userId } as any,
+      data: data as any
     });
     return profile ? this.toDomain(profile) : null;
   }
 
   async findByUserName(userName: string): Promise<Profile | null> {
-    const profile = await this.prisma.profile.findUnique({ where: { userName } });
+    const profile = await this.prisma.profile.findUnique({ where: { userName } as any });
     return profile ? this.toDomain(profile) : null;
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
-      await this.prisma.profile.delete({ where: { id } });
+      await this.prisma.profile.delete({ where: { id } as any });
       return true;
     } catch {
       return false;
@@ -70,6 +71,7 @@ export class ProfilePrismaRepository {
       prismaProfile.displayName,
       prismaProfile.userName,
       prismaProfile.bio,
+      prismaProfile.bannerUrl ?? null,
       prismaProfile.country,
       prismaProfile.birthDate,
       prismaProfile.createdAt,

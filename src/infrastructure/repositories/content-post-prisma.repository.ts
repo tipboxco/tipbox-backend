@@ -1,9 +1,9 @@
-import { PrismaClient } from '@prisma/client';
+import { getPrisma } from './prisma.client';
 import { ContentPost } from '../../domain/content/content-post.entity';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
 
 export class ContentPostPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: number): Promise<ContentPost | null> {
     const post = await this.prisma.contentPost.findUnique({ 

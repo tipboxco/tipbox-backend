@@ -1,6 +1,6 @@
 export class DMFeedback {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly sessionId: number,
     public readonly rating: number,
     public readonly comment: string | null,

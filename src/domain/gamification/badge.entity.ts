@@ -3,7 +3,7 @@ import { BadgeRarity } from './badge-rarity.enum';
 
 export class Badge {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly name: string,
     public readonly description: string | null,
     public readonly imageUrl: string | null,

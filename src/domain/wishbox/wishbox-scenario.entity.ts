@@ -1,6 +1,6 @@
 export class WishboxScenario {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly eventId: number,
     public readonly title: string,
     public readonly description: string | null,

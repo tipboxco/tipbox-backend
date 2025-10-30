@@ -2,7 +2,7 @@ import { QuestionAnswerFormat } from './question-answer-format.enum';
 
 export class PostQuestion {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly postId: number,
     public readonly expectedAnswerFormat: QuestionAnswerFormat,
     public readonly relatedProductId: number | null,

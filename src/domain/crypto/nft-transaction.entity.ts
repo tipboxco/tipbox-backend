@@ -2,7 +2,7 @@ import { NFTTransactionType } from './nft-transaction-type.enum';
 
 export class NFTTransaction {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly nftId: number,
     public readonly fromUserId: number | null,
     public readonly toUserId: number,

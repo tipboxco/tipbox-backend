@@ -1,6 +1,6 @@
 export class UserRole {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly userId: number,
     public readonly role: string,
     public readonly createdAt: Date,

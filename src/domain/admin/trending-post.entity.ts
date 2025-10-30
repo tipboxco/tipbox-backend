@@ -2,7 +2,7 @@ import { TrendPeriod } from './trend-period.enum';
 
 export class TrendingPost {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly postId: number,
     public readonly score: number,
     public readonly trendPeriod: TrendPeriod,

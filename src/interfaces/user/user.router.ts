@@ -73,8 +73,8 @@ const upload = multer({
  *               type: object
  *               properties:
  *                 id:
- *                   type: integer
- *                   example: 5
+ *                   type: string
+ *                   example: "a2y7c1m4xk9q0v3b5n8d6p1r0s"
  *                   description: Oluşturulan kullanıcının benzersiz ID'si
  *                 email:
  *                   type: string
@@ -294,15 +294,8 @@ router.post('/setup-profile', upload.single('Avatar'), asyncHandler(async (req: 
     });
   }
 
-  // userId'yi number'a çevir (JWT'den string olarak gelebilir)
-  const userIdNumber = typeof userId === 'string' ? parseInt(userId, 10) : userId;
-  
-  if (isNaN(userIdNumber)) {
-    return res.status(401).json({
-      success: false,
-      message: 'Geçersiz kullanıcı ID',
-    });
-  }
+  // ID artık string (UUID/ULID)
+  const userIdStr = String(userId);
 
   const { FullName, UserName, selectCategories } = req.body;
 
@@ -367,14 +360,14 @@ router.post('/setup-profile', upload.single('Avatar'), asyncHandler(async (req: 
       }
       
       // Dosya adını oluştur
-      const fileName = `profile-pictures/${userIdNumber}/${uuidv4()}.${fileExtension}`;
+      const fileName = `profile-pictures/${userIdStr}/${uuidv4()}.${fileExtension}`;
       
       // Avatar'ı yükle
       avatarUrl = await s3Service.uploadFile(fileName, req.file.buffer, req.file.mimetype);
       
       logger.info({
         message: 'Avatar başarıyla yüklendi',
-        userId: userIdNumber,
+        userId: userIdStr,
         fileName,
         fileSize: req.file.size,
         mimeType: req.file.mimetype,
@@ -384,7 +377,7 @@ router.post('/setup-profile', upload.single('Avatar'), asyncHandler(async (req: 
       logger.error({
         message: 'Avatar yükleme hatası',
         error: errorMessage,
-        userId: userIdNumber,
+        userId: userIdStr,
         fileName: req.file.originalname,
         fileSize: req.file.size,
         mimeType: req.file.mimetype,
@@ -399,7 +392,7 @@ router.post('/setup-profile', upload.single('Avatar'), asyncHandler(async (req: 
 
   // Profil setup
   try {
-    const user = await userService.setupProfile(userIdNumber, {
+    const user = await userService.setupProfile(userIdStr, {
       fullName: FullName,
       userName: UserName,
       avatarUrl,
@@ -460,8 +453,7 @@ router.post('/setup-profile', upload.single('Avatar'), asyncHandler(async (req: 
  *       - in: path
  *         name: id
  *         schema:
- *           type: integer
- *           minimum: 1
+ *           type: string
  *         required: true
  *         description: Kullanıcının benzersiz ID'si
  *         example: 1
@@ -546,7 +538,7 @@ router.post('/setup-profile', upload.single('Avatar'), asyncHandler(async (req: 
  *                   example: Kullanıcı bilgileri alınırken bir hata oluştu
  */
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
+  const id = req.params.id;
   const user = await userService.getUserById(id);
   if (!user) return res.status(404).json({ message: 'User not found' });
   const response: UserResponse = {
@@ -595,6 +587,229 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
+ * /users/{id}/profile-card:
+ *   get:
+ *     summary: Kullanıcının profil kartını getir
+ *     description: Profil kartı için isim, avatar, banner, açıklama, unvanlar, istatistikler ve rozetleri döner
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Kullanıcı ID (UUID/ULID)
+ *         example: "b6d8c1f2-4a9b-4d1c-9e2a-123456789abc"
+ *     responses:
+ *       200:
+ *         description: Profil kartı
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                   example: "b6d8c1f2-4a9b-4d1c-9e2a-123456789abc"
+ *                 name:
+ *                   type: string
+ *                   example: "Ömer Faruk"
+ *                 avatarUrl:
+ *                   type: string
+ *                   nullable: true
+ *                   example: "https://cdn.tipbox.co/profile-pictures/omer.jpg"
+ *                 bannerUrl:
+ *                   type: string
+ *                   nullable: true
+ *                   example: "https://cdn.tipbox.co/profile-banners/omer-banner.jpg"
+ *                 description:
+ *                   type: string
+ *                   nullable: true
+ *                   example: "Teknoloji meraklısı. Donanım ve yazılım üzerine yazıyorum."
+ *                 titles:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                   example: ["Technology Enthusiast", "Digital Surfer", "Hardware Expert"]
+ *                 stats:
+ *                   type: object
+ *                   properties:
+ *                     posts:
+ *                       type: integer
+ *                       example: 42
+ *                     trust:
+ *                       type: integer
+ *                       example: 15
+ *                     truster:
+ *                       type: integer
+ *                       example: 28
+ *                 badges:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       imageUrl:
+ *                         type: string
+ *                         nullable: true
+ *                         example: "https://cdn.tipbox.co/badges/rare-builder.png"
+ *                       title:
+ *                         type: string
+ *                         example: "Rare Builder"
+ *       404:
+ *         description: Kullanıcı bulunamadı
+ */
+router.get('/:id/profile-card', asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const card = await userService.getUserProfileCard(id);
+  if (!card) {
+    return res.status(404).json({ message: 'Kullanıcı bulunamadı' });
+  }
+  res.json(card);
+}));
+
+/**
+ * @openapi
+ * /users/{id}/trusts:
+ *   get:
+ *     summary: Kullanıcının trust ettiği kullanıcıları listele
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: Kullanıcı ID
+ *       - in: query
+ *         name: q
+ *         schema:
+ *           type: string
+ *         description: İsim veya kullanıcı adına göre arama (case-insensitive)
+ *     responses:
+ *       200:
+ *         description: Trust listesi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id: { type: string, example: "b6d8c1f2-4a9b-4d1c-9e2a-123456789abc" }
+ *                   userName: { type: string, nullable: true, example: "omerfaruk" }
+ *                   name: { type: string, nullable: true, example: "Ömer Faruk" }
+ *                   titles:
+ *                     type: array
+ *                     items: { type: string }
+ *                     example: ["Technology Enthusiast","Digital Surfer","Hardware Expert"]
+ *                   avatar: { type: string, nullable: true, example: "https://cdn.tipbox.co/avatars/omer.jpg" }
+ */
+router.get('/:id/trusts', asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const q = (req.query.q as string) || undefined;
+  const list = await userService.listTrustedUsers(id, q);
+  res.json(list);
+}));
+
+/**
+ * @openapi
+ * /users/{id}/trusters:
+ *   get:
+ *     summary: Kullanıcıyı trust eden kullanıcıları listele
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: Kullanıcı ID
+ *       - in: query
+ *         name: q
+ *         schema:
+ *           type: string
+ *         description: İsim veya kullanıcı adına göre arama (case-insensitive)
+ *     responses:
+ *       200:
+ *         description: Truster listesi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id: { type: string, example: "7a2d..." }
+ *                   userName: { type: string, nullable: true, example: "techguy" }
+ *                   name: { type: string, nullable: true, example: "Ali Veli" }
+ *                   titles:
+ *                     type: array
+ *                     items: { type: string }
+ *                     example: ["Hardware Expert"]
+ *                   avatar: { type: string, nullable: true }
+ *                   isTrusted: { type: boolean, example: true }
+ */
+router.get('/:id/trusters', asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const q = (req.query.q as string) || undefined;
+  const list = await userService.listTrusters(id, q);
+  res.json(list);
+}));
+
+/**
+ * @openapi
+ * /users/{id}/trust/{targetUserId}:
+ *   post:
+ *     summary: Bir kullanıcıyı trust et
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: targetUserId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       204: { description: Başarılı }
+ */
+router.post('/:id/trust/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
+  const { id, targetUserId } = req.params;
+  await userService.addTrust(id, targetUserId);
+  res.status(204).send();
+}));
+
+/**
+ * @openapi
+ * /users/{id}/trusts/{targetUserId}:
+ *   delete:
+ *     summary: Trust listesinden kaldır
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: targetUserId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       204: { description: Başarılı }
+ *       404: { description: Kayıt bulunamadı }
+ */
+router.delete('/:id/trusts/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
+  const { id, targetUserId } = req.params;
+  const ok = await userService.removeTrust(id, targetUserId);
+  if (!ok) return res.status(404).json({ message: 'Kayıt bulunamadı' });
+  res.status(204).send();
+}));
+
+/**
+ * @openapi
  * /users/{id}:
  *   put:
  *     summary: Kullanıcıyı güncelle
@@ -602,7 +817,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  *       - in: path
  *         name: id
  *         schema:
- *           type: integer
+ *           type: string
  *         required: true
  *         description: Kullanıcı ID
  *     requestBody:
@@ -627,7 +842,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  *         description: Kullanıcı bulunamadı
  */
 router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
+  const id = req.params.id;
   const { email, status } = req.body;
   const user = await userService.updateUser(id, { email, status });
   if (!user) return res.status(404).json({ message: 'User not found' });
@@ -653,7 +868,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
  *       - in: path
  *         name: id
  *         schema:
- *           type: integer
+ *           type: string
  *         required: true
  *         description: Kullanıcı ID
  *     responses:
@@ -663,7 +878,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
  *         description: Kullanıcı bulunamadı
  */
 router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = Number(req.params.id);
+  const id = req.params.id;
   const ok = await userService.deleteUser(id);
   if (!ok) return res.status(404).json({ message: 'User not found' });
   res.status(204).send();

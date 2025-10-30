@@ -1,6 +1,6 @@
 export class TrustRelation {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly trusterId: number,
     public readonly trustedUserId: number,
     public readonly createdAt: Date,

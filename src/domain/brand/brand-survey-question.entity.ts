@@ -2,7 +2,7 @@ import { SurveyQuestionType } from './survey-question-type.enum';
 
 export class BrandSurveyQuestion {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly surveyId: number,
     public readonly questionText: string,
     public readonly type: SurveyQuestionType,

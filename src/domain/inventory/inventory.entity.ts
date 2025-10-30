@@ -1,6 +1,6 @@
 export class Inventory {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly userId: number,
     public readonly productId: number,
     public readonly hasOwned: boolean,

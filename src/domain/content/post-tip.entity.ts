@@ -2,7 +2,7 @@ import { TipCategory } from './tip-category.enum';
 
 export class PostTip {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly postId: number,
     public readonly tipCategory: TipCategory,
     public readonly isVerified: boolean,

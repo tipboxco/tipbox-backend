@@ -2,7 +2,7 @@ import { UserVisibility } from './user-visibility.enum';
 
 export class UserSettings {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly userId: number,
     public readonly themeId: number | null,
     public readonly receiveNotifications: boolean | null,

@@ -2,7 +2,7 @@ import { AchievementDifficulty } from './achievement-difficulty.enum';
 
 export class AchievementGoal {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly chainId: number,
     public readonly title: string,
     public readonly requirement: string,

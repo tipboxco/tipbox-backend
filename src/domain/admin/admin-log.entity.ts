@@ -1,7 +1,7 @@
 export class AdminLog {
   constructor(
-    public readonly id: number,
-    public readonly adminId: number,
+    public readonly id: string,
+    public readonly adminId: string,
     public readonly action: string,
     public readonly description: string | null,
     public readonly entityType: string,
@@ -11,7 +11,7 @@ export class AdminLog {
   ) {}
 
   // Essential business methods only
-  belongsToAdmin(adminId: number): boolean {
+  belongsToAdmin(adminId: string): boolean {
     return this.adminId === adminId;
   }
 

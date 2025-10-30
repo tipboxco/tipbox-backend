@@ -1,6 +1,6 @@
 export class PostComparison {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly postId: number,
     public readonly product1Id: number,
     public readonly product2Id: number,

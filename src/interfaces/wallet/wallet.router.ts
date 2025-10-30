@@ -27,12 +27,12 @@ const walletService = new WalletService();
  *                 type: object
  *                 properties:
  *                   id:
- *                     type: integer
- *                     example: 1
+ *                     type: string
+ *                     example: "01J9Y4NQSW3KZV9W0F7B6C2D1E"
  *                     description: Cüzdanın benzersiz ID'si
  *                   userId:
- *                     type: integer
- *                     example: 1
+ *                     type: string
+ *                     example: "01J9Y4NQSW3KZV9W0F7B6C2D1E"
  *                     description: Cüzdanın sahibi olan kullanıcının ID'si
  *                   publicAddress:
  *                     type: string
@@ -88,7 +88,7 @@ const walletService = new WalletService();
  */
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
   // TODO: Get userId from JWT token
-  const userId = parseInt(req.headers['user-id'] as string) || 1;
+  const userId = String(req.headers['user-id'] || '');
   
   const wallets = await walletService.getUserWallets(userId);
   const response: WalletResponse[] = wallets.map(wallet => ({
@@ -125,7 +125,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  *         description: No active wallet found
  */
 router.get('/active', asyncHandler(async (req: Request, res: Response) => {
-  const userId = parseInt(req.headers['user-id'] as string) || 1;
+  const userId = String(req.headers['user-id'] || '');
   
   const activeWallet = await walletService.getActiveWallet(userId);
   if (!activeWallet) {
@@ -185,12 +185,12 @@ router.get('/active', asyncHandler(async (req: Request, res: Response) => {
  *               type: object
  *               properties:
  *                 id:
- *                   type: integer
- *                   example: 1
+ *                   type: string
+ *                   example: "01J9Y4NQSW3KZV9W0F7B6C2D1E"
  *                   description: Bağlanan cüzdanın benzersiz ID'si
  *                 userId:
- *                   type: integer
- *                   example: 1
+ *                   type: string
+ *                   example: "01J9Y4NQSW3KZV9W0F7B6C2D1E"
  *                   description: Cüzdanın sahibi olan kullanıcının ID'si
  *                 publicAddress:
  *                   type: string
@@ -264,7 +264,7 @@ router.get('/active', asyncHandler(async (req: Request, res: Response) => {
  *                   example: Cüzdan bağlanırken bir hata oluştu
  */
 router.post('/connect', asyncHandler(async (req: Request, res: Response) => {
-  const userId = parseInt(req.headers['user-id'] as string) || 1;
+  const userId = String(req.headers['user-id'] || '');
   const { publicAddress, provider }: ConnectWalletRequest = req.body;
 
   // Validation
@@ -306,7 +306,7 @@ router.post('/connect', asyncHandler(async (req: Request, res: Response) => {
  *         in: path
  *         required: true
  *         schema:
- *           type: integer
+ *           type: string
  *     responses:
  *       200:
  *         description: Wallet disconnected successfully
@@ -318,7 +318,7 @@ router.post('/connect', asyncHandler(async (req: Request, res: Response) => {
  *         description: Wallet not found
  */
 router.patch('/:id/disconnect', asyncHandler(async (req: Request, res: Response) => {
-  const walletId = parseInt(req.params.id);
+  const walletId = req.params.id;
   
   const wallet = await walletService.disconnectWallet(walletId);
   if (!wallet) {
@@ -353,7 +353,7 @@ router.patch('/:id/disconnect', asyncHandler(async (req: Request, res: Response)
  *         in: path
  *         required: true
  *         schema:
- *           type: integer
+ *           type: string
  *     responses:
  *       200:
  *         description: Wallet activated successfully
@@ -365,7 +365,7 @@ router.patch('/:id/disconnect', asyncHandler(async (req: Request, res: Response)
  *         description: Wallet not found
  */
 router.patch('/:id/activate', asyncHandler(async (req: Request, res: Response) => {
-  const walletId = parseInt(req.params.id);
+  const walletId = req.params.id;
   
   const wallet = await walletService.switchActiveWallet(walletId);
   if (!wallet) {
@@ -400,7 +400,7 @@ router.patch('/:id/activate', asyncHandler(async (req: Request, res: Response) =
  *         in: path
  *         required: true
  *         schema:
- *           type: integer
+ *           type: string
  *     responses:
  *       204:
  *         description: Wallet removed successfully
@@ -408,7 +408,7 @@ router.patch('/:id/activate', asyncHandler(async (req: Request, res: Response) =
  *         description: Wallet not found
  */
 router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const walletId = parseInt(req.params.id);
+  const walletId = req.params.id;
   
   const deleted = await walletService.removeWallet(walletId);
   if (!deleted) {

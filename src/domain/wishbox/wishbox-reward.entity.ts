@@ -2,7 +2,7 @@ import { WishboxRewardType } from './wishbox-reward-type.enum';
 
 export class WishboxReward {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly userId: number,
     public readonly eventId: number,
     public readonly rewardType: WishboxRewardType,

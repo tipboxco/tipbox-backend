@@ -1,6 +1,6 @@
 export class ContentComment {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly postId: number,
     public readonly userId: number,
     public readonly parentId: number | null,

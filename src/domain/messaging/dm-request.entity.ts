@@ -2,7 +2,7 @@ import { DMRequestStatus } from './dm-request-status.enum';
 
 export class DMRequest {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly fromUserId: number,
     public readonly toUserId: number,
     public readonly status: DMRequestStatus,

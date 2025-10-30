@@ -2,7 +2,7 @@ import { ContentPostType } from './content-post-type.enum';
 
 export class ContentPost {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly userId: number,
     public readonly type: ContentPostType,
     public readonly title: string,

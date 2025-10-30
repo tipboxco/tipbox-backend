@@ -16,7 +16,7 @@ datasource db {
 // ===== USER RELATED MODELS =====
 
 model User {
-  id           Int      @id @default(autoincrement())
+  id           String   @id @db.Uuid @default(uuid())
   email        String?  @unique
   passwordHash String?  @map("password_hash")
   status       String?
@@ -83,15 +83,22 @@ model User {
   manualReviewFlags    ManualReviewFlag[]
   userKycRecords       UserKycRecord[]
 
+  // Block/Mute relations
+  userBlocksAsBlocker  UserBlock[]        @relation("BlockerRelation")
+  userBlocksAsBlocked  UserBlock[]        @relation("BlockedUserRelation")
+  userMutesAsMuter     UserMute[]         @relation("MuterRelation")
+  userMutesAsMuted     UserMute[]         @relation("MutedUserRelation")
+
   @@map("users")
 }
 
 model Profile {
-  id          Int       @id @default(autoincrement())
-  userId      Int       @unique @map("user_id")
+  id          String    @id @db.Uuid @default(uuid())
+  userId      String    @unique @map("user_id") @db.Uuid
   displayName String?   @map("display_name")
   userName    String?   @unique @map("user_name")
   bio         String?
+  bannerUrl   String?   @map("banner_url")
   country     String?
   birthDate   DateTime? @map("birth_date") @db.Date
   createdAt   DateTime  @default(now()) @map("created_at")
@@ -104,9 +111,9 @@ model Profile {
 }
 
 model UserSettings {
-  id                   Int                @id @default(autoincrement())
-  userId               Int                @unique @map("user_id")
-  themeId              Int?               @map("theme_id")
+  id                   String             @id @db.Uuid @default(uuid())
+  userId               String             @unique @map("user_id") @db.Uuid
+  themeId              String?            @map("theme_id") @db.Uuid
   receiveNotifications Boolean?           @map("receive_notifications")
   visibility           UserVisibility?
   createdAt            DateTime           @default(now()) @map("created_at")
@@ -120,9 +127,9 @@ model UserSettings {
 }
 
 model TrustRelation {
-  id            Int      @id @default(autoincrement())
-  trusterId     Int      @map("truster_id")
-  trustedUserId Int      @map("trusted_user_id")
+  id            String   @id @db.Uuid @default(uuid())
+  trusterId     String   @map("truster_id") @db.Uuid
+  trustedUserId String   @map("trusted_user_id") @db.Uuid
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
@@ -134,9 +141,41 @@ model TrustRelation {
   @@map("trust_relations")
 }
 
+// Kullanıcı engelleme ilişkisi (Block)
+model UserBlock {
+  id           String   @id @db.Uuid @default(uuid())
+  blockerId    String   @map("blocker_id") @db.Uuid
+  blockedUserId String  @map("blocked_user_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  blocker     User @relation("BlockerRelation", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedUser User @relation("BlockedUserRelation", fields: [blockedUserId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedUserId])
+  @@map("user_blocks")
+}
+
+// Kullanıcı susturma ilişkisi (Mute)
+model UserMute {
+  id           String   @id @db.Uuid @default(uuid())
+  muterId      String   @map("muter_id") @db.Uuid
+  mutedUserId  String   @map("muted_user_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  muter     User @relation("MuterRelation", fields: [muterId], references: [id], onDelete: Cascade)
+  mutedUser User @relation("MutedUserRelation", fields: [mutedUserId], references: [id], onDelete: Cascade)
+
+  @@unique([muterId, mutedUserId])
+  @@map("user_mutes")
+}
+
 model UserTrustScore {
-  id           Int      @id @default(autoincrement())
-  userId       Int      @map("user_id")
+  id           String   @id @db.Uuid @default(uuid())
+  userId       String   @map("user_id") @db.Uuid
   score        Float
   reason       String?
   calculatedAt DateTime @default(now()) @map("calculated_at")
@@ -150,8 +189,8 @@ model UserTrustScore {
 }
 
 model UserRole {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @map("user_id")
+  id        String   @id @db.Uuid @default(uuid())
+  userId    String   @map("user_id") @db.Uuid
   role      String
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -163,8 +202,8 @@ model UserRole {
 }
 
 model UserFeedPreferences {
-  id                     Int      @id @default(autoincrement())
-  userId                 Int      @unique @map("user_id")
+  id                     String   @id @db.Uuid @default(uuid())
+  userId                 String   @unique @map("user_id") @db.Uuid
   preferredCategories    String?  @map("preferred_categories")
   preferredContentTypes  String?  @map("preferred_content_types")
   language               String?
@@ -178,8 +217,8 @@ model UserFeedPreferences {
 }
 
 model UserAvatar {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @map("user_id")
+  id        String   @id @db.Uuid @default(uuid())
+  userId    String   @map("user_id") @db.Uuid
   imageUrl  String   @map("image_url")
   isActive  Boolean  @map("is_active")
   createdAt DateTime @default(now()) @map("created_at")
@@ -192,8 +231,8 @@ model UserAvatar {
 }
 
 model UserKycRecord {
-  id                Int           @id @default(autoincrement())
-  userId            Int           @map("user_id")
+  id                String        @id @db.Uuid @default(uuid())
+  userId            String        @map("user_id") @db.Uuid
   sumsubApplicantId String        @unique @map("sumsub_applicant_id")
   reviewStatus      KycReviewStatus @map("review_status") @default(INIT)
   reviewResult      KycReviewResult @map("review_result") @default(NULL)
@@ -212,7 +251,7 @@ model UserKycRecord {
 }
 
 model UserTheme {
-  id          Int      @id @default(autoincrement())
+  id          String   @id @db.Uuid @default(uuid())
   name        String
   description String?
   createdAt   DateTime @default(now()) @map("created_at")
@@ -225,8 +264,8 @@ model UserTheme {
 }
 
 model UserTitle {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @map("user_id")
+  id        String   @id @db.Uuid @default(uuid())
+  userId    String   @map("user_id") @db.Uuid
   title     String
   earnedAt  DateTime @default(now()) @map("earned_at")
   createdAt DateTime @default(now()) @map("created_at")
@@ -239,8 +278,8 @@ model UserTitle {
 }
 
 model UserCollection {
-  id          Int      @id @default(autoincrement())
-  userId      Int      @map("user_id")
+  id          String   @id @db.Uuid @default(uuid())
+  userId      String   @map("user_id") @db.Uuid
   name        String
   description String?
   createdAt   DateTime @default(now()) @map("created_at")
@@ -253,8 +292,8 @@ model UserCollection {
 }
 
 model LoginAttempt {
-  id          Int               @id @default(autoincrement())
-  userId      Int?              @map("user_id")
+  id          String            @id @db.Uuid @default(uuid())
+  userId      String?           @map("user_id") @db.Uuid
   ipAddress   String            @map("ip_address")
   userAgent   String            @map("user_agent")
   status      LoginAttemptStatus
@@ -267,8 +306,8 @@ model LoginAttempt {
 }
 
 model PasswordResetToken {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @map("user_id")
+  id        String   @id @db.Uuid @default(uuid())
+  userId    String   @map("user_id") @db.Uuid
   token     String   @unique
   isUsed    Boolean  @default(false) @map("is_used")
   expiresAt DateTime @map("expires_at")
@@ -282,8 +321,8 @@ model PasswordResetToken {
 }
 
 model EmailVerificationCode {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @map("user_id")
+  id        String   @id @db.Uuid @default(uuid())
+  userId    String   @map("user_id") @db.Uuid
   email     String
   code      String   @db.VarChar(6)
   isUsed    Boolean  @default(false) @map("is_used")
@@ -345,7 +384,7 @@ enum LoginAttemptStatus {
 // ===== CATEGORY & PRODUCT MODELS =====
 
 model MainCategory {
-  id          Int      @id @default(autoincrement())
+  id          String   @id @db.Uuid @default(uuid())
   name        String
   description String?
   createdAt   DateTime @default(now()) @map("created_at")
@@ -359,8 +398,8 @@ model MainCategory {
 }
 
 model SubCategory {
-  id             Int      @id @default(autoincrement())
-  mainCategoryId Int      @map("main_category_id")
+  id             String   @id @db.Uuid @default(uuid())
+  mainCategoryId String   @map("main_category_id") @db.Uuid
   name           String
   description    String?
   createdAt      DateTime @default(now()) @map("created_at")
@@ -375,8 +414,8 @@ model SubCategory {
 }
 
 model ProductGroup {
-  id            Int      @id @default(autoincrement())
-  subCategoryId Int      @map("sub_category_id")
+  id            String   @id @db.Uuid @default(uuid())
+  subCategoryId String   @map("sub_category_id") @db.Uuid
   name          String
   description   String?
   createdAt     DateTime @default(now()) @map("created_at")
@@ -391,11 +430,11 @@ model ProductGroup {
 }
 
 model Product {
-  id          Int      @id @default(autoincrement())
+  id          String   @id @db.Uuid @default(uuid())
   name        String
   brand       String?
   description String?
-  groupId     Int?     @map("group_id")
+  groupId     String?  @map("group_id") @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -411,8 +450,8 @@ model Product {
 }
 
 model ProductSuggestion {
-  id            Int                        @id @default(autoincrement())
-  userId        Int                        @map("user_id")
+  id            String                     @id @db.Uuid @default(uuid())
+  userId        String                     @map("user_id") @db.Uuid
   suggestedName String                     @map("suggested_name")
   suggestedBrand String?                   @map("suggested_brand")
   description   String?
@@ -421,7 +460,7 @@ model ProductSuggestion {
   createdAt     DateTime                   @default(now()) @map("created_at")
   updatedAt     DateTime                   @updatedAt @map("updated_at")
   reviewedAt    DateTime?                  @map("reviewed_at")
-  reviewedBy    Int?                       @map("reviewed_by")
+  reviewedBy    String?                    @map("reviewed_by") @db.Uuid
 
   // Relations
   user     User  @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -443,9 +482,9 @@ enum ProductSuggestionStatus {
 // ===== INVENTORY SYSTEM MODELS =====
 
 model Inventory {
-  id                Int      @id @default(autoincrement())
-  userId            Int      @map("user_id")
-  productId         Int      @map("product_id")
+  id                String   @id @db.Uuid @default(uuid())
+  userId            String   @map("user_id") @db.Uuid
+  productId         String   @map("product_id") @db.Uuid
   hasOwned          Boolean  @map("has_owned")
   experienceSummary String?  @map("experience_summary")
   createdAt         DateTime @default(now()) @map("created_at")
@@ -462,8 +501,8 @@ model Inventory {
 }
 
 model ProductExperience {
-  id             Int      @id @default(autoincrement())
-  inventoryId    Int      @map("inventory_id")
+  id             String   @id @db.Uuid @default(uuid())
+  inventoryId    String   @map("inventory_id") @db.Uuid
   title          String
   experienceText String   @map("experience_text")
   createdAt      DateTime @default(now()) @map("created_at")
@@ -476,8 +515,8 @@ model ProductExperience {
 }
 
 model InventoryMedia {
-  id          Int              @id @default(autoincrement())
-  inventoryId Int              @map("inventory_id")
+  id          String           @id @db.Uuid @default(uuid())
+  inventoryId String           @map("inventory_id") @db.Uuid
   mediaUrl    String           @map("media_url")
   type        InventoryMediaType
   uploadedAt  DateTime         @default(now()) @map("uploaded_at")
@@ -502,15 +541,15 @@ enum InventoryMediaType {
 // ===== CONTENT SYSTEM MODELS =====
 
 model ContentPost {
-  id               Int             @id @default(autoincrement())
-  userId           Int             @map("user_id")
+  id               String          @id @db.VarChar(26)
+  userId           String          @map("user_id") @db.Uuid
   type             ContentPostType
   title            String
   body             String
-  mainCategoryId   Int?            @map("main_category_id")
-  subCategoryId    Int?            @map("sub_category_id")
-  productGroupId   Int?            @map("product_group_id")
-  productId        Int?            @map("product_id")
+  mainCategoryId   String?         @map("main_category_id") @db.Uuid
+  subCategoryId    String?         @map("sub_category_id") @db.Uuid
+  productGroupId   String?         @map("product_group_id") @db.Uuid
+  productId        String?         @map("product_id") @db.Uuid
   inventoryRequired Boolean        @map("inventory_required")
   isBoosted        Boolean         @map("is_boosted")
   boostedUntil     DateTime?       @map("boosted_until")
@@ -541,10 +580,10 @@ model ContentPost {
 }
 
 model PostQuestion {
-  id                   Int                    @id @default(autoincrement())
-  postId               Int                    @unique @map("post_id")
+  id                   String                 @id @db.Uuid @default(uuid())
+  postId               String                 @unique @map("post_id") @db.VarChar(26)
   expectedAnswerFormat QuestionAnswerFormat   @map("expected_answer_format")
-  relatedProductId     Int?                   @map("related_product_id")
+  relatedProductId     String?                @map("related_product_id") @db.Uuid
   createdAt            DateTime               @default(now()) @map("created_at")
   updatedAt            DateTime               @updatedAt @map("updated_at")
 
@@ -556,10 +595,10 @@ model PostQuestion {
 }
 
 model PostComparison {
-  id                Int      @id @default(autoincrement())
-  postId            Int      @unique @map("post_id")
-  product1Id        Int      @map("product_1_id")
-  product2Id        Int      @map("product_2_id")
+  id                String   @id @db.Uuid @default(uuid())
+  postId            String   @unique @map("post_id") @db.VarChar(26)
+  product1Id        String   @map("product_1_id") @db.Uuid
+  product2Id        String   @map("product_2_id") @db.Uuid
   comparisonSummary String?  @map("comparison_summary")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
@@ -574,7 +613,7 @@ model PostComparison {
 }
 
 model ComparisonMetric {
-  id          Int      @id @default(autoincrement())
+  id          String   @id @db.Uuid @default(uuid())
   name        String
   description String?
   createdAt   DateTime @default(now()) @map("created_at")
@@ -587,9 +626,9 @@ model ComparisonMetric {
 }
 
 model PostComparisonScore {
-  id           Int      @id @default(autoincrement())
-  comparisonId Int      @map("comparison_id")
-  metricId     Int      @map("metric_id")
+  id           String   @id @db.Uuid @default(uuid())
+  comparisonId String   @map("comparison_id") @db.Uuid
+  metricId     String   @map("metric_id") @db.Uuid
   scoreProduct1 Int     @map("score_product_1")
   scoreProduct2 Int     @map("score_product_2")
   comment      String?
@@ -605,8 +644,8 @@ model PostComparisonScore {
 }
 
 model PostTip {
-  id          Int         @id @default(autoincrement())
-  postId      Int         @unique @map("post_id")
+  id          String      @id @db.Uuid @default(uuid())
+  postId      String      @unique @map("post_id") @db.VarChar(26)
   tipCategory TipCategory @map("tip_category")
   isVerified  Boolean     @map("is_verified")
   createdAt   DateTime    @default(now()) @map("created_at")
@@ -619,8 +658,8 @@ model PostTip {
 }
 
 model PostTag {
-  id        Int      @id @default(autoincrement())
-  postId    Int      @map("post_id")
+  id        String   @id @db.Uuid @default(uuid())
+  postId    String   @map("post_id") @db.VarChar(26)
   tag       String
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -632,8 +671,8 @@ model PostTag {
 }
 
 model ContentPostTag {
-  id        Int      @id @default(autoincrement())
-  postId    Int      @map("post_id")
+  id        String   @id @db.Uuid @default(uuid())
+  postId    String   @map("post_id") @db.VarChar(26)
   tag       String
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -676,10 +715,10 @@ enum TipCategory {
 // ===== CONTENT INTERACTION MODELS =====
 
 model ContentComment {
-  id        Int      @id @default(autoincrement())
-  postId    Int      @map("post_id")
-  userId    Int      @map("user_id")
-  parentId  Int?     @map("parent_id")
+  id        String   @id @db.VarChar(26)
+  postId    String   @map("post_id") @db.VarChar(26)
+  userId    String   @map("user_id") @db.Uuid
+  parentId  String?  @map("parent_id") @db.VarChar(26)
   comment   String
   isAnswer  Boolean  @map("is_answer")
   createdAt DateTime @default(now()) @map("created_at")
@@ -698,10 +737,10 @@ model ContentComment {
 }
 
 model ContentLike {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @map("user_id")
-  postId    Int?     @map("post_id")
-  commentId Int?     @map("comment_id")
+  id        String   @id @db.Uuid @default(uuid())
+  userId    String   @map("user_id") @db.Uuid
+  postId    String?  @map("post_id") @db.VarChar(26)
+  commentId String?  @map("comment_id") @db.VarChar(26)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -716,9 +755,9 @@ model ContentLike {
 }
 
 model ContentFavorite {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @map("user_id")
-  postId    Int      @map("post_id")
+  id        String   @id @db.Uuid @default(uuid())
+  userId    String   @map("user_id") @db.Uuid
+  postId    String   @map("post_id") @db.VarChar(26)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -731,8 +770,8 @@ model ContentFavorite {
 }
 
 model ContentCollection {
-  id          Int      @id @default(autoincrement())
-  userId      Int      @map("user_id")
+  id          String   @id @db.Uuid @default(uuid())
+  userId      String   @map("user_id") @db.Uuid
   name        String
   description String?
   createdAt   DateTime @default(now()) @map("created_at")
@@ -745,9 +784,9 @@ model ContentCollection {
 }
 
 model ContentRating {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @map("user_id")
-  commentId Int      @map("comment_id")
+  id        String   @id @db.Uuid @default(uuid())
+  userId    String   @map("user_id") @db.Uuid
+  commentId String   @map("comment_id") @db.VarChar(26)
   rating    Int
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -761,9 +800,9 @@ model ContentRating {
 }
 
 model ContentCommentVote {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @map("user_id")
-  commentId Int      @map("comment_id")
+  id        String   @id @db.Uuid @default(uuid())
+  userId    String   @map("user_id") @db.Uuid
+  commentId String   @map("comment_id") @db.VarChar(26)
   voteType  VoteType @map("vote_type")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -777,9 +816,9 @@ model ContentCommentVote {
 }
 
 model ContentPostView {
-  id        Int      @id @default(autoincrement())
-  postId    Int      @map("post_id")
-  userId    Int?     @map("user_id")
+  id        String   @id @db.Uuid @default(uuid())
+  postId    String   @map("post_id") @db.VarChar(26)
+  userId    String?  @map("user_id") @db.Uuid
   viewedAt  DateTime @default(now()) @map("viewed_at")
   viewerIp  String   @map("viewer_ip")
   createdAt DateTime @default(now()) @map("created_at")
@@ -793,8 +832,8 @@ model ContentPostView {
 }
 
 model TopCommunityChoice {
-  id         Int      @id @default(autoincrement())
-  postId     Int      @map("post_id")
+  id         String   @id @db.Uuid @default(uuid())
+  postId     String   @map("post_id") @db.VarChar(26)
   reason     String?
   badgeLabel String   @map("badge_label")
   awardedAt  DateTime @default(now()) @map("awarded_at")
@@ -819,7 +858,7 @@ enum VoteType {
 // ===== BADGE & ACHIEVEMENT SYSTEM MODELS =====
 
 model Badge {
-  id              Int              @id @default(autoincrement())
+  id              String           @id @db.Uuid @default(uuid())
   name            String
   description     String?
   imageUrl        String?          @map("image_url")
@@ -827,7 +866,7 @@ model Badge {
   rarity          BadgeRarity
   boostMultiplier Float?           @map("boost_multiplier")
   rewardMultiplier Float?          @map("reward_multiplier")
-  categoryId      Int              @map("category_id")
+  categoryId      String           @map("category_id") @db.Uuid
   createdAt       DateTime         @default(now()) @map("created_at")
 
   // Relations
@@ -841,7 +880,7 @@ model Badge {
 }
 
 model BadgeCategory {
-  id          Int     @id @default(autoincrement())
+  id          String  @id @db.Uuid @default(uuid())
   name        String
   description String?
 
@@ -852,9 +891,9 @@ model BadgeCategory {
 }
 
 model UserBadge {
-  id           Int            @id @default(autoincrement())
-  userId       Int            @map("user_id")
-  badgeId      Int            @map("badge_id")
+  id           String         @id @db.Uuid @default(uuid())
+  userId       String         @map("user_id") @db.Uuid
+  badgeId      String         @map("badge_id") @db.Uuid
   isVisible    Boolean        @map("is_visible")
   displayOrder Int?           @map("display_order")
   visibility   BadgeVisibility
@@ -870,7 +909,7 @@ model UserBadge {
 }
 
 model AchievementChain {
-  id          Int    @id @default(autoincrement())
+  id          String @id @db.Uuid @default(uuid())
   name        String
   description String?
   category    String
@@ -882,11 +921,11 @@ model AchievementChain {
 }
 
 model AchievementGoal {
-  id             Int                  @id @default(autoincrement())
-  chainId        Int                  @map("chain_id")
+  id             String               @id @db.Uuid @default(uuid())
+  chainId        String               @map("chain_id") @db.Uuid
   title          String
   requirement    String
-  rewardBadgeId  Int?                 @map("reward_badge_id")
+  rewardBadgeId  String?              @map("reward_badge_id") @db.Uuid
   pointsRequired Int                  @map("points_required")
   difficulty     AchievementDifficulty
 
@@ -899,9 +938,9 @@ model AchievementGoal {
 }
 
 model UserAchievement {
-  id          Int       @id @default(autoincrement())
-  userId      Int       @map("user_id")
-  goalId      Int       @map("goal_id")
+  id          String    @id @db.Uuid @default(uuid())
+  userId      String    @map("user_id") @db.Uuid
+  goalId      String    @map("goal_id") @db.Uuid
   progress    Int
   completed   Boolean   @default(false)
   completedAt DateTime? @map("completed_at")
@@ -915,9 +954,9 @@ model UserAchievement {
 }
 
 model RewardClaim {
-  id           Int           @id @default(autoincrement())
-  userId       Int           @map("user_id")
-  badgeId      Int           @map("badge_id")
+  id           String        @id @db.Uuid @default(uuid())
+  userId       String        @map("user_id") @db.Uuid
+  badgeId      String        @map("badge_id") @db.Uuid
   amount       Float
   claimedAt    DateTime      @default(now()) @map("claimed_at")
   vestingStatus VestingStatus @map("vesting_status")
@@ -975,7 +1014,7 @@ enum VestingStatus {
 // ===== BRAND & BRIDGE SYSTEM MODELS =====
 
 model Brand {
-  id          Int      @id @default(autoincrement())
+  id          String   @id @db.Uuid @default(uuid())
   name        String
   description String?
   logoUrl     String?  @map("logo_url")
@@ -995,9 +1034,9 @@ model Brand {
 }
 
 model BridgePost {
-  id        Int      @id @default(autoincrement())
-  brandId   Int      @map("brand_id")
-  userId    Int      @map("user_id")
+  id        String   @id @db.VarChar(26)
+  brandId   String   @map("brand_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
   content   String
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1010,8 +1049,8 @@ model BridgePost {
 }
 
 model BrandSurvey {
-  id          Int      @id @default(autoincrement())
-  brandId     Int      @map("brand_id")
+  id          String   @id @db.Uuid @default(uuid())
+  brandId     String   @map("brand_id") @db.Uuid
   title       String
   description String?
   startsAt    DateTime @map("starts_at")
@@ -1027,8 +1066,8 @@ model BrandSurvey {
 }
 
 model BrandSurveyQuestion {
-  id           Int              @id @default(autoincrement())
-  surveyId     Int              @map("survey_id")
+  id           String           @id @db.Uuid @default(uuid())
+  surveyId     String           @map("survey_id") @db.Uuid
   questionText String           @map("question_text")
   type         SurveyQuestionType
   createdAt    DateTime         @default(now()) @map("created_at")
@@ -1042,9 +1081,9 @@ model BrandSurveyQuestion {
 }
 
 model BrandSurveyAnswer {
-  id         Int      @id @default(autoincrement())
-  questionId Int      @map("question_id")
-  userId     Int      @map("user_id")
+  id         String   @id @db.Uuid @default(uuid())
+  questionId String   @map("question_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
   answerText String   @map("answer_text")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
@@ -1058,9 +1097,9 @@ model BrandSurveyAnswer {
 }
 
 model BridgeFollower {
-  id         Int      @id @default(autoincrement())
-  userId     Int      @map("user_id")
-  brandId    Int      @map("brand_id")
+  id         String   @id @db.Uuid @default(uuid())
+  userId     String   @map("user_id") @db.Uuid
+  brandId    String   @map("brand_id") @db.Uuid
   followedAt DateTime @default(now()) @map("followed_at")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
@@ -1074,9 +1113,9 @@ model BridgeFollower {
 }
 
 model BridgeUserStats {
-  id                   Int       @id @default(autoincrement())
-  userId               Int       @map("user_id")
-  brandId              Int       @map("brand_id")
+  id                   String    @id @db.Uuid @default(uuid())
+  userId               String    @map("user_id") @db.Uuid
+  brandId              String    @map("brand_id") @db.Uuid
   commentsCount        Int       @map("comments_count")
   surveysParticipated  Int       @map("surveys_participated")
   trustScore           Float     @map("trust_score")
@@ -1093,9 +1132,9 @@ model BridgeUserStats {
 }
 
 model BridgeLeaderboard {
-  id         Int                    @id @default(autoincrement())
-  brandId    Int                    @map("brand_id")
-  userId     Int                    @map("user_id")
+  id         String                 @id @db.Uuid @default(uuid())
+  brandId    String                 @map("brand_id") @db.Uuid
+  userId     String                 @map("user_id") @db.Uuid
   period     LeaderboardPeriod
   rank       Int
   score      Float
@@ -1112,10 +1151,10 @@ model BridgeLeaderboard {
 }
 
 model BridgeReward {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @map("user_id")
-  brandId   Int      @map("brand_id")
-  badgeId   Int      @map("badge_id")
+  id        String   @id @db.Uuid @default(uuid())
+  userId    String   @map("user_id") @db.Uuid
+  brandId   String   @map("brand_id") @db.Uuid
+  badgeId   String   @map("badge_id") @db.Uuid
   awardedAt DateTime @default(now()) @map("awarded_at")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1148,8 +1187,8 @@ enum LeaderboardPeriod {
 // ===== CRYPTO & NFT SYSTEM MODELS =====
 
 model Wallet {
-  id            Int           @id @default(autoincrement())
-  userId        Int           @map("user_id")
+  id            String        @id @db.Uuid @default(uuid())
+  userId        String        @map("user_id") @db.Uuid
   publicAddress String        @map("public_address")
   provider      WalletProvider
   isConnected   Boolean       @map("is_connected")
@@ -1164,9 +1203,9 @@ model Wallet {
 }
 
 model TipsTokenTransfer {
-  id         Int      @id @default(autoincrement())
-  fromUserId Int      @map("from_user_id")
-  toUserId   Int      @map("to_user_id")
+  id         String   @id @db.Uuid @default(uuid())
+  fromUserId String   @map("from_user_id") @db.Uuid
+  toUserId   String   @map("to_user_id") @db.Uuid
   amount     Float
   reason     String?
   createdAt  DateTime @default(now()) @map("created_at")
@@ -1180,7 +1219,7 @@ model TipsTokenTransfer {
 }
 
 model NFT {
-  id             Int       @id @default(autoincrement())
+  id             String    @id @db.Uuid @default(uuid())
   name           String
   description    String?
   imageUrl       String    @map("image_url")
@@ -1200,10 +1239,10 @@ model NFT {
 }
 
 model NFTTransaction {
-  id              Int                 @id @default(autoincrement())
-  nftId           Int                 @map("nft_id")
-  fromUserId      Int?                @map("from_user_id")
-  toUserId        Int                 @map("to_user_id")
+  id              String              @id @db.Uuid @default(uuid())
+  nftId           String              @map("nft_id") @db.Uuid
+  fromUserId      String?             @map("from_user_id") @db.Uuid
+  toUserId        String              @map("to_user_id") @db.Uuid
   price           Float?
   transactionType NFTTransactionType  @map("transaction_type")
   createdAt       DateTime            @default(now()) @map("created_at")
@@ -1218,9 +1257,9 @@ model NFTTransaction {
 }
 
 model NFTMarketListing {
-  id            Int                    @id @default(autoincrement())
-  nftId         Int                    @map("nft_id")
-  listedByUserId Int                   @map("listed_by_user_id")
+  id            String                 @id @db.Uuid @default(uuid())
+  nftId         String                 @map("nft_id") @db.Uuid
+  listedByUserId String                @map("listed_by_user_id") @db.Uuid
   price         Float
   status        NFTMarketListingStatus @default(ACTIVE)
   listedAt      DateTime               @default(now()) @map("listed_at")
@@ -1235,8 +1274,8 @@ model NFTMarketListing {
 }
 
 model NFTAttribute {
-  id        Int      @id @default(autoincrement())
-  nftId     Int      @map("nft_id")
+  id        String   @id @db.Uuid @default(uuid())
+  nftId     String   @map("nft_id") @db.Uuid
   key       String
   value     String
   createdAt DateTime @default(now()) @map("created_at")
@@ -1249,8 +1288,8 @@ model NFTAttribute {
 }
 
 model Lootbox {
-  id          Int           @id @default(autoincrement())
-  userId      Int           @map("user_id")
+  id          String        @id @db.Uuid @default(uuid())
+  userId      String        @map("user_id") @db.Uuid
   tipsLocked  Float         @map("tips_locked")
   status      LootboxStatus @default(LOCKED)
   createdAt   DateTime      @default(now()) @map("created_at")
@@ -1263,9 +1302,9 @@ model Lootbox {
 }
 
 model NFTClaim {
-  id          Int      @id @default(autoincrement())
-  userId      Int      @map("user_id")
-  nftId       Int?     @map("nft_id")
+  id          String   @id @db.Uuid @default(uuid())
+  userId      String   @map("user_id") @db.Uuid
+  nftId       String?  @map("nft_id") @db.Uuid
   tipsAmount  Float    @map("tips_amount")
   claimedAt   DateTime @default(now()) @map("claimed_at")
   createdAt   DateTime @default(now()) @map("created_at")
@@ -1331,7 +1370,7 @@ enum LootboxStatus {
 // ===== WISHBOX SYSTEM MODELS =====
 
 model WishboxEvent {
-  id          Int              @id @default(autoincrement())
+  id          String           @id @db.VarChar(26)
   title       String
   description String?
   startDate   DateTime         @map("start_date")
@@ -1349,8 +1388,8 @@ model WishboxEvent {
 }
 
 model WishboxScenario {
-  id          Int      @id @default(autoincrement())
-  eventId     Int      @map("event_id")
+  id          String   @id @db.Uuid @default(uuid())
+  eventId     String   @map("event_id") @db.VarChar(26)
   title       String
   description String?
   orderIndex  Int      @map("order_index")
@@ -1365,9 +1404,9 @@ model WishboxScenario {
 }
 
 model ScenarioChoice {
-  id         Int      @id @default(autoincrement())
-  scenarioId Int      @map("scenario_id")
-  userId     Int      @map("user_id")
+  id         String   @id @db.Uuid @default(uuid())
+  scenarioId String   @map("scenario_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
   choiceText String   @map("choice_text")
   isSelected Boolean  @map("is_selected")
   createdAt  DateTime @default(now()) @map("created_at")
@@ -1383,9 +1422,9 @@ model ScenarioChoice {
 }
 
 model ChoiceComment {
-  id       Int      @id @default(autoincrement())
-  choiceId Int      @map("choice_id")
-  userId   Int      @map("user_id")
+  id       String   @id @db.Uuid @default(uuid())
+  choiceId String   @map("choice_id") @db.Uuid
+  userId   String   @map("user_id") @db.Uuid
   comment  String
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1398,9 +1437,9 @@ model ChoiceComment {
 }
 
 model WishboxStats {
-  id                    Int      @id @default(autoincrement())
-  userId                Int      @map("user_id")
-  eventId               Int      @map("event_id")
+  id                    String   @id @db.Uuid @default(uuid())
+  userId                String   @map("user_id") @db.Uuid
+  eventId               String   @map("event_id") @db.VarChar(26)
   totalParticipated     Int      @map("total_participated")
   totalComments         Int      @map("total_comments")
   helpfulVotesReceived  Int      @map("helpful_votes_received")
@@ -1416,9 +1455,9 @@ model WishboxStats {
 }
 
 model WishboxReward {
-  id         Int                 @id @default(autoincrement())
-  userId     Int                 @map("user_id")
-  eventId    Int                 @map("event_id")
+  id         String              @id @db.Uuid @default(uuid())
+  userId     String              @map("user_id") @db.Uuid
+  eventId    String              @map("event_id") @db.VarChar(26)
   rewardType WishboxRewardType   @map("reward_type")
   rewardId   Int                 @map("reward_id")
   amount     Float?
@@ -1454,9 +1493,9 @@ enum WishboxRewardType {
 // ===== DM & MESSAGING SYSTEM MODELS =====
 
 model DMThread {
-  id        Int      @id @default(autoincrement())
-  userOneId Int      @map("user_one_id")
-  userTwoId Int      @map("user_two_id")
+  id        String   @id @db.Uuid @default(uuid())
+  userOneId String   @map("user_one_id") @db.Uuid
+  userTwoId String   @map("user_two_id") @db.Uuid
   isActive  Boolean  @map("is_active")
   startedAt DateTime @default(now()) @map("started_at")
   createdAt DateTime @default(now()) @map("created_at")
@@ -1473,9 +1512,9 @@ model DMThread {
 }
 
 model DMMessage {
-  id       Int      @id @default(autoincrement())
-  threadId Int      @map("thread_id")
-  senderId Int      @map("sender_id")
+  id       String   @id @db.Uuid @default(uuid())
+  threadId String   @map("thread_id") @db.Uuid
+  senderId String   @map("sender_id") @db.Uuid
   message  String
   sentAt   DateTime @default(now()) @map("sent_at")
   isRead   Boolean  @map("is_read")
@@ -1490,9 +1529,9 @@ model DMMessage {
 }
 
 model DMRequest {
-  id          Int              @id @default(autoincrement())
-  fromUserId  Int              @map("from_user_id")
-  toUserId    Int              @map("to_user_id")
+  id          String           @id @db.Uuid @default(uuid())
+  fromUserId  String           @map("from_user_id") @db.Uuid
+  toUserId    String           @map("to_user_id") @db.Uuid
   status      DMRequestStatus  @default(PENDING)
   sentAt      DateTime         @default(now()) @map("sent_at")
   respondedAt DateTime?        @map("responded_at")
@@ -1508,9 +1547,9 @@ model DMRequest {
 }
 
 model DMSupportSession {
-  id          Int      @id @default(autoincrement())
-  threadId    Int      @map("thread_id")
-  helperId    Int      @map("helper_id")
+  id          String   @id @db.Uuid @default(uuid())
+  threadId    String   @map("thread_id") @db.Uuid
+  helperId    String   @map("helper_id") @db.Uuid
   tipsAmount  Float    @map("tips_amount")
   supportedAt DateTime @default(now()) @map("supported_at")
   createdAt   DateTime @default(now()) @map("created_at")
@@ -1525,8 +1564,8 @@ model DMSupportSession {
 }
 
 model DMFeedback {
-  id          Int      @id @default(autoincrement())
-  sessionId   Int      @map("session_id")
+  id          String   @id @db.Uuid @default(uuid())
+  sessionId   String   @map("session_id") @db.Uuid
   rating      Int
   comment     String?
   submittedAt DateTime @default(now()) @map("submitted_at")
@@ -1552,9 +1591,9 @@ enum DMRequestStatus {
 // ===== FEED & ADMIN SYSTEM MODELS =====
 
 model Feed {
-  id        Int        @id @default(autoincrement())
-  userId    Int        @map("user_id")
-  postId    Int        @map("post_id")
+  id        String     @id @db.VarChar(26)
+  userId    String     @map("user_id") @db.Uuid
+  postId    String     @map("post_id") @db.VarChar(26)
   source    FeedSource
   seen      Boolean    @default(false)
   createdAt DateTime   @default(now()) @map("created_at")
@@ -1568,8 +1607,8 @@ model Feed {
 }
 
 model FeedHighlight {
-  id            Int                 @id @default(autoincrement())
-  postId        Int                 @map("post_id")
+  id            String              @id @db.VarChar(26)
+  postId        String              @map("post_id") @db.VarChar(26)
   reason        FeedHighlightReason
   highlightedAt DateTime            @default(now()) @map("highlighted_at")
   createdAt     DateTime            @default(now()) @map("created_at")
@@ -1582,8 +1621,8 @@ model FeedHighlight {
 }
 
 model TrendingPost {
-  id           Int            @id @default(autoincrement())
-  postId       Int            @map("post_id")
+  id           String         @id @db.VarChar(26)
+  postId       String         @map("post_id") @db.VarChar(26)
   score        Float
   trendPeriod  TrendPeriod    @map("trend_period")
   calculatedAt DateTime       @default(now()) @map("calculated_at")
@@ -1598,8 +1637,8 @@ model TrendingPost {
 }
 
 model AdminLog {
-  id          Int      @id @default(autoincrement())
-  adminId     Int      @map("admin_id")
+  id          String   @id @db.Uuid @default(uuid())
+  adminId     String   @map("admin_id") @db.Uuid
   action      String
   description String?
   entityType  String   @map("entity_type")
@@ -1614,9 +1653,9 @@ model AdminLog {
 }
 
 model ModerationAction {
-  id           Int              @id @default(autoincrement())
-  moderatorId  Int              @map("moderator_id")
-  targetUserId Int              @map("target_user_id")
+  id           String           @id @db.Uuid @default(uuid())
+  moderatorId  String           @map("moderator_id") @db.Uuid
+  targetUserId String           @map("target_user_id") @db.Uuid
   reason       String
   actionType   ModerationActionType @map("action_type")
   contentType  String?          @map("content_type")
@@ -1632,8 +1671,8 @@ model ModerationAction {
 }
 
 model ManualReviewFlag {
-  id              Int                    @id @default(autoincrement())
-  flaggedByUserId Int                    @map("flagged_by_user_id")
+  id              String                 @id @db.Uuid @default(uuid())
+  flaggedByUserId String                 @map("flagged_by_user_id") @db.Uuid
   contentType     String                 @map("content_type")
   contentId       Int                    @map("content_id")
   reason          String

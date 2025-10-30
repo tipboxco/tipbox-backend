@@ -1,6 +1,6 @@
 export class ScenarioChoice {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly scenarioId: number,
     public readonly userId: number,
     public readonly choiceText: string,

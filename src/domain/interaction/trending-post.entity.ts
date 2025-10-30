@@ -5,7 +5,7 @@ export enum TrendPeriod {
 
 export class TrendingPost {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly postId: number,
     public readonly score: number,
     public readonly trendPeriod: TrendPeriod,

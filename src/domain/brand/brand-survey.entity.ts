@@ -1,6 +1,6 @@
 export class BrandSurvey {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly brandId: number,
     public readonly title: string,
     public readonly description: string | null,

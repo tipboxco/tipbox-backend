@@ -1,6 +1,6 @@
 export class NFTAttribute {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly nftId: number,
     public readonly key: string,
     public readonly value: string,

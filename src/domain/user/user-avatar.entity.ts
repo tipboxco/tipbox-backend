@@ -1,7 +1,7 @@
 export class UserAvatar {
   constructor(
-    public readonly id: number,
-    public readonly userId: number,
+    public readonly id: string,
+    public readonly userId: string,
     public readonly imageUrl: string,
     public readonly isActive: boolean,
     public readonly createdAt: Date,

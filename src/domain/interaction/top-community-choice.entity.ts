@@ -1,6 +1,6 @@
 export class TopCommunityChoice {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly postId: number,
     public readonly reason: string | null,
     public readonly badgeLabel: string,

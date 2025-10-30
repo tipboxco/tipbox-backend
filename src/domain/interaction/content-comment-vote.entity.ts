@@ -2,7 +2,7 @@ import { VoteType } from './vote-type.enum';
 
 export class ContentCommentVote {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly userId: number,
     public readonly commentId: number,
     public readonly voteType: VoteType,

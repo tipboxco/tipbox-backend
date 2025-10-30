@@ -1,6 +1,6 @@
 export class DMSupportSession {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly threadId: number,
     public readonly helperId: number,
     public readonly tipsAmount: number,

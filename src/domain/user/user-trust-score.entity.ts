@@ -1,6 +1,6 @@
 export class UserTrustScore {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly userId: number,
     public readonly score: number,
     public readonly reason: string | null,

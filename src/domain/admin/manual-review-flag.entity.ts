@@ -2,7 +2,7 @@ import { ManualReviewFlagStatus } from './manual-review-flag-status.enum';
 
 export class ManualReviewFlag {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly flaggedByUserId: number,
     public readonly contentType: string,
     public readonly contentId: number,

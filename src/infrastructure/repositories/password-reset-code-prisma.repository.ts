@@ -1,8 +1,8 @@
 import { PrismaClient } from '@prisma/client';
 
 export interface PasswordResetCodeData {
-  id: number;
-  userId: number;
+  id: string;
+  userId: string;
   email: string;
   code: string;
   isUsed: boolean;
@@ -14,7 +14,7 @@ export interface PasswordResetCodeData {
 export class PasswordResetCodePrismaRepository {
   private prisma = new PrismaClient();
 
-  async create(userId: number, email: string, code: string, expiresAt: Date): Promise<PasswordResetCodeData> {
+  async create(userId: string, email: string, code: string, expiresAt: Date): Promise<PasswordResetCodeData> {
     // Kullanıcının aktif olmayan kodlarını iptal et
     await this.prisma.passwordResetToken.updateMany({
       where: {
@@ -88,7 +88,7 @@ export class PasswordResetCodePrismaRepository {
     } : null;
   }
 
-  async findByUserIdAndCode(userId: number, code: string): Promise<PasswordResetCodeData | null> {
+  async findByUserIdAndCode(userId: string, code: string): Promise<PasswordResetCodeData | null> {
     const resetCode = await this.prisma.passwordResetToken.findFirst({
       where: {
         userId,
@@ -125,7 +125,7 @@ export class PasswordResetCodePrismaRepository {
     };
   }
 
-  async markAsUsed(id: number): Promise<void> {
+  async markAsUsed(id: string): Promise<void> {
     await this.prisma.passwordResetToken.update({
       where: { id },
       data: { isUsed: true },
@@ -144,7 +144,7 @@ export class PasswordResetCodePrismaRepository {
     return result.count;
   }
 
-  async deleteByUserId(userId: number): Promise<number> {
+  async deleteByUserId(userId: string): Promise<number> {
     const result = await this.prisma.passwordResetToken.deleteMany({
       where: {
         userId,

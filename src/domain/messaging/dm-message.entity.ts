@@ -1,6 +1,6 @@
 export class DMMessage {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly threadId: number,
     public readonly senderId: number,
     public readonly message: string,

@@ -2,7 +2,7 @@ import { FeedHighlightReason } from './feed-highlight-reason.enum';
 
 export class FeedHighlight {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly postId: number,
     public readonly reason: FeedHighlightReason,
     public readonly highlightedAt: Date,

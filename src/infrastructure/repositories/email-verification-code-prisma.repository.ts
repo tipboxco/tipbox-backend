@@ -1,8 +1,8 @@
 import { PrismaClient } from '@prisma/client';
 
 export interface EmailVerificationCodeData {
-  id: number;
-  userId: number;
+  id: string;
+  userId: string;
   email: string;
   code: string;
   isUsed: boolean;
@@ -14,7 +14,7 @@ export interface EmailVerificationCodeData {
 export class EmailVerificationCodePrismaRepository {
   private prisma = new PrismaClient();
 
-  async create(userId: number, email: string, code: string, expiresAt: Date): Promise<EmailVerificationCodeData> {
+  async create(userId: string, email: string, code: string, expiresAt: Date): Promise<EmailVerificationCodeData> {
     // Kullanıcının aktif olmayan kodlarını iptal et
     await this.prisma.emailVerificationCode.updateMany({
       where: {
@@ -61,7 +61,7 @@ export class EmailVerificationCodePrismaRepository {
     return verificationCode ? this.toDomain(verificationCode) : null;
   }
 
-  async findByUserIdAndCode(userId: number, code: string): Promise<EmailVerificationCodeData | null> {
+  async findByUserIdAndCode(userId: string, code: string): Promise<EmailVerificationCodeData | null> {
     const verificationCode = await this.prisma.emailVerificationCode.findFirst({
       where: {
         userId,
@@ -79,7 +79,7 @@ export class EmailVerificationCodePrismaRepository {
     return verificationCode ? this.toDomain(verificationCode) : null;
   }
 
-  async markAsUsed(id: number): Promise<void> {
+  async markAsUsed(id: string): Promise<void> {
     await this.prisma.emailVerificationCode.update({
       where: { id },
       data: { isUsed: true },
@@ -98,7 +98,7 @@ export class EmailVerificationCodePrismaRepository {
     return result.count;
   }
 
-  async deleteByUserId(userId: number): Promise<number> {
+  async deleteByUserId(userId: string): Promise<number> {
     const result = await this.prisma.emailVerificationCode.deleteMany({
       where: {
         userId,

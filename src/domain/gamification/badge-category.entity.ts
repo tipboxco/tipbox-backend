@@ -1,6 +1,6 @@
 export class BadgeCategory {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly name: string,
     public readonly description: string | null
   ) {}

@@ -2,7 +2,7 @@ import { NFTMarketListingStatus } from './nft-market-listing-status.enum';
 
 export class NFTMarketListing {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly nftId: number,
     public readonly listedByUserId: number,
     public readonly price: number,

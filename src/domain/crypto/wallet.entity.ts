@@ -2,7 +2,7 @@ import { WalletProvider } from './wallet-provider.enum';
 
 export class Wallet {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly userId: number,
     public readonly publicAddress: string,
     public readonly provider: WalletProvider,

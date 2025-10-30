@@ -4,15 +4,15 @@ import { WalletPrismaRepository } from '../../infrastructure/repositories/wallet
 export class WalletService {
   constructor(private readonly walletRepo = new WalletPrismaRepository()) {}
 
-  async getUserWallets(userId: number): Promise<Wallet[]> {
+  async getUserWallets(userId: string): Promise<Wallet[]> {
     return this.walletRepo.findByUserId(userId);
   }
 
-  async getActiveWallet(userId: number): Promise<Wallet | null> {
+  async getActiveWallet(userId: string): Promise<Wallet | null> {
     return this.walletRepo.findActiveByUserId(userId);
   }
 
-  async connectWallet(userId: number, publicAddress: string, provider: WalletProvider): Promise<Wallet> {
+  async connectWallet(userId: string, publicAddress: string, provider: WalletProvider): Promise<Wallet> {
     // Aynı adres zaten var mı kontrol et
     const existingWallets = await this.walletRepo.findByUserId(userId);
     const existing = existingWallets.find(w => w.publicAddress.toLowerCase() === publicAddress.toLowerCase());
@@ -30,19 +30,19 @@ export class WalletService {
     return this.walletRepo.create(userId, publicAddress, provider, true);
   }
 
-  async disconnectWallet(walletId: number): Promise<Wallet | null> {
+  async disconnectWallet(walletId: string): Promise<Wallet | null> {
     return this.walletRepo.updateConnectionStatus(walletId, false);
   }
 
-  async switchActiveWallet(walletId: number): Promise<Wallet | null> {
+  async switchActiveWallet(walletId: string): Promise<Wallet | null> {
     return this.walletRepo.updateConnectionStatus(walletId, true);
   }
 
-  async removeWallet(walletId: number): Promise<boolean> {
+  async removeWallet(walletId: string): Promise<boolean> {
     return this.walletRepo.delete(walletId);
   }
 
-  async getWalletById(walletId: number): Promise<Wallet | null> {
+  async getWalletById(walletId: string): Promise<Wallet | null> {
     return this.walletRepo.findById(walletId);
   }
 

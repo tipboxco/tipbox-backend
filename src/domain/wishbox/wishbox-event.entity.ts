@@ -2,7 +2,7 @@ import { WishboxEventStatus } from './wishbox-event-status.enum';
 
 export class WishboxEvent {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly title: string,
     public readonly description: string | null,
     public readonly startDate: Date,

@@ -1,6 +1,6 @@
 export class ContentFavorite {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly userId: number,
     public readonly postId: number,
     public readonly createdAt: Date,

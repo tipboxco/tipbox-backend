@@ -1,10 +1,11 @@
 export class Profile {
   constructor(
-    public readonly id: number,
-    public readonly userId: number,
+    public readonly id: string,
+    public readonly userId: string,
     public readonly displayName: string | null,
     public readonly userName: string | null,
     public readonly bio: string | null,
+    public readonly bannerUrl: string | null,
     public readonly country: string | null,
     public readonly birthDate: Date | null,
     public readonly createdAt: Date,

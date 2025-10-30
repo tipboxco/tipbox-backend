@@ -1,6 +1,6 @@
 export class UserTitle {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly userId: number,
     public readonly title: string,
     public readonly earnedAt: Date,

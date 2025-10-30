@@ -1,6 +1,6 @@
 export class BridgePost {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly brandId: number,
     public readonly userId: number,
     public readonly content: string,

@@ -1,6 +1,6 @@
 export class ContentPostTag {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly postId: number,
     public readonly tag: string,
     public readonly createdAt: Date,

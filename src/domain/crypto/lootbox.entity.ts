@@ -2,7 +2,7 @@ import { LootboxStatus } from './lootbox-status.enum';
 
 export class Lootbox {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly userId: number,
     public readonly tipsLocked: number,
     public readonly status: LootboxStatus,

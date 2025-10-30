@@ -8,7 +8,7 @@ export enum UserRole {
 
 export class User {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly email: string | null,
     public readonly passwordHash: string | null,
     public readonly status: string | null,

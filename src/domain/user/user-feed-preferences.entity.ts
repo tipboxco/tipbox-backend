@@ -1,7 +1,7 @@
 export class UserFeedPreferences {
   constructor(
-    public readonly id: number,
-    public readonly userId: number,
+    public readonly id: string,
+    public readonly userId: string,
     public readonly preferredCategories: string | null,
     public readonly preferredContentTypes: string | null,
     public readonly language: string | null,

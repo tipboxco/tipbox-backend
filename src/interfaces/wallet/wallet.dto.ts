@@ -6,11 +6,11 @@
  *       type: object
  *       properties:
  *         id:
- *           type: integer
- *           example: 1
+ *           type: string
+ *           example: "01J9Y4NQSW3KZV9W0F7B6C2D1E"
  *         userId:
- *           type: integer
- *           example: 1
+ *           type: string
+ *           example: "01J9Y4NQSW3KZV9W0F7B6C2D1E"
  *         publicAddress:
  *           type: string
  *           example: 0x742d35Cc6632C0532c718cF7Bc9f1ba3d1c7F3EA
@@ -58,8 +58,8 @@ export interface ConnectWalletRequest {
 }
 
 export interface WalletResponse {
-  id: number;
-  userId: number;
+  id: string;
+  userId: string;
   publicAddress: string;
   provider: 'METAMASK' | 'WALLETCONNECT' | 'CUSTOM';
   isConnected: boolean;

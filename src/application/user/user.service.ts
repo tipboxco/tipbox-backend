@@ -25,7 +25,7 @@ export class UserService {
     this.prisma = new PrismaClient();
   }
 
-  async getUserById(id: number): Promise<User | null> {
+  async getUserById(id: string): Promise<User | null> {
     return this.userRepo.findById(id);
   }
 
@@ -34,7 +34,7 @@ export class UserService {
    * @param userId - Kullanıcı ID'si
    * @returns Kullanıcı profili
    */
-  async getUserProfile(userId: number): Promise<User | null> {
+  async getUserProfile(userId: string): Promise<User | null> {
     const cacheKey = `user:${userId}:profile`;
     
     try {
@@ -70,7 +70,7 @@ export class UserService {
     return this.userRepo.createWithPassword(email, passwordHash, displayName);
   }
 
-  async updateUser(id: number, data: { email?: string; passwordHash?: string; status?: string }): Promise<User | null> {
+  async updateUser(id: string, data: { email?: string; passwordHash?: string; status?: string }): Promise<User | null> {
     return this.userRepo.update(id, data);
   }
 
@@ -80,7 +80,7 @@ export class UserService {
    * @param data - Güncellenecek veri
    * @returns Güncellenmiş kullanıcı profili
    */
-  async updateUserProfile(userId: number, data: { email?: string; passwordHash?: string; status?: string }): Promise<User | null> {
+  async updateUserProfile(userId: string, data: { email?: string; passwordHash?: string; status?: string }): Promise<User | null> {
     try {
       // Veritabanını güncelle
       const updatedUser = await this.userRepo.update(userId, data);
@@ -97,12 +97,197 @@ export class UserService {
     }
   }
 
-  async deleteUser(id: number): Promise<boolean> {
+  async deleteUser(id: string): Promise<boolean> {
     return this.userRepo.delete(id);
   }
 
   async listUsers(): Promise<User[]> {
     return this.userRepo.list();
+  }
+
+  async getUserProfileCard(userId: string): Promise<{
+    id: string;
+    name: string;
+    avatarUrl: string | null;
+    bannerUrl: string | null;
+    description: string | null;
+    titles: string[];
+    stats: { posts: number; trust: number; truster: number };
+    badges: Array<{ imageUrl: string | null; title: string }>
+  } | null> {
+    const user = await this.userRepo.findById(userId);
+    if (!user) return null;
+
+    const [profile, activeAvatar, titles, postsCount, trustCount, trusterCount, userBadges] = await Promise.all([
+      this.profileRepo.findByUserId(userId),
+      this.prisma.userAvatar.findFirst({ where: { userId, isActive: true }, orderBy: { createdAt: 'desc' } }),
+      this.prisma.userTitle.findMany({ where: { userId }, orderBy: { earnedAt: 'desc' }, take: 5 }),
+      this.prisma.contentPost.count({ where: { userId } }),
+      this.prisma.trustRelation.count({ where: { trusterId: userId } }),
+      this.prisma.trustRelation.count({ where: { trustedUserId: userId } }),
+      this.prisma.userBadge.findMany({
+        where: { userId },
+        include: { badge: true },
+        orderBy: { claimedAt: 'desc' },
+        take: 6,
+      }),
+    ]);
+
+    return {
+      id: user.id,
+      name: profile?.displayName || user.name || 'Anonymous User',
+      avatarUrl: activeAvatar?.imageUrl ?? null,
+      bannerUrl: profile?.bannerUrl ?? null,
+      description: profile?.bio ?? null,
+      titles: titles.map(t => t.title),
+      stats: {
+        posts: postsCount,
+        trust: trustCount,
+        truster: trusterCount,
+      },
+      badges: userBadges.map(ub => ({ imageUrl: ub.badge.imageUrl ?? null, title: ub.badge.name })),
+    };
+  }
+
+  async listTrustedUsers(userId: string, query?: string): Promise<Array<{
+    id: string;
+    userName: string | null;
+    titles: string[];
+    avatar: string | null;
+    name: string | null;
+  }>> {
+    const trustedRelations = await this.prisma.trustRelation.findMany({
+      where: { trusterId: userId },
+      select: { trustedUserId: true },
+    });
+    const trustedIds = trustedRelations.map(r => r.trustedUserId);
+    if (trustedIds.length === 0) return [];
+
+    const profiles = await this.prisma.profile.findMany({
+      where: {
+        userId: { in: trustedIds },
+        ...(query
+          ? {
+              OR: [
+                { displayName: { contains: query, mode: 'insensitive' } },
+                { userName: { contains: query, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
+      },
+      select: { userId: true, displayName: true, userName: true },
+    });
+    const titles = await this.prisma.userTitle.findMany({
+      where: { userId: { in: profiles.map(p => p.userId) } },
+      orderBy: { earnedAt: 'desc' },
+    });
+    const avatars = await this.prisma.userAvatar.findMany({
+      where: { userId: { in: profiles.map(p => p.userId) }, isActive: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const titleMap = new Map<string, string[]>();
+    titles.forEach(t => {
+      const arr = titleMap.get(t.userId) || [];
+      arr.push(t.title);
+      titleMap.set(t.userId, arr);
+    });
+    const avatarMap = new Map<string, string>();
+    avatars.forEach(a => {
+      if (!avatarMap.has(a.userId)) avatarMap.set(a.userId, a.imageUrl);
+    });
+
+    return profiles.map(p => ({
+      id: p.userId,
+      userName: p.userName,
+      titles: (titleMap.get(p.userId) || []).slice(0, 3),
+      avatar: avatarMap.get(p.userId) ?? null,
+      name: p.displayName,
+    }));
+  }
+
+  async removeTrust(userId: string, targetUserId: string): Promise<boolean> {
+    try {
+      await this.prisma.trustRelation.delete({
+        where: { trusterId_trustedUserId: { trusterId: userId, trustedUserId: targetUserId } },
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async addTrust(userId: string, targetUserId: string): Promise<void> {
+    // idempotent create
+    await this.prisma.trustRelation.upsert({
+      where: { trusterId_trustedUserId: { trusterId: userId, trustedUserId: targetUserId } },
+      update: {},
+      create: { trusterId: userId, trustedUserId: targetUserId },
+    });
+  }
+
+  async listTrusters(userId: string, query?: string): Promise<Array<{
+    id: string;
+    userName: string | null;
+    titles: string[];
+    avatar: string | null;
+    name: string | null;
+    isTrusted: boolean;
+  }>> {
+    const trusterRelations = await this.prisma.trustRelation.findMany({
+      where: { trustedUserId: userId },
+      select: { trusterId: true },
+    });
+    const trusterIds = trusterRelations.map(r => r.trusterId);
+    if (trusterIds.length === 0) return [];
+
+    const profiles = await this.prisma.profile.findMany({
+      where: {
+        userId: { in: trusterIds },
+        ...(query
+          ? {
+              OR: [
+                { displayName: { contains: query, mode: 'insensitive' } },
+                { userName: { contains: query, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
+      },
+      select: { userId: true, displayName: true, userName: true },
+    });
+
+    const titles = await this.prisma.userTitle.findMany({
+      where: { userId: { in: profiles.map(p => p.userId) } },
+      orderBy: { earnedAt: 'desc' },
+    });
+    const avatars = await this.prisma.userAvatar.findMany({
+      where: { userId: { in: profiles.map(p => p.userId) }, isActive: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // who current user trusts to compute isTrusted
+    const myTrusted = await this.prisma.trustRelation.findMany({ where: { trusterId: userId } });
+    const myTrustedSet = new Set(myTrusted.map(r => r.trustedUserId));
+
+    const titleMap = new Map<string, string[]>();
+    titles.forEach(t => {
+      const arr = titleMap.get(t.userId) || [];
+      arr.push(t.title);
+      titleMap.set(t.userId, arr);
+    });
+    const avatarMap = new Map<string, string>();
+    avatars.forEach(a => {
+      if (!avatarMap.has(a.userId)) avatarMap.set(a.userId, a.imageUrl);
+    });
+
+    return profiles.map(p => ({
+      id: p.userId,
+      userName: p.userName,
+      titles: (titleMap.get(p.userId) || []).slice(0, 3),
+      avatar: avatarMap.get(p.userId) ?? null,
+      name: p.displayName,
+      isTrusted: myTrustedSet.has(p.userId),
+    }));
   }
 
   /**
@@ -112,7 +297,7 @@ export class UserService {
    * @param fileType - Dosya tipi (MIME type)
    * @returns Pre-signed URL ve dosya bilgileri
    */
-  async updateUserProfilePicture(userId: number, fileName: string, fileType: string): Promise<{
+  async updateUserProfilePicture(userId: string, fileName: string, fileType: string): Promise<{
     uploadUrl: string;
     fileUrl: string;
   }> {
@@ -139,7 +324,7 @@ export class UserService {
    * @returns Güncellenmiş kullanıcı profili
    */
   async setupProfile(
-    userId: number,
+    userId: string,
     data: {
       fullName: string;
       userName: string;

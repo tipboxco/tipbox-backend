@@ -2,7 +2,7 @@ import { ModerationActionType } from './moderation-action-type.enum';
 
 export class ModerationAction {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly moderatorId: number,
     public readonly targetUserId: number,
     public readonly reason: string,

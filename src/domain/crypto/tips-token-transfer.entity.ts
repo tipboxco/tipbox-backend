@@ -1,6 +1,6 @@
 export class TipsTokenTransfer {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly fromUserId: number,
     public readonly toUserId: number,
     public readonly amount: number,

@@ -1,6 +1,6 @@
 export class DMThread {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly userOneId: number,
     public readonly userTwoId: number,
     public readonly isActive: boolean,

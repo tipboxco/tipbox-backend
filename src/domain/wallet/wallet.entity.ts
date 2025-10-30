@@ -6,8 +6,8 @@ export enum WalletProvider {
 
 export class Wallet {
   constructor(
-    public readonly id: number,
-    public readonly userId: number,
+    public readonly id: string,
+    public readonly userId: string,
     public readonly publicAddress: string,
     public readonly provider: WalletProvider,
     public readonly isConnected: boolean,

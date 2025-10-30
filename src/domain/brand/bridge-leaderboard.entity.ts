@@ -2,7 +2,7 @@ import { LeaderboardPeriod } from './leaderboard-period.enum';
 
 export class BridgeLeaderboard {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly brandId: number,
     public readonly userId: number,
     public readonly period: LeaderboardPeriod,

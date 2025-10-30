@@ -4,7 +4,7 @@ import { Wallet, WalletProvider } from '../../domain/wallet/wallet.entity';
 export class WalletPrismaRepository {
   private prisma = new PrismaClient();
 
-  async findByUserId(userId: number): Promise<Wallet[]> {
+  async findByUserId(userId: string): Promise<Wallet[]> {
     const wallets = await this.prisma.wallet.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' }
@@ -12,12 +12,12 @@ export class WalletPrismaRepository {
     return wallets.map(this.toDomain);
   }
 
-  async findById(id: number): Promise<Wallet | null> {
+  async findById(id: string): Promise<Wallet | null> {
     const wallet = await this.prisma.wallet.findUnique({ where: { id } });
     return wallet ? this.toDomain(wallet) : null;
   }
 
-  async findActiveByUserId(userId: number): Promise<Wallet | null> {
+  async findActiveByUserId(userId: string): Promise<Wallet | null> {
     const wallet = await this.prisma.wallet.findFirst({
       where: { 
         userId, 
@@ -28,7 +28,7 @@ export class WalletPrismaRepository {
     return wallet ? this.toDomain(wallet) : null;
   }
 
-  async create(userId: number, publicAddress: string, provider: WalletProvider, isConnected = true): Promise<Wallet> {
+  async create(userId: string, publicAddress: string, provider: WalletProvider, isConnected = true): Promise<Wallet> {
     // Eğer yeni wallet bağlanıyorsa, diğerlerini disconnect et
     if (isConnected) {
       await this.prisma.wallet.updateMany({
@@ -48,7 +48,7 @@ export class WalletPrismaRepository {
     return this.toDomain(wallet);
   }
 
-  async updateConnectionStatus(id: number, isConnected: boolean): Promise<Wallet | null> {
+  async updateConnectionStatus(id: string, isConnected: boolean): Promise<Wallet | null> {
     // Eğer bu wallet bağlanıyorsa, aynı user'ın diğer wallet'larını disconnect et
     if (isConnected) {
       const wallet = await this.prisma.wallet.findUnique({ where: { id } });
@@ -71,7 +71,7 @@ export class WalletPrismaRepository {
     return this.toDomain(updatedWallet);
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.wallet.delete({ where: { id } });
       return true;

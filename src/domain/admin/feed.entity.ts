@@ -2,7 +2,7 @@ import { FeedSource } from './feed-source.enum';
 
 export class Feed {
   constructor(
-    public readonly id: number,
+    public readonly id: string,
     public readonly userId: number,
     public readonly postId: number,
     public readonly source: FeedSource,
