@@ -3,14 +3,14 @@ import { ContentPostType } from './content-post-type.enum';
 export class ContentPost {
   constructor(
     public readonly id: string,
-    public readonly userId: number,
+    public readonly userId: string,
     public readonly type: ContentPostType,
     public readonly title: string,
     public readonly body: string,
-    public readonly mainCategoryId: number | null,
-    public readonly subCategoryId: number | null,
-    public readonly productGroupId: number | null,
-    public readonly productId: number | null,
+    public readonly mainCategoryId: string | null,
+    public readonly subCategoryId: string | null,
+    public readonly productGroupId: string | null,
+    public readonly productId: string | null,
     public readonly inventoryRequired: boolean,
     public readonly isBoosted: boolean,
     public readonly boostedUntil: Date | null,
@@ -43,7 +43,7 @@ export class ContentPost {
     return this.type === ContentPostType.FREE;
   }
 
-  belongsToUser(userId: number): boolean {
+  belongsToUser(userId: string): boolean {
     return this.userId === userId;
   }
 

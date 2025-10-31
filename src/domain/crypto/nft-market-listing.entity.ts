@@ -3,8 +3,8 @@ import { NFTMarketListingStatus } from './nft-market-listing-status.enum';
 export class NFTMarketListing {
   constructor(
     public readonly id: string,
-    public readonly nftId: number,
-    public readonly listedByUserId: number,
+    public readonly nftId: string,
+    public readonly listedByUserId: string,
     public readonly price: number,
     public readonly status: NFTMarketListingStatus,
     public readonly listedAt: Date,
@@ -13,11 +13,11 @@ export class NFTMarketListing {
   ) {}
 
   // Essential business methods only
-  belongsToNFT(nftId: number): boolean {
+  belongsToNFT(nftId: string): boolean {
     return this.nftId === nftId;
   }
 
-  belongsToUser(userId: number): boolean {
+  belongsToUser(userId: string): boolean {
     return this.listedByUserId === userId;
   }
 

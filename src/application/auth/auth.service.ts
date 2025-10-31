@@ -3,8 +3,10 @@ import { User } from '../../domain/user/user.entity';
 import { UserPrismaRepository } from '../../infrastructure/repositories/user-prisma.repository';
 import { EmailVerificationCodePrismaRepository } from '../../infrastructure/repositories/email-verification-code-prisma.repository';
 import { PasswordResetCodePrismaRepository } from '../../infrastructure/repositories/password-reset-code-prisma.repository';
+import { UserDevicePrismaRepository } from '../../infrastructure/repositories/user-device-prisma.repository';
 import { EmailService } from '../../infrastructure/email/email.service';
 import { signJwt, verifyJwt } from '../../infrastructure/auth/jwt.helper';
+import { DeviceParser } from '../../infrastructure/utils/device-parser.util';
 import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 import logger from '../../infrastructure/logger/logger';
@@ -13,6 +15,7 @@ export class AuthService implements IAuthService {
   private userRepo = new UserPrismaRepository();
   private emailVerificationRepo = new EmailVerificationCodePrismaRepository();
   private passwordResetRepo = new PasswordResetCodePrismaRepository();
+  private deviceRepo = new UserDevicePrismaRepository();
   private emailService = new EmailService();
   private prisma = new PrismaClient();
 
@@ -280,6 +283,59 @@ export class AuthService implements IAuthService {
       success: true,
       message: 'Kod doğrulandı. Yeni şifrenizi oluşturabilirsiniz.',
     };
+  }
+
+  /**
+   * Track Device - Login sırasında cihaz bilgilerini kaydeder veya günceller
+   */
+  async trackDevice(
+    userId: string,
+    userAgent: string,
+    ipAddress: string | null,
+    location?: string | null
+  ): Promise<void> {
+    try {
+      // User-Agent'tan device name parse et
+      const deviceName = DeviceParser.parseDeviceName(userAgent);
+      
+      // Location'ı IP'den al veya parametreden kullan
+      let deviceLocation: string | null = location || null;
+      if (!deviceLocation && ipAddress) {
+        deviceLocation = await DeviceParser.getLocationFromIP(ipAddress);
+      }
+
+      // Önce tüm cihazları inactive yap
+      await this.deviceRepo.setActiveDevice(userId);
+
+      // Cihazı upsert et (userAgent unique constraint ile)
+      // upsert içinde zaten isActive=true ve lastLoginAt güncelleniyor
+      const device = await this.deviceRepo.upsert(
+        userId,
+        deviceName,
+        deviceLocation,
+        userAgent,
+        ipAddress,
+        true // isActive = true
+      );
+
+      // Device'ı aktif yap (upsert'ten sonra ID'yi biliyoruz)
+      await this.deviceRepo.setActiveDevice(userId, device.id);
+
+      logger.info({
+        message: 'Device tracked successfully',
+        userId,
+        deviceName,
+        ipAddress,
+        deviceId: device.id,
+      });
+    } catch (error) {
+      // Device tracking hatası kritik değil, log'la ve devam et
+      logger.error({
+        message: 'Error tracking device',
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   /**

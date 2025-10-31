@@ -3,6 +3,7 @@ import { AuthService } from '../../application/auth/auth.service';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { UserAvatarPrismaRepository } from '../../infrastructure/repositories/user-avatar-prisma.repository';
 import { ProfilePrismaRepository } from '../../infrastructure/repositories/profile-prisma.repository';
+import logger from '../../infrastructure/logger/logger';
 
 const router = Router();
 const authService = new AuthService();
@@ -148,6 +149,20 @@ router.post('/login', asyncHandler(async (req: Request, res: Response) => {
   
   // Refresh token oluştur (daha uzun süreli - 7 gün)
   const refreshToken = authService.generateRefreshToken(user);
+
+  // Device tracking - User-Agent ve IP'den cihaz bilgilerini kaydet
+  const userAgent = req.headers['user-agent'] || '';
+  const ipAddress = (req.ip || req.socket.remoteAddress || null) as string | null;
+  
+  // Async olarak device tracking yap (blocking olmaz)
+  authService.trackDevice(user.id, userAgent, ipAddress).catch((error) => {
+    // Hata durumunda log'la ama login işlemini engelleme
+    logger.error({
+      message: 'Device tracking failed during login',
+      userId: user.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
 
   // Response
   res.json({

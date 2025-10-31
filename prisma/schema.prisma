@@ -63,6 +63,7 @@ model User {
   receivedTips         TipsTokenTransfer[] @relation("ReceivedTips")
   nftTransactionsSent  NFTTransaction[] @relation("NFTSender")
   nftTransactionsReceived NFTTransaction[] @relation("NFTReceiver")
+  nftOwned             NFT[]             @relation("NFTOwner")
   nftMarketListings    NFTMarketListing[]
   lootboxes            Lootbox[]
   nftClaims            NFTClaim[]
@@ -1219,22 +1220,27 @@ model TipsTokenTransfer {
 }
 
 model NFT {
-  id             String    @id @db.Uuid @default(uuid())
+  id             String    @id @default(uuid()) @db.Uuid
   name           String
   description    String?
   imageUrl       String    @map("image_url")
   type           NFTType
   rarity         NFTRarity
   isTransferable Boolean   @map("is_transferable")
+  currentOwnerId String?   @map("current_owner_id") @db.Uuid
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
   // Relations
+  currentOwner   User?              @relation("NFTOwner", fields: [currentOwnerId], references: [id])
   transactions   NFTTransaction[]
   marketListings NFTMarketListing[]
   attributes     NFTAttribute[]
   claims         NFTClaim[]
 
+  @@index([currentOwnerId])
+  @@index([name])
+  @@index([type, rarity])
   @@map("nfts")
 }
 

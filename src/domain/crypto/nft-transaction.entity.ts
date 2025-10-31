@@ -3,9 +3,9 @@ import { NFTTransactionType } from './nft-transaction-type.enum';
 export class NFTTransaction {
   constructor(
     public readonly id: string,
-    public readonly nftId: number,
-    public readonly fromUserId: number | null,
-    public readonly toUserId: number,
+    public readonly nftId: string,
+    public readonly fromUserId: string | null,
+    public readonly toUserId: string,
     public readonly price: number | null,
     public readonly transactionType: NFTTransactionType,
     public readonly createdAt: Date,
@@ -13,19 +13,19 @@ export class NFTTransaction {
   ) {}
 
   // Essential business methods only
-  belongsToNFT(nftId: number): boolean {
+  belongsToNFT(nftId: string): boolean {
     return this.nftId === nftId;
   }
 
-  belongsToSender(userId: number): boolean {
+  belongsToSender(userId: string): boolean {
     return this.fromUserId === userId;
   }
 
-  belongsToReceiver(userId: number): boolean {
+  belongsToReceiver(userId: string): boolean {
     return this.toUserId === userId;
   }
 
-  involveUser(userId: number): boolean {
+  involveUser(userId: string): boolean {
     return this.belongsToSender(userId) || this.belongsToReceiver(userId);
   }
 

@@ -10,6 +10,7 @@ export class NFT {
     public readonly type: NFTType,
     public readonly rarity: NFTRarity,
     public readonly isTransferable: boolean,
+    public readonly currentOwnerId: string | null,
     public readonly createdAt: Date,
     public readonly updatedAt: Date
   ) {}
@@ -120,5 +121,17 @@ export class NFT {
     }
 
     return Math.floor(baseValue);
+  }
+
+  getCurrentOwnerId(): string | null {
+    return this.currentOwnerId;
+  }
+
+  hasOwner(): boolean {
+    return this.currentOwnerId !== null;
+  }
+
+  belongsToUser(userId: string): boolean {
+    return this.currentOwnerId === userId;
   }
 }

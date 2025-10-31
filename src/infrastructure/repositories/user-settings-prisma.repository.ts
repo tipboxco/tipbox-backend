@@ -5,45 +5,74 @@ import { UserVisibility } from '../../domain/user/user-visibility.enum';
 export class UserSettingsPrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<UserSettings | null> {
+  async findById(id: string): Promise<UserSettings | null> {
     const settings = await this.prisma.userSettings.findUnique({ where: { id } });
     return settings ? this.toDomain(settings) : null;
   }
 
-  async findByUserId(userId: number): Promise<UserSettings | null> {
+  async findByUserId(userId: string): Promise<UserSettings | null> {
     const settings = await this.prisma.userSettings.findUnique({ where: { userId } });
     return settings ? this.toDomain(settings) : null;
   }
 
-  async create(userId: number, themeId?: number, receiveNotifications?: boolean, visibility?: UserVisibility): Promise<UserSettings> {
+  async create(
+    userId: string,
+    themeId?: string,
+    receiveNotifications?: boolean,
+    visibility?: UserVisibility
+  ): Promise<UserSettings> {
     const settings = await this.prisma.userSettings.create({
       data: {
         userId,
         themeId,
         receiveNotifications,
-        visibility
-      }
+        visibility,
+      },
     });
     return this.toDomain(settings);
   }
 
-  async update(id: number, data: { themeId?: number; receiveNotifications?: boolean; visibility?: UserVisibility }): Promise<UserSettings | null> {
+  async update(
+    id: string,
+    data: {
+      themeId?: string;
+      receiveNotifications?: boolean;
+      visibility?: UserVisibility;
+      notificationEmailEnabled?: boolean;
+      notificationPushEnabled?: boolean;
+      notificationInAppEnabled?: boolean;
+      supportSessionPrice?: number | null;
+      supportSessionPriceUpdatedAt?: Date | null;
+    }
+  ): Promise<UserSettings | null> {
     const settings = await this.prisma.userSettings.update({
       where: { id },
-      data
+      data,
     });
     return settings ? this.toDomain(settings) : null;
   }
 
-  async updateByUserId(userId: number, data: { themeId?: number; receiveNotifications?: boolean; visibility?: UserVisibility }): Promise<UserSettings | null> {
+  async updateByUserId(
+    userId: string,
+    data: {
+      themeId?: string;
+      receiveNotifications?: boolean;
+      visibility?: UserVisibility;
+      notificationEmailEnabled?: boolean;
+      notificationPushEnabled?: boolean;
+      notificationInAppEnabled?: boolean;
+      supportSessionPrice?: number | null;
+      supportSessionPriceUpdatedAt?: Date | null;
+    }
+  ): Promise<UserSettings | null> {
     const settings = await this.prisma.userSettings.update({
       where: { userId },
-      data
+      data,
     });
     return settings ? this.toDomain(settings) : null;
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.userSettings.delete({ where: { id } });
       return true;
@@ -54,7 +83,7 @@ export class UserSettingsPrismaRepository {
 
   async list(): Promise<UserSettings[]> {
     const settings = await this.prisma.userSettings.findMany();
-    return settings.map(setting => this.toDomain(setting));
+    return settings.map((setting) => this.toDomain(setting));
   }
 
   private toDomain(prismaSettings: any): UserSettings {
@@ -64,6 +93,11 @@ export class UserSettingsPrismaRepository {
       prismaSettings.themeId,
       prismaSettings.receiveNotifications,
       prismaSettings.visibility as UserVisibility,
+      prismaSettings.notificationEmailEnabled ?? true,
+      prismaSettings.notificationPushEnabled ?? true,
+      prismaSettings.notificationInAppEnabled ?? true,
+      prismaSettings.supportSessionPrice,
+      prismaSettings.supportSessionPriceUpdatedAt,
       prismaSettings.createdAt,
       prismaSettings.updatedAt
     );

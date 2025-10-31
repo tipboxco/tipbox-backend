@@ -1,11 +1,12 @@
 import { getPrisma } from './prisma.client';
 import { ContentPost } from '../../domain/content/content-post.entity';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
+import { generateIdForModel } from '../ids/id.strategy';
 
 export class ContentPostPrismaRepository {
   private prisma = getPrisma();
 
-  async findById(id: number): Promise<ContentPost | null> {
+  async findById(id: string): Promise<ContentPost | null> {
     const post = await this.prisma.contentPost.findUnique({ 
       where: { id },
       include: {
@@ -24,7 +25,7 @@ export class ContentPostPrismaRepository {
     return post ? this.toDomain(post) : null;
   }
 
-  async findByUserId(userId: number): Promise<ContentPost[]> {
+  async findByUserId(userId: string): Promise<ContentPost[]> {
     const posts = await this.prisma.contentPost.findMany({
       where: { userId },
       include: {
@@ -44,7 +45,7 @@ export class ContentPostPrismaRepository {
     return posts.map(post => this.toDomain(post));
   }
 
-  async findBySubCategoryId(subCategoryId: number): Promise<ContentPost[]> {
+  async findBySubCategoryId(subCategoryId: string): Promise<ContentPost[]> {
     const posts = await this.prisma.contentPost.findMany({
       where: { subCategoryId },
       include: {
@@ -110,27 +111,28 @@ export class ContentPostPrismaRepository {
   }
 
   async create(
-    userId: number,
+    userId: string,
     type: ContentPostType,
     title: string,
     body: string,
-    subCategoryId?: number,
-    mainCategoryId?: number,
-    productGroupId?: number,
-    productId?: number,
+    subCategoryId?: string,
+    mainCategoryId?: string,
+    productGroupId?: string,
+    productId?: string,
     inventoryRequired: boolean = false,
     isBoosted: boolean = false
   ): Promise<ContentPost> {
     const post = await this.prisma.contentPost.create({
       data: {
+        id: generateIdForModel('ContentPost'),
         userId,
         type,
         title,
         body,
-        subCategoryId,
-        mainCategoryId,
-        productGroupId,
-        productId,
+        subCategoryId: subCategoryId || null,
+        mainCategoryId: mainCategoryId || null,
+        productGroupId: productGroupId || null,
+        productId: productId || null,
         inventoryRequired,
         isBoosted
       },
@@ -150,7 +152,7 @@ export class ContentPostPrismaRepository {
     return this.toDomain(post);
   }
 
-  async update(id: number, data: { 
+  async update(id: string, data: { 
     title?: string;
     body?: string;
     isBoosted?: boolean;
@@ -175,7 +177,7 @@ export class ContentPostPrismaRepository {
     return post ? this.toDomain(post) : null;
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.contentPost.delete({ where: { id } });
       return true;
@@ -251,27 +253,27 @@ export class ContentPostPrismaRepository {
     return posts.map(post => this.toDomain(post));
   }
 
-  async incrementLikeCount(postId: number): Promise<void> {
+  async incrementLikeCount(postId: string): Promise<void> {
     // Like count is calculated from ContentLike table, no need to update
     // This method is kept for compatibility but does nothing
   }
 
-  async decrementLikeCount(postId: number): Promise<void> {
+  async decrementLikeCount(postId: string): Promise<void> {
     // Like count is calculated from ContentLike table, no need to update
     // This method is kept for compatibility but does nothing
   }
 
-  async incrementViewCount(postId: number): Promise<void> {
+  async incrementViewCount(postId: string): Promise<void> {
     // View count is calculated from ContentPostView table, no need to update
     // This method is kept for compatibility but does nothing
   }
 
-  async incrementCommentCount(postId: number): Promise<void> {
+  async incrementCommentCount(postId: string): Promise<void> {
     // Comment count is calculated from ContentComment table, no need to update
     // This method is kept for compatibility but does nothing
   }
 
-  async decrementCommentCount(postId: number): Promise<void> {
+  async decrementCommentCount(postId: string): Promise<void> {
     // Comment count is calculated from ContentComment table, no need to update
     // This method is kept for compatibility but does nothing
   }

@@ -3,8 +3,8 @@ import { FeedSource } from './feed-source.enum';
 export class Feed {
   constructor(
     public readonly id: string,
-    public readonly userId: number,
-    public readonly postId: number,
+    public readonly userId: string,
+    public readonly postId: string,
     public readonly source: FeedSource,
     public readonly seen: boolean,
     public readonly createdAt: Date,
@@ -12,11 +12,11 @@ export class Feed {
   ) {}
 
   // Essential business methods only
-  belongsToUser(userId: number): boolean {
+  belongsToUser(userId: string): boolean {
     return this.userId === userId;
   }
 
-  belongsToPost(postId: number): boolean {
+  belongsToPost(postId: string): boolean {
     return this.postId === postId;
   }
 

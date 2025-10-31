@@ -810,6 +810,510 @@ router.delete('/:id/trusts/:targetUserId', asyncHandler(async (req: Request, res
 
 /**
  * @openapi
+ * /users/{id}/block/{targetUserId}:
+ *   post:
+ *     summary: Bir kullanıcıyı engelle (block)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Kullanıcı ID (engelleyen)
+ *       - in: path
+ *         name: targetUserId
+ *         required: true
+ *         schema: { type: string }
+ *         description: Engellenecek kullanıcı ID
+ *     responses:
+ *       204:
+ *         description: Kullanıcı başarıyla engellendi
+ *       400:
+ *         description: Geçersiz istek
+ */
+router.post('/:id/block/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
+  const { id, targetUserId } = req.params;
+  await userService.blockUser(id, targetUserId);
+  res.status(204).send();
+}));
+
+/**
+ * @openapi
+ * /users/{id}/block/{targetUserId}:
+ *   delete:
+ *     summary: Bir kullanıcının engelini kaldır (unblock)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Kullanıcı ID (engeli kaldıran)
+ *       - in: path
+ *         name: targetUserId
+ *         required: true
+ *         schema: { type: string }
+ *         description: Engeli kaldırılacak kullanıcı ID
+ *     responses:
+ *       204:
+ *         description: Engel başarıyla kaldırıldı
+ *       404:
+ *         description: Engelleme kaydı bulunamadı
+ */
+router.delete('/:id/block/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
+  const { id, targetUserId } = req.params;
+  const ok = await userService.unblockUser(id, targetUserId);
+  if (!ok) return res.status(404).json({ message: 'Engelleme kaydı bulunamadı' });
+  res.status(204).send();
+}));
+
+/**
+ * @openapi
+ * /users/{id}/mute/{targetUserId}:
+ *   post:
+ *     summary: Bir kullanıcıyı sustur (mute)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Kullanıcı ID (susturan)
+ *       - in: path
+ *         name: targetUserId
+ *         required: true
+ *         schema: { type: string }
+ *         description: Susturulacak kullanıcı ID
+ *     responses:
+ *       204:
+ *         description: Kullanıcı başarıyla susturuldu
+ *       400:
+ *         description: Geçersiz istek
+ */
+router.post('/:id/mute/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
+  const { id, targetUserId } = req.params;
+  await userService.muteUser(id, targetUserId);
+  res.status(204).send();
+}));
+
+/**
+ * @openapi
+ * /users/{id}/mute/{targetUserId}:
+ *   delete:
+ *     summary: Bir kullanıcının susturulmasını kaldır (unmute)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Kullanıcı ID (susturmayı kaldıran)
+ *       - in: path
+ *         name: targetUserId
+ *         required: true
+ *         schema: { type: string }
+ *         description: Susturulması kaldırılacak kullanıcı ID
+ *     responses:
+ *       204:
+ *         description: Susturma başarıyla kaldırıldı
+ *       404:
+ *         description: Susturma kaydı bulunamadı
+ */
+router.delete('/:id/mute/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
+  const { id, targetUserId } = req.params;
+  const ok = await userService.unmuteUser(id, targetUserId);
+  if (!ok) return res.status(404).json({ message: 'Susturma kaydı bulunamadı' });
+  res.status(204).send();
+}));
+
+/**
+ * @openapi
+ * /users/{id}/collections/achievements:
+ *   get:
+ *     summary: Kullanıcının Achievement Badge koleksiyonunu listele
+ *     description: Kullanıcının kazandığı achievement badge'leri döner. Arama parametresi ile filtreleme yapılabilir.
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Kullanıcı ID
+ *       - in: query
+ *         name: q
+ *         schema: { type: string }
+ *         description: Badge adı veya açıklamasına göre arama (case-insensitive)
+ *     responses:
+ *       200:
+ *         description: Achievement Badge listesi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                     example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+ *                   image:
+ *                     type: string
+ *                     nullable: true
+ *                     example: "https://cdn.tipbox.co/badges/builder.png"
+ *                   title:
+ *                     type: string
+ *                     example: "Builder Badge"
+ *                   rarity:
+ *                     type: string
+ *                     enum: [Usual, Rare]
+ *                     example: "Rare"
+ *                   isClaimed:
+ *                     type: boolean
+ *                     example: true
+ *                   nftAddress:
+ *                     type: string
+ *                     nullable: true
+ *                     example: null
+ *                   totalEarned:
+ *                     type: integer
+ *                     example: 1
+ *                   earnedDate:
+ *                     type: string
+ *                     format: date-time
+ *                     nullable: true
+ *                     example: "2024-01-15T10:30:00.000Z"
+ *                   tasks:
+ *                     type: array
+ *                     items:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: string
+ *                           example: "goal-123"
+ *                         title:
+ *                           type: string
+ *                           example: "10 Yorum Yap"
+ *                         type:
+ *                           type: string
+ *                           enum: [Yorum Yap, Beğeni, Paylaşma]
+ *                           example: "Yorum Yap"
+ */
+router.get('/:id/collections/achievements', asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const q = (req.query.q as string) || undefined;
+  const badges = await userService.listAchievementBadges(id, q);
+  res.json(badges.map(b => ({
+    ...b,
+    earnedDate: b.earnedDate?.toISOString() ?? null,
+  })));
+}));
+
+/**
+ * @openapi
+ * /users/{id}/posts:
+ *   get:
+ *     summary: Kullanıcının paylaştığı post'ları listele
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Post listesi
+ */
+router.get('/:id/posts', asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const posts = await userService.getUserPosts(id);
+  res.json(posts);
+}));
+
+/**
+ * @openapi
+ * /users/{id}/reviews:
+ *   get:
+ *     summary: Kullanıcının paylaştığı review'ları listele
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Review listesi
+ */
+router.get('/:id/reviews', asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const reviews = await userService.getUserReviews(id);
+  res.json(reviews);
+}));
+
+/**
+ * @openapi
+ * /users/{id}/benchmarks:
+ *   get:
+ *     summary: Kullanıcının paylaştığı benchmark'ları listele
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Benchmark listesi
+ */
+router.get('/:id/benchmarks', asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const benchmarks = await userService.getUserBenchmarks(id);
+  res.json(benchmarks);
+}));
+
+/**
+ * @openapi
+ * /users/{id}/tips:
+ *   get:
+ *     summary: Kullanıcının paylaştığı tips&tricks'leri listele
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Tips&Tricks listesi
+ */
+router.get('/:id/tips', asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const tips = await userService.getUserTips(id);
+  res.json(tips);
+}));
+
+/**
+ * @openapi
+ * /users/{id}/replies:
+ *   get:
+ *     summary: Kullanıcının yaptığı reply'leri listele
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Reply listesi
+ */
+router.get('/:id/replies', asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const replies = await userService.getUserReplies(id);
+  res.json(replies);
+}));
+
+/**
+ * @openapi
+ * /users/{id}/ladder/badges:
+ *   get:
+ *     summary: Kullanıcının başarım merdivenlerinden kazandığı badge'leri listele
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Ladder badge listesi
+ */
+router.get('/:id/ladder/badges', asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const badges = await userService.getUserLadderBadges(id);
+  res.json(badges);
+}));
+
+/**
+ * @openapi
+ * /users/{id}/bookmarks:
+ *   get:
+ *     summary: Kullanıcının bookmark ettiği gönderileri listele
+ *     description: |
+ *       Kullanıcının favorite (bookmark) ettiği tüm gönderileri getirir.
+ *       Her gönderi kendi tipine göre (feed, benchmark, post, question, tipsAndTricks) formatlanmış olarak döner.
+ *       
+ *       **Post Tipleri:**
+ *       - `FREE` -> `post` tipi
+ *       - `COMPARE` -> `benchmark` tipi
+ *       - `TIPS` -> `tipsAndTricks` tipi
+ *       - `QUESTION` -> `question` tipi
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Kullanıcı ID (UUID)
+ *         example: "248cc91f-b551-4ecc-a885-db1163571330"
+ *     responses:
+ *       200:
+ *         description: Bookmark edilmiş gönderiler listesi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 oneOf:
+ *                   - type: object
+ *                     properties:
+ *                       id: { type: string, example: "01ARZ3NDEKTSV4RRFFQ69G5FAV" }
+ *                       type: { type: string, enum: ["post"], example: "post" }
+ *                       user:
+ *                         type: object
+ *                         properties:
+ *                           id: { type: string }
+ *                           name: { type: string, example: "Ömer Faruk" }
+ *                           title: { type: string, example: "Technology Enthusiast" }
+ *                           avatarUrl: { type: string, nullable: true }
+ *                       stats:
+ *                         type: object
+ *                         properties:
+ *                           likes: { type: number, example: 15 }
+ *                           comments: { type: number, example: 3 }
+ *                           shares: { type: number, example: 0 }
+ *                           bookmarks: { type: number, example: 5 }
+ *                       createdAt: { type: string, format: date-time }
+ *                       product:
+ *                         type: object
+ *                         nullable: true
+ *                         properties:
+ *                           id: { type: string }
+ *                           name: { type: string }
+ *                           subName: { type: string }
+ *                           image: { type: string, nullable: true }
+ *                       content: { type: string, example: "This is a great product..." }
+ *                       images: { type: array, items: { type: string } }
+ *                   - type: object
+ *                     properties:
+ *                       id: { type: string }
+ *                       type: { type: string, enum: ["benchmark"], example: "benchmark" }
+ *                       user: { type: object }
+ *                       stats: { type: object }
+ *                       createdAt: { type: string }
+ *                       products:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id: { type: string }
+ *                             name: { type: string }
+ *                             subName: { type: string }
+ *                             image: { type: string, nullable: true }
+ *                             isOwned: { type: boolean }
+ *                             choice: { type: boolean }
+ *                       content: { type: string }
+ *                   - type: object
+ *                     properties:
+ *                       id: { type: string }
+ *                       type: { type: string, enum: ["tipsAndTricks"], example: "tipsAndTricks" }
+ *                       user: { type: object }
+ *                       stats: { type: object }
+ *                       createdAt: { type: string }
+ *                       product: { type: object, nullable: true }
+ *                       content: { type: string }
+ *                       tag: { type: string, example: "Maintenance" }
+ *                       images: { type: array }
+ *                   - type: object
+ *                     properties:
+ *                       id: { type: string }
+ *                       type: { type: string, enum: ["question"], example: "question" }
+ *                       user: { type: object }
+ *                       stats: { type: object }
+ *                       createdAt: { type: string }
+ *                       product: { type: object, nullable: true }
+ *                       content: { type: string }
+ *                       expectedAnswerFormat: { type: string, enum: ["short", "long", "poll", "choice"] }
+ *                       images: { type: array }
+ *                   - type: object
+ *                     properties:
+ *                       id: { type: string }
+ *                       type: { type: string, enum: ["feed"], example: "feed" }
+ *                       user: { type: object }
+ *                       stats: { type: object }
+ *                       createdAt: { type: string }
+ *                       product: { type: object, nullable: true }
+ *                       content: { type: string }
+ *                       images: { type: array }
+ *             example:
+ *               - id: "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+ *                 type: "post"
+ *                 user:
+ *                   id: "248cc91f-b551-4ecc-a885-db1163571330"
+ *                   name: "Ömer Faruk"
+ *                   title: "Technology Enthusiast"
+ *                   avatarUrl: "https://cdn.tipbox.co/avatars/omer.jpg"
+ *                 stats:
+ *                   likes: 15
+ *                   comments: 3
+ *                   shares: 0
+ *                   bookmarks: 5
+ *                 createdAt: "2024-01-15T10:30:00.000Z"
+ *                 product:
+ *                   id: "550e8400-e29b-41d4-a716-446655440000"
+ *                   name: "Dyson V15s Detect Submarine"
+ *                   subName: "Dyson"
+ *                   image: null
+ *                 content: "Using the Dyson V15s Submarine daily has completely changed how I clean my home."
+ *                 images: []
+ *               - id: "01ARZ3NDEKTSV4RRFFQ69G5FAW"
+ *                 type: "benchmark"
+ *                 user:
+ *                   id: "248cc91f-b551-4ecc-a885-db1163571330"
+ *                   name: "Ömer Faruk"
+ *                   title: "Hardware Expert"
+ *                   avatarUrl: "https://cdn.tipbox.co/avatars/omer.jpg"
+ *                 stats:
+ *                   likes: 20
+ *                   comments: 5
+ *                   shares: 2
+ *                   bookmarks: 8
+ *                 createdAt: "2024-01-14T09:15:00.000Z"
+ *                 products:
+ *                   - id: "550e8400-e29b-41d4-a716-446655440000"
+ *                     name: "Dyson V15s Detect Submarine"
+ *                     subName: "Dyson"
+ *                     image: null
+ *                     isOwned: true
+ *                     choice: false
+ *                   - id: "550e8400-e29b-41d4-a716-446655440001"
+ *                     name: "Dyson V12 Detect Slim"
+ *                     subName: "Dyson"
+ *                     image: null
+ *                     isOwned: false
+ *                     choice: false
+ *                 content: "Her iki modeli de test ettim. V15s daha güçlü..."
+ */
+router.get('/:id/bookmarks', asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const bookmarks = await userService.getUserBookmarks(id);
+  res.json(bookmarks);
+}));
+
+/**
+ * @openapi
  * /users/{id}:
  *   put:
  *     summary: Kullanıcıyı güncelle
@@ -882,6 +1386,435 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
   const ok = await userService.deleteUser(id);
   if (!ok) return res.status(404).json({ message: 'User not found' });
   res.status(204).send();
+}));
+
+// ===== SETTINGS ENDPOINTS =====
+
+/**
+ * @openapi
+ * /users/settings/change-password:
+ *   post:
+ *     summary: Şifre değiştir
+ *     description: Kullanıcının şifresini değiştirir
+ *     tags: [User Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - currentPassword
+ *               - newPassword
+ *             properties:
+ *               currentPassword:
+ *                 type: string
+ *                 example: oldPassword123
+ *               newPassword:
+ *                 type: string
+ *                 minLength: 6
+ *                 example: newPassword123
+ *     responses:
+ *       200:
+ *         description: Şifre başarıyla değiştirildi
+ *       400:
+ *         description: Geçersiz istek
+ */
+router.post('/settings/change-password', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = (req as any).user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ message: 'Current password and new password are required' });
+  }
+
+  const result = await userService.changePassword(String(userId), currentPassword, newPassword);
+  if (!result.success) {
+    return res.status(400).json(result);
+  }
+
+  res.json(result);
+}));
+
+/**
+ * @openapi
+ * /users/settings/notifications:
+ *   get:
+ *     summary: Bildirim ayarlarını getir
+ *     description: Kullanıcının bildirim ayarlarını getirir
+ *     tags: [User Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Bildirim ayarları
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   notificationCode:
+ *                     type: integer
+ *                     example: 0
+ *                   value:
+ *                     type: boolean
+ *                     example: true
+ */
+router.get('/settings/notifications', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = (req as any).user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const settings = await userService.getNotificationSettings(String(userId));
+  res.json(settings);
+}));
+
+/**
+ * @openapi
+ * /users/settings/notifications:
+ *   put:
+ *     summary: Bildirim ayarlarını güncelle
+ *     description: Kullanıcının bildirim ayarlarını günceller
+ *     tags: [User Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: array
+ *             items:
+ *               type: object
+ *               properties:
+ *                 notificationCode:
+ *                   type: integer
+ *                   example: 0
+ *                 value:
+ *                   type: boolean
+ *                   example: true
+ *     responses:
+ *       200:
+ *         description: Bildirim ayarları güncellendi
+ */
+router.put('/settings/notifications', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = (req as any).user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const settings = req.body;
+  if (!Array.isArray(settings)) {
+    return res.status(400).json({ message: 'Settings must be an array' });
+  }
+
+  const result = await userService.updateNotificationSettings(String(userId), settings);
+  if (!result.success) {
+    return res.status(400).json(result);
+  }
+
+  res.json(result);
+}));
+
+/**
+ * @openapi
+ * /users/settings/privacy:
+ *   get:
+ *     summary: Gizlilik ayarlarını getir
+ *     description: Kullanıcının gizlilik ayarlarını getirir
+ *     tags: [User Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Gizlilik ayarları
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   privacyCode:
+ *                     type: integer
+ *                     example: 0
+ *                   selectedValue:
+ *                     type: string
+ *                     example: "trust-only"
+ */
+router.get('/settings/privacy', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = (req as any).user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const settings = await userService.getPrivacySettings(String(userId));
+  res.json(settings);
+}));
+
+/**
+ * @openapi
+ * /users/settings/privacy:
+ *   put:
+ *     summary: Gizlilik ayarlarını güncelle
+ *     description: Kullanıcının gizlilik ayarlarını günceller
+ *     tags: [User Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: array
+ *             items:
+ *               type: object
+ *               properties:
+ *                 privacyCode:
+ *                   type: integer
+ *                   example: 0
+ *                 selectedValue:
+ *                   type: string
+ *                   example: "trust-only"
+ *     responses:
+ *       200:
+ *         description: Gizlilik ayarları güncellendi
+ */
+router.put('/settings/privacy', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = (req as any).user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const settings = req.body;
+  if (!Array.isArray(settings)) {
+    return res.status(400).json({ message: 'Settings must be an array' });
+  }
+
+  const result = await userService.updatePrivacySettings(String(userId), settings);
+  if (!result.success) {
+    return res.status(400).json(result);
+  }
+
+  res.json(result);
+}));
+
+/**
+ * @openapi
+ * /users/settings/support-session-price:
+ *   get:
+ *     summary: Destek oturumu fiyatını getir
+ *     description: Kullanıcının destek oturumu fiyatını getirir
+ *     tags: [User Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Destek oturumu fiyatı
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 price:
+ *                   type: number
+ *                   nullable: true
+ *                   example: 50
+ */
+router.get('/settings/support-session-price', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = (req as any).user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const price = await userService.getSupportSessionPrice(String(userId));
+  res.json({ price });
+}));
+
+/**
+ * @openapi
+ * /users/settings/support-session-price:
+ *   put:
+ *     summary: Destek oturumu fiyatını güncelle
+ *     description: Kullanıcının destek oturumu fiyatını günceller (minimum 50 TIPS, 10 günde bir değiştirilebilir)
+ *     tags: [User Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - price
+ *             properties:
+ *               price:
+ *                 type: number
+ *                 minimum: 50
+ *                 example: 50
+ *     responses:
+ *       200:
+ *         description: Fiyat başarıyla güncellendi
+ *       400:
+ *         description: Geçersiz istek veya 10 gün beklemeden değiştirme denemesi
+ */
+router.put('/settings/support-session-price', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = (req as any).user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const { price } = req.body;
+  if (!price || typeof price !== 'number') {
+    return res.status(400).json({ message: 'Price is required and must be a number' });
+  }
+
+  const result = await userService.updateSupportSessionPrice(String(userId), price);
+  if (!result.success) {
+    return res.status(400).json(result);
+  }
+
+  res.json(result);
+}));
+
+/**
+ * @openapi
+ * /users/settings/devices:
+ *   get:
+ *     summary: Bağlı cihazları getir
+ *     description: Kullanıcının bağlı cihazlarını getirir
+ *     tags: [User Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Bağlı cihazlar listesi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                   name:
+ *                     type: string
+ *                   location:
+ *                     type: string
+ *                     nullable: true
+ *                   date:
+ *                     type: string
+ *                   isActive:
+ *                     type: boolean
+ */
+router.get('/settings/devices', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = (req as any).user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const devices = await userService.getConnectedDevices(String(userId));
+  res.json(devices);
+}));
+
+/**
+ * @openapi
+ * /users/settings/devices/{deviceId}:
+ *   delete:
+ *     summary: Cihazı kaldır
+ *     description: Bağlı cihazı listeden kaldırır
+ *     tags: [User Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: deviceId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Cihaz başarıyla kaldırıldı
+ *       404:
+ *         description: Cihaz bulunamadı
+ */
+router.delete('/settings/devices/:deviceId', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = (req as any).user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const { deviceId } = req.params;
+  const result = await userService.removeDevice(String(userId), deviceId);
+  if (!result.success) {
+    return res.status(404).json(result);
+  }
+
+  res.json(result);
+}));
+
+/**
+ * @openapi
+ * /users/settings/devices:
+ *   delete:
+ *     summary: Tüm cihazları kaldır
+ *     description: Kullanıcının tüm bağlı cihazlarını listeden kaldırır
+ *     tags: [User Settings]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Tüm cihazlar başarıyla kaldırıldı
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 count:
+ *                   type: integer
+ */
+router.delete('/settings/devices', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = (req as any).user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const result = await userService.removeAllDevices(String(userId));
+  res.json(result);
 }));
 
 export default router; 

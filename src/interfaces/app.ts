@@ -3,6 +3,8 @@ import cors from 'cors';
 import userRouter from './user/user.router';
 import authRouter from './auth/auth.router';
 import walletRouter from './wallet/wallet.router';
+import feedRouter from './feed/feed.router';
+import marketplaceRouter from './marketplace/marketplace.router';
 import { authMiddleware } from './auth/auth.middleware';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJSDoc from 'swagger-jsdoc';
@@ -33,6 +35,174 @@ const swaggerOptions = {
           type: 'http',
           scheme: 'bearer',
           bearerFormat: 'JWT',
+        },
+      },
+      schemas: {
+        BaseUser: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            name: { type: 'string' },
+            title: { type: 'string' },
+            avatarUrl: { type: 'string', format: 'uri' },
+          },
+        },
+        BaseStats: {
+          type: 'object',
+          properties: {
+            likes: { type: 'number' },
+            comments: { type: 'number' },
+            shares: { type: 'number' },
+            bookmarks: { type: 'number' },
+          },
+        },
+        BaseProduct: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            name: { type: 'string' },
+            subName: { type: 'string' },
+            image: { type: 'object' },
+          },
+        },
+        PostProduct: {
+          allOf: [
+            { $ref: '#/components/schemas/BaseProduct' },
+          ],
+        },
+        BenchmarkProduct: {
+          allOf: [
+            { $ref: '#/components/schemas/BaseProduct' },
+            {
+              type: 'object',
+              properties: {
+                isOwned: { type: 'boolean' },
+                choice: { type: 'boolean' },
+              },
+            },
+          ],
+        },
+        Post: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            type: {
+              type: 'string',
+              enum: ['feed', 'benchmark', 'post', 'question', 'tipsAndTricks'],
+            },
+            user: { $ref: '#/components/schemas/BaseUser' },
+            stats: { $ref: '#/components/schemas/BaseStats' },
+            createdAt: { type: 'string', format: 'date-time' },
+            product: {
+              oneOf: [
+                { $ref: '#/components/schemas/PostProduct' },
+                { type: 'null' },
+              ],
+            },
+            content: { type: 'string' },
+            images: {
+              type: 'array',
+              items: { type: 'object' },
+            },
+          },
+        },
+        BenchmarkPost: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            type: {
+              type: 'string',
+              enum: ['feed', 'benchmark', 'post', 'question', 'tipsAndTricks'],
+            },
+            user: { $ref: '#/components/schemas/BaseUser' },
+            stats: { $ref: '#/components/schemas/BaseStats' },
+            createdAt: { type: 'string', format: 'date-time' },
+            products: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/BenchmarkProduct' },
+            },
+            content: { type: 'string' },
+          },
+        },
+        TipsAndTricksPost: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            type: {
+              type: 'string',
+              enum: ['feed', 'benchmark', 'post', 'question', 'tipsAndTricks'],
+            },
+            user: { $ref: '#/components/schemas/BaseUser' },
+            stats: { $ref: '#/components/schemas/BaseStats' },
+            createdAt: { type: 'string', format: 'date-time' },
+            product: {
+              oneOf: [
+                { $ref: '#/components/schemas/PostProduct' },
+                { type: 'null' },
+              ],
+            },
+            content: { type: 'string' },
+            tag: { type: 'string' },
+            images: {
+              type: 'array',
+              items: { type: 'object' },
+            },
+          },
+        },
+        FeedResponse: {
+          type: 'object',
+          properties: {
+            items: {
+              type: 'array',
+              items: {
+                oneOf: [
+                  {
+                    type: 'object',
+                    properties: {
+                      type: { type: 'string', enum: ['feed'] },
+                      data: { $ref: '#/components/schemas/Post' },
+                    },
+                  },
+                  {
+                    type: 'object',
+                    properties: {
+                      type: { type: 'string', enum: ['benchmark'] },
+                      data: { $ref: '#/components/schemas/BenchmarkPost' },
+                    },
+                  },
+                  {
+                    type: 'object',
+                    properties: {
+                      type: { type: 'string', enum: ['post'] },
+                      data: { $ref: '#/components/schemas/Post' },
+                    },
+                  },
+                  {
+                    type: 'object',
+                    properties: {
+                      type: { type: 'string', enum: ['question'] },
+                      data: { $ref: '#/components/schemas/Post' },
+                    },
+                  },
+                  {
+                    type: 'object',
+                    properties: {
+                      type: { type: 'string', enum: ['tipsAndTricks'] },
+                      data: { $ref: '#/components/schemas/TipsAndTricksPost' },
+                    },
+                  },
+                ],
+              },
+            },
+            pagination: {
+              type: 'object',
+              properties: {
+                cursor: { type: 'string' },
+                hasMore: { type: 'boolean' },
+                limit: { type: 'number' },
+              },
+            },
+          },
         },
       },
     },
@@ -110,6 +280,8 @@ app.get('/api-docs', swaggerUi.setup(getSwaggerSpec(), {
 app.use('/auth', authRouter);
 app.use('/users', authMiddleware, userRouter);
 app.use('/wallets', authMiddleware, walletRouter);
+app.use('/feed', authMiddleware, feedRouter);
+app.use('/marketplace', marketplaceRouter);
 
 // Error handler middleware (en sona eklenmeli)
 app.use(errorHandler);
