@@ -4,12 +4,12 @@ import { UserTitle } from '../../domain/user/user-title.entity';
 export class UserTitlePrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<UserTitle | null> {
+  async findById(id: string): Promise<UserTitle | null> {
     const title = await this.prisma.userTitle.findUnique({ where: { id } });
     return title ? this.toDomain(title) : null;
   }
 
-  async findByUserId(userId: number): Promise<UserTitle[]> {
+  async findByUserId(userId: string): Promise<UserTitle[]> {
     const titles = await this.prisma.userTitle.findMany({
       where: { userId },
       orderBy: { earnedAt: 'desc' }
@@ -25,7 +25,7 @@ export class UserTitlePrismaRepository {
     return titles.map(userTitle => this.toDomain(userTitle));
   }
 
-  async create(userId: number, title: string): Promise<UserTitle> {
+  async create(userId: string, title: string): Promise<UserTitle> {
     const userTitle = await this.prisma.userTitle.create({
       data: {
         userId,
@@ -35,7 +35,7 @@ export class UserTitlePrismaRepository {
     return this.toDomain(userTitle);
   }
 
-  async update(id: number, data: { title?: string }): Promise<UserTitle | null> {
+  async update(id: string, data: { title?: string }): Promise<UserTitle | null> {
     const updatedTitle = await this.prisma.userTitle.update({
       where: { id },
       data
@@ -43,7 +43,7 @@ export class UserTitlePrismaRepository {
     return updatedTitle ? this.toDomain(updatedTitle) : null;
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.userTitle.delete({ where: { id } });
       return true;

@@ -1519,6 +1519,274 @@ async function main() {
   }
   console.log('✅ NFT attributes created')
 
+  // ===== EXPLORE SECTION - Marketplace Banners, Trending Posts, Events =====
+  console.log('🔍 Creating explore data...')
+
+  // 1. Marketplace Banners
+  console.log('📰 Creating marketplace banners...')
+  const banners = await Promise.all([
+    prisma.marketplaceBanner.create({
+      data: {
+        title: 'Yeni Sezon NFT Koleksiyonu',
+        description: 'Sınırlı sayıda özel avatar ve badge NFT\'leri şimdi satışta!',
+        imageUrl: 'https://images.unsplash.com/photo-1634193295627-1cdddf751ebf?w=800',
+        linkUrl: '/marketplace/listings?type=BADGE',
+        isActive: true,
+        displayOrder: 1,
+      },
+    }),
+    prisma.marketplaceBanner.create({
+      data: {
+        title: 'Epic Rarity İndirimi',
+        description: '%30 indirimli EPIC rarity NFT\'lere göz at',
+        imageUrl: 'https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=800',
+        linkUrl: '/marketplace/listings?rarity=EPIC',
+        isActive: true,
+        displayOrder: 2,
+      },
+    }),
+    prisma.marketplaceBanner.create({
+      data: {
+        title: 'Yeni Markalar Platformda',
+        description: 'Ünlü markalar TipBox\'a katıldı! Hemen keşfet.',
+        imageUrl: 'https://images.unsplash.com/photo-1556742400-b5a9d4555f7c?w=800',
+        linkUrl: '/explore/brands/new',
+        isActive: true,
+        displayOrder: 3,
+      },
+    }),
+  ])
+  console.log(`✅ ${banners.length} marketplace banner oluşturuldu`)
+
+  // 2. Trending Posts - Add some posts to trending
+  console.log('📈 Creating trending posts...')
+  const allContentPosts = await prisma.contentPost.findMany({ take: 10 })
+  const postsForTrending = allContentPosts.slice(0, 8) // Top 8 posts will be trending
+  const trendingPosts = await Promise.all(
+    postsForTrending.map((post, index) =>
+      prisma.trendingPost.create({
+        data: {
+          id: generateUlid(),
+          postId: post.id,
+          score: 100 - index * 10, // Descending scores
+          trendPeriod: 'DAILY',
+          calculatedAt: new Date(),
+        },
+      })
+    )
+  )
+  console.log(`✅ ${trendingPosts.length} trending post oluşturuldu`)
+
+  // 3. Wishbox Events (What's News)
+  console.log('🎪 Creating wishbox events...')
+  const today = new Date()
+  const nextWeek = new Date()
+  nextWeek.setDate(today.getDate() + 7)
+  const nextMonth = new Date()
+  nextMonth.setMonth(today.getMonth() + 1)
+
+  const events = await Promise.all([
+    prisma.wishboxEvent.create({
+      data: {
+        id: generateUlid(),
+        title: 'Yılbaşı Mega Ödül Anketi',
+        description: 'Yılın en iyi ürünlerini belirle, büyük ödüller kazan! 1000 TIPS havuzu seni bekliyor.',
+        startDate: today,
+        endDate: nextMonth,
+        status: 'PUBLISHED',
+      },
+    }),
+    prisma.wishboxEvent.create({
+      data: {
+        id: generateUlid(),
+        title: 'Teknoloji Trendleri 2024',
+        description: '2024\'ün en çok beklenen teknoloji ürünlerini seçiyoruz. Senin tercihin ne?',
+        startDate: today,
+        endDate: nextWeek,
+        status: 'PUBLISHED',
+      },
+    }),
+    prisma.wishboxEvent.create({
+      data: {
+        id: generateUlid(),
+        title: 'Kahve Tutkunlarının Anketi',
+        description: 'En iyi kahve makinesi hangisi? Kahve severlerin tercihleri bu etkinlikte belirleniyor.',
+        startDate: today,
+        endDate: nextWeek,
+        status: 'PUBLISHED',
+      },
+    }),
+  ])
+  console.log(`✅ ${events.length} wishbox event oluşturuldu`)
+
+  // Create scenarios for events
+  console.log('🎯 Creating event scenarios...')
+  const scenarios = await Promise.all([
+    // Event 1 - Yılbaşı scenarios
+    prisma.wishboxScenario.create({
+      data: {
+        eventId: events[0].id,
+        title: 'Yılın En İyi Telefonu',
+        description: 'Hangi telefon 2024\'ün şampiyonu olmalı?',
+        orderIndex: 1,
+      },
+    }),
+    prisma.wishboxScenario.create({
+      data: {
+        eventId: events[0].id,
+        title: 'Yılın En İyi Laptop\'u',
+        description: 'En iyi performansı hangi laptop verdi?',
+        orderIndex: 2,
+      },
+    }),
+    // Event 2 - Technology scenarios
+    prisma.wishboxScenario.create({
+      data: {
+        eventId: events[1].id,
+        title: 'En Beklenen Akıllı Saat',
+        description: '2024\'te hangi akıllı saati almayı düşünüyorsun?',
+        orderIndex: 1,
+      },
+    }),
+    // Event 3 - Coffee scenarios
+    prisma.wishboxScenario.create({
+      data: {
+        eventId: events[2].id,
+        title: 'Tam Otomatik vs Manuel',
+        description: 'Tam otomatik mı, manuel kahve makinesi mi?',
+        orderIndex: 1,
+      },
+    }),
+  ])
+  console.log(`✅ ${scenarios.length} scenario oluşturuldu`)
+
+  // Add event statistics for some users
+  console.log('📊 Creating event statistics...')
+  const allUserIds = [userIdToUse, TARGET_USER_ID, ...TRUST_USER_IDS.slice(0, 3)]
+  const eventStats = await Promise.all(
+    events.flatMap((event) =>
+      allUserIds.map((userId, index) =>
+        prisma.wishboxStats.create({
+          data: {
+            userId,
+            eventId: event.id,
+            totalParticipated: Math.floor(Math.random() * 5) + 1,
+            totalComments: Math.floor(Math.random() * 10),
+            helpfulVotesReceived: Math.floor(Math.random() * 20),
+          },
+        })
+      )
+    )
+  )
+  console.log(`✅ ${eventStats.length} event stat oluşturuldu`)
+
+  // 4. Create some brands (if not exist)
+  console.log('🏢 Creating brands...')
+  const brandsData = [
+    {
+      name: 'TechVision',
+      description: 'Yenilikçi teknoloji ürünleri ve çözümleri sunan global marka',
+      logoUrl: 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=200',
+      category: 'Technology',
+    },
+    {
+      name: 'SmartHome Pro',
+      description: 'Akıllı ev sistemleri ve IoT cihazları konusunda uzman',
+      logoUrl: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=200',
+      category: 'Home & Living',
+    },
+    {
+      name: 'CoffeeDelight',
+      description: 'Premium kahve makineleri ve barista ekipmanları',
+      logoUrl: 'https://images.unsplash.com/photo-1511920170033-f8396924c348?w=200',
+      category: 'Kitchen',
+    },
+    {
+      name: 'FitnessTech',
+      description: 'Akıllı spor ekipmanları ve sağlık takip cihazları',
+      logoUrl: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=200',
+      category: 'Health & Fitness',
+    },
+    {
+      name: 'StyleHub',
+      description: 'Modern ve şık yaşam ürünleri markası',
+      logoUrl: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=200',
+      category: 'Fashion',
+    },
+  ]
+
+  const brands = await Promise.all(
+    brandsData.map((brandData) =>
+      prisma.brand.create({
+        data: brandData,
+      }).catch(() => null)
+    )
+  )
+  const createdBrands = brands.filter(Boolean)
+  console.log(`✅ ${createdBrands.length} brand oluşturuldu`)
+
+  // 5. Create Expert Requests and Answers
+  console.log('💡 Creating expert requests...')
+  const expertRequests = await Promise.all([
+    prisma.expertRequest.create({
+      data: {
+        userId: TEST_USER_ID,
+        description: 'iPhone 15 Pro Max ve Samsung Galaxy S24 Ultra arasındaki farkları anlayabilir miyim? Hangisi daha iyi kamera performansı sunuyor?',
+        tipsAmount: 50.0,
+        status: 'ANSWERED',
+        answeredAt: new Date(),
+      },
+    }),
+    prisma.expertRequest.create({
+      data: {
+        userId: TEST_USER_ID,
+        description: 'Dell XPS 13 ve MacBook Air M3 hangisi daha iyi? Programlama ve video editing için hangisini önerirsiniz?',
+        tipsAmount: 100.0,
+        status: 'PENDING',
+      },
+    }),
+    prisma.expertRequest.create({
+      data: {
+        userId: TARGET_USER_ID,
+        description: 'Sony WH-1000XM5 ve AirPods Max arasında karar veremiyorum. Noise cancellation ve ses kalitesi açısından hangisi daha iyi?',
+        tipsAmount: 75.0,
+        status: 'ANSWERED',
+        answeredAt: new Date(),
+      },
+    }),
+    prisma.expertRequest.create({
+      data: {
+        userId: TARGET_USER_ID,
+        description: 'Nespresso ve DeLonghi tam otomatik kahve makineleri arasındaki fark nedir? Ev kullanımı için hangisi daha uygun?',
+        tipsAmount: 0,
+        status: 'PENDING',
+      },
+    }),
+  ])
+  console.log(`✅ ${expertRequests.length} expert request oluşturuldu`)
+
+  // Create Expert Answers for answered requests
+  console.log('💬 Creating expert answers...')
+  const expertAnswers = await Promise.all([
+    // Answer for first request (iPhone vs Samsung)
+    prisma.expertAnswer.create({
+      data: {
+        requestId: expertRequests[0].id,
+        expertUserId: TRUST_USER_IDS[0],
+        content: 'Her iki telefon da mükemmel kamera sistemlerine sahip, ancak ihtiyacınıza göre farklılık gösteriyorlar. iPhone 15 Pro Max video çekimlerde daha iyi performans sunarken, Galaxy S24 Ultra fotoğraf çekimlerde daha fazla özellik sunuyor. Video editing için iPhone\'u, fotoğrafçılık için Galaxy\'i öneririm.',
+      },
+    }),
+    // Answer for third request (Sony vs AirPods)
+    prisma.expertAnswer.create({
+      data: {
+        requestId: expertRequests[2].id,
+        expertUserId: TRUST_USER_IDS[1],
+        content: 'Sony WH-1000XM5 noise cancellation açısından kesinlikle daha üstün. Özellikle uçak yolculuklarında ve ofis ortamında çok etkili. AirPods Max ise Apple ekosistemiyle mükemmel entegrasyon sunuyor. Android kullanıyorsanız Sony\'yi, iOS kullanıyorsanız AirPods Max\'i tercih edin.',
+      },
+    }),
+  ])
+  console.log(`✅ ${expertAnswers.length} expert answer oluşturuldu`)
+
   console.log('✨ Seed process completed successfully!')
   
   // Build summary text
@@ -1532,6 +1800,14 @@ async function main() {
   summaryLines.push(`• ${metrics.length} Comparison Metrics`)
   summaryLines.push(`• ${allNFTs.length} NFTs (including ${nfts.length} for target user)`)
   summaryLines.push(`• ${marketplaceListings.length} Marketplace Listings`)
+  summaryLines.push(`• ${banners.length} Marketplace Banners`)
+  summaryLines.push(`• ${trendingPosts.length} Trending Posts`)
+  summaryLines.push(`• ${events.length} Wishbox Events`)
+  summaryLines.push(`• ${scenarios.length} Event Scenarios`)
+  summaryLines.push(`• ${eventStats.length} Event Statistics`)
+  summaryLines.push(`• ${createdBrands.length} Brands`)
+  summaryLines.push(`• ${expertRequests.length} Expert Requests`)
+  summaryLines.push(`• ${expertAnswers.length} Expert Answers`)
   summaryLines.push(`• Target User (Market Test) - ID: ${TARGET_USER_ID}`)
   summaryLines.push(`  - Owned NFTs: 4 (not listed)`)
   summaryLines.push(`  - Listed NFTs: 6 (on marketplace)`)
@@ -1589,6 +1865,21 @@ async function main() {
   summaryLines.push('• Update Price: PUT /marketplace/listings/:listingId/price')
   summaryLines.push('  Body: { "amount": 150.0 }')
   summaryLines.push('• Cancel Listing: DELETE /marketplace/listings/:listingId')
+  summaryLines.push('')
+  summaryLines.push('🔍 Explore Endpoints:')
+  summaryLines.push('• Hottest/Trending: GET /explore/hottest (with auth token)')
+  summaryLines.push('• Marketplace Banners: GET /explore/marketplace-banners')
+  summaryLines.push('• What\'s News (Events): GET /explore/events')
+  summaryLines.push('• New Brands: GET /explore/brands/new')
+  summaryLines.push('• New Products: GET /explore/products/new')
+  summaryLines.push('')
+  summaryLines.push('💡 Expert Endpoints:')
+  summaryLines.push('• Create Request: POST /expert/request')
+  summaryLines.push('  Body: { "description": "...", "tipsAmount": 50.0 }')
+  summaryLines.push('• Update Tips: PATCH /expert/request/:requestId/tips')
+  summaryLines.push('  Body: { "tipsAmount": 100.0 }')
+  summaryLines.push('• Get Answered: GET /expert/answered')
+  summaryLines.push('• Get Request Detail: GET /expert/request/:requestId')
   console.log(summaryLines.join('\n'))
 }
 

@@ -1273,7 +1273,7 @@ export class UserService {
     }> = [];
 
     for (const privacyCode of Object.values(PrivacyCode) as PrivacyCode[]) {
-      const setting = settings.find((s) => s.privacyCode === privacyCode);
+      const setting = settings.find((s: any) => s.privacyCode === privacyCode);
       result.push({
         privacyCode,
         selectedValue: setting?.selectedValue || defaultValues[privacyCode],

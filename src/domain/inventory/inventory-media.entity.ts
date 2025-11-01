@@ -3,7 +3,7 @@ import { InventoryMediaType } from './inventory-media-type.enum';
 export class InventoryMedia {
   constructor(
     public readonly id: string,
-    public readonly inventoryId: number,
+    public readonly inventoryId: string,
     public readonly mediaUrl: string,
     public readonly type: InventoryMediaType,
     public readonly uploadedAt: Date,
@@ -24,7 +24,7 @@ export class InventoryMedia {
     return this.type === InventoryMediaType.VIDEO;
   }
 
-  belongsToInventory(inventoryId: number): boolean {
+  belongsToInventory(inventoryId: string): boolean {
     return this.inventoryId === inventoryId;
   }
 

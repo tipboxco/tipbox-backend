@@ -1,8 +1,8 @@
 export class Inventory {
   constructor(
     public readonly id: string,
-    public readonly userId: number,
-    public readonly productId: number,
+    public readonly userId: string,
+    public readonly productId: string,
     public readonly hasOwned: boolean,
     public readonly experienceSummary: string | null,
     public readonly createdAt: Date,
@@ -22,11 +22,11 @@ export class Inventory {
     return this.experienceSummary ?? 'Deneyim paylaşılmamış';
   }
 
-  belongsToUser(userId: number): boolean {
+  belongsToUser(userId: string): boolean {
     return this.userId === userId;
   }
 
-  isForProduct(productId: number): boolean {
+  isForProduct(productId: string): boolean {
     return this.productId === productId;
   }
 

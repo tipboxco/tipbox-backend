@@ -2,20 +2,18 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Package files'ları kopyala
+# Package files ve Prisma schema'yı kopyala
 COPY package*.json ./
+COPY prisma ./prisma
 
 # Dependencies'leri yükle
 RUN npm install
 
-# Prisma'yı global olarak yükle (opsiyonel ama yararlı)
-RUN npx prisma generate || echo "Prisma generate skipped if schema not available yet"
+# Prisma Client'ı generate et (schema kopyalandıktan sonra)
+RUN npx prisma generate
 
 # Source code'u kopyala
 COPY . .
-
-# Prisma Client'ı tekrar generate et (schema kopyalandıktan sonra)
-RUN npx prisma generate
 
 # Port'u expose et
 EXPOSE 3000

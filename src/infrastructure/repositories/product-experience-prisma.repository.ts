@@ -4,7 +4,7 @@ import { ProductExperience } from '../../domain/inventory/product-experience.ent
 export class ProductExperiencePrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<ProductExperience | null> {
+  async findById(id: string): Promise<ProductExperience | null> {
     const experience = await this.prisma.productExperience.findUnique({ 
       where: { id },
       include: {
@@ -19,7 +19,7 @@ export class ProductExperiencePrismaRepository {
     return experience ? this.toDomain(experience) : null;
   }
 
-  async findByInventoryId(inventoryId: number): Promise<ProductExperience[]> {
+  async findByInventoryId(inventoryId: string): Promise<ProductExperience[]> {
     const experiences = await this.prisma.productExperience.findMany({
       where: { inventoryId },
       include: {
@@ -75,7 +75,7 @@ export class ProductExperiencePrismaRepository {
   }
 
   async create(
-    inventoryId: number,
+    inventoryId: string,
     title: string,
     experienceText: string
   ): Promise<ProductExperience> {
@@ -97,7 +97,7 @@ export class ProductExperiencePrismaRepository {
     return this.toDomain(experience);
   }
 
-  async update(id: number, data: { 
+  async update(id: string, data: { 
     title?: string;
     experienceText?: string;
   }): Promise<ProductExperience | null> {
@@ -116,7 +116,7 @@ export class ProductExperiencePrismaRepository {
     return experience ? this.toDomain(experience) : null;
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.productExperience.delete({ where: { id } });
       return true;
@@ -125,7 +125,7 @@ export class ProductExperiencePrismaRepository {
     }
   }
 
-  async deleteByInventoryId(inventoryId: number): Promise<boolean> {
+  async deleteByInventoryId(inventoryId: string): Promise<boolean> {
     try {
       await this.prisma.productExperience.deleteMany({
         where: { inventoryId }
@@ -136,7 +136,7 @@ export class ProductExperiencePrismaRepository {
     }
   }
 
-  async countByInventoryId(inventoryId: number): Promise<number> {
+  async countByInventoryId(inventoryId: string): Promise<number> {
     return await this.prisma.productExperience.count({
       where: { inventoryId }
     });

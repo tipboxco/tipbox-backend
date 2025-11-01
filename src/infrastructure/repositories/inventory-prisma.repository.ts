@@ -4,7 +4,7 @@ import { Inventory } from '../../domain/inventory/inventory.entity';
 export class InventoryPrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<Inventory | null> {
+  async findById(id: string): Promise<Inventory | null> {
     const inventory = await this.prisma.inventory.findUnique({ 
       where: { id },
       include: {
@@ -17,7 +17,7 @@ export class InventoryPrismaRepository {
     return inventory ? this.toDomain(inventory) : null;
   }
 
-  async findByUserId(userId: number): Promise<Inventory[]> {
+  async findByUserId(userId: string): Promise<Inventory[]> {
     const inventories = await this.prisma.inventory.findMany({
       where: { userId },
       include: {
@@ -31,7 +31,7 @@ export class InventoryPrismaRepository {
     return inventories.map(inventory => this.toDomain(inventory));
   }
 
-  async findByProductId(productId: number): Promise<Inventory[]> {
+  async findByProductId(productId: string): Promise<Inventory[]> {
     const inventories = await this.prisma.inventory.findMany({
       where: { productId },
       include: {
@@ -45,7 +45,7 @@ export class InventoryPrismaRepository {
     return inventories.map(inventory => this.toDomain(inventory));
   }
 
-  async findByUserAndProduct(userId: number, productId: number): Promise<Inventory[]> {
+  async findByUserAndProduct(userId: string, productId: string): Promise<Inventory[]> {
     const inventories = await this.prisma.inventory.findMany({
       where: { 
         userId,
@@ -63,8 +63,8 @@ export class InventoryPrismaRepository {
   }
 
   async create(
-    userId: number, 
-    productId: number, 
+    userId: string, 
+    productId: string, 
     hasOwned: boolean = true,
     experienceSummary?: string
   ): Promise<Inventory> {
@@ -85,7 +85,7 @@ export class InventoryPrismaRepository {
     return this.toDomain(inventory);
   }
 
-  async update(id: number, data: { 
+  async update(id: string, data: { 
     hasOwned?: boolean;
     experienceSummary?: string;
   }): Promise<Inventory | null> {
@@ -102,7 +102,7 @@ export class InventoryPrismaRepository {
     return inventory ? this.toDomain(inventory) : null;
   }
 
-  async updateOwnershipStatus(id: number, hasOwned: boolean): Promise<Inventory | null> {
+  async updateOwnershipStatus(id: string, hasOwned: boolean): Promise<Inventory | null> {
     const inventory = await this.prisma.inventory.update({
       where: { id },
       data: { hasOwned },
@@ -116,7 +116,7 @@ export class InventoryPrismaRepository {
     return inventory ? this.toDomain(inventory) : null;
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.inventory.delete({ where: { id } });
       return true;
@@ -125,7 +125,7 @@ export class InventoryPrismaRepository {
     }
   }
 
-  async findCurrentlyOwned(userId: number): Promise<Inventory[]> {
+  async findCurrentlyOwned(userId: string): Promise<Inventory[]> {
     const inventories = await this.prisma.inventory.findMany({
       where: { 
         userId,
@@ -142,7 +142,7 @@ export class InventoryPrismaRepository {
     return inventories.map(inventory => this.toDomain(inventory));
   }
 
-  async findRecentPurchases(userId: number, days: number = 30): Promise<Inventory[]> {
+  async findRecentPurchases(userId: string, days: number = 30): Promise<Inventory[]> {
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     const inventories = await this.prisma.inventory.findMany({
       where: { 

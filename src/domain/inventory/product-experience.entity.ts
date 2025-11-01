@@ -1,7 +1,7 @@
 export class ProductExperience {
   constructor(
     public readonly id: string,
-    public readonly inventoryId: number,
+    public readonly inventoryId: string,
     public readonly title: string,
     public readonly experienceText: string,
     public readonly createdAt: Date,
@@ -17,7 +17,7 @@ export class ProductExperience {
     return this.experienceText;
   }
 
-  belongsToInventory(inventoryId: number): boolean {
+  belongsToInventory(inventoryId: string): boolean {
     return this.inventoryId === inventoryId;
   }
 

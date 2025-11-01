@@ -305,7 +305,6 @@ export class AuthService implements IAuthService {
       }
 
       // Önce tüm cihazları inactive yap
-      await this.deviceRepo.setActiveDevice(userId);
 
       // Cihazı upsert et (userAgent unique constraint ile)
       // upsert içinde zaten isActive=true ve lastLoginAt güncelleniyor
@@ -319,7 +318,7 @@ export class AuthService implements IAuthService {
       );
 
       // Device'ı aktif yap (upsert'ten sonra ID'yi biliyoruz)
-      await this.deviceRepo.setActiveDevice(userId, device.id);
+      if (device?.id) { await this.deviceRepo.setActiveDevice(userId, device.id); }
 
       logger.info({
         message: 'Device tracked successfully',

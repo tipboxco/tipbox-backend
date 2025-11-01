@@ -5,6 +5,9 @@ import authRouter from './auth/auth.router';
 import walletRouter from './wallet/wallet.router';
 import feedRouter from './feed/feed.router';
 import marketplaceRouter from './marketplace/marketplace.router';
+import exploreRouter from './explore/explore.router';
+import expertRouter from './expert/expert.router';
+import inventoryRouter from './inventory/inventory.router';
 import { authMiddleware } from './auth/auth.middleware';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJSDoc from 'swagger-jsdoc';
@@ -204,6 +207,140 @@ const swaggerOptions = {
             },
           },
         },
+        ExpertRequestMediaResponse: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            mediaUrl: { type: 'string', format: 'uri' },
+            mediaType: { type: 'string', enum: ['IMAGE', 'VIDEO'] },
+            uploadedAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        ExpertRequestResponse: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            userId: { type: 'string', format: 'uuid' },
+            description: { type: 'string' },
+            category: { type: 'string', nullable: true },
+            tipsAmount: { type: 'number' },
+            status: {
+              type: 'string',
+              enum: ['PENDING', 'BROADCASTING', 'EXPERT_FOUND', 'ANSWERED', 'CLOSED'],
+            },
+            answeredAt: { type: 'string', format: 'date-time', nullable: true },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+            media: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/ExpertRequestMediaResponse' },
+            },
+          },
+        },
+        ExpertRequestStatusResponse: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            status: {
+              type: 'string',
+              enum: ['PENDING', 'BROADCASTING', 'EXPERT_FOUND', 'ANSWERED', 'CLOSED'],
+            },
+            description: { type: 'string' },
+            category: { type: 'string', nullable: true },
+            tipsAmount: { type: 'number' },
+            estimatedWaitTimeMinutes: { type: 'number', nullable: true },
+            expertFound: {
+              type: 'object',
+              nullable: true,
+              properties: {
+                expertUserId: { type: 'string', format: 'uuid' },
+                expertName: { type: 'string' },
+                expertTitle: { type: 'array', items: { type: 'string' } },
+                expertAvatar: { type: 'string', format: 'uri', nullable: true },
+              },
+            },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        ExpertAnswerUser: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            name: { type: 'string' },
+            title: { type: 'array', items: { type: 'string' } },
+            avatar: { type: 'string', format: 'uri', nullable: true },
+          },
+        },
+        ExpertAnswerResponse: {
+          type: 'object',
+          properties: {
+            question: {
+              type: 'object',
+              properties: {
+                description: { type: 'string' },
+              },
+            },
+            answer: {
+              type: 'object',
+              properties: {
+                user: { $ref: '#/components/schemas/ExpertAnswerUser' },
+                content: { type: 'string' },
+              },
+            },
+          },
+        },
+        InventoryListItemResponse: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            brand: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+                model: { type: 'string' },
+                specs: { type: 'string' },
+              },
+            },
+            image: { type: 'string', format: 'uri', nullable: true },
+            reviews: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  title: { type: 'string' },
+                  description: { type: 'string' },
+                  rating: { type: 'number', minimum: 0, maximum: 5 },
+                },
+              },
+            },
+            tags: {
+              type: 'array',
+              items: { type: 'string' },
+            },
+          },
+        },
+        InventoryItemResponse: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            userId: { type: 'string', format: 'uuid' },
+            productId: { type: 'string', format: 'uuid' },
+            hasOwned: { type: 'boolean' },
+            experienceSummary: { type: 'string', nullable: true },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+            product: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', format: 'uuid' },
+                name: { type: 'string' },
+                brand: { type: 'string', nullable: true },
+                description: { type: 'string', nullable: true },
+              },
+            },
+          },
+        },
       },
     },
     security: [{ bearerAuth: [] }],
@@ -282,6 +419,9 @@ app.use('/users', authMiddleware, userRouter);
 app.use('/wallets', authMiddleware, walletRouter);
 app.use('/feed', authMiddleware, feedRouter);
 app.use('/marketplace', marketplaceRouter);
+app.use('/explore', exploreRouter);
+app.use('/expert', expertRouter);
+app.use('/inventory', inventoryRouter);
 
 // Error handler middleware (en sona eklenmeli)
 app.use(errorHandler);
