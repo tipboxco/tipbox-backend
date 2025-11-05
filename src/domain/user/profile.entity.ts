@@ -8,6 +8,10 @@ export class Profile {
     public readonly bannerUrl: string | null,
     public readonly country: string | null,
     public readonly birthDate: Date | null,
+    public readonly postsCount: number,
+    public readonly trustCount: number,
+    public readonly trusterCount: number,
+    public readonly unseenFeedCount: number,
     public readonly createdAt: Date,
     public readonly updatedAt: Date
   ) {}

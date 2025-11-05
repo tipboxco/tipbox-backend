@@ -149,6 +149,17 @@ export class ContentPostPrismaRepository {
         contentPostTags: true
       }
     });
+
+    // Increment user's postsCount
+    await this.prisma.profile.updateMany({
+      where: { userId },
+      data: {
+        postsCount: {
+          increment: 1
+        }
+      } as any
+    });
+
     return this.toDomain(post);
   }
 
@@ -179,7 +190,26 @@ export class ContentPostPrismaRepository {
 
   async delete(id: string): Promise<boolean> {
     try {
+      // Get post to get userId before deleting
+      const post = await this.prisma.contentPost.findUnique({
+        where: { id },
+        select: { userId: true }
+      });
+
+      if (!post) return false;
+
       await this.prisma.contentPost.delete({ where: { id } });
+
+      // Decrement user's postsCount
+      await this.prisma.profile.updateMany({
+        where: { userId: post.userId },
+        data: {
+          postsCount: {
+            increment: -1
+          }
+        } as any
+      });
+
       return true;
     } catch {
       return false;
@@ -212,14 +242,7 @@ export class ContentPostPrismaRepository {
         subCategory: true,
         question: true,
         tip: true,
-        tags: true,
-        _count: {
-          select: {
-            comments: true,
-            likes: true,
-            views: true
-          }
-        }
+        tags: true
       },
       orderBy: { createdAt: 'desc' },
       take: limit
@@ -234,48 +257,91 @@ export class ContentPostPrismaRepository {
         subCategory: true,
         question: true,
         tip: true,
-        tags: true,
-        _count: {
-          select: {
-            likes: true,
-            comments: true,
-            views: true
-          }
-        }
+        tags: true
       },
       orderBy: {
-        likes: {
-          _count: 'desc'
-        }
-      },
+        likesCount: 'desc'
+      } as any,
       take: limit
     });
     return posts.map(post => this.toDomain(post));
   }
 
   async incrementLikeCount(postId: string): Promise<void> {
-    // Like count is calculated from ContentLike table, no need to update
-    // This method is kept for compatibility but does nothing
+    await this.prisma.contentPost.update({
+      where: { id: postId },
+      data: {
+        likesCount: {
+          increment: 1
+        }
+      } as any
+    });
   }
 
   async decrementLikeCount(postId: string): Promise<void> {
-    // Like count is calculated from ContentLike table, no need to update
-    // This method is kept for compatibility but does nothing
+    await this.prisma.contentPost.update({
+      where: { id: postId },
+      data: {
+        likesCount: {
+          increment: -1
+        }
+      } as any
+    });
   }
 
   async incrementViewCount(postId: string): Promise<void> {
-    // View count is calculated from ContentPostView table, no need to update
-    // This method is kept for compatibility but does nothing
+    await this.prisma.contentPost.update({
+      where: { id: postId },
+      data: {
+        viewsCount: {
+          increment: 1
+        }
+      } as any
+    });
   }
 
   async incrementCommentCount(postId: string): Promise<void> {
-    // Comment count is calculated from ContentComment table, no need to update
-    // This method is kept for compatibility but does nothing
+    await this.prisma.contentPost.update({
+      where: { id: postId },
+      data: {
+        commentsCount: {
+          increment: 1
+        }
+      } as any
+    });
   }
 
   async decrementCommentCount(postId: string): Promise<void> {
-    // Comment count is calculated from ContentComment table, no need to update
-    // This method is kept for compatibility but does nothing
+    await this.prisma.contentPost.update({
+      where: { id: postId },
+      data: {
+        commentsCount: {
+          increment: -1
+        }
+      } as any
+    });
+  }
+
+  async incrementFavoriteCount(postId: string): Promise<void> {
+    await this.prisma.contentPost.update({
+      where: { id: postId },
+      data: {
+        favoritesCount: {
+          increment: 1
+        }
+      } as any
+    });
+  }
+
+  async decrementFavoriteCount(postId: string): Promise<void> {
+    await this.prisma.contentPost.update({
+      where: { id: postId },
+      data: {
+        favoritesCount: {
+          increment: -1
+        }
+      } as any
+    });
   }
 
   private toDomain(prismaPost: any): ContentPost {
@@ -292,6 +358,10 @@ export class ContentPostPrismaRepository {
       prismaPost.inventoryRequired,
       prismaPost.isBoosted,
       prismaPost.boostedUntil,
+      prismaPost.likesCount ?? 0,
+      prismaPost.commentsCount ?? 0,
+      prismaPost.favoritesCount ?? 0,
+      prismaPost.viewsCount ?? 0,
       prismaPost.createdAt,
       prismaPost.updatedAt
     );

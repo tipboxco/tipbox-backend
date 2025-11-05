@@ -96,16 +96,20 @@ model User {
 }
 
 model Profile {
-  id          String    @id @default(uuid()) @db.Uuid
-  userId      String    @unique @map("user_id") @db.Uuid
-  displayName String?   @map("display_name")
-  userName    String?   @unique @map("user_name")
-  bio         String?
-  bannerUrl   String?   @map("banner_url")
-  country     String?
-  birthDate   DateTime? @map("birth_date") @db.Date
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  id              String    @id @default(uuid()) @db.Uuid
+  userId          String    @unique @map("user_id") @db.Uuid
+  displayName     String?   @map("display_name")
+  userName        String?   @unique @map("user_name")
+  bio             String?
+  bannerUrl       String?   @map("banner_url")
+  country         String?
+  birthDate       DateTime? @map("birth_date") @db.Date
+  postsCount      Int       @default(0) @map("posts_count")
+  trustCount      Int       @default(0) @map("trust_count")
+  trusterCount    Int       @default(0) @map("truster_count")
+  unseenFeedCount Int       @default(0) @map("unseen_feed_count")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -141,6 +145,8 @@ model TrustRelation {
   trustedUser User @relation("TrustedUserRelation", fields: [trustedUserId], references: [id], onDelete: Cascade)
 
   @@unique([trusterId, trustedUserId])
+  @@index([trusterId])
+  @@index([trustedUserId])
   @@map("trust_relations")
 }
 
@@ -188,6 +194,7 @@ model UserTrustScore {
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("user_trust_scores")
 }
 
@@ -201,6 +208,8 @@ model UserRole {
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+  @@index([role])
   @@map("user_roles")
 }
 
@@ -230,6 +239,8 @@ model UserAvatar {
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+  @@index([userId, isActive])
   @@map("user_avatars")
 }
 
@@ -250,6 +261,8 @@ model UserKycRecord {
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+  @@index([reviewStatus])
   @@map("user_kyc_records")
 }
 
@@ -277,6 +290,7 @@ model UserTitle {
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("user_titles")
 }
 
@@ -500,6 +514,9 @@ model Inventory {
   media              InventoryMedia[]
 
   @@unique([userId, productId])
+  @@index([userId])
+  @@index([productId])
+  @@index([userId, hasOwned])
   @@map("inventories")
 }
 
@@ -514,6 +531,7 @@ model ProductExperience {
   // Relations
   inventory Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
 
+  @@index([inventoryId])
   @@map("product_experiences")
 }
 
@@ -529,6 +547,8 @@ model InventoryMedia {
   // Relations
   inventory Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
 
+  @@index([inventoryId])
+  @@index([inventoryId, type])
   @@map("inventory_media")
 }
 
@@ -556,6 +576,10 @@ model ContentPost {
   inventoryRequired Boolean         @map("inventory_required")
   isBoosted         Boolean         @map("is_boosted")
   boostedUntil      DateTime?       @map("boosted_until")
+  likesCount        Int             @default(0) @map("likes_count")
+  commentsCount     Int             @default(0) @map("comments_count")
+  favoritesCount    Int             @default(0) @map("favorites_count")
+  viewsCount        Int             @default(0) @map("views_count")
   createdAt         DateTime        @default(now()) @map("created_at")
   updatedAt         DateTime        @updatedAt @map("updated_at")
 
@@ -579,6 +603,13 @@ model ContentPost {
   trendingPosts       TrendingPost[]
   contentPostTags     ContentPostTag[]
 
+  @@index([userId])
+  @@index([userId, createdAt])
+  @@index([subCategoryId])
+  @@index([type])
+  @@index([mainCategoryId])
+  @@index([productId])
+  @@index([createdAt])
   @@map("content_posts")
 }
 
@@ -670,6 +701,7 @@ model PostTag {
   // Relations
   post ContentPost @relation(fields: [postId], references: [id], onDelete: Cascade)
 
+  @@index([postId])
   @@map("post_tags")
 }
 
@@ -683,6 +715,7 @@ model ContentPostTag {
   // Relations
   post ContentPost @relation(fields: [postId], references: [id], onDelete: Cascade)
 
+  @@index([postId])
   @@map("content_post_tags")
 }
 
@@ -736,6 +769,9 @@ model ContentComment {
   votes   ContentCommentVote[]
   ratings ContentRating[]
 
+  @@index([postId])
+  @@index([userId])
+  @@index([parentId])
   @@map("content_comments")
 }
 
@@ -754,6 +790,9 @@ model ContentLike {
 
   @@unique([userId, postId])
   @@unique([userId, commentId])
+  @@index([userId])
+  @@index([postId])
+  @@index([commentId])
   @@map("content_likes")
 }
 
@@ -769,6 +808,8 @@ model ContentFavorite {
   post ContentPost @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@unique([userId, postId])
+  @@index([userId])
+  @@index([postId])
   @@map("content_favorites")
 }
 
@@ -783,6 +824,7 @@ model ContentCollection {
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("content_collections")
 }
 
@@ -799,6 +841,8 @@ model ContentRating {
   comment ContentComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
 
   @@unique([userId, commentId])
+  @@index([userId])
+  @@index([commentId])
   @@map("content_ratings")
 }
 
@@ -815,6 +859,8 @@ model ContentCommentVote {
   comment ContentComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
 
   @@unique([userId, commentId])
+  @@index([userId])
+  @@index([commentId])
   @@map("content_comment_votes")
 }
 
@@ -831,6 +877,7 @@ model ContentPostView {
   post ContentPost @relation(fields: [postId], references: [id], onDelete: Cascade)
   user User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([postId])
   @@map("content_post_views")
 }
 
@@ -908,6 +955,8 @@ model UserBadge {
   badge Badge @relation(fields: [badgeId], references: [id])
 
   @@unique([userId, badgeId])
+  @@index([userId])
+  @@index([badgeId, claimed])
   @@map("user_badges")
 }
 
@@ -1048,6 +1097,8 @@ model BridgePost {
   brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([brandId])
+  @@index([userId])
   @@map("bridge_posts")
 }
 
@@ -1065,6 +1116,7 @@ model BrandSurvey {
   brand     Brand                 @relation(fields: [brandId], references: [id], onDelete: Cascade)
   questions BrandSurveyQuestion[]
 
+  @@index([brandId])
   @@map("brand_surveys")
 }
 
@@ -1096,6 +1148,8 @@ model BrandSurveyAnswer {
   user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([questionId, userId])
+  @@index([questionId])
+  @@index([userId])
   @@map("brand_survey_answers")
 }
 
@@ -1218,6 +1272,8 @@ model TipsTokenTransfer {
   fromUser User @relation("SentTips", fields: [fromUserId], references: [id], onDelete: Cascade)
   toUser   User @relation("ReceivedTips", fields: [toUserId], references: [id], onDelete: Cascade)
 
+  @@index([fromUserId])
+  @@index([toUserId])
   @@map("tips_token_transfers")
 }
 
@@ -1261,6 +1317,9 @@ model NFTTransaction {
   fromUser User? @relation("NFTSender", fields: [fromUserId], references: [id])
   toUser   User  @relation("NFTReceiver", fields: [toUserId], references: [id])
 
+  @@index([nftId])
+  @@index([toUserId])
+  @@index([fromUserId])
   @@map("nft_transactions")
 }
 
@@ -1278,6 +1337,10 @@ model NFTMarketListing {
   nft          NFT  @relation(fields: [nftId], references: [id], onDelete: Cascade)
   listedByUser User @relation(fields: [listedByUserId], references: [id], onDelete: Cascade)
 
+  @@index([status])
+  @@index([nftId])
+  @@index([listedByUserId])
+  @@index([status, price])
   @@map("nft_market_listings")
 }
 
@@ -1306,6 +1369,8 @@ model Lootbox {
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+  @@index([status])
   @@map("lootboxes")
 }
 
@@ -1322,6 +1387,7 @@ model NFTClaim {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   nft  NFT? @relation(fields: [nftId], references: [id])
 
+  @@index([userId])
   @@map("nft_claims")
 }
 
@@ -1441,6 +1507,8 @@ model ChoiceComment {
   choice ScenarioChoice @relation(fields: [choiceId], references: [id], onDelete: Cascade)
   user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([choiceId])
+  @@index([userId])
   @@map("choice_comments")
 }
 
@@ -1477,6 +1545,8 @@ model WishboxReward {
   user  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   event WishboxEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+  @@index([eventId])
   @@map("wishbox_rewards")
 }
 
@@ -1501,13 +1571,15 @@ enum WishboxRewardType {
 // ===== DM & MESSAGING SYSTEM MODELS =====
 
 model DMThread {
-  id        String   @id @default(uuid()) @db.Uuid
-  userOneId String   @map("user_one_id") @db.Uuid
-  userTwoId String   @map("user_two_id") @db.Uuid
-  isActive  Boolean  @map("is_active")
-  startedAt DateTime @default(now()) @map("started_at")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id                String   @id @default(uuid()) @db.Uuid
+  userOneId         String   @map("user_one_id") @db.Uuid
+  userTwoId          String   @map("user_two_id") @db.Uuid
+  isActive           Boolean  @map("is_active")
+  unreadCountUserOne Int      @default(0) @map("unread_count_user_one")
+  unreadCountUserTwo Int      @default(0) @map("unread_count_user_two")
+  startedAt          DateTime @default(now()) @map("started_at")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
   // Relations
   userOne         User               @relation("DMThreadUserOne", fields: [userOneId], references: [id], onDelete: Cascade)
@@ -1516,6 +1588,8 @@ model DMThread {
   supportSessions DMSupportSession[]
 
   @@unique([userOneId, userTwoId])
+  @@index([userOneId])
+  @@index([userTwoId])
   @@map("dm_threads")
 }
 
@@ -1533,6 +1607,9 @@ model DMMessage {
   thread DMThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
   sender User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
 
+  @@index([threadId])
+  @@index([threadId, isRead])
+  @@index([senderId])
   @@map("dm_messages")
 }
 
@@ -1551,6 +1628,9 @@ model DMRequest {
   toUser   User @relation("DMRequestReceiver", fields: [toUserId], references: [id], onDelete: Cascade)
 
   @@unique([fromUserId, toUserId])
+  @@index([fromUserId])
+  @@index([toUserId])
+  @@index([status])
   @@map("dm_requests")
 }
 
@@ -1568,6 +1648,8 @@ model DMSupportSession {
   helper    User         @relation(fields: [helperId], references: [id], onDelete: Cascade)
   feedbacks DMFeedback[]
 
+  @@index([threadId])
+  @@index([helperId])
   @@map("dm_support_sessions")
 }
 
@@ -1611,6 +1693,10 @@ model Feed {
   user User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   post ContentPost @relation(fields: [postId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+  @@index([userId, seen])
+  @@index([userId, source])
+  @@index([postId])
   @@map("feeds")
 }
 
@@ -1625,6 +1711,7 @@ model FeedHighlight {
   // Relations
   post ContentPost @relation(fields: [postId], references: [id], onDelete: Cascade)
 
+  @@index([postId])
   @@map("feed_highlights")
 }
 
@@ -1657,6 +1744,7 @@ model AdminLog {
   // Relations
   admin User @relation(fields: [adminId], references: [id], onDelete: Cascade)
 
+  @@index([adminId])
   @@map("admin_logs")
 }
 
@@ -1675,6 +1763,8 @@ model ModerationAction {
   moderator  User @relation("ModeratorActions", fields: [moderatorId], references: [id], onDelete: Cascade)
   targetUser User @relation("ModeratedActions", fields: [targetUserId], references: [id], onDelete: Cascade)
 
+  @@index([moderatorId])
+  @@index([targetUserId])
   @@map("moderation_actions")
 }
 
@@ -1774,6 +1864,8 @@ model ExpertRequest {
   answers ExpertAnswer[]
   media   ExpertRequestMedia[]
 
+  @@index([userId])
+  @@index([status])
   @@map("expert_requests")
 }
 
@@ -1806,6 +1898,8 @@ model ExpertAnswer {
   expertUser User          @relation(fields: [expertUserId], references: [id], onDelete: Cascade)
 
   @@unique([requestId, expertUserId])
+  @@index([requestId])
+  @@index([expertUserId])
   @@map("expert_answers")
 }
 

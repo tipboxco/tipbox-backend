@@ -130,13 +130,10 @@ export class UserService {
     const user = await this.userRepo.findById(userId);
     if (!user) return null;
 
-    const [profile, activeAvatar, titles, postsCount, trustCount, trusterCount, userBadges] = await Promise.all([
+    const [profile, activeAvatar, titles, userBadges] = await Promise.all([
       this.profileRepo.findByUserId(userId),
       this.prisma.userAvatar.findFirst({ where: { userId, isActive: true }, orderBy: { createdAt: 'desc' } }),
       this.prisma.userTitle.findMany({ where: { userId }, orderBy: { earnedAt: 'desc' }, take: 5 }),
-      this.prisma.contentPost.count({ where: { userId } }),
-      this.prisma.trustRelation.count({ where: { trusterId: userId } }),
-      this.prisma.trustRelation.count({ where: { trustedUserId: userId } }),
       this.prisma.userBadge.findMany({
         where: { userId },
         include: { badge: true },
@@ -153,9 +150,9 @@ export class UserService {
       description: profile?.bio ?? null,
       titles: titles.map(t => t.title),
       stats: {
-        posts: postsCount,
-        trust: trustCount,
-        truster: trusterCount,
+        posts: profile?.postsCount || 0,
+        trust: profile?.trustCount || 0,
+        truster: profile?.trusterCount || 0,
       },
       badges: userBadges.map(ub => ({ imageUrl: ub.badge.imageUrl ?? null, title: ub.badge.name })),
     };
@@ -223,6 +220,27 @@ export class UserService {
       await this.prisma.trustRelation.delete({
         where: { trusterId_trustedUserId: { trusterId: userId, trustedUserId: targetUserId } },
       });
+
+      // Decrement truster's trustCount
+      await this.prisma.profile.updateMany({
+        where: { userId },
+        data: {
+          trustCount: {
+            increment: -1
+          }
+        } as any
+      });
+
+      // Decrement trusted user's trusterCount
+      await this.prisma.profile.updateMany({
+        where: { userId: targetUserId },
+        data: {
+          trusterCount: {
+            increment: -1
+          }
+        } as any
+      });
+
       return true;
     } catch {
       return false;
@@ -230,11 +248,40 @@ export class UserService {
   }
 
   async addTrust(userId: string, targetUserId: string): Promise<void> {
+    // Check if relation already exists
+    const existing = await this.prisma.trustRelation.findUnique({
+      where: { trusterId_trustedUserId: { trusterId: userId, trustedUserId: targetUserId } }
+    });
+
+    if (existing) {
+      return; // Already exists, no need to update counts
+    }
+
     // idempotent create
     await this.prisma.trustRelation.upsert({
       where: { trusterId_trustedUserId: { trusterId: userId, trustedUserId: targetUserId } },
       update: {},
       create: { trusterId: userId, trustedUserId: targetUserId },
+    });
+
+    // Increment truster's trustCount
+    await this.prisma.profile.updateMany({
+      where: { userId },
+      data: {
+        trustCount: {
+          increment: 1
+        }
+      } as any
+    });
+
+    // Increment trusted user's trusterCount
+    await this.prisma.profile.updateMany({
+      where: { userId: targetUserId },
+      data: {
+        trusterCount: {
+          increment: 1
+        }
+      } as any
     });
   }
 
@@ -414,13 +461,23 @@ export class UserService {
 
   // Profile Feed EP'leri için yardımcı fonksiyonlar
   private async getPostStats(postId: string) {
-    const [likes, comments, favorites, views] = await Promise.all([
-      this.prisma.contentLike.count({ where: { postId } as any }),
-      this.prisma.contentComment.count({ where: { postId } as any }),
-      this.prisma.contentFavorite.count({ where: { postId } as any }),
-      this.prisma.contentPostView.count({ where: { postId } as any }),
-    ]);
-    return { likes, comments, shares: 0, bookmarks: favorites };
+    const post = await this.prisma.contentPost.findUnique({
+      where: { id: postId },
+      select: {
+        id: true,
+        likesCount: true,
+        commentsCount: true,
+        favoritesCount: true,
+        viewsCount: true
+      } as any
+    });
+
+    return {
+      likes: post?.likesCount || 0,
+      comments: post?.commentsCount || 0,
+      shares: 0,
+      bookmarks: post?.favoritesCount || 0
+    };
   }
 
   private async getUserBase(userId: string) {

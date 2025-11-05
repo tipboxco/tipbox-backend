@@ -891,6 +891,11 @@ async function main() {
         isAnswer: false,
       }
     })
+    // Update comment count
+    await prisma.contentPost.update({
+      where: { id: post.id },
+      data: { commentsCount: { increment: 1 } }
+    }).catch(() => {})
   }
   console.log('✅ Content comments (Replies) created')
 
@@ -906,6 +911,11 @@ async function main() {
         postId: post.id,
       }
     }).catch(() => {})
+    // Update like count
+    await prisma.contentPost.update({
+      where: { id: post.id },
+      data: { likesCount: { increment: 1 } }
+    }).catch(() => {})
 
     if (allPosts.indexOf(post) % 2 === 0) {
       await prisma.contentFavorite.create({
@@ -913,6 +923,11 @@ async function main() {
           userId: userIdToUse,
           postId: post.id,
         }
+      }).catch(() => {})
+      // Update favorite count
+      await prisma.contentPost.update({
+        where: { id: post.id },
+        data: { favoritesCount: { increment: 1 } }
       }).catch(() => {})
     }
   }
@@ -925,6 +940,11 @@ async function main() {
         userId: userIdToUse,
         viewerIp: '127.0.0.1',
       }
+    }).catch(() => {})
+    // Update view count
+    await prisma.contentPost.update({
+      where: { id: post.id },
+      data: { viewsCount: { increment: 1 } }
     }).catch(() => {})
   }
   console.log('✅ Content interactions (likes, favorites, views) created')
@@ -958,6 +978,11 @@ async function main() {
         seen: false,
       }
     }).catch(() => {}) // Duplicate hatası varsa devam et
+    // Update unseen feed count
+    await prisma.profile.updateMany({
+      where: { userId: userIdToUse },
+      data: { unseenFeedCount: { increment: 1 } }
+    }).catch(() => {})
   }
 
   // Diğer kullanıcılar varsa onlar için de feed oluştur
@@ -987,6 +1012,11 @@ async function main() {
           source: actualSource,
           seen: false,
         }
+      }).catch(() => {})
+      // Update unseen feed count
+      await prisma.profile.updateMany({
+        where: { userId: user.id },
+        data: { unseenFeedCount: { increment: 1 } }
       }).catch(() => {})
     }
   }
