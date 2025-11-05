@@ -386,7 +386,7 @@ export class UserService {
       EPIC: 'Rare', // EPIC de Rare olarak göster
     };
 
-    return userBadges.map(ub => {
+    return userBadges.map(ub=> {
       const badge = (ub as any).badge;
       const goals = (badge?.achievementGoals || []) as any[];
       // Task type'ları goal title/requirement'dan çıkar (basitleştirilmiş)
@@ -685,7 +685,7 @@ export class UserService {
     const users = await Promise.all(
       postUserIds.map(async (uid) => {
         const [profile, avatar, title] = await Promise.all([
-          this.profileRepo.findByUserId(uid),
+          this.profileRepo.findByUserId(uid as unknown as string), // uid tek başına hata veriyor
           this.prisma.userAvatar.findFirst({ where: { userId: uid, isActive: true } as any }),
           this.prisma.userTitle.findFirst({ where: { userId: uid } as any, orderBy: { earnedAt: 'desc' } }),
         ]);

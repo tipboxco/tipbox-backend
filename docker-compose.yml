@@ -57,6 +57,7 @@ services:
     ports:
       - "3000:3000"
       - "5555:5555"  # Prisma Studio
+      - "8080:8080"  # Test Report Server
     environment:
       - NODE_ENV=development
       - NODE_OPTIONS=--max-old-space-size=4096

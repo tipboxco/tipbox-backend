@@ -76,15 +76,27 @@ export class UserPrismaRepository {
   }
 
   async update(id: string, data: { email?: string; passwordHash?: string; status?: string }): Promise<User | null> {
-    const user = await this.prisma.user.update({
-      where: { id },
-      data,
-      include: { 
-        profile: true,
-        wallets: true
+    try {
+      const user = await this.prisma.user.update({
+        where: { id },
+        data,
+        include: { 
+          profile: true,
+          wallets: true
+        }
+      });
+      return user ? this.toDomain(user) : null;
+    } catch (err: any) {
+      // Prisma P2025: Record not found
+      if (err.code === 'P2025') {
+        return null;
       }
-    });
-    return user ? this.toDomain(user) : null;
+      // Email duplicate hatası
+      if (err.code === 'P2002' && err.meta?.target?.includes('email')) {
+        throw new EmailAlreadyExistsError();
+      }
+      throw err;
+    }
   }
 
   async delete(id: string): Promise<boolean> {
