@@ -2,8 +2,9 @@ import type { Config } from 'jest';
 
 const config: Config = {
   testEnvironment: 'node',
+  rootDir: '../..',
   roots: ['<rootDir>/tests'],
-  testMatch: ['**/?(*.)+(spec|test).ts'],
+  testMatch: ['**/e2e/auth.test.ts'],
   moduleFileExtensions: ['ts', 'js', 'json'],
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   maxWorkers: 1,
@@ -15,11 +16,27 @@ const config: Config = {
       'ts-jest',
       {
         tsconfig: '<rootDir>/tsconfig.json',
-     
+        isolatedModules: true,
         diagnostics: false,
       },
     ],
   },
+  reporters: [
+    'default',
+    [
+      'jest-html-reporters',
+      {
+        publicPath: './test-results',
+        filename: 'auth-report.html',
+        openReport: false,
+        inlineSource: true,
+        expand: true,
+        pageTitle: 'Tipbox API Auth Test Results',
+      },
+    ],
+    ['<rootDir>/scripts/custom-jest-reporter.js', {}],
+  ],
+  testTimeout: 30000,
 };
 
 export default config;

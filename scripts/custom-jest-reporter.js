@@ -6,12 +6,19 @@ class CustomJestReporter {
     this.globalConfig = globalConfig;
     this.options = options || {};
     this.testResults = [];
+    this.testResultsByFile = {}; // Her test dosyası için ayrı array
     this.currentTest = null;
     this.currentDescribe = null;
     this.testSteps = [];
   }
 
   onTestResult(test, testResult, aggregatedResult) {
+    // Test dosyası yolunu al
+    const testFilePath = (test && (test.path || test.testFilePath)) || testResult.testFilePath || '';
+    if (testFilePath && !this.testResultsByFile[testFilePath]) {
+      this.testResultsByFile[testFilePath] = [];
+    }
+
     testResult.testResults.forEach((result) => {
       const testInfo = {
         title: result.title,
@@ -24,6 +31,9 @@ class CustomJestReporter {
         services: this.extractServices(result),
       };
       this.testResults.push(testInfo);
+      if (testFilePath) {
+        this.testResultsByFile[testFilePath].push(testInfo);
+      }
     });
   }
 
@@ -181,30 +191,26 @@ class CustomJestReporter {
     
     const endpointFromDescribe = describeBlock.match(/(GET|POST|PUT|DELETE|PATCH)\s+([^\s]+)/);
     
+    const addWithEndpoint = (method, endpoint) => {
+      const serviceFunctions = this.mapEndpointToServiceFunctions(endpoint);
+      services.push({
+        method,
+        endpoint,
+        status: result.status === 'passed' ? 'success' : 'failed',
+        duration: result.duration,
+        serviceFunctions,
+      });
+    };
+
     if (endpointMatch) {
-      services.push({
-        method: endpointMatch[1],
-        endpoint: endpointMatch[2],
-        status: result.status === 'passed' ? 'success' : 'failed',
-        duration: result.duration,
-      });
+      addWithEndpoint(endpointMatch[1], endpointMatch[2]);
     } else if (endpointFromDescribe) {
-      services.push({
-        method: endpointFromDescribe[1],
-        endpoint: endpointFromDescribe[2],
-        status: result.status === 'passed' ? 'success' : 'failed',
-        duration: result.duration,
-      });
+      addWithEndpoint(endpointFromDescribe[1], endpointFromDescribe[2]);
     } else {
       // Describe block'tan endpoint çıkar
       const endpointPath = describeBlock.replace(/^(GET|POST|PUT|DELETE|PATCH)\s+/, '');
       if (endpointPath && endpointPath !== describeBlock) {
-        services.push({
-          method: describeBlock.match(/^(GET|POST|PUT|DELETE|PATCH)/)?.[1] || 'GET',
-          endpoint: endpointPath,
-          status: result.status === 'passed' ? 'success' : 'failed',
-          duration: result.duration,
-        });
+        addWithEndpoint(describeBlock.match(/^(GET|POST|PUT|DELETE|PATCH)/)?.[1] || 'GET', endpointPath);
       }
     }
 
@@ -223,15 +229,72 @@ class CustomJestReporter {
     // Test title'ından endpoint bilgisini çıkar
     const titleEndpointMatch = result.title.match(/(\/[^\s]+)/);
     if (titleEndpointMatch && services.length === 0) {
-      services.push({
-        method: 'GET',
-        endpoint: titleEndpointMatch[1],
-        status: result.status === 'passed' ? 'success' : 'failed',
-        duration: result.duration,
-      });
+      addWithEndpoint('GET', titleEndpointMatch[1]);
     }
 
     return services;
+  }
+
+  mapEndpointToServiceFunctions(endpoint) {
+    if (!endpoint) return [];
+    // Normalize dynamic ids
+    const e = endpoint
+      .replace(/\b[0-9a-fA-F-]{36}\b/g, ':id')
+      .replace(/\/[0-9]+(?![^])/g, '/:id');
+
+    // User endpoints
+    if (/^\/users\/:id$/.test(e)) return ['UserService.getUserById()'];
+    if (/^\/users\/:id\/profile-card$/.test(e)) return ['UserService.getUserProfileCard()'];
+    if (/^\/users\/:id\/trusts$/.test(e)) return ['UserService.getUserTrusts()'];
+    if (/^\/users\/:id\/trusters$/.test(e)) return ['UserService.getUserTrusters()'];
+    if (/^\/users\/:id\/collections\/achievements$/.test(e)) return ['UserService.getUserAchievementCollections()'];
+    if (/^\/users\/:id\/posts$/.test(e)) return ['UserService.getUserPosts()'];
+    if (/^\/users\/:id\/reviews$/.test(e)) return ['UserService.getUserReviews()'];
+    if (/^\/users\/:id\/benchmarks$/.test(e)) return ['UserService.getUserBenchmarks()'];
+    if (/^\/users\/:id\/tips$/.test(e)) return ['UserService.getUserTips()'];
+    if (/^\/users\/:id\/replies$/.test(e)) return ['UserService.getUserReplies()'];
+    if (/^\/users\/:id\/ladder\/badges$/.test(e)) return ['UserService.getUserBadgeLadder()'];
+    if (/^\/users\/:id\/bookmarks$/.test(e)) return ['UserService.getUserBookmarks()'];
+    if (/^\/users$/.test(e)) return ['UserService.createUser()'];
+    if (/^\/users\/settings\/notifications$/.test(e)) return ['UserService.getNotificationSettings()'];
+    if (/^\/users\/settings\/privacy$/.test(e)) return ['UserService.getPrivacySettings()'];
+    if (/^\/users\/settings\/support-session-price$/.test(e)) return ['UserService.getSupportSessionPrice()'];
+    if (/^\/users\/settings\/devices$/.test(e)) return ['UserService.getDevices()'];
+    if (/^\/users\/settings\/change-password$/.test(e)) return ['UserService.changePassword()'];
+
+    // Feed
+    if (/^\/feed$/.test(e)) return ['FeedService.getUserFeed()'];
+    if (/^\/feed\/filtered$/.test(e)) return ['FeedService.getFilteredFeed()'];
+
+    // Explore
+    if (/^\/explore\/hottest$/.test(e)) return ['ExploreService.getHottestPosts()'];
+    if (/^\/explore\/marketplace-banners$/.test(e)) return ['ExploreService.getMarketplaceBanners()'];
+    if (/^\/explore\/events$/.test(e)) return ['ExploreService.getEvents()'];
+    if (/^\/explore\/brands\/new$/.test(e)) return ['ExploreService.getNewBrands()'];
+    if (/^\/explore\/products\/new$/.test(e)) return ['ExploreService.getNewProducts()'];
+
+    // Marketplace
+    if (/^\/marketplace\/listings$/.test(e)) return ['MarketplaceService.getListings()'];
+    if (/^\/marketplace\/listings\/:id$/.test(e)) return ['MarketplaceService.getListingDetail()'];
+    if (/^\/marketplace\/my-nfts$/.test(e)) return ['MarketplaceService.getMyNfts()'];
+
+    // Expert
+    if (/^\/expert\/categories$/.test(e)) return ['ExpertService.getCategories()'];
+    if (/^\/expert\/request$/.test(e)) return ['ExpertService.createRequest()'];
+    if (/^\/expert\/request\/:id\/tips$/.test(e)) return ['ExpertService.updateTipsAmount()'];
+    if (/^\/expert\/my-requests$/.test(e)) return ['ExpertService.getMyRequests()'];
+    if (/^\/expert\/request\/:id\/status$/.test(e)) return ['ExpertService.getRequestStatus()'];
+    if (/^\/expert\/answered$/.test(e)) return ['ExpertService.getAnsweredContents()'];
+    if (/^\/expert\/balance$/.test(e)) return ['ExpertService.getBalance()'];
+    if (/^\/expert\/request\/:id$/.test(e)) return ['ExpertService.getRequestDetail()'];
+    if (/^\/expert\/my-requests\/answered$/.test(e)) return ['ExpertService.getMyAnsweredRequests()'];
+    if (/^\/expert\/my-requests\/pending$/.test(e)) return ['ExpertService.getMyPendingRequests()'];
+    if (/^\/expert\/request\/:id\/answer$/.test(e)) return ['ExpertService.answerRequest()'];
+    if (/^\/expert\/request\/:id\/accept-answer$/.test(e)) return ['ExpertService.acceptAnswer()'];
+    if (/^\/expert\/request\/:id\/accept$/.test(e)) return ['ExpertService.acceptToAnswer()'];
+    if (/^\/expert\/my-answers$/.test(e)) return ['ExpertService.getMyAnswers()'];
+
+    return [];
   }
 
   cleanFailureMessage(message) {
@@ -244,6 +307,7 @@ class CustomJestReporter {
   }
 
   onRunComplete(contexts, results) {
+    // Ana birleşik rapor (detailed-test-report.html) - navigation ile
     const reportData = {
       summary: {
         totalTests: results.numTotalTests,
@@ -255,6 +319,23 @@ class CustomJestReporter {
     };
 
     this.generateHTMLReport(reportData);
+
+    // Her test dosyası için izole rapor (navigation olmadan)
+    Object.keys(this.testResultsByFile).forEach((testFilePath) => {
+      const fileName = require('path').basename(testFilePath, '.test.ts');
+      const reportFileName = `${fileName}-report.html`;
+      const testResults = this.testResultsByFile[testFilePath];
+      const isolatedReportData = {
+        summary: {
+          totalTests: testResults.length,
+          passedTests: testResults.filter((t) => t.status === 'passed').length,
+          failedTests: testResults.filter((t) => t.status === 'failed').length,
+          duration: results.startTime ? Date.now() - results.startTime : 0,
+        },
+        tests: testResults,
+      };
+      this.generateIsolatedHTMLReport(isolatedReportData, reportFileName, fileName);
+    });
   }
 
   generateHTMLReport(data) {
@@ -275,27 +356,35 @@ class CustomJestReporter {
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             background: #f5f5f5;
-            padding: 20px;
+            padding: 12px;
             color: #333;
         }
         
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
         }
         
         .header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 30px;
+            padding: 20px 24px;
             border-radius: 10px;
             margin-bottom: 30px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
         }
         
         .header h1 {
             font-size: 28px;
             margin-bottom: 10px;
+        }
+        .header .meta {
+            text-align: right;
+            font-size: 13px;
+            opacity: 0.9;
         }
         
         .summary {
@@ -330,12 +419,33 @@ class CustomJestReporter {
         .summary-card.failed .value { color: #ef4444; }
         .summary-card.total .value { color: #667eea; }
         
+        .nav {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin: -10px 0 16px 0;
+        }
+        .nav button {
+            background: #e0e7ff;
+            color: #111827;
+            border: 1px solid #c7d2fe;
+            padding: 8px 14px;
+            border-radius: 10px;
+            font-size: 13px;
+            cursor: pointer;
+            font-weight: 600;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+            transition: background .2s, transform .05s;
+        }
+        .nav button:hover { background: #c7d2fe; }
+        .nav button.active { background: #a5b4fc; border-color: #818cf8; }
+
         .test-section {
             margin-bottom: 20px;
         }
         
         .test-section-title {
-            font-size: 20px;
+            font-size: 18px;
             font-weight: 600;
             color: #333;
             margin-bottom: 15px;
@@ -473,8 +583,9 @@ class CustomJestReporter {
         
         .service-endpoint {
             font-family: 'Courier New', monospace;
-            color: #667eea;
-            font-size: 13px;
+            color: #4f46e5;
+            font-size: 14px;
+            font-weight: 600;
         }
         
         .service-info {
@@ -496,8 +607,13 @@ class CustomJestReporter {
 <body>
     <div class="container">
         <div class="header">
-            <h1>🚀 Tipbox API Test Results</h1>
-            <p>Detaylı E2E Test Raporu</p>
+            <div>
+              <h1>🚀 Tipbox API Test Results</h1>
+              <p>Detaylı E2E Test Raporu</p>
+            </div>
+            <div class="meta">
+              <div id="report-date">Tarih: ${new Date().toLocaleString('tr-TR')}</div>
+            </div>
         </div>
         
         <div class="summary">
@@ -515,8 +631,18 @@ class CustomJestReporter {
             </div>
             <div class="summary-card">
                 <h3>Süre</h3>
-                <div class="value">${(data.summary.duration / 1000).toFixed(2)}s</div>
+                <div class="value" id="summary-duration">${(data.summary.duration / 1000).toFixed(2)}s</div>
             </div>
+        </div>
+        <div class="nav" id="nav">
+          <button data-cat="all" class="active">Tümü</button>
+          <button data-cat="Auth">Auth</button>
+          <button data-cat="User">User</button>
+          <button data-cat="Expert">Expert</button>
+          <button data-cat="Explore">Explore</button>
+          <button data-cat="Feed">Feed</button>
+          <button data-cat="Inventory">Inventory</button>
+          <button data-cat="Marketplace">Marketplace</button>
         </div>
         
         ${this.generateTestSections(data.tests)}
@@ -534,6 +660,33 @@ class CustomJestReporter {
                 if (icon) icon.classList.toggle('active');
             });
         });
+
+        // Navigation filter
+        const buttons = document.querySelectorAll('#nav button');
+        const sections = document.querySelectorAll('[data-category]');
+        function updateSummaryDuration() {
+          const visible = Array.from(sections).filter(sec => sec.style.display !== 'none');
+          const totalMs = visible.reduce((sum, sec) => sum + (parseInt(sec.getAttribute('data-duration'))||0), 0);
+          const el = document.getElementById('summary-duration');
+          if (el) el.textContent = (totalMs/1000).toFixed(2) + 's';
+        }
+        buttons.forEach(btn=>{
+          btn.addEventListener('click',()=>{
+            buttons.forEach(b=>b.classList.remove('active'));
+            btn.classList.add('active');
+            const cat = btn.dataset.cat;
+            sections.forEach(sec=>{
+              if(cat==='all' || sec.dataset.category===cat){
+                sec.style.display = '';
+              } else {
+                sec.style.display = 'none';
+              }
+            });
+            updateSummaryDuration();
+          })
+        })
+        // initial ensure
+        updateSummaryDuration();
     </script>
 </body>
 </html>
@@ -550,23 +703,315 @@ class CustomJestReporter {
     console.log(`\n📊 Detaylı test raporu oluşturuldu: ${outputPath}`);
   }
 
+  generateIsolatedHTMLReport(data, reportFileName, testName) {
+    // Navigation olmadan izole rapor oluştur
+    const html = `
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${this.escapeHtml(testName)} API Test Results</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            padding: 12px;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 24px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        .header .meta {
+            text-align: right;
+            font-size: 13px;
+            opacity: 0.9;
+        }
+        
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .summary-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .summary-card h3 {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .summary-card .value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .summary-card.success .value { color: #10b981; }
+        .summary-card.failed .value { color: #ef4444; }
+        .summary-card.total .value { color: #667eea; }
+
+        .test-section {
+            margin-bottom: 20px;
+        }
+        
+        .test-section-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e5e7eb;
+        }
+        
+        .test-item {
+            background: white;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .test-header {
+            padding: 15px 20px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s;
+        }
+        
+        .test-header:hover {
+            background: #f9fafb;
+        }
+        
+        .test-header.active {
+            background: #f3f4f6;
+        }
+        
+        .test-title {
+            font-weight: 500;
+            color: #333;
+            flex: 1;
+        }
+        
+        .test-status {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .test-status.passed {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        
+        .test-status.failed {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        
+        .test-duration {
+            margin-left: 15px;
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .test-content {
+            display: none;
+            padding: 0 20px 20px 20px;
+            border-top: 1px solid #e5e7eb;
+        }
+        
+        .test-content.active {
+            display: block;
+        }
+        
+        .detail-section {
+            margin-top: 15px;
+        }
+        
+        .detail-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .detail-title::before {
+            content: "▼";
+            margin-right: 8px;
+            font-size: 10px;
+        }
+        
+        .detail-list {
+            background: #f9fafb;
+            padding: 15px;
+            border-radius: 6px;
+            margin-left: 20px;
+        }
+        
+        .detail-item {
+            padding: 8px 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        
+        .detail-item:last-child {
+            border-bottom: none;
+        }
+        
+        .step-item, .assertion-item, .service-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .step-name, .assertion-type, .service-method {
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .step-status, .assertion-status, .service-status {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        
+        .step-status.passed, .assertion-status.passed, .service-status.success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        
+        .step-status.failed, .assertion-status.failed, .service-status.failed {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        
+        .service-endpoint {
+            font-family: 'Courier New', monospace;
+            color: #4f46e5;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        
+        .service-info {
+            display: flex;
+            gap: 15px;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .toggle-icon {
+            transition: transform 0.3s;
+        }
+        
+        .toggle-icon.active {
+            transform: rotate(180deg);
+        }
+    </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div>
+            <h1>🚀 ${this.escapeHtml(testName)} API Test Results</h1>
+            <p>Detaylı E2E Test Raporu</p>
+          </div>
+          <div class="meta">
+            <div id="report-date">Tarih: ${new Date().toLocaleString('tr-TR')}</div>
+          </div>
+        </div>
+        <div class="summary">
+          <div class="summary-card total"><h3>Toplam Test</h3><div class="value">${data.summary.totalTests}</div></div>
+          <div class="summary-card success"><h3>Başarılı</h3><div class="value">${data.summary.passedTests}</div></div>
+          <div class="summary-card failed"><h3>Başarısız</h3><div class="value">${data.summary.failedTests}</div></div>
+          <div class="summary-card"><h3>Süre</h3><div class="value">${(data.summary.duration / 1000).toFixed(2)}s</div></div>
+        </div>
+        ${this.generateTestSections(data.tests)}
+      </div>
+      <script>
+        document.querySelectorAll('.test-header').forEach(header => {
+          header.addEventListener('click', () => {
+            const testItem = header.parentElement;
+            const content = testItem.querySelector('.test-content');
+            const icon = header.querySelector('.toggle-icon');
+            header.classList.toggle('active');
+            content.classList.toggle('active');
+            if (icon) icon.classList.toggle('active');
+          });
+        });
+      </script>
+    </body>
+    </html>`;
+
+    const outputPath = require('path').join(process.cwd(), 'test-results', reportFileName);
+    const outputDir = require('path').dirname(outputPath);
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+    }
+    fs.writeFileSync(outputPath, html, 'utf8');
+    console.log(`\n📊 ${testName} test raporu oluşturuldu: ${outputPath}`);
+  }
+
   generateTestSections(tests) {
     const sections = {};
     
     // Testleri describe block'a göre grupla
     tests.forEach((test) => {
-      if (!sections[test.describeBlock]) {
-        sections[test.describeBlock] = [];
+      const key = this.translateSectionTitle(test.describeBlock || 'Root');
+      if (!sections[key]) {
+        sections[key] = [];
       }
-      sections[test.describeBlock].push(test);
+      sections[key].push(test);
     });
 
     let html = '';
     
     Object.keys(sections).forEach((sectionTitle) => {
+      const cat = this.extractCategory(sectionTitle);
+      const totalDuration = sections[sectionTitle].reduce((sum, t) => sum + (t.duration || 0), 0);
       html += `
-        <div class="test-section">
-          <div class="test-section-title">${sectionTitle}</div>
+        <div class="test-section" data-category="${cat}" data-duration="${totalDuration}">
+          <div class="test-section-title">${sectionTitle} <span style="font-size:12px;color:#6b7280;margin-left:8px;">(${totalDuration}ms)</span></div>
           ${sections[sectionTitle].map((test) => this.generateTestItem(test)).join('')}
         </div>
       `;
@@ -578,11 +1023,11 @@ class CustomJestReporter {
   generateTestItem(test) {
     const statusClass = test.status === 'passed' ? 'passed' : 'failed';
     const statusText = test.status === 'passed' ? '✓ Başarılı' : '✗ Başarısız';
-    
+    const displayTitle = this.translateTestTitle(test.title);
     return `
       <div class="test-item">
         <div class="test-header">
-          <div class="test-title">${this.escapeHtml(test.title)}</div>
+          <div class="test-title">${this.escapeHtml(displayTitle)}</div>
           <div style="display: flex; align-items: center;">
             <span class="test-status ${statusClass}">${statusText}</span>
             <span class="test-duration">${test.duration}ms</span>
@@ -623,21 +1068,25 @@ class CustomJestReporter {
       `;
     }
     
-    // Test Adımları
+    // Test Adımları (solunda ilgili servis fonksiyon(ları))
     if (test.steps && test.steps.length > 0) {
       html += `
         <div class="detail-section">
           <div class="detail-title">📋 Test Adımları</div>
           <div class="detail-list">
-            ${test.steps.map((step) => `
+            ${test.steps.map((step) => {
+              const serviceFns = (test.services && test.services[0] && test.services[0].serviceFunctions) || [];
+              const left = serviceFns.length ? `<span style="font-family: 'Courier New', monospace; color:#1d4ed8; font-size:14px; font-weight:600; margin-right:10px;">${this.escapeHtml(serviceFns.join(', '))}</span>` : '';
+              return `
               <div class="detail-item step-item">
-                <span class="step-name">${this.escapeHtml(step.name)}</span>
+                <span class="step-name">${left}${this.escapeHtml(step.name)}</span>
                 <div style="display: flex; align-items: center; gap: 10px;">
                   <span class="step-status ${step.status}">${step.status === 'passed' ? 'Başarılı' : 'Başarısız'}</span>
                   ${step.duration ? `<span style="color: #666; font-size: 11px;">${step.duration}ms</span>` : ''}
                 </div>
               </div>
-            `).join('')}
+              `;
+            }).join('')}
           </div>
         </div>
       `;
@@ -680,6 +1129,30 @@ class CustomJestReporter {
     }
     
     return html;
+  }
+
+  translateSectionTitle(title) {
+    if (!title) return '';
+    // Keep English labels; only format the separator
+    return title.replace(/> /, '— ');
+  }
+
+  extractCategory(sectionTitle) {
+    if (!sectionTitle) return 'Other';
+    const s = sectionTitle.toLowerCase();
+    if (s.startsWith('user api')) return 'User';
+    if (s.startsWith('auth api')) return 'Auth';
+    if (s.startsWith('expert api')) return 'Expert';
+    if (s.startsWith('explore api')) return 'Explore';
+    if (s.startsWith('feed api')) return 'Feed';
+    if (s.startsWith('inventory api')) return 'Inventory';
+    if (s.startsWith('marketplace api')) return 'Marketplace';
+    return 'Other';
+  }
+
+  translateTestTitle(title) {
+    // Keep original English test titles
+    return title || '';
   }
 
   escapeHtml(text) {

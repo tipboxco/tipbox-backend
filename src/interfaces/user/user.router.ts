@@ -156,7 +156,11 @@ const upload = multer({
  *                   example: Kullanıcı oluşturulurken bir hata oluştu
  */
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
-  const { email, displayName, bio } = req.body as CreateUserRequest;
+  let { email, displayName, bio } = req.body as CreateUserRequest;
+  // Normalize leading/trailing whitespace on string inputs
+  if (typeof email === 'string') email = email.trim();
+  if (typeof displayName === 'string') displayName = displayName.trim();
+  if (typeof bio === 'string') bio = bio.trim();
   
   // Validation: Email zorunlu ve kontrolü (undefined/null kontrolü önce)
   if (email === undefined || email === null) {
@@ -179,25 +183,25 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   
   // Validation: DisplayName zorunlu ve kontrolü
   if (displayName === undefined || displayName === null) {
-    return res.status(400).json({ error: { message: 'Display name zorunludur ve boş olamaz.' } });
+    return res.status(400).json({ error: { message: 'DisplayName zorunludur ve boş olamaz.' } });
   }
   
   if (typeof displayName !== 'string') {
-    return res.status(400).json({ error: { message: 'Display name string olmalıdır.' } });
+    return res.status(400).json({ error: { message: 'DisplayName string olmalıdır.' } });
   }
   
   if (displayName === '') {
-    return res.status(400).json({ error: { message: 'Display name zorunludur ve boş olamaz.' } });
+    return res.status(400).json({ error: { message: 'DisplayName zorunludur ve boş olamaz.' } });
   }
   
   // DisplayName minLength kontrolü (OpenAPI: minLength: 2)
   if (displayName.length < 2) {
-    return res.status(400).json({ error: { message: 'Display name en az 2 karakter olmalıdır.' } });
+    return res.status(400).json({ error: { message: 'DisplayName en az 2 karakter olmalıdır.' } });
   }
   
   // DisplayName maxLength kontrolü (OpenAPI: maxLength: 50)
   if (displayName.length > 50) {
-    return res.status(400).json({ error: { message: 'Display name en fazla 50 karakter olabilir.' } });
+    return res.status(400).json({ error: { message: 'DisplayName en fazla 50 karakter olabilir.' } });
   }
   
   // Bio maxLength kontrolü (OpenAPI: maxLength: 500)
@@ -612,35 +616,6 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
   res.json(response);
 }));
 
-/**
- * @openapi
- * /users:
- *   get:
- *     summary: Tüm kullanıcıları listele
- *     responses:
- *       200:
- *         description: Kullanıcı listesi
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/UserResponse'
- */
-router.get('/', asyncHandler(async (req: Request, res: Response) => {
-  const users = await userService.listUsers();
-  res.json(users.map(user => ({
-    id: user.id,
-    email: user.email ?? '',
-    name: user.name ?? '',
-    status: user.status || 'ACTIVE',
-    auth0Id: user.auth0Id || null,
-    walletAddress: user.walletAddress || null,
-    kycStatus: user.kycStatus || '',
-    createdAt: user.createdAt.toISOString(),
-    updatedAt: user.updatedAt.toISOString()
-  })));
-}));
 
 /**
  * @openapi
@@ -1369,137 +1344,8 @@ router.get('/:id/bookmarks', asyncHandler(async (req: Request, res: Response) =>
   res.json(bookmarks);
 }));
 
-/**
- * @openapi
- * /users/{id}:
- *   put:
- *     summary: Kullanıcıyı güncelle
- *     parameters:
- *       - in: path
- *         name: id
- *         schema:
- *           type: string
- *         required: true
- *         description: Kullanıcı ID
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               email:
- *                 type: string
- *               name:
- *                 type: string
- *     responses:
- *       200:
- *         description: Güncellenen kullanıcı
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/UserResponse'
- *       404:
- *         description: Kullanıcı bulunamadı
- */
-router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = req.params.id;
-  const { email, status } = req.body;
-  
-  // Validation: Email format kontrolü (eğer email gönderilmişse)
-  if (email !== undefined && email !== null) {
-    if (typeof email !== 'string') {
-      return res.status(400).json({ error: { message: 'Email adresi string olmalıdır.' } });
-    }
-    if (email === '') {
-      return res.status(400).json({ error: { message: 'Email adresi boş olamaz.' } });
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ error: { message: 'Geçerli bir email adresi giriniz.' } });
-    }
-  }
-  
-  // Validation: Status enum kontrolü (eğer status gönderilmişse)
-  const allowedStatuses = ['ACTIVE', 'INACTIVE', 'SUSPENDED', 'DELETED'];
-  if (status !== undefined && status !== null) {
-    if (typeof status !== 'string') {
-      return res.status(400).json({ error: { message: 'Status değeri string olmalıdır.' } });
-    }
-    if (!allowedStatuses.includes(status)) {
-      return res.status(400).json({ error: { message: `Status değeri şunlardan biri olmalıdır: ${allowedStatuses.join(', ')}` } });
-    }
-  }
-  
-  // Update data hazırla (trim edilmiş değerlerle)
-  const updateData: { email?: string; status?: string } = {};
-  if (email !== undefined && email !== null && typeof email === 'string') {
-    updateData.email = email;
-  }
-  if (status !== undefined && status !== null && typeof status === 'string' && allowedStatuses.includes(status)) {
-    updateData.status = status;
-  }
-  
-  try {
-    const user = await userService.updateUser(id, updateData);
-    if (!user) {
-      return res.status(404).json({ error: { message: 'User not found' } });
-    }
-    
-    // Trim edilmiş email'i response'a yaz (eğer update edildiyse)
-    const responseEmail = email !== undefined && email !== null && typeof email === 'string' 
-      ? email 
-      : (user.email ?? '');
-    
-    res.json({
-      id: user.id,
-      email: responseEmail, // Trim edilmiş email kullan
-      name: user.name ?? '',
-      status: user.status || 'ACTIVE',
-      auth0Id: user.auth0Id || null,
-      walletAddress: user.walletAddress || null,
-      kycStatus: user.kycStatus || '',
-      createdAt: user.createdAt.toISOString(),
-      updatedAt: user.updatedAt.toISOString()
-    });
-  } catch (error: any) {
-    // Prisma unique constraint hatası (email duplicate)
-    if (error.code === 'P2002' && error.meta?.target?.includes('email')) {
-      return res.status(409).json({ error: { message: 'Bu email adresi zaten kullanılıyor.' } });
-    }
-    // Prisma not found hatası
-    if (error.code === 'P2025') {
-      return res.status(404).json({ error: { message: 'User not found' } });
-    }
-    // Diğer hataları tekrar fırlat
-    throw error;
-  }
-}));
 
-/**
- * @openapi
- * /users/{id}:
- *   delete:
- *     summary: Kullanıcıyı sil
- *     parameters:
- *       - in: path
- *         name: id
- *         schema:
- *           type: string
- *         required: true
- *         description: Kullanıcı ID
- *     responses:
- *       204:
- *         description: Başarıyla silindi
- *       404:
- *         description: Kullanıcı bulunamadı
- */
-router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = req.params.id;
-  const ok = await userService.deleteUser(id);
-  if (!ok) return res.status(404).json({ message: 'User not found' });
-  res.status(204).send();
-}));
+
 
 // ===== SETTINGS ENDPOINTS =====
 
@@ -1807,7 +1653,7 @@ router.put('/settings/support-session-price', asyncHandler(async (req: Request, 
 
   const result = await userService.updateSupportSessionPrice(String(userId), price);
   if (!result.success) {
-    return res.status(400).json(result);
+    return res.status(400).json({ error: { message: result.message || 'Notification settings update failed' } } );
   }
 
   res.json(result);

@@ -114,58 +114,7 @@ app.post('/test/users', async (req, res) => {
   }
 });
 
-/**
- * @swagger
- * /test/users:
- *   get:
- *     summary: Tüm kullanıcıları listele
- *     description: Database'den tüm kullanıcıları okur
- *     tags: [Test]
- *     responses:
- *       200:
- *         description: Kullanıcılar başarıyla listelendi
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                 data:
- *                   type: array
- *                   items:
- *                     type: object
- */
-app.get('/test/users', async (req, res) => {
-  try {
-    // Database'den okuma işlemi
-    const users = await prisma.user.findMany({
-      take: 10, // İlk 10 kullanıcıyı al
-      orderBy: {
-        createdAt: 'desc'
-      },
-      include: {
-        profile: true
-      }
-    });
 
-    res.json({
-      success: true,
-      message: 'Kullanıcılar başarıyla listelendi',
-      data: users,
-      count: users.length
-    });
-  } catch (error) {
-    console.error('Kullanıcı listeleme hatası:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Kullanıcılar listelenirken hata oluştu',
-      error: error.message
-    });
-  }
-});
 
 // Swagger spec endpoint'i
 app.get('/api-docs/swagger.json', (req, res) => {

@@ -2,8 +2,9 @@ import type { Config } from 'jest';
 
 const config: Config = {
   testEnvironment: 'node',
+  rootDir: '../..',
   roots: ['<rootDir>/tests'],
-  testMatch: ['**/e2e/expert.test.ts'],
+  testMatch: ['**/e2e/user.test.ts'],
   moduleFileExtensions: ['ts', 'js', 'json'],
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   maxWorkers: 1,
@@ -26,13 +27,14 @@ const config: Config = {
       'jest-html-reporters',
       {
         publicPath: './test-results',
-        filename: 'expert-report.html',
+        filename: 'user-report.html',
         openReport: false,
         inlineSource: true,
         expand: true,
-        pageTitle: 'Tipbox API Expert Test Results',
+        pageTitle: 'Tipbox API User Test Results',
       },
     ],
+    ['<rootDir>/scripts/custom-jest-reporter.js', {}],
   ],
   testTimeout: 30000,
 };
