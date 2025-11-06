@@ -14,6 +14,10 @@ export class ContentPost {
     public readonly inventoryRequired: boolean,
     public readonly isBoosted: boolean,
     public readonly boostedUntil: Date | null,
+    public readonly likesCount: number,
+    public readonly commentsCount: number,
+    public readonly favoritesCount: number,
+    public readonly viewsCount: number,
     public readonly createdAt: Date,
     public readonly updatedAt: Date
   ) {}

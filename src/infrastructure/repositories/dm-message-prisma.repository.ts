@@ -6,7 +6,7 @@ export class DmMessagePrismaRepository {
 
   async findById(id: number): Promise<DMMessage | null> {
     const message = await this.prisma.dMMessage.findUnique({ 
-      where: { id },
+      where: { id: String(id) },
       include: {
         sender: true,
         thread: true
@@ -17,7 +17,7 @@ export class DmMessagePrismaRepository {
 
   async findByThreadId(threadId: number, limit = 50, offset = 0): Promise<DMMessage[]> {
     const messages = await this.prisma.dMMessage.findMany({
-      where: { threadId },
+      where: { threadId: String(threadId) },
       include: {
         sender: true,
         thread: true
@@ -31,7 +31,7 @@ export class DmMessagePrismaRepository {
 
   async findBySenderId(senderId: number): Promise<DMMessage[]> {
     const messages = await this.prisma.dMMessage.findMany({
-      where: { senderId },
+      where: { senderId: String(senderId) },
       include: {
         sender: true,
         thread: true
@@ -42,10 +42,19 @@ export class DmMessagePrismaRepository {
   }
 
   async create(data: Partial<DMMessage>): Promise<DMMessage> {
+    const threadIdStr = String(data.threadId!);
+    const senderIdStr = String(data.senderId!);
+
+    // Get thread to determine which user's unread count to increment
+    const thread = await this.prisma.dMThread.findUnique({
+      where: { id: threadIdStr },
+      select: { userOneId: true, userTwoId: true }
+    });
+
     const message = await this.prisma.dMMessage.create({
       data: {
-        threadId: data.threadId!,
-        senderId: data.senderId!,
+        threadId: threadIdStr,
+        senderId: senderIdStr,
         message: data.message!,
         isRead: data.isRead || false,
         sentAt: data.sentAt || new Date(),
@@ -56,17 +65,47 @@ export class DmMessagePrismaRepository {
         thread: true
       }
     });
+
+    // Increment unread count for the other user (not the sender)
+    if (thread && !data.isRead) {
+      if (thread.userOneId === senderIdStr) {
+        // Sender is userOne, increment userTwo's unread count
+        await this.prisma.dMThread.update({
+          where: { id: threadIdStr },
+          data: {
+            unreadCountUserTwo: {
+              increment: 1
+            }
+          } as any
+        });
+      } else if (thread.userTwoId === senderIdStr) {
+        // Sender is userTwo, increment userOne's unread count
+        await this.prisma.dMThread.update({
+          where: { id: threadIdStr },
+          data: {
+            unreadCountUserOne: {
+              increment: 1
+            }
+          } as any
+        });
+      }
+    }
+
     return this.toDomain(message);
   }
 
   async update(id: number, data: Partial<DMMessage>): Promise<DMMessage | null> {
     try {
+      const updateData: any = {
+        updatedAt: new Date(),
+      };
+      if (data.message !== undefined) updateData.message = data.message;
+      if (data.isRead !== undefined) updateData.isRead = data.isRead;
+      if (data.sentAt !== undefined) updateData.sentAt = data.sentAt;
+      
       const message = await this.prisma.dMMessage.update({
-        where: { id },
-        data: {
-          ...data,
-          updatedAt: new Date(),
-        },
+        where: { id: String(id) },
+        data: updateData,
         include: {
           sender: true,
           thread: true
@@ -80,7 +119,7 @@ export class DmMessagePrismaRepository {
 
   async delete(id: number): Promise<boolean> {
     try {
-      await this.prisma.dMMessage.delete({ where: { id } });
+      await this.prisma.dMMessage.delete({ where: { id: String(id) } });
       return true;
     } catch {
       return false;
@@ -88,12 +127,13 @@ export class DmMessagePrismaRepository {
   }
 
   async getUnreadCountByUserId(userId: number): Promise<number> {
+    const userIdStr = String(userId);
     // Kullanıcının katıldığı thread'lerdeki okunmamış mesaj sayısını al
     const threads = await this.prisma.dMThread.findMany({
       where: {
         OR: [
-          { userOneId: userId },
-          { userTwoId: userId }
+          { userOneId: userIdStr },
+          { userTwoId: userIdStr }
         ]
       }
     });
@@ -104,16 +144,34 @@ export class DmMessagePrismaRepository {
       where: {
         threadId: { in: threadIds },
         isRead: false,
-        senderId: { not: userId } // Kendi gönderdiği mesajları sayma
+        senderId: { not: userIdStr } // Kendi gönderdiği mesajları sayma
       }
     });
   }
 
   async markAllAsReadInThread(threadId: number, userId: number): Promise<void> {
+    const threadIdStr = String(threadId);
+    const userIdStr = String(userId);
+
+    // Get thread to determine which user's unread count to reset
+    const thread = await this.prisma.dMThread.findUnique({
+      where: { id: threadIdStr },
+      select: { userOneId: true, userTwoId: true }
+    });
+
+    // Count unread messages before marking as read
+    const unreadCount = await this.prisma.dMMessage.count({
+      where: {
+        threadId: threadIdStr,
+        senderId: { not: userIdStr },
+        isRead: false
+      }
+    });
+
     await this.prisma.dMMessage.updateMany({
       where: {
-        threadId,
-        senderId: { not: userId },
+        threadId: threadIdStr,
+        senderId: { not: userIdStr },
         isRead: false
       },
       data: {
@@ -121,6 +179,27 @@ export class DmMessagePrismaRepository {
         updatedAt: new Date()
       }
     });
+
+    // Reset unread count for the user who marked messages as read
+    if (thread && unreadCount > 0) {
+      if (thread.userOneId === userIdStr) {
+        // UserOne marked as read, reset userOne's unread count
+        await this.prisma.dMThread.update({
+          where: { id: threadIdStr },
+          data: {
+            unreadCountUserOne: 0
+          } as any
+        });
+      } else if (thread.userTwoId === userIdStr) {
+        // UserTwo marked as read, reset userTwo's unread count
+        await this.prisma.dMThread.update({
+          where: { id: threadIdStr },
+          data: {
+            unreadCountUserTwo: 0
+          } as any
+        });
+      }
+    }
   }
 
   private toDomain(prismaMessage: any): DMMessage {

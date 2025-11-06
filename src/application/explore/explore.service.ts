@@ -113,41 +113,6 @@ export class ExploreService {
       };
     }
 
-    // Get post IDs
-    const postIds = resultPosts.map((tp) => tp.postId);
-
-    // Batch fetch stats
-    const [likesCounts, commentsCounts, favoritesCounts] = await Promise.all([
-      this.prisma.contentLike.groupBy({
-        by: ['postId'],
-        where: { postId: { in: postIds } },
-        _count: true,
-      }),
-      this.prisma.contentComment.groupBy({
-        by: ['postId'],
-        where: { postId: { in: postIds } },
-        _count: true,
-      }),
-      this.prisma.contentFavorite.groupBy({
-        by: ['postId'],
-        where: { postId: { in: postIds } },
-        _count: true,
-      }),
-    ]);
-
-    const statsMap = new Map();
-    postIds.forEach((postId) => {
-      const likes = likesCounts.find((l) => l.postId === postId)?._count || 0;
-      const comments = commentsCounts.find((c) => c.postId === postId)?._count || 0;
-      const bookmarks = favoritesCounts.find((f) => f.postId === postId)?._count || 0;
-      statsMap.set(postId, {
-        likes: likes as number,
-        comments: comments as number,
-        shares: 0,
-        bookmarks: bookmarks as number,
-      });
-    });
-
     // Get user inventories for benchmark isOwned check
     const inventories = await this.prisma.inventory.findMany({
       where: { userId },
@@ -155,8 +120,17 @@ export class ExploreService {
     });
     const ownedProductIds = new Set(inventories.map((inv) => String(inv.productId)));
 
-    // Batch fetch images
+    // Get posts from resultPosts and create stats map from denormalized counts
     const posts = resultPosts.map((tp) => tp.post);
+    const statsMap = new Map();
+    posts.forEach((post) => {
+      statsMap.set(post.id, {
+        likes: (post as any).likesCount || 0,
+        comments: (post as any).commentsCount || 0,
+        shares: 0,
+        bookmarks: (post as any).favoritesCount || 0,
+      });
+    });
     const postProductIds = posts.map((p) => p.productId).filter(Boolean) as string[];
     const inventoryMediaMap = new Map<string, string[]>();
     if (postProductIds.length > 0) {

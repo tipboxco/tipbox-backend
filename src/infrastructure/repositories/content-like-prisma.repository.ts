@@ -87,7 +87,7 @@ export class ContentLikePrismaRepository {
     }
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.contentLike.delete({ where: { id } });
       return true;

@@ -74,6 +74,10 @@ export class ProfilePrismaRepository {
       prismaProfile.bannerUrl ?? null,
       prismaProfile.country,
       prismaProfile.birthDate,
+      prismaProfile.postsCount ?? 0,
+      prismaProfile.trustCount ?? 0,
+      prismaProfile.trusterCount ?? 0,
+      prismaProfile.unseenFeedCount ?? 0,
       prismaProfile.createdAt,
       prismaProfile.updatedAt
     );

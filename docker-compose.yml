@@ -56,8 +56,6 @@ services:
     restart: always
     ports:
       - "3000:3000"
-      - "5555:5555"  # Prisma Studio
-      - "8080:8080"  # Test Report Server
     environment:
       - NODE_ENV=development
       - NODE_OPTIONS=--max-old-space-size=4096
@@ -84,6 +82,22 @@ services:
       - /app/node_modules
     working_dir: /app
     command: npm run dev
+
+  prisma-studio:
+    build: .
+    container_name: tipbox_prisma_studio
+    restart: always
+    ports:
+      - "5555:5555"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/tipbox_dev
+    depends_on:
+      - postgres
+    volumes:
+      - .:/app
+      - /app/node_modules
+    working_dir: /app
+    command: npx prisma studio --port 5555 --browser none
 
 volumes:
   pgdata:

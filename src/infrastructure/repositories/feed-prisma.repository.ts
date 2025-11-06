@@ -74,25 +74,75 @@ export class FeedPrismaRepository {
   }
 
   async markAsSeen(feedId: string): Promise<Feed | null> {
+    // Get feed to get userId before updating
+    const feedBeforeUpdate = await this.prisma.feed.findUnique({
+      where: { id: feedId },
+      select: { userId: true, seen: true }
+    });
+
     const feed = await this.prisma.feed.update({
       where: { id: feedId },
       data: { seen: true },
     });
+
+    // Decrement unseenFeedCount if feed was previously unseen
+    if (feedBeforeUpdate && !feedBeforeUpdate.seen) {
+      await this.prisma.profile.updateMany({
+        where: { userId: feedBeforeUpdate.userId },
+        data: {
+          unseenFeedCount: {
+            increment: -1
+          }
+        } as any
+      });
+    }
+
     return feed ? this.toDomain(feed) : null;
   }
 
   async markMultipleAsSeen(feedIds: string[]): Promise<number> {
+    // Get feeds to get userIds before updating
+    const feedsBeforeUpdate = await this.prisma.feed.findMany({
+      where: { id: { in: feedIds } },
+      select: { userId: true, seen: true }
+    });
+
     const result = await this.prisma.feed.updateMany({
       where: { id: { in: feedIds } },
       data: { seen: true },
     });
+
+    // Count unseen feeds per user and decrement their unseenFeedCount
+    const unseenCountsByUser = new Map<string, number>();
+    feedsBeforeUpdate.forEach(feed => {
+      if (!feed.seen) {
+        const current = unseenCountsByUser.get(feed.userId) || 0;
+        unseenCountsByUser.set(feed.userId, current + 1);
+      }
+    });
+
+    // Update each user's unseenFeedCount
+    for (const [userId, count] of unseenCountsByUser.entries()) {
+      await this.prisma.profile.updateMany({
+        where: { userId },
+        data: {
+          unseenFeedCount: {
+            increment: -count
+          }
+        } as any
+      });
+    }
+
     return result.count;
   }
 
   async countUnseen(userId: string): Promise<number> {
-    return this.prisma.feed.count({
-      where: { userId, seen: false },
+    // Use denormalized count from Profile table
+    const profile = await this.prisma.profile.findUnique({
+      where: { userId },
+      select: { unseenFeedCount: true } as any
     });
+    return (profile as any)?.unseenFeedCount || 0;
   }
 
   async delete(feedId: string): Promise<boolean> {
@@ -102,6 +152,21 @@ export class FeedPrismaRepository {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Feed oluşturulduğunda unseenFeedCount'u artırmak için kullanılır
+   * Feed oluşturma işlemlerinden sonra bu metod çağrılmalıdır
+   */
+  async incrementUnseenFeedCount(userId: string): Promise<void> {
+    await this.prisma.profile.updateMany({
+      where: { userId },
+      data: {
+        unseenFeedCount: {
+          increment: 1
+        }
+      } as any
+    });
   }
 
   private toDomain(prismaFeed: any): Feed {

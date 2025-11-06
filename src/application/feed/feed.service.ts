@@ -113,36 +113,14 @@ export class FeedService {
       },
     });
 
-    // Batch fetch stats for all posts
-    const [likesCounts, commentsCounts, favoritesCounts] = await Promise.all([
-      this.prisma.contentLike.groupBy({
-        by: ['postId'],
-        where: { postId: { in: postIds } },
-        _count: true,
-      }),
-      this.prisma.contentComment.groupBy({
-        by: ['postId'],
-        where: { postId: { in: postIds } },
-        _count: true,
-      }),
-      this.prisma.contentFavorite.groupBy({
-        by: ['postId'],
-        where: { postId: { in: postIds } },
-        _count: true,
-      }),
-    ]);
-
-    // Create stats map
+    // Create stats map from denormalized counts in posts
     const statsMap = new Map<string, BaseStats>();
-    postIds.forEach((postId) => {
-      const likes = likesCounts.find((l) => l.postId === postId)?._count || 0;
-      const comments = commentsCounts.find((c) => c.postId === postId)?._count || 0;
-      const bookmarks = favoritesCounts.find((f) => f.postId === postId)?._count || 0;
-      statsMap.set(postId, {
-        likes: likes as number,
-        comments: comments as number,
+    posts.forEach((post) => {
+      statsMap.set(post.id, {
+        likes: (post as any).likesCount || 0,
+        comments: (post as any).commentsCount || 0,
         shares: 0,
-        bookmarks: bookmarks as number,
+        bookmarks: (post as any).favoritesCount || 0,
       });
     });
 
@@ -369,35 +347,14 @@ export class FeedService {
     let posts = resultFeeds.map((feed) => feed.post);
     let postIds = posts.map((p) => p.id);
 
-    // Batch fetch stats
-    const [likesCounts, commentsCounts, favoritesCounts] = await Promise.all([
-      this.prisma.contentLike.groupBy({
-        by: ['postId'],
-        where: { postId: { in: postIds } },
-        _count: true,
-      }),
-      this.prisma.contentComment.groupBy({
-        by: ['postId'],
-        where: { postId: { in: postIds } },
-        _count: true,
-      }),
-      this.prisma.contentFavorite.groupBy({
-        by: ['postId'],
-        where: { postId: { in: postIds } },
-        _count: true,
-      }),
-    ]);
-
+    // Create stats map from denormalized counts in posts
     const statsMap = new Map<string, BaseStats>();
-    postIds.forEach((postId) => {
-      const likes = likesCounts.find((l) => l.postId === postId)?._count || 0;
-      const comments = commentsCounts.find((c) => c.postId === postId)?._count || 0;
-      const bookmarks = favoritesCounts.find((f) => f.postId === postId)?._count || 0;
-      statsMap.set(postId, {
-        likes: likes as number,
-        comments: comments as number,
+    posts.forEach((post) => {
+      statsMap.set(post.id, {
+        likes: (post as any).likesCount || 0,
+        comments: (post as any).commentsCount || 0,
         shares: 0,
-        bookmarks: bookmarks as number,
+        bookmarks: (post as any).favoritesCount || 0,
       });
     });
 
