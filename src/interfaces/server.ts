@@ -9,8 +9,7 @@ import SocketConfigManager from '../infrastructure/config/socket.config';
 import SocketManager from '../infrastructure/realtime/socket-manager';
 import { CacheService } from '../infrastructure/cache/cache.service';
 import QueueProvider from '../infrastructure/queue/queue.provider';
-import { PrismaClient } from '@prisma/client';
-import { registerIdMiddleware } from '../infrastructure/repositories/prisma-id-middleware';
+import { getPrisma } from '../infrastructure/repositories/prisma.client';
 
 const PORT = process.env.PORT || 3000;
 
@@ -19,9 +18,8 @@ async function startServer() {
     // HTTP server oluştur
     const httpServer = http.createServer(app);
 
-    // Prisma middleware: ID stratejisi
-    const prisma = new PrismaClient();
-    registerIdMiddleware(prisma);
+    // Prisma client'ı başlat (ID middleware ile birlikte)
+    const prisma = getPrisma();
 
     // Redis konfigürasyonunu başlat
     const redisConfig = await RedisConfigManager.getInstance().initialize();

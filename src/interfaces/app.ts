@@ -14,6 +14,9 @@ import swaggerJSDoc from 'swagger-jsdoc';
 import { requestLogger } from '../infrastructure/logger/request-logger.middleware';
 import { errorHandler } from '../infrastructure/logger/error-handler.middleware';
 import logger from '../infrastructure/logger/logger';
+import messagingRouter from './messaging/messaging.router';
+import { getMetricsService } from '../infrastructure/metrics/metrics.service';
+import { metricsMiddleware } from '../infrastructure/metrics/metrics.middleware';
 
 const PORT = process.env.PORT || 3000;
 const swaggerServerUrl =
@@ -375,6 +378,9 @@ app.use(express.json());
 
 // Request logger middleware
 app.use(requestLogger);
+
+// Prometheus metrics middleware
+app.use(metricsMiddleware);
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({ 
@@ -383,11 +389,25 @@ app.get('/', (req, res) => {
     version: '1.0.0',
     endpoints: {
       'GET /api-docs': 'Swagger API dokümantasyonu',
+      'GET /metrics': 'Prometheus metrics endpoint',
       'POST /auth/login': 'Kullanıcı girişi',
       'GET /users': 'Kullanıcı listesi',
       'GET /wallets': 'Cüzdan bilgileri'
     }
   });
+});
+
+// Prometheus metrics endpoint
+app.get('/metrics', async (req, res) => {
+  try {
+    const metricsService = getMetricsService();
+    res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+    const metrics = await metricsService.getMetrics();
+    res.end(metrics);
+  } catch (err) {
+    logger.error({ message: 'Error getting metrics', error: err });
+    res.status(500).end(err instanceof Error ? err.message : 'Metrics error');
+  }
 });
 
 // Swagger JSON endpoint (Swagger UI middleware'lerinden önce tanımlanmalı)
@@ -418,6 +438,7 @@ app.use('/auth', authRouter);
 app.use('/users', authMiddleware, userRouter);
 app.use('/wallets', authMiddleware, walletRouter);
 app.use('/feed', authMiddleware, feedRouter);
+app.use('/messages', messagingRouter);
 app.use('/marketplace', marketplaceRouter);
 app.use('/explore', exploreRouter);
 app.use('/expert', expertRouter);
