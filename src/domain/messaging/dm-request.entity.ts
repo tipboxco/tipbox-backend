@@ -1,0 +1,124 @@
+import { DMRequestStatus } from './dm-request-status.enum';
+
+export class DMRequest {
+  constructor(
+    public readonly id: string,
+    public readonly fromUserId: number,
+    public readonly toUserId: number,
+    public readonly status: DMRequestStatus,
+    public readonly sentAt: Date,
+    public readonly respondedAt: Date | null,
+    public readonly createdAt: Date,
+    public readonly updatedAt: Date
+  ) {}
+
+  // Essential business methods only
+  belongsToSender(userId: number): boolean {
+    return this.fromUserId === userId;
+  }
+
+  belongsToReceiver(userId: number): boolean {
+    return this.toUserId === userId;
+  }
+
+  involveUser(userId: number): boolean {
+    return this.belongsToSender(userId) || this.belongsToReceiver(userId);
+  }
+
+  isPending(): boolean {
+    return this.status === DMRequestStatus.PENDING;
+  }
+
+  isAccepted(): boolean {
+    return this.status === DMRequestStatus.ACCEPTED;
+  }
+
+  isDeclined(): boolean {
+    return this.status === DMRequestStatus.DECLINED;
+  }
+
+  hasBeenResponded(): boolean {
+    return this.respondedAt !== null;
+  }
+
+  getDaysSinceSent(): number {
+    return Math.floor((Date.now() - this.sentAt.getTime()) / (1000 * 60 * 60 * 24));
+  }
+
+  getDaysSinceResponded(): number | null {
+    if (!this.hasBeenResponded()) return null;
+    return Math.floor((Date.now() - this.respondedAt!.getTime()) / (1000 * 60 * 60 * 24));
+  }
+
+  isRecentRequest(): boolean {
+    return this.getDaysSinceSent() <= 7;
+  }
+
+  isExpiredRequest(): boolean {
+    // Requests could expire after 30 days if not responded
+    return this.isPending() && this.getDaysSinceSent() >= 30;
+  }
+
+  getStatusDisplayName(): string {
+    switch (this.status) {
+      case DMRequestStatus.PENDING: return 'Beklemede';
+      case DMRequestStatus.ACCEPTED: return 'Kabul Edildi';
+      case DMRequestStatus.DECLINED: return 'Reddedildi';
+    }
+  }
+
+  getStatusColor(): string {
+    switch (this.status) {
+      case DMRequestStatus.PENDING: return '#f59e0b';    // Yellow
+      case DMRequestStatus.ACCEPTED: return '#22c55e';   // Green
+      case DMRequestStatus.DECLINED: return '#ef4444';   // Red
+    }
+  }
+
+  getStatusIcon(): string {
+    switch (this.status) {
+      case DMRequestStatus.PENDING: return '⏳';
+      case DMRequestStatus.ACCEPTED: return '✅';
+      case DMRequestStatus.DECLINED: return '❌';
+    }
+  }
+
+  canBeResponded(): boolean {
+    return this.isPending() && !this.isExpiredRequest();
+  }
+
+  canBeAccepted(): boolean {
+    return this.canBeResponded();
+  }
+
+  canBeDeclined(): boolean {
+    return this.canBeResponded();
+  }
+
+  getResponseTime(): number | null {
+    if (!this.hasBeenResponded()) return null;
+    return this.respondedAt!.getTime() - this.sentAt.getTime();
+  }
+
+  getResponseTimeHours(): number | null {
+    const responseTime = this.getResponseTime();
+    if (responseTime === null) return null;
+    return Math.floor(responseTime / (1000 * 60 * 60));
+  }
+
+  isQuickResponse(): boolean {
+    const responseTimeHours = this.getResponseTimeHours();
+    return responseTimeHours !== null && responseTimeHours <= 24;
+  }
+
+  getRequestPriority(): 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' {
+    const days = this.getDaysSinceSent();
+    if (this.isPending()) {
+      if (days >= 7) return 'URGENT';
+      if (days >= 3) return 'HIGH';
+      if (days >= 1) return 'MEDIUM';
+      return 'LOW';
+    }
+    return 'LOW';
+  }
+}

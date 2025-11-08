@@ -41,3 +41,9 @@ coverage/
 *.orig
 
 /src/generated/prisma
+
+# Google Cloud Service Account credentials (güvenlik için)
+*service-account*.json
+*gserviceaccount*.json
+tipboxbackend-*.json
+!tipboxbackend-3e2c3d3c0b31.json.example

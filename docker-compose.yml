@@ -1,4 +1,5 @@
-version: '3.8'
+version: "3.9"
+
 services:
   postgres:
     image: postgres:15
@@ -12,6 +13,8 @@ services:
       - '5432:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
+    networks:
+      - monitoring
 
   pgadmin:
     image: dpage/pgadmin4:8
@@ -26,7 +29,183 @@ services:
       - postgres
     volumes:
       - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - monitoring
+
+  minio:
+    image: minio/minio:latest
+    container_name: tipbox_minio
+    restart: always
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"  # API için
+      - "9001:9001"  # Web arayüzü için
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+
+  redis:
+    image: redis:7
+    container_name: tipbox_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - monitoring
+
+  backend:
+    build: .
+    container_name: tipbox_backend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - NODE_OPTIONS=--max-old-space-size=4096
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/tipbox_dev
+      - REDIS_URL=redis://redis:6379
+      - S3_ENDPOINT=http://minio:9000
+      - S3_BUCKET_NAME=tipbox-media
+      - S3_REGION=eu-central-1
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=minioadmin123
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin123
+      - JWT_SECRET=your-super-secret-jwt-key-for-development-only
+      # Email (Google Workspace OAuth 2.0) yapılandırması
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/tipboxbackend-3e2c3d3c0b31.json
+      - EMAIL_USER_TO_IMPERSONATE=info@tipbox.co
+      - EMAIL_FROM_NAME=Tipbox
+    depends_on:
+      - postgres
+      - redis
+      - minio
+    volumes:
+      - .:/app
+      - /app/node_modules
+    working_dir: /app
+    command: npm run dev
+    networks:
+      - monitoring
+
+  prisma-studio:
+    build: .
+    container_name: tipbox_prisma_studio
+    restart: always
+    ports:
+      - "5555:5555"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/tipbox_dev
+    depends_on:
+      - postgres
+    volumes:
+      - .:/app
+      - /app/node_modules
+    working_dir: /app
+    command: npx prisma studio --port 5555 --browser none
+    networks:
+      - monitoring
+
+  # PostgreSQL Exporter
+  postgres-exporter:
+    image: wrouesnel/postgres_exporter
+    container_name: postgres-exporter
+    restart: always
+    environment:
+      DATA_SOURCE_NAME: "postgresql://postgres:postgres@postgres:5432/tipbox_dev?sslmode=disable"
+    ports:
+      - "9187:9187"
+    depends_on:
+      - postgres
+    networks:
+      - monitoring
+
+  # Redis Exporter
+  redis-exporter:
+    image: oliver006/redis_exporter
+    container_name: redis-exporter
+    restart: always
+    command:
+      - "--redis.addr=redis://redis:6379"
+    ports:
+      - "9121:9121"
+    depends_on:
+      - redis
+    networks:
+      - monitoring
+
+  # Node Exporter (Docker host metrikleri)
+  node-exporter:
+    image: prom/node-exporter
+    container_name: node-exporter
+    restart: always
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    networks:
+      - monitoring
+
+  # Prometheus
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    restart: always
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    depends_on:
+      - backend
+      - postgres-exporter
+      - redis-exporter
+      - node-exporter
+    networks:
+      - monitoring
+
+  # Grafana
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    restart: always
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - monitoring
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=
+    volumes:
+      - grafana-data:/var/lib/grafana
 
 volumes:
   pgdata:
-  pgadmin_data: 
+  pgadmin_data:
+  minio_data:
+  redis_data:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  monitoring:
+    driver: bridge 

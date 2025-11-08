@@ -1,0 +1,210 @@
+import { PrismaClient, Prisma } from '@prisma/client';
+import { DMThread } from '../../domain/messaging/dm-thread.entity';
+
+const THREAD_INCLUDE = {
+  messages: {
+    orderBy: { sentAt: 'desc' as const },
+    take: 1,
+  },
+  userOne: {
+    include: {
+      profile: true,
+      titles: {
+        orderBy: { earnedAt: 'desc' as const },
+        take: 1,
+      },
+      avatars: {
+        where: { isActive: true },
+        orderBy: { createdAt: 'desc' as const },
+        take: 1,
+      },
+    },
+  },
+  userTwo: {
+    include: {
+      profile: true,
+      titles: {
+        orderBy: { earnedAt: 'desc' as const },
+        take: 1,
+      },
+      avatars: {
+        where: { isActive: true },
+        orderBy: { createdAt: 'desc' as const },
+        take: 1,
+      },
+    },
+  },
+} satisfies Prisma.DMThreadInclude;
+
+type ThreadWithRelations = Prisma.DMThreadGetPayload<{
+  include: typeof THREAD_INCLUDE;
+}>;
+
+export class DMThreadPrismaRepository {
+  private prisma = new PrismaClient();
+
+  async findById(id: number): Promise<DMThread | null> {
+    const thread = await this.prisma.dMThread.findUnique({
+      where: { id: String(id) },
+      include: THREAD_INCLUDE,
+    });
+    return thread ? this.toDomain(thread) : null;
+  }
+
+  async findByUserId(userId: number): Promise<DMThread[]> {
+    const threads = await this.prisma.dMThread.findMany({
+      where: {
+        OR: [
+          { userOneId: String(userId) },
+          { userTwoId: String(userId) },
+        ],
+      },
+      include: THREAD_INCLUDE,
+      orderBy: { updatedAt: 'desc' },
+    });
+    return threads.map((thread) => this.toDomain(thread));
+  }
+
+  async findDetailedByUserId(
+    userId: string,
+    options: { search?: string; unreadOnly?: boolean; limit?: number } = {},
+  ): Promise<ThreadWithRelations[]> {
+    const userIdStr = String(userId);
+
+    const threads = await this.prisma.dMThread.findMany({
+      where: {
+        OR: [
+          { userOneId: userIdStr },
+          { userTwoId: userIdStr },
+        ],
+      },
+      include: THREAD_INCLUDE,
+      orderBy: { updatedAt: 'desc' },
+      take: options.limit ?? 50,
+    });
+
+    let filteredThreads = threads as ThreadWithRelations[];
+
+    if (options.unreadOnly) {
+      filteredThreads = filteredThreads.filter((thread) => {
+        const unreadCount = thread.userOneId === userIdStr ? thread.unreadCountUserOne : thread.unreadCountUserTwo;
+        return unreadCount > 0;
+      });
+    }
+
+    if (options.search) {
+      const searchLower = options.search.toLowerCase();
+      filteredThreads = filteredThreads.filter((thread) => {
+        const counterpart = thread.userOneId === userIdStr ? thread.userTwo : thread.userOne;
+        const lastMessage = thread.messages[0];
+        const values = [
+          counterpart?.profile?.displayName,
+          counterpart?.profile?.userName,
+          counterpart?.name,
+          counterpart?.email,
+          counterpart?.titles?.[0]?.title,
+          lastMessage?.message,
+        ];
+
+        return values.some((value) => value?.toLowerCase().includes(searchLower));
+      });
+    }
+
+    return filteredThreads;
+  }
+
+  async findByParticipants(userOneId: number, userTwoId: number): Promise<DMThread | null> {
+    const thread = await this.prisma.dMThread.findFirst({
+      where: {
+        OR: [
+          {
+            userOneId: String(userOneId),
+            userTwoId: String(userTwoId),
+          },
+          {
+            userOneId: String(userTwoId),
+            userTwoId: String(userOneId),
+          },
+        ],
+      },
+      include: THREAD_INCLUDE,
+    });
+    return thread ? this.toDomain(thread) : null;
+  }
+
+  async create(data: Partial<DMThread>): Promise<DMThread> {
+    const thread = await this.prisma.dMThread.create({
+      data: {
+        userOneId: String(data.userOneId!),
+        userTwoId: String(data.userTwoId!),
+        isActive: data.isActive ?? true,
+        startedAt: data.startedAt ?? new Date(),
+        createdAt: data.createdAt ?? new Date(),
+        updatedAt: data.updatedAt ?? new Date(),
+      },
+      include: THREAD_INCLUDE,
+    });
+    return this.toDomain(thread);
+  }
+
+  async update(id: number, data: Partial<DMThread>): Promise<DMThread | null> {
+    try {
+      const thread = await this.prisma.dMThread.update({
+        where: { id: String(id) },
+        data: {
+          ...data,
+          updatedAt: new Date(),
+        },
+        include: THREAD_INCLUDE,
+      });
+      return this.toDomain(thread);
+    } catch {
+      return null;
+    }
+  }
+
+  async delete(id: number): Promise<boolean> {
+    try {
+      await this.prisma.dMThread.delete({ where: { id: String(id) } });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async getThreadCountByUserId(userId: number): Promise<number> {
+    return this.prisma.dMThread.count({
+      where: {
+        OR: [
+          { userOneId: String(userId) },
+          { userTwoId: String(userId) },
+        ],
+      },
+    });
+  }
+
+  async getActiveThreadsCount(): Promise<number> {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    return this.prisma.dMThread.count({
+      where: {
+        updatedAt: {
+          gte: thirtyDaysAgo,
+        },
+      },
+    });
+  }
+
+  private toDomain(prismaThread: any): DMThread {
+    return new DMThread(
+      prismaThread.id,
+      prismaThread.userOneId,
+      prismaThread.userTwoId,
+      prismaThread.isActive,
+      prismaThread.startedAt,
+      prismaThread.createdAt,
+      prismaThread.updatedAt,
+    );
+  }
+}

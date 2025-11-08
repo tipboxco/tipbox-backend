@@ -1,0 +1,5 @@
+export enum WalletProvider {
+  METAMASK = 'METAMASK',
+  WALLETCONNECT = 'WALLETCONNECT',
+  CUSTOM = 'CUSTOM'
+}

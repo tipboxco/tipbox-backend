@@ -1,20 +1,35 @@
-import { PrismaClient, User as PrismaUser } from '../../generated/prisma';
+import { PrismaClient } from '@prisma/client';
 import { User } from '../../domain/user/user.entity';
-import { KycStatus } from '../../domain/user/kyc-status.enum';
+import { Wallet, WalletProvider } from '../../domain/wallet/wallet.entity';
 import { EmailAlreadyExistsError } from '../errors/custom-errors';
 
 export class UserPrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<User | null> {
-    const user = await this.prisma.user.findUnique({ where: { id } });
+  async findById(id: string): Promise<User | null> {
+    const user = await this.prisma.user.findUnique({ 
+      where: { id },
+      include: { 
+        profile: true,
+        wallets: true
+      }
+    });
     return user ? this.toDomain(user) : null;
   }
 
-  async create(email: string, name?: string): Promise<User> {
+  async create(email: string, displayName?: string): Promise<User> {
     try {
       const user = await this.prisma.user.create({
-        data: { email, name }
+        data: { 
+          email,
+          profile: displayName ? {
+            create: { displayName }
+          } : undefined
+        },
+        include: { 
+          profile: true,
+          wallets: true
+        }
       });
       return this.toDomain(user);
     } catch (err: any) {
@@ -26,27 +41,65 @@ export class UserPrismaRepository {
   }
 
   async findByEmail(email: string): Promise<User | null> {
-    const user = await this.prisma.user.findUnique({ where: { email } });
-    return user ? this.toDomain(user) : null;
-  }
-
-  // Şimdilik passwordHash yok, ileride eklenebilir
-  async createWithPassword(email: string, passwordHash: string, name?: string): Promise<User> {
-    const user = await this.prisma.user.create({
-      data: { email, name /*, passwordHash */ }
-    });
-    return this.toDomain(user);
-  }
-
-  async update(id: number, data: { email?: string; name?: string }): Promise<User | null> {
-    const user = await this.prisma.user.update({
-      where: { id },
-      data,
+    const user = await this.prisma.user.findUnique({ 
+      where: { email },
+      include: { 
+        profile: true,
+        wallets: true
+      }
     });
     return user ? this.toDomain(user) : null;
   }
 
-  async delete(id: number): Promise<boolean> {
+  async createWithPassword(email: string, passwordHash: string, displayName?: string): Promise<User> {
+    try {
+      const user = await this.prisma.user.create({
+        data: { 
+          email, 
+          passwordHash,
+          profile: displayName ? {
+            create: { displayName }
+          } : undefined
+        },
+        include: { 
+          profile: true,
+          wallets: true
+        }
+      });
+      return this.toDomain(user);
+    } catch (err: any) {
+      if (err.code === 'P2002' && err.meta?.target?.includes('email')) {
+        throw new EmailAlreadyExistsError();
+      }
+      throw err;
+    }
+  }
+
+  async update(id: string, data: { email?: string; passwordHash?: string; status?: string }): Promise<User | null> {
+    try {
+      const user = await this.prisma.user.update({
+        where: { id },
+        data,
+        include: { 
+          profile: true,
+          wallets: true
+        }
+      });
+      return user ? this.toDomain(user) : null;
+    } catch (err: any) {
+      // Prisma P2025: Record not found
+      if (err.code === 'P2025') {
+        return null;
+      }
+      // Email duplicate hatası
+      if (err.code === 'P2002' && err.meta?.target?.includes('email')) {
+        throw new EmailAlreadyExistsError();
+      }
+      throw err;
+    }
+  }
+
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.user.delete({ where: { id } });
       return true;
@@ -56,20 +109,44 @@ export class UserPrismaRepository {
   }
 
   async list(): Promise<User[]> {
-    const users = await this.prisma.user.findMany();
-    return users.map(this.toDomain);
+    const users = await this.prisma.user.findMany({
+      include: { 
+        profile: true,
+        wallets: true
+      }
+    });
+    return users.map(user => this.toDomain(user));
   }
 
-  private toDomain(prismaUser: PrismaUser): User {
+  private toDomain(prismaUser: any): User {
+    // Wallet'ları domain entity'ye çevir
+    const wallets = prismaUser.wallets?.map((w: any) => new Wallet(
+      w.id,
+      w.userId,
+      w.publicAddress,
+      w.provider as WalletProvider,
+      w.isConnected,
+      w.createdAt,
+      w.updatedAt
+    )) || [];
+
     return new User(
       prismaUser.id,
       prismaUser.email,
-      prismaUser.name,
-      prismaUser.auth0Id,
-      prismaUser.walletAddress,
-      prismaUser.kycStatus as KycStatus,
+      prismaUser.passwordHash,
+      prismaUser.status,
       prismaUser.createdAt,
-      prismaUser.updatedAt
+      prismaUser.updatedAt,
+      // Profile'dan displayName'i al
+      prismaUser.profile?.displayName || null,
+      // Auth0 - şimdilik null (schema'da yok)
+      null,
+      // KYC - şimdilik null (ayrı tablo)
+      null,
+      // Email verified status
+      prismaUser.emailVerified ?? false,
+      // Wallet'lar - relation'dan gelen data
+      wallets
     );
   }
 } 
