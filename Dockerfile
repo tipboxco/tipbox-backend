@@ -7,7 +7,7 @@ COPY package*.json ./
 COPY prisma ./prisma
 
 # Dependencies'leri yükle
-RUN npm install
+RUN npm install --legacy-peer-deps
 
 # Prisma Client'ı generate et (schema kopyalandıktan sonra)
 RUN npx prisma generate

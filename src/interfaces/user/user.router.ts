@@ -6,6 +6,7 @@ import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { S3Service } from '../../infrastructure/s3/s3.service';
 import { v4 as uuidv4 } from 'uuid';
 import logger from '../../infrastructure/logger/logger';
+// ValidationError kullanılmıyor; mevcut mimaride router içinde direkt 400/409 dönüyoruz
 
 const router = Router();
 const userService = new UserService();
@@ -155,20 +156,80 @@ const upload = multer({
  *                   example: Kullanıcı oluşturulurken bir hata oluştu
  */
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
-  const { email, displayName, bio } = req.body as CreateUserRequest;
-  const user = await userService.createUser(email, displayName);
-  const response: UserResponse = {
-    id: user.id,
-    email: user.email ?? '',
-    name: user.name ?? '',
-    status: user.status || 'ACTIVE',
-    auth0Id: user.auth0Id || null,
-    walletAddress: user.walletAddress || null,
-    kycStatus: user.kycStatus || '',
-    createdAt: user.createdAt.toISOString(),
-    updatedAt: user.updatedAt.toISOString()
-  };
-  res.status(201).json(response);
+  let { email, displayName, bio } = req.body as CreateUserRequest;
+  // Normalize leading/trailing whitespace on string inputs
+  if (typeof email === 'string') email = email.trim();
+  if (typeof displayName === 'string') displayName = displayName.trim();
+  if (typeof bio === 'string') bio = bio.trim();
+  
+  // Validation: Email zorunlu ve kontrolü (undefined/null kontrolü önce)
+  if (email === undefined || email === null) {
+    return res.status(400).json({ error: { message: 'Email adresi zorunludur ve boş olamaz.' } });
+  }
+  
+  if (typeof email !== 'string') {
+    return res.status(400).json({ error: { message: 'Email adresi string olmalıdır.' } });
+  }
+  
+  if (email === '') {
+    return res.status(400).json({ error: { message: 'Email adresi zorunludur ve boş olamaz.' } });
+  }
+  
+  // Email format kontrolü
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ error: { message: 'Geçerli bir email adresi giriniz.' } });
+  }
+  
+  // Validation: DisplayName zorunlu ve kontrolü
+  if (displayName === undefined || displayName === null) {
+    return res.status(400).json({ error: { message: 'DisplayName zorunludur ve boş olamaz.' } });
+  }
+  
+  if (typeof displayName !== 'string') {
+    return res.status(400).json({ error: { message: 'DisplayName string olmalıdır.' } });
+  }
+  
+  if (displayName === '') {
+    return res.status(400).json({ error: { message: 'DisplayName zorunludur ve boş olamaz.' } });
+  }
+  
+  // DisplayName minLength kontrolü (OpenAPI: minLength: 2)
+  if (displayName.length < 2) {
+    return res.status(400).json({ error: { message: 'DisplayName en az 2 karakter olmalıdır.' } });
+  }
+  
+  // DisplayName maxLength kontrolü (OpenAPI: maxLength: 50)
+  if (displayName.length > 50) {
+    return res.status(400).json({ error: { message: 'DisplayName en fazla 50 karakter olabilir.' } });
+  }
+  
+  // Bio maxLength kontrolü (OpenAPI: maxLength: 500)
+  if (bio !== undefined && bio !== null && typeof bio === 'string' && bio.length > 500) {
+    return res.status(400).json({ error: { message: 'Bio en fazla 500 karakter olabilir.' } });
+  }
+  
+  // Tüm validation'lar geçildi, şimdi user oluştur
+  try {
+    const user = await userService.createUser(email, displayName);
+    const response: UserResponse = {
+      id: user.id,
+      email: user.email ?? email,
+      name: user.name ?? displayName,
+      status: user.status || 'ACTIVE',
+      auth0Id: user.auth0Id || null,
+      walletAddress: user.walletAddress || null,
+      kycStatus: user.kycStatus || '',
+      createdAt: user.createdAt.toISOString(),
+      updatedAt: user.updatedAt.toISOString()
+    };
+    return res.status(201).json(response);
+  } catch (error: any) {
+    if (error?.code === 'P2002' && error?.meta?.target?.includes('email')) {
+      return res.status(409).json({ error: { message: 'Bu email adresi zaten kullanılıyor.' } });
+    }
+    throw error;
+  }
 }));
 
 /**
@@ -555,35 +616,6 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
   res.json(response);
 }));
 
-/**
- * @openapi
- * /users:
- *   get:
- *     summary: Tüm kullanıcıları listele
- *     responses:
- *       200:
- *         description: Kullanıcı listesi
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/UserResponse'
- */
-router.get('/', asyncHandler(async (req: Request, res: Response) => {
-  const users = await userService.listUsers();
-  res.json(users.map(user => ({
-    id: user.id,
-    email: user.email ?? '',
-    name: user.name ?? '',
-    status: user.status || 'ACTIVE',
-    auth0Id: user.auth0Id || null,
-    walletAddress: user.walletAddress || null,
-    kycStatus: user.kycStatus || '',
-    createdAt: user.createdAt.toISOString(),
-    updatedAt: user.updatedAt.toISOString()
-  })));
-}));
 
 /**
  * @openapi
@@ -1312,81 +1344,8 @@ router.get('/:id/bookmarks', asyncHandler(async (req: Request, res: Response) =>
   res.json(bookmarks);
 }));
 
-/**
- * @openapi
- * /users/{id}:
- *   put:
- *     summary: Kullanıcıyı güncelle
- *     parameters:
- *       - in: path
- *         name: id
- *         schema:
- *           type: string
- *         required: true
- *         description: Kullanıcı ID
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               email:
- *                 type: string
- *               name:
- *                 type: string
- *     responses:
- *       200:
- *         description: Güncellenen kullanıcı
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/UserResponse'
- *       404:
- *         description: Kullanıcı bulunamadı
- */
-router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = req.params.id;
-  const { email, status } = req.body;
-  const user = await userService.updateUser(id, { email, status });
-  if (!user) return res.status(404).json({ message: 'User not found' });
-  res.json({
-    id: user.id,
-    email: user.email ?? '',
-    name: user.name ?? '',
-    status: user.status || 'ACTIVE',
-    auth0Id: user.auth0Id || null,
-    walletAddress: user.walletAddress || null,
-    kycStatus: user.kycStatus || '',
-    createdAt: user.createdAt.toISOString(),
-    updatedAt: user.updatedAt.toISOString()
-  });
-}));
 
-/**
- * @openapi
- * /users/{id}:
- *   delete:
- *     summary: Kullanıcıyı sil
- *     parameters:
- *       - in: path
- *         name: id
- *         schema:
- *           type: string
- *         required: true
- *         description: Kullanıcı ID
- *     responses:
- *       204:
- *         description: Başarıyla silindi
- *       404:
- *         description: Kullanıcı bulunamadı
- */
-router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = req.params.id;
-  const ok = await userService.deleteUser(id);
-  if (!ok) return res.status(404).json({ message: 'User not found' });
-  res.status(204).send();
-}));
+
 
 // ===== SETTINGS ENDPOINTS =====
 
@@ -1427,17 +1386,17 @@ router.post('/settings/change-password', asyncHandler(async (req: Request, res: 
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ error: { message: 'Unauthorized' } });
   }
 
   const { currentPassword, newPassword } = req.body;
   if (!currentPassword || !newPassword) {
-    return res.status(400).json({ message: 'Current password and new password are required' });
+    return res.status(400).json({ error: { message: 'Current password and new password are required' } });
   }
 
   const result = await userService.changePassword(String(userId), currentPassword, newPassword);
   if (!result.success) {
-    return res.status(400).json(result);
+    return res.status(400).json({ error: { message: result.message || 'Password change failed' } });
   }
 
   res.json(result);
@@ -1474,7 +1433,7 @@ router.get('/settings/notifications', asyncHandler(async (req: Request, res: Res
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ error: { message: 'Unauthorized' } });
   }
 
   const settings = await userService.getNotificationSettings(String(userId));
@@ -1694,7 +1653,7 @@ router.put('/settings/support-session-price', asyncHandler(async (req: Request, 
 
   const result = await userService.updateSupportSessionPrice(String(userId), price);
   if (!result.success) {
-    return res.status(400).json(result);
+    return res.status(400).json({ error: { message: result.message || 'Notification settings update failed' } } );
   }
 
   res.json(result);

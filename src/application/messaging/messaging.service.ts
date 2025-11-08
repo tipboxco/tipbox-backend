@@ -15,6 +15,23 @@ export interface SendMessageData {
   threadId?: number;
 }
 
+export interface InboxMessageItem {
+  id: string;
+  senderName: string;
+  senderTitle: string | null;
+  senderAvatar: string | null;
+  lastMessage: string | null;
+  timestamp: string;
+  isUnread: boolean;
+  unreadCount: number;
+}
+
+export interface InboxQueryOptions {
+  search?: string;
+  unreadOnly?: boolean;
+  limit?: number;
+}
+
 export class MessagingService {
   private dmMessageRepo = new DmMessagePrismaRepository();
   private dmThreadRepo = new DMThreadPrismaRepository();
@@ -199,6 +216,44 @@ export class MessagingService {
       return count;
     } catch (error) {
       logger.error(`Failed to get unread message count for user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  async getUserInboxMessages(userId: string, options: InboxQueryOptions = {}): Promise<InboxMessageItem[]> {
+    try {
+      const threads = await this.dmThreadRepo.findDetailedByUserId(userId, options);
+      const userIdStr = String(userId);
+
+      return threads.map((thread) => {
+        const isUserOne = thread.userOneId === userIdStr;
+        const counterpart = isUserOne ? thread.userTwo : thread.userOne;
+        const unreadCount = isUserOne ? thread.unreadCountUserOne : thread.unreadCountUserTwo;
+        const lastMessage = thread.messages?.[0];
+        const timestamp = (lastMessage?.sentAt ?? thread.updatedAt).toISOString();
+
+        const senderName = counterpart?.profile?.displayName
+          || counterpart?.profile?.userName
+          || counterpart?.name
+          || counterpart?.email
+          || 'Unknown';
+
+        const senderTitle = counterpart?.titles?.[0]?.title ?? null;
+        const senderAvatar = counterpart?.avatars?.[0]?.imageUrl ?? null;
+
+        return {
+          id: thread.id,
+          senderName,
+          senderTitle,
+          senderAvatar,
+          lastMessage: lastMessage?.message ?? null,
+          timestamp,
+          isUnread: unreadCount > 0,
+          unreadCount,
+        } satisfies InboxMessageItem;
+      });
+    } catch (error) {
+      logger.error(`Failed to get inbox messages for user ${userId}:`, error);
       throw error;
     }
   }

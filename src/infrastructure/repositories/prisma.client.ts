@@ -1,12 +1,11 @@
 import { PrismaClient } from '@prisma/client';
-import { registerIdMiddleware } from './prisma-id-middleware';
+import { createPrismaWithIdMiddleware } from './prisma-id-middleware';
 
-let prismaSingleton: PrismaClient | null = null;
+let prismaSingleton: ReturnType<typeof createPrismaWithIdMiddleware> | null = null;
 
-export function getPrisma(): PrismaClient {
+export function getPrisma(): ReturnType<typeof createPrismaWithIdMiddleware> {
   if (!prismaSingleton) {
-    prismaSingleton = new PrismaClient();
-    registerIdMiddleware(prismaSingleton);
+    prismaSingleton = createPrismaWithIdMiddleware();
   }
   return prismaSingleton;
 }
