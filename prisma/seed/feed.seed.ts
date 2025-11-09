@@ -45,6 +45,18 @@ export async function seedFeedAndTrending(): Promise<void> {
       data: { id: generateUlid(), postId: postsForTrending[i].id, score: 100 - i * 10, trendPeriod: 'DAILY', calculatedAt: new Date() },
     }).catch(() => {});
   }
+  console.log('🎉 Feed seeding completed');
+}
+
+if (require.main === module) {
+  seedFeedAndTrending()
+    .catch((e) => {
+      console.error('❌ Feed seed failed:', e);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
 }
 
 

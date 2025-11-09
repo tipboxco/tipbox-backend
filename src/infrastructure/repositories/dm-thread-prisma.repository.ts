@@ -100,7 +100,6 @@ export class DMThreadPrismaRepository {
         const values = [
           counterpart?.profile?.displayName,
           counterpart?.profile?.userName,
-          counterpart?.name,
           counterpart?.email,
           counterpart?.titles?.[0]?.title,
           lastMessage?.message,
@@ -111,6 +110,37 @@ export class DMThreadPrismaRepository {
     }
 
     return filteredThreads;
+  }
+
+  /**
+   * Get thread activity map for a user
+   * Returns a map of otherUserId -> { isActive: boolean }
+   * Used to determine support request status
+   */
+  async getThreadActivityMap(userId: string): Promise<Map<string, { isActive: boolean }>> {
+    const threads = await this.prisma.dMThread.findMany({
+      where: {
+        OR: [
+          { userOneId: userId },
+          { userTwoId: userId },
+        ],
+      },
+      select: {
+        userOneId: true,
+        userTwoId: true,
+        isActive: true,
+      },
+    });
+
+    const threadMap = new Map<string, { isActive: boolean }>();
+    for (const thread of threads) {
+      const otherUserId = thread.userOneId === userId 
+        ? thread.userTwoId 
+        : thread.userOneId;
+      threadMap.set(otherUserId, { isActive: thread.isActive });
+    }
+
+    return threadMap;
   }
 
   async findByParticipants(userOneId: number, userTwoId: number): Promise<DMThread | null> {
@@ -149,12 +179,17 @@ export class DMThreadPrismaRepository {
 
   async update(id: number, data: Partial<DMThread>): Promise<DMThread | null> {
     try {
+      const updateData: any = {
+        updatedAt: new Date(),
+      };
+      
+      if (data.isActive !== undefined) {
+        updateData.isActive = data.isActive;
+      }
+      
       const thread = await this.prisma.dMThread.update({
         where: { id: String(id) },
-        data: {
-          ...data,
-          updatedAt: new Date(),
-        },
+        data: updateData,
         include: THREAD_INCLUDE,
       });
       return this.toDomain(thread);

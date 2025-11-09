@@ -1592,9 +1592,11 @@ async function main() {
   console.log('📈 Creating trending posts...')
   const allContentPosts = await prisma.contentPost.findMany({ take: 10 })
   const postsForTrending = allContentPosts.slice(0, 8) // Top 8 posts will be trending
-  const trendingPosts = await Promise.all(
-    postsForTrending.map((post, index) =>
-      prisma.trendingPost.create({
+  const trendingPosts: any[] = []
+  for (const post of postsForTrending) {
+    const index = postsForTrending.indexOf(post)
+    try {
+      const trendingPost = await prisma.trendingPost.create({
         data: {
           id: generateUlid(),
           postId: post.id,
@@ -1603,8 +1605,12 @@ async function main() {
           calculatedAt: new Date(),
         },
       })
-    )
-  )
+      trendingPosts.push(trendingPost)
+    } catch (error) {
+      // Skip if already exists (unique constraint)
+      console.log(`⚠️  Trending post for ${post.id} already exists, skipping...`)
+    }
+  }
   console.log(`✅ ${trendingPosts.length} trending post oluşturuldu`)
 
   // 3. Wishbox Events (What's News)
@@ -1817,6 +1823,215 @@ async function main() {
   ])
   console.log(`✅ ${expertAnswers.length} expert answer oluşturuldu`)
 
+  // 6. Create DM Requests (Support Requests)
+  console.log('💌 Creating DM requests (support requests)...')
+  
+  // DM Request descriptions (support request scenarios)
+  const dmRequestDescriptions = [
+    'Merhaba! iPhone 15 Pro hakkında birkaç sorum var. Özellikle kamera performansı ve pil ömrü konusunda deneyimlerinizi paylaşabilir misiniz?',
+    'Dyson V15s kullanıyor musunuz? Islak temizlik özelliği gerçekten işe yarıyor mu? Ev temizliği için önerir misiniz?',
+    'MacBook Air M3 ile programlama yapıyorum. Xcode ve Visual Studio Code performansı nasıl? Önerir misiniz?',
+    'Sony WH-1000XM5 kulaklık kullanıyorum ama AirPods Max\'i de merak ediyorum. Noise cancellation karşılaştırması yapabilir miyiz?',
+    'Nespresso ve DeLonghi tam otomatik kahve makineleri arasında karar veremiyorum. Hangisini önerirsiniz?',
+    'Dyson V12 ve V15s arasındaki farklar nelerdir? Hangi modeli almalıyım?',
+    'iPhone kamera ayarları konusunda yardıma ihtiyacım var. Profesyonel fotoğraf çekimi için ipuçlarınız var mı?',
+    'Laptop alışverişi yapıyorum. Dell XPS 13 ve MacBook Air M3 arasında karar veremiyorum. Hangisi daha iyi?',
+    'Akıllı saat önerisi arıyorum. Apple Watch ve Samsung Galaxy Watch karşılaştırması yapabilir misiniz?',
+    'Kablosuz kulaklık arıyorum. Noise cancellation özelliği olan, günlük kullanım için uygun bir model önerebilir misiniz?',
+  ]
+
+  const dmRequests: any[] = []
+  const now = new Date()
+  
+  // 1. Test user'dan trust user'lara PENDING request'ler (description ile)
+  for (let i = 0; i < Math.min(3, trustUserIds.length); i++) {
+    const trustUserId = trustUserIds[i]
+    const description = dmRequestDescriptions[i % dmRequestDescriptions.length]
+    
+    try {
+      const dmRequest = await prisma.dMRequest.create({
+        data: {
+          fromUserId: userIdToUse,
+          toUserId: trustUserId,
+          status: 'PENDING',
+          description: description,
+          sentAt: new Date(now.getTime() - (i + 1) * 24 * 60 * 60 * 1000), // 1, 2, 3 gün önce
+        },
+      })
+      dmRequests.push(dmRequest)
+    } catch (error) {
+      // Skip if already exists (unique constraint)
+      console.log(`⚠️  DM request from ${userIdToUse} to ${trustUserId} already exists, skipping...`)
+    }
+  }
+
+  // 2. Test user'dan target user'a ACCEPTED request (description ile)
+  try {
+    const acceptedRequest = await prisma.dMRequest.create({
+      data: {
+        fromUserId: userIdToUse,
+        toUserId: TARGET_USER_ID,
+        status: 'ACCEPTED',
+        description: dmRequestDescriptions[3],
+        sentAt: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000), // 5 gün önce
+        respondedAt: new Date(now.getTime() - 4 * 24 * 60 * 60 * 1000), // 4 gün önce kabul edildi
+      },
+    })
+    dmRequests.push(acceptedRequest)
+  } catch (error) {
+    console.log(`⚠️  DM request from ${userIdToUse} to ${TARGET_USER_ID} already exists, skipping...`)
+  }
+
+  // 3. Target user'dan test user'a DECLINED request
+  try {
+    const declinedRequest = await prisma.dMRequest.create({
+      data: {
+        fromUserId: TARGET_USER_ID,
+        toUserId: userIdToUse,
+        status: 'DECLINED',
+        description: dmRequestDescriptions[4],
+        sentAt: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000), // 7 gün önce
+        respondedAt: new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000), // 6 gün önce reddedildi
+      },
+    })
+    dmRequests.push(declinedRequest)
+  } catch (error) {
+    console.log(`⚠️  DM request from ${TARGET_USER_ID} to ${userIdToUse} already exists, skipping...`)
+  }
+
+  // 4. Trust user'lardan test user'a PENDING request'ler
+  for (let i = 0; i < Math.min(2, trustUserIds.length); i++) {
+    const trustUserId = trustUserIds[i]
+    const description = dmRequestDescriptions[(i + 5) % dmRequestDescriptions.length]
+    
+    try {
+      const dmRequest = await prisma.dMRequest.create({
+        data: {
+          fromUserId: trustUserId,
+          toUserId: userIdToUse,
+          status: 'PENDING',
+          description: description,
+          sentAt: new Date(now.getTime() - (i + 2) * 24 * 60 * 60 * 1000), // 2, 3 gün önce
+        },
+      })
+      dmRequests.push(dmRequest)
+    } catch (error) {
+      console.log(`⚠️  DM request from ${trustUserId} to ${userIdToUse} already exists, skipping...`)
+    }
+  }
+
+  // 5. Trust user'lar arasında ACCEPTED request'ler
+  if (trustUserIds.length >= 2) {
+    try {
+      const acceptedRequestBetweenTrustUsers = await prisma.dMRequest.create({
+        data: {
+          fromUserId: trustUserIds[0],
+          toUserId: trustUserIds[1],
+          status: 'ACCEPTED',
+          description: dmRequestDescriptions[6],
+          sentAt: new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000), // 10 gün önce
+          respondedAt: new Date(now.getTime() - 9 * 24 * 60 * 60 * 1000), // 9 gün önce kabul edildi
+        },
+      })
+      dmRequests.push(acceptedRequestBetweenTrustUsers)
+    } catch (error) {
+      console.log(`⚠️  DM request from ${trustUserIds[0]} to ${trustUserIds[1]} already exists, skipping...`)
+    }
+  }
+
+  // 6. Truster user'lardan test user'a ACCEPTED request'ler
+  for (let i = 0; i < Math.min(2, TRUSTER_USER_IDS.length); i++) {
+    const trusterUserId = TRUSTER_USER_IDS[i]
+    const description = dmRequestDescriptions[(i + 7) % dmRequestDescriptions.length]
+    
+    try {
+      const dmRequest = await prisma.dMRequest.create({
+        data: {
+          fromUserId: trusterUserId,
+          toUserId: userIdToUse,
+          status: 'ACCEPTED',
+          description: description,
+          sentAt: new Date(now.getTime() - (i + 8) * 24 * 60 * 60 * 1000), // 8, 9 gün önce
+          respondedAt: new Date(now.getTime() - (i + 7) * 24 * 60 * 60 * 1000), // 7, 8 gün önce kabul edildi
+        },
+      })
+      dmRequests.push(dmRequest)
+    } catch (error) {
+      console.log(`⚠️  DM request from ${trusterUserId} to ${userIdToUse} already exists, skipping...`)
+    }
+  }
+
+  // 7. Target user'dan trust user'lara PENDING request'ler
+  for (let i = 0; i < Math.min(2, trustUserIds.length); i++) {
+    const trustUserId = trustUserIds[i]
+    const description = dmRequestDescriptions[(i + 8) % dmRequestDescriptions.length]
+    
+    try {
+      const dmRequest = await prisma.dMRequest.create({
+        data: {
+          fromUserId: TARGET_USER_ID,
+          toUserId: trustUserId,
+          status: 'PENDING',
+          description: description,
+          sentAt: new Date(now.getTime() - (i + 1) * 12 * 60 * 60 * 1000), // 12, 24 saat önce
+        },
+      })
+      dmRequests.push(dmRequest)
+    } catch (error) {
+      console.log(`⚠️  DM request from ${TARGET_USER_ID} to ${trustUserId} already exists, skipping...`)
+    }
+  }
+
+  console.log(`✅ ${dmRequests.length} DM request (support request) oluşturuldu`)
+
+  // Create threads for ACCEPTED requests (for active status)
+  console.log('💬 Creating DM threads for ACCEPTED requests...')
+  const acceptedRequests = await prisma.dMRequest.findMany({
+    where: {
+      status: 'ACCEPTED',
+      description: { not: null },
+    },
+  })
+
+  let threadsCreated = 0
+  for (const request of acceptedRequests) {
+    try {
+      // Check if thread already exists
+      const existingThread = await prisma.dMThread.findFirst({
+        where: {
+          OR: [
+            { userOneId: request.fromUserId, userTwoId: request.toUserId },
+            { userOneId: request.toUserId, userTwoId: request.fromUserId },
+          ],
+        },
+      })
+
+      if (!existingThread) {
+        await prisma.dMThread.create({
+          data: {
+            userOneId: request.fromUserId,
+            userTwoId: request.toUserId,
+            isActive: true, // Active threads for support requests
+            startedAt: request.respondedAt || request.sentAt,
+          },
+        })
+        threadsCreated++
+      } else {
+        // Update existing thread to active if it's not active
+        if (!existingThread.isActive) {
+          await prisma.dMThread.update({
+            where: { id: existingThread.id },
+            data: { isActive: true },
+          })
+          threadsCreated++
+        }
+      }
+    } catch (error) {
+      console.log(`⚠️  Thread creation failed for request ${request.id}:`, error)
+    }
+  }
+  console.log(`✅ ${threadsCreated} DM thread oluşturuldu/güncellendi (ACCEPTED requests için)`)
+
   console.log('✨ Seed process completed successfully!')
   
   // Build summary text
@@ -1838,6 +2053,7 @@ async function main() {
   summaryLines.push(`• ${createdBrands.length} Brands`)
   summaryLines.push(`• ${expertRequests.length} Expert Requests`)
   summaryLines.push(`• ${expertAnswers.length} Expert Answers`)
+  summaryLines.push(`• ${dmRequests.length} DM Requests (Support Requests)`)
   summaryLines.push(`• Target User (Market Test) - ID: ${TARGET_USER_ID}`)
   summaryLines.push(`  - Owned NFTs: 4 (not listed)`)
   summaryLines.push(`  - Listed NFTs: 6 (on marketplace)`)
@@ -1850,6 +2066,7 @@ async function main() {
   summaryLines.push('  - Stats (Likes, Favorites, Views)')
   summaryLines.push('  - Feed Entries (User feeds)')
   summaryLines.push('  - NFTs (owned and listed)')
+  summaryLines.push('  - DM Requests (Support Requests with descriptions)')
   summaryLines.push('')
   summaryLines.push('🎉 Database is ready for development!')
   summaryLines.push('')
@@ -1910,6 +2127,12 @@ async function main() {
   summaryLines.push('  Body: { "tipsAmount": 100.0 }')
   summaryLines.push('• Get Answered: GET /expert/answered')
   summaryLines.push('• Get Request Detail: GET /expert/request/:requestId')
+  summaryLines.push('')
+  summaryLines.push('📨 Inbox/Messaging Endpoints:')
+  summaryLines.push('• Get Messages: GET /messages (with auth token)')
+  summaryLines.push('• Get Support Requests: GET /messages/support-requests (with auth token)')
+  summaryLines.push('  Query params: ?status=active|pending|completed&search=...&limit=50')
+  summaryLines.push('  Returns: List of support requests with user info and descriptions')
   console.log(summaryLines.join('\n'))
 }
 

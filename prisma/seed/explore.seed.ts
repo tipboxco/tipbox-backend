@@ -128,6 +128,18 @@ export async function seedExplore(): Promise<void> {
       )
     );
   }
+  console.log('🎉 Explore seeding completed');
+}
+
+if (require.main === module) {
+  seedExplore()
+    .catch((e) => {
+      console.error('❌ Explore seed failed:', e);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
 }
 
 

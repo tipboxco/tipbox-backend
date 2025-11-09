@@ -1,4 +1,4 @@
-import { prisma } from './types';
+import { prisma, TEST_USER_ID, TARGET_USER_ID, TRUST_USER_IDS, TRUSTER_USER_IDS } from './types';
 
 import { seedTaxonomy } from './taxonomy.seed';
 import { seedUsersAndProfiles } from './user.seed';
@@ -6,16 +6,44 @@ import { seedProductsAndContent } from './content.seed';
 import { seedFeedAndTrending } from './feed.seed';
 import { seedMarketplace } from './marketplace.seed';
 import { seedExplore } from './explore.seed';
+import { markSeedStart, markSeedEnd, addSeedUserId } from './seed-metadata';
 
 export async function runAllSeeds(): Promise<void> {
   console.log('🌱 Modular seed start');
-  await seedTaxonomy();
-  await seedUsersAndProfiles();
-  await seedProductsAndContent();
-  await seedFeedAndTrending();
-  await seedMarketplace();
-  await seedExplore();
-  console.log('✨ Modular seed completed');
+  
+  // Seed başlangıcını işaretle
+  markSeedStart();
+  
+  // Seed.ts'deki tüm test kullanıcı ID'lerini metadata'ya ekle (seed.ts satır 6-28)
+  // Bu ID'ler seed.ts'de tanımlı test kullanıcılarıdır
+  const allSeedUserIds = [
+    TEST_USER_ID,
+    TARGET_USER_ID,
+    ...TRUST_USER_IDS,
+    ...TRUSTER_USER_IDS
+  ];
+  
+  console.log(`📝 Seed kullanıcı ID'leri metadata'ya ekleniyor: ${allSeedUserIds.length} kullanıcı`);
+  for (const userId of allSeedUserIds) {
+    addSeedUserId(userId);
+  }
+  
+  try {
+    await seedTaxonomy();
+    await seedUsersAndProfiles();
+    await seedProductsAndContent();
+    await seedFeedAndTrending();
+    await seedMarketplace();
+    await seedExplore();
+    
+    // Seed sonunu işaretle
+    markSeedEnd();
+    console.log('✨ Modular seed completed');
+  } catch (error) {
+    console.error('❌ Seed hatası:', error);
+    markSeedEnd(); // Hata olsa bile metadata'yı temizle
+    throw error;
+  }
 }
 
 if (require.main === module) {

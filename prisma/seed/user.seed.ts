@@ -20,11 +20,15 @@ const TRUSTER_USER_IDS = [
 
 const DEFAULT_PASSWORD = 'password123'
 
-async function main() {
+export async function seedUsersAndProfiles(): Promise<void> {
   console.log('👤 User seeding started...')
 
   const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, 10)
-
+  
+  // Not: Tüm seed kullanıcı ID'leri (TEST_USER_ID, TARGET_USER_ID, TRUST_USER_IDS, TRUSTER_USER_IDS)
+  // artık seed/index.ts'de markSeedStart() sonrası otomatik olarak metadata'ya ekleniyor
+  // Burada sadece kullanıcıları oluşturuyoruz, metadata'ya ekleme işlemi index.ts'de yapılıyor
+  
   // Create or get primary test user
   let testUser = await prisma.user.findUnique({ where: { id: TEST_USER_ID } })
   if (!testUser) {
@@ -97,6 +101,7 @@ async function main() {
         data: { id: trustUserId, email: trustUserEmail, passwordHash, emailVerified: true, status: 'ACTIVE' },
       })
     }
+    // Not: Seed kullanıcı ID'leri artık seed/index.ts'de otomatik olarak metadata'ya ekleniyor
     trustUserIds.push(trustUser.id)
     await prisma.profile.upsert({
       where: { userId: trustUser.id },
@@ -120,6 +125,7 @@ async function main() {
         data: { id: trusterUserId, email: trusterUserEmail, passwordHash, emailVerified: true, status: 'ACTIVE' },
       })
     }
+    // Not: Seed kullanıcı ID'leri artık seed/index.ts'de otomatik olarak metadata'ya ekleniyor
     await prisma.profile.upsert({
       where: { userId: trusterUser.id },
       update: { displayName: `Truster User ${i + 1}`, userName: `truster${i + 1}` },
@@ -170,12 +176,15 @@ async function main() {
   console.log('🎉 User seeding completed')
 }
 
-main()
-  .catch((e) => {
-    console.error('❌ User seed failed:', e)
-    process.exit(1)
-  })
-  .finally(async () => {
-    await prisma.$disconnect()
-  })
+// Eğer doğrudan çalıştırılıyorsa
+if (require.main === module) {
+  seedUsersAndProfiles()
+    .catch((e) => {
+      console.error('❌ User seed failed:', e)
+      process.exit(1)
+    })
+    .finally(async () => {
+      await prisma.$disconnect()
+    })
+}
 

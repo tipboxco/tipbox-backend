@@ -313,6 +313,7 @@ model MainCategory {
   id            String        @id @default(uuid()) @db.Uuid
   name          String
   description   String?
+  imageUrl      String?       @map("image_url")
   createdAt     DateTime      @default(now()) @map("created_at")
   updatedAt     DateTime      @updatedAt @map("updated_at")
   contentPosts  ContentPost[]
@@ -326,6 +327,7 @@ model SubCategory {
   mainCategoryId String         @map("main_category_id") @db.Uuid
   name           String
   description    String?
+  imageUrl       String?        @map("image_url")
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
   contentPosts   ContentPost[]
@@ -340,6 +342,7 @@ model ProductGroup {
   subCategoryId String        @map("sub_category_id") @db.Uuid
   name          String
   description   String?
+  imageUrl      String?       @map("image_url")
   createdAt     DateTime      @default(now()) @map("created_at")
   updatedAt     DateTime      @updatedAt @map("updated_at")
   contentPosts  ContentPost[]
@@ -354,6 +357,8 @@ model Product {
   name               String
   brand              String?
   description        String?
+  imageUrl           String?          @map("image_url")
+  subName            String?          @map("sub_name")
   groupId            String?          @map("group_id") @db.Uuid
   createdAt          DateTime         @default(now()) @map("created_at")
   updatedAt          DateTime         @updatedAt @map("updated_at")
@@ -450,6 +455,7 @@ model ContentPost {
   commentsCount       Int                  @default(0) @map("comments_count")
   favoritesCount      Int                  @default(0) @map("favorites_count")
   viewsCount          Int                  @default(0) @map("views_count")
+  sharesCount         Int                  @default(0) @map("shares_count")
   createdAt           DateTime             @default(now()) @map("created_at")
   updatedAt           DateTime             @updatedAt @map("updated_at")
   comments            ContentComment[]
@@ -807,6 +813,7 @@ model Brand {
   name         String
   description  String?
   logoUrl      String?             @map("logo_url")
+  imageUrl     String?             @map("image_url")
   category     String?
   createdAt    DateTime            @default(now()) @map("created_at")
   updatedAt    DateTime            @updatedAt @map("updated_at")
@@ -1214,6 +1221,7 @@ model DMRequest {
   fromUserId  String          @map("from_user_id") @db.Uuid
   toUserId    String          @map("to_user_id") @db.Uuid
   status      DMRequestStatus @default(PENDING)
+  description String?         @db.Text
   sentAt      DateTime        @default(now()) @map("sent_at")
   respondedAt DateTime?       @map("responded_at")
   createdAt   DateTime        @default(now()) @map("created_at")

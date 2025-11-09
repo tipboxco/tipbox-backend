@@ -47,3 +47,6 @@ coverage/
 *gserviceaccount*.json
 tipboxbackend-*.json
 !tipboxbackend-3e2c3d3c0b31.json.example
+
+# Seed metadata (local development)
+prisma/seed/seed-metadata.json

@@ -15,6 +15,18 @@ export async function seedMarketplace(): Promise<void> {
       displayOrder: 1,
     },
   }).catch(() => {});
+  console.log('🎉 Marketplace seeding completed');
+}
+
+if (require.main === module) {
+  seedMarketplace()
+    .catch((e) => {
+      console.error('❌ Marketplace seed failed:', e);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
 }
 
 

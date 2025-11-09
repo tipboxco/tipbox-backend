@@ -6,6 +6,7 @@ export class DMRequest {
     public readonly fromUserId: number,
     public readonly toUserId: number,
     public readonly status: DMRequestStatus,
+    public readonly description: string | null,
     public readonly sentAt: Date,
     public readonly respondedAt: Date | null,
     public readonly createdAt: Date,
