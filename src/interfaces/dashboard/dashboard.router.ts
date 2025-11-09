@@ -1016,19 +1016,9 @@ router.get('/', (req: Request, res: Response) => {
       </div>
     </div>
 
-    <!-- Database: Veri Temizleme section gizlendi -->
-    <!--
     <div class="section">
       <h2 class="section-title">Database: Veri Temizleme</h2>
       <div class="seed-grid">
-        <div class="seed-card danger-card">
-          <h3>Test Verilerini Kaldır</h3>
-          <p>Test kullanıcıları ve onların verilerini kaldırır</p>
-          <button class="danger-button" id="btn-clear-test">
-            Test Verilerini Kaldır
-          </button>
-          <div id="status-clear-test"></div>
-        </div>
         <div class="seed-card danger-card">
           <h3>Seed Verilerini Kaldır</h3>
           <p>Tüm seed verilerini veritabanından kaldırır</p>
@@ -1039,7 +1029,6 @@ router.get('/', (req: Request, res: Response) => {
         </div>
       </div>
     </div>
-    -->
   </div>
 
   <!-- Docker Control Buttons - Gizlendi -->
