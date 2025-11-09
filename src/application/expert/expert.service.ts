@@ -641,7 +641,12 @@ export class ExpertService {
       const estimatedWaitTimeMinutes = request.isBroadcasting() ? 3 : null; // Şimdilik 3 dakika
 
       // Expert found bilgilerini getir
-      let expertFound = null;
+      let expertFound: {
+        expertUserId: string;
+        expertName: string;
+        expertTitle: string[];
+        expertAvatar: string | null;
+      } | null = null;
       if (request.isExpertFound() || request.isAnswered()) {
         const answers = await this.expertAnswerRepo.findByRequestId(requestId);
         if (answers.length > 0) {

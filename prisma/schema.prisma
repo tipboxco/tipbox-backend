@@ -1221,6 +1221,7 @@ model DMRequest {
   fromUserId  String          @map("from_user_id") @db.Uuid
   toUserId    String          @map("to_user_id") @db.Uuid
   status      DMRequestStatus @default(PENDING)
+  description String?         @db.Text
   sentAt      DateTime        @default(now()) @map("sent_at")
   respondedAt DateTime?       @map("responded_at")
   createdAt   DateTime        @default(now()) @map("created_at")

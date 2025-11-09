@@ -115,6 +115,18 @@ export async function seedTaxonomy(): Promise<void> {
     prisma.comparisonMetric.create({ data: { name: 'Özellikler', description: 'Ürünün sahip olduğu özellikler (1-10)' } }),
     prisma.comparisonMetric.create({ data: { name: 'Çevre Dostu', description: 'Ürünün çevreye olan etkisi (1-10)' } }),
   ]).catch(() => {});
+  console.log('🎉 Taxonomy seeding completed');
+}
+
+if (require.main === module) {
+  seedTaxonomy()
+    .catch((e) => {
+      console.error('❌ Taxonomy seed failed:', e);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
 }
 
 

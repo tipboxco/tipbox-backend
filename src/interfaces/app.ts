@@ -17,6 +17,7 @@ import logger from '../infrastructure/logger/logger';
 import messagingRouter from './messaging/messaging.router';
 import catalogRouter from './catalog/catalog.router';
 import brandRouter from './brand/brand.router';
+import dashboardRouter from './dashboard/dashboard.router';
 import { getMetricsService } from '../infrastructure/metrics/metrics.service';
 import { metricsMiddleware } from '../infrastructure/metrics/metrics.middleware';
 
@@ -383,8 +384,9 @@ app.use(requestLogger);
 
 // Prometheus metrics middleware
 app.use(metricsMiddleware);
-// Root endpoint
-app.get('/', (req, res) => {
+
+// API root endpoint (dashboard'dan önce)
+app.get('/api', (req, res) => {
   res.json({ 
     message: 'Tipbox Backend API çalışıyor!',
     swagger: 'http://localhost:3000/api-docs',
@@ -447,6 +449,11 @@ app.use('/expert', expertRouter);
 app.use('/inventory', inventoryRouter);
 app.use('/catalog', catalogRouter);
 app.use('/brands', brandRouter);
+
+// Dashboard endpoint - en sona eklenmeli ki diğer route'lar çalışabilsin
+// Dashboard hem root'ta hem de /dashboard'da çalışabilir
+app.use('/', dashboardRouter);
+app.use('/dashboard', dashboardRouter);
 
 // Error handler middleware (en sona eklenmeli)
 app.use(errorHandler);

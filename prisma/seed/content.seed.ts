@@ -243,6 +243,18 @@ export async function seedProductsAndContent(): Promise<void> {
   for (const post of allPosts.slice(0, 2)) {
     await prisma.contentPostView.create({ data: { postId: post.id, userId: userIdToUse, viewerIp: '127.0.0.1' } }).catch(() => {});
   }
+  console.log('🎉 Content seeding completed');
+}
+
+if (require.main === module) {
+  seedProductsAndContent()
+    .catch((e) => {
+      console.error('❌ Content seed failed:', e);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
 }
 
 

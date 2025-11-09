@@ -25,7 +25,7 @@ const config: Config = {
     [
       'jest-html-reporters',
       {
-        publicPath: './test-results',
+        publicPath: './tests/test-results',
         filename: 'jest-html-report.html',
         openReport: false,
         inlineSource: true,

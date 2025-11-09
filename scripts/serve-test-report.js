@@ -16,7 +16,7 @@ const RESULTS_DIR = RESULTS_DIR_CANDIDATES.find((p) => {
 });
 
 // Fallback to default even if not exists (will error with helpful message later)
-const BASE_RESULTS_DIR = RESULTS_DIR || path.join(__dirname, '../test-results');
+const BASE_RESULTS_DIR = RESULTS_DIR || path.join(__dirname, '../tests/test-results');
 
 const DETAILED_REPORT_FILE = path.join(BASE_RESULTS_DIR, 'detailed-test-report.html');
 const AUTH_REPORT_FILE = path.join(BASE_RESULTS_DIR, 'auth-report.html');
@@ -26,6 +26,7 @@ const EXPERT_REPORT_FILE = path.join(BASE_RESULTS_DIR, 'expert-report.html');
 const FEED_REPORT_FILE = path.join(BASE_RESULTS_DIR, 'feed-report.html');
 const EXPLORE_REPORT_FILE = path.join(BASE_RESULTS_DIR, 'explore-report.html');
 const INVENTORY_REPORT_FILE = path.join(BASE_RESULTS_DIR, 'inventory-report.html');
+const INBOX_REPORT_FILE = path.join(BASE_RESULTS_DIR, 'inbox-report.html');
 const MARKETPLACE_REPORT_FILE = path.join(BASE_RESULTS_DIR, 'marketplace-report.html');
 const HEALTH_REPORT_FILE = path.join(BASE_RESULTS_DIR, 'health-report.html');
 
@@ -39,6 +40,7 @@ const reportFiles = [
   FEED_REPORT_FILE,
   EXPLORE_REPORT_FILE,
   INVENTORY_REPORT_FILE,
+  INBOX_REPORT_FILE,
   MARKETPLACE_REPORT_FILE,
 
 ];
@@ -66,6 +68,7 @@ const server = http.createServer((req, res) => {
         'feed-report.html',
         'explore-report.html',
         'inventory-report.html',
+        'inbox-report.html',
         'marketplace-report.html',
         'health-report.html',
         'jest-auth-run.html',
@@ -179,6 +182,7 @@ const server = http.createServer((req, res) => {
         ${fs.existsSync(FEED_REPORT_FILE) ? `<a href="/feed-report.html" class="report-link" style="background:#ec4899">📰 Feed Test Raporu${getFileDate(FEED_REPORT_FILE) ? '<small>' + getFileDate(FEED_REPORT_FILE) + '</small>' : ''}</a>` : ''}
         ${fs.existsSync(EXPLORE_REPORT_FILE) ? `<a href="/explore-report.html" class="report-link" style="background:#14b8a6">🔍 Explore Test Raporu${getFileDate(EXPLORE_REPORT_FILE) ? '<small>' + getFileDate(EXPLORE_REPORT_FILE) + '</small>' : ''}</a>` : ''}
         ${fs.existsSync(INVENTORY_REPORT_FILE) ? `<a href="/inventory-report.html" class="report-link" style="background:#6366f1">📦 Inventory Test Raporu${getFileDate(INVENTORY_REPORT_FILE) ? '<small>' + getFileDate(INVENTORY_REPORT_FILE) + '</small>' : ''}</a>` : ''}
+        ${fs.existsSync(INBOX_REPORT_FILE) ? `<a href="/inbox-report.html" class="report-link" style="background:#06b6d4">📬 Inbox Test Raporu${getFileDate(INBOX_REPORT_FILE) ? '<small>' + getFileDate(INBOX_REPORT_FILE) + '</small>' : ''}</a>` : ''}
         ${fs.existsSync(MARKETPLACE_REPORT_FILE) ? `<a href="/marketplace-report.html" class="report-link" style="background:#f97316">🛒 Marketplace Test Raporu${getFileDate(MARKETPLACE_REPORT_FILE) ? '<small>' + getFileDate(MARKETPLACE_REPORT_FILE) + '</small>' : ''}</a>` : ''}
         ${fs.existsSync(HEALTH_REPORT_FILE) ? `<a href="/health-report.html" class="report-link" style="background:#10b981">❤️ Health Test Raporu${getFileDate(HEALTH_REPORT_FILE) ? '<small>' + getFileDate(HEALTH_REPORT_FILE) + '</small>' : ''}</a>` : ''}
         ${dynamicLinks}
@@ -279,6 +283,16 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(data);
     });
+  } else if (req.url === '/inbox-report.html') {
+    fs.readFile(INBOX_REPORT_FILE, 'utf8', (err, data) => {
+      if (err) {
+        res.writeHead(500, { 'Content-Type': 'text/plain' });
+        res.end('Inbox raporu bulunamadı. Test çalıştırıldı mı?');
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(data);
+    });
   } else if (req.url === '/marketplace-report.html') {
     fs.readFile(MARKETPLACE_REPORT_FILE, 'utf8', (err, data) => {
       if (err) {
@@ -371,6 +385,10 @@ server.listen(REPORT_PORT, () => {
   if (fs.existsSync(INVENTORY_REPORT_FILE)) {
     const date = getFileDateForConsole(INVENTORY_REPORT_FILE);
     console.log(`   📦 Inventory Raporu: http://localhost:${REPORT_PORT}/inventory-report.html${date ? ' (Tarih: ' + date + ')' : ''}`);
+  }
+  if (fs.existsSync(INBOX_REPORT_FILE)) {
+    const date = getFileDateForConsole(INBOX_REPORT_FILE);
+    console.log(`   📬 Inbox Raporu: http://localhost:${REPORT_PORT}/inbox-report.html${date ? ' (Tarih: ' + date + ')' : ''}`);
   }
   if (fs.existsSync(MARKETPLACE_REPORT_FILE)) {
     const date = getFileDateForConsole(MARKETPLACE_REPORT_FILE);

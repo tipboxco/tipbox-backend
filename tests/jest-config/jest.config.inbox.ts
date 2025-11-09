@@ -4,7 +4,7 @@ const config: Config = {
   testEnvironment: 'node',
   rootDir: '../..',
   roots: ['<rootDir>/tests'],
-  testMatch: ['**/e2e/user-settings.test.ts'],
+  testMatch: ['**/e2e/inbox.test.ts'],
   moduleFileExtensions: ['ts', 'js', 'json'],
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   maxWorkers: 1,
@@ -27,11 +27,11 @@ const config: Config = {
       'jest-html-reporters',
       {
         publicPath: './tests/test-results',
-        filename: 'user-settings-report.html',
+        filename: 'inbox-report.html',
         openReport: false,
         inlineSource: true,
         expand: true,
-        pageTitle: 'Tipbox API User Settings Test Results',
+        pageTitle: 'Tipbox API Inbox Test Results',
       },
     ],
     ['<rootDir>/scripts/custom-jest-reporter.js', {}],
@@ -40,5 +40,4 @@ const config: Config = {
 };
 
 export default config;
-
 

@@ -2,9 +2,12 @@ import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { authMiddleware } from '../auth/auth.middleware';
 import { MessagingService } from '../../application/messaging/messaging.service';
+import { SupportRequestService } from '../../application/messaging/support-request.service';
+import { SupportRequestStatus } from '../../domain/messaging/support-request-status.enum';
 
 const router = Router();
 const messagingService = new MessagingService();
+const supportRequestService = new SupportRequestService();
 
 router.use(authMiddleware);
 
@@ -12,7 +15,7 @@ router.use(authMiddleware);
  * @openapi
  * /messages:
  *   get:
- *     summary: Kullanıcının mesaj kutusunu getirir
+ *     summary: Messages - Kullanıcının mesaj kutusunu getirir
  *     description: Oturum açmış kullanıcının DM mesaj kutusundaki thread listesini döner.
  *     tags: [Inbox]
  *     security:
@@ -101,6 +104,115 @@ router.get(
     });
 
     res.json(inbox);
+  }),
+);
+
+/**
+ * @openapi
+ * /messages/support-requests:
+ *   get:
+ *     summary: 1-On-1 Support Request - Kullanıcının birebir destek sohbetlerini getirir
+ *     description: Oturum açmış kullanıcının geçmiş ve devam eden birebir destek sohbetlerinin listesini döner.
+ *     tags: [Inbox]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [pending, active, completed]
+ *         description: Destek sohbetlerinin durumuna göre filtreleme yapar.
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Kullanıcı adı, unvanı veya istek açıklamasında arama yapar.
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 50
+ *         description: Döndürülecek maksimum destek sohbeti sayısı.
+ *     responses:
+ *       200:
+ *         description: Birebir destek sohbetleri başarıyla listelendi.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                     format: uuid
+ *                   userName:
+ *                     type: string
+ *                   userTitle:
+ *                     type: string
+ *                     nullable: true
+ *                   userAvatar:
+ *                     type: string
+ *                     nullable: true
+ *                   requestDescription:
+ *                     type: string
+ *                   status:
+ *                     type: string
+ *                     enum: [active, pending, completed]
+ *       401:
+ *         description: Kimlik doğrulaması başarısız.
+ */
+router.get(
+  '/support-requests',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    // Parse status filter
+    let status: SupportRequestStatus | undefined;
+    if (typeof req.query.status === 'string') {
+      const statusValue = req.query.status.toLowerCase();
+      if (Object.values(SupportRequestStatus).includes(statusValue as SupportRequestStatus)) {
+        status = statusValue as SupportRequestStatus;
+      }
+    }
+
+    // Parse search query
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
+    
+    // Debug: Log search parameter
+    if (search) {
+      console.log('[Support Requests] Search parameter received:', search);
+    }
+
+    // Parse limit
+    let limit: number | undefined;
+    if (typeof req.query.limit === 'string') {
+      const parsed = parseInt(req.query.limit, 10);
+      if (!Number.isNaN(parsed)) {
+        limit = Math.min(Math.max(parsed, 1), 100);
+      }
+    }
+
+    const supportRequests = await supportRequestService.getUserSupportRequests(String(userId), {
+      status,
+      search,
+      limit,
+    });
+    
+    // Debug: Log results count
+    if (search) {
+      console.log('[Support Requests] Search results count:', supportRequests.length);
+    }
+
+    res.json(supportRequests);
   }),
 );
 
