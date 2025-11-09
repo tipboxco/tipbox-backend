@@ -15,6 +15,8 @@ import { requestLogger } from '../infrastructure/logger/request-logger.middlewar
 import { errorHandler } from '../infrastructure/logger/error-handler.middleware';
 import logger from '../infrastructure/logger/logger';
 import messagingRouter from './messaging/messaging.router';
+import catalogRouter from './catalog/catalog.router';
+import brandRouter from './brand/brand.router';
 import { getMetricsService } from '../infrastructure/metrics/metrics.service';
 import { metricsMiddleware } from '../infrastructure/metrics/metrics.middleware';
 
@@ -443,6 +445,8 @@ app.use('/marketplace', marketplaceRouter);
 app.use('/explore', exploreRouter);
 app.use('/expert', expertRouter);
 app.use('/inventory', inventoryRouter);
+app.use('/catalog', catalogRouter);
+app.use('/brands', brandRouter);
 
 // Error handler middleware (en sona eklenmeli)
 app.use(errorHandler);
