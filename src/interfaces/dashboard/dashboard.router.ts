@@ -9,25 +9,25 @@ const router = Router();
 
 // Container port bilgileri
 const services = [
-  { name: 'Backend API', port: 3000, url: 'http://localhost:3000', description: 'Ana backend servisi' },
-  { name: 'Swagger Docs', port: 3000, url: 'http://localhost:3000/api-docs', description: 'API dokümantasyonu', path: '/api-docs' },
-  { name: 'Prisma Studio', port: 5555, url: 'http://localhost:5555', description: 'Database GUI' },
-  { name: 'pgAdmin', port: 5050, url: 'http://localhost:5050', description: 'PostgreSQL yönetim arayüzü' },
-  { name: 'MinIO Console', port: 9001, url: 'http://localhost:9001', description: 'MinIO object storage konsolu' },
-  { name: 'MinIO API', port: 9000, url: 'http://localhost:9000', description: 'MinIO API endpoint' },
-  { name: 'PostgreSQL', port: 5432, url: 'localhost:5432', description: 'PostgreSQL veritabanı' },
-  { name: 'Redis', port: 6379, url: 'localhost:6379', description: 'Redis cache servisi' },
+  { name: 'Backend API', port: 3000, url: 'http://localhost:3000', description: 'Ana backend servisi', icon: 'fa-server' },
+  { name: 'Swagger Docs', port: 3000, url: 'http://localhost:3000/api-docs', description: 'API dokümantasyonu', path: '/api-docs', icon: 'fa-book' },
+  { name: 'Prisma Studio', port: 5555, url: 'http://localhost:5555', description: 'Database GUI', icon: 'fa-table' },
+  { name: 'pgAdmin', port: 5050, url: 'http://localhost:5050', description: 'PostgreSQL yönetim arayüzü', icon: 'fa-database' },
+  { name: 'MinIO Console', port: 9001, url: 'http://localhost:9001', description: 'MinIO object storage konsolu', icon: 'fa-cloud' },
+  { name: 'MinIO API', port: 9000, url: 'http://localhost:9000', description: 'MinIO API endpoint', icon: 'fa-cloud-upload-alt' },
+  { name: 'PostgreSQL', port: 5432, url: 'localhost:5432', description: 'PostgreSQL veritabanı', icon: 'fa-database' },
+  { name: 'Redis', port: 6379, url: 'localhost:6379', description: 'Redis cache servisi', icon: 'fa-bolt' },
 ];
 
 // Seed bilgileri
 const seedCommands = [
-  { name: 'Tümü', command: 'db:seed:all', description: 'Tüm seed verilerini ekle' },
-  { name: 'User Seed', command: 'db:seed:user', description: 'Kullanıcı ve profil verileri' },
-  { name: 'Content Seed', command: 'db:seed:content', description: 'Ürün ve içerik verileri' },
-  { name: 'Feed Seed', command: 'db:seed:feed', description: 'Feed ve trending verileri' },
-  { name: 'Taxonomy Seed', command: 'db:seed:taxonomy', description: 'Kategori ve taksonomi verileri' },
-  { name: 'Marketplace Seed', command: 'db:seed:marketplace', description: 'Marketplace verileri' },
-  { name: 'Explore Seed', command: 'db:seed:explore', description: 'Explore ve brand verileri' },
+  { name: 'Tümü', command: 'db:seed:all', description: 'Tüm seed verilerini ekle', icon: 'fa-seedling' },
+  { name: 'User Seed', command: 'db:seed:user', description: 'Kullanıcı ve profil verileri', icon: 'fa-users' },
+  { name: 'Content Seed', command: 'db:seed:content', description: 'Ürün ve içerik verileri', icon: 'fa-box' },
+  { name: 'Feed Seed', command: 'db:seed:feed', description: 'Feed ve trending verileri', icon: 'fa-stream' },
+  { name: 'Taxonomy Seed', command: 'db:seed:taxonomy', description: 'Kategori ve taksonomi verileri', icon: 'fa-tags' },
+  { name: 'Marketplace Seed', command: 'db:seed:marketplace', description: 'Marketplace verileri', icon: 'fa-store' },
+  { name: 'Explore Seed', command: 'db:seed:explore', description: 'Explore ve brand verileri', icon: 'fa-compass' },
 ];
 
 // JavaScript kodunu ayrı bir değişkene al (template literal sorunlarını önlemek için)
@@ -594,7 +594,11 @@ router.get('/', (req: Request, res: Response) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tipbox Docker Dashboard</title>
+  <title>Tipbox Development Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Jura:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
   <style>
     * {
       margin: 0;
@@ -602,10 +606,12 @@ router.get('/', (req: Request, res: Response) => {
       box-sizing: border-box;
     }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      font-family: 'Jura', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #272727;
+      color: #FAFAFA;
       min-height: 100vh;
-      padding: 20px;
+      padding: 32px 24px;
+      line-height: 1.6;
     }
     .container {
       max-width: 1400px;
@@ -615,210 +621,259 @@ router.get('/', (req: Request, res: Response) => {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 30px;
-      gap: 20px;
-      position: relative;
+      margin-bottom: 48px;
+      gap: 32px;
+      padding-bottom: 32px;
+      border-bottom: 1px solid rgba(163, 163, 163, 0.2);
     }
     h1 {
-      color: white;
+      color: #FAFAFA;
       text-align: left;
       margin: 0;
-      font-size: 2.5em;
-      text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
-      flex: 1;
-      position: relative;
-      z-index: 1;
+      font-size: 2.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
     }
     .dashboard-header-image {
-      height: 150px;
+      height: 80px;
       width: auto;
       object-fit: contain;
-      animation: slideToRight 1.2s ease-out forwards;
-      position: relative;
-      z-index: 2;
+      animation: fadeInSlide 0.8s ease-out forwards;
     }
-    @keyframes slideToRight {
+    @keyframes fadeInSlide {
       0% {
         opacity: 0;
-        transform: translateX(calc(-100vw + 100%));
-      }
-      60% {
-        opacity: 1;
+        transform: translateX(20px);
       }
       100% {
         opacity: 1;
         transform: translateX(0);
       }
     }
-    @media (max-width: 1200px) {
+    @media (max-width: 768px) {
+      .dashboard-header-image {
+        height: 60px;
+        align-self: flex-end;
+      }
       .dashboard-header {
         flex-direction: column;
         align-items: flex-start;
+        gap: 24px;
       }
-      .dashboard-header-image {
-        height: 120px;
-        width: auto;
-        align-self: flex-end;
-        animation: slideToRightMobile 1.2s ease-out forwards;
-      }
-    }
-    @keyframes slideToRightMobile {
-      0% {
-        opacity: 0;
-        transform: translateX(-200px);
-      }
-      60% {
-        opacity: 1;
-      }
-      100% {
-        opacity: 1;
-        transform: translateX(0);
+      h1 {
+        font-size: 2rem;
       }
     }
     .section {
-      background: white;
-      border-radius: 12px;
-      padding: 25px;
-      margin-bottom: 25px;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(208, 242, 5, 0.2);
+      border-radius: 16px;
+      padding: 32px;
+      margin-bottom: 32px;
+      backdrop-filter: blur(10px);
+      transition: all 0.3s ease;
+    }
+    .section:hover {
+      border-color: rgba(208, 242, 5, 0.4);
     }
     .section-title {
-      font-size: 1.5em;
-      margin-bottom: 20px;
-      color: #333;
-      border-bottom: 2px solid #667eea;
-      padding-bottom: 10px;
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 24px;
+      color: #FAFAFA;
+      letter-spacing: -0.01em;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .section-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(90deg, rgba(163, 163, 163, 0.3) 0%, transparent 100%);
     }
     .ports-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 15px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 20px;
     }
     .port-card {
-      flex: 1;
-      min-width: 200px;
-      background: #f8f9fa;
-      border: 2px solid #e9ecef;
-      border-radius: 8px;
-      padding: 20px;
-      transition: all 0.3s ease;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(208, 242, 5, 0.3);
+      border-radius: 12px;
+      padding: 24px;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       cursor: pointer;
     }
     .port-card:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 6px 12px rgba(0,0,0,0.15);
-      border-color: #667eea;
+      transform: translateY(-2px);
+      border-color: rgba(208, 242, 5, 0.6);
+      background: rgba(255, 255, 255, 0.08);
+      box-shadow: 0 4px 16px rgba(208, 242, 5, 0.15);
     }
     .port-card h3 {
-      color: #667eea;
-      margin-bottom: 10px;
-      font-size: 1.1em;
+      color: #FAFAFA;
+      margin-bottom: 8px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .port-card .icon {
+      font-size: 1.3rem;
+      color: #D0F205;
+      width: 24px;
+      text-align: center;
     }
     .port-card p {
-      color: #666;
-      font-size: 0.9em;
-      margin-bottom: 10px;
+      color: #A3A3A3;
+      font-size: 0.875rem;
+      margin-bottom: 12px;
+      line-height: 1.5;
     }
     .port-card .url {
-      color: #667eea;
-      font-weight: bold;
+      color: #A3A3A3;
+      font-weight: 400;
+      font-size: 0.875rem;
       word-break: break-all;
+      font-family: 'Monaco', 'Courier New', monospace;
+      opacity: 0.8;
+      transition: opacity 0.2s ease;
+    }
+    .port-card:hover .url {
+      opacity: 1;
+      color: #FAFAFA;
     }
     .seed-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 15px;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 20px;
     }
     .seed-card {
-      background: #f8f9fa;
-      border: 2px solid #e9ecef;
-      border-radius: 8px;
-      padding: 20px;
-      transition: all 0.3s ease;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(208, 242, 5, 0.3);
+      border-radius: 12px;
+      padding: 24px;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
     .seed-card:hover {
-      transform: translateY(-3px);
-      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-      border-color: #28a745;
+      transform: translateY(-2px);
+      border-color: rgba(208, 242, 5, 0.6);
+      background: rgba(255, 255, 255, 0.08);
+      box-shadow: 0 4px 16px rgba(208, 242, 5, 0.15);
     }
     .seed-card h3 {
-      color: #28a745;
-      margin-bottom: 10px;
-      font-size: 1.1em;
+      color: #FAFAFA;
+      margin-bottom: 8px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .seed-card .icon {
+      font-size: 1.3rem;
+      color: #D0F205;
+      width: 24px;
+      text-align: center;
     }
     .seed-card p {
-      color: #666;
-      font-size: 0.9em;
-      margin-bottom: 15px;
+      color: #A3A3A3;
+      font-size: 0.875rem;
+      margin-bottom: 20px;
+      line-height: 1.5;
     }
     .seed-button {
-      background: #28a745;
-      color: white;
-      border: none;
-      padding: 10px 20px;
-      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      color: #FAFAFA;
+      border: 1px solid rgba(163, 163, 163, 0.2);
+      padding: 12px 24px;
+      border-radius: 8px;
       cursor: pointer;
-      font-size: 0.95em;
-      font-weight: bold;
+      font-size: 0.9375rem;
+      font-weight: 500;
       width: 100%;
-      transition: background 0.3s ease;
+      transition: all 0.3s ease;
+      font-family: 'Jura', sans-serif;
     }
     .seed-button:hover {
-      background: #218838;
+      background: rgba(255, 255, 255, 0.15);
+      border-color: rgba(163, 163, 163, 0.3);
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+    .seed-button:active {
+      transform: translateY(0);
     }
     .seed-button:disabled {
-      background: #ccc;
+      background: rgba(163, 163, 163, 0.1);
+      color: #A3A3A3;
+      border-color: rgba(163, 163, 163, 0.1);
       cursor: not-allowed;
+      transform: none;
     }
     .status {
-      margin-top: 10px;
-      padding: 10px;
-      border-radius: 6px;
-      font-size: 0.9em;
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 500;
     }
     .status.success {
-      background: #d4edda;
-      color: #155724;
-      border: 1px solid #c3e6cb;
+      background: rgba(255, 255, 255, 0.05);
+      color: #A3A3A3;
+      border: 1px solid rgba(163, 163, 163, 0.2);
     }
     .status.error {
-      background: #f8d7da;
-      color: #721c24;
-      border: 1px solid #f5c6cb;
+      background: rgba(220, 53, 69, 0.1);
+      color: #FF6B7A;
+      border: 1px solid rgba(220, 53, 69, 0.2);
     }
     .status.loading {
-      background: #d1ecf1;
-      color: #0c5460;
-      border: 1px solid #bee5eb;
+      background: rgba(255, 255, 255, 0.05);
+      color: #A3A3A3;
+      border: 1px solid rgba(163, 163, 163, 0.2);
     }
     .danger-button {
-      background: #dc3545;
-      color: white;
-      border: none;
-      padding: 10px 20px;
-      border-radius: 6px;
+      background: rgba(220, 53, 69, 0.15);
+      color: #FF6B7A;
+      border: 1px solid rgba(220, 53, 69, 0.3);
+      padding: 12px 24px;
+      border-radius: 8px;
       cursor: pointer;
-      font-size: 0.95em;
-      font-weight: bold;
+      font-size: 0.9375rem;
+      font-weight: 500;
       width: 100%;
-      transition: background 0.3s ease;
+      transition: all 0.3s ease;
+      font-family: 'Jura', sans-serif;
     }
     .danger-button:hover {
-      background: #c82333;
+      background: rgba(220, 53, 69, 0.25);
+      border-color: rgba(220, 53, 69, 0.4);
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(220, 53, 69, 0.15);
     }
     .danger-button:disabled {
-      background: #ccc;
+      background: rgba(163, 163, 163, 0.1);
+      color: #A3A3A3;
+      border-color: rgba(163, 163, 163, 0.1);
       cursor: not-allowed;
+      transform: none;
     }
     .danger-card {
-      background: #fff5f5;
-      border: 2px solid #fc8181;
+      background: rgba(220, 53, 69, 0.05);
+      border: 1px solid rgba(220, 53, 69, 0.2);
     }
     .danger-card:hover {
-      border-color: #dc3545;
+      border-color: rgba(220, 53, 69, 0.3);
+      background: rgba(220, 53, 69, 0.08);
     }
     .danger-card h3 {
-      color: #dc3545;
+      color: #FF6B7A;
+    }
+    .danger-card .icon {
+      color: #FF6B7A;
     }
     .modal {
       display: none;
@@ -828,72 +883,86 @@ router.get('/', (req: Request, res: Response) => {
       top: 0;
       width: 100%;
       height: 100%;
-      background-color: rgba(0,0,0,0.5);
+      background-color: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
     }
     .modal-content {
-      background-color: white;
+      background: #272727;
+      border: 1px solid rgba(163, 163, 163, 0.2);
       margin: 15% auto;
-      padding: 30px;
-      border-radius: 12px;
+      padding: 32px;
+      border-radius: 16px;
       max-width: 500px;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
     }
     .modal-header {
-      font-size: 1.5em;
+      font-size: 1.5rem;
+      font-weight: 600;
       margin-bottom: 20px;
-      color: #333;
+      color: #FAFAFA;
     }
     .modal-body {
-      margin-bottom: 20px;
-      color: #666;
+      margin-bottom: 24px;
+      color: #A3A3A3;
       line-height: 1.6;
+    }
+    .modal-body strong {
+      color: #FAFAFA;
     }
     .modal-actions {
       display: flex;
-      gap: 10px;
+      gap: 12px;
       justify-content: flex-end;
     }
     .modal-button {
       padding: 10px 20px;
       border: none;
-      border-radius: 6px;
+      border-radius: 8px;
       cursor: pointer;
-      font-size: 1em;
-      font-weight: bold;
+      font-size: 0.9375rem;
+      font-weight: 600;
+      font-family: 'Jura', sans-serif;
+      transition: all 0.3s ease;
     }
     .modal-button.confirm {
-      background: #dc3545;
-      color: white;
+      background: rgba(220, 53, 69, 0.2);
+      color: #FF6B7A;
+      border: 1px solid rgba(220, 53, 69, 0.4);
     }
     .modal-button.confirm:hover {
-      background: #c82333;
+      background: rgba(220, 53, 69, 0.3);
+      border-color: #FF6B7A;
     }
     .modal-button.cancel {
-      background: #6c757d;
-      color: white;
+      background: rgba(163, 163, 163, 0.2);
+      color: #A3A3A3;
+      border: 1px solid rgba(163, 163, 163, 0.3);
     }
     .modal-button.cancel:hover {
-      background: #5a6268;
+      background: rgba(163, 163, 163, 0.3);
+      color: #FAFAFA;
     }
     .modal-steps {
-      margin-top: 20px;
-      padding-top: 20px;
-      border-top: 1px solid #e9ecef;
+      margin-top: 24px;
+      padding-top: 24px;
+      border-top: 1px solid rgba(163, 163, 163, 0.2);
     }
     .modal-step {
-      margin-bottom: 15px;
-      padding: 10px;
-      background: #f8f9fa;
-      border-radius: 6px;
+      margin-bottom: 16px;
+      padding: 16px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 8px;
+      border: 1px solid rgba(163, 163, 163, 0.1);
     }
     .modal-step-title {
-      font-weight: bold;
-      margin-bottom: 5px;
-      color: #333;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: #FAFAFA;
+      font-size: 0.9375rem;
     }
     .modal-step-desc {
-      font-size: 0.9em;
-      color: #666;
+      font-size: 0.875rem;
+      color: #A3A3A3;
     }
     .docker-controls {
       position: fixed;
@@ -908,38 +977,42 @@ router.get('/', (req: Request, res: Response) => {
       border: none;
       border-radius: 8px;
       cursor: pointer;
-      font-size: 1em;
-      font-weight: bold;
-      color: white;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #FAFAFA;
       transition: all 0.3s ease;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      font-family: 'Jura', sans-serif;
     }
     .docker-button:hover {
       transform: translateY(-2px);
-      box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
     }
     .docker-button:disabled {
-      opacity: 0.6;
+      opacity: 0.5;
       cursor: not-allowed;
       transform: none;
     }
     .docker-button.stop {
-      background: #dc3545;
+      background: rgba(220, 53, 69, 0.2);
+      border: 1px solid rgba(220, 53, 69, 0.4);
     }
     .docker-button.stop:hover:not(:disabled) {
-      background: #c82333;
+      background: rgba(220, 53, 69, 0.3);
     }
     .docker-button.down {
-      background: #6c757d;
+      background: rgba(163, 163, 163, 0.2);
+      border: 1px solid rgba(163, 163, 163, 0.3);
     }
     .docker-button.down:hover:not(:disabled) {
-      background: #5a6268;
+      background: rgba(163, 163, 163, 0.3);
     }
     .docker-button.start {
-      background: #28a745;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(163, 163, 163, 0.2);
     }
     .docker-button.start:hover:not(:disabled) {
-      background: #218838;
+      background: rgba(255, 255, 255, 0.15);
     }
     .loading-overlay {
       display: none;
@@ -948,7 +1021,8 @@ router.get('/', (req: Request, res: Response) => {
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(0,0,0,0.7);
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(4px);
       z-index: 2000;
       justify-content: center;
       align-items: center;
@@ -958,8 +1032,8 @@ router.get('/', (req: Request, res: Response) => {
       display: flex;
     }
     .loading-spinner {
-      border: 4px solid #f3f3f3;
-      border-top: 4px solid #667eea;
+      border: 4px solid rgba(163, 163, 163, 0.2);
+      border-top: 4px solid rgba(163, 163, 163, 0.6);
       border-radius: 50%;
       width: 50px;
       height: 50px;
@@ -971,18 +1045,18 @@ router.get('/', (req: Request, res: Response) => {
       100% { transform: rotate(360deg); }
     }
     .loading-text {
-      color: white;
-      font-size: 1.2em;
-      font-weight: bold;
+      color: #FAFAFA;
+      font-size: 1.2rem;
+      font-weight: 600;
     }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="dashboard-header">
-      <h1>🐳 Tipbox Docker Dashboard</h1>
-      <img src="https://media.formula1.com/image/upload/c_lfill,w_3392/q_auto/v1740000000/common/f1/2025/ferrari/2025ferraricarright.webp" 
-           alt="Ferrari F1 Car" 
+      <h1>Tipbox Development Console</h1>
+      <img src="https://tipbox.co/images/tipbox-logo-yellow.png" 
+           alt="Tipbox Logo" 
            class="dashboard-header-image" 
            onerror="this.style.display='none'">
     </div>
@@ -992,7 +1066,10 @@ router.get('/', (req: Request, res: Response) => {
       <div class="ports-grid">
         ${services.map(service => `
           <div class="port-card" onclick="window.open('${service.url}', '_blank')">
-            <h3>${service.name}</h3>
+            <h3>
+              <i class="fas ${service.icon} icon"></i>
+              ${service.name}
+            </h3>
             <p>${service.description}</p>
             <div class="url">${service.url}</div>
           </div>
@@ -1005,7 +1082,10 @@ router.get('/', (req: Request, res: Response) => {
       <div class="seed-grid">
         ${seedCommands.map((seed, index) => `
           <div class="seed-card">
-            <h3>${seed.name}</h3>
+            <h3>
+              <i class="fas ${seed.icon} icon"></i>
+              ${seed.name}
+            </h3>
             <p>${seed.description}</p>
             <button class="seed-button" onclick="runSeed('${seed.command}', ${index})" id="btn-${index}">
               Seed Çalıştır
@@ -1020,7 +1100,10 @@ router.get('/', (req: Request, res: Response) => {
       <h2 class="section-title">Database: Veri Temizleme</h2>
       <div class="seed-grid">
         <div class="seed-card danger-card">
-          <h3>Seed Verilerini Kaldır</h3>
+          <h3>
+            <i class="fas fa-trash-alt icon"></i>
+            Seed Verilerini Kaldır
+          </h3>
           <p>Tüm seed verilerini veritabanından kaldırır</p>
           <button class="danger-button" id="btn-clear-seed">
             Seed Verilerini Kaldır

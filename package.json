@@ -45,7 +45,8 @@
     "docker:start": "node scripts/docker-up.js --start",
     "docker:ports": "node scripts/docker-up.js --ports-only",
     "docker:down": "node scripts/docker-up.js --down",
-    "docker:logs": "node scripts/docker-up.js --logs"
+    "docker:logs": "node scripts/docker-up.js --logs",
+    "dev:reset": "bash scripts/reset-dev.sh"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
