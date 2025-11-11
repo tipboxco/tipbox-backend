@@ -327,7 +327,4 @@ Bu akış ile:
 
 ---
 
-**Dokümantasyon Tarihi:** 2024
-**Versiyon:** 1.0
-**Durum:** Planlama Aşaması
 
