@@ -158,6 +158,73 @@ export class UserService {
     };
   }
 
+  /**
+   * Self profile (for account page) - maps to required UserProfile shape
+   */
+  async getSelfUserProfile(userId: string): Promise<{
+    id: string;
+    name: string;
+    avatarUrl: string | null;
+    bannerUrl: string | null;
+    biography: string | null;
+    titles: string[];
+    stats: { posts: number; trust: number; truster: number };
+    badges: Array<{ id: string; title: string; image: string | null }>;
+  } | null> {
+    const card = await this.getUserProfileCard(userId);
+    if (!card) return null;
+
+    // Fetch badge ids alongside names for edit/collection UX
+    const userBadges = await this.prisma.userBadge.findMany({
+      where: { userId },
+      include: { badge: true },
+      orderBy: { claimedAt: 'desc' },
+      take: 6,
+    });
+
+    return {
+      id: card.id,
+      name: card.name,
+      avatarUrl: card.avatarUrl,
+      bannerUrl: card.bannerUrl,
+      biography: card.description,
+      titles: card.titles,
+      stats: card.stats,
+      badges: userBadges.map(ub => ({
+        id: String(ub.badgeId),
+        title: ub.badge.name,
+        image: ub.badge.imageUrl ?? null,
+      })),
+    };
+  }
+
+  /**
+   * Other user's profile for a viewer, includes isTrusted flag
+   */
+  async getUserProfileForViewer(viewerUserId: string, targetUserId: string): Promise<{
+    id: string;
+    name: string;
+    avatarUrl: string | null;
+    bannerUrl: string | null;
+    biography: string | null;
+    titles: string[];
+    stats: { posts: number; trust: number; truster: number };
+    badges: Array<{ id: string; title: string; image: string | null }>;
+    isTrusted: boolean;
+  } | null> {
+    const base = await this.getSelfUserProfile(targetUserId);
+    if (!base) return null;
+
+    const rel = await this.prisma.trustRelation.findUnique({
+      where: { trusterId_trustedUserId: { trusterId: viewerUserId, trustedUserId: targetUserId } },
+    });
+
+    return {
+      ...base,
+      isTrusted: !!rel,
+    };
+  }
+
   async listTrustedUsers(userId: string, query?: string): Promise<Array<{
     id: string;
     userName: string | null;
@@ -457,6 +524,79 @@ export class UserService {
         tasks: tasks.map(t => ({ ...t, id: String(t.id) })),
       };
     });
+  }
+
+  async listBridgeBadges(userId: string, query?: string): Promise<Array<{
+    id: string;
+    image: string | null;
+    title: string;
+    rarity: 'Usual' | 'Rare';
+    isClaimed: boolean;
+    nftAddress: string | null;
+    earnDate: Date | null;
+    totalEarned: number;
+  }>> {
+    const rewards = await this.prisma.bridgeReward.findMany({
+      where: {
+        userId,
+        badge: query
+          ? {
+              OR: [
+                { name: { contains: query, mode: 'insensitive' } },
+                { description: { contains: query, mode: 'insensitive' } },
+              ] as any,
+            }
+          : undefined,
+      } as any,
+      include: { badge: true },
+      orderBy: { awardedAt: 'desc' },
+    } as any);
+
+    const rarityMap: Record<string, 'Usual' | 'Rare'> = {
+      COMMON: 'Usual',
+      RARE: 'Rare',
+      EPIC: 'Rare',
+    };
+
+    return rewards.map((rw: any) => ({
+      id: String(rw.badge?.id || ''),
+      image: rw.badge?.imageUrl ?? null,
+      title: rw.badge?.name || '',
+      rarity: rarityMap[rw.badge?.rarity || 'COMMON'] || 'Usual',
+      isClaimed: true,
+      nftAddress: null,
+      earnDate: rw.awardedAt,
+      totalEarned: 1,
+    }));
+  }
+
+  async claimAchievementBadge(userId: string, badgeId: string): Promise<{ success: boolean }> {
+    await this.prisma.userBadge.upsert({
+      where: { userId_badgeId: { userId, badgeId } },
+      update: { claimed: true, claimedAt: new Date() },
+      create: {
+        userId,
+        badgeId,
+        isVisible: true,
+        visibility: 'PUBLIC',
+        claimed: true,
+        claimedAt: new Date(),
+      } as any,
+    });
+    return { success: true };
+  }
+
+  async claimBridgeBadge(userId: string, badgeId: string): Promise<{ success: boolean }> {
+    // Create a RewardClaim record to represent claiming action
+    await this.prisma.rewardClaim.create({
+      data: {
+        userId,
+        badgeId,
+        amount: 0,
+        vestingStatus: 'VESTED',
+      } as any,
+    });
+    return { success: true };
   }
 
   // Profile Feed EP'leri için yardımcı fonksiyonlar
