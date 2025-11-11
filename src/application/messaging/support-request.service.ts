@@ -35,8 +35,12 @@ export class SupportRequestService {
       let dmRequestStatus: DMRequestStatus | undefined;
       if (options.status === SupportRequestStatus.PENDING) {
         dmRequestStatus = DMRequestStatus.PENDING;
-      } else if (options.status === SupportRequestStatus.ACTIVE || options.status === SupportRequestStatus.COMPLETED) {
+      } else if (options.status === SupportRequestStatus.ACTIVE) {
         dmRequestStatus = DMRequestStatus.ACCEPTED;
+      } else if (options.status === SupportRequestStatus.COMPLETED) {
+        // Completed: include both DECLINED and ACCEPTED without active thread.
+        // Do NOT pre-filter by status here; fetch all and filter at service layer.
+        dmRequestStatus = undefined;
       }
 
       // Get support requests (requests with description)
@@ -143,6 +147,18 @@ export class SupportRequestService {
       }
       throw error;
     }
+  }
+
+  async createSupportRequest(
+    senderId: string,
+    payload: { recipientUserId: string; type: string; message: string; amount: number }
+  ) {
+    await this.dmRequestRepo.create({
+      fromUserId: senderId,
+      toUserId: payload.recipientUserId,
+      status: DMRequestStatus.PENDING,
+      description: payload.message,
+    });
   }
 }
 

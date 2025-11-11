@@ -12,6 +12,445 @@ const router = Router();
 const userService = new UserService();
 const s3Service = new S3Service();
 
+/**
+ * @openapi
+ * /users/me/profile:
+ *   get:
+ *     summary: Hesabın profil bilgileri (self profile)
+ *     description: Giriş yapan kullanıcının detaylı profil bilgisini döner.
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Profil bilgileri
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id: { type: string }
+ *                 name: { type: string }
+ *                 avatarUrl: { type: string, nullable: true }
+ *                 bannerUrl: { type: string, nullable: true }
+ *                 biography: { type: string, nullable: true }
+ *                 titles:
+ *                   type: array
+ *                   items: { type: string }
+ *                 stats:
+ *                   type: object
+ *                   properties:
+ *                     posts: { type: integer }
+ *                     trust: { type: integer }
+ *                     truster: { type: integer }
+ *                 badges:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id: { type: string }
+ *                       title: { type: string }
+ *                       image: { type: string, nullable: true }
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/me/profile', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = (req as any).user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+  const profile = await userService.getSelfUserProfile(String(userId));
+  if (!profile) return res.status(404).json({ message: 'User not found' });
+  return res.json(profile);
+}));
+
+/**
+ * @openapi
+ * /users/{id}/profile:
+ *   get:
+ *     summary: Kullanıcı profili (diğer kullanıcı)
+ *     description: Ziyaret edilen kullanıcının profilini ve "isTrusted" durumunu döner.
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
++ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Ziyaret edilen kullanıcı ID'si
+ *     responses:
+ *       200:
+ *         description: Profil bilgileri
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id: { type: string }
+ *                 name: { type: string }
+ *                 avatarUrl: { type: string, nullable: true }
+ *                 bannerUrl: { type: string, nullable: true }
+ *                 biography: { type: string, nullable: true }
+ *                 titles:
+ *                   type: array
+ *                   items: { type: string }
+ *                 stats:
+ *                   type: object
+ *                   properties:
+ *                     posts: { type: integer }
+ *                     trust: { type: integer }
+ *                     truster: { type: integer }
+ *                 badges:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id: { type: string }
+ *                       title: { type: string }
+ *                       image: { type: string, nullable: true }
+ *                 isTrusted: { type: boolean }
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: User not found
+ */
+router.get('/:id/profile', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = (req as any).user;
+  const viewerId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  if (!viewerId) return res.status(401).json({ message: 'Unauthorized' });
+
+  const targetUserId = req.params.id;
+  if (!targetUserId) return res.status(400).json({ message: 'User id is required' });
+
+  const profile = await userService.getUserProfileForViewer(String(viewerId), String(targetUserId));
+  if (!profile) return res.status(404).json({ message: 'User not found' });
+  return res.json(profile);
+}));
+
+/**
+ * @openapi
+ * /users/{id}/trusts:
+ *   get:
+ *     summary: Kullanıcının trust listesini getirir
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Trust list
+ */
+router.get('/:id/trusts', asyncHandler(async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
+  const list = await userService.listTrustedUsers(id, search);
+  return res.json(list);
+}));
+
+/**
+ * @openapi
+ * /users/{id}/trusters:
+ *   get:
+ *     summary: Kullanıcının truster listesini getirir
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Truster listesi
+ */
+router.get('/:id/trusters', asyncHandler(async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
+  const list = await userService.listTrusters(id, search);
+  return res.json(list);
+}));
+
+/**
+ * @openapi
+ * /users/{id}/trusts/{targetUserId}:
+ *   delete:
+ *     summary: Trust listesinden kullanıcı kaldır
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: targetUserId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       204:
+ *         description: Kaldırıldı
+ *       401:
+ *         description: Unauthorized
+ */
+router.delete('/:id/trusts/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = (req as any).user;
+  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
+  const id = String(req.params.id);
+  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
+  const targetUserId = String(req.params.targetUserId);
+  await userService.removeTrust(id, targetUserId);
+  return res.status(204).end();
+}));
+
+/**
+ * @openapi
+ * /users/{id}/trust:
+ *   post:
+ *     summary: Trust ekle
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ targetUserId ]
+ *             properties:
+ *               targetUserId: { type: string }
+ *     responses:
+ *       201:
+ *         description: Eklendi
+ *       401:
+ *         description: Unauthorized
+ */
+router.post('/:id/trust', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = (req as any).user;
+  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
+  const id = String(req.params.id);
+  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
+  const { targetUserId } = req.body || {};
+  if (!targetUserId || typeof targetUserId !== 'string') return res.status(400).json({ message: 'targetUserId is required' });
+  await userService.addTrust(id, targetUserId);
+  return res.status(201).end();
+}));
+
+/**
+ * @openapi
+ * /users/{id}/block:
+ *   post:
+ *     summary: Kullanıcıyı engelle
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ targetUserId ]
+ *             properties:
+ *               targetUserId: { type: string }
+ */
+router.post('/:id/block', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = (req as any).user;
+  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
+  const id = String(req.params.id);
+  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
+  const { targetUserId } = req.body || {};
+  if (!targetUserId || typeof targetUserId !== 'string') return res.status(400).json({ message: 'targetUserId is required' });
+  await userService.blockUser(id, targetUserId);
+  return res.status(201).end();
+}));
+
+/**
+ * @openapi
+ * /users/{id}/unblock:
+ *   post:
+ *     summary: Kullanıcı blok kaldır
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ targetUserId ]
+ *             properties:
+ *               targetUserId: { type: string }
+ *     responses:
+ *       204:
+ *         description: Blok kaldırıldı
+ */
+router.post('/:id/unblock', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = (req as any).user;
+  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
+  const id = String(req.params.id);
+  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
+  const { targetUserId } = req.body || {};
+  if (!targetUserId || typeof targetUserId !== 'string') return res.status(400).json({ message: 'targetUserId is required' });
+  const ok = await userService.unblockUser(id, targetUserId);
+  return res.status(ok ? 204 : 404).end();
+}));
+
+/**
+ * @openapi
+ * /users/{id}/mute:
+ *   post:
+ *     summary: Kullanıcıyı sustur
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ targetUserId ]
+ *             properties:
+ *               targetUserId: { type: string }
+ *     responses:
+ *       201:
+ *         description: Susturma ayarlandı
+ */
+router.post('/:id/mute', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = (req as any).user;
+  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
+  const id = String(req.params.id);
+  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
+  const { targetUserId } = req.body || {};
+  if (!targetUserId || typeof targetUserId !== 'string') return res.status(400).json({ message: 'targetUserId is required' });
+  await userService.muteUser(id, targetUserId);
+  return res.status(201).end();
+}));
+
+/**
+ * @openapi
+ * /users/{id}/unmute:
+ *   post:
+ *     summary: Susturma kaldır
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ targetUserId ]
+ *             properties:
+ *               targetUserId: { type: string }
+ *     responses:
+ *       204:
+ *         description: Susturma kaldırıldı
+ */
+router.post('/:id/unmute', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = (req as any).user;
+  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
+  const id = String(req.params.id);
+  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
+  const { targetUserId } = req.body || {};
+  if (!targetUserId || typeof targetUserId !== 'string') return res.status(400).json({ message: 'targetUserId is required' });
+  const ok = await userService.unmuteUser(id, targetUserId);
+  return res.status(ok ? 204 : 404).end();
+}));
+
+/**
+ * @openapi
+ * /users/{id}/collections/achievements:
+ *   get:
+ *     summary: Achievement badge koleksiyonu
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ */
+router.get('/:id/collections/achievements', asyncHandler(async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
+  const list = await userService.listAchievementBadges(id, search);
+  return res.json(list);
+}));
+
+/**
+ * @openapi
+ * /users/{id}/collections/bridges:
+ *   get:
+ *     summary: Bridge badge koleksiyonu
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ */
+router.get('/:id/collections/bridges', asyncHandler(async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
+  const list = await userService.listBridgeBadges(id, search);
+  return res.json(list);
+}));
+
+/**
+ * @openapi
+ * /collections/achievements/{badgeId}/claim:
+ *   post:
+ *     summary: Achievement badge claim et
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.post('/collections/achievements/:badgeId/claim', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = (req as any).user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+  const badgeId = String(req.params.badgeId);
+  const result = await userService.claimAchievementBadge(String(userId), badgeId);
+  return res.status(result.success ? 201 : 400).json(result);
+}));
+
+router.post('/collections/bridges/:badgeId/claim', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = (req as any).user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+  const badgeId = String(req.params.badgeId);
+  const result = await userService.claimBridgeBadge(String(userId), badgeId);
+  return res.status(result.success ? 201 : 400).json(result);
+}));
 // Multer configuration - memory storage (dosya buffer'da tutulacak)
 const upload = multer({
   storage: multer.memoryStorage(),

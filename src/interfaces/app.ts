@@ -17,6 +17,7 @@ import logger from '../infrastructure/logger/logger';
 import messagingRouter from './messaging/messaging.router';
 import catalogRouter from './catalog/catalog.router';
 import brandRouter from './brand/brand.router';
+import searchRouter from './search/search.router';
 import dashboardRouter from './dashboard/dashboard.router';
 import { getMetricsService } from '../infrastructure/metrics/metrics.service';
 import { metricsMiddleware } from '../infrastructure/metrics/metrics.middleware';
@@ -449,6 +450,7 @@ app.use('/expert', expertRouter);
 app.use('/inventory', inventoryRouter);
 app.use('/catalog', catalogRouter);
 app.use('/brands', brandRouter);
+app.use('/search', searchRouter);
 
 // Dashboard endpoint - en sona eklenmeli ki diğer route'lar çalışabilsin
 // Dashboard hem root'ta hem de /dashboard'da çalışabilir
