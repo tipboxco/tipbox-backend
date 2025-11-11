@@ -148,5 +148,17 @@ export class SupportRequestService {
       throw error;
     }
   }
+
+  async createSupportRequest(
+    senderId: string,
+    payload: { recipientUserId: string; type: string; message: string; amount: number }
+  ) {
+    await this.dmRequestRepo.create({
+      fromUserId: senderId,
+      toUserId: payload.recipientUserId,
+      status: DMRequestStatus.PENDING,
+      description: payload.message,
+    });
+  }
 }
 

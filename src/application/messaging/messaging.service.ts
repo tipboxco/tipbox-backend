@@ -6,14 +6,7 @@ import { DMThreadPrismaRepository } from '../../infrastructure/repositories/dm-t
 import { UserPrismaRepository } from '../../infrastructure/repositories/user-prisma.repository';
 import SocketManager from '../../infrastructure/realtime/socket-manager';
 import logger from '../../infrastructure/logger/logger';
-
-export interface SendMessageData {
-  senderId: number;
-  recipientId: number;
-  content: string;
-  messageType?: 'text' | 'image' | 'file';
-  threadId?: number;
-}
+import { PrismaClient } from '@prisma/client';
 
 export interface InboxMessageItem {
   id: string;
@@ -36,94 +29,68 @@ export class MessagingService {
   private dmMessageRepo = new DmMessagePrismaRepository();
   private dmThreadRepo = new DMThreadPrismaRepository();
   private userRepo = new UserPrismaRepository();
+  private prisma = new PrismaClient();
+  async createThreadIfNotExists(senderId: string, recipientId: string) {
+    const existing = await this.prisma.dMThread.findFirst({
+      where: {
+        OR: [
+          { userOneId: senderId, userTwoId: recipientId },
+          { userOneId: recipientId, userTwoId: senderId },
+        ],
+      },
+    });
 
-  constructor() {}
+    if (existing) return existing;
 
-  /**
-   * Yeni mesaj gönder
-   */
-  async sendMessage(data: SendMessageData): Promise<DMMessage> {
-    try {
-      const { senderId, recipientId, content, messageType = 'text', threadId } = data;
+    return await this.prisma.dMThread.create({
+      data: {
+        userOneId: senderId,
+        userTwoId: recipientId,
+        isActive: true,
+        startedAt: new Date(),
+      },
+    } as any);
+  }
 
-      // Gönderici ve alıcıyı kontrol et
-      const sender = await this.userRepo.findById(senderId);
-      const recipient = await this.userRepo.findById(recipientId);
+  async sendDirectMessage(senderId: string, recipientId: string, message: string) {
+    const sender = await this.userRepo.findById(String(senderId));
+    const recipient = await this.userRepo.findById(String(recipientId));
+    if (!sender || !recipient) throw new Error('User not found');
 
-      if (!sender) {
-        throw new Error('Sender not found');
-      }
-      if (!recipient) {
-        throw new Error('Recipient not found');
-      }
+    const thread = await this.createThreadIfNotExists(senderId, recipientId);
 
-      // Thread'i bul veya oluştur
-      let thread: DMThread;
-      if (threadId) {
-        const foundThread = await this.dmThreadRepo.findById(threadId);
-        if (!foundThread) {
-          throw new Error('Thread not found');
-        }
-        thread = foundThread;
-      } else {
-        // Yeni thread oluştur
-        thread = await this.dmThreadRepo.create({
-          userOneId: senderId,
-          userTwoId: recipientId,
-          isActive: true,
-          startedAt: new Date(),
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        });
-      }
-
-      // Mesajı oluştur
-      const message = await this.dmMessageRepo.create({
+    await this.prisma.dMMessage.create({
+      data: {
         threadId: thread.id,
-        senderId,
-        message: content,
+        senderId: String(senderId),
+        message,
         isRead: false,
+        messageType: 'TEXT',
         sentAt: new Date(),
-        createdAt: new Date(),
-      });
+      } as any,
+    });
 
-      // Thread'i güncelle
-      await this.dmThreadRepo.update(thread.id, {
-        updatedAt: new Date(),
-      });
+    await this.prisma.dMThread.update({
+      where: { id: thread.id },
+      data: { updatedAt: new Date() },
+    });
+  }
 
-      // Alıcıya anlık mesaj gönder
-      SocketManager.getInstance().getSocketHandler().sendMessageToUser(
-        recipientId.toString(),
-        'new_message',
-        {
-          messageId: message.id,
-          threadId: thread.id,
-          senderId: sender.id,
-          senderName: sender.name || sender.email,
-          content: message.message,
-          timestamp: message.sentAt.toISOString(),
-        }
-      );
+  async sendTips(senderId: string, recipientId: string, amount: number, tipsMessage?: string) {
+    await this.prisma.tipsTokenTransfer.create({
+      data: {
+        fromUserId: senderId,
+        toUserId: recipientId,
+        amount,
+        reason: tipsMessage || null,
+      } as any,
+    });
 
-      // Göndericiye de mesaj gönderilme onayı
-      SocketManager.getInstance().getSocketHandler().sendMessageToUser(
-        senderId.toString(),
-        'message_sent',
-        {
-          messageId: message.id,
-          threadId: thread.id,
-          recipientId: recipient.id,
-          timestamp: message.sentAt.toISOString(),
-        }
-      );
+    const body = tipsMessage
+      ? `Sent ${amount} TIPS: ${tipsMessage}`
+      : `Sent ${amount} TIPS`;
 
-      logger.info(`Message sent from user ${senderId} to user ${recipientId}`);
-      return message;
-    } catch (error) {
-      logger.error(`Failed to send message from user ${data.senderId} to user ${data.recipientId}:`, error);
-      throw error;
-    }
+    await this.sendDirectMessage(senderId, recipientId, body);
   }
 
   /**
@@ -227,7 +194,7 @@ export class MessagingService {
 
       return threads.map((thread) => {
         const isUserOne = thread.userOneId === userIdStr;
-        const counterpart = isUserOne ? thread.userTwo : thread.userOne;
+        const counterpart = (isUserOne ? thread.userTwo : thread.userOne) as any;
         const unreadCount = isUserOne ? thread.unreadCountUserOne : thread.unreadCountUserTwo;
         const lastMessage = thread.messages?.[0];
         const timestamp = (lastMessage?.sentAt ?? thread.updatedAt).toISOString();

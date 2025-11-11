@@ -109,6 +109,48 @@ router.get(
 
 /**
  * @openapi
+ * /messages:
+ *   post:
+ *     summary: Direkt mesaj gönder
+ *     tags: [Inbox]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ recipientUserId, message ]
+ *             properties:
+ *               recipientUserId: { type: string }
+ *               message: { type: string }
+ *     responses:
+ *       201:
+ *         description: Mesaj gönderildi
+ */
+router.post(
+  '/',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = (req as any).user;
+    const senderId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!senderId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+    const { recipientUserId, message } = req.body || {};
+    if (!recipientUserId || typeof recipientUserId !== 'string') {
+      return res.status(400).json({ message: 'recipientUserId is required' });
+    }
+    if (!message || typeof message !== 'string' || message.trim() === '') {
+      return res.status(400).json({ message: 'message is required' });
+    }
+    await messagingService.sendDirectMessage(String(senderId), recipientUserId, message);
+    return res.status(201).end();
+  }),
+);
+
+/**
+ * @openapi
  * /messages/support-requests:
  *   get:
  *     summary: 1-On-1 Support Request - Kullanıcının birebir destek sohbetlerini getirir
@@ -213,6 +255,114 @@ router.get(
     }
 
     res.json(supportRequests);
+  }),
+);
+
+/**
+ * @openapi
+ * /messages/support-requests:
+ *   post:
+ *     summary: 1-on-1 destek talebi oluştur
+ *     tags: [Inbox]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ recipientUserId, message, amount ]
+ *             properties:
+ *               recipientUserId: { type: string }
+ *               type: { type: string }
+ *               message: { type: string }
+ *               amount: { type: number }
+ *     responses:
+ *       201:
+ *         description: Talep oluşturuldu
+ */
+router.post(
+  '/support-requests',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = (req as any).user;
+    const senderId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!senderId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { recipientUserId, type, message, amount } = req.body || {};
+    if (!recipientUserId || typeof recipientUserId !== 'string') {
+      return res.status(400).json({ message: 'recipientUserId is required' });
+    }
+    if (!message || typeof message !== 'string' || message.trim() === '') {
+      return res.status(400).json({ message: 'message is required' });
+    }
+    const numericAmount = Number(amount);
+    if (Number.isNaN(numericAmount) || numericAmount < 0) {
+      return res.status(400).json({ message: 'amount must be a non-negative number' });
+    }
+
+    await supportRequestService.createSupportRequest(String(senderId), {
+      recipientUserId,
+      type: typeof type === 'string' ? type : 'GENERAL',
+      message,
+      amount: numericAmount,
+    });
+
+    return res.status(201).end();
+  }),
+);
+
+/**
+ * @openapi
+ * /messages/tips:
+ *   post:
+ *     summary: Kullanıcıya TIPS gönder
+ *     tags: [Inbox]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ recipientUserId, amount ]
+ *             properties:
+ *               recipientUserId: { type: string }
+ *               message: { type: string }
+ *               amount: { type: number }
+ *     responses:
+ *       201:
+ *         description: TIPS gönderildi
+ */
+router.post(
+  '/tips',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = (req as any).user;
+    const senderId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!senderId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { recipientUserId, amount, message } = req.body || {};
+    if (!recipientUserId || typeof recipientUserId !== 'string') {
+      return res.status(400).json({ message: 'recipientUserId is required' });
+    }
+    const numericAmount = Number(amount);
+    if (Number.isNaN(numericAmount) || numericAmount <= 0) {
+      return res.status(400).json({ message: 'amount must be a positive number' });
+    }
+
+    await messagingService.sendTips(
+      String(senderId),
+      recipientUserId,
+      numericAmount,
+      typeof message === 'string' ? message : undefined,
+    );
+
+    return res.status(201).end();
   }),
 );
 
