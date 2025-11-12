@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Style Socket Test</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            background: #e5ddd5;
+            background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect fill="%23f0f0f0" width="50" height="50"/><rect fill="%23f0f0f0" x="50" y="50" width="50" height="50"/></svg>');
+        }
+
+        .setup-panel {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #075e54;
+            color: white;
+            padding: 15px 20px;
+            z-index: 1000;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .setup-panel input {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+
+        .setup-panel input[type="text"] {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .setup-panel button {
+            padding: 8px 20px;
+            border: none;
+            border-radius: 20px;
+            background: #25d366;
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .setup-panel button:hover {
+            background: #20ba5a;
+        }
+
+        .setup-panel button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #dc3545;
+            display: inline-block;
+            margin-right: 5px;
+        }
+
+        .status-indicator.connected {
+            background: #25d366;
+        }
+
+        .chat-container {
+            display: flex;
+            height: calc(100vh - 60px);
+            margin-top: 60px;
+            gap: 2px;
+        }
+
+        .chat-window {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: white;
+            border-radius: 0;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .chat-header {
+            background: #075e54;
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .chat-header-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #25d366;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .user-info h3 {
+            font-size: 16px;
+            margin-bottom: 2px;
+        }
+
+        .user-info .status {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+
+        .typing-indicator {
+            font-size: 12px;
+            font-style: italic;
+            opacity: 0.7;
+            padding: 5px 20px;
+            background: #f0f0f0;
+        }
+
+        .messages-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #e5ddd5;
+            background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect fill="%23f0f0f0" width="50" height="50"/><rect fill="%23f0f0f0" x="50" y="50" width="50" height="50"/></svg>');
+        }
+
+        .message {
+            display: flex;
+            margin-bottom: 8px;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.sent {
+            justify-content: flex-end;
+        }
+
+        .message.received {
+            justify-content: flex-start;
+        }
+
+        .message-bubble {
+            max-width: 65%;
+            padding: 8px 12px;
+            border-radius: 7.5px;
+            word-wrap: break-word;
+            position: relative;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        .message.sent .message-bubble {
+            background: #dcf8c6;
+            border-bottom-right-radius: 2px;
+        }
+
+        .message.received .message-bubble {
+            background: white;
+            border-bottom-left-radius: 2px;
+        }
+
+        .message-text {
+            font-size: 14px;
+            line-height: 1.4;
+            color: #303030;
+            margin-bottom: 4px;
+        }
+
+        .message-time {
+            font-size: 11px;
+            color: #667781;
+            text-align: right;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 4px;
+        }
+
+        .message-status {
+            font-size: 12px;
+        }
+
+        .message-status.sent {
+            color: #667781;
+        }
+
+        .message-status.delivered {
+            color: #667781;
+        }
+
+        .message-status.read {
+            color: #4fc3f7;
+        }
+
+        .input-container {
+            background: #f0f0f0;
+            padding: 10px 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .input-container input {
+            flex: 1;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 21px;
+            font-size: 15px;
+            outline: none;
+            background: white;
+        }
+
+        .input-container button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 50%;
+            background: #25d366;
+            color: white;
+            cursor: pointer;
+            font-size: 20px;
+            width: 42px;
+            height: 42px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .input-container button:hover {
+            background: #20ba5a;
+        }
+
+        .input-container button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .empty-state {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #667781;
+            font-size: 14px;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .system-message {
+            text-align: center;
+            color: #667781;
+            font-size: 12px;
+            padding: 5px 0;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <!-- Setup Panel -->
+    <div class="setup-panel">
+        <div>
+            <span class="status-indicator" id="status1"></span>
+            <strong>Kullanıcı 1:</strong>
+        </div>
+        <input type="text" id="token1" placeholder="JWT Token 1">
+        <input type="text" id="userId1" placeholder="User ID 1" style="width: 150px;">
+        <button onclick="connectUser1()" id="connectBtn1">Bağlan</button>
+        <button onclick="disconnectUser1()" id="disconnectBtn1" disabled>Bağlantıyı Kes</button>
+        
+        <div style="margin-left: 20px;">
+            <span class="status-indicator" id="status2"></span>
+            <strong>Kullanıcı 2:</strong>
+        </div>
+        <input type="text" id="token2" placeholder="JWT Token 2">
+        <input type="text" id="userId2" placeholder="User ID 2" style="width: 150px;">
+        <button onclick="connectUser2()" id="connectBtn2">Bağlan</button>
+        <button onclick="disconnectUser2()" id="disconnectBtn2" disabled>Bağlantıyı Kes</button>
+        
+        <input type="text" id="threadId" placeholder="Thread ID" style="width: 250px; margin-left: 20px;">
+        <input type="text" id="serverUrl" value="http://localhost:3000" style="width: 180px;">
+    </div>
+
+    <!-- Chat Container -->
+    <div class="chat-container">
+        <!-- User 1 Chat Window -->
+        <div class="chat-window">
+            <div class="chat-header">
+                <div class="chat-header-info">
+                    <div class="avatar" id="avatar1">U1</div>
+                    <div class="user-info">
+                        <h3 id="userName1">Kullanıcı 1</h3>
+                        <div class="status" id="userStatus1">Bağlantı yok</div>
+                    </div>
+                </div>
+            </div>
+            <div class="typing-indicator" id="typing1" style="display: none;">Kullanıcı 2 yazıyor...</div>
+            <div class="messages-container" id="messages1">
+                <div class="empty-state">Bağlanın ve thread'e katılın</div>
+            </div>
+            <div class="input-container">
+                <input type="text" id="input1" placeholder="Mesaj yazın..." onkeypress="handleKeyPress(event, 1)">
+                <button onclick="sendMessage(1)" id="sendBtn1" disabled>➤</button>
+            </div>
+        </div>
+
+        <!-- User 2 Chat Window -->
+        <div class="chat-window">
+            <div class="chat-header">
+                <div class="chat-header-info">
+                    <div class="avatar" id="avatar2">U2</div>
+                    <div class="user-info">
+                        <h3 id="userName2">Kullanıcı 2</h3>
+                        <div class="status" id="userStatus2">Bağlantı yok</div>
+                    </div>
+                </div>
+            </div>
+            <div class="typing-indicator" id="typing2" style="display: none;">Kullanıcı 1 yazıyor...</div>
+            <div class="messages-container" id="messages2">
+                <div class="empty-state">Bağlanın ve thread'e katılın</div>
+            </div>
+            <div class="input-container">
+                <input type="text" id="input2" placeholder="Mesaj yazın..." onkeypress="handleKeyPress(event, 2)">
+                <button onclick="sendMessage(2)" id="sendBtn2" disabled>➤</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let socket1 = null;
+        let socket2 = null;
+        let currentThreadId = null;
+        let userId1 = null;
+        let userId2 = null;
+        const serverUrl = 'http://localhost:3000';
+
+        function updateStatus(userNum, connected) {
+            const statusEl = document.getElementById(`status${userNum}`);
+            const connectBtn = document.getElementById(`connectBtn${userNum}`);
+            const disconnectBtn = document.getElementById(`disconnectBtn${userNum}`);
+            const sendBtn = document.getElementById(`sendBtn${userNum}`);
+            const statusText = document.getElementById(`userStatus${userNum}`);
+            
+            if (connected) {
+                statusEl.classList.add('connected');
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+                sendBtn.disabled = false;
+                statusText.textContent = 'Çevrimiçi';
+            } else {
+                statusEl.classList.remove('connected');
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+                sendBtn.disabled = true;
+                statusText.textContent = 'Bağlantı yok';
+            }
+        }
+
+        function connectUser1() {
+            const token = document.getElementById('token1').value.trim();
+            const userId = document.getElementById('userId1').value.trim();
+            const url = document.getElementById('serverUrl').value.trim() || serverUrl;
+            
+            if (!token) {
+                alert('Kullanıcı 1 için JWT token gerekli!');
+                return;
+            }
+            
+            if (socket1) {
+                socket1.disconnect();
+            }
+            
+            userId1 = userId;
+            document.getElementById('userName1').textContent = userId ? `User ${userId.substring(0, 8)}` : 'Kullanıcı 1';
+            document.getElementById('avatar1').textContent = userId ? userId.substring(0, 2).toUpperCase() : 'U1';
+            
+            socket1 = io(url, {
+                auth: { token },
+                transports: ['websocket', 'polling']
+            });
+            
+            setupSocketListeners(socket1, 1);
+        }
+
+        function connectUser2() {
+            const token = document.getElementById('token2').value.trim();
+            const userId = document.getElementById('userId2').value.trim();
+            const url = document.getElementById('serverUrl').value.trim() || serverUrl;
+            
+            if (!token) {
+                alert('Kullanıcı 2 için JWT token gerekli!');
+                return;
+            }
+            
+            if (socket2) {
+                socket2.disconnect();
+            }
+            
+            userId2 = userId;
+            document.getElementById('userName2').textContent = userId ? `User ${userId.substring(0, 8)}` : 'Kullanıcı 2';
+            document.getElementById('avatar2').textContent = userId ? userId.substring(0, 2).toUpperCase() : 'U2';
+            
+            socket2 = io(url, {
+                auth: { token },
+                transports: ['websocket', 'polling']
+            });
+            
+            setupSocketListeners(socket2, 2);
+        }
+
+        function setupSocketListeners(socket, userNum) {
+            socket.on('connect', () => {
+                updateStatus(userNum, true);
+                const threadId = document.getElementById('threadId').value.trim();
+                if (threadId) {
+                    socket.emit('join_thread', threadId);
+                    currentThreadId = threadId;
+                }
+            });
+            
+            socket.on('disconnect', () => {
+                updateStatus(userNum, false);
+            });
+            
+            socket.on('connect_error', (error) => {
+                alert(`Kullanıcı ${userNum} bağlantı hatası: ${error.message}`);
+                updateStatus(userNum, false);
+            });
+            
+            socket.on('thread_joined', (data) => {
+                currentThreadId = data.threadId;
+                addSystemMessage(userNum, `Thread'e katıldınız`);
+            });
+            
+            socket.on('new_message', (data) => {
+                const isSent = data.senderId === (userNum === 1 ? userId1 : userId2);
+                addMessage(userNum, data.message, isSent, data.timestamp, data.messageType);
+            });
+            
+            socket.on('message_read', (data) => {
+                updateMessageStatus(userNum, data.messageId, 'read');
+            });
+            
+            socket.on('user_typing', (data) => {
+                const otherUserNum = userNum === 1 ? 2 : 1;
+                const typingEl = document.getElementById(`typing${otherUserNum}`);
+                if (data.isTyping) {
+                    typingEl.style.display = 'block';
+                } else {
+                    typingEl.style.display = 'none';
+                }
+            });
+        }
+
+        function disconnectUser1() {
+            if (socket1) {
+                socket1.disconnect();
+                socket1 = null;
+                updateStatus(1, false);
+            }
+        }
+
+        function disconnectUser2() {
+            if (socket2) {
+                socket2.disconnect();
+                socket2 = null;
+                updateStatus(2, false);
+            }
+        }
+
+        function addMessage(userNum, text, isSent, timestamp, messageType = 'TEXT') {
+            const messagesContainer = document.getElementById(`messages${userNum}`);
+            
+            // Empty state'i kaldır
+            const emptyState = messagesContainer.querySelector('.empty-state');
+            if (emptyState) {
+                emptyState.remove();
+            }
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isSent ? 'sent' : 'received'}`;
+            messageDiv.setAttribute('data-message-id', Date.now());
+            
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble';
+            
+            const textDiv = document.createElement('div');
+            textDiv.className = 'message-text';
+            if (messageType === 'TIPS') {
+                textDiv.innerHTML = `💰 <strong>TIPS:</strong> ${text}`;
+            } else {
+                textDiv.textContent = text;
+            }
+            
+            const timeDiv = document.createElement('div');
+            timeDiv.className = 'message-time';
+            const time = timestamp ? new Date(timestamp).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+            timeDiv.innerHTML = `<span>${time}</span> <span class="message-status sent">✓</span>`;
+            
+            bubble.appendChild(textDiv);
+            bubble.appendChild(timeDiv);
+            messageDiv.appendChild(bubble);
+            
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function addSystemMessage(userNum, text) {
+            const messagesContainer = document.getElementById(`messages${userNum}`);
+            const emptyState = messagesContainer.querySelector('.empty-state');
+            if (emptyState) {
+                emptyState.remove();
+            }
+            
+            const systemDiv = document.createElement('div');
+            systemDiv.className = 'system-message';
+            systemDiv.textContent = text;
+            messagesContainer.appendChild(systemDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function updateMessageStatus(userNum, messageId, status) {
+            const messagesContainer = document.getElementById(`messages${userNum}`);
+            const message = messagesContainer.querySelector(`[data-message-id="${messageId}"]`);
+            if (message) {
+                const statusEl = message.querySelector('.message-status');
+                if (status === 'read') {
+                    statusEl.innerHTML = '✓✓';
+                    statusEl.classList.add('read');
+                }
+            }
+        }
+
+        async function sendMessage(userNum) {
+            const input = document.getElementById(`input${userNum}`);
+            const message = input.value.trim();
+            if (!message) return;
+            
+            const socket = userNum === 1 ? socket1 : socket2;
+            const token = userNum === 1 ? document.getElementById('token1').value.trim() : document.getElementById('token2').value.trim();
+            const recipientId = userNum === 1 ? userId2 : userId1;
+            const url = document.getElementById('serverUrl').value.trim() || serverUrl;
+            
+            if (!socket || !socket.connected) {
+                alert('Önce bağlantı kurun!');
+                return;
+            }
+            
+            if (!recipientId) {
+                alert('Alıcı kullanıcı ID gerekli!');
+                return;
+            }
+            
+            // Mesajı hemen göster (optimistic update)
+            addMessage(userNum, message, true, new Date().toISOString());
+            input.value = '';
+            
+            try {
+                const response = await fetch(`${url}/messages`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        recipientId: recipientId,
+                        message: message
+                    })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    alert(`Mesaj gönderme hatası: ${error.error?.message || 'Bilinmeyen hata'}`);
+                }
+            } catch (error) {
+                alert(`Hata: ${error.message}`);
+            }
+        }
+
+        function handleKeyPress(event, userNum) {
+            if (event.key === 'Enter') {
+                sendMessage(userNum);
+            }
+        }
+
+        // Thread ID değiştiğinde otomatik join
+        document.getElementById('threadId').addEventListener('change', function() {
+            const threadId = this.value.trim();
+            if (threadId && socket1 && socket1.connected) {
+                socket1.emit('join_thread', threadId);
+            }
+            if (threadId && socket2 && socket2.connected) {
+                socket2.emit('join_thread', threadId);
+            }
+            currentThreadId = threadId;
+        });
+
+        // Typing indicator için input event'leri
+        let typingTimeout1, typingTimeout2;
+        
+        document.getElementById('input1').addEventListener('input', function() {
+            if (socket1 && socket1.connected && currentThreadId) {
+                socket1.emit('typing_start', { threadId: currentThreadId });
+                clearTimeout(typingTimeout1);
+                typingTimeout1 = setTimeout(() => {
+                    if (socket1 && socket1.connected) {
+                        socket1.emit('typing_stop', { threadId: currentThreadId });
+                    }
+                }, 3000);
+            }
+        });
+
+        document.getElementById('input2').addEventListener('input', function() {
+            if (socket2 && socket2.connected && currentThreadId) {
+                socket2.emit('typing_start', { threadId: currentThreadId });
+                clearTimeout(typingTimeout2);
+                typingTimeout2 = setTimeout(() => {
+                    if (socket2 && socket2.connected) {
+                        socket2.emit('typing_stop', { threadId: currentThreadId });
+                    }
+                }, 3000);
+            }
+        });
+    </script>
+</body>
+</html>

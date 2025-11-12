@@ -1,11 +1,14 @@
 import { DMRequestStatus } from './dm-request-status.enum';
+import { SupportType } from './support-type.enum';
 
 export class DMRequest {
   constructor(
     public readonly id: string,
-    public readonly fromUserId: number,
-    public readonly toUserId: number,
+    public readonly fromUserId: string,
+    public readonly toUserId: string,
     public readonly status: DMRequestStatus,
+    public readonly type: SupportType,
+    public readonly amount: number,
     public readonly description: string | null,
     public readonly sentAt: Date,
     public readonly respondedAt: Date | null,
@@ -14,15 +17,15 @@ export class DMRequest {
   ) {}
 
   // Essential business methods only
-  belongsToSender(userId: number): boolean {
+  belongsToSender(userId: string): boolean {
     return this.fromUserId === userId;
   }
 
-  belongsToReceiver(userId: number): boolean {
+  belongsToReceiver(userId: string): boolean {
     return this.toUserId === userId;
   }
 
-  involveUser(userId: number): boolean {
+  involveUser(userId: string): boolean {
     return this.belongsToSender(userId) || this.belongsToReceiver(userId);
   }
 

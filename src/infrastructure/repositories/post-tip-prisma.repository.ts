@@ -5,7 +5,7 @@ import { TipCategory } from '../../domain/content/tip-category.enum';
 export class PostTipPrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<PostTip | null> {
+  async findById(id: string): Promise<PostTip | null> {
     const tip = await this.prisma.postTip.findUnique({ 
       where: { id },
       include: {
@@ -15,7 +15,7 @@ export class PostTipPrismaRepository {
     return tip ? this.toDomain(tip) : null;
   }
 
-  async findByPostId(postId: number): Promise<PostTip | null> {
+  async findByPostId(postId: string): Promise<PostTip | null> {
     const tip = await this.prisma.postTip.findUnique({
       where: { postId },
       include: {
@@ -59,7 +59,7 @@ export class PostTipPrismaRepository {
   }
 
   async create(
-    postId: number,
+    postId: string,
     tipCategory: TipCategory,
     isVerified: boolean = false
   ): Promise<PostTip> {
@@ -76,7 +76,7 @@ export class PostTipPrismaRepository {
     return this.toDomain(tip);
   }
 
-  async update(id: number, data: { 
+  async update(id: string, data: { 
     tipCategory?: TipCategory;
     isVerified?: boolean;
   }): Promise<PostTip | null> {
@@ -90,7 +90,7 @@ export class PostTipPrismaRepository {
     return tip ? this.toDomain(tip) : null;
   }
 
-  async toggleVerification(id: number): Promise<PostTip | null> {
+  async toggleVerification(id: string): Promise<PostTip | null> {
     const tip = await this.prisma.postTip.findUnique({ where: { id } });
     if (!tip) return null;
 
@@ -104,7 +104,7 @@ export class PostTipPrismaRepository {
     return updated ? this.toDomain(updated) : null;
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.postTip.delete({ where: { id } });
       return true;
@@ -113,7 +113,7 @@ export class PostTipPrismaRepository {
     }
   }
 
-  async deleteByPostId(postId: number): Promise<boolean> {
+  async deleteByPostId(postId: string): Promise<boolean> {
     try {
       await this.prisma.postTip.delete({ where: { postId } });
       return true;

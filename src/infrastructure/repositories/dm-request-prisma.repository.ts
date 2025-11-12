@@ -1,6 +1,10 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { DMRequest } from '../../domain/messaging/dm-request.entity';
 import { DMRequestStatus } from '../../domain/messaging/dm-request-status.enum';
+import { SupportType as DomainSupportType } from '../../domain/messaging/support-type.enum';
+
+// SupportType will be available from Prisma after TypeScript server restart
+type PrismaSupportType = 'GENERAL' | 'TECHNICAL' | 'PRODUCT';
 
 const DM_REQUEST_INCLUDE = {
   fromUser: {
@@ -96,18 +100,37 @@ export class DMRequestPrismaRepository {
     fromUserId: string;
     toUserId: string;
     status?: DMRequestStatus;
+    type?: PrismaSupportType | DomainSupportType | string;
+    amount?: number;
     description?: string | null;
   }): Promise<DMRequest> {
+    // Map string or domain enum to Prisma SupportType enum
+    let supportType: PrismaSupportType = 'GENERAL';
+    if (data.type) {
+      if (typeof data.type === 'string') {
+        const upperType = data.type.toUpperCase();
+        // Validate and map to Prisma enum
+        if (upperType === 'GENERAL' || upperType === 'TECHNICAL' || upperType === 'PRODUCT') {
+          supportType = upperType as PrismaSupportType;
+        }
+      } else {
+        // Domain enum value, convert to string
+        supportType = data.type as PrismaSupportType;
+      }
+    }
+
     const request = await this.prisma.dMRequest.create({
       data: {
         fromUserId: data.fromUserId,
         toUserId: data.toUserId,
         status: data.status || DMRequestStatus.PENDING,
+        type: supportType as any, // TypeScript will recognize after server restart
+        amount: data.amount ?? 0,
         description: data.description || null,
         sentAt: new Date(),
         createdAt: new Date(),
         updatedAt: new Date(),
-      },
+      } as any, // TypeScript will recognize after server restart
       include: DM_REQUEST_INCLUDE,
     });
     return this.toDomain(request);
@@ -133,12 +156,28 @@ export class DMRequestPrismaRepository {
     }
   }
 
-  private toDomain(prismaRequest: any): DMRequest {
+  private toDomain(prismaRequest: DMRequestWithRelations): DMRequest {
+    // Map Prisma SupportType to domain SupportType
+    // Type assertion needed until TypeScript picks up the updated Prisma types
+    const prismaRequestWithType = prismaRequest as DMRequestWithRelations & { type: PrismaSupportType; amount: number | Prisma.Decimal };
+    const prismaType = prismaRequestWithType.type;
+    const supportType: DomainSupportType = 
+      prismaType === 'GENERAL' || prismaType === 'TECHNICAL' || prismaType === 'PRODUCT'
+        ? (prismaType as DomainSupportType)
+        : DomainSupportType.GENERAL;
+
+    // Convert amount (may be Decimal) to number
+    const amount = typeof prismaRequestWithType.amount === 'number' 
+      ? prismaRequestWithType.amount 
+      : Number(prismaRequestWithType.amount) || 0;
+
     return new DMRequest(
       prismaRequest.id,
-      Number(prismaRequest.fromUserId),
-      Number(prismaRequest.toUserId),
+      prismaRequest.fromUserId,
+      prismaRequest.toUserId,
       prismaRequest.status as DMRequestStatus,
+      supportType,
+      amount,
       prismaRequest.description,
       prismaRequest.sentAt,
       prismaRequest.respondedAt,

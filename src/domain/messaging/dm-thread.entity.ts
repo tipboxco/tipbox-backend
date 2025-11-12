@@ -1,8 +1,8 @@
 export class DMThread {
   constructor(
     public readonly id: string,
-    public readonly userOneId: number,
-    public readonly userTwoId: number,
+    public readonly userOneId: string,
+    public readonly userTwoId: string,
     public readonly isActive: boolean,
     public readonly startedAt: Date,
     public readonly createdAt: Date,
@@ -10,11 +10,11 @@ export class DMThread {
   ) {}
 
   // Essential business methods only
-  belongsToUser(userId: number): boolean {
+  belongsToUser(userId: string): boolean {
     return this.userOneId === userId || this.userTwoId === userId;
   }
 
-  getOtherUserId(currentUserId: number): number {
+  getOtherUserId(currentUserId: string): string {
     return this.userOneId === currentUserId ? this.userTwoId : this.userOneId;
   }
 
@@ -22,7 +22,7 @@ export class DMThread {
     return this.isActive;
   }
 
-  isThreadBetweenUsers(userId1: number, userId2: number): boolean {
+  isThreadBetweenUsers(userId1: string, userId2: string): boolean {
     return (this.userOneId === userId1 && this.userTwoId === userId2) ||
            (this.userOneId === userId2 && this.userTwoId === userId1);
   }

@@ -1221,6 +1221,8 @@ model DMRequest {
   fromUserId  String          @map("from_user_id") @db.Uuid
   toUserId    String          @map("to_user_id") @db.Uuid
   status      DMRequestStatus @default(PENDING)
+  type        SupportType     @default(GENERAL)
+  amount      Float           @default(0)
   description String?         @db.Text
   sentAt      DateTime        @default(now()) @map("sent_at")
   respondedAt DateTime?       @map("responded_at")
@@ -1484,6 +1486,8 @@ enum ContentPostType {
   TIPS
   COMPARE
   QUESTION
+  EXPERIENCE
+  UPDATE
 
   @@map("content_post_type")
 }
@@ -1639,6 +1643,14 @@ enum DMRequestStatus {
   DECLINED
 
   @@map("dm_request_status")
+}
+
+enum SupportType {
+  GENERAL
+  TECHNICAL
+  PRODUCT
+
+  @@map("support_type")
 }
 
 enum FeedSource {

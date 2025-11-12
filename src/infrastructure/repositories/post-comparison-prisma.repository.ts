@@ -4,7 +4,7 @@ import { PostComparison } from '../../domain/product/post-comparison.entity';
 export class PostComparisonPrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<PostComparison | null> {
+  async findById(id: string): Promise<PostComparison | null> {
     const comparison = await this.prisma.postComparison.findUnique({ 
       where: { id },
       include: {
@@ -17,7 +17,7 @@ export class PostComparisonPrismaRepository {
     return comparison ? this.toDomain(comparison) : null;
   }
 
-  async findByPostId(postId: number): Promise<PostComparison[]> {
+  async findByPostId(postId: string): Promise<PostComparison[]> {
     const comparisons = await this.prisma.postComparison.findMany({
       where: { postId },
       include: {
@@ -31,7 +31,7 @@ export class PostComparisonPrismaRepository {
     return comparisons.map(comparison => this.toDomain(comparison));
   }
 
-  async findByProductId(productId: number): Promise<PostComparison[]> {
+  async findByProductId(productId: string): Promise<PostComparison[]> {
     const comparisons = await this.prisma.postComparison.findMany({
       where: {
         OR: [
@@ -50,7 +50,7 @@ export class PostComparisonPrismaRepository {
     return comparisons.map(comparison => this.toDomain(comparison));
   }
 
-  async findByProducts(productAId: number, productBId: number): Promise<PostComparison[]> {
+  async findByProducts(productAId: string, productBId: string): Promise<PostComparison[]> {
     const comparisons = await this.prisma.postComparison.findMany({
       where: {
         OR: [
@@ -70,10 +70,10 @@ export class PostComparisonPrismaRepository {
   }
 
   async create(
-    postId: number, 
-    productAId: number, 
-    productBId: number, 
-    winnerProductId?: number
+    postId: string, 
+    productAId: string, 
+    productBId: string, 
+    winnerProductId?: string
   ): Promise<PostComparison> {
     const comparison = await this.prisma.postComparison.create({
       data: {
@@ -92,7 +92,7 @@ export class PostComparisonPrismaRepository {
     return this.toDomain(comparison);
   }
 
-  async update(id: number, data: { 
+  async update(id: string, data: { 
 
   }): Promise<PostComparison | null> {
     const comparison = await this.prisma.postComparison.update({
@@ -108,7 +108,7 @@ export class PostComparisonPrismaRepository {
     return comparison ? this.toDomain(comparison) : null;
   }
 
-  async setWinner(id: number, winnerProductId: number): Promise<PostComparison | null> {
+  async setWinner(id: string, winnerProductId: string): Promise<PostComparison | null> {
     const comparison = await this.prisma.postComparison.update({
       where: { id },
       data: { comparisonSummary: "Updated" },
@@ -122,7 +122,7 @@ export class PostComparisonPrismaRepository {
     return comparison ? this.toDomain(comparison) : null;
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.postComparison.delete({ where: { id } });
       return true;
