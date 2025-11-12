@@ -43,15 +43,15 @@ type ThreadWithRelations = Prisma.DMThreadGetPayload<{
 export class DMThreadPrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<DMThread | null> {
+  async findById(id: string): Promise<DMThread | null> {
     const thread = await this.prisma.dMThread.findUnique({
-      where: { id: String(id) },
+      where: { id },
       include: THREAD_INCLUDE,
     });
     return thread ? this.toDomain(thread) : null;
   }
 
-  async findByUserId(userId: number): Promise<DMThread[]> {
+  async findByUserId(userId: string): Promise<DMThread[]> {
     const threads = await this.prisma.dMThread.findMany({
       where: {
         OR: [
@@ -177,7 +177,7 @@ export class DMThreadPrismaRepository {
     return this.toDomain(thread);
   }
 
-  async update(id: number, data: Partial<DMThread>): Promise<DMThread | null> {
+  async update(id: string, data: Partial<DMThread>): Promise<DMThread | null> {
     try {
       const updateData: any = {
         updatedAt: new Date(),
@@ -198,9 +198,9 @@ export class DMThreadPrismaRepository {
     }
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
-      await this.prisma.dMThread.delete({ where: { id: String(id) } });
+      await this.prisma.dMThread.delete({ where: { id } });
       return true;
     } catch {
       return false;

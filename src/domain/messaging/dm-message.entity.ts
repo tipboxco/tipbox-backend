@@ -1,8 +1,8 @@
 export class DMMessage {
   constructor(
     public readonly id: string,
-    public readonly threadId: number,
-    public readonly senderId: number,
+    public readonly threadId: string,
+    public readonly senderId: string,
     public readonly message: string,
     public readonly sentAt: Date,
     public readonly isRead: boolean,
@@ -11,11 +11,11 @@ export class DMMessage {
   ) {}
 
   // Essential business methods only
-  belongsToThread(threadId: number): boolean {
+  belongsToThread(threadId: string): boolean {
     return this.threadId === threadId;
   }
 
-  belongsToSender(senderId: number): boolean {
+  belongsToSender(senderId: string): boolean {
     return this.senderId === senderId;
   }
 

@@ -5,7 +5,7 @@ import { QuestionAnswerFormat } from '../../domain/content/question-answer-forma
 export class PostQuestionPrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<PostQuestion | null> {
+  async findById(id: string): Promise<PostQuestion | null> {
     const question = await this.prisma.postQuestion.findUnique({ 
       where: { id },
       include: {
@@ -16,7 +16,7 @@ export class PostQuestionPrismaRepository {
     return question ? this.toDomain(question) : null;
   }
 
-  async findByPostId(postId: number): Promise<PostQuestion | null> {
+  async findByPostId(postId: string): Promise<PostQuestion | null> {
     const question = await this.prisma.postQuestion.findUnique({
       where: { postId },
       include: {
@@ -39,7 +39,7 @@ export class PostQuestionPrismaRepository {
     return questions.map(question => this.toDomain(question));
   }
 
-  async findByRelatedProduct(productId: number): Promise<PostQuestion[]> {
+  async findByRelatedProduct(productId: string): Promise<PostQuestion[]> {
     const questions = await this.prisma.postQuestion.findMany({
       where: { relatedProductId: productId },
       include: {
@@ -64,9 +64,9 @@ export class PostQuestionPrismaRepository {
   }
 
   async create(
-    postId: number,
+    postId: string,
     expectedAnswerFormat: QuestionAnswerFormat,
-    relatedProductId?: number
+    relatedProductId?: string
   ): Promise<PostQuestion> {
     const question = await this.prisma.postQuestion.create({
       data: {
@@ -82,9 +82,9 @@ export class PostQuestionPrismaRepository {
     return this.toDomain(question);
   }
 
-  async update(id: number, data: { 
+  async update(id: string, data: { 
     expectedAnswerFormat?: QuestionAnswerFormat;
-    relatedProductId?: number;
+    relatedProductId?: string;
   }): Promise<PostQuestion | null> {
     const question = await this.prisma.postQuestion.update({
       where: { id },
@@ -97,15 +97,15 @@ export class PostQuestionPrismaRepository {
     return question ? this.toDomain(question) : null;
   }
 
-  async setRelatedProduct(id: number, productId: number): Promise<PostQuestion | null> {
+  async setRelatedProduct(id: string, productId: string): Promise<PostQuestion | null> {
     return this.update(id, { relatedProductId: productId });
   }
 
-  async removeRelatedProduct(id: number): Promise<PostQuestion | null> {
+  async removeRelatedProduct(id: string): Promise<PostQuestion | null> {
     return this.update(id, { relatedProductId: undefined });
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.postQuestion.delete({ where: { id } });
       return true;
@@ -114,7 +114,7 @@ export class PostQuestionPrismaRepository {
     }
   }
 
-  async deleteByPostId(postId: number): Promise<boolean> {
+  async deleteByPostId(postId: string): Promise<boolean> {
     try {
       await this.prisma.postQuestion.delete({ where: { postId } });
       return true;

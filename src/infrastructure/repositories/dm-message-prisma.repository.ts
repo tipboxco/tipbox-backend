@@ -4,9 +4,9 @@ import { DMMessage } from '../../domain/messaging/dm-message.entity';
 export class DmMessagePrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<DMMessage | null> {
+  async findById(id: string): Promise<DMMessage | null> {
     const message = await this.prisma.dMMessage.findUnique({ 
-      where: { id: String(id) },
+      where: { id },
       include: {
         sender: true,
         thread: true
@@ -15,9 +15,9 @@ export class DmMessagePrismaRepository {
     return message ? this.toDomain(message) : null;
   }
 
-  async findByThreadId(threadId: number, limit = 50, offset = 0): Promise<DMMessage[]> {
+  async findByThreadId(threadId: string, limit = 50, offset = 0): Promise<DMMessage[]> {
     const messages = await this.prisma.dMMessage.findMany({
-      where: { threadId: String(threadId) },
+      where: { threadId },
       include: {
         sender: true,
         thread: true
@@ -94,7 +94,7 @@ export class DmMessagePrismaRepository {
     return this.toDomain(message);
   }
 
-  async update(id: number, data: Partial<DMMessage>): Promise<DMMessage | null> {
+  async update(id: string, data: Partial<DMMessage>): Promise<DMMessage | null> {
     try {
       const updateData: any = {
         updatedAt: new Date(),
@@ -104,7 +104,7 @@ export class DmMessagePrismaRepository {
       if (data.sentAt !== undefined) updateData.sentAt = data.sentAt;
       
       const message = await this.prisma.dMMessage.update({
-        where: { id: String(id) },
+        where: { id },
         data: updateData,
         include: {
           sender: true,
@@ -117,16 +117,16 @@ export class DmMessagePrismaRepository {
     }
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
-      await this.prisma.dMMessage.delete({ where: { id: String(id) } });
+      await this.prisma.dMMessage.delete({ where: { id } });
       return true;
     } catch {
       return false;
     }
   }
 
-  async getUnreadCountByUserId(userId: number): Promise<number> {
+  async getUnreadCountByUserId(userId: string): Promise<number> {
     const userIdStr = String(userId);
     // Kullanıcının katıldığı thread'lerdeki okunmamış mesaj sayısını al
     const threads = await this.prisma.dMThread.findMany({
@@ -149,9 +149,9 @@ export class DmMessagePrismaRepository {
     });
   }
 
-  async markAllAsReadInThread(threadId: number, userId: number): Promise<void> {
-    const threadIdStr = String(threadId);
-    const userIdStr = String(userId);
+  async markAllAsReadInThread(threadId: string, userId: string): Promise<void> {
+    const threadIdStr = threadId;
+    const userIdStr = userId;
 
     // Get thread to determine which user's unread count to reset
     const thread = await this.prisma.dMThread.findUnique({

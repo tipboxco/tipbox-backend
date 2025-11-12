@@ -2,7 +2,9 @@ import { DMRequestPrismaRepository } from '../../infrastructure/repositories/dm-
 import { DMThreadPrismaRepository } from '../../infrastructure/repositories/dm-thread-prisma.repository';
 import { SupportRequestStatus } from '../../domain/messaging/support-request-status.enum';
 import { DMRequestStatus } from '../../domain/messaging/dm-request-status.enum';
+import SocketManager from '../../infrastructure/realtime/socket-manager';
 import logger from '../../infrastructure/logger/logger';
+import { PrismaClient } from '@prisma/client';
 
 export interface SupportRequestListItem {
   id: string;
@@ -22,6 +24,7 @@ export interface SupportRequestQueryOptions {
 export class SupportRequestService {
   private dmRequestRepo = new DMRequestPrismaRepository();
   private dmThreadRepo = new DMThreadPrismaRepository();
+  private prisma = new PrismaClient();
 
   /**
    * Kullanıcının birebir destek sohbetlerini listele
@@ -153,12 +156,58 @@ export class SupportRequestService {
     senderId: string,
     payload: { recipientUserId: string; type: string; message: string; amount: number }
   ) {
-    await this.dmRequestRepo.create({
+    const request = await this.dmRequestRepo.create({
       fromUserId: senderId,
       toUserId: payload.recipientUserId,
       status: DMRequestStatus.PENDING,
+      type: payload.type,
+      amount: payload.amount,
       description: payload.message,
     });
+
+    // Thread oluştur veya mevcut thread'i al
+    const existingThread = await this.prisma.dMThread.findFirst({
+      where: {
+        OR: [
+          { userOneId: senderId, userTwoId: payload.recipientUserId },
+          { userOneId: payload.recipientUserId, userTwoId: senderId },
+        ],
+      },
+    });
+
+    let threadId: string;
+    if (!existingThread) {
+      const newThread = await this.dmThreadRepo.create({
+        userOneId: senderId,
+        userTwoId: payload.recipientUserId,
+        isActive: true,
+        startedAt: new Date(),
+      });
+      threadId = newThread.id;
+    } else {
+      threadId = existingThread.id;
+    }
+
+    // Socket bildirimi gönder - new_message event'i (messageType: 'support-request')
+    const socketHandler = SocketManager.getInstance().getSocketHandler();
+    
+    const newMessageEvent = {
+      messageId: request.id,
+      threadId: threadId,
+      senderId: senderId,
+      recipientId: payload.recipientUserId,
+      message: payload.message,
+      messageType: 'support-request' as const,
+      timestamp: request.sentAt.toISOString(),
+    };
+
+    // Alıcıya kendi odasına gönder
+    socketHandler.sendMessageToUser(payload.recipientUserId, 'new_message', newMessageEvent);
+    
+    // Thread room'una gönder
+    socketHandler.sendToRoom(`thread:${threadId}`, 'new_message', newMessageEvent);
+
+    logger.info(`Support request created from ${senderId} to ${payload.recipientUserId}, socket events emitted`);
   }
 }
 
