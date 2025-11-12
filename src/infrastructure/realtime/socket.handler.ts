@@ -1,5 +1,7 @@
 import { Server, Socket } from 'socket.io';
 import { AuthService } from '../../application/auth/auth.service';
+import { MessagingService } from '../../application/messaging/messaging.service';
+import { TypingEvent } from './messaging-events';
 import logger from '../logger/logger';
 
 export interface AuthenticatedSocket extends Socket {
@@ -12,10 +14,12 @@ export interface AuthenticatedSocket extends Socket {
 export class SocketHandler {
   private io: Server;
   private authService: AuthService;
+  private messagingService: MessagingService;
 
   constructor(io: Server) {
     this.io = io;
     this.authService = new AuthService();
+    this.messagingService = new MessagingService();
   }
 
   public initialize(): void {
@@ -84,10 +88,153 @@ export class SocketHandler {
         socket.emit('pong');
       });
 
+      // Thread room yönetimi
+      this.setupThreadHandlers(socket);
+
+      // Typing indicators
+      this.setupTypingHandlers(socket);
+
       // Hata yakalama
       socket.on('error', (error) => {
         logger.error(`Socket error for user ${userEmail}:`, error);
       });
+    });
+  }
+
+  /**
+   * Thread room yönetimi için event handler'ları
+   */
+  private setupThreadHandlers(socket: AuthenticatedSocket): void {
+    const userId = socket.data.userId;
+    const userEmail = socket.data.userEmail;
+
+    // join_thread event handler
+    socket.on('join_thread', async (threadId: string) => {
+      try {
+        if (!threadId || typeof threadId !== 'string') {
+          socket.emit('thread_join_error', {
+            threadId: threadId || 'unknown',
+            reason: 'Invalid threadId',
+          });
+          return;
+        }
+
+        // Thread erişim kontrolü
+        const hasAccess = await this.messagingService.validateThreadAccess(threadId, userId);
+        if (!hasAccess) {
+          socket.emit('thread_join_error', {
+            threadId,
+            reason: 'Access denied: User is not a participant of this thread',
+          });
+          logger.warn(`User ${userEmail} (${userId}) attempted to join thread ${threadId} without access`);
+          return;
+        }
+
+        // Thread room'una katıl
+        const roomName = `thread:${threadId}`;
+        socket.join(roomName);
+        logger.info(`User ${userEmail} (${userId}) joined thread room: ${roomName}`);
+
+        // Başarılı katılım bildirimi
+        socket.emit('thread_joined', { threadId });
+      } catch (error) {
+        logger.error(`Error joining thread for user ${userEmail}:`, error);
+        socket.emit('thread_join_error', {
+          threadId: typeof threadId === 'string' ? threadId : 'unknown',
+          reason: 'Internal server error',
+        });
+      }
+    });
+
+    // leave_thread event handler
+    socket.on('leave_thread', (threadId: string) => {
+      try {
+        if (!threadId || typeof threadId !== 'string') {
+          logger.warn(`Invalid threadId for leave_thread from user ${userEmail}`);
+          return;
+        }
+
+        const roomName = `thread:${threadId}`;
+        socket.leave(roomName);
+        logger.info(`User ${userEmail} (${userId}) left thread room: ${roomName}`);
+
+        // Başarılı ayrılma bildirimi
+        socket.emit('thread_left', { threadId });
+      } catch (error) {
+        logger.error(`Error leaving thread for user ${userEmail}:`, error);
+      }
+    });
+  }
+
+  /**
+   * Typing indicators için event handler'ları
+   */
+  private setupTypingHandlers(socket: AuthenticatedSocket): void {
+    const userId = socket.data.userId;
+    const userEmail = socket.data.userEmail;
+
+    // typing_start event handler
+    socket.on('typing_start', async (data: { threadId: string }) => {
+      try {
+        const { threadId } = data || {};
+        
+        if (!threadId || typeof threadId !== 'string') {
+          logger.warn(`Invalid threadId for typing_start from user ${userEmail}`);
+          return;
+        }
+
+        // Thread erişim kontrolü
+        const hasAccess = await this.messagingService.validateThreadAccess(threadId, userId);
+        if (!hasAccess) {
+          logger.warn(`User ${userEmail} (${userId}) attempted typing_start for thread ${threadId} without access`);
+          return;
+        }
+
+        const roomName = `thread:${threadId}`;
+        const typingEvent: TypingEvent = {
+          userId,
+          threadId,
+          isTyping: true,
+        };
+
+        // Socket'in kendisi hariç room'daki diğer kullanıcılara gönder
+        socket.to(roomName).emit('user_typing', typingEvent);
+        logger.debug(`Typing started: User ${userEmail} in thread ${threadId}`);
+      } catch (error) {
+        logger.error(`Error handling typing_start for user ${userEmail}:`, error);
+      }
+    });
+
+    // typing_stop event handler
+    socket.on('typing_stop', async (data: { threadId: string }) => {
+      try {
+        const { threadId } = data || {};
+        
+        if (!threadId || typeof threadId !== 'string') {
+          logger.warn(`Invalid threadId for typing_stop from user ${userEmail}`);
+          return;
+        }
+
+        // Thread erişim kontrolü
+        const hasAccess = await this.messagingService.validateThreadAccess(threadId, userId);
+        if (!hasAccess) {
+          logger.warn(`User ${userEmail} (${userId}) attempted typing_stop for thread ${threadId} without access`);
+          return;
+        }
+
+        const roomName = `thread:${threadId}`;
+        const typingEvent: TypingEvent = {
+          userId,
+          threadId,
+          isTyping: false,
+        };
+
+        // Socket'in kendisi hariç room'daki diğer kullanıcılara gönder
+        socket.to(roomName).emit('user_typing', typingEvent);
+        logger.debug(`Typing stopped: User ${userEmail} in thread ${threadId}`);
+      } catch (error) {
+        logger.error(`Error handling typing_stop for user ${userEmail}:`, error);
+      }
     });
   }
 

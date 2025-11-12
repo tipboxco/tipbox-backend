@@ -217,6 +217,25 @@ export class MessagingService {
   }
 
   /**
+   * Kullanıcının thread'e erişim yetkisi olup olmadığını kontrol et
+   */
+  async validateThreadAccess(threadId: string, userId: string): Promise<boolean> {
+    try {
+      const thread = await this.dmThreadRepo.findById(threadId);
+      if (!thread) {
+        return false;
+      }
+
+      const userIdStr = String(userId);
+      const isParticipant = thread.userOneId === userIdStr || thread.userTwoId === userIdStr;
+      return isParticipant;
+    } catch (error) {
+      logger.error(`Failed to validate thread access for thread ${threadId} and user ${userId}:`, error);
+      return false;
+    }
+  }
+
+  /**
    * Thread'deki tüm mesajları al (DMMessage, TIPS, Support Request birleşik)
    */
   async getThreadMessages(threadId: string, userId: string, limit = 50, offset = 0): Promise<MessageFeedItem[]> {
