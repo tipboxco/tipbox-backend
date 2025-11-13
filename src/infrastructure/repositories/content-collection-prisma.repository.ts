@@ -4,7 +4,7 @@ import { ContentCollection } from '../../domain/content/content-collection.entit
 export class ContentCollectionPrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<ContentCollection | null> {
+  async findById(id: string): Promise<ContentCollection | null> {
     const collection = await this.prisma.contentCollection.findUnique({ 
       where: { id },
       include: {
@@ -66,7 +66,7 @@ export class ContentCollectionPrismaRepository {
     return this.toDomain(collection);
   }
 
-  async update(id: number, data: { 
+  async update(id: string, data: { 
     name?: string;
     description?: string;
   }): Promise<ContentCollection | null> {
@@ -82,7 +82,7 @@ export class ContentCollectionPrismaRepository {
 
 
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.contentCollection.delete({ where: { id } });
       return true;

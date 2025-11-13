@@ -14,6 +14,7 @@ import {
 import { ContextType } from '../../domain/content/context-type.enum';
 import { TipsAndTricksBenefitCategory } from '../../domain/content/tips-and-tricks-benefit-category.enum';
 import { ExperienceType } from '../../domain/content/experience-type.enum';
+import { ExperienceStatus } from '../../domain/content/experience-status.enum';
 
 const router = Router();
 const postService = new PostService();
@@ -358,6 +359,7 @@ router.post(
       selectedPurposeId: req.body.selectedPurposeId,
       content: req.body.content,
       experience: req.body.experience,
+      status: req.body.status as ExperienceStatus,
       images: req.body.images || [],
     };
 
@@ -368,11 +370,12 @@ router.post(
       !request.selectedLocationId ||
       !request.selectedPurposeId ||
       !request.content ||
-      !request.experience
+      !request.experience ||
+      !request.status
     ) {
       return res.status(400).json({
         message:
-          'All fields are required: contextType, contextId, selectedDurationId, selectedLocationId, selectedPurposeId, content, experience',
+          'All fields are required: contextType, contextId, selectedDurationId, selectedLocationId, selectedPurposeId, content, experience, status',
       });
     }
 

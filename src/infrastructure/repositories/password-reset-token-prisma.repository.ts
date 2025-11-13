@@ -4,7 +4,7 @@ import { PasswordResetToken } from '../../domain/user/password-reset-token.entit
 export class PasswordResetTokenPrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<PasswordResetToken | null> {
+  async findById(id: string): Promise<PasswordResetToken | null> {
     const token = await this.prisma.passwordResetToken.findUnique({ where: { id } });
     return token ? this.toDomain(token) : null;
   }
@@ -69,7 +69,7 @@ export class PasswordResetTokenPrismaRepository {
     return this.toDomain(resetToken);
   }
 
-  async markAsUsed(id: number): Promise<PasswordResetToken | null> {
+  async markAsUsed(id: string): Promise<PasswordResetToken | null> {
     const token = await this.prisma.passwordResetToken.update({
       where: { id },
       data: { isUsed: true }
@@ -88,7 +88,7 @@ export class PasswordResetTokenPrismaRepository {
     return updated;
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.passwordResetToken.delete({ where: { id } });
       return true;

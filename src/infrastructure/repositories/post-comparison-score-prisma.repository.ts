@@ -4,7 +4,7 @@ import { PostComparisonScore } from '../../domain/product/post-comparison-score.
 export class PostComparisonScorePrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<PostComparisonScore | null> {
+  async findById(id: string): Promise<PostComparisonScore | null> {
     const score = await this.prisma.postComparisonScore.findUnique({ 
       where: { id },
       include: {
@@ -78,7 +78,7 @@ export class PostComparisonScorePrismaRepository {
     return this.toDomain(score);
   }
 
-  async update(id: number, data: { 
+  async update(id: string, data: { 
     scoreProduct1?: number;
     scoreProduct2?: number;
     comment?: string;
@@ -94,11 +94,11 @@ export class PostComparisonScorePrismaRepository {
     return score ? this.toDomain(score) : null;
   }
 
-  async updateScores(id: number, scoreProduct1: number, scoreProduct2: number): Promise<PostComparisonScore | null> {
+  async updateScores(id: string, scoreProduct1: number, scoreProduct2: number): Promise<PostComparisonScore | null> {
     return this.update(id, { scoreProduct1, scoreProduct2 });
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.postComparisonScore.delete({ where: { id } });
       return true;

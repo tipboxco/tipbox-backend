@@ -4,12 +4,12 @@ import { TrustRelation } from '../../domain/user/trust-relation.entity';
 export class TrustRelationPrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<TrustRelation | null> {
-    const relation = await this.prisma.trustRelation.findUnique({ where: { id: String(id) } });
+  async findById(id: string): Promise<TrustRelation | null> {
+    const relation = await this.prisma.trustRelation.findUnique({ where: { id } });
     return relation ? this.toDomain(relation) : null;
   }
 
-  async findByUsers(trusterId: number, trustedUserId: number): Promise<TrustRelation | null> {
+    async findByUsers(trusterId: string, trustedUserId: string): Promise<TrustRelation | null> {
     const relation = await this.prisma.trustRelation.findUnique({
       where: {
         trusterId_trustedUserId: {
@@ -21,7 +21,7 @@ export class TrustRelationPrismaRepository {
     return relation ? this.toDomain(relation) : null;
   }
 
-  async findByTrusterUserId(trusterId: number): Promise<TrustRelation[]> {
+  async findByTrusterUserId(trusterId: string): Promise<TrustRelation[]> {
     const relations = await this.prisma.trustRelation.findMany({
       where: { trusterId: String(trusterId) },
       orderBy: { createdAt: 'desc' }
@@ -29,7 +29,7 @@ export class TrustRelationPrismaRepository {
     return relations.map(relation => this.toDomain(relation));
   }
 
-  async findByTrustedUserId(trustedUserId: number): Promise<TrustRelation[]> {
+  async findByTrustedUserId(trustedUserId: string): Promise<TrustRelation[]> {
     const relations = await this.prisma.trustRelation.findMany({
       where: { trustedUserId: String(trustedUserId) },
       orderBy: { createdAt: 'desc' }
@@ -37,7 +37,7 @@ export class TrustRelationPrismaRepository {
     return relations.map(relation => this.toDomain(relation));
   }
 
-  async create(trusterId: number, trustedUserId: number): Promise<TrustRelation> {
+  async create(trusterId: string, trustedUserId: string): Promise<TrustRelation> {
     const relation = await this.prisma.trustRelation.create({
       data: {
         trusterId: String(trusterId),
@@ -68,17 +68,17 @@ export class TrustRelationPrismaRepository {
     return this.toDomain(relation);
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       // Get relation to get trusterId and trustedUserId before deleting
       const relation = await this.prisma.trustRelation.findUnique({
-        where: { id: String(id) },
+        where: { id },
         select: { trusterId: true, trustedUserId: true }
       });
 
       if (!relation) return false;
 
-      await this.prisma.trustRelation.delete({ where: { id: String(id) } });
+      await this.prisma.trustRelation.delete({ where: { id } });
 
       // Decrement truster's trustCount
       await this.prisma.profile.updateMany({
@@ -106,7 +106,7 @@ export class TrustRelationPrismaRepository {
     }
   }
 
-  async deleteByUsers(trusterId: number, trustedUserId: number): Promise<boolean> {
+      async deleteByUsers(trusterId: string, trustedUserId: string): Promise<boolean> {
     try {
       const trusterIdStr = String(trusterId);
       const trustedUserIdStr = String(trustedUserId);

@@ -164,7 +164,7 @@ export class PostComparisonPrismaRepository {
       prismaComparison.postId,
       prismaComparison.product1Id,
       prismaComparison.product2Id,
-      prismaComparison.winnerProductId,
+      prismaComparison.comparisonSummary,
       prismaComparison.createdAt,
       prismaComparison.updatedAt
     );

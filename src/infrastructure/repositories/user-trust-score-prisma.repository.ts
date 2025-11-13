@@ -4,17 +4,17 @@ import { UserTrustScore } from '../../domain/user/user-trust-score.entity';
 export class UserTrustScorePrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<UserTrustScore | null> {
+  async findById(id: string): Promise<UserTrustScore | null> {
     const score = await this.prisma.userTrustScore.findUnique({ where: { id } });
     return score ? this.toDomain(score) : null;
   }
 
-  async findByUserId(userId: number): Promise<UserTrustScore | null> {
+  async findByUserId(userId: string): Promise<UserTrustScore | null> {
     const score = await this.prisma.userTrustScore.findFirst({ where: { userId } });
     return score ? this.toDomain(score) : null;
   }
 
-  async create(userId: number, score: number): Promise<UserTrustScore> {
+  async create(userId: string, score: number): Promise<UserTrustScore> {
     const trustScore = await this.prisma.userTrustScore.create({
       data: {
         userId,
@@ -24,7 +24,7 @@ export class UserTrustScorePrismaRepository {
     return this.toDomain(trustScore);
   }
 
-  async update(id: number, score: number): Promise<UserTrustScore | null> {
+  async update(id: string, score: number): Promise<UserTrustScore | null> {
     const trustScore = await this.prisma.userTrustScore.update({
       where: { id },
       data: { score }
@@ -32,7 +32,7 @@ export class UserTrustScorePrismaRepository {
     return trustScore ? this.toDomain(trustScore) : null;
   }
 
-  async updateByUserId(userId: number, score: number): Promise<UserTrustScore | null> {
+  async updateByUserId(userId: string, score: number): Promise<UserTrustScore | null> {
     // Find first record by userId and then update by id
     const existing = await this.prisma.userTrustScore.findFirst({ where: { userId } });
     if (!existing) return null;
@@ -44,7 +44,7 @@ export class UserTrustScorePrismaRepository {
     return trustScore ? this.toDomain(trustScore) : null;
   }
 
-  async incrementScore(userId: number, increment: number): Promise<UserTrustScore | null> {
+  async incrementScore(userId: string, increment: number): Promise<UserTrustScore | null> {
     // Find first record by userId and then update by id
     const existing = await this.prisma.userTrustScore.findFirst({ where: { userId } });
     if (!existing) return null;
@@ -60,7 +60,7 @@ export class UserTrustScorePrismaRepository {
     return trustScore ? this.toDomain(trustScore) : null;
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.userTrustScore.delete({ where: { id } });
       return true;

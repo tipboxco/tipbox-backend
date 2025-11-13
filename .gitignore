@@ -50,3 +50,6 @@ tipboxbackend-*.json
 
 # Seed metadata (local development)
 prisma/seed/seed-metadata.json
+
+# Docusaurus documentation (development phase)
+tipbox-docs/

@@ -1,6 +1,7 @@
 import { ContextType } from '../../domain/content/context-type.enum';
 import { TipsAndTricksBenefitCategory } from '../../domain/content/tips-and-tricks-benefit-category.enum';
 import { ExperienceType } from '../../domain/content/experience-type.enum';
+import { ExperienceStatus } from '../../domain/content/experience-status.enum';
 
 /**
  * @openapi
@@ -15,6 +16,9 @@ import { ExperienceType } from '../../domain/content/experience-type.enum';
  *     ExperienceType:
  *       type: string
  *       enum: [price_and_shopping, product_and_usage]
+ *     ExperienceStatus:
+ *       type: string
+ *       enum: [own, tested]
  *     CreatePostRequest:
  *       type: object
  *       required:
@@ -140,6 +144,7 @@ import { ExperienceType } from '../../domain/content/experience-type.enum';
  *         - selectedPurposeId
  *         - content
  *         - experience
+ *         - status
  *       properties:
  *         contextType:
  *           $ref: '#/components/schemas/ContextType'
@@ -157,6 +162,8 @@ import { ExperienceType } from '../../domain/content/experience-type.enum';
  *           type: array
  *           items:
  *             $ref: '#/components/schemas/Experience'
+ *         status:
+ *           $ref: '#/components/schemas/ExperienceStatus'
  *         images:
  *           type: array
  *           items:
@@ -238,6 +245,7 @@ export interface CreateExperiencePostRequest {
   selectedPurposeId: string;
   content: string;
   experience: Experience[];
+  status: ExperienceStatus;
   images?: string[];
 }
 

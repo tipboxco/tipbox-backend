@@ -8,6 +8,7 @@ import { TipsAndTricksBenefitCategory } from '../../domain/content/tips-and-tric
 import { TipCategory } from '../../domain/content/tip-category.enum';
 import { QuestionAnswerFormat } from '../../domain/content/question-answer-format.enum';
 import { ExperienceType } from '../../domain/content/experience-type.enum';
+import { ExperienceStatus } from '../../domain/content/experience-status.enum';
 import {
   CreatePostRequest,
   CreateTipsAndTricksPostRequest,
@@ -419,6 +420,9 @@ export class PostService {
         request.contextId
       );
 
+      // Map status to hasOwned: OWN = true, TEST = false
+      const hasOwned = request.status === ExperienceStatus.OWN;
+
       // Combine content and experiences
       const experienceText = request.experience
         .map(
@@ -426,7 +430,8 @@ export class PostService {
             `[${exp.type}] ${exp.content} (Rating: ${exp.rating}/5)`
         )
         .join('\n\n');
-      const fullBody = `${request.content}\n\n${experienceText}`;
+      const statusInfo = `[Status: ${request.status}]`;
+      const fullBody = `${request.content}\n\n${statusInfo}\n\n${experienceText}`;
 
       const bodyWithImages = this.appendImagesToBody(fullBody, request.images);
 

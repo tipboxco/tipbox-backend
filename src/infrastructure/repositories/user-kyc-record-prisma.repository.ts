@@ -5,12 +5,12 @@ import { KycReviewStatus, KycReviewResult, KycProvider } from '../../domain/user
 export class UserKycRecordPrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<UserKycRecord | null> {
+  async findById(id: string): Promise<UserKycRecord | null> {
     const record = await this.prisma.userKycRecord.findUnique({ where: { id } });
     return record ? this.toDomain(record) : null;
   }
 
-  async findByUserId(userId: number): Promise<UserKycRecord[]> {
+  async findByUserId(userId: string): Promise<UserKycRecord[]> {
     const records = await this.prisma.userKycRecord.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' }
@@ -18,7 +18,7 @@ export class UserKycRecordPrismaRepository {
     return records.map(record => this.toDomain(record));
   }
 
-  async findLatestByUserId(userId: number): Promise<UserKycRecord | null> {
+  async findLatestByUserId(userId: string): Promise<UserKycRecord | null> {
     const record = await this.prisma.userKycRecord.findFirst({
       where: { userId },
       orderBy: { createdAt: 'desc' }
@@ -35,7 +35,7 @@ export class UserKycRecordPrismaRepository {
   }
 
   async create(
-    userId: number, 
+    userId: string, 
     sumsubApplicantId: string,
     reviewStatus?: KycReviewStatus,
     reviewResult?: KycReviewResult,
@@ -57,7 +57,7 @@ export class UserKycRecordPrismaRepository {
     return this.toDomain(record);
   }
 
-  async update(id: number, data: { 
+  async update(id: string, data: { 
     reviewStatus?: KycReviewStatus; 
     reviewResult?: KycReviewResult; 
     reviewReason?: string; 
@@ -70,7 +70,7 @@ export class UserKycRecordPrismaRepository {
     return record ? this.toDomain(record) : null;
   }
 
-  async updateStatus(id: number, reviewStatus: KycReviewStatus, reviewReason?: string): Promise<UserKycRecord | null> {
+  async updateStatus(id: string, reviewStatus: KycReviewStatus, reviewReason?: string): Promise<UserKycRecord | null> {
     const record = await this.prisma.userKycRecord.update({
       where: { id },
       data: { 
@@ -81,7 +81,7 @@ export class UserKycRecordPrismaRepository {
     return record ? this.toDomain(record) : null;
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.userKycRecord.delete({ where: { id } });
       return true;
