@@ -8,7 +8,7 @@ COPY package*.json ./
 COPY prisma ./prisma
 
 # Production dependencies'leri yükle (devDependencies hariç)
-RUN npm ci --only=production --legacy-peer-deps
+RUN npm ci --legacy-peer-deps
 
 # Prisma Client'ı generate et
 RUN npx prisma generate
