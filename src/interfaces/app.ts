@@ -387,6 +387,16 @@ app.use(requestLogger);
 // Prometheus metrics middleware
 app.use(metricsMiddleware);
 
+// Health check endpoint (en önce, diğer middleware'lerden önce)
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development',
+  });
+});
+
 // API root endpoint (dashboard'dan önce)
 app.get('/api', (req, res) => {
   res.json({ 
