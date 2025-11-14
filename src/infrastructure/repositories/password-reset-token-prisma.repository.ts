@@ -14,7 +14,7 @@ export class PasswordResetTokenPrismaRepository {
     return resetToken ? this.toDomain(resetToken) : null;
   }
 
-  async findByUserId(userId: number): Promise<PasswordResetToken[]> {
+  async findByUserId(userId: string): Promise<PasswordResetToken[]> {
     const tokens = await this.prisma.passwordResetToken.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' }
@@ -22,7 +22,7 @@ export class PasswordResetTokenPrismaRepository {
     return tokens.map(token => this.toDomain(token));
   }
 
-  async findActiveByUserId(userId: number): Promise<PasswordResetToken | null> {
+  async findActiveByUserId(userId: string): Promise<PasswordResetToken | null> {
     const token = await this.prisma.passwordResetToken.findFirst({
       where: { 
         userId,
@@ -49,7 +49,7 @@ export class PasswordResetTokenPrismaRepository {
     return resetToken ? this.toDomain(resetToken) : null;
   }
 
-  async create(userId: number, token: string, expiresAt: Date): Promise<PasswordResetToken> {
+  async create(userId: string, token: string, expiresAt: Date): Promise<PasswordResetToken> {
     // Invalidate existing active tokens for the user
     await this.prisma.passwordResetToken.updateMany({
       where: { 

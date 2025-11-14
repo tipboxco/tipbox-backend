@@ -14,7 +14,7 @@ export class PostTagPrismaRepository {
     return tag ? this.toDomain(tag) : null;
   }
 
-  async findByPostId(postId: number): Promise<PostTag[]> {
+  async findByPostId(postId: string): Promise<PostTag[]> {
     const tags = await this.prisma.postTag.findMany({
       where: { postId },
       include: {
@@ -36,7 +36,7 @@ export class PostTagPrismaRepository {
     return tags.map(postTag => this.toDomain(postTag));
   }
 
-  async findByPostAndTag(postId: number, tag: string): Promise<PostTag | null> {
+  async findByPostAndTag(postId: string, tag: string): Promise<PostTag | null> {
     const postTag = await this.prisma.postTag.findFirst({
       where: {
         postId,
@@ -49,7 +49,7 @@ export class PostTagPrismaRepository {
     return postTag ? this.toDomain(postTag) : null;
   }
 
-  async create(postId: number, tag: string): Promise<PostTag> {
+  async create(postId: string, tag: string): Promise<PostTag> {
     const postTag = await this.prisma.postTag.create({
       data: {
         postId,
@@ -62,7 +62,7 @@ export class PostTagPrismaRepository {
     return this.toDomain(postTag);
   }
 
-  async createMultiple(postId: number, tags: string[]): Promise<PostTag[]> {
+  async createMultiple(postId: string, tags: string[]): Promise<PostTag[]> {
     const data = tags.map(tag => ({ postId, tag }));
     
     await this.prisma.postTag.createMany({
@@ -93,7 +93,7 @@ export class PostTagPrismaRepository {
     }
   }
 
-  async deleteByPostAndTag(postId: number, tag: string): Promise<boolean> {
+  async deleteByPostAndTag(postId: string, tag: string): Promise<boolean> {
     try {
       const postTag = await this.prisma.postTag.findFirst({
         where: { postId, tag }
@@ -107,7 +107,7 @@ export class PostTagPrismaRepository {
     }
   }
 
-  async deleteByPostId(postId: number): Promise<boolean> {
+  async deleteByPostId(postId: string): Promise<boolean> {
     try {
       await this.prisma.postTag.deleteMany({
         where: { postId }
@@ -118,7 +118,7 @@ export class PostTagPrismaRepository {
     }
   }
 
-  async updatePostTags(postId: number, tags: string[]): Promise<PostTag[]> {
+  async updatePostTags(postId: string, tags: string[]): Promise<PostTag[]> {
     // Remove existing tags
     await this.deleteByPostId(postId);
     
@@ -130,7 +130,7 @@ export class PostTagPrismaRepository {
     return [];
   }
 
-  async countByPostId(postId: number): Promise<number> {
+  async countByPostId(postId: string): Promise<number> {
     return await this.prisma.postTag.count({
       where: { postId }
     });

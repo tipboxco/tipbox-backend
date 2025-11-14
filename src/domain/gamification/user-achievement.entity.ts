@@ -1,19 +1,19 @@
 export class UserAchievement {
   constructor(
     public readonly id: string,
-    public readonly userId: number,
-    public readonly goalId: number,
+    public readonly userId: string,
+    public readonly goalId: string,
     public readonly progress: number,
     public readonly completed: boolean,
     public readonly completedAt: Date | null
   ) {}
 
   // Essential business methods only
-  belongsToUser(userId: number): boolean {
+  belongsToUser(userId: string): boolean {
     return this.userId === userId;
   }
 
-  belongsToGoal(goalId: number): boolean {
+  belongsToGoal(goalId: string): boolean {
     return this.goalId === goalId;
   }
 

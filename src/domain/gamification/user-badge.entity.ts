@@ -3,8 +3,8 @@ import { BadgeVisibility } from './badge-visibility.enum';
 export class UserBadge {
   constructor(
     public readonly id: string,
-    public readonly userId: number,
-    public readonly badgeId: number,
+    public readonly userId: string,
+    public readonly badgeId: string,
     public readonly isVisible: boolean,
     public readonly displayOrder: number | null,
     public readonly visibility: BadgeVisibility,
@@ -13,11 +13,11 @@ export class UserBadge {
   ) {}
 
   // Essential business methods only
-  belongsToUser(userId: number): boolean {
+  belongsToUser(userId: string): boolean {
     return this.userId === userId;
   }
 
-  belongsToBadge(badgeId: number): boolean {
+  belongsToBadge(badgeId: string): boolean {
     return this.badgeId === badgeId;
   }
 

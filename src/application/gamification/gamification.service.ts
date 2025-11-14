@@ -20,7 +20,7 @@ export class GamificationService {
    * @param badgeId - Rozet ID'si
    * @returns Verilen rozet bilgisi
    */
-  async grantBadgeToUser(userId: number, badgeId: number): Promise<UserBadge | null> {
+  async grantBadgeToUser(userId: string, badgeId: string): Promise<UserBadge | null> {
     try {
       // Bu kısımda gerçek veritabanı işlemleri yapılacak
       // Şimdilik mock data döndürüyoruz
@@ -33,12 +33,12 @@ export class GamificationService {
         BadgeRarity.COMMON,
         null, // boostMultiplier
         null, // rewardMultiplier
-        1, // categoryId
+        '00000000-0000-0000-0000-000000000001', // categoryId
         new Date()
       );
 
       const mockUserBadge = new UserBadge(
-        1,
+        '00000000-0000-0000-0000-000000000001',
         userId,
         badgeId,
         true, // isVisible
@@ -76,11 +76,11 @@ export class GamificationService {
    * @param achievementId - Başarı ID'si
    * @returns Verilen başarı bilgisi
    */
-  async grantAchievementToUser(userId: number, achievementId: number): Promise<UserAchievement | null> {
+  async grantAchievementToUser(userId: string, achievementId: string): Promise<UserAchievement | null> {
     try {
       // Mock achievement data
       const mockUserAchievement = new UserAchievement(
-        1,
+        '00000000-0000-0000-0000-000000000001',
         userId,
         achievementId,
         100, // progress
@@ -114,7 +114,7 @@ export class GamificationService {
    * @param userId - Kullanıcı ID'si
    * @returns Kullanıcının rozetleri
    */
-  async getUserBadges(userId: number): Promise<UserBadge[]> {
+  async getUserBadges(userId: string): Promise<UserBadge[]> {
     try {
       // Mock data - gerçek implementasyonda repository kullanılacak
       return [];
@@ -129,7 +129,7 @@ export class GamificationService {
    * @param userId - Kullanıcı ID'si
    * @returns Kullanıcının başarıları
    */
-  async getUserAchievements(userId: number): Promise<UserAchievement[]> {
+  async getUserAchievements(userId: string): Promise<UserAchievement[]> {
     try {
       // Mock data - gerçek implementasyonda repository kullanılacak
       return [];
@@ -144,7 +144,7 @@ export class GamificationService {
    * @param userId - Kullanıcı ID'si
    * @returns Gamification istatistikleri
    */
-  async getUserGamificationStats(userId: number): Promise<{
+  async getUserGamificationStats(userId: string): Promise<{
     totalBadges: number;
     totalAchievements: number;
     level: number;

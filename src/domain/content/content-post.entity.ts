@@ -84,6 +84,9 @@ export class ContentPost {
       case ContentPostType.TIPS: return '💡';
       case ContentPostType.COMPARE: return '⚖️';
       case ContentPostType.FREE: return '📝';
+      case ContentPostType.EXPERIENCE: return '🌟';
+      case ContentPostType.UPDATE: return '📢';
+      default: return '📝';
     }
   }
 
@@ -93,6 +96,9 @@ export class ContentPost {
       case ContentPostType.TIPS: return 'İpucu';
       case ContentPostType.COMPARE: return 'Karşılaştırma';
       case ContentPostType.FREE: return 'Serbest';
+      case ContentPostType.EXPERIENCE: return 'Deneyim';
+      case ContentPostType.UPDATE: return 'Güncelleme';
+      default: return 'Serbest';
     }
   }
 

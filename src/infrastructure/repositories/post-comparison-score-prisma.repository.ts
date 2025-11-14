@@ -15,7 +15,7 @@ export class PostComparisonScorePrismaRepository {
     return score ? this.toDomain(score) : null;
   }
 
-  async findByComparisonId(comparisonId: number): Promise<PostComparisonScore[]> {
+  async findByComparisonId(comparisonId: string): Promise<PostComparisonScore[]> {
     const scores = await this.prisma.postComparisonScore.findMany({
       where: { comparisonId },
       include: {
@@ -27,7 +27,7 @@ export class PostComparisonScorePrismaRepository {
     return scores.map(score => this.toDomain(score));
   }
 
-  async findByMetricId(metricId: number): Promise<PostComparisonScore[]> {
+  async findByMetricId(metricId: string): Promise<PostComparisonScore[]> {
     const scores = await this.prisma.postComparisonScore.findMany({
       where: { metricId },
       include: {
@@ -39,7 +39,7 @@ export class PostComparisonScorePrismaRepository {
     return scores.map(score => this.toDomain(score));
   }
 
-  async findByComparisonAndMetric(comparisonId: number, metricId: number): Promise<PostComparisonScore | null> {
+  async findByComparisonAndMetric(comparisonId: string, metricId: string): Promise<PostComparisonScore | null> {
     const score = await this.prisma.postComparisonScore.findUnique({
       where: {
         comparisonId_metricId: {
@@ -56,8 +56,8 @@ export class PostComparisonScorePrismaRepository {
   }
 
   async create(
-    comparisonId: number,
-    metricId: number,
+    comparisonId: string,
+    metricId: string,
     scoreProduct1: number,
     scoreProduct2: number,
     comment?: string
@@ -107,7 +107,7 @@ export class PostComparisonScorePrismaRepository {
     }
   }
 
-  async deleteByComparisonId(comparisonId: number): Promise<boolean> {
+  async deleteByComparisonId(comparisonId: string): Promise<boolean> {
     try {
       await this.prisma.postComparisonScore.deleteMany({
         where: { comparisonId }
@@ -118,7 +118,7 @@ export class PostComparisonScorePrismaRepository {
     }
   }
 
-  async countByComparisonId(comparisonId: number): Promise<number> {
+  async countByComparisonId(comparisonId: string): Promise<number> {
     return await this.prisma.postComparisonScore.count({
       where: { comparisonId }
     });
