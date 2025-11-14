@@ -4,7 +4,7 @@ import { ContentLike } from '../../domain/interaction/content-like.entity';
 export class ContentLikePrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<ContentLike | null> {
+  async findById(id: string): Promise<ContentLike | null> {
     const like = await this.prisma.contentLike.findUnique({ 
       where: { id },
       include: {
@@ -68,7 +68,7 @@ export class ContentLikePrismaRepository {
     return this.toDomain(like);
   }
 
-  async update(id: number, data: Partial<ContentLike>): Promise<ContentLike | null> {
+  async update(id: string, data: Partial<ContentLike>): Promise<ContentLike | null> {
     try {
       const like = await this.prisma.contentLike.update({
         where: { id },

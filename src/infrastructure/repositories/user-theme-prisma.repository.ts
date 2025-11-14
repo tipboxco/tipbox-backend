@@ -4,7 +4,7 @@ import { UserTheme } from '../../domain/user/user-theme.entity';
 export class UserThemePrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<UserTheme | null> {
+  async findById(id: string): Promise<UserTheme | null> {
     const theme = await this.prisma.userTheme.findUnique({ where: { id } });
     return theme ? this.toDomain(theme) : null;
   }
@@ -31,7 +31,7 @@ export class UserThemePrismaRepository {
     return this.toDomain(theme);
   }
 
-  async update(id: number, data: { name?: string; description?: string }): Promise<UserTheme | null> {
+  async update(id: string, data: { name?: string; description?: string }): Promise<UserTheme | null> {
     const theme = await this.prisma.userTheme.update({
       where: { id },
       data
@@ -39,7 +39,7 @@ export class UserThemePrismaRepository {
     return theme ? this.toDomain(theme) : null;
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.userTheme.delete({ where: { id } });
       return true;

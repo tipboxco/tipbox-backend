@@ -4,7 +4,7 @@ import { SubCategory } from '../../domain/product/sub-category.entity';
 export class SubCategoryPrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<SubCategory | null> {
+  async findById(id: string): Promise<SubCategory | null> {
     const category = await this.prisma.subCategory.findUnique({ 
       where: { id },
       include: {
@@ -28,7 +28,7 @@ export class SubCategoryPrismaRepository {
     return category ? this.toDomain(category) : null;
   }
 
-  async findByMainCategoryId(mainCategoryId: number): Promise<SubCategory[]> {
+  async findByMainCategoryId(mainCategoryId: string): Promise<SubCategory[]> {
     const categories = await this.prisma.subCategory.findMany({
       where: { mainCategoryId },
       include: {
@@ -41,7 +41,7 @@ export class SubCategoryPrismaRepository {
     return categories.map(category => this.toDomain(category));
   }
 
-  async create(mainCategoryId: number, name: string, description?: string): Promise<SubCategory> {
+  async create(mainCategoryId: string, name: string, description?: string): Promise<SubCategory> {
     const category = await this.prisma.subCategory.create({
       data: {
         mainCategoryId,
@@ -57,7 +57,7 @@ export class SubCategoryPrismaRepository {
     return this.toDomain(category);
   }
 
-  async update(id: number, data: { name?: string; description?: string }): Promise<SubCategory | null> {
+  async update(id: string, data: { name?: string; description?: string }): Promise<SubCategory | null> {
     const category = await this.prisma.subCategory.update({
       where: { id },
       data,
@@ -70,7 +70,7 @@ export class SubCategoryPrismaRepository {
     return category ? this.toDomain(category) : null;
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.subCategory.delete({ where: { id } });
       return true;

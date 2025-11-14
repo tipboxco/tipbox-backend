@@ -4,7 +4,7 @@ import { ComparisonMetric } from '../../domain/product/comparison-metric.entity'
 export class ComparisonMetricPrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<ComparisonMetric | null> {
+  async findById(id: string): Promise<ComparisonMetric | null> {
     const metric = await this.prisma.comparisonMetric.findUnique({ 
       where: { id },
       include: {
@@ -40,7 +40,7 @@ export class ComparisonMetricPrismaRepository {
     return this.toDomain(metric);
   }
 
-  async update(id: number, data: { 
+  async update(id: string, data: { 
     name?: string; 
     description?: string;
   }): Promise<ComparisonMetric | null> {
@@ -54,7 +54,7 @@ export class ComparisonMetricPrismaRepository {
     return metric ? this.toDomain(metric) : null;
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.comparisonMetric.delete({ where: { id } });
       return true;

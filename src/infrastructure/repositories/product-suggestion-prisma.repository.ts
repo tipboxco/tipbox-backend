@@ -5,7 +5,7 @@ import { ProductSuggestionStatus } from '../../domain/product/product-suggestion
 export class ProductSuggestionPrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<ProductSuggestion | null> {
+  async findById(id: string): Promise<ProductSuggestion | null> {
     const suggestion = await this.prisma.productSuggestion.findUnique({ 
       where: { id },
       include: {
@@ -16,7 +16,7 @@ export class ProductSuggestionPrismaRepository {
     return suggestion ? this.toDomain(suggestion) : null;
   }
 
-  async findByUserId(userId: number): Promise<ProductSuggestion[]> {
+  async findByUserId(userId: string): Promise<ProductSuggestion[]> {
     const suggestions = await this.prisma.productSuggestion.findMany({
       where: { userId },
       include: {
@@ -53,7 +53,7 @@ export class ProductSuggestionPrismaRepository {
   }
 
   async create(
-    userId: number,
+    userId: string,
     suggestedName: string,
     suggestedBrand?: string,
     description?: string,
@@ -76,7 +76,7 @@ export class ProductSuggestionPrismaRepository {
     return this.toDomain(suggestion);
   }
 
-  async update(id: number, data: { 
+  async update(id: string, data: { 
     suggestedName?: string;
     suggestedBrand?: string;
     description?: string;
@@ -94,7 +94,7 @@ export class ProductSuggestionPrismaRepository {
     return suggestion ? this.toDomain(suggestion) : null;
   }
 
-  async updateStatus(id: number, status: ProductSuggestionStatus, reviewedBy?: number): Promise<ProductSuggestion | null> {
+  async updateStatus(id: string, status: ProductSuggestionStatus, reviewedBy?: string): Promise<ProductSuggestion | null> {
     const suggestion = await this.prisma.productSuggestion.update({
       where: { id },
       data: { 
@@ -110,15 +110,15 @@ export class ProductSuggestionPrismaRepository {
     return suggestion ? this.toDomain(suggestion) : null;
   }
 
-  async approve(id: number, reviewedBy: number): Promise<ProductSuggestion | null> {
+  async approve(id: string, reviewedBy: string): Promise<ProductSuggestion | null> {
     return this.updateStatus(id, ProductSuggestionStatus.APPROVED, reviewedBy);
   }
 
-  async reject(id: number, reviewedBy: number): Promise<ProductSuggestion | null> {
+  async reject(id: string, reviewedBy: string): Promise<ProductSuggestion | null> {
     return this.updateStatus(id, ProductSuggestionStatus.REJECTED, reviewedBy);
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.productSuggestion.delete({ where: { id } });
       return true;

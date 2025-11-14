@@ -4,12 +4,12 @@ import { UserCollection } from '../../domain/user/user-collection.entity';
 export class UserCollectionPrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<UserCollection | null> {
+  async findById(id: string): Promise<UserCollection | null> {
     const collection = await this.prisma.userCollection.findUnique({ where: { id } });
     return collection ? this.toDomain(collection) : null;
   }
 
-  async findByUserId(userId: number): Promise<UserCollection[]> {
+  async findByUserId(userId: string): Promise<UserCollection[]> {
     const collections = await this.prisma.userCollection.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' }
@@ -17,7 +17,7 @@ export class UserCollectionPrismaRepository {
     return collections.map(collection => this.toDomain(collection));
   }
 
-  async findByName(userId: number, name: string): Promise<UserCollection | null> {
+  async findByName(userId: string, name: string): Promise<UserCollection | null> {
     const collection = await this.prisma.userCollection.findFirst({
       where: { 
         userId,
@@ -34,7 +34,7 @@ export class UserCollectionPrismaRepository {
     return collections.map(collection => this.toDomain(collection));
   }
 
-  async create(userId: number, name: string, description?: string): Promise<UserCollection> {
+  async create(userId: string, name: string, description?: string): Promise<UserCollection> {
     const collection = await this.prisma.userCollection.create({
       data: {
         userId,
@@ -45,7 +45,7 @@ export class UserCollectionPrismaRepository {
     return this.toDomain(collection);
   }
 
-  async update(id: number, data: { name?: string; description?: string }): Promise<UserCollection | null> {
+  async update(id: string, data: { name?: string; description?: string }): Promise<UserCollection | null> {
     const collection = await this.prisma.userCollection.update({
       where: { id },
       data
@@ -53,7 +53,7 @@ export class UserCollectionPrismaRepository {
     return collection ? this.toDomain(collection) : null;
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.userCollection.delete({ where: { id } });
       return true;

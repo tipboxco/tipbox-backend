@@ -4,7 +4,7 @@ import { MainCategory } from '../../domain/product/main-category.entity';
 export class MainCategoryPrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<MainCategory | null> {
+  async findById(id: string): Promise<MainCategory | null> {
     const category = await this.prisma.mainCategory.findUnique({ 
       where: { id },
       include: {
@@ -39,7 +39,7 @@ export class MainCategoryPrismaRepository {
     return this.toDomain(category);
   }
 
-  async update(id: number, data: { name?: string; description?: string }): Promise<MainCategory | null> {
+  async update(id: string, data: { name?: string; description?: string }): Promise<MainCategory | null> {
     const category = await this.prisma.mainCategory.update({
       where: { id },
       data,
@@ -50,7 +50,7 @@ export class MainCategoryPrismaRepository {
     return category ? this.toDomain(category) : null;
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.mainCategory.delete({ where: { id } });
       return true;

@@ -4,7 +4,7 @@ import { ProductGroup } from '../../domain/product/product-group.entity';
 export class ProductGroupPrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<ProductGroup | null> {
+  async findById(id: string): Promise<ProductGroup | null> {
     const group = await this.prisma.productGroup.findUnique({ 
       where: { id },
       include: {
@@ -34,7 +34,7 @@ export class ProductGroupPrismaRepository {
     return group ? this.toDomain(group) : null;
   }
 
-  async create(subCategoryId: number, name: string, description?: string): Promise<ProductGroup> {
+  async create(subCategoryId: string, name: string, description?: string): Promise<ProductGroup> {
     const group = await this.prisma.productGroup.create({
       data: {
         subCategoryId,
@@ -48,7 +48,7 @@ export class ProductGroupPrismaRepository {
     return this.toDomain(group);
   }
 
-  async update(id: number, data: { name?: string; description?: string; slug?: string }): Promise<ProductGroup | null> {
+  async update(id: string, data: { name?: string; description?: string; slug?: string }): Promise<ProductGroup | null> {
     const group = await this.prisma.productGroup.update({
       where: { id },
       data,
@@ -59,7 +59,7 @@ export class ProductGroupPrismaRepository {
     return group ? this.toDomain(group) : null;
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.productGroup.delete({ where: { id } });
       return true;
@@ -93,9 +93,9 @@ export class ProductGroupPrismaRepository {
   private toDomain(prismaGroup: any): ProductGroup {
     return new ProductGroup(
       prismaGroup.id,
+      prismaGroup.subCategoryId,
       prismaGroup.name,
       prismaGroup.description,
-      prismaGroup.slug,
       prismaGroup.createdAt,
       prismaGroup.updatedAt
     );

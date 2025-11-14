@@ -11,6 +11,7 @@ const router = Router();
 const services = [
   { name: 'Backend API', port: 3000, url: 'http://localhost:3000', description: 'Ana backend servisi', icon: 'fa-server' },
   { name: 'Swagger Docs', port: 3000, url: 'http://localhost:3000/api-docs', description: 'API dokümantasyonu', path: '/api-docs', icon: 'fa-book' },
+  { name: 'Tipbox Docs', port: 3000, url: 'http://localhost:3000/docs/', description: 'Docusaurus dokümantasyonu', path: '/docs/', icon: 'fa-book-open' },
   { name: 'Prisma Studio', port: 5555, url: 'http://localhost:5555', description: 'Database GUI', icon: 'fa-table' },
   { name: 'pgAdmin', port: 5050, url: 'http://localhost:5050', description: 'PostgreSQL yönetim arayüzü', icon: 'fa-database' },
   { name: 'MinIO Console', port: 9001, url: 'http://localhost:9001', description: 'MinIO object storage konsolu', icon: 'fa-cloud' },
@@ -594,7 +595,7 @@ router.get('/', (req: Request, res: Response) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tipbox Development Console</title>
+  <title>Tipbox Backend Dashboard</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Jura:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -626,6 +627,17 @@ router.get('/', (req: Request, res: Response) => {
       padding-bottom: 32px;
       border-bottom: 1px solid rgba(163, 163, 163, 0.2);
     }
+    .dashboard-header-left {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+    .dashboard-header-logo {
+      height: 60px;
+      width: auto;
+      object-fit: contain;
+      animation: fadeInSlide 0.8s ease-out forwards;
+    }
     h1 {
       color: #FAFAFA;
       text-align: left;
@@ -633,12 +645,6 @@ router.get('/', (req: Request, res: Response) => {
       font-size: 2.5rem;
       font-weight: 700;
       letter-spacing: -0.02em;
-    }
-    .dashboard-header-image {
-      height: 80px;
-      width: auto;
-      object-fit: contain;
-      animation: fadeInSlide 0.8s ease-out forwards;
     }
     @keyframes fadeInSlide {
       0% {
@@ -651,14 +657,18 @@ router.get('/', (req: Request, res: Response) => {
       }
     }
     @media (max-width: 768px) {
-      .dashboard-header-image {
-        height: 60px;
-        align-self: flex-end;
-      }
       .dashboard-header {
         flex-direction: column;
         align-items: flex-start;
         gap: 24px;
+      }
+      .dashboard-header-left {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+      }
+      .dashboard-header-logo {
+        height: 50px;
       }
       h1 {
         font-size: 2rem;
@@ -666,7 +676,7 @@ router.get('/', (req: Request, res: Response) => {
     }
     .section {
       background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(208, 242, 5, 0.2);
+      border: 1px solid #D0F205;
       border-radius: 16px;
       padding: 32px;
       margin-bottom: 32px;
@@ -674,23 +684,35 @@ router.get('/', (req: Request, res: Response) => {
       transition: all 0.3s ease;
     }
     .section:hover {
-      border-color: rgba(208, 242, 5, 0.4);
+      border-color: #D0F205;
+      box-shadow: 0 4px 20px rgba(208, 242, 5, 0.2);
     }
     .section-title {
-      font-size: 1.5rem;
+      font-size: 1.75rem;
       font-weight: 600;
-      margin-bottom: 24px;
+      margin-bottom: 28px;
       color: #FAFAFA;
       letter-spacing: -0.01em;
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 16px;
+      position: relative;
+      padding-left: 20px;
+    }
+    .section-title::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      width: 4px;
+      height: 24px;
+      background: #D0F205;
+      border-radius: 2px;
     }
     .section-title::after {
       content: '';
       flex: 1;
       height: 1px;
-      background: linear-gradient(90deg, rgba(163, 163, 163, 0.3) 0%, transparent 100%);
+      background: linear-gradient(90deg, rgba(208, 242, 5, 0.3) 0%, transparent 100%);
     }
     .ports-grid {
       display: grid;
@@ -699,7 +721,7 @@ router.get('/', (req: Request, res: Response) => {
     }
     .port-card {
       background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(208, 242, 5, 0.3);
+      border: 1px solid #D0F205;
       border-radius: 12px;
       padding: 24px;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -707,9 +729,9 @@ router.get('/', (req: Request, res: Response) => {
     }
     .port-card:hover {
       transform: translateY(-2px);
-      border-color: rgba(208, 242, 5, 0.6);
+      border-color: #D0F205;
       background: rgba(255, 255, 255, 0.08);
-      box-shadow: 0 4px 16px rgba(208, 242, 5, 0.15);
+      box-shadow: 0 4px 16px rgba(208, 242, 5, 0.25);
     }
     .port-card h3 {
       color: #FAFAFA;
@@ -752,16 +774,16 @@ router.get('/', (req: Request, res: Response) => {
     }
     .seed-card {
       background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(208, 242, 5, 0.3);
+      border: 1px solid #D0F205;
       border-radius: 12px;
       padding: 24px;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
     .seed-card:hover {
       transform: translateY(-2px);
-      border-color: rgba(208, 242, 5, 0.6);
+      border-color: #D0F205;
       background: rgba(255, 255, 255, 0.08);
-      box-shadow: 0 4px 16px rgba(208, 242, 5, 0.15);
+      box-shadow: 0 4px 16px rgba(208, 242, 5, 0.25);
     }
     .seed-card h3 {
       color: #FAFAFA;
@@ -1054,11 +1076,13 @@ router.get('/', (req: Request, res: Response) => {
 <body>
   <div class="container">
     <div class="dashboard-header">
-      <h1>Tipbox Development Console</h1>
-      <img src="https://tipbox.co/images/tipbox-logo-yellow.png" 
-           alt="Tipbox Logo" 
-           class="dashboard-header-image" 
-           onerror="this.style.display='none'">
+      <div class="dashboard-header-left">
+        <img src="https://tipbox.co/images/tipbox-logo-yellow.png" 
+             alt="Tipbox Logo" 
+             class="dashboard-header-logo" 
+             onerror="this.style.display='none'">
+        <h1>Tipbox Backend Dashboard</h1>
+      </div>
     </div>
     
     <div class="section">

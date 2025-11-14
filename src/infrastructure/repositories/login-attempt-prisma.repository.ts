@@ -5,7 +5,7 @@ import { LoginAttemptStatus } from '../../domain/user/login-attempt-status.enum'
 export class LoginAttemptPrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<LoginAttempt | null> {
+  async findById(id: string): Promise<LoginAttempt | null> {
     const attempt = await this.prisma.loginAttempt.findUnique({ where: { id } });
     return attempt ? this.toDomain(attempt) : null;
   }
@@ -77,7 +77,7 @@ export class LoginAttemptPrismaRepository {
     });
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.loginAttempt.delete({ where: { id } });
       return true;

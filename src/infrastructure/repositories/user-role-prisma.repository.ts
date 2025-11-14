@@ -4,12 +4,12 @@ import { UserRole } from '../../domain/user/user-role.entity';
 export class UserRolePrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<UserRole | null> {
+  async findById(id: string): Promise<UserRole | null> {
     const role = await this.prisma.userRole.findUnique({ where: { id } });
     return role ? this.toDomain(role) : null;
   }
 
-  async findByUserId(userId: number): Promise<UserRole[]> {
+  async findByUserId(userId: string): Promise<UserRole[]> {
     const roles = await this.prisma.userRole.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' }
@@ -25,7 +25,7 @@ export class UserRolePrismaRepository {
     return roles.map(userRole => this.toDomain(userRole));
   }
 
-  async findByUserAndRole(userId: number, role: string): Promise<UserRole | null> {
+  async findByUserAndRole(userId: string, role: string): Promise<UserRole | null> {
     const userRole = await this.prisma.userRole.findFirst({
       where: {
         userId,
@@ -35,7 +35,7 @@ export class UserRolePrismaRepository {
     return userRole ? this.toDomain(userRole) : null;
   }
 
-  async create(userId: number, role: string): Promise<UserRole> {
+  async create(userId: string, role: string): Promise<UserRole> {
     const userRole = await this.prisma.userRole.create({
       data: {
         userId,
@@ -45,7 +45,7 @@ export class UserRolePrismaRepository {
     return this.toDomain(userRole);
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.userRole.delete({ where: { id } });
       return true;
@@ -54,7 +54,7 @@ export class UserRolePrismaRepository {
     }
   }
 
-  async deleteByUserAndRole(userId: number, role: string): Promise<boolean> {
+  async deleteByUserAndRole(userId: string, role: string): Promise<boolean> {
     try {
       // Find the record first, then delete by id
       const userRole = await this.prisma.userRole.findFirst({
@@ -69,7 +69,7 @@ export class UserRolePrismaRepository {
     }
   }
 
-  async deleteAllByUserId(userId: number): Promise<boolean> {
+  async deleteAllByUserId(userId: string): Promise<boolean> {
     try {
       await this.prisma.userRole.deleteMany({
         where: { userId }

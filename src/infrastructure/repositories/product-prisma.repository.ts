@@ -4,7 +4,7 @@ import { Product } from '../../domain/product/product.entity';
 export class ProductPrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<Product | null> {
+  async findById(id: string): Promise<Product | null> {
     const product = await this.prisma.product.findUnique({ 
       where: { id },
       include: {
@@ -43,7 +43,7 @@ export class ProductPrismaRepository {
     return product ? this.toDomain(product) : null;
   }
 
-  async findByGroupId(groupId: number): Promise<Product[]> {
+  async findByGroupId(groupId: string): Promise<Product[]> {
     const products = await this.prisma.product.findMany({
       where: { groupId },
       include: {
@@ -79,7 +79,7 @@ export class ProductPrismaRepository {
     name: string, 
     brand?: string,
     description?: string, 
-    groupId?: number
+    groupId?: string
   ): Promise<Product> {
     const product = await this.prisma.product.create({
       data: {
@@ -98,11 +98,11 @@ export class ProductPrismaRepository {
     return this.toDomain(product);
   }
 
-  async update(id: number, data: { 
+  async update(id: string, data: { 
     name?: string; 
     brand?: string;
     description?: string; 
-    groupId?: number;
+      groupId?: string;
   }): Promise<Product | null> {
     const product = await this.prisma.product.update({
       where: { id },
@@ -117,7 +117,7 @@ export class ProductPrismaRepository {
     return product ? this.toDomain(product) : null;
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.product.delete({ where: { id } });
       return true;

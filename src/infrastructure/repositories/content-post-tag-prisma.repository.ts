@@ -4,7 +4,7 @@ import { ContentPostTag } from '../../domain/content/content-post-tag.entity';
 export class ContentPostTagPrismaRepository {
   private prisma = new PrismaClient();
 
-  async findById(id: number): Promise<ContentPostTag | null> {
+  async findById(id: string): Promise<ContentPostTag | null> {
     const postTag = await this.prisma.contentPostTag.findUnique({ 
       where: { id },
       include: {
@@ -74,7 +74,7 @@ export class ContentPostTagPrismaRepository {
     return this.findByPostId(postId);
   }
 
-  async delete(id: number): Promise<boolean> {
+  async delete(id: string): Promise<boolean> {
     try {
       await this.prisma.contentPostTag.delete({ where: { id } });
       return true;
