@@ -1,15 +1,15 @@
 export class ContentLike {
   constructor(
     public readonly id: string,
-    public readonly userId: number,
-    public readonly postId: number | null,
-    public readonly commentId: number | null,
+    public readonly userId: string,
+    public readonly postId: string | null,
+    public readonly commentId: string | null,
     public readonly createdAt: Date,
     public readonly updatedAt: Date
   ) {}
 
   // Essential business methods only
-  belongsToUser(userId: number): boolean {
+  belongsToUser(userId: string): boolean {
     return this.userId === userId;
   }
 
@@ -21,11 +21,11 @@ export class ContentLike {
     return this.commentId !== null && this.postId === null;
   }
 
-  belongsToPost(postId: number): boolean {
+  belongsToPost(postId: string): boolean {
     return this.postId === postId;
   }
 
-  belongsToComment(commentId: number): boolean {
+  belongsToComment(commentId: string): boolean {
     return this.commentId === commentId;
   }
 
