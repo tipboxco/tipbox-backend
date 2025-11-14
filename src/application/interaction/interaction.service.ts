@@ -37,15 +37,15 @@ export class InteractionService {
       }
 
       // Zaten beğenilmiş mi kontrol et
-      const existingLike = await this.contentLikeRepo.findByUserAndPost(userId, postId);
+      const existingLike = await this.contentLikeRepo.findByUserAndPost(userIdStr, postIdStr);
       if (existingLike) {
         throw new Error('Post already liked');
       }
 
       // Beğeniyi oluştur
       const like = await this.contentLikeRepo.create({
-        userId,
-        postId,
+        userId: userIdStr,
+        postId: postIdStr,
         createdAt: new Date(),
       });
 
@@ -85,9 +85,10 @@ export class InteractionService {
   async unlikePost(userId: number, postId: number): Promise<void> {
     try {
       const postIdStr = String(postId);
+      const userIdStr = String(userId);
       
       // Beğeniyi bul ve sil
-      const like = await this.contentLikeRepo.findByUserAndPost(userId, postId);
+      const like = await this.contentLikeRepo.findByUserAndPost(userIdStr, postIdStr);
       if (!like) {
         throw new Error('Like not found');
       }

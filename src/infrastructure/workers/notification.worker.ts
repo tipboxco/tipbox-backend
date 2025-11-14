@@ -106,7 +106,7 @@ export class NotificationWorker {
   /**
    * Yeni rozet bildirimi işler
    */
-  private async handleNewBadgeNotification(userId: number, data: any): Promise<void> {
+  private async handleNewBadgeNotification(userId: string, data: any): Promise<void> {
     // Socket.IO ile gerçek zamanlı bildirim gönder
     await this.sendSocketNotification(userId, {
       type: 'NEW_BADGE',
@@ -124,7 +124,7 @@ export class NotificationWorker {
   /**
    * Başarı bildirimi işler
    */
-  private async handleAchievementNotification(userId: number, data: any): Promise<void> {
+  private async handleAchievementNotification(userId: string, data: any): Promise<void> {
     await this.sendSocketNotification(userId, {
       type: 'ACHIEVEMENT_UNLOCKED',
       title: 'Başarı Açıldı! 🎯',
@@ -140,7 +140,7 @@ export class NotificationWorker {
   /**
    * Yeni takipçi bildirimi işler
    */
-  private async handleNewFollowerNotification(userId: number, data: any): Promise<void> {
+  private async handleNewFollowerNotification(userId: string, data: any): Promise<void> {
     await this.sendSocketNotification(userId, {
       type: 'NEW_FOLLOWER',
       title: 'Yeni Takipçi! 👥',
@@ -156,7 +156,7 @@ export class NotificationWorker {
   /**
    * Post beğeni bildirimi işler
    */
-  private async handlePostLikedNotification(userId: number, data: any): Promise<void> {
+  private async handlePostLikedNotification(userId: string, data: any): Promise<void> {
     await this.sendSocketNotification(userId, {
       type: 'POST_LIKED',
       title: 'Postunuz Beğenildi! ❤️',
@@ -173,7 +173,7 @@ export class NotificationWorker {
   /**
    * Yorum bildirimi işler
    */
-  private async handleCommentNotification(userId: number, data: any): Promise<void> {
+  private async handleCommentNotification(userId: string, data: any): Promise<void> {
     await this.sendSocketNotification(userId, {
       type: 'COMMENT_ADDED',
       title: 'Yeni Yorum! 💬',
@@ -191,7 +191,7 @@ export class NotificationWorker {
   /**
    * Sistem duyurusu işler
    */
-  private async handleSystemAnnouncement(userId: number, data: any): Promise<void> {
+  private async handleSystemAnnouncement(userId: string, data: any): Promise<void> {
     await this.sendSocketNotification(userId, {
       type: 'SYSTEM_ANNOUNCEMENT',
       title: data.title || 'Sistem Duyurusu',
@@ -208,14 +208,14 @@ export class NotificationWorker {
    * @param userId - Hedef kullanıcı ID'si
    * @param notification - Bildirim verisi
    */
-  private async sendSocketNotification(userId: number, notification: any): Promise<void> {
+  private async sendSocketNotification(userId: string, notification: any): Promise<void> {
     try {
       // SocketManager üzerinden SocketHandler'a eriş
       const { default: SocketManager } = await import('../realtime/socket-manager');
       const socketManager = SocketManager.getInstance();
       const socketHandler = socketManager.getSocketHandler();
       
-      socketHandler.sendMessageToUser(userId.toString(), 'notification', notification);
+      socketHandler.sendMessageToUser(userId, 'notification', notification);
     } catch (error) {
       logger.error(`Failed to send socket notification to user ${userId}:`, error);
       // Socket hatası durumunda job'u fail etme, sadece log'la

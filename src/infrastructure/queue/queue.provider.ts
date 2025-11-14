@@ -8,13 +8,13 @@ export interface JobData {
 
 export interface NotificationJobData extends JobData {
   type: string;
-  userId: number;
+  userId: string;
   [key: string]: any;
 }
 
 export interface AnalyticsJobData extends JobData {
   event: string;
-  userId?: number;
+  userId?: string;
   data: any;
 }
 
