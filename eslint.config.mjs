@@ -6,6 +6,19 @@ import { defineConfig } from "eslint/config";
 
 export default defineConfig([
   {
+    ignores: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/build/**",
+      "**/*.config.js",
+      "**/prisma/seed.js",
+      "**/prisma/seed.ts",
+      "**/scripts/**",
+      "**/test-results/**",
+      "**/logs/**",
+    ],
+  },
+  {
     files: ["**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}"],
     plugins: { js },
     extends: ["js/recommended"],

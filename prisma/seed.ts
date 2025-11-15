@@ -740,7 +740,7 @@ async function main() {
   // Content Posts
   // FREE Post (Feed)
   const freePostId = generateUlid()
-  const feedPost = await prisma.contentPost.create({
+  await prisma.contentPost.create({
     data: {
       id: freePostId,
       userId: userIdToUse,
@@ -1072,8 +1072,8 @@ async function main() {
   }
   
   // NFT örnekleri oluştur
-  const nftTypes = ['BADGE', 'COSMETIC', 'LOOTBOX'] as const
-  const nftRarities = ['COMMON', 'RARE', 'EPIC'] as const
+  // const nftTypes = ['BADGE', 'COSMETIC', 'LOOTBOX'] as const
+  // const nftRarities = ['COMMON', 'RARE', 'EPIC'] as const
   
   const nfts = await Promise.all([
     // ===== BELİRTİLEN KULLANICI (248cc91f-b551-4ecc-a885-db1163571330) NFT'LERİ =====

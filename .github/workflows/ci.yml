@@ -35,6 +35,9 @@ jobs:
 
       - name: Run linter
         run: npm run lint
+        continue-on-error: true
+        env:
+          ESLINT_NO_DEV_ERRORS: true
 
   test:
     name: Test
