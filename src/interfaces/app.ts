@@ -25,8 +25,36 @@ import { metricsMiddleware } from '../infrastructure/metrics/metrics.middleware'
 import config from '../infrastructure/config';
 
 const PORT = process.env.PORT || 3000;
-const swaggerServerUrl =
-  process.env.SWAGGER_SERVER_URL || `http://localhost:${PORT}`;
+const nodeEnv = config.nodeEnv;
+
+// Ortam bazlı Swagger server URL'leri
+function getSwaggerServers() {
+  const baseUrl = process.env.SWAGGER_SERVER_URL || process.env.API_BASE_URL;
+  
+  switch (nodeEnv) {
+    case 'development':
+      return [
+        { url: `http://localhost:${PORT}`, description: 'Local Development' }
+      ];
+    case 'test':
+      // Test ortamı için IP veya domain
+      const testUrl = baseUrl || `http://188.245.150.117:${PORT}`;
+      return [
+        { url: testUrl, description: 'Test Environment' },
+        { url: `http://localhost:${PORT}`, description: 'Local (Fallback)' }
+      ];
+    case 'production':
+      // Production için domain
+      const prodUrl = baseUrl || 'https://api.tipbox.co';
+      return [
+        { url: prodUrl, description: 'Production' }
+      ];
+    default:
+      return [
+        { url: `http://localhost:${PORT}`, description: 'Local' }
+      ];
+  }
+}
 
 const swaggerOptions = {
   definition: {
@@ -36,11 +64,7 @@ const swaggerOptions = {
       version: '1.0.0',
       description: 'Tipbox servisleri için API dokümantasyonu',
     },
-    servers: [
-      { url: `http://localhost:${PORT}`, description: 'Local' }
-      // Elastic Beanstalk test environment disabled for developer branch
-      // { url: 'http://app-backend-test-env.eba-iyvqk4cj.eu-central-1.elasticbeanstalk.com', description: 'Test' }
-    ],
+    servers: getSwaggerServers(),
     components: {
       securitySchemes: {
         bearerAuth: {
@@ -355,8 +379,9 @@ const swaggerOptions = {
     security: [{ bearerAuth: [] }],
   },
   apis: [
-    './dist/interfaces/**/*.js', // Docker/Production için compiled JavaScript dosyaları (ÖNCELIK)
-    './src/interfaces/**/*.ts', // Local development için TypeScript dosyaları
+    './src/interfaces/**/*.ts', // TypeScript dosyaları (development ve build öncesi)
+    './dist/interfaces/**/*.js', // Compiled JavaScript dosyaları (production)
+    './src/interfaces/**/*.router.ts', // Router dosyaları (explicit)
   ],
 };
 
@@ -425,7 +450,23 @@ app.get('/metrics', async (req, res) => {
 
 // Swagger JSON endpoint (Swagger UI middleware'lerinden önce tanımlanmalı)
 app.get('/api-docs/swagger.json', (req, res) => {
-  const swaggerSpec = getSwaggerSpec();
+  // Request'ten dinamik olarak server URL'lerini güncelle
+  const dynamicSwaggerOptions = {
+    ...swaggerOptions,
+    definition: {
+      ...swaggerOptions.definition,
+      servers: getSwaggerServers().map(server => {
+        // Eğer localhost ise ve request'ten host bilgisi varsa, onu kullan
+        if (server.url.includes('localhost') && req.get('host')) {
+          const protocol = req.protocol || 'http';
+          return { ...server, url: `${protocol}://${req.get('host')}` };
+        }
+        return server;
+      })
+    }
+  };
+  
+  const swaggerSpec = swaggerJSDoc(dynamicSwaggerOptions);
   // Cache'i devre dışı bırak (her zaman fresh spec için)
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -435,18 +476,37 @@ app.get('/api-docs/swagger.json', (req, res) => {
 });
 
 app.use('/api-docs', swaggerUi.serve);
-app.get('/api-docs', swaggerUi.setup(getSwaggerSpec(), {
-  customCss: '.swagger-ui .topbar { display: none }',
-  customSiteTitle: 'Tipbox API Documentation',
-  swaggerOptions: {
-    persistAuthorization: true, // Token'ı tarayıcıda sakla
-    displayRequestDuration: true, // İstek süresini göster
-    filter: true, // Endpoint filtreleme özelliğini etkinleştir
-    showExtensions: true, // Extension'ları göster
-    showCommonExtensions: true,
-    tryItOutEnabled: true, // "Try it out" butonunu her zaman göster
-  },
-}));
+app.get('/api-docs', (req, res, next) => {
+  // Request'ten dinamik olarak server URL'lerini güncelle
+  const dynamicSwaggerOptions = {
+    ...swaggerOptions,
+    definition: {
+      ...swaggerOptions.definition,
+      servers: getSwaggerServers().map(server => {
+        // Eğer localhost ise ve request'ten host bilgisi varsa, onu kullan
+        if (server.url.includes('localhost') && req.get('host')) {
+          const protocol = req.protocol || 'http';
+          return { ...server, url: `${protocol}://${req.get('host')}` };
+        }
+        return server;
+      })
+    }
+  };
+  
+  const swaggerSpec = swaggerJSDoc(dynamicSwaggerOptions);
+  swaggerUi.setup(swaggerSpec, {
+    customCss: '.swagger-ui .topbar { display: none }',
+    customSiteTitle: 'Tipbox API Documentation',
+    swaggerOptions: {
+      persistAuthorization: true, // Token'ı tarayıcıda sakla
+      displayRequestDuration: true, // İstek süresini göster
+      filter: true, // Endpoint filtreleme özelliğini etkinleştir
+      showExtensions: true, // Extension'ları göster
+      showCommonExtensions: true,
+      tryItOutEnabled: true, // "Try it out" butonunu her zaman göster
+    },
+  })(req, res, next);
+});
 app.use('/auth', authRouter);
 app.use('/users', authMiddleware, userRouter);
 app.use('/wallets', authMiddleware, walletRouter);
