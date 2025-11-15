@@ -73,7 +73,7 @@ function getConfig(): Config {
 
   const corsMethods = process.env.CORS_METHODS
     ? process.env.CORS_METHODS.split(',').map((method) => method.trim())
-    : getDefaultCorsMethods();
+    : ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'];
 
   return {
     databaseUrl: process.env.DATABASE_URL,
