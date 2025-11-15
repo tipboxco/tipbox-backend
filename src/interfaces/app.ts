@@ -22,6 +22,7 @@ import dashboardRouter from './dashboard/dashboard.router';
 import postRouter from './post/post.router';
 import { getMetricsService } from '../infrastructure/metrics/metrics.service';
 import { metricsMiddleware } from '../infrastructure/metrics/metrics.middleware';
+import config from '../infrastructure/config';
 
 const PORT = process.env.PORT || 3000;
 const swaggerServerUrl =
@@ -366,15 +367,11 @@ function getSwaggerSpec() {
 
 const app = express();
 
-// CORS configuration
+// CORS configuration - Config modülünden ortam bazlı değerleri al
 const corsOptions = {
-  origin: process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : [
-    'http://localhost:3000'
-    // Elastic Beanstalk test environment disabled for developer branch
-    // 'http://app-backend-test-env.eba-iyvqk4cj.eu-central-1.elasticbeanstalk.com'
-  ],
+  origin: config.corsOrigins,
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  methods: config.corsMethods,
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With']
 };
 

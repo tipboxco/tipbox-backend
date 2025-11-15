@@ -1,8 +1,11 @@
 import { createLogger, format, transports, Logger } from 'winston';
 import DailyRotateFile from 'winston-daily-rotate-file';
 import path from 'path';
+import config from '../config';
 
-const env = process.env.NODE_ENV || 'development';
+const env = config.nodeEnv;
+const logLevel = config.logLevel;
+const logRetentionDays = config.logRetentionDays;
 
 const logDir = path.resolve(process.cwd(), 'logs');
 
@@ -16,8 +19,16 @@ const enumerateErrorFormat = format((info) => {
   return info;
 });
 
+// Ortam bazlı console log level
+// Development: debug, Test: info, Production: warn (console'da sadece warn ve error)
+const consoleLogLevel = env === 'production' ? 'warn' : logLevel;
+
+// Ortam bazlı file log level
+// Tüm ortamlarda file'a info ve üzeri yazılır
+const fileLogLevel = 'info';
+
 const logger: Logger = createLogger({
-  level: env === 'development' ? 'debug' : 'info',
+  level: logLevel,
   levels: {
     error: 0,
     warn: 1,
@@ -36,7 +47,14 @@ const logger: Logger = createLogger({
   ),
   transports: [
     new transports.Console({
-      level: env === 'development' ? 'debug' : 'info',
+      level: consoleLogLevel,
+      format: format.combine(
+        format.colorize(),
+        format.printf(({ timestamp, level, message, ...meta }) => {
+          const metaStr = Object.keys(meta).length ? JSON.stringify(meta, null, 2) : '';
+          return `${timestamp} [${level}]: ${message} ${metaStr}`;
+        })
+      ),
     }),
     new DailyRotateFile({
       dirname: logDir,
@@ -44,8 +62,8 @@ const logger: Logger = createLogger({
       datePattern: 'YYYY-MM-DD',
       zippedArchive: true,
       maxSize: '20m',
-      maxFiles: '14d',
-      level: 'info',
+      maxFiles: `${logRetentionDays}d`,
+      level: fileLogLevel,
     }),
     new DailyRotateFile({
       dirname: logDir,
@@ -53,7 +71,8 @@ const logger: Logger = createLogger({
       datePattern: 'YYYY-MM-DD',
       zippedArchive: true,
       maxSize: '20m',
-      maxFiles: '30d',
+      // Error loglar daha uzun süre saklanır (production'da 90 gün, diğerlerinde retention * 1.5)
+      maxFiles: `${Math.ceil(logRetentionDays * 1.5)}d`,
       level: 'error',
     }),
   ],

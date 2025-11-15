@@ -1,3 +1,5 @@
+import config from './index';
+
 export interface SocketConfig {
   cors: {
     origin: string[];
@@ -26,18 +28,11 @@ class SocketConfigManager {
       return this.config;
     }
 
-    // CORS origins from environment variable
-    const corsOrigins = process.env.CORS_ORIGINS || 'http://localhost:3000';
-    const origins = corsOrigins.split(',').map(origin => origin.trim());
-
-    // CORS methods from environment variable
-    const corsMethods = process.env.CORS_METHODS || 'GET,POST,PUT,DELETE,OPTIONS';
-    const methods = corsMethods.split(',').map(method => method.trim());
-
+    // Config modülünden ortam bazlı CORS ayarlarını al
     this.config = {
       cors: {
-        origin: origins,
-        methods,
+        origin: config.corsOrigins,
+        methods: config.corsMethods,
         credentials: true,
       },
       transports: ['websocket', 'polling'] as const,

@@ -77,33 +77,33 @@ jobs:
             git pull origin ${{ github.event.inputs.branch || 'test' }}
             
             # Environment dosyasının varlığını kontrol et
-            if [ ! -f .env ]; then
-              echo "❌ .env file not found! Please create it first."
+            if [ ! -f .env.test ]; then
+              echo "❌ .env.test file not found! Please create it first."
               exit 1
             fi
             
-            # Docker Compose ile build ve deploy
+            # Docker Compose ile build ve deploy (test ortamı için)
             echo "🔨 Building Docker images..."
-            docker compose -f docker-compose.prod.yml build --no-cache backend
+            docker compose -f docker-compose.test.yml build --no-cache backend
             
             echo "🚀 Starting containers..."
-            docker compose -f docker-compose.prod.yml up -d
+            docker compose -f docker-compose.test.yml up -d
             
             # Migration'ları çalıştır
             echo "📊 Running database migrations..."
-            docker compose -f docker-compose.prod.yml run --rm backend npx prisma migrate deploy || true
+            docker compose -f docker-compose.test.yml run --rm backend npx prisma migrate deploy || true
             
             # Health check
             echo "🏥 Checking backend health..."
             sleep 10
             for i in {1..30}; do
-              if docker compose -f docker-compose.prod.yml exec -T backend node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" 2>/dev/null; then
+              if docker compose -f docker-compose.test.yml exec -T backend node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" 2>/dev/null; then
                 echo "✅ Backend is healthy!"
                 break
               fi
               if [ $i -eq 30 ]; then
                 echo "❌ Health check failed after 30 attempts"
-                docker compose -f docker-compose.prod.yml logs backend
+                docker compose -f docker-compose.test.yml logs backend
                 exit 1
               fi
               echo "⏳ Waiting for backend to be ready... ($i/30)"
@@ -114,11 +114,11 @@ jobs:
             echo "🧹 Cleaning up old Docker images..."
             docker image prune -f
             
-            echo "✅ Deployment completed successfully!"
+            echo "✅ Test environment deployment completed successfully!"
             
             # Container durumunu göster
             echo "📊 Container status:"
-            docker compose -f docker-compose.prod.yml ps
+            docker compose -f docker-compose.test.yml ps
           EOF
 
       - name: Deployment Summary

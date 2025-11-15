@@ -183,7 +183,14 @@ create_backup() {
         docker-compose exec -T postgres pg_dump -U postgres "$db_name" > "$backup_file"
     else
         # Local backup
-        local db_url="${DATABASE_URL:-postgresql://postgres:postgres@localhost:5432/tipbox_dev}"
+        # Ortam bazlı default database isimleri
+        local default_db="tipbox_dev"
+        if [ "$ENV" = "test" ]; then
+            default_db="tipbox_test"
+        elif [ "$ENV" = "prod" ]; then
+            default_db="tipbox_prod"
+        fi
+        local db_url="${DATABASE_URL:-postgresql://postgres:postgres@localhost:5432/$default_db}"
         pg_dump "$db_url" > "$backup_file" 2>/dev/null || {
             error "Backup alınamadı. pg_dump kurulu mu kontrol edin."
             return 1
