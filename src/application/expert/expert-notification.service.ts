@@ -72,7 +72,7 @@ export class ExpertNotificationService {
             const queueProvider = QueueProvider.getInstance();
             await queueProvider.addNotificationJob({
               type: 'EXPERT_REQUEST_AVAILABLE',
-              userId: parseInt(expertUserId) || 0, // NotificationJobData userId number bekliyor
+              userId: expertUserId,
               requestId,
               category,
               description,

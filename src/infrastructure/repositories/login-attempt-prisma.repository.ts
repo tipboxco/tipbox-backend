@@ -10,7 +10,7 @@ export class LoginAttemptPrismaRepository {
     return attempt ? this.toDomain(attempt) : null;
   }
 
-  async findByUserId(userId: number): Promise<LoginAttempt[]> {
+  async findByUserId(userId: string): Promise<LoginAttempt[]> {
     const attempts = await this.prisma.loginAttempt.findMany({
       where: { userId },
       orderBy: { attemptedAt: 'desc' }
@@ -18,7 +18,7 @@ export class LoginAttemptPrismaRepository {
     return attempts.map(attempt => this.toDomain(attempt));
   }
 
-  async findRecentByUserId(userId: number, minutes: number = 60): Promise<LoginAttempt[]> {
+  async findRecentByUserId(userId: string, minutes: number = 60): Promise<LoginAttempt[]> {
     const since = new Date(Date.now() - minutes * 60 * 1000);
     const attempts = await this.prisma.loginAttempt.findMany({
       where: { 
@@ -40,7 +40,7 @@ export class LoginAttemptPrismaRepository {
     return attempts.map(attempt => this.toDomain(attempt));
   }
 
-  async findFailedAttemptsByUserId(userId: number, since?: Date): Promise<LoginAttempt[]> {
+  async findFailedAttemptsByUserId(userId: string, since?: Date): Promise<LoginAttempt[]> {
     const attempts = await this.prisma.loginAttempt.findMany({
       where: { 
         userId,
@@ -52,10 +52,10 @@ export class LoginAttemptPrismaRepository {
     return attempts.map(attempt => this.toDomain(attempt));
   }
 
-  async create(userId: number, status: LoginAttemptStatus, ipAddress: string, userAgent: string): Promise<LoginAttempt> {
+  async create(userId: string | null, status: LoginAttemptStatus, ipAddress: string, userAgent: string): Promise<LoginAttempt> {
     const attempt = await this.prisma.loginAttempt.create({
       data: {
-        userId,
+        
         status,
         ipAddress,
         userAgent
@@ -64,7 +64,7 @@ export class LoginAttemptPrismaRepository {
     return this.toDomain(attempt);
   }
 
-  async countRecentFailedAttempts(userId: number, minutes: number = 15): Promise<number> {
+  async countRecentFailedAttempts(userId: string, minutes: number = 15): Promise<number> {
     const since = new Date(Date.now() - minutes * 60 * 1000);
     return await this.prisma.loginAttempt.count({
       where: {

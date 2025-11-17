@@ -1,4 +1,5 @@
 export type MessageEventType = 'message' | 'support-request' | 'send-tips';
+export type MessageEventContext = 'DM' | 'SUPPORT';
 
 export interface NewMessageEvent {
   messageId: string;
@@ -8,6 +9,7 @@ export interface NewMessageEvent {
   message: string;
   messageType: MessageEventType;
   timestamp: string;
+  context?: MessageEventContext;
 }
 
 export interface MessageSentEvent extends NewMessageEvent {}

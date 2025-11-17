@@ -119,18 +119,33 @@ export class DMRequestPrismaRepository {
       }
     }
 
-    const request = await this.prisma.dMRequest.create({
-      data: {
+    const request = await this.prisma.dMRequest.upsert({
+      where: {
+        fromUserId_toUserId: {
+          fromUserId: data.fromUserId,
+          toUserId: data.toUserId,
+        },
+      },
+      update: {
+        status: data.status || DMRequestStatus.PENDING,
+        type: supportType as any,
+        amount: data.amount ?? 0,
+        description: data.description || null,
+        sentAt: new Date(),
+        respondedAt: null,
+        updatedAt: new Date(),
+      } as any,
+      create: {
         fromUserId: data.fromUserId,
         toUserId: data.toUserId,
         status: data.status || DMRequestStatus.PENDING,
-        type: supportType as any, // TypeScript will recognize after server restart
+        type: supportType as any,
         amount: data.amount ?? 0,
         description: data.description || null,
         sentAt: new Date(),
         createdAt: new Date(),
         updatedAt: new Date(),
-      } as any, // TypeScript will recognize after server restart
+      } as any,
       include: DM_REQUEST_INCLUDE,
     });
     return this.toDomain(request);

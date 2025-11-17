@@ -14,7 +14,7 @@ export class ContentCollectionPrismaRepository {
     return collection ? this.toDomain(collection) : null;
   }
 
-  async findByUserId(userId: number): Promise<ContentCollection[]> {
+  async findByUserId(userId: string): Promise<ContentCollection[]> {
     const collections = await this.prisma.contentCollection.findMany({
       where: { userId },
       include: {
@@ -25,7 +25,7 @@ export class ContentCollectionPrismaRepository {
     return collections.map(collection => this.toDomain(collection));
   }
 
-  async findByName(userId: number, name: string): Promise<ContentCollection | null> {
+  async findByName(userId: string, name: string): Promise<ContentCollection | null> {
     const collection = await this.prisma.contentCollection.findFirst({
       where: { 
         userId,
@@ -49,7 +49,7 @@ export class ContentCollectionPrismaRepository {
   }
 
   async create(
-    userId: number,
+    userId: string,
     name: string,
     description?: string
   ): Promise<ContentCollection> {

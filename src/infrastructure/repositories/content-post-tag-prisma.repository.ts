@@ -14,7 +14,7 @@ export class ContentPostTagPrismaRepository {
     return postTag ? this.toDomain(postTag) : null;
   }
 
-  async findByPostId(postId: number): Promise<ContentPostTag[]> {
+  async findByPostId(postId: string): Promise<ContentPostTag[]> {
     const postTags = await this.prisma.contentPostTag.findMany({
       where: { postId },
       include: {
@@ -36,7 +36,7 @@ export class ContentPostTagPrismaRepository {
     return postTags.map(postTag => this.toDomain(postTag));
   }
 
-  async findByPostAndTag(postId: number, tag: string): Promise<ContentPostTag | null> {
+  async findByPostAndTag(postId: string, tag: string): Promise<ContentPostTag | null> {
     const postTag = await this.prisma.contentPostTag.findFirst({
       where: {
         postId,
@@ -49,7 +49,7 @@ export class ContentPostTagPrismaRepository {
     return postTag ? this.toDomain(postTag) : null;
   }
 
-  async create(postId: number, tag: string): Promise<ContentPostTag> {
+  async create(postId: string, tag: string): Promise<ContentPostTag> {
     const postTag = await this.prisma.contentPostTag.create({
       data: {
         postId,
@@ -62,7 +62,7 @@ export class ContentPostTagPrismaRepository {
     return this.toDomain(postTag);
   }
 
-  async createMultiple(postId: number, tags: string[]): Promise<ContentPostTag[]> {
+  async createMultiple(postId: string, tags: string[]): Promise<ContentPostTag[]> {
     const data = tags.map(tag => ({ postId, tag }));
     
     await this.prisma.contentPostTag.createMany({
@@ -83,7 +83,7 @@ export class ContentPostTagPrismaRepository {
     }
   }
 
-  async deleteByPostAndTag(postId: number, tag: string): Promise<boolean> {
+  async deleteByPostAndTag(postId: string, tag: string): Promise<boolean> {
     try {
       const postTag = await this.prisma.contentPostTag.findFirst({
         where: { postId, tag }
@@ -97,7 +97,7 @@ export class ContentPostTagPrismaRepository {
     }
   }
 
-  async deleteByPostId(postId: number): Promise<boolean> {
+  async deleteByPostId(postId: string): Promise<boolean> {
     try {
       await this.prisma.contentPostTag.deleteMany({
         where: { postId }
@@ -119,7 +119,7 @@ export class ContentPostTagPrismaRepository {
     }
   }
 
-  async updatePostTags(postId: number, tags: string[]): Promise<ContentPostTag[]> {
+  async updatePostTags(postId: string, tags: string[]): Promise<ContentPostTag[]> {
     // Remove existing tags
     await this.deleteByPostId(postId);
     
@@ -131,7 +131,7 @@ export class ContentPostTagPrismaRepository {
     return [];
   }
 
-  async countByPostId(postId: number): Promise<number> {
+  async countByPostId(postId: string): Promise<number> {
     return await this.prisma.contentPostTag.count({
       where: { postId }
     });

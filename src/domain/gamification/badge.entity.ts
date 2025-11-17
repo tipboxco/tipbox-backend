@@ -11,7 +11,7 @@ export class Badge {
     public readonly rarity: BadgeRarity,
     public readonly boostMultiplier: number | null,
     public readonly rewardMultiplier: number | null,
-    public readonly categoryId: number,
+    public readonly categoryId: string,
     public readonly createdAt: Date
   ) {}
 

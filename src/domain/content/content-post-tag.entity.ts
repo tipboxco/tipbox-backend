@@ -1,14 +1,14 @@
 export class ContentPostTag {
   constructor(
     public readonly id: string,
-    public readonly postId: number,
+    public readonly postId: string,
     public readonly tag: string,
     public readonly createdAt: Date,
     public readonly updatedAt: Date
   ) {}
 
   // Essential business methods only
-  belongsToPost(postId: number): boolean {
+  belongsToPost(postId: string): boolean {
     return this.postId === postId;
   }
 

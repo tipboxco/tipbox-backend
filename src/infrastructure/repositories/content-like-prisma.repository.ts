@@ -15,7 +15,7 @@ export class ContentLikePrismaRepository {
     return like ? this.toDomain(like) : null;
   }
 
-  async findByUserAndPost(userId: number, postId: number): Promise<ContentLike | null> {
+  async findByUserAndPost(userId: string, postId: string): Promise<ContentLike | null> {
     const like = await this.prisma.contentLike.findFirst({
       where: {
         userId,
@@ -29,7 +29,7 @@ export class ContentLikePrismaRepository {
     return like ? this.toDomain(like) : null;
   }
 
-  async findByUserId(userId: number): Promise<ContentLike[]> {
+  async findByUserId(userId: string): Promise<ContentLike[]> {
     const likes = await this.prisma.contentLike.findMany({
       where: { userId },
       include: {
@@ -41,7 +41,7 @@ export class ContentLikePrismaRepository {
     return likes.map(like => this.toDomain(like));
   }
 
-  async findByPostId(postId: number): Promise<ContentLike[]> {
+  async findByPostId(postId: string): Promise<ContentLike[]> {
     const likes = await this.prisma.contentLike.findMany({
       where: { postId },
       include: {
@@ -57,7 +57,8 @@ export class ContentLikePrismaRepository {
     const like = await this.prisma.contentLike.create({
       data: {
         userId: data.userId!,
-        postId: data.postId!,
+        postId: data.postId ?? null,
+        commentId: data.commentId ?? null,
         createdAt: data.createdAt || new Date(),
       },
       include: {
@@ -96,13 +97,13 @@ export class ContentLikePrismaRepository {
     }
   }
 
-  async getLikeCountByPostId(postId: number): Promise<number> {
+  async getLikeCountByPostId(postId: string): Promise<number> {
     return this.prisma.contentLike.count({
       where: { postId }
     });
   }
 
-  async getLikeCountByUserId(userId: number): Promise<number> {
+  async getLikeCountByUserId(userId: string): Promise<number> {
     return this.prisma.contentLike.count({
       where: { userId }
     });

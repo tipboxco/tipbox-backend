@@ -135,6 +135,14 @@ export class SocketHandler {
         socket.join(roomName);
         logger.info(`User ${userEmail} (${userId}) joined thread room: ${roomName}`);
 
+        // Thread'deki tüm mesajları okundu olarak işaretle
+        try {
+          await this.messagingService.markAllMessagesAsReadInThread(threadId, userId);
+        } catch (error) {
+          logger.error(`Failed to mark messages as read when joining thread ${threadId}:`, error);
+          // Hata olsa bile thread'e katılmaya devam et
+        }
+
         // Başarılı katılım bildirimi
         socket.emit('thread_joined', { threadId });
       } catch (error) {
@@ -190,6 +198,14 @@ export class SocketHandler {
           return;
         }
 
+        // Thread bilgisini al (diğer kullanıcıyı bulmak için)
+        const thread = await this.messagingService.getThreadById(threadId);
+        if (!thread) {
+          logger.warn(`Thread ${threadId} not found for typing_start`);
+          return;
+        }
+
+        const otherUserId = thread.userOneId === userId ? thread.userTwoId : thread.userOneId;
         const roomName = `thread:${threadId}`;
         const typingEvent: TypingEvent = {
           userId,
@@ -197,8 +213,12 @@ export class SocketHandler {
           isTyping: true,
         };
 
-        // Socket'in kendisi hariç room'daki diğer kullanıcılara gönder
+        // Thread room'una gönder (thread açık olan kullanıcılar için)
         socket.to(roomName).emit('user_typing', typingEvent);
+        
+        // Diğer kullanıcının kişisel room'una da gönder (mesaj listesindeyken görmesi için)
+        this.sendMessageToUser(otherUserId, 'user_typing', typingEvent);
+        
         logger.debug(`Typing started: User ${userEmail} in thread ${threadId}`);
       } catch (error) {
         logger.error(`Error handling typing_start for user ${userEmail}:`, error);
@@ -222,6 +242,14 @@ export class SocketHandler {
           return;
         }
 
+        // Thread bilgisini al (diğer kullanıcıyı bulmak için)
+        const thread = await this.messagingService.getThreadById(threadId);
+        if (!thread) {
+          logger.warn(`Thread ${threadId} not found for typing_stop`);
+          return;
+        }
+
+        const otherUserId = thread.userOneId === userId ? thread.userTwoId : thread.userOneId;
         const roomName = `thread:${threadId}`;
         const typingEvent: TypingEvent = {
           userId,
@@ -229,8 +257,12 @@ export class SocketHandler {
           isTyping: false,
         };
 
-        // Socket'in kendisi hariç room'daki diğer kullanıcılara gönder
+        // Thread room'una gönder (thread açık olan kullanıcılar için)
         socket.to(roomName).emit('user_typing', typingEvent);
+        
+        // Diğer kullanıcının kişisel room'una da gönder (mesaj listesindeyken görmesi için)
+        this.sendMessageToUser(otherUserId, 'user_typing', typingEvent);
+        
         logger.debug(`Typing stopped: User ${userEmail} in thread ${threadId}`);
       } catch (error) {
         logger.error(`Error handling typing_stop for user ${userEmail}:`, error);
@@ -243,8 +275,9 @@ export class SocketHandler {
    */
   public sendMessageToUser(userId: string, event: string, payload: any): void {
     try {
+      // Kullanıcılar user:{userId} room'una katılıyor
       this.io.to(userId).emit(event, payload);
-      logger.info(`Message sent to user ${userId}: ${event}`);
+      logger.debug(`Message sent to user ${userId}: ${event}`);
     } catch (error) {
       logger.error(`Failed to send message to user ${userId}:`, error);
     }

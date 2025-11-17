@@ -1205,6 +1205,7 @@ model DMMessage {
   message   String
   sentAt    DateTime @default(now()) @map("sent_at")
   isRead    Boolean  @map("is_read")
+  context   DMMessageContext @default(DM)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
   sender    User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
@@ -1214,6 +1215,11 @@ model DMMessage {
   @@index([threadId, isRead])
   @@index([senderId])
   @@map("dm_messages")
+}
+
+enum DMMessageContext {
+  DM
+  SUPPORT
 }
 
 model DMRequest {

@@ -85,6 +85,7 @@ export class ContentPost {
       case ContentPostType.COMPARE: return '⚖️';
       case ContentPostType.FREE: return '📝';
     }
+    return '📝';
   }
 
   getPostTypeDisplayName(): string {
@@ -94,6 +95,7 @@ export class ContentPost {
       case ContentPostType.COMPARE: return 'Karşılaştırma';
       case ContentPostType.FREE: return 'Serbest';
     }
+    return 'Serbest';
   }
 
   getWordCount(): number {
