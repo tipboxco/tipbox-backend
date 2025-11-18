@@ -1,0 +1,56 @@
+# Production Dockerfile
+FROM node:18-alpine AS builder
+
+WORKDIR /app
+
+# Package files ve Prisma schema'yı kopyala
+COPY package*.json ./
+COPY prisma ./prisma
+
+# Production dependencies'leri yükle (devDependencies hariç)
+RUN npm ci --only=production --legacy-peer-deps
+
+# Prisma Client'ı generate et
+RUN npx prisma generate
+
+# Source code'u kopyala
+COPY . .
+
+# TypeScript build
+RUN npm run build
+
+# Production image
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Production dependencies'leri kopyala
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/dist ./dist
+
+# Prisma Client'ı kopyala (generate edilmiş)
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+
+# Non-root user oluştur (güvenlik için)
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+# Log dizini oluştur
+RUN mkdir -p /app/logs && \
+    chown -R nodejs:nodejs /app
+
+# Non-root user'a geç
+USER nodejs
+
+# Port'u expose et
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+
+# Production için start komutu
+CMD ["npm", "run", "start"]
+

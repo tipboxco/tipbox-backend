@@ -33,12 +33,12 @@ export class GamificationService {
         BadgeRarity.COMMON,
         null, // boostMultiplier
         null, // rewardMultiplier
-        'badge-category', // categoryId
+        '00000000-0000-0000-0000-000000000001', // categoryId
         new Date()
       );
 
       const mockUserBadge = new UserBadge(
-        'user-badge-1',
+        '00000000-0000-0000-0000-000000000001',
         userId,
         badgeId,
         true, // isVisible
@@ -80,7 +80,7 @@ export class GamificationService {
     try {
       // Mock achievement data
       const mockUserAchievement = new UserAchievement(
-        'user-achievement-1',
+        '00000000-0000-0000-0000-000000000001',
         userId,
         achievementId,
         100, // progress
