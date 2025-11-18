@@ -495,7 +495,7 @@ router.post(
  * /messages/tips:
  *   post:
  *     summary: Kullanıcıya TIPS gönder
- *     description: Bir kullanıcıya TIPS gönderir. TIPS gönderildiğinde `new_message` socket event'i `messageType: 'send-tips'` ile tetiklenir.
+ *     description: Bir kullanıcıya TIPS gönderir. TIPS gönderildiğinde `new_message` socket event'i messageType alanı "send-tips" olacak şekilde tetiklenir.
  *     tags: [Inbox]
  *     security:
  *       - bearerAuth: []
@@ -678,6 +678,153 @@ router.post(
       return res.status(200).json({ message: 'Message marked as read' });
     } catch (error: any) {
       if (error.message === 'Message not found' || error.message === 'Thread not found') {
+        return res.status(404).json({ message: error.message });
+      }
+      if (error.message === 'User is not a participant of this thread') {
+        return res.status(403).json({ message: error.message });
+      }
+      throw error;
+    }
+  }),
+);
+
+/**
+ * @openapi
+ * /messages/{threadId}/support-chat:
+ *   get:
+ *     summary: Support chat mesajlarını getir
+ *     description: Belirtilen thread için 1-on-1 support chat mesajlarını döner.
+ *     tags: [Inbox]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: threadId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 500
+ *           default: 200
+ *       - in: query
+ *         name: supportRequestId
+ *         schema:
+ *           type: string
+ *         description: Support request ID (optional, filters messages after this request)
+ *     responses:
+ *       200:
+ *         description: Support chat mesajları
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Message'
+ *       401:
+ *         description: Unauthorized
+ */
+router.get(
+  '/:threadId/support-chat',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { threadId } = req.params;
+    if (!threadId) {
+      return res.status(400).json({ message: 'threadId is required' });
+    }
+
+    let limit = 200;
+    if (typeof req.query.limit === 'string') {
+      const parsed = parseInt(req.query.limit, 10);
+      if (!Number.isNaN(parsed)) {
+        limit = Math.min(Math.max(parsed, 1), 500);
+      }
+    }
+
+    const supportRequestId = typeof req.query.supportRequestId === 'string' ? req.query.supportRequestId : undefined;
+
+    try {
+      const messages = await messagingService.getSupportChatMessages(threadId, String(userId), supportRequestId, limit);
+      return res.status(200).json(messages);
+    } catch (error: any) {
+      if (error.message === 'Thread not found') {
+        return res.status(404).json({ message: error.message });
+      }
+      if (error.message === 'User is not a participant of this thread') {
+        return res.status(403).json({ message: error.message });
+      }
+      throw error;
+    }
+  }),
+);
+
+/**
+ * @openapi
+ * /messages/{threadId}/support-chat:
+ *   post:
+ *     summary: Support chat içinde mesaj gönder
+ *     tags: [Inbox]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: threadId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ message ]
+ *             properties:
+ *               message:
+ *                 type: string
+ *                 example: "Smartwatch kurulumu için yardıma ihtiyacım var."
+ *     responses:
+ *       201:
+ *         description: Mesaj gönderildi.
+ *       400:
+ *         description: Geçersiz istek.
+ *       401:
+ *         description: Unauthorized.
+ *       403:
+ *         description: Thread erişimi yok.
+ */
+router.post(
+  '/:threadId/support-chat',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { threadId } = req.params;
+    if (!threadId) {
+      return res.status(400).json({ message: 'threadId is required' });
+    }
+
+    const { message } = req.body || {};
+    if (!message || typeof message !== 'string' || message.trim() === '') {
+      return res.status(400).json({ message: 'message is required' });
+    }
+
+    try {
+      await messagingService.sendSupportChatMessage(threadId, String(userId), message.trim());
+      return res.status(201).end();
+    } catch (error: any) {
+      if (error.message === 'Thread not found') {
         return res.status(404).json({ message: error.message });
       }
       if (error.message === 'User is not a participant of this thread') {

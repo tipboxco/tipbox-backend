@@ -55,7 +55,7 @@ export class LoginAttemptPrismaRepository {
   async create(userId: string | null, status: LoginAttemptStatus, ipAddress: string, userAgent: string): Promise<LoginAttempt> {
     const attempt = await this.prisma.loginAttempt.create({
       data: {
-        userId,
+        
         status,
         ipAddress,
         userAgent

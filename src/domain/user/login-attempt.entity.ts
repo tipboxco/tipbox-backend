@@ -3,7 +3,7 @@ import { LoginAttemptStatus } from './login-attempt-status.enum';
 export class LoginAttempt {
   constructor(
     public readonly id: string,
-    public readonly userId: number | null,
+    public readonly userId: string | null,
     public readonly ipAddress: string,
     public readonly userAgent: string,
     public readonly status: LoginAttemptStatus,

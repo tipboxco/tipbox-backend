@@ -36,6 +36,18 @@
  *           format: date-time
  *         isUnread:
  *           type: boolean
+ *     SupportChatMessage:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *         senderId:
+ *           type: string
+ *         message:
+ *           type: string
+ *         timestamp:
+ *           type: string
+ *           format: date-time
  *     SupportRequest:
  *       type: object
  *       properties:
@@ -54,6 +66,11 @@
  *         timestamp:
  *           type: string
  *           format: date-time
+ *         messages:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/SupportChatMessage'
+ *           description: Support chat ekranı için detaylı mesajlar (DM ekranında kullanılmaz)
  *     TipsInfo:
  *       type: object
  *       properties:
@@ -160,6 +177,20 @@ export interface Message {
   isUnread: boolean;
 }
 
+/**
+ * Support request mesaj grubunun içerisinde yer alan bireysel mesajlar
+ */
+export interface SupportChatMessage {
+  id: string;
+  senderId: string;
+  message: string;
+  timestamp: string;
+}
+
+/**
+ * Support request (DM ekranında sadece özet gösterilir)
+ * Destek chat ekranı açılınca messages alanı kullanılır.
+ */
 export interface SupportRequest {
   id: string;
   sender: SenderUser;
@@ -168,6 +199,8 @@ export interface SupportRequest {
   amount: number;
   status: SupportRequestStatus;
   timestamp: string;
+  // Support chat ekranı için detaylı mesajlar
+  messages: SupportChatMessage[];
 }
 
 export interface TipsInfo {

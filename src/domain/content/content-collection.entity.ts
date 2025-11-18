@@ -1,7 +1,7 @@
 export class ContentCollection {
   constructor(
     public readonly id: string,
-    public readonly userId: number,
+    public readonly userId: string,
     public readonly name: string,
     public readonly description: string | null,
     public readonly createdAt: Date,
@@ -9,7 +9,7 @@ export class ContentCollection {
   ) {}
 
   // Essential business methods only
-  belongsToUser(userId: number): boolean {
+  belongsToUser(userId: string): boolean {
     return this.userId === userId;
   }
 

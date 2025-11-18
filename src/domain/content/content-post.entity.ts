@@ -88,6 +88,7 @@ export class ContentPost {
       case ContentPostType.UPDATE: return '📢';
       default: return '📝';
     }
+    return '📝';
   }
 
   getPostTypeDisplayName(): string {
@@ -100,6 +101,7 @@ export class ContentPost {
       case ContentPostType.UPDATE: return 'Güncelleme';
       default: return 'Serbest';
     }
+    return 'Serbest';
   }
 
   getWordCount(): number {

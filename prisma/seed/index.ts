@@ -6,6 +6,7 @@ import { seedProductsAndContent } from './content.seed';
 import { seedFeedAndTrending } from './feed.seed';
 import { seedMarketplace } from './marketplace.seed';
 import { seedExplore } from './explore.seed';
+import { seedMessaging } from './messaging.seed';
 import { markSeedStart, markSeedEnd, addSeedUserId } from './seed-metadata';
 
 export async function runAllSeeds(): Promise<void> {
@@ -35,6 +36,7 @@ export async function runAllSeeds(): Promise<void> {
     await seedFeedAndTrending();
     await seedMarketplace();
     await seedExplore();
+    await seedMessaging();
     
     // Seed sonunu işaretle
     markSeedEnd();

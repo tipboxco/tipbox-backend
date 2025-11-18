@@ -1,8 +1,8 @@
 export class PostComparisonScore {
   constructor(
     public readonly id: string,
-    public readonly comparisonId: number,
-    public readonly metricId: number,
+    public readonly comparisonId: string,
+    public readonly metricId: string,
     public readonly scoreProduct1: number,
     public readonly scoreProduct2: number,
     public readonly comment: string | null,
@@ -214,11 +214,11 @@ export class PostComparisonScore {
     };
   }
 
-  belongsToComparison(comparisonId: number): boolean {
+  belongsToComparison(comparisonId: string): boolean {
     return this.comparisonId === comparisonId;
   }
 
-  belongsToMetric(metricId: number): boolean {
+  belongsToMetric(metricId: string): boolean {
     return this.metricId === metricId;
   }
 }

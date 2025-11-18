@@ -76,7 +76,7 @@ router.get('/me/profile', asyncHandler(async (req: Request, res: Response) => {
  *     parameters:
  *       - in: path
  *         name: id
-+ *         required: true
+ *         required: true
  *         schema:
  *           type: string
  *         description: Ziyaret edilen kullanıcı ID'si

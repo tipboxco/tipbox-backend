@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import * as bcrypt from 'bcryptjs'
+import { seedMessaging } from './seed/messaging.seed'
 
 const prisma = new PrismaClient()
 
@@ -2032,6 +2033,8 @@ async function main() {
   }
   console.log(`✅ ${threadsCreated} DM thread oluşturuldu/güncellendi (ACCEPTED requests için)`)
 
+  const messagingStats = await seedMessaging(prisma)
+
   console.log('✨ Seed process completed successfully!')
   
   // Build summary text
@@ -2054,6 +2057,7 @@ async function main() {
   summaryLines.push(`• ${expertRequests.length} Expert Requests`)
   summaryLines.push(`• ${expertAnswers.length} Expert Answers`)
   summaryLines.push(`• ${dmRequests.length} DM Requests (Support Requests)`)
+  summaryLines.push(`• Messaging: ${messagingStats.threads} threads, ${messagingStats.messages} messages, ${messagingStats.tipsTransfers} tips transfers, ${messagingStats.supportRequests} support requests`)
   summaryLines.push(`• Target User (Market Test) - ID: ${TARGET_USER_ID}`)
   summaryLines.push(`  - Owned NFTs: 4 (not listed)`)
   summaryLines.push(`  - Listed NFTs: 6 (on marketplace)`)
