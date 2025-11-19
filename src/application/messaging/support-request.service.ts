@@ -67,20 +67,40 @@ export class SupportRequestService {
         select: { id: true, isActive: true, userOneId: true, userTwoId: true },
       });
 
-      // Thread'leri request'lere eşleştir (userOneId ve userTwoId'ye göre)
+      // Thread'leri request'lere eşleştir
+      // ÖNEMLİ: Request'in kendi threadId'sini kontrol et, yoksa userOneId/userTwoId'ye göre eşleştir
       const threadMap = new Map<string, { threadId: string; isActive: boolean }>();
       for (const request of requests) {
-        const matchingThread = supportThreads.find(
-          (thread) =>
-            (thread.userOneId === request.fromUserId && thread.userTwoId === request.toUserId) ||
-            (thread.userOneId === request.toUserId && thread.userTwoId === request.fromUserId)
-        );
-        if (matchingThread) {
-          threadMap.set(request.id, {
-            threadId: matchingThread.id,
-            isActive: matchingThread.isActive,
-          });
+        // Type assertion: Prisma type'ında threadId tanımlı olmayabilir
+        const requestThreadId = (request as any).threadId as string | null | undefined;
+        
+        // Önce request'in kendi threadId'sini kontrol et
+        // Pending request'lerde threadId null olmalı, bu durumda eşleştirme yapma
+        if (requestThreadId) {
+          // Request'in kendi threadId'si var, direkt bunu kullan
+          const matchingThread = supportThreads.find(thread => thread.id === requestThreadId);
+          if (matchingThread) {
+            threadMap.set(request.id, {
+              threadId: matchingThread.id,
+              isActive: matchingThread.isActive,
+            });
+          }
+        } else if (request.status === DMRequestStatus.ACCEPTED) {
+          // Request'in threadId'si yok ama ACCEPTED durumunda
+          // Bu durumda aynı kullanıcılar arasındaki thread'i bul (eski mantık - backward compatibility)
+          const matchingThread = supportThreads.find(
+            (thread) =>
+              (thread.userOneId === request.fromUserId && thread.userTwoId === request.toUserId) ||
+              (thread.userOneId === request.toUserId && thread.userTwoId === request.fromUserId)
+          );
+          if (matchingThread) {
+            threadMap.set(request.id, {
+              threadId: matchingThread.id,
+              isActive: matchingThread.isActive,
+            });
+          }
         }
+        // PENDING durumunda threadId null kalır, eşleştirme yapılmaz
       }
 
       // Map requests to support request list items
@@ -123,6 +143,19 @@ export class SupportRequestService {
         const userTitle = counterpart?.titles?.[0]?.title ?? null;
         const userAvatar = counterpart?.avatars?.[0]?.imageUrl ?? null;
 
+        // ThreadId'yi belirle: Önce request'in kendi threadId'sini kontrol et, sonra threadMap'i kontrol et
+        // PENDING durumunda request.threadId null olmalı, bu durumda threadInfo da null olacak
+        const requestThreadId = (request as any).threadId as string | null | undefined;
+        let finalThreadId: string | null = null;
+        if (requestThreadId) {
+          // Request'in kendi threadId'si varsa onu kullan
+          finalThreadId = requestThreadId;
+        } else if (threadInfo?.threadId) {
+          // ThreadMap'ten bulunan threadId'yi kullan (backward compatibility)
+          finalThreadId = threadInfo.threadId;
+        }
+        // PENDING durumunda finalThreadId null kalır
+
         supportRequests.push({
           id: request.id,
           userName,
@@ -130,7 +163,7 @@ export class SupportRequestService {
           userAvatar,
           requestDescription: request.description,
           status: supportStatus,
-          threadId: threadInfo?.threadId ?? null,
+          threadId: finalThreadId,
         });
       }
 
@@ -215,9 +248,28 @@ export class SupportRequestService {
       dmThreadId = newThread.id;
     }
 
-    // Support request REST API ile oluşturuldu, socket event'i göndermiyoruz
-    // Frontend GET isteği ile thread items'ı yeniden yükleyecek
-    logger.info(`Support request created from ${senderId} to ${payload.recipientUserId} via REST API`);
+    const socketHandler = SocketManager.getInstance().getSocketHandler();
+    const supportEvent = {
+      messageId: request.id,
+      threadId: dmThreadId,
+      senderId,
+      recipientId: payload.recipientUserId,
+      message: payload.message,
+      messageType: 'support-request' as const,
+      type: payload.type,
+      amount: payload.amount,
+      status: 'pending' as const,
+      context: 'DM' as const,
+      timestamp: request.sentAt.toISOString(),
+    };
+
+    if (dmThreadId) {
+      socketHandler.sendToRoom(`thread:${dmThreadId}`, 'new_message', supportEvent);
+    }
+    socketHandler.sendMessageToUser(payload.recipientUserId, 'new_message', supportEvent);
+    socketHandler.sendMessageToUser(senderId, 'message_sent', supportEvent);
+
+    logger.info(`Support request created from ${senderId} to ${payload.recipientUserId}, socket events emitted`);
   }
 
   /**

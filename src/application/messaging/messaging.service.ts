@@ -153,9 +153,24 @@ export class MessagingService {
       data: { updatedAt: new Date() },
     });
 
-    // TIPS REST API ile oluşturuldu, socket event'i göndermiyoruz
-    // Frontend GET isteği ile thread items'ı yeniden yükleyecek
-    logger.info(`TIPS sent from ${senderId} to ${recipientId}, amount: ${amount} via REST API`);
+    const socketHandler = SocketManager.getInstance().getSocketHandler();
+    const tipsEvent = {
+      messageId: tipsTransfer.id,
+      threadId: thread.id,
+      senderId: String(senderId),
+      recipientId: String(recipientId),
+      message: tipsMessage || '',
+      messageType: 'send-tips' as const,
+      amount,
+      context: 'DM' as const,
+      timestamp: tipsTransfer.createdAt.toISOString(),
+    };
+
+    socketHandler.sendMessageToUser(String(recipientId), 'new_message', tipsEvent);
+    socketHandler.sendToRoom(`thread:${thread.id}`, 'new_message', tipsEvent);
+    socketHandler.sendMessageToUser(String(senderId), 'message_sent', tipsEvent);
+
+    logger.info(`TIPS sent from ${senderId} to ${recipientId}, amount: ${amount}, socket events emitted`);
   }
 
   /**
@@ -793,21 +808,19 @@ export class MessagingService {
 
         if (!dmRequest) continue;
 
-        const isFromUser = dmRequest.fromUserId === userIdStr;
-        const counterpart = isFromUser ? dmRequest.toUser : dmRequest.fromUser;
-        
-        if (!counterpart) continue;
+        const requestCreator = dmRequest.fromUser;
+        if (!requestCreator) continue;
 
-        const senderName = counterpart.profile?.displayName
-          || counterpart.profile?.userName
-          || counterpart.email
+        const senderName = requestCreator.profile?.displayName
+          || requestCreator.profile?.userName
+          || requestCreator.email
           || 'Unknown';
 
         const sender: SenderUser = {
-          id: isFromUser ? dmRequest.toUserId : dmRequest.fromUserId,
+          id: dmRequest.fromUserId,
           senderName,
-          senderTitle: counterpart.titles?.[0]?.title ?? '',
-          senderAvatar: counterpart.avatars?.[0]?.imageUrl ?? '',
+          senderTitle: requestCreator.titles?.[0]?.title ?? '',
+          senderAvatar: requestCreator.avatars?.[0]?.imageUrl ?? '',
         };
 
         // Map DMRequestStatus to SupportRequestStatus

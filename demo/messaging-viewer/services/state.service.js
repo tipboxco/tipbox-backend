@@ -19,6 +19,9 @@ export function createPanelState(side) {
     typingThreads: new Map(),
     typingTimeout: null,
     side,
+    activeTab: 'messages', // 'messages' or 'support-requests'
+    supportRequests: [],
+    filteredSupportRequests: [],
   };
 }
 

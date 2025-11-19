@@ -1,6 +1,7 @@
 import { Server, Socket } from 'socket.io';
 import { AuthService } from '../../application/auth/auth.service';
 import { MessagingService } from '../../application/messaging/messaging.service';
+import { SupportRequestService } from '../../application/messaging/support-request.service';
 import { TypingEvent } from './messaging-events';
 import logger from '../logger/logger';
 
@@ -15,11 +16,13 @@ export class SocketHandler {
   private io: Server;
   private authService: AuthService;
   private messagingService: MessagingService;
+  private supportRequestService: SupportRequestService;
 
   constructor(io: Server) {
     this.io = io;
     this.authService = new AuthService();
     this.messagingService = new MessagingService();
+    this.supportRequestService = new SupportRequestService();
   }
 
   public initialize(): void {
@@ -294,6 +297,122 @@ export class SocketHandler {
         });
       }
     });
+
+    socket.on('send_tips', async (data: { threadId?: string; recipientUserId?: string; amount: number; message?: string }, callback?: (response: { success?: boolean; error?: string }) => void) => {
+      try {
+        const { threadId, recipientUserId, amount, message } = data || {};
+        const numericAmount = Number(amount);
+
+        if (!numericAmount || Number.isNaN(numericAmount) || numericAmount <= 0) {
+          this.emitTipsError(socket, 'Amount must be greater than zero', callback);
+          return;
+        }
+
+        let targetUserId = recipientUserId;
+
+        if (!targetUserId) {
+          if (!threadId) {
+            this.emitTipsError(socket, 'recipientUserId or threadId is required', callback);
+            return;
+          }
+
+          const thread = await this.messagingService.getThreadById(threadId);
+          if (!thread) {
+            this.emitTipsError(socket, 'Thread not found', callback);
+            return;
+          }
+
+          if (!thread.belongsToUser(userId)) {
+            this.emitTipsError(socket, 'Access denied: User is not a participant of this thread', callback);
+            return;
+          }
+
+          targetUserId = thread.getOtherUserId(userId);
+        }
+
+        if (!targetUserId) {
+          this.emitTipsError(socket, 'recipientUserId could not be determined', callback);
+          return;
+        }
+
+        await this.messagingService.sendTips(userId, targetUserId, numericAmount, (message ?? '').trim());
+        callback?.({ success: true });
+      } catch (error: any) {
+        logger.error(`Error handling send_tips for user ${userEmail}:`, error);
+        this.emitTipsError(socket, error.message || 'Failed to send TIPS', callback);
+      }
+    });
+
+    socket.on('create_support_request', async (data: { threadId?: string; recipientUserId?: string; type: string; message: string; amount: number }, callback?: (response: { success?: boolean; error?: string }) => void) => {
+      try {
+        const { threadId, recipientUserId, type, message, amount } = data || {};
+        const trimmedMessage = (message ?? '').trim();
+        if (!trimmedMessage) {
+          this.emitSupportRequestError(socket, 'Message is required', callback);
+          return;
+        }
+
+        const normalizedType = (type || 'GENERAL').toUpperCase();
+        if (!['GENERAL', 'TECHNICAL', 'PRODUCT'].includes(normalizedType)) {
+          this.emitSupportRequestError(socket, 'Invalid support request type', callback);
+          return;
+        }
+
+        const numericAmount = Number(amount ?? 0);
+        if (Number.isNaN(numericAmount) || numericAmount < 0) {
+          this.emitSupportRequestError(socket, 'Amount must be a positive number', callback);
+          return;
+        }
+
+        let targetUserId = recipientUserId;
+        if (!targetUserId) {
+          if (!threadId) {
+            this.emitSupportRequestError(socket, 'recipientUserId or threadId is required', callback);
+            return;
+          }
+
+          const thread = await this.messagingService.getThreadById(threadId);
+          if (!thread) {
+            this.emitSupportRequestError(socket, 'Thread not found', callback);
+            return;
+          }
+
+          if (!thread.belongsToUser(userId)) {
+            this.emitSupportRequestError(socket, 'Access denied: User is not a participant of this thread', callback);
+            return;
+          }
+
+          targetUserId = thread.getOtherUserId(userId);
+        }
+
+        if (!targetUserId) {
+          this.emitSupportRequestError(socket, 'recipientUserId could not be determined', callback);
+          return;
+        }
+
+        await this.supportRequestService.createSupportRequest(userId, {
+          recipientUserId: targetUserId,
+          type: normalizedType,
+          message: trimmedMessage,
+          amount: numericAmount,
+        });
+
+        callback?.({ success: true });
+      } catch (error: any) {
+        logger.error(`Error handling create_support_request for user ${userEmail}:`, error);
+        this.emitSupportRequestError(socket, error.message || 'Failed to create support request', callback);
+      }
+    });
+  }
+
+  private emitTipsError(socket: AuthenticatedSocket, reason: string, callback?: (response: { error?: string }) => void) {
+    socket.emit('tips_send_error', { reason });
+    callback?.({ error: reason });
+  }
+
+  private emitSupportRequestError(socket: AuthenticatedSocket, reason: string, callback?: (response: { error?: string }) => void) {
+    socket.emit('support_request_error', { reason });
+    callback?.({ error: reason });
   }
 
   /**

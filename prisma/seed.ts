@@ -1,6 +1,5 @@
 import { PrismaClient } from '@prisma/client'
 import * as bcrypt from 'bcryptjs'
-import { seedMessaging } from './seed/messaging.seed'
 
 const prisma = new PrismaClient()
 
@@ -1824,216 +1823,282 @@ async function main() {
   ])
   console.log(`✅ ${expertAnswers.length} expert answer oluşturuldu`)
 
-  // 6. Create DM Requests (Support Requests)
-  console.log('💌 Creating DM requests (support requests)...')
+  // 6. DM Threads (Normal DM conversations)
+  console.log('💬 Creating DM threads...')
   
-  // DM Request descriptions (support request scenarios)
-  const dmRequestDescriptions = [
-    'Merhaba! iPhone 15 Pro hakkında birkaç sorum var. Özellikle kamera performansı ve pil ömrü konusunda deneyimlerinizi paylaşabilir misiniz?',
-    'Dyson V15s kullanıyor musunuz? Islak temizlik özelliği gerçekten işe yarıyor mu? Ev temizliği için önerir misiniz?',
-    'MacBook Air M3 ile programlama yapıyorum. Xcode ve Visual Studio Code performansı nasıl? Önerir misiniz?',
-    'Sony WH-1000XM5 kulaklık kullanıyorum ama AirPods Max\'i de merak ediyorum. Noise cancellation karşılaştırması yapabilir miyiz?',
-    'Nespresso ve DeLonghi tam otomatik kahve makineleri arasında karar veremiyorum. Hangisini önerirsiniz?',
-    'Dyson V12 ve V15s arasındaki farklar nelerdir? Hangi modeli almalıyım?',
-    'iPhone kamera ayarları konusunda yardıma ihtiyacım var. Profesyonel fotoğraf çekimi için ipuçlarınız var mı?',
-    'Laptop alışverişi yapıyorum. Dell XPS 13 ve MacBook Air M3 arasında karar veremiyorum. Hangisi daha iyi?',
-    'Akıllı saat önerisi arıyorum. Apple Watch ve Samsung Galaxy Watch karşılaştırması yapabilir misiniz?',
-    'Kablosuz kulaklık arıyorum. Noise cancellation özelliği olan, günlük kullanım için uygun bir model önerebilir misiniz?',
-  ]
+  type ThreadSeed = {
+    userOneId: string;
+    userTwoId: string;
+    unreadCountUserOne: number;
+    unreadCountUserTwo: number;
+    isSupportThread: boolean;
+    messages: Array<{
+      senderId: string;
+      message: string;
+      minutesAgo: number;
+      isRead: boolean;
+      context?: 'DM' | 'SUPPORT';
+    }>;
+  };
 
-  const dmRequests: any[] = []
-  const now = new Date()
-  
-  // 1. Test user'dan trust user'lara PENDING request'ler (description ile)
-  for (let i = 0; i < Math.min(3, trustUserIds.length); i++) {
-    const trustUserId = trustUserIds[i]
-    const description = dmRequestDescriptions[i % dmRequestDescriptions.length]
-    
-    try {
-      const dmRequest = await prisma.dMRequest.create({
-        data: {
-          fromUserId: userIdToUse,
-          toUserId: trustUserId,
-          status: 'PENDING',
-          description: description,
-          sentAt: new Date(now.getTime() - (i + 1) * 24 * 60 * 60 * 1000), // 1, 2, 3 gün önce
+  const NORMAL_DM_THREAD_SEEDS: ThreadSeed[] = [
+    {
+      userOneId: TEST_USER_ID,
+      userTwoId: TARGET_USER_ID,
+      unreadCountUserOne: 1,
+      unreadCountUserTwo: 0,
+      isSupportThread: false,
+      messages: [
+        {
+          senderId: TEST_USER_ID,
+          message: 'Selam! Yeni ürün incelemesini gördün mü?',
+          minutesAgo: 30,
+          isRead: true,
+          context: 'DM',
         },
-      })
-      dmRequests.push(dmRequest)
-    } catch (error) {
-      // Skip if already exists (unique constraint)
-      console.log(`⚠️  DM request from ${userIdToUse} to ${trustUserId} already exists, skipping...`)
-    }
-  }
-
-  // 2. Test user'dan target user'a ACCEPTED request (description ile)
-  try {
-    const acceptedRequest = await prisma.dMRequest.create({
-      data: {
-        fromUserId: userIdToUse,
-        toUserId: TARGET_USER_ID,
-        status: 'ACCEPTED',
-        description: dmRequestDescriptions[3],
-        sentAt: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000), // 5 gün önce
-        respondedAt: new Date(now.getTime() - 4 * 24 * 60 * 60 * 1000), // 4 gün önce kabul edildi
-      },
-    })
-    dmRequests.push(acceptedRequest)
-  } catch (error) {
-    console.log(`⚠️  DM request from ${userIdToUse} to ${TARGET_USER_ID} already exists, skipping...`)
-  }
-
-  // 3. Target user'dan test user'a DECLINED request
-  try {
-    const declinedRequest = await prisma.dMRequest.create({
-      data: {
-        fromUserId: TARGET_USER_ID,
-        toUserId: userIdToUse,
-        status: 'DECLINED',
-        description: dmRequestDescriptions[4],
-        sentAt: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000), // 7 gün önce
-        respondedAt: new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000), // 6 gün önce reddedildi
-      },
-    })
-    dmRequests.push(declinedRequest)
-  } catch (error) {
-    console.log(`⚠️  DM request from ${TARGET_USER_ID} to ${userIdToUse} already exists, skipping...`)
-  }
-
-  // 4. Trust user'lardan test user'a PENDING request'ler
-  for (let i = 0; i < Math.min(2, trustUserIds.length); i++) {
-    const trustUserId = trustUserIds[i]
-    const description = dmRequestDescriptions[(i + 5) % dmRequestDescriptions.length]
-    
-    try {
-      const dmRequest = await prisma.dMRequest.create({
-        data: {
-          fromUserId: trustUserId,
-          toUserId: userIdToUse,
-          status: 'PENDING',
-          description: description,
-          sentAt: new Date(now.getTime() - (i + 2) * 24 * 60 * 60 * 1000), // 2, 3 gün önce
+        {
+          senderId: TARGET_USER_ID,
+          message: 'Evet, mükemmel olmuş. Birkaç önerim olacak 👌',
+          minutesAgo: 10,
+          isRead: false,
+          context: 'DM',
         },
-      })
-      dmRequests.push(dmRequest)
-    } catch (error) {
-      console.log(`⚠️  DM request from ${trustUserId} to ${userIdToUse} already exists, skipping...`)
-    }
-  }
-
-  // 5. Trust user'lar arasında ACCEPTED request'ler
-  if (trustUserIds.length >= 2) {
-    try {
-      const acceptedRequestBetweenTrustUsers = await prisma.dMRequest.create({
-        data: {
-          fromUserId: trustUserIds[0],
-          toUserId: trustUserIds[1],
-          status: 'ACCEPTED',
-          description: dmRequestDescriptions[6],
-          sentAt: new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000), // 10 gün önce
-          respondedAt: new Date(now.getTime() - 9 * 24 * 60 * 60 * 1000), // 9 gün önce kabul edildi
-        },
-      })
-      dmRequests.push(acceptedRequestBetweenTrustUsers)
-    } catch (error) {
-      console.log(`⚠️  DM request from ${trustUserIds[0]} to ${trustUserIds[1]} already exists, skipping...`)
-    }
-  }
-
-  // 6. Truster user'lardan test user'a ACCEPTED request'ler
-  for (let i = 0; i < Math.min(2, TRUSTER_USER_IDS.length); i++) {
-    const trusterUserId = TRUSTER_USER_IDS[i]
-    const description = dmRequestDescriptions[(i + 7) % dmRequestDescriptions.length]
-    
-    try {
-      const dmRequest = await prisma.dMRequest.create({
-        data: {
-          fromUserId: trusterUserId,
-          toUserId: userIdToUse,
-          status: 'ACCEPTED',
-          description: description,
-          sentAt: new Date(now.getTime() - (i + 8) * 24 * 60 * 60 * 1000), // 8, 9 gün önce
-          respondedAt: new Date(now.getTime() - (i + 7) * 24 * 60 * 60 * 1000), // 7, 8 gün önce kabul edildi
-        },
-      })
-      dmRequests.push(dmRequest)
-    } catch (error) {
-      console.log(`⚠️  DM request from ${trusterUserId} to ${userIdToUse} already exists, skipping...`)
-    }
-  }
-
-  // 7. Target user'dan trust user'lara PENDING request'ler
-  for (let i = 0; i < Math.min(2, trustUserIds.length); i++) {
-    const trustUserId = trustUserIds[i]
-    const description = dmRequestDescriptions[(i + 8) % dmRequestDescriptions.length]
-    
-    try {
-      const dmRequest = await prisma.dMRequest.create({
-        data: {
-          fromUserId: TARGET_USER_ID,
-          toUserId: trustUserId,
-          status: 'PENDING',
-          description: description,
-          sentAt: new Date(now.getTime() - (i + 1) * 12 * 60 * 60 * 1000), // 12, 24 saat önce
-        },
-      })
-      dmRequests.push(dmRequest)
-    } catch (error) {
-      console.log(`⚠️  DM request from ${TARGET_USER_ID} to ${trustUserId} already exists, skipping...`)
-    }
-  }
-
-  console.log(`✅ ${dmRequests.length} DM request (support request) oluşturuldu`)
-
-  // Create threads for ACCEPTED requests (for active status)
-  console.log('💬 Creating DM threads for ACCEPTED requests...')
-  const acceptedRequests = await prisma.dMRequest.findMany({
-    where: {
-      status: 'ACCEPTED',
-      description: { not: null },
+      ],
     },
-  })
-
-  let threadsCreated = 0
-  for (const request of acceptedRequests) {
-    try {
-      // Check if thread already exists
-      const existingThread = await prisma.dMThread.findFirst({
-        where: {
-          OR: [
-            { userOneId: request.fromUserId, userTwoId: request.toUserId },
-            { userOneId: request.toUserId, userTwoId: request.fromUserId },
-          ],
+    {
+      userOneId: TRUST_USER_IDS[0],
+      userTwoId: TEST_USER_ID,
+      unreadCountUserOne: 0,
+      unreadCountUserTwo: 2,
+      isSupportThread: false,
+      messages: [
+        {
+          senderId: TRUST_USER_IDS[0],
+          message: 'Merhaba! Mini destek görüşmesi için uygun musun?',
+          minutesAgo: 45,
+          isRead: false,
+          context: 'DM',
         },
-      })
+        {
+          senderId: TRUST_USER_IDS[0],
+          message: 'Bu arada geçen hafta gönderdiğim TIPS için teşekkür ederim.',
+          minutesAgo: 40,
+          isRead: false,
+          context: 'DM',
+        },
+        {
+          senderId: TEST_USER_ID,
+          message: 'Ben de teşekkür ederim, çok yardımcı oldun 🙏',
+          minutesAgo: 5,
+          isRead: true,
+          context: 'DM',
+        },
+      ],
+    },
+  ];
 
-      if (!existingThread) {
-        await prisma.dMThread.create({
-          data: {
-            userOneId: request.fromUserId,
-            userTwoId: request.toUserId,
-            isActive: true, // Active threads for support requests
-            startedAt: request.respondedAt || request.sentAt,
-          },
-        })
-        threadsCreated++
-      } else {
-        // Update existing thread to active if it's not active
-        if (!existingThread.isActive) {
-          await prisma.dMThread.update({
-            where: { id: existingThread.id },
-            data: { isActive: true },
-          })
-          threadsCreated++
-        }
-      }
-    } catch (error) {
-      console.log(`⚠️  Thread creation failed for request ${request.id}:`, error)
+  function minutesAgoToDate(minutesAgo: number): Date {
+    return new Date(Date.now() - minutesAgo * 60 * 1000);
+  }
+
+  let dmThreadsCount = 0;
+  let dmMessagesCount = 0;
+  const threadMap = new Map<string, string>();
+
+  // Create normal DM threads (not support threads)
+  for (const threadSeed of NORMAL_DM_THREAD_SEEDS) {
+    // Delete existing thread and messages first
+    const existingThread = await prisma.dMThread.findFirst({
+      where: {
+        userOneId: threadSeed.userOneId,
+        userTwoId: threadSeed.userTwoId,
+        isSupportThread: false as any,
+      } as any,
+    });
+    
+    if (existingThread) {
+      await prisma.dMMessage.deleteMany({ where: { threadId: existingThread.id } });
+      await prisma.dMThread.delete({ where: { id: existingThread.id } });
+    }
+    
+    const thread = await prisma.dMThread.create({
+      data: {
+        userOneId: threadSeed.userOneId,
+        userTwoId: threadSeed.userTwoId,
+        isActive: true,
+        isSupportThread: false as any,
+        unreadCountUserOne: threadSeed.unreadCountUserOne,
+        unreadCountUserTwo: threadSeed.unreadCountUserTwo,
+        startedAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any,
+    });
+    threadMap.set(`${threadSeed.userOneId}:${threadSeed.userTwoId}`, thread.id);
+    dmThreadsCount++;
+
+    if (threadSeed.messages.length > 0) {
+      const data = threadSeed.messages.map((msg) => ({
+        threadId: thread.id,
+        senderId: msg.senderId,
+        message: msg.message,
+        isRead: msg.isRead,
+        context: msg.context || 'DM',
+        sentAt: minutesAgoToDate(msg.minutesAgo),
+      }));
+      
+      const batchResult = await prisma.dMMessage.createMany({ data } as any);
+      dmMessagesCount += batchResult.count;
     }
   }
-  console.log(`✅ ${threadsCreated} DM thread oluşturuldu/güncellendi (ACCEPTED requests için)`)
 
-  const messagingStats = await seedMessaging(prisma)
+  console.log(`✅ ${dmThreadsCount} DM threads and ${dmMessagesCount} messages created`)
+
+  // 7. DM Requests (Support Requests)
+  console.log('💌 Creating DM requests (support requests)...')
+
+  type SupportRequestSeed = {
+    id: string;
+    fromUserId: string;
+    toUserId: string;
+    description: string;
+    status: 'PENDING' | 'ACCEPTED' | 'DECLINED';
+    type: 'GENERAL' | 'TECHNICAL' | 'PRODUCT';
+    amount: number;
+    minutesAgo: number;
+    threadId: null;
+  };
+
+  const SUPPORT_REQUEST_SEEDS: SupportRequestSeed[] = [
+    // Pending request - threadId yok
+    {
+      id: '00000000-0000-4000-8000-000000000101',
+      fromUserId: TARGET_USER_ID,
+      toUserId: TEST_USER_ID,
+      description: 'Beta paneldeki yeni metrikler için rehberlik rica ediyorum.',
+      status: 'PENDING',
+      type: 'GENERAL',
+      amount: 50,
+      minutesAgo: 60,
+      threadId: null,
+    },
+    // Accepted request - threadId var, support thread oluşturulacak
+    {
+      id: '00000000-0000-4000-8000-000000000102',
+      fromUserId: TEST_USER_ID,
+      toUserId: TARGET_USER_ID,
+      description: 'Smartwatch kurulumu için yardıma ihtiyacım var. Hangi modeli kullanıyorsunuz?',
+      status: 'ACCEPTED',
+      type: 'TECHNICAL',
+      amount: 100,
+      minutesAgo: 120,
+      threadId: null,
+    },
+    // Declined request - threadId yok
+    {
+      id: '00000000-0000-4000-8000-000000000103',
+      fromUserId: TRUST_USER_IDS[0],
+      toUserId: TEST_USER_ID,
+      description: 'Ürün önerisi için destek istiyorum.',
+      status: 'DECLINED',
+      type: 'PRODUCT',
+      amount: 75,
+      minutesAgo: 180,
+      threadId: null,
+    },
+    // Another accepted request - farklı kullanıcılar arasında
+    {
+      id: '00000000-0000-4000-8000-000000000104',
+      fromUserId: TRUST_USER_IDS[1],
+      toUserId: TEST_USER_ID,
+      description: 'Yazılım geliştirme konusunda danışmanlık almak istiyorum.',
+      status: 'ACCEPTED',
+      type: 'GENERAL',
+      amount: 150,
+      minutesAgo: 90,
+      threadId: null,
+    },
+  ];
+
+  let supportRequestsCount = 0;
+  let supportThreadsCount = 0;
+  let supportMessagesCount = 0;
+  
+  for (const supportRequest of SUPPORT_REQUEST_SEEDS) {
+    // Delete existing request if exists
+    await prisma.dMRequest.deleteMany({ where: { id: supportRequest.id } });
+    
+    let threadId: string | null = null;
+    
+    // If status is ACCEPTED, create a support thread
+    if (supportRequest.status === 'ACCEPTED') {
+      const supportThread = await prisma.dMThread.create({
+        data: {
+          userOneId: supportRequest.fromUserId,
+          userTwoId: supportRequest.toUserId,
+          isActive: true,
+          isSupportThread: true as any,
+          startedAt: minutesAgoToDate(supportRequest.minutesAgo),
+          createdAt: minutesAgoToDate(supportRequest.minutesAgo),
+          updatedAt: minutesAgoToDate(supportRequest.minutesAgo),
+        } as any,
+      });
+      threadId = supportThread.id;
+      supportThreadsCount++;
+      
+      // Create some support chat messages in the support thread
+      const supportMessages = await prisma.dMMessage.createMany({
+        data: [
+          {
+            threadId: supportThread.id,
+            senderId: supportRequest.fromUserId,
+            message: supportRequest.description,
+            isRead: false,
+            context: 'SUPPORT',
+            sentAt: minutesAgoToDate(supportRequest.minutesAgo),
+          },
+          {
+            threadId: supportThread.id,
+            senderId: supportRequest.toUserId,
+            message: 'Merhaba! Size nasıl yardımcı olabilirim?',
+            isRead: true,
+            context: 'SUPPORT',
+            sentAt: minutesAgoToDate(supportRequest.minutesAgo - 5),
+          },
+          {
+            threadId: supportThread.id,
+            senderId: supportRequest.fromUserId,
+            message: 'Teşekkür ederim, detayları paylaşayım...',
+            isRead: true,
+            context: 'SUPPORT',
+            sentAt: minutesAgoToDate(supportRequest.minutesAgo - 3),
+          },
+        ] as any,
+      });
+      supportMessagesCount += supportMessages.count;
+    }
+    
+    // Create the support request
+    await prisma.dMRequest.create({
+      data: {
+        id: supportRequest.id,
+        fromUserId: supportRequest.fromUserId,
+        toUserId: supportRequest.toUserId,
+        description: supportRequest.description,
+        status: supportRequest.status as any,
+        type: supportRequest.type,
+        amount: supportRequest.amount,
+        threadId: threadId,
+        sentAt: minutesAgoToDate(supportRequest.minutesAgo),
+        respondedAt: supportRequest.status !== 'PENDING' ? minutesAgoToDate(supportRequest.minutesAgo - 10) : null,
+        createdAt: minutesAgoToDate(supportRequest.minutesAgo),
+        updatedAt: minutesAgoToDate(supportRequest.minutesAgo),
+      } as any,
+    });
+    supportRequestsCount++;
+  }
+
+  console.log(`✅ ${supportRequestsCount} support requests, ${supportThreadsCount} support threads, and ${supportMessagesCount} support messages created`)
 
   console.log('✨ Seed process completed successfully!')
   
@@ -2056,8 +2121,8 @@ async function main() {
   summaryLines.push(`• ${createdBrands.length} Brands`)
   summaryLines.push(`• ${expertRequests.length} Expert Requests`)
   summaryLines.push(`• ${expertAnswers.length} Expert Answers`)
-  summaryLines.push(`• ${dmRequests.length} DM Requests (Support Requests)`)
-  summaryLines.push(`• Messaging: ${messagingStats.threads} threads, ${messagingStats.messages} messages, ${messagingStats.tipsTransfers} tips transfers, ${messagingStats.supportRequests} support requests`)
+  summaryLines.push(`• ${dmThreadsCount} DM Threads, ${dmMessagesCount} DM Messages`)
+  summaryLines.push(`• ${supportRequestsCount} Support Requests, ${supportThreadsCount} Support Threads, ${supportMessagesCount} Support Messages`)
   summaryLines.push(`• Target User (Market Test) - ID: ${TARGET_USER_ID}`)
   summaryLines.push(`  - Owned NFTs: 4 (not listed)`)
   summaryLines.push(`  - Listed NFTs: 6 (on marketplace)`)

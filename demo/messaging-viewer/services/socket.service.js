@@ -272,11 +272,17 @@ async function handleRealtimeMessage(panelState, side, els, event, { isSender = 
   }
 
   if (context === 'SUPPORT') {
+    // Support chat mesajlarını support chat state'ine ekle
     appendSupportMessageState(panelState, event);
+    
+    // Eğer support chat açıksa ve bu thread için ise, render et
     if (panelState.supportChat?.threadId && String(panelState.supportChat.threadId) === threadId) {
       renderSupportChat(panelState, side, els);
     }
-    updateThreadPreviewState(panelState, side, els, event, { isSupport: true });
+    
+    // Support mesajları DM feed'inde görünmemeli - sadece support chat ekranında görünür
+    // updateThreadPreviewState çağrısını kaldırdık - support mesajları thread preview'ını güncellememeli
+    // Support request feed'i ayrı bir feed ve thread preview güncellemesine ihtiyaç yok
     return;
   }
 
@@ -305,7 +311,7 @@ async function handleRealtimeMessage(panelState, side, els, event, { isSender = 
       if (shouldAddToActiveThread) {
         // Aktif thread'deyse veya kendi mesajımızsa ekle
         console.log(`[${side}] Adding message to active thread (isOwnMessage: ${isOwnMessage}, isActiveThread: ${isActiveThread}):`, messageItem.id);
-      upsertActiveThreadMessage(panelState, messageItem);
+      upsertActiveThreadItem(panelState, messageItem);
       renderMessages(panelState, side, els);
         
         // Aktif thread için preview güncelleme (mesaj gönderildiğinde veya alındığında)
@@ -329,21 +335,38 @@ async function handleRealtimeMessage(panelState, side, els, event, { isSender = 
     return;
   }
 
-  // support-request artık REST API ile oluşturuluyor, socket event'i göndermiyoruz
-  // Bu handler'ı kaldırdık çünkü support request'ler POST isteği sonrası GET ile yükleniyor
+  const isOwnGeneric = isSender || event.senderId === currentUserId;
+
   if (event.messageType === 'support-request') {
-    // Support request'ler REST API ile oluşturulduğu için socket event'i beklenmiyor
-    // Eğer gelecek olursa (eski kod uyumluluğu için), sadece log atıyoruz
-    console.log(`[${side}] Support request event received but ignored (using REST API):`, event.messageId);
+    const supportItem = buildSupportRequestItemFromEvent(panelState, event);
+    if (!supportItem) return;
+
+    const shouldAdd = isActiveThread || (isOwnGeneric && activeThreadId);
+    if (shouldAdd) {
+      upsertActiveThreadItem(panelState, supportItem);
+      renderMessages(panelState, side, els);
+    }
+
+    updateThreadPreviewState(panelState, side, els, event, {
+      isSender: isOwnGeneric,
+      isSupport: true,
+    });
     return;
   }
 
-  // send-tips artık REST API ile oluşturuluyor, socket event'i göndermiyoruz
-  // Bu handler'ı kaldırdık çünkü tips POST isteği sonrası GET ile yükleniyor
   if (event.messageType === 'send-tips') {
-    // Tips REST API ile oluşturulduğu için socket event'i beklenmiyor
-    // Eğer gelecek olursa (eski kod uyumluluğu için), sadece log atıyoruz
-    console.log(`[${side}] Tips event received but ignored (using REST API):`, event.messageId);
+    const tipsItem = buildTipsItemFromEvent(panelState, event);
+    if (!tipsItem) return;
+
+    const shouldAdd = isActiveThread || (isOwnGeneric && activeThreadId);
+    if (shouldAdd) {
+      upsertActiveThreadItem(panelState, tipsItem);
+      renderMessages(panelState, side, els);
+    }
+
+    updateThreadPreviewState(panelState, side, els, event, {
+      isSender: isOwnGeneric,
+    });
     return;
   }
 }
@@ -446,15 +469,16 @@ function getTimestampFromItem(item) {
   return new Date(item.data.timestamp || 0).getTime();
 }
 
-function upsertActiveThreadMessage(panelState, newItem) {
-  console.log(`upsertActiveThreadMessage called with:`, { 
+function upsertActiveThreadItem(panelState, newItem) {
+  const currentItems = panelState.activeThreadItems || [];
+  console.log(`upsertActiveThreadItem called with:`, { 
     newItemId: newItem.id, 
-    newItemMessage: newItem.data?.lastMessage,
-    currentItemsCount: panelState.activeThreadItems.length 
+    newItemType: newItem.type,
+    currentItemsCount: currentItems.length 
   });
   
   // Duplicate kontrolü: Aynı ID'ye sahip mesajı kaldır
-  const normalized = panelState.activeThreadItems.filter((item) => item.id !== newItem.id);
+  const normalized = currentItems.filter((item) => item.id !== newItem.id);
   console.log(`After duplicate filter:`, { count: normalized.length });
   
   // Gerçek mesajı ekle (optimistic mesaj yok, sadece socket'ten gelen mesajlar)
@@ -539,7 +563,7 @@ function updateThreadPreviewState(panelState, side, els, event, { isSender = fal
     }
   } else {
     thread = panelState.threads[threadIndex];
-    thread.lastMessage = isSupport ? '[Support]' : previewMessage;
+    thread.lastMessage = previewMessage;
     thread.timestamp = event.timestamp;
     thread.isUnread = isIncoming && !isActiveThread;
     thread.unreadCount = thread.isUnread ? (thread.unreadCount || 0) + 1 : 0;

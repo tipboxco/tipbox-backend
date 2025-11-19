@@ -34,7 +34,7 @@
           <div class="inbox-view" id="inboxViewLeft">
             <div class="inbox-header">
               <div class="header-content">
-                <h3>Mesajlar</h3>
+                <h3>Inbox</h3>
                 <span class="user-badge" id="userBadgeLeft">—</span>
               </div>
               <div class="header-actions">
@@ -42,15 +42,40 @@
                 <button id="logoutBtnLeft" class="icon-btn" title="Çıkış">🚪</button>
               </div>
             </div>
-            <div class="search-bar">
-              <input type="text" id="searchInputLeft" placeholder="Ara..." />
-              <label class="checkbox">
-                <input type="checkbox" id="unreadOnlyInputLeft" />
-                <span>Okunmamış</span>
-              </label>
+            <div class="inbox-tabs">
+              <button class="inbox-tab active" data-tab="messages" id="messagesTabLeft">Messages</button>
+              <button class="inbox-tab" data-tab="support-requests" id="supportRequestsTabLeft">1-on-1 Support Requests</button>
             </div>
-            <div id="threadListLeft" class="thread-list">
-              <div class="empty-state">Mesaj yok</div>
+            <!-- Messages Tab Content -->
+            <div class="inbox-tab-content active" id="messagesTabContentLeft">
+              <div class="search-bar">
+                <input type="text" id="searchInputLeft" placeholder="Mesajlarda Ara" />
+                <label class="checkbox">
+                  <input type="checkbox" id="unreadOnlyInputLeft" />
+                  <span>Okunmamış</span>
+                </label>
+              </div>
+              <div id="threadListLeft" class="thread-list">
+                <div class="empty-state">Mesaj yok</div>
+              </div>
+            </div>
+            <!-- Support Requests Tab Content -->
+            <div class="inbox-tab-content" id="supportRequestsTabContentLeft">
+              <div class="search-bar">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="searchSupportRequestsInputLeft" placeholder="Destek Taleplerinde Ara" />
+                <button class="filter-icon-btn" id="filterIconBtnLeft" title="Filter">☰</button>
+              </div>
+              <div class="filter-buttons" id="filterButtonsLeft">
+                <button class="filter-btn active" data-status="">All Requests</button>
+                <button class="filter-btn" data-status="active">Active</button>
+                <button class="filter-btn" data-status="completed">Awaiting Completion</button>
+                <button class="filter-btn" data-status="finalized">Finalized</button>
+                <button class="filter-btn" data-status="pending">Pending</button>
+              </div>
+              <div id="supportRequestsListLeft" class="thread-list">
+                <div class="empty-state">Support request yok</div>
+              </div>
             </div>
           </div>
 
@@ -157,7 +182,7 @@
           <div class="inbox-view" id="inboxViewRight">
             <div class="inbox-header">
               <div class="header-content">
-                <h3>Mesajlar</h3>
+                <h3>Inbox</h3>
                 <span class="user-badge" id="userBadgeRight">—</span>
               </div>
               <div class="header-actions">
@@ -165,15 +190,40 @@
                 <button id="logoutBtnRight" class="icon-btn" title="Çıkış">🚪</button>
               </div>
             </div>
-            <div class="search-bar">
-              <input type="text" id="searchInputRight" placeholder="Ara..." />
-              <label class="checkbox">
-                <input type="checkbox" id="unreadOnlyInputRight" />
-                <span>Okunmamış</span>
-              </label>
+            <div class="inbox-tabs">
+              <button class="inbox-tab active" data-tab="messages" id="messagesTabRight">Messages</button>
+              <button class="inbox-tab" data-tab="support-requests" id="supportRequestsTabRight">1-on-1 Support Requests</button>
             </div>
-            <div id="threadListRight" class="thread-list">
-              <div class="empty-state">Mesaj yok</div>
+            <!-- Messages Tab Content -->
+            <div class="inbox-tab-content active" id="messagesTabContentRight">
+              <div class="search-bar">
+                <input type="text" id="searchInputRight" placeholder="Mesajlarda Ara" />
+                <label class="checkbox">
+                  <input type="checkbox" id="unreadOnlyInputRight" />
+                  <span>Okunmamış</span>
+                </label>
+              </div>
+              <div id="threadListRight" class="thread-list">
+                <div class="empty-state">Mesaj yok</div>
+              </div>
+            </div>
+            <!-- Support Requests Tab Content -->
+            <div class="inbox-tab-content" id="supportRequestsTabContentRight">
+              <div class="search-bar">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="searchSupportRequestsInputRight" placeholder="Destek Taleplerinde Ara" />
+                <button class="filter-icon-btn" id="filterIconBtnRight" title="Filter">☰</button>
+              </div>
+              <div class="filter-buttons" id="filterButtonsRight">
+                <button class="filter-btn active" data-status="">All Requests</button>
+                <button class="filter-btn" data-status="active">Active</button>
+                <button class="filter-btn" data-status="completed">Awaiting Completion</button>
+                <button class="filter-btn" data-status="finalized">Finalized</button>
+                <button class="filter-btn" data-status="pending">Pending</button>
+              </div>
+              <div id="supportRequestsListRight" class="thread-list">
+                <div class="empty-state">Support request yok</div>
+              </div>
             </div>
           </div>
 

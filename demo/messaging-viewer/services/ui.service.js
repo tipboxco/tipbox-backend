@@ -261,7 +261,19 @@ export function renderSupportChat(panelState, side, els) {
   
   const counterpartId = getCounterpartId(panelState);
   const currentUser = panelState.user;
-  const counterpart = panelState.activeThread?.sender;
+  
+  // Counterpart bilgisini al - önce supportChat.data'dan, sonra activeThread.sender'dan
+  let counterpart = null;
+  if (data?.userName) {
+    // Support request listesinden açıldıysa, data'dan al
+    counterpart = {
+      senderName: data.userName,
+      senderTitle: data.userTitle || 'Technology Enthusiast',
+    };
+  } else {
+    // DM thread içinden açıldıysa, activeThread.sender'dan al
+    counterpart = panelState.activeThread?.sender;
+  }
   
   // Header
   supportChatTitle.textContent = 'Support Chat';
@@ -272,11 +284,11 @@ export function renderSupportChat(panelState, side, els) {
   // Participants - Görseldeki gibi yan yana
   if (currentUser && counterpart) {
     const currentUserInitials = (currentUser.profile?.displayName || currentUser.email || 'U').charAt(0).toUpperCase();
-    const counterpartInitials = (counterpart.senderName || 'U').charAt(0).toUpperCase();
+    const counterpartInitials = (counterpart.senderName || data?.userName || 'U').charAt(0).toUpperCase();
     const currentUserName = currentUser.profile?.displayName || currentUser.email || 'You';
-    const counterpartName = counterpart.senderName || 'User';
+    const counterpartName = counterpart.senderName || data?.userName || 'User';
     const currentUserTitle = currentUser.profile?.title || 'Technology Enthusiast';
-    const counterpartTitle = counterpart.senderTitle || 'Technology Enthusiast';
+    const counterpartTitle = counterpart.senderTitle || data?.userTitle || 'Technology Enthusiast';
     
     supportParticipants.innerHTML = `
       <div class="support-participant">
