@@ -1,5 +1,4 @@
 // Socket Service
-import { loadThreadItems, loadThreads } from './thread.service.js';
 import { loadSupportChatMessages } from './support.service.js';
 import { renderThreads, renderMessages, renderSupportChat } from './ui.service.js';
 
@@ -29,17 +28,21 @@ export function initSocket(panelState, side, els) {
     panelState.socket.on('thread_joined', ({ threadId }) => {
       panelState.joinedThreads.add(threadId);
       console.log(`[${side}] Joined thread:`, threadId);
-      // Thread'e katıldığında mesajlar otomatik okundu olarak işaretlendi
-      // Mesajları yeniden yükle ki okundu durumları güncellensin
+
       if (panelState.activeThread?.id === threadId) {
-        loadThreadItems(threadId, panelState, side, els);
+        markAllActiveThreadMessagesRead(panelState);
+        renderMessages(panelState, side, els);
+        const thread = panelState.threads.find((t) => t.id === threadId);
+        if (thread) {
+          thread.isUnread = false;
+          thread.unreadCount = 0;
+          renderThreads(panelState, side, els);
+        }
       }
+
       if (panelState.supportChat?.threadId === threadId) {
-        // Thread items'ı yeniden yükle ki güncel messages array'i gelsin
-        loadThreadItems(threadId, panelState, side, els);
+        renderSupportChat(panelState, side, els);
       }
-      // Thread listesini de güncelle (unread count değişti)
-      loadThreads(panelState, side, els);
     });
 
     panelState.socket.on('thread_left', ({ threadId }) => {
@@ -54,55 +57,72 @@ export function initSocket(panelState, side, els) {
     });
 
     panelState.socket.on('new_message', (event) => {
-      const context = event.context || 'DM';
-      if (context === 'SUPPORT') {
-        // SUPPORT mesajı geldiğinde:
-        // 1. Thread items'ı yeniden yükle ki support request'in messages array'i güncellensin
-        //    (SUPPORT mesajları DM ekranında gösterilmez, sadece support request'in messages array'inde olur)
-        if (panelState.activeThread?.id === event.threadId) {
-          loadThreadItems(event.threadId, panelState, side, els);
-        }
-        // 2. Support chat açıksa, support chat messages'ı yeniden yükle
-        if (panelState.supportChat?.threadId === event.threadId) {
-          loadSupportChatMessages(event.threadId, panelState, side, els, {
-            supportRequestId: panelState.supportChat.requestId,
-          });
-        }
-        // 3. Thread listesini güncelle (unread count değişebilir)
-        loadThreads(panelState, side, els);
-        // NOT: SUPPORT mesajları DM ekranında render edilmez, sadece support chat ekranında
-        return;
-      }
-      // DM mesajı geldiğinde normal akış
-      if (panelState.activeThread?.id === event.threadId) {
-        loadThreadItems(event.threadId, panelState, side, els);
-      } else {
-        loadThreads(panelState, side, els);
-      }
+      console.log(`[${side}] new_message event received:`, event);
+      handleRealtimeMessage(panelState, side, els, event);
     });
 
     panelState.socket.on('message_sent', (event) => {
-      if (panelState.activeThread?.id === event.threadId) {
-        loadThreadItems(event.threadId, panelState, side, els);
-      }
+      console.log(`[${side}] message_sent event received:`, event);
+      handleRealtimeMessage(panelState, side, els, event, { isSender: true });
     });
 
     panelState.socket.on('message_read', (event) => {
-      // Mesaj okundu event'i geldiğinde thread'deki mesajları güncelle
-      if (panelState.activeThread?.id === event.threadId) {
-        // Aktif thread'deki mesajları güncelle
-        loadThreadItems(event.threadId, panelState, side, els);
+      applyMessageReadState(panelState, side, els, event);
+    });
+
+    panelState.socket.on('support_request_accepted', async (event) => {
+      console.log(`[${side}] Support request accepted event:`, event);
+      const { requestId, threadId } = event;
+      
+      // Support request item'ını bul ve threadId'yi güncelle
+      const supportItem = panelState.activeThreadItems.find(
+        (item) => item.id === requestId && item.type === 'support-request'
+      );
+      
+      if (supportItem && supportItem.data) {
+        supportItem.data.status = 'accepted';
+        supportItem.data.threadId = threadId;
+        renderMessages(panelState, side, els);
       }
-      // Thread listesini de güncelle (unread count değişebilir)
-      loadThreads(panelState, side, els);
+      
+      // Aktif thread'deki items'ı yeniden yükle (threadId güncellemesi için)
+      if (panelState.activeThread?.id) {
+        const { loadThreadItems } = await import('./thread.service.js');
+        await loadThreadItems(panelState.activeThread.id, panelState, side, els);
+      }
+      
+      // Thread listesini de güncelle (support request'in durumu değişti)
+      const { loadThreads } = await import('./thread.service.js');
+      await loadThreads(panelState, side, els);
+    });
+
+    panelState.socket.on('support_request_rejected', async (event) => {
+      console.log(`[${side}] Support request rejected event:`, event);
+      const { requestId } = event;
+      
+      // Support request item'ını bul ve status'u güncelle
+      const supportItem = panelState.activeThreadItems.find(
+        (item) => item.id === requestId && item.type === 'support-request'
+      );
+      
+      if (supportItem && supportItem.data) {
+        supportItem.data.status = 'rejected';
+        renderMessages(panelState, side, els);
+      }
+      
+      // Eğer aktif thread'de değilse, thread items'ı yeniden yükle
+      if (panelState.activeThread?.id) {
+        const { loadThreadItems } = await import('./thread.service.js');
+        await loadThreadItems(panelState.activeThread.id, panelState, side, els);
+      }
     });
 
     panelState.socket.on('user_typing', (event) => {
-      const threadId = String(event.threadId);
-      const userId = String(event.userId);
+      const threadId = event.threadId;
+      const userId = event.userId;
       const isTyping = event.isTyping;
       
-      console.log(`[${side}] user_typing event received:`, { threadId, userId, isTyping, activeThreadId: String(panelState.activeThread?.id), currentUserId: String(panelState.user?.id) });
+      console.log(`[${side}] user_typing event received:`, { threadId, userId, isTyping, activeThreadId: panelState.activeThread?.id, currentUserId: panelState.user?.id });
       
       if (!panelState.typingThreads.has(threadId)) {
         panelState.typingThreads.set(threadId, new Set());
@@ -121,8 +141,8 @@ export function initSocket(panelState, side, els) {
       console.log(`[${side}] typingThreads after update:`, Array.from(panelState.typingThreads.entries()).map(([tid, users]) => [tid, Array.from(users)]));
       
       // Aktif thread'de typing indicator göster
-      if (String(panelState.activeThread?.id) === threadId) {
-        const isCounterpart = userId !== String(panelState.user?.id);
+      if (panelState.activeThread?.id === threadId) {
+        const isCounterpart = userId !== panelState.user?.id;
         const typingIndicator = side === 'left' ? els.typingIndicatorLeft : els.typingIndicatorRight;
         console.log(`[${side}] Active thread match, isCounterpart:`, isCounterpart, 'typingIndicator:', !!typingIndicator);
         if (isCounterpart && isTyping) {
@@ -145,8 +165,8 @@ export function initSocket(panelState, side, els) {
       }
       
       // Support chat'te typing indicator göster
-      if (String(panelState.supportChat?.threadId) === threadId) {
-        const isCounterpart = userId !== String(panelState.user?.id);
+      if (panelState.supportChat?.threadId === threadId) {
+        const isCounterpart = userId !== panelState.user?.id;
         const typingIndicator = side === 'left' ? els.supportTypingIndicatorLeft : els.supportTypingIndicatorRight;
         if (typingIndicator) {
           if (isCounterpart && isTyping) {
@@ -198,14 +218,429 @@ export function emitTyping(panelState, isTyping) {
 }
 
 export function emitSupportTyping(panelState, isTyping) {
-  if (!panelState.socket || !panelState.supportChat?.threadId) return;
+  if (!panelState.socket || !panelState.supportChat?.threadId) {
+    console.log('emitSupportTyping: socket or supportChat missing', { hasSocket: !!panelState.socket, hasSupportChat: !!panelState.supportChat });
+    return;
+  }
   
   const threadId = panelState.supportChat.threadId;
+  console.log('emitSupportTyping:', { threadId, isTyping });
 
   if (isTyping) {
     panelState.socket.emit('typing_start', { threadId });
+    
+    if (panelState.supportTypingTimeout) {
+      clearTimeout(panelState.supportTypingTimeout);
+    }
+    panelState.supportTypingTimeout = setTimeout(() => {
+      emitSupportTyping(panelState, false);
+    }, 3000);
   } else {
     panelState.socket.emit('typing_stop', { threadId });
+    
+    if (panelState.supportTypingTimeout) {
+      clearTimeout(panelState.supportTypingTimeout);
+      panelState.supportTypingTimeout = null;
+    }
   }
+}
+
+async function handleRealtimeMessage(panelState, side, els, event, { isSender = false } = {}) {
+  const context = event.context || 'DM';
+  const threadId = String(event.threadId || ''); // String'e çevir
+  const activeThreadId = panelState.activeThread?.id ? String(panelState.activeThread.id) : null;
+  const isActiveThread = activeThreadId === threadId;
+  const currentUserId = String(panelState.user?.id);
+
+  console.log(`[${side}] handleRealtimeMessage:`, { 
+    context, 
+    threadId, 
+    activeThreadId, 
+    isActiveThread, 
+    messageType: event.messageType,
+    senderId: event.senderId,
+    currentUserId,
+    isSender,
+    eventMessageId: event.messageId,
+    activeThreadItemsCount: panelState.activeThreadItems?.length || 0 
+  });
+  
+  // Thread ID yoksa veya geçersizse işlem yapma
+  if (!threadId || threadId === 'undefined' || threadId === 'null') {
+    console.warn(`[${side}] Invalid threadId in event:`, event);
+    return;
+  }
+
+  if (context === 'SUPPORT') {
+    appendSupportMessageState(panelState, event);
+    if (panelState.supportChat?.threadId && String(panelState.supportChat.threadId) === threadId) {
+      renderSupportChat(panelState, side, els);
+    }
+    updateThreadPreviewState(panelState, side, els, event, { isSupport: true });
+    return;
+  }
+
+  // Sadece normal DM mesajları için real-time state güncellemesi yap
+  if (event.messageType === 'message' || (!event.messageType && context === 'DM')) {
+    const messageItem = buildFeedItemFromEvent(panelState, event);
+    console.log(`[${side}] DM message item built:`, { 
+      hasMessageItem: !!messageItem, 
+      messageId: event.messageId,
+      isActiveThread,
+      messageItemId: messageItem?.id,
+      isSender: isSender || event.senderId === currentUserId 
+    });
+    
+    if (messageItem) {
+      // Mesaj gönderici tarafından gönderildiyse (`message_sent` event'i), 
+      // aktif thread kontrolü yapmadan mesajı ekle (optimistic mesajı gerçek mesajla değiştir)
+      const isOwnMessage = isSender || event.senderId === currentUserId;
+      
+      // Mesajı aktif thread'e ekleme mantığı:
+      // 1. Eğer aktif thread'deyse (thread ID eşleşiyorsa) -> ekle (hem kendi mesajımız hem gelen mesajlar için)
+      // 2. Eğer kendi mesajımızsa ve aktif thread varsa -> ekle (mesajı gönderdiğimizde aktif thread'de olmalıyız)
+      // NOT: Gelen mesajlar için de aktif thread kontrolü yapılıyor (isActiveThread = true ise eklenir)
+      const shouldAddToActiveThread = isActiveThread || (isOwnMessage && activeThreadId);
+      
+      if (shouldAddToActiveThread) {
+        // Aktif thread'deyse veya kendi mesajımızsa ekle
+        console.log(`[${side}] Adding message to active thread (isOwnMessage: ${isOwnMessage}, isActiveThread: ${isActiveThread}):`, messageItem.id);
+      upsertActiveThreadMessage(panelState, messageItem);
+      renderMessages(panelState, side, els);
+        
+        // Aktif thread için preview güncelleme (mesaj gönderildiğinde veya alındığında)
+        // Sadece thread state'te varsa güncelle
+        const threadIndex = panelState.threads.findIndex((t) => String(t.id) === threadId);
+        if (threadIndex !== -1) {
+          updateThreadPreviewState(panelState, side, els, event, {
+            isSender: isOwnMessage,
+          });
+        }
+      } else {
+        console.log(`[${side}] Message not in active thread (isOwnMessage: ${isOwnMessage}, isActiveThread: ${isActiveThread}, activeThreadId: ${activeThreadId}), updating thread preview only`);
+        // Aktif thread değilse, preview güncelle
+    updateThreadPreviewState(panelState, side, els, event, {
+          isSender: isOwnMessage,
+    });
+      }
+    } else {
+      console.warn(`[${side}] Failed to build message item from event:`, event);
+    }
+    return;
+  }
+
+  // support-request artık REST API ile oluşturuluyor, socket event'i göndermiyoruz
+  // Bu handler'ı kaldırdık çünkü support request'ler POST isteği sonrası GET ile yükleniyor
+  if (event.messageType === 'support-request') {
+    // Support request'ler REST API ile oluşturulduğu için socket event'i beklenmiyor
+    // Eğer gelecek olursa (eski kod uyumluluğu için), sadece log atıyoruz
+    console.log(`[${side}] Support request event received but ignored (using REST API):`, event.messageId);
+    return;
+  }
+
+  // send-tips artık REST API ile oluşturuluyor, socket event'i göndermiyoruz
+  // Bu handler'ı kaldırdık çünkü tips POST isteği sonrası GET ile yükleniyor
+  if (event.messageType === 'send-tips') {
+    // Tips REST API ile oluşturulduğu için socket event'i beklenmiyor
+    // Eğer gelecek olursa (eski kod uyumluluğu için), sadece log atıyoruz
+    console.log(`[${side}] Tips event received but ignored (using REST API):`, event.messageId);
+    return;
+  }
+}
+
+function buildFeedItemFromEvent(panelState, event) {
+  const sender = buildSenderMeta(panelState, event.threadId, event.senderId);
+  if (!sender) return null;
+
+  return {
+    id: event.messageId,
+    type: 'message',
+    data: {
+      id: event.messageId,
+      sender,
+      lastMessage: event.message,
+      timestamp: event.timestamp,
+      isUnread: event.senderId !== String(panelState.user?.id),
+    },
+  };
+}
+
+function buildSupportRequestItemFromEvent(panelState, event) {
+  const sender = buildSenderMeta(panelState, event.threadId, event.senderId);
+  if (!sender) return null;
+
+  return {
+    id: event.messageId,
+    type: 'support-request',
+    data: {
+      id: event.messageId,
+      sender,
+      type: event.type || 'GENERAL',
+      message: event.message,
+      amount: event.amount || 0,
+      status: event.status || 'pending',
+      timestamp: event.timestamp,
+      threadId: null, // Thread henüz oluşturulmadı (accept edilene kadar)
+    },
+  };
+}
+
+function buildTipsItemFromEvent(panelState, event) {
+  const sender = buildSenderMeta(panelState, event.threadId, event.senderId);
+  if (!sender) return null;
+
+  return {
+    id: event.messageId,
+    type: 'send-tips',
+    data: {
+      id: event.messageId,
+      sender,
+      amount: event.amount || 0,
+      message: event.message,
+      timestamp: event.timestamp,
+    },
+  };
+}
+
+function buildSenderMeta(panelState, threadId, senderId) {
+  const isCurrentUser = String(panelState.user?.id) === String(senderId);
+  if (isCurrentUser) {
+    const user = panelState.user || {};
+    const profile = user.profile || {};
+    return {
+      id: String(user.id),
+      senderName: profile.displayName || user.email || 'You',
+      senderTitle: profile.title || '',
+      senderAvatar: profile.avatarUrl || '',
+    };
+  }
+
+  // Thread ID'leri string olarak karşılaştır
+  const threadIdStr = String(threadId);
+  const thread =
+    panelState.threads.find((t) => String(t.id) === threadIdStr) ||
+    (panelState.activeThread?.id && String(panelState.activeThread.id) === threadIdStr ? panelState.activeThread : null);
+
+  if (!thread) {
+    // Thread bulunamazsa, minimal sender bilgisi döndür (mesajı eklemek için yeterli)
+    console.warn(`[buildSenderMeta] Thread not found for threadId: ${threadIdStr}, senderId: ${senderId}, using minimal sender info`);
+    return {
+      id: String(senderId),
+      senderName: 'User',
+      senderTitle: '',
+      senderAvatar: '',
+    };
+  }
+
+  return {
+    id: String(senderId),
+    senderName: thread.senderName || 'User',
+    senderTitle: thread.senderTitle || '',
+    senderAvatar: thread.senderAvatar || '',
+  };
+}
+
+function getTimestampFromItem(item) {
+  if (!item || !item.data) return 0;
+  // Tüm item tipleri için timestamp data.timestamp altında
+  return new Date(item.data.timestamp || 0).getTime();
+}
+
+function upsertActiveThreadMessage(panelState, newItem) {
+  console.log(`upsertActiveThreadMessage called with:`, { 
+    newItemId: newItem.id, 
+    newItemMessage: newItem.data?.lastMessage,
+    currentItemsCount: panelState.activeThreadItems.length 
+  });
+  
+  // Duplicate kontrolü: Aynı ID'ye sahip mesajı kaldır
+  const normalized = panelState.activeThreadItems.filter((item) => item.id !== newItem.id);
+  console.log(`After duplicate filter:`, { count: normalized.length });
+  
+  // Gerçek mesajı ekle (optimistic mesaj yok, sadece socket'ten gelen mesajlar)
+  normalized.push(newItem);
+  
+  // En eski önce sırala (WhatsApp tarzı - en yeni en altta)
+  normalized.sort((a, b) => {
+    const ta = getTimestampFromItem(a);
+    const tb = getTimestampFromItem(b);
+    return ta - tb;
+  });
+  
+  console.log(`Final items count:`, normalized.length);
+  panelState.activeThreadItems = normalized;
+}
+
+function updateThreadPreviewState(panelState, side, els, event, { isSender = false, isSupport = false } = {}) {
+  const eventThreadId = String(event.threadId);
+  const activeThreadId = panelState.activeThread?.id ? String(panelState.activeThread.id) : null;
+  const isActiveThread = activeThreadId === eventThreadId;
+  const currentUserId = String(panelState.user?.id);
+  const isIncoming = event.senderId !== currentUserId;
+
+  // Thread ID'leri string olarak karşılaştır
+  const threadIndex = panelState.threads.findIndex((t) => String(t.id) === eventThreadId);
+  
+  console.log(`[${side}] updateThreadPreviewState:`, { 
+    eventThreadId, 
+    activeThreadId, 
+    isActiveThread, 
+    threadIndex, 
+    isSender,
+    isIncoming,
+    totalThreads: panelState.threads.length 
+  });
+
+  // Support request için özel mesaj oluştur
+  let previewMessage = event.message;
+  if (event.messageType === 'support-request') {
+    previewMessage = `🎧 Support Request: ${event.message || 'No message'}`;
+  } else if (event.messageType === 'send-tips') {
+    previewMessage = `🎁 TIPS: ${event.amount || 0} TIPS - ${event.message || 'No message'}`;
+  }
+
+  let thread;
+  
+  if (threadIndex === -1) {
+    // Thread state'te yoksa, DM mesajları için thread oluşturma
+    // Support mesajları için minimal thread objesi oluştur
+    if (isSupport) {
+      // Support request için minimal thread objesi oluştur
+    const sender = buildSenderMeta(panelState, event.threadId, event.senderId);
+    thread = {
+      id: event.threadId,
+      senderName: sender?.senderName || 'User',
+      senderTitle: sender?.senderTitle || '',
+      senderAvatar: sender?.senderAvatar || '',
+        lastMessage: '[Support]',
+      timestamp: event.timestamp,
+      isUnread: isIncoming && !isActiveThread,
+      unreadCount: isIncoming && !isActiveThread ? 1 : 0,
+    };
+    // Thread'i listenin başına ekle
+    panelState.threads.unshift(thread);
+      console.log(`[${side}] New support thread created in preview:`, thread);
+    } else {
+      // DM mesajları için thread state'te yoksa, thread'i yükle
+      // Ama aktif thread ise (mesaj gönderdiğimiz thread), preview güncelleme yapma
+      if (isActiveThread) {
+        console.log(`[${side}] Thread not found in state but is active thread, skipping preview update`);
+        return;
+      }
+      // Aktif thread değilse, thread listesini yeniden yükle
+      console.log(`[${side}] Thread not found in state, reloading thread list:`, eventThreadId);
+      import('./thread.service.js').then(({ loadThreads }) => {
+        loadThreads(panelState, side, els).catch((error) => {
+          console.error(`[${side}] Failed to load threads:`, error);
+        });
+      });
+      // Thread yüklenene kadar preview güncelleme yapma
+      return;
+    }
+  } else {
+    thread = panelState.threads[threadIndex];
+    thread.lastMessage = isSupport ? '[Support]' : previewMessage;
+    thread.timestamp = event.timestamp;
+    thread.isUnread = isIncoming && !isActiveThread;
+    thread.unreadCount = thread.isUnread ? (thread.unreadCount || 0) + 1 : 0;
+
+    // Thread'i listenin başına taşı
+    panelState.threads.splice(threadIndex, 1);
+    panelState.threads.unshift(thread);
+    console.log(`[${side}] Thread preview updated:`, { id: thread.id, lastMessage: thread.lastMessage });
+  }
+
+  panelState.filteredThreads = panelState.threads;
+  renderThreads(panelState, side, els);
+  console.log(`[${side}] Threads rendered, total threads:`, panelState.threads.length);
+}
+
+function appendSupportMessageState(panelState, event) {
+  // TIPS mesajlarını support chat'e ekleme - sadece SUPPORT context'li mesajlar
+  const messageText = event.message || '';
+  const messageType = event.messageType;
+  const isTipsMessage = messageType === 'send-tips' || messageType === 'TIPS' ||
+    (messageText.includes('Sent') && messageText.includes('TIPS'));
+  
+  if (isTipsMessage) {
+    console.log(`[Support Chat] Ignoring TIPS message in support chat:`, event.messageId);
+    return; // TIPS mesajlarını support chat'e ekleme
+  }
+
+  const newMessage = {
+    id: event.messageId,
+    senderId: event.senderId,
+    message: event.message,
+    timestamp: event.timestamp,
+  };
+
+  // Duplicate kontrolü: Eğer mesaj zaten varsa ekleme
+  const existingItems = panelState.supportChatItems || [];
+  const messageExists = existingItems.some((item) => item.id === event.messageId);
+  
+  if (!messageExists) {
+    // Gerçek mesajı ekle (optimistic mesaj yok, sadece socket'ten gelen mesajlar)
+    panelState.supportChatItems = [...existingItems, newMessage].sort((a, b) => {
+      return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+    });
+
+    // Aktif thread içerisindeki support request kartını da güncelle
+    if (panelState.activeThreadItems?.length) {
+      const supportItem = panelState.activeThreadItems.find(
+        (item) => item.type === 'support-request' && item.id === panelState.supportChat?.requestId,
+      );
+      if (supportItem) {
+        supportItem.data = supportItem.data || {};
+        supportItem.data.messages = supportItem.data.messages || [];
+        // DM thread'deki messages array'inde de duplicate kontrolü yap
+        const dmMessageExists = supportItem.data.messages.some((msg) => msg.id === event.messageId);
+        if (!dmMessageExists) {
+          supportItem.data.messages.push(newMessage);
+        }
+      }
+    }
+  }
+}
+
+function applyMessageReadState(panelState, side, els, event) {
+  const isActiveThread = panelState.activeThread?.id === event.threadId;
+  if (isActiveThread) {
+    panelState.activeThreadItems = panelState.activeThreadItems.map((item) => {
+      if (item.type !== 'message') return item;
+      if (item.id === event.messageId) {
+        return {
+          ...item,
+          data: {
+            ...item.data,
+            isUnread: false,
+          },
+        };
+      }
+      return item;
+    });
+
+    renderMessages(panelState, side, els);
+  }
+
+  const thread = panelState.threads.find((t) => t.id === event.threadId);
+  if (thread) {
+    thread.isUnread = false;
+    thread.unreadCount = 0;
+    renderThreads(panelState, side, els);
+  }
+  // Thread state'te yoksa, socket event'leri zaten thread'i ekleyecek, GET isteği atmaya gerek yok
+}
+
+function markAllActiveThreadMessagesRead(panelState) {
+  panelState.activeThreadItems = panelState.activeThreadItems.map((item) => {
+    if (item.type !== 'message') return item;
+    return {
+      ...item,
+      data: {
+        ...item.data,
+        isUnread: false,
+      },
+    };
+  });
 }
 

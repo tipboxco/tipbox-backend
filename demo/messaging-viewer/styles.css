@@ -713,23 +713,35 @@ body {
 .typing-indicator {
   padding: 0.5rem 1rem;
   display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #D0F205; /* Primary Color */
+  font-family: 'Jura', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.typing-indicator-label {
+  font-size: 0.85rem;
+  letter-spacing: 0.5px;
+  text-transform: lowercase;
+}
+
+.typing-indicator-dots {
+  display: flex;
   gap: 0.25rem;
   align-items: center;
 }
 
-.typing-indicator span {
+.typing-indicator-dots span {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: #D0F205; /* Primary Color */
   animation: typing 1.4s infinite;
 }
-
-.typing-indicator span:nth-child(2) {
+.typing-indicator-dots span:nth-child(2) {
   animation-delay: 0.2s;
 }
-
-.typing-indicator span:nth-child(3) {
+.typing-indicator-dots span:nth-child(3) {
   animation-delay: 0.4s;
 }
 
@@ -875,26 +887,29 @@ body {
 }
 
 .modal-card {
-  background: white;
-  border-radius: 12px;
-  padding: 1.5rem;
+  background: rgba(255, 255, 255, 0.05); /* Card Background */
+  border: 1px solid rgba(208, 242, 5, 0.3); /* Primary Border */
+  border-radius: 16px;
+  padding: 1.75rem;
   width: 90%;
-  max-width: 420px;
+  max-width: 480px;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.45);
+  color: #FAFAFA; /* Primary Text */
 }
 
 .modal-card header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.75rem;
 }
 
 .modal-card h3 {
-  font-size: 1.25rem;
-  font-weight: 500;
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: #FAFAFA;
 }
 
 .modal-card form {
@@ -908,16 +923,34 @@ body {
   flex-direction: column;
   gap: 0.5rem;
   font-size: 0.9rem;
-  font-weight: 500;
+  font-weight: 600;
+  color: #FAFAFA;
 }
 
 .modal-card input,
 .modal-card select,
 .modal-card textarea {
-  padding: 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  font-size: 0.9rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(163, 163, 163, 0.25); /* Border Light */
+  border-radius: 10px;
+  font-size: 0.95rem;
+  background: rgba(255, 255, 255, 0.05); /* Card Background */
+  color: #FAFAFA; /* Primary Text */
+  font-family: 'Jura', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  transition: border-color 0.3s ease, background 0.3s ease;
+}
+
+.modal-card input::placeholder,
+.modal-card textarea::placeholder {
+  color: #A3A3A3; /* Secondary Text */
+}
+
+.modal-card input:focus,
+.modal-card select:focus,
+.modal-card textarea:focus {
+  outline: none;
+  border-color: #D0F205; /* Primary Color */
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .modal-card textarea {
@@ -933,36 +966,38 @@ body {
 
 .muted {
   font-size: 0.8rem;
-  color: var(--text-secondary);
+  color: #A3A3A3; /* Secondary Text */
 }
 
 .pill {
-  padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: 24px;
+  padding: 0.9rem 1.75rem;
+  border: 1px solid rgba(208, 242, 5, 0.4);
+  border-radius: 999px;
   font-weight: 600;
   cursor: pointer;
-  transition: transform 0.2s;
+  transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+  font-family: 'Jura', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .pill:hover {
   transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(208, 242, 5, 0.25);
 }
 
 .pill.primary {
-  background: #d4ff00;
-  color: #272727;
+  background: rgba(208, 242, 5, 0.2);
+  color: #D0F205;
 }
 
 .pill.secondary {
-  background: #f5e1ff;
-  color: #6d28d9;
+  background: rgba(87, 31, 221, 0.25);
+  color: #E4D6FF;
 }
 
 .ghost {
   background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-primary);
+  border: 1px solid rgba(163, 163, 163, 0.4);
+  color: #FAFAFA;
   padding: 0.5rem 1rem;
   border-radius: 8px;
   cursor: pointer;
@@ -1193,22 +1228,28 @@ body {
 }
 
 .support-message-bubble.sent {
-  background: var(--sent-bubble);
+  background: rgba(208, 242, 5, 0.15); /* Sent Bubble */
+  border: 1px solid rgba(208, 242, 5, 0.3); /* Primary Border */
+  color: #FAFAFA; /* Primary Text */
   align-self: flex-end;
   border-bottom-right-radius: 4px;
 }
 
 .support-message-bubble.received {
-  background: var(--received-bubble);
+  background: rgba(255, 255, 255, 0.05); /* Received Bubble */
+  border: 1px solid rgba(163, 163, 163, 0.2); /* Border Light */
+  color: #FAFAFA; /* Primary Text */
   align-self: flex-start;
   border-bottom-left-radius: 4px;
-  box-shadow: 0 1px 2px var(--shadow);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .support-message-content {
   font-size: 0.9rem;
-  line-height: 1.4;
+  line-height: 1.6;
   margin-bottom: 0.25rem;
+  color: #FAFAFA; /* Primary Text */
+  font-family: 'Jura', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .support-message-meta {
@@ -1217,30 +1258,40 @@ body {
   align-items: center;
   gap: 0.25rem;
   font-size: 0.7rem;
-  color: var(--text-secondary);
+  color: #A3A3A3; /* Secondary Text */
   margin-top: 0.25rem;
+  font-family: 'Jura', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 .support-message-input-container {
-  background: var(--bg-white);
+  background: rgba(255, 255, 255, 0.05); /* Card Background */
+  border-top: 1px solid rgba(163, 163, 163, 0.2); /* Border Light */
   padding: 0.75rem 1rem;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  border-top: 1px solid var(--border);
 }
 
 .support-message-input-container input {
   flex: 1;
   padding: 0.625rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: 24px;
+  border: 1px solid rgba(163, 163, 163, 0.2); /* Border Light */
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05); /* Card Background */
+  color: #FAFAFA; /* Primary Text */
   font-size: 0.9rem;
+  font-family: 'Jura', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  transition: border-color 0.3s ease, background 0.3s ease;
   outline: none;
 }
 
+.support-message-input-container input::placeholder {
+  color: #A3A3A3; /* Secondary Text */
+}
+
 .support-message-input-container input:focus {
-  border-color: var(--primary);
+  border-color: #D0F205; /* Primary Color */
+  background: rgba(255, 255, 255, 0.08); /* Hover Background */
 }
 
 /* Responsive */

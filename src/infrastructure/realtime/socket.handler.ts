@@ -94,6 +94,9 @@ export class SocketHandler {
       // Typing indicators
       this.setupTypingHandlers(socket);
 
+      // Message sending handlers
+      this.setupMessageHandlers(socket);
+
       // Hata yakalama
       socket.on('error', (error) => {
         logger.error(`Socket error for user ${userEmail}:`, error);
@@ -170,6 +173,125 @@ export class SocketHandler {
         socket.emit('thread_left', { threadId });
       } catch (error) {
         logger.error(`Error leaving thread for user ${userEmail}:`, error);
+      }
+    });
+  }
+
+  /**
+   * Mesaj gönderme için event handler'ları
+   */
+  private setupMessageHandlers(socket: AuthenticatedSocket): void {
+    const userId = socket.data.userId;
+    const userEmail = socket.data.userEmail;
+
+    // send_message event handler (normal DM mesajları için)
+    socket.on('send_message', async (data: { threadId: string; message: string }) => {
+      try {
+        const { threadId, message } = data || {};
+        
+        if (!threadId || typeof threadId !== 'string') {
+          socket.emit('message_send_error', {
+            reason: 'Invalid threadId',
+          });
+          return;
+        }
+
+        if (!message || typeof message !== 'string' || message.trim() === '') {
+          socket.emit('message_send_error', {
+            reason: 'Message is required',
+          });
+          return;
+        }
+
+        // Thread erişim kontrolü
+        const hasAccess = await this.messagingService.validateThreadAccess(threadId, userId);
+        if (!hasAccess) {
+          socket.emit('message_send_error', {
+            reason: 'Access denied: User is not a participant of this thread',
+          });
+          logger.warn(`User ${userEmail} (${userId}) attempted to send message to thread ${threadId} without access`);
+          return;
+        }
+
+        // Thread'i al ve recipientId'yi bul
+        const thread = await this.messagingService.getThreadById(threadId);
+        if (!thread) {
+          socket.emit('message_send_error', {
+            reason: 'Thread not found',
+          });
+          return;
+        }
+
+        // Thread'in support thread olmadığını kontrol et
+        if (thread.isSupportContext()) {
+          socket.emit('message_send_error', {
+            reason: 'Use send_support_message for support chat messages',
+          });
+          return;
+        }
+
+        // RecipientId'yi bul
+        const recipientId = thread.userOneId === userId ? thread.userTwoId : thread.userOneId;
+
+        // Mesajı gönder (internal service call)
+        await this.messagingService.sendDirectMessage(userId, recipientId, message.trim());
+        
+        logger.info(`Message sent via socket: User ${userEmail} in thread ${threadId}`);
+      } catch (error: any) {
+        logger.error(`Error handling send_message for user ${userEmail}:`, error);
+        socket.emit('message_send_error', {
+          reason: error.message || 'Failed to send message',
+        });
+      }
+    });
+
+    // send_support_message event handler (support chat mesajları için)
+    socket.on('send_support_message', async (data: { threadId: string; message: string }) => {
+      try {
+        const { threadId, message } = data || {};
+        
+        if (!threadId || typeof threadId !== 'string') {
+          socket.emit('message_send_error', {
+            reason: 'Invalid threadId',
+          });
+          return;
+        }
+
+        if (!message || typeof message !== 'string' || message.trim() === '') {
+          socket.emit('message_send_error', {
+            reason: 'Message is required',
+          });
+          return;
+        }
+
+        // Thread erişim kontrolü
+        const hasAccess = await this.messagingService.validateThreadAccess(threadId, userId);
+        if (!hasAccess) {
+          socket.emit('message_send_error', {
+            reason: 'Access denied: User is not a participant of this thread',
+          });
+          logger.warn(`User ${userEmail} (${userId}) attempted to send support message to thread ${threadId} without access`);
+          return;
+        }
+
+        // Thread'in support thread olduğunu kontrol et
+        const thread = await this.messagingService.getThreadById(threadId);
+        if (!thread?.isSupportContext()) {
+          socket.emit('message_send_error', {
+            reason: 'Thread is not a support chat',
+          });
+          return;
+        }
+
+        // Support chat mesajını gönder (internal service call)
+        await this.messagingService.sendSupportChatMessage(threadId, userId, message.trim());
+        
+        logger.info(`Support message sent via socket: User ${userEmail} in thread ${threadId}`);
+      } catch (error: any) {
+        logger.error(`Error handling send_support_message for user ${userEmail}:`, error);
+        socket.emit('message_send_error', {
+          reason: error.message || 'Failed to send support message',
+        });
       }
     });
   }
@@ -275,9 +397,11 @@ export class SocketHandler {
    */
   public sendMessageToUser(userId: string, event: string, payload: any): void {
     try {
-      // Kullanıcılar user:{userId} room'una katılıyor
-      this.io.to(userId).emit(event, payload);
-      logger.debug(`Message sent to user ${userId}: ${event}`);
+      // Kullanıcılar connection handler'da kendi userId room'una katılıyor (socket.join(userId))
+      // Room adı userId string olarak kullanılıyor
+      const roomName = String(userId);
+      this.io.to(roomName).emit(event, payload);
+      logger.info(`Message sent to user ${userId} (room: ${roomName}): ${event}`);
     } catch (error) {
       logger.error(`Failed to send message to user ${userId}:`, error);
     }

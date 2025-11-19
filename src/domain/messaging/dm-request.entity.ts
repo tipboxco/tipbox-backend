@@ -10,6 +10,7 @@ export class DMRequest {
     public readonly type: SupportType,
     public readonly amount: number,
     public readonly description: string | null,
+    public readonly threadId: string | null,
     public readonly sentAt: Date,
     public readonly respondedAt: Date | null,
     public readonly createdAt: Date,

@@ -2,6 +2,7 @@ import { PrismaClient, Prisma } from '@prisma/client';
 import { DMRequest } from '../../domain/messaging/dm-request.entity';
 import { DMRequestStatus } from '../../domain/messaging/dm-request-status.enum';
 import { SupportType as DomainSupportType } from '../../domain/messaging/support-type.enum';
+import logger from '../logger/logger';
 
 // SupportType will be available from Prisma after TypeScript server restart
 type PrismaSupportType = 'GENERAL' | 'TECHNICAL' | 'PRODUCT';
@@ -119,32 +120,19 @@ export class DMRequestPrismaRepository {
       }
     }
 
-    const request = await this.prisma.dMRequest.upsert({
-      where: {
-        fromUserId_toUserId: {
-          fromUserId: data.fromUserId,
-          toUserId: data.toUserId,
-        },
-      },
-      update: {
-        status: data.status || DMRequestStatus.PENDING,
-        type: supportType as any,
-        amount: data.amount ?? 0,
-        description: data.description || null,
-        sentAt: new Date(),
-        respondedAt: null,
-        updatedAt: new Date(),
-      } as any,
-      create: {
+    const now = new Date();
+    const request = await this.prisma.dMRequest.create({
+      data: {
         fromUserId: data.fromUserId,
         toUserId: data.toUserId,
         status: data.status || DMRequestStatus.PENDING,
         type: supportType as any,
         amount: data.amount ?? 0,
         description: data.description || null,
-        sentAt: new Date(),
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        sentAt: now,
+        respondedAt: null,
+        createdAt: now,
+        updatedAt: now,
       } as any,
       include: DM_REQUEST_INCLUDE,
     });
@@ -155,18 +143,46 @@ export class DMRequestPrismaRepository {
     status?: DMRequestStatus;
     description?: string | null;
     respondedAt?: Date | null;
+    threadId?: string | null;
   }): Promise<DMRequest | null> {
     try {
+      // Prisma client'ın threadId field'ını tanıması için type assertion
+      const updateData: any = {
+        updatedAt: new Date(),
+      };
+      
+      // Her field'ı explicit olarak ekle
+      if (data.status !== undefined) {
+        updateData.status = data.status;
+      }
+      
+      if (data.description !== undefined) {
+        updateData.description = data.description;
+      }
+      
+      if (data.respondedAt !== undefined) {
+        updateData.respondedAt = data.respondedAt;
+      }
+      
+      if (data.threadId !== undefined) {
+        updateData.threadId = data.threadId;
+      }
+      
       const request = await this.prisma.dMRequest.update({
         where: { id },
-        data: {
-          ...data,
-          updatedAt: new Date(),
-        },
+        data: updateData,
         include: DM_REQUEST_INCLUDE,
       });
+      
+      logger.info(`DMRequest ${id} updated:`, {
+        status: data.status,
+        threadId: data.threadId,
+        hasThreadId: !!data.threadId,
+      });
+      
       return this.toDomain(request);
-    } catch {
+    } catch (error) {
+      logger.error(`Failed to update DMRequest ${id}:`, error);
       return null;
     }
   }
@@ -194,6 +210,7 @@ export class DMRequestPrismaRepository {
       supportType,
       amount,
       prismaRequest.description,
+      (prismaRequest as any).threadId ?? null,
       prismaRequest.sentAt,
       prismaRequest.respondedAt,
       prismaRequest.createdAt,

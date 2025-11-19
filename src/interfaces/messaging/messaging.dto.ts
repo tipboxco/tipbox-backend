@@ -66,11 +66,19 @@
  *         timestamp:
  *           type: string
  *           format: date-time
- *         messages:
- *           type: array
- *           items:
- *             $ref: '#/components/schemas/SupportChatMessage'
- *           description: Support chat ekranı için detaylı mesajlar (DM ekranında kullanılmaz)
+ *         threadId:
+ *           type: string
+ *           format: uuid
+ *           nullable: true
+ *           description: |
+ *             Support request'in bağlı olduğu support thread ID.
+ *             - status: "pending" → threadId: null (henüz accept edilmemiş, thread oluşturulmamış)
+ *             - status: "accepted" → threadId: "uuid" (accept edildiğinde oluşturulan unique support thread ID)
+ *             - status: "rejected" → threadId: null
+ *             
+ *             Her support request accept edildiğinde yeni bir unique support thread oluşturulur (is_support_thread=true) 
+ *             ve bu thread ID'si DMRequest.threadId field'ına kaydedilir. 
+ *             Bu ID ile support chat açılır ve GET /messages/{threadId} endpoint'i ile sadece SUPPORT context'li mesajlar yüklenir.
  *     TipsInfo:
  *       type: object
  *       properties:
@@ -189,7 +197,7 @@ export interface SupportChatMessage {
 
 /**
  * Support request (DM ekranında sadece özet gösterilir)
- * Destek chat ekranı açılınca messages alanı kullanılır.
+ * Support chat açılırken threadId ile GET /messages/{threadId} çağrısı yapılarak mesajlar yüklenir.
  */
 export interface SupportRequest {
   id: string;
@@ -199,8 +207,7 @@ export interface SupportRequest {
   amount: number;
   status: SupportRequestStatus;
   timestamp: string;
-  // Support chat ekranı için detaylı mesajlar
-  messages: SupportChatMessage[];
+  threadId?: string | null; // Accept edilmişse thread ID, yoksa null. Support chat açılırken GET /messages/{threadId} ile mesajlar yüklenir.
 }
 
 export interface TipsInfo {

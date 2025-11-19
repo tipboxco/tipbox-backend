@@ -21,12 +21,15 @@ export function showAuthPanel(side, els) {
 export function renderThreads(panelState, side, els) {
   const threadList = side === 'left' ? els.threadListLeft : els.threadListRight;
 
+  console.log(`[${side}] renderThreads called, filteredThreads count:`, panelState.filteredThreads.length);
+  console.log(`[${side}] Thread IDs:`, panelState.filteredThreads.map(t => t.id));
+
   if (!panelState.filteredThreads.length) {
     threadList.innerHTML = '<div class="empty-state">Mesaj yok</div>';
     return;
   }
 
-  threadList.innerHTML = panelState.filteredThreads
+  const html = panelState.filteredThreads
     .map((thread) => {
       const isActive = panelState.activeThread?.id === thread.id;
       const avatarText = (thread.senderName || '?').slice(0, 2).toUpperCase();
@@ -61,12 +64,21 @@ export function renderThreads(panelState, side, els) {
     })
     .join('');
 
+  console.log(`[${side}] Setting threadList.innerHTML, HTML length:`, html.length);
+  threadList.innerHTML = html;
+  console.log(`[${side}] Thread list DOM updated, child count:`, threadList.children.length);
+
   [...threadList.querySelectorAll('.thread-item')].forEach((item) => {
     item.addEventListener('click', async () => {
       const { selectThread } = await import('./thread.service.js');
       selectThread(item.dataset.thread, panelState, side, els);
     });
   });
+
+  // Yeni thread eklendiğinde scroll'u en üste al
+  if (threadList.scrollTop > 0) {
+    threadList.scrollTop = 0;
+  }
 }
 
 export function renderThreadHeader(panelState, side, els) {
@@ -104,6 +116,21 @@ export function renderMessages(panelState, side, els) {
       const { openSupportChat } = await import('./support.service.js');
       openSupportChat(btn.dataset.supportChat, panelState, side, els);
       // Note: activePanel is managed in app.js, not here
+    });
+  });
+
+  // Accept/Reject butonları için event listener'lar
+  messagesContainer.querySelectorAll('[data-accept-request]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const { acceptSupportRequest } = await import('./support.service.js');
+      acceptSupportRequest(btn.dataset.acceptRequest, panelState, side, els);
+    });
+  });
+
+  messagesContainer.querySelectorAll('[data-reject-request]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const { rejectSupportRequest } = await import('./support.service.js');
+      rejectSupportRequest(btn.dataset.rejectRequest, panelState, side, els);
     });
   });
 }
@@ -153,6 +180,42 @@ function renderMessageItem(item, panelState) {
   }
 
   if (item.type === 'support-request') {
+    const status = item.data?.status || 'pending';
+    const threadId = item.data?.threadId;
+    const currentUserId = String(panelState.user?.id);
+    const senderId = item.data?.sender?.id;
+    const isExpert = !isSent; // Alıcı expert (karşı taraf)
+    const isPending = status === 'pending';
+    const isAccepted = status === 'accepted' && threadId;
+    
+    // Expert tarafında (alıcı) pending ise accept/reject butonları göster
+    // Gönderen tarafında (sender) pending ise sadece durum göster
+    // Accepted ise ve threadId varsa "Open Support Chat" butonu göster
+    let actionButtons = '';
+    if (isExpert && isPending) {
+      // Expert tarafında accept/reject butonları
+      actionButtons = `
+        <button class="action-btn accept-btn" data-accept-request="${item.id}">Accept</button>
+        <button class="action-btn reject-btn" data-reject-request="${item.id}">Reject</button>
+      `;
+    } else if (isAccepted) {
+      // Accept edilmişse ve threadId varsa "Open Support Chat" butonu
+      actionButtons = `<button class="action-btn" data-support-chat="${item.id}">Open Support Chat</button>`;
+    } else if (isPending) {
+      // Gönderen tarafında pending ise sadece durum göster
+      actionButtons = `<span class="tag pending-tag">Beklemede</span>`;
+    } else {
+      // Rejected veya diğer durumlar
+      actionButtons = `<span class="tag rejected-tag">${status === 'rejected' ? 'Reddedildi' : status}</span>`;
+    }
+    
+    // Thread ID bilgisini göster (varsa)
+    const threadIdInfo = threadId 
+      ? `<div style="margin-top: 0.5rem; font-size: 0.85rem; color: #666; font-family: monospace;">
+           <strong>Thread ID:</strong> ${escapeHtml(threadId)}
+         </div>`
+      : '';
+    
     return `
       <div class="card-item support ${isSent ? 'sent' : 'received'}">
         <header>
@@ -160,10 +223,11 @@ function renderMessageItem(item, panelState) {
         </header>
         <p><span class="tag">${item.data?.type}</span> ${escapeHtml(item.data?.message || '')}</p>
         <footer>
-          <span class="tag">Durum: ${item.data?.status}</span>
+          <span class="tag">Durum: ${status}</span>
           <span class="tag">${item.data?.amount} TIPS</span>
-          <button class="action-btn" data-support-chat="${item.id}">Open Support Chat</button>
+          ${actionButtons}
         </footer>
+        ${threadIdInfo}
         <div class="message-meta">
           <span class="message-time">${timestamp}</span>
           ${isSent ? `<span class="message-status read"></span>` : ''}
@@ -201,7 +265,9 @@ export function renderSupportChat(panelState, side, els) {
   
   // Header
   supportChatTitle.textContent = 'Support Chat';
-  supportChatStatus.textContent = `${data?.type || 'GENERAL'} • ${data?.amount || 0} TIPS`;
+  const threadId = panelState.supportChat?.threadId;
+  const threadIdText = threadId ? ` • Thread: ${threadId.substring(0, 8)}...` : '';
+  supportChatStatus.textContent = `${data?.type || 'GENERAL'} • ${data?.amount || 0} TIPS${threadIdText}`;
   
   // Participants - Görseldeki gibi yan yana
   if (currentUser && counterpart) {
@@ -216,7 +282,7 @@ export function renderSupportChat(panelState, side, els) {
       <div class="support-participant">
         <div class="support-participant-avatar">${currentUserInitials}</div>
         <div class="support-participant-info">
-          <div class="support-participant-name">${escapeHtml(currentUserName)}</div>
+        <div class="support-participant-name">${escapeHtml(currentUserName)}</div>
           <div class="support-participant-title">${escapeHtml(currentUserTitle)}</div>
         </div>
       </div>
@@ -224,7 +290,7 @@ export function renderSupportChat(panelState, side, els) {
       <div class="support-participant">
         <div class="support-participant-avatar">${counterpartInitials}</div>
         <div class="support-participant-info">
-          <div class="support-participant-name">${escapeHtml(counterpartName)}</div>
+        <div class="support-participant-name">${escapeHtml(counterpartName)}</div>
           <div class="support-participant-title">${escapeHtml(counterpartTitle)}</div>
         </div>
       </div>
@@ -244,7 +310,15 @@ export function renderSupportChat(panelState, side, els) {
   if (topicSpan) topicSpan.textContent = data?.type || 'GENERAL';
   if (tipsSpan) tipsSpan.textContent = `${data?.amount || 0} TIPS`;
   if (messageDiv) messageDiv.textContent = data?.message || '';
-  if (statusDiv) statusDiv.textContent = `Status: ${data?.status || 'pending'}`;
+  
+  // Thread ID bilgisini status ile birlikte göster
+  const threadIdForSummary = panelState.supportChat?.threadId;
+  if (statusDiv) {
+    statusDiv.innerHTML = `
+      <div>Status: ${data?.status || 'pending'}</div>
+      ${threadIdForSummary ? `<div style="margin-top: 0.5rem; font-size: 0.85rem; color: #666; font-family: monospace;">Thread ID: ${escapeHtml(threadIdForSummary)}</div>` : ''}
+    `;
+  }
   
   // Toggle functionality
   if (toggleBtn) {

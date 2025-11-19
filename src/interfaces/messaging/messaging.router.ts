@@ -257,6 +257,16 @@ router.post(
  *                   status:
  *                     type: string
  *                     enum: [active, pending, completed]
+ *                   threadId:
+ *                     type: string
+ *                     format: uuid
+ *                     nullable: true
+ *                     description: |
+ *                       Support request'in bağlı olduğu support thread ID.
+ *                       - pending: null (henüz accept edilmemiş, thread oluşturulmamış)
+ *                       - accepted: support thread ID (accept edildiğinde oluşturulan unique thread ID)
+ *                       - rejected: null
+ *                       Her support request accept edildiğinde yeni bir unique thread oluşturulur ve threadId bu thread'e kaydedilir.
  *       401:
  *         description: Kimlik doğrulaması başarısız.
  */
@@ -492,6 +502,154 @@ router.post(
 
 /**
  * @openapi
+ * /messages/support-requests/{requestId}/accept:
+ *   post:
+ *     summary: Support request'i accept et
+ *     description: |
+ *       Expert, support request'i accept eder ve yeni bir support thread oluşturulur.
+ *       
+ *       **İşlem Adımları:**
+ *       1. Support request status'u "accepted" olarak güncellenir
+ *       2. Yeni bir support thread oluşturulur (is_support_thread=true)
+ *       3. Oluşturulan thread ID'si DMRequest.threadId field'ına kaydedilir
+ *       4. Her support request için unique thread oluşturulur (aynı kullanıcılar arasında birden fazla request varsa her biri için ayrı thread)
+ *       
+ *       **Response:**
+ *       - requestId: Accept edilen support request ID'si
+ *       - threadId: Oluşturulan support thread ID'si (bu ID ile GET /messages/{threadId} çağrılarak support chat mesajları yüklenir)
+ *     tags: [Inbox]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: requestId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Accept edilecek support request ID'si
+ *     responses:
+ *       200:
+ *         description: Support request başarıyla accept edildi ve unique support thread oluşturuldu
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 requestId:
+ *                   type: string
+ *                   format: uuid
+ *                   description: Accept edilen support request ID'si
+ *                 threadId:
+ *                   type: string
+ *                   format: uuid
+ *                   description: Oluşturulan support thread ID'si. Bu ID ile GET /messages/{threadId} endpoint'i çağrılarak support chat mesajları yüklenir.
+ *             example:
+ *               requestId: "ccef8c37-cc75-4141-8b99-573ca8d277bb"
+ *               threadId: "1f2d6cb7-aef1-4221-8dba-2cd0601faae3"
+ *       400:
+ *         description: Bad request
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Only recipient can accept
+ *       404:
+ *         description: Support request not found
+ */
+router.post(
+  '/support-requests/:requestId/accept',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = (req as any).user;
+    const expertUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!expertUserId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { requestId } = req.params;
+    if (!requestId) {
+      return res.status(400).json({ message: 'requestId is required' });
+    }
+
+    try {
+      const result = await supportRequestService.acceptSupportRequest(requestId, String(expertUserId));
+      return res.status(200).json(result);
+    } catch (error: any) {
+      if (error.message === 'Support request not found') {
+        return res.status(404).json({ message: error.message });
+      }
+      if (error.message.includes('Only the recipient')) {
+        return res.status(403).json({ message: error.message });
+      }
+      if (error.message.includes('Only pending')) {
+        return res.status(400).json({ message: error.message });
+      }
+      throw error;
+    }
+  }),
+);
+
+/**
+ * @openapi
+ * /messages/support-requests/{requestId}/reject:
+ *   post:
+ *     summary: Support request'i reject et
+ *     description: Expert, support request'i reject eder.
+ *     tags: [Inbox]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: requestId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Support request başarıyla reject edildi
+ *       400:
+ *         description: Bad request
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Only recipient can reject
+ *       404:
+ *         description: Support request not found
+ */
+router.post(
+  '/support-requests/:requestId/reject',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = (req as any).user;
+    const expertUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!expertUserId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { requestId } = req.params;
+    if (!requestId) {
+      return res.status(400).json({ message: 'requestId is required' });
+    }
+
+    try {
+      await supportRequestService.rejectSupportRequest(requestId, String(expertUserId));
+      return res.status(200).json({ message: 'Support request rejected' });
+    } catch (error: any) {
+      if (error.message === 'Support request not found') {
+        return res.status(404).json({ message: error.message });
+      }
+      if (error.message.includes('Only the recipient')) {
+        return res.status(403).json({ message: error.message });
+      }
+      if (error.message.includes('Only pending')) {
+        return res.status(400).json({ message: error.message });
+      }
+      throw error;
+    }
+  }),
+);
+
+/**
+ * @openapi
  * /messages/tips:
  *   post:
  *     summary: Kullanıcıya TIPS gönder
@@ -688,159 +846,33 @@ router.post(
   }),
 );
 
-/**
- * @openapi
- * /messages/{threadId}/support-chat:
- *   get:
- *     summary: Support chat mesajlarını getir
- *     description: Belirtilen thread için 1-on-1 support chat mesajlarını döner.
- *     tags: [Inbox]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: threadId
- *         required: true
- *         schema:
- *           type: string
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 500
- *           default: 200
- *       - in: query
- *         name: supportRequestId
- *         schema:
- *           type: string
- *         description: Support request ID (optional, filters messages after this request)
- *     responses:
- *       200:
- *         description: Support chat mesajları
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/Message'
- *       401:
- *         description: Unauthorized
- */
-router.get(
-  '/:threadId/support-chat',
-  asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
-    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-    if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
-    }
-
-    const { threadId } = req.params;
-    if (!threadId) {
-      return res.status(400).json({ message: 'threadId is required' });
-    }
-
-    let limit = 200;
-    if (typeof req.query.limit === 'string') {
-      const parsed = parseInt(req.query.limit, 10);
-      if (!Number.isNaN(parsed)) {
-        limit = Math.min(Math.max(parsed, 1), 500);
-      }
-    }
-
-    const supportRequestId = typeof req.query.supportRequestId === 'string' ? req.query.supportRequestId : undefined;
-
-    try {
-      const messages = await messagingService.getSupportChatMessages(threadId, String(userId), supportRequestId, limit);
-      return res.status(200).json(messages);
-    } catch (error: any) {
-      if (error.message === 'Thread not found') {
-        return res.status(404).json({ message: error.message });
-      }
-      if (error.message === 'User is not a participant of this thread') {
-        return res.status(403).json({ message: error.message });
-      }
-      throw error;
-    }
-  }),
-);
-
-/**
- * @openapi
- * /messages/{threadId}/support-chat:
- *   post:
- *     summary: Support chat içinde mesaj gönder
- *     tags: [Inbox]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: threadId
- *         required: true
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [ message ]
- *             properties:
- *               message:
- *                 type: string
- *                 example: "Smartwatch kurulumu için yardıma ihtiyacım var."
- *     responses:
- *       201:
- *         description: Mesaj gönderildi.
- *       400:
- *         description: Geçersiz istek.
- *       401:
- *         description: Unauthorized.
- *       403:
- *         description: Thread erişimi yok.
- */
-router.post(
-  '/:threadId/support-chat',
-  asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
-    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-    if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
-    }
-
-    const { threadId } = req.params;
-    if (!threadId) {
-      return res.status(400).json({ message: 'threadId is required' });
-    }
-
-    const { message } = req.body || {};
-    if (!message || typeof message !== 'string' || message.trim() === '') {
-      return res.status(400).json({ message: 'message is required' });
-    }
-
-    try {
-      await messagingService.sendSupportChatMessage(threadId, String(userId), message.trim());
-      return res.status(201).end();
-    } catch (error: any) {
-      if (error.message === 'Thread not found') {
-        return res.status(404).json({ message: error.message });
-      }
-      if (error.message === 'User is not a participant of this thread') {
-        return res.status(403).json({ message: error.message });
-      }
-      throw error;
-    }
-  }),
-);
+// DEPRECATED ENDPOINTS (Removed):
+// - GET /messages/:supportThreadId/support-chat
+//   → Artık GET /messages/:threadId kullanılıyor (thread tipine göre otomatik olarak doğru veri döndürülüyor)
+// - POST /messages/:supportThreadId/support-chat
+//   → Artık socket üzerinden send_support_message event'i kullanılıyor
 
 /**
  * @openapi
  * /messages/{threadId}:
  *   get:
- *     summary: Thread mesajlarını getir
- *     description: Belirtilen thread'deki mesajları getirir. Kullanıcının thread'e erişim yetkisi olmalıdır.
+ *     summary: Thread mesajlarını getir (DM veya Support Chat)
+ *     description: |
+ *       Belirtilen thread'deki mesajları getirir. Thread tipine göre otomatik olarak doğru veri döndürülür:
+ *       
+ *       **DM Thread (is_support_thread=false):**
+ *       - type: "message" - DM context'li mesajlar
+ *       - type: "send-tips" - TIPS transferleri
+ *       - type: "support-request" - Support request'ler (pending/accepted/rejected)
+ *         - pending: threadId = null (henüz accept edilmemiş)
+ *         - accepted: threadId = support thread ID (accept edildiğinde oluşturulan unique thread ID)
+ *         - rejected: threadId = null
+ *       
+ *       **Support Chat Thread (is_support_thread=true):**
+ *       - type: "message" - Sadece SUPPORT context'li mesajlar (TIPS ve support-request yok)
+ *       - Her support request accept edildiğinde yeni bir unique thread oluşturulur
+ *       
+ *       Kullanıcının thread'e erişim yetkisi olmalıdır.
  *     tags: [Inbox]
  *     security:
  *       - bearerAuth: []
@@ -850,7 +882,7 @@ router.post(
  *         required: true
  *         schema:
  *           type: string
- *         description: Thread ID
+ *         description: Thread ID (DM thread veya Support Chat thread ID'si)
  *       - in: query
  *         name: limit
  *         schema:
@@ -868,52 +900,98 @@ router.post(
  *         description: Atlanacak mesaj sayısı (pagination için).
  *     responses:
  *       200:
- *         description: Thread mesajları başarıyla getirildi. Mesajlar, TIPS transferleri ve Support Request'ler timestamp'e göre sıralanmış olarak döner.
+ *         description: Thread mesajları başarıyla getirildi. Thread tipine göre farklı içerik döner.
  *         content:
  *           application/json:
  *             schema:
  *               type: array
  *               items:
  *                 $ref: '#/components/schemas/MessageFeedItem'
- *             example:
- *               - id: "msg-123"
- *                 type: "message"
- *                 data:
- *                   id: "msg-123"
- *                   sender:
- *                     id: "user-1"
- *                     senderName: "Ahmet Yılmaz"
- *                     senderTitle: "Expert"
- *                     senderAvatar: "https://example.com/avatar.jpg"
- *                   lastMessage: "Merhaba!"
- *                   timestamp: "2024-01-15T10:30:00Z"
- *                   isUnread: false
- *               - id: "tips-456"
- *                 type: "send-tips"
- *                 data:
- *                   id: "tips-456"
- *                   sender:
- *                     id: "user-1"
- *                     senderName: "Ahmet Yılmaz"
- *                     senderTitle: "Expert"
- *                     senderAvatar: "https://example.com/avatar.jpg"
- *                   amount: 100.50
- *                   message: "Teşekkürler!"
- *                   timestamp: "2024-01-15T10:25:00Z"
- *               - id: "req-789"
- *                 type: "support-request"
- *                 data:
- *                   id: "req-789"
- *                   sender:
- *                     id: "user-1"
- *                     senderName: "Ahmet Yılmaz"
- *                     senderTitle: "Expert"
- *                     senderAvatar: "https://example.com/avatar.jpg"
- *                   type: "GENERAL"
- *                   message: "Yardıma ihtiyacım var"
- *                   amount: 50
- *                   status: "pending"
- *                   timestamp: "2024-01-15T10:20:00Z"
+ *             examples:
+ *               dm-thread:
+ *                 summary: DM Thread örneği
+ *                 value:
+ *                   - id: "msg-123"
+ *                     type: "message"
+ *                     data:
+ *                       id: "msg-123"
+ *                       sender:
+ *                         id: "user-1"
+ *                         senderName: "Ahmet Yılmaz"
+ *                         senderTitle: "Expert"
+ *                         senderAvatar: "https://example.com/avatar.jpg"
+ *                       lastMessage: "Merhaba!"
+ *                       timestamp: "2024-01-15T10:30:00Z"
+ *                       isUnread: false
+ *                   - id: "tips-456"
+ *                     type: "send-tips"
+ *                     data:
+ *                       id: "tips-456"
+ *                       sender:
+ *                         id: "user-1"
+ *                         senderName: "Ahmet Yılmaz"
+ *                         senderTitle: "Expert"
+ *                         senderAvatar: "https://example.com/avatar.jpg"
+ *                       amount: 100.50
+ *                       message: "Teşekkürler!"
+ *                       timestamp: "2024-01-15T10:25:00Z"
+ *                   - id: "req-789"
+ *                     type: "support-request"
+ *                     data:
+ *                       id: "req-789"
+ *                       sender:
+ *                         id: "user-1"
+ *                         senderName: "Ahmet Yılmaz"
+ *                         senderTitle: "Expert"
+ *                         senderAvatar: "https://example.com/avatar.jpg"
+ *                       type: "GENERAL"
+ *                       message: "Yardıma ihtiyacım var"
+ *                       amount: 50
+ *                       status: "accepted"
+ *                       timestamp: "2024-01-15T10:20:00Z"
+ *                       threadId: "1f2d6cb7-aef1-4221-8dba-2cd0601faae3"
+ *                   - id: "req-790"
+ *                     type: "support-request"
+ *                     data:
+ *                       id: "req-790"
+ *                       sender:
+ *                         id: "user-1"
+ *                         senderName: "Ahmet Yılmaz"
+ *                         senderTitle: "Expert"
+ *                         senderAvatar: "https://example.com/avatar.jpg"
+ *                       type: "TECHNICAL"
+ *                       message: "Teknik destek istiyorum"
+ *                       amount: 100
+ *                       status: "pending"
+ *                       timestamp: "2024-01-15T10:15:00Z"
+ *                       threadId: null
+ *               support-chat-thread:
+ *                 summary: Support Chat Thread örneği
+ *                 value:
+ *                   - id: "msg-456"
+ *                     type: "message"
+ *                     data:
+ *                       id: "msg-456"
+ *                       sender:
+ *                         id: "user-1"
+ *                         senderName: "Ahmet Yılmaz"
+ *                         senderTitle: "Expert"
+ *                         senderAvatar: "https://example.com/avatar.jpg"
+ *                       lastMessage: "Smartwatch kurulumu için yardıma ihtiyacım var."
+ *                       timestamp: "2024-01-15T10:30:00Z"
+ *                       isUnread: false
+ *                   - id: "msg-457"
+ *                     type: "message"
+ *                     data:
+ *                       id: "msg-457"
+ *                       sender:
+ *                         id: "user-2"
+ *                         senderName: "Ayşe Demir"
+ *                         senderTitle: "Support Expert"
+ *                         senderAvatar: "https://example.com/avatar2.jpg"
+ *                       lastMessage: "Size yardımcı olabilirim. Hangi model?"
+ *                       timestamp: "2024-01-15T10:31:00Z"
+ *                       isUnread: false
  *       401:
  *         description: Kimlik doğrulaması başarısız.
  *       403:
@@ -955,7 +1033,7 @@ router.get(
       const feedItems = await messagingService.getThreadMessages(
         threadId,
         String(userId),
-        limit || 50,
+        limit || 100,
         offset || 0
       );
       return res.status(200).json(feedItems);
@@ -972,4 +1050,3 @@ router.get(
 );
 
 export default router;
-

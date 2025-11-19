@@ -3,7 +3,7 @@ import { panels, createPanelState } from './services/state.service.js';
 import { handleLogin, handleLogout } from './services/auth.service.js';
 import { loadThreads, selectThread, handleSearch, backToInbox } from './services/thread.service.js';
 import { sendMessage, markAsRead, sendSupportChatMessage } from './services/message.service.js';
-import { initSocket, emitTyping } from './services/socket.service.js';
+import { initSocket, emitTyping, emitSupportTyping } from './services/socket.service.js';
 import { openSupportModal, closeSupportModalUI, submitSupportRequest, openTipsModal, closeTipsModalUI, submitTips, openSupportChat, closeSupportChatPanel } from './services/support.service.js';
 
 // Element References
@@ -162,6 +162,22 @@ function registerEvents() {
       sendSupportChatMessage(panels.left, 'left', els);
     }
   });
+  let supportTypingDebounceLeft = null;
+  els.supportChatInputLeft.addEventListener('input', () => {
+    if (!panels.left.supportChat) return;
+    emitSupportTyping(panels.left, true);
+    if (supportTypingDebounceLeft) clearTimeout(supportTypingDebounceLeft);
+    supportTypingDebounceLeft = setTimeout(() => {
+      emitSupportTyping(panels.left, false);
+    }, 3000);
+  });
+  els.supportChatInputLeft.addEventListener('blur', () => {
+    emitSupportTyping(panels.left, false);
+    if (supportTypingDebounceLeft) {
+      clearTimeout(supportTypingDebounceLeft);
+      supportTypingDebounceLeft = null;
+    }
+  });
 
   // Right Panel
   if (els.loginFormRight) {
@@ -221,6 +237,22 @@ function registerEvents() {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendSupportChatMessage(panels.right, 'right', els);
+    }
+  });
+  let supportTypingDebounceRight = null;
+  els.supportChatInputRight.addEventListener('input', () => {
+    if (!panels.right.supportChat) return;
+    emitSupportTyping(panels.right, true);
+    if (supportTypingDebounceRight) clearTimeout(supportTypingDebounceRight);
+    supportTypingDebounceRight = setTimeout(() => {
+      emitSupportTyping(panels.right, false);
+    }, 3000);
+  });
+  els.supportChatInputRight.addEventListener('blur', () => {
+    emitSupportTyping(panels.right, false);
+    if (supportTypingDebounceRight) {
+      clearTimeout(supportTypingDebounceRight);
+      supportTypingDebounceRight = null;
     }
   });
 
