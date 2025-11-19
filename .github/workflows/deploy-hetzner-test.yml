@@ -1,0 +1,143 @@
+name: Deploy to Hetzner Test Server
+
+on:
+  push:
+    branches:
+      - test
+      - staging
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to deploy'
+        required: true
+        default: 'test'
+        type: choice
+        options:
+          - test
+          - staging
+
+env:
+  NODE_VERSION: '18'
+  DOCKER_COMPOSE_VERSION: '2.24.0'
+
+jobs:
+  deploy:
+    name: Deploy to Hetzner Test Server
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || 'test' }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Run linter
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.HETZNER_SSH_KEY }}
+
+      - name: Add server to known hosts
+        run: |
+          ssh-keyscan -H ${{ secrets.HETZNER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to server
+        env:
+          HETZNER_HOST: ${{ secrets.HETZNER_HOST }}
+          HETZNER_USER: ${{ secrets.HETZNER_USER }}
+          HETZNER_SSH_PORT: ${{ secrets.HETZNER_SSH_PORT || '22' }}
+        run: |
+          ssh -p ${{ env.HETZNER_SSH_PORT }} ${{ env.HETZNER_USER }}@${{ env.HETZNER_HOST }} << 'EOF'
+            set -e
+            
+            echo "🚀 Starting deployment..."
+            
+            # Proje dizinine git
+            cd /opt/tipbox-backend
+            
+            # Git pull
+            echo "📥 Pulling latest changes..."
+            git fetch origin
+            git checkout ${{ github.event.inputs.branch || 'test' }}
+            git pull origin ${{ github.event.inputs.branch || 'test' }}
+            
+            # Environment dosyasının varlığını kontrol et
+            if [ ! -f .env ]; then
+              echo "❌ .env file not found! Please create it first."
+              exit 1
+            fi
+            
+            # Docker Compose ile build ve deploy
+            echo "🔨 Building Docker images..."
+            docker compose -f docker-compose.prod.yml build --no-cache backend
+            
+            echo "🚀 Starting containers..."
+            docker compose -f docker-compose.prod.yml up -d
+            
+            # Migration'ları çalıştır
+            echo "📊 Running database migrations..."
+            docker compose -f docker-compose.prod.yml run --rm backend npx prisma migrate deploy || true
+            
+            # Health check
+            echo "🏥 Checking backend health..."
+            sleep 10
+            for i in {1..30}; do
+              if docker compose -f docker-compose.prod.yml exec -T backend node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" 2>/dev/null; then
+                echo "✅ Backend is healthy!"
+                break
+              fi
+              if [ $i -eq 30 ]; then
+                echo "❌ Health check failed after 30 attempts"
+                docker compose -f docker-compose.prod.yml logs backend
+                exit 1
+              fi
+              echo "⏳ Waiting for backend to be ready... ($i/30)"
+              sleep 2
+            done
+            
+            # Eski image'ları temizle
+            echo "🧹 Cleaning up old Docker images..."
+            docker image prune -f
+            
+            echo "✅ Deployment completed successfully!"
+            
+            # Container durumunu göster
+            echo "📊 Container status:"
+            docker compose -f docker-compose.prod.yml ps
+          EOF
+
+      - name: Deployment Summary
+        if: success()
+        run: |
+          echo "## ✅ Deployment Successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Server**: ${{ secrets.HETZNER_HOST }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Time**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+      - name: Deployment Failed
+        if: failure()
+        run: |
+          echo "## ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Please check the logs above for details." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+

@@ -71,12 +71,15 @@ export class ContentLikePrismaRepository {
 
   async update(id: string, data: Partial<ContentLike>): Promise<ContentLike | null> {
     try {
+      const updateData: any = {
+        updatedAt: new Date(),
+      };
+      if (data.postId !== undefined) updateData.postId = data.postId;
+      if (data.commentId !== undefined) updateData.commentId = data.commentId;
+      
       const like = await this.prisma.contentLike.update({
         where: { id },
-        data: {
-          ...data,
-          updatedAt: new Date(),
-        },
+        data: updateData,
         include: {
           user: true,
           post: true
