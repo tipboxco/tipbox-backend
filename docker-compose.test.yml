@@ -59,6 +59,7 @@ services:
       dockerfile: Dockerfile.prod
     container_name: tipbox_backend_test
     restart: always
+    command: npm run start:test
     env_file:
       - .env.test
     environment:
