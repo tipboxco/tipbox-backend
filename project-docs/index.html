@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tipbox Backend Dokümantasyonu</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Jura:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <img src="https://tipbox.co/images/tipbox-logo-yellow.png" 
+             alt="Tipbox Logo" 
+             class="sidebar-logo"
+             onerror="this.style.display='none'">
+        <h1 class="sidebar-title">Dokümantasyon</h1>
+      </div>
+      
+      <div class="search-container">
+        <input type="text" 
+               id="searchInput" 
+               class="search-input" 
+               placeholder="Dokümantasyonda ara...">
+        <i class="fas fa-search search-icon"></i>
+      </div>
+      
+      <nav class="sidebar-nav" id="sidebarNav">
+        <!-- Kategoriler ve menü buraya JavaScript ile eklenecek -->
+      </nav>
+      
+      <button class="sidebar-toggle" id="sidebarToggle" aria-label="Menüyü aç/kapat">
+        <i class="fas fa-bars"></i>
+      </button>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content" id="mainContent">
+      <div class="content-header">
+        <button class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Menüyü aç">
+          <i class="fas fa-bars"></i>
+        </button>
+        <div class="breadcrumb" id="breadcrumb">
+          <a href="#" class="breadcrumb-item" data-action="home">Ana Sayfa</a>
+        </div>
+      </div>
+      
+      <div class="content-wrapper">
+        <!-- Home View -->
+        <div class="home-view" id="homeView">
+          <div class="welcome-section">
+            <h1 class="welcome-title">Tipbox Backend Dokümantasyonu</h1>
+            <p class="welcome-description">
+              Proje dokümantasyonuna hoş geldiniz. Sol menüden kategorilere göz atabilir veya arama yaparak istediğiniz dokümantasyonu bulabilirsiniz.
+            </p>
+          </div>
+          
+          <div class="categories-grid" id="categoriesGrid">
+            <!-- Kategoriler buraya JavaScript ile eklenecek -->
+          </div>
+        </div>
+        
+        <!-- Document View -->
+        <div class="document-view" id="documentView" style="display: none;">
+          <article class="document-content" id="documentContent">
+            <!-- Dokümantasyon içeriği buraya yüklenecek -->
+          </article>
+        </div>
+        
+        <!-- Search Results View -->
+        <div class="search-results-view" id="searchResultsView" style="display: none;">
+          <h2 class="search-results-title">Arama Sonuçları</h2>
+          <div class="search-results-list" id="searchResultsList">
+            <!-- Arama sonuçları buraya eklenecek -->
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="docs-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
+
