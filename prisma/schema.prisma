@@ -1182,6 +1182,7 @@ model DMThread {
   userOneId          String             @map("user_one_id") @db.Uuid
   userTwoId          String             @map("user_two_id") @db.Uuid
   isActive           Boolean            @map("is_active")
+  isSupportThread    Boolean            @default(false) @map("is_support_thread")
   unreadCountUserOne Int                @default(0) @map("unread_count_user_one")
   unreadCountUserTwo Int                @default(0) @map("unread_count_user_two")
   startedAt          DateTime           @default(now()) @map("started_at")
@@ -1189,12 +1190,15 @@ model DMThread {
   updatedAt          DateTime           @updatedAt @map("updated_at")
   messages           DMMessage[]
   supportSessions    DMSupportSession[]
+  supportRequests    DMRequest[]        @relation("DMRequestThread")
   userOne            User               @relation("DMThreadUserOne", fields: [userOneId], references: [id], onDelete: Cascade)
   userTwo            User               @relation("DMThreadUserTwo", fields: [userTwoId], references: [id], onDelete: Cascade)
 
-  @@unique([userOneId, userTwoId])
+  // Unique constraint kaldırıldı: Her support request için yeni bir thread oluşturulabilir
+  // Normal DM thread'ler için uygulama seviyesinde kontrol yapılacak
   @@index([userOneId])
   @@index([userTwoId])
+  @@index([isSupportThread])
   @@map("dm_threads")
 }
 
@@ -1230,17 +1234,20 @@ model DMRequest {
   type        SupportType     @default(GENERAL)
   amount      Float           @default(0)
   description String?         @db.Text
+  threadId    String?         @map("thread_id") @db.Uuid
   sentAt      DateTime        @default(now()) @map("sent_at")
   respondedAt DateTime?       @map("responded_at")
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
   fromUser    User            @relation("DMRequestSender", fields: [fromUserId], references: [id], onDelete: Cascade)
   toUser      User            @relation("DMRequestReceiver", fields: [toUserId], references: [id], onDelete: Cascade)
+  thread      DMThread?       @relation("DMRequestThread", fields: [threadId], references: [id], onDelete: SetNull)
 
-  @@unique([fromUserId, toUserId])
+  @@index([fromUserId, toUserId])
   @@index([fromUserId])
   @@index([toUserId])
   @@index([status])
+  @@index([threadId])
   @@map("dm_requests")
 }
 

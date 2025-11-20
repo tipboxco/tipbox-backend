@@ -1,6 +1,7 @@
 import { Server, Socket } from 'socket.io';
 import { AuthService } from '../../application/auth/auth.service';
 import { MessagingService } from '../../application/messaging/messaging.service';
+import { SupportRequestService } from '../../application/messaging/support-request.service';
 import { TypingEvent } from './messaging-events';
 import logger from '../logger/logger';
 
@@ -15,11 +16,13 @@ export class SocketHandler {
   private io: Server;
   private authService: AuthService;
   private messagingService: MessagingService;
+  private supportRequestService: SupportRequestService;
 
   constructor(io: Server) {
     this.io = io;
     this.authService = new AuthService();
     this.messagingService = new MessagingService();
+    this.supportRequestService = new SupportRequestService();
   }
 
   public initialize(): void {
@@ -93,6 +96,9 @@ export class SocketHandler {
 
       // Typing indicators
       this.setupTypingHandlers(socket);
+
+      // Message sending handlers
+      this.setupMessageHandlers(socket);
 
       // Hata yakalama
       socket.on('error', (error) => {
@@ -172,6 +178,241 @@ export class SocketHandler {
         logger.error(`Error leaving thread for user ${userEmail}:`, error);
       }
     });
+  }
+
+  /**
+   * Mesaj gönderme için event handler'ları
+   */
+  private setupMessageHandlers(socket: AuthenticatedSocket): void {
+    const userId = socket.data.userId;
+    const userEmail = socket.data.userEmail;
+
+    // send_message event handler (normal DM mesajları için)
+    socket.on('send_message', async (data: { threadId: string; message: string }) => {
+      try {
+        const { threadId, message } = data || {};
+        
+        if (!threadId || typeof threadId !== 'string') {
+          socket.emit('message_send_error', {
+            reason: 'Invalid threadId',
+          });
+          return;
+        }
+
+        if (!message || typeof message !== 'string' || message.trim() === '') {
+          socket.emit('message_send_error', {
+            reason: 'Message is required',
+          });
+          return;
+        }
+
+        // Thread erişim kontrolü
+        const hasAccess = await this.messagingService.validateThreadAccess(threadId, userId);
+        if (!hasAccess) {
+          socket.emit('message_send_error', {
+            reason: 'Access denied: User is not a participant of this thread',
+          });
+          logger.warn(`User ${userEmail} (${userId}) attempted to send message to thread ${threadId} without access`);
+          return;
+        }
+
+        // Thread'i al ve recipientId'yi bul
+        const thread = await this.messagingService.getThreadById(threadId);
+        if (!thread) {
+          socket.emit('message_send_error', {
+            reason: 'Thread not found',
+          });
+          return;
+        }
+
+        // Thread'in support thread olmadığını kontrol et
+        if (thread.isSupportContext()) {
+          socket.emit('message_send_error', {
+            reason: 'Use send_support_message for support chat messages',
+          });
+          return;
+        }
+
+        // RecipientId'yi bul
+        const recipientId = thread.userOneId === userId ? thread.userTwoId : thread.userOneId;
+
+        // Mesajı gönder (internal service call)
+        await this.messagingService.sendDirectMessage(userId, recipientId, message.trim());
+        
+        logger.info(`Message sent via socket: User ${userEmail} in thread ${threadId}`);
+      } catch (error: any) {
+        logger.error(`Error handling send_message for user ${userEmail}:`, error);
+        socket.emit('message_send_error', {
+          reason: error.message || 'Failed to send message',
+        });
+      }
+    });
+
+    // send_support_message event handler (support chat mesajları için)
+    socket.on('send_support_message', async (data: { threadId: string; message: string }) => {
+      try {
+        const { threadId, message } = data || {};
+        
+        if (!threadId || typeof threadId !== 'string') {
+          socket.emit('message_send_error', {
+            reason: 'Invalid threadId',
+          });
+          return;
+        }
+
+        if (!message || typeof message !== 'string' || message.trim() === '') {
+          socket.emit('message_send_error', {
+            reason: 'Message is required',
+          });
+          return;
+        }
+
+        // Thread erişim kontrolü
+        const hasAccess = await this.messagingService.validateThreadAccess(threadId, userId);
+        if (!hasAccess) {
+          socket.emit('message_send_error', {
+            reason: 'Access denied: User is not a participant of this thread',
+          });
+          logger.warn(`User ${userEmail} (${userId}) attempted to send support message to thread ${threadId} without access`);
+          return;
+        }
+
+        // Thread'in support thread olduğunu kontrol et
+        const thread = await this.messagingService.getThreadById(threadId);
+        if (!thread?.isSupportContext()) {
+          socket.emit('message_send_error', {
+            reason: 'Thread is not a support chat',
+          });
+          return;
+        }
+
+        // Support chat mesajını gönder (internal service call)
+        await this.messagingService.sendSupportChatMessage(threadId, userId, message.trim());
+        
+        logger.info(`Support message sent via socket: User ${userEmail} in thread ${threadId}`);
+      } catch (error: any) {
+        logger.error(`Error handling send_support_message for user ${userEmail}:`, error);
+        socket.emit('message_send_error', {
+          reason: error.message || 'Failed to send support message',
+        });
+      }
+    });
+
+    socket.on('send_tips', async (data: { threadId?: string; recipientUserId?: string; amount: number; message?: string }, callback?: (response: { success?: boolean; error?: string }) => void) => {
+      try {
+        const { threadId, recipientUserId, amount, message } = data || {};
+        const numericAmount = Number(amount);
+
+        if (!numericAmount || Number.isNaN(numericAmount) || numericAmount <= 0) {
+          this.emitTipsError(socket, 'Amount must be greater than zero', callback);
+          return;
+        }
+
+        let targetUserId = recipientUserId;
+
+        if (!targetUserId) {
+          if (!threadId) {
+            this.emitTipsError(socket, 'recipientUserId or threadId is required', callback);
+            return;
+          }
+
+          const thread = await this.messagingService.getThreadById(threadId);
+          if (!thread) {
+            this.emitTipsError(socket, 'Thread not found', callback);
+            return;
+          }
+
+          if (!thread.belongsToUser(userId)) {
+            this.emitTipsError(socket, 'Access denied: User is not a participant of this thread', callback);
+            return;
+          }
+
+          targetUserId = thread.getOtherUserId(userId);
+        }
+
+        if (!targetUserId) {
+          this.emitTipsError(socket, 'recipientUserId could not be determined', callback);
+          return;
+        }
+
+        await this.messagingService.sendTips(userId, targetUserId, numericAmount, (message ?? '').trim());
+        callback?.({ success: true });
+      } catch (error: any) {
+        logger.error(`Error handling send_tips for user ${userEmail}:`, error);
+        this.emitTipsError(socket, error.message || 'Failed to send TIPS', callback);
+      }
+    });
+
+    socket.on('create_support_request', async (data: { threadId?: string; recipientUserId?: string; type: string; message: string; amount: number }, callback?: (response: { success?: boolean; error?: string }) => void) => {
+      try {
+        const { threadId, recipientUserId, type, message, amount } = data || {};
+        const trimmedMessage = (message ?? '').trim();
+        if (!trimmedMessage) {
+          this.emitSupportRequestError(socket, 'Message is required', callback);
+          return;
+        }
+
+        const normalizedType = (type || 'GENERAL').toUpperCase();
+        if (!['GENERAL', 'TECHNICAL', 'PRODUCT'].includes(normalizedType)) {
+          this.emitSupportRequestError(socket, 'Invalid support request type', callback);
+          return;
+        }
+
+        const numericAmount = Number(amount ?? 0);
+        if (Number.isNaN(numericAmount) || numericAmount < 0) {
+          this.emitSupportRequestError(socket, 'Amount must be a positive number', callback);
+          return;
+        }
+
+        let targetUserId = recipientUserId;
+        if (!targetUserId) {
+          if (!threadId) {
+            this.emitSupportRequestError(socket, 'recipientUserId or threadId is required', callback);
+            return;
+          }
+
+          const thread = await this.messagingService.getThreadById(threadId);
+          if (!thread) {
+            this.emitSupportRequestError(socket, 'Thread not found', callback);
+            return;
+          }
+
+          if (!thread.belongsToUser(userId)) {
+            this.emitSupportRequestError(socket, 'Access denied: User is not a participant of this thread', callback);
+            return;
+          }
+
+          targetUserId = thread.getOtherUserId(userId);
+        }
+
+        if (!targetUserId) {
+          this.emitSupportRequestError(socket, 'recipientUserId could not be determined', callback);
+          return;
+        }
+
+        await this.supportRequestService.createSupportRequest(userId, {
+          recipientUserId: targetUserId,
+          type: normalizedType,
+          message: trimmedMessage,
+          amount: numericAmount,
+        });
+
+        callback?.({ success: true });
+      } catch (error: any) {
+        logger.error(`Error handling create_support_request for user ${userEmail}:`, error);
+        this.emitSupportRequestError(socket, error.message || 'Failed to create support request', callback);
+      }
+    });
+  }
+
+  private emitTipsError(socket: AuthenticatedSocket, reason: string, callback?: (response: { error?: string }) => void) {
+    socket.emit('tips_send_error', { reason });
+    callback?.({ error: reason });
+  }
+
+  private emitSupportRequestError(socket: AuthenticatedSocket, reason: string, callback?: (response: { error?: string }) => void) {
+    socket.emit('support_request_error', { reason });
+    callback?.({ error: reason });
   }
 
   /**
@@ -275,9 +516,11 @@ export class SocketHandler {
    */
   public sendMessageToUser(userId: string, event: string, payload: any): void {
     try {
-      // Kullanıcılar user:{userId} room'una katılıyor
-      this.io.to(userId).emit(event, payload);
-      logger.debug(`Message sent to user ${userId}: ${event}`);
+      // Kullanıcılar connection handler'da kendi userId room'una katılıyor (socket.join(userId))
+      // Room adı userId string olarak kullanılıyor
+      const roomName = String(userId);
+      this.io.to(roomName).emit(event, payload);
+      logger.info(`Message sent to user ${userId} (room: ${roomName}): ${event}`);
     } catch (error) {
       logger.error(`Failed to send message to user ${userId}:`, error);
     }

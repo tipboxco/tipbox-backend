@@ -56,18 +56,28 @@ export async function loadThreadItems(threadId, panelState, side, els) {
       const supportItem = panelState.activeThreadItems.find(
         (item) => item.id === panelState.supportChat.requestId && item.type === 'support-request'
       );
-      if (supportItem?.data?.messages) {
-        panelState.supportChatItems = supportItem.data.messages;
-        panelState.supportChat.data = supportItem.data; // Data'yı da güncelle
-        // Support chat'i yeniden render et
+      if (supportItem?.data) {
+        panelState.supportChat.data = supportItem.data;
         const { renderSupportChat } = await import('./ui.service.js');
         renderSupportChat(panelState, side, els);
-        // Support chat açıkken DM ekranına render etme
-        return;
       }
+      return;
     }
-    
-    // Support chat açık değilse veya support request bulunamadıysa DM ekranına render et
+
+    // Thread'de support request varsa ve support chat açık değilse, otomatik olarak aç
+    // NOT: Bu özellik şu an devre dışı - kullanıcı manuel olarak "Open Support Chat" butonuna tıklayacak
+    // Otomatik açma yerine, sadece render et
+    // const supportRequestItem = panelState.activeThreadItems.find(
+    //   (item) => item.type === 'support-request' && item.data?.threadId && item.data?.status === 'accepted'
+    // );
+    // 
+    // if (supportRequestItem && !panelState.supportChat) {
+    //   console.log(`[${side}] Auto-opening support chat for request:`, supportRequestItem.id);
+    //   const { openSupportChat } = await import('./support.service.js');
+    //   openSupportChat(supportRequestItem.id, panelState, side, els);
+    //   return;
+    // }
+
     renderMessages(panelState, side, els);
   } catch (error) {
     console.error(error);

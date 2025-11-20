@@ -172,6 +172,37 @@ function dockerComposeLogs() {
   });
 }
 
+// Docker compose restart komutunu çalıştır
+function dockerComposeRestart() {
+  const dockerComposeCmd = getDockerComposeCommand();
+  const commandParts = dockerComposeCmd.split(' ');
+  const allArgs = [...commandParts.slice(1), 'restart'];
+  const command = commandParts[0];
+
+  console.log('♻️  Container\'lar yeniden başlatılıyor...');
+
+  const dockerCompose = spawn(command, allArgs, {
+    stdio: 'inherit',
+    shell: true,
+    cwd: process.cwd(),
+  });
+
+  dockerCompose.on('error', (error) => {
+    console.error('❌ Docker compose hatası:', error.message);
+    process.exit(1);
+  });
+
+  dockerCompose.on('close', (code) => {
+    if (code === 0) {
+      console.log('✅ Container\'lar yeniden başlatıldı, backend hazır olana kadar bekleniyor...');
+      waitForBackendAndOpenBrowser().catch(console.error);
+    } else {
+      console.error(`❌ Docker compose çıkış kodu: ${code}`);
+      process.exit(code);
+    }
+  });
+}
+
 // Docker compose start komutunu çalıştır
 function dockerComposeStart() {
   const dockerComposeCmd = getDockerComposeCommand();
@@ -218,6 +249,9 @@ if (require.main === module) {
   } else if (args.includes('--logs')) {
     // Docker compose logs
     dockerComposeLogs();
+  } else if (args.includes('--restart')) {
+    // Docker compose restart
+    dockerComposeRestart();
   } else if (args.includes('--start')) {
     // Docker compose start
     dockerComposeStart();
@@ -227,5 +261,5 @@ if (require.main === module) {
   }
 }
 
-module.exports = { dockerComposeUp, dockerComposeStart, waitForBackendAndOpenBrowser };
+module.exports = { dockerComposeUp, dockerComposeStart, dockerComposeRestart, waitForBackendAndOpenBrowser };
 
