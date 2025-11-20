@@ -595,7 +595,7 @@ router.get('/', (req: Request, res: Response) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tipbox Backend Dashboard</title>
+  <title>Tipbox Developer Console</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Jura:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -1081,7 +1081,7 @@ router.get('/', (req: Request, res: Response) => {
              alt="Tipbox Logo" 
              class="dashboard-header-logo" 
              onerror="this.style.display='none'">
-        <h1>Tipbox Backend Dashboard</h1>
+        <h1>Tipbox Developer Console</h1>
       </div>
     </div>
     
