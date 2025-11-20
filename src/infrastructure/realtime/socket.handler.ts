@@ -403,6 +403,89 @@ export class SocketHandler {
         this.emitSupportRequestError(socket, error.message || 'Failed to create support request', callback);
       }
     });
+
+    // cancel_support_request event handler (sender tarafından cancel)
+    socket.on('cancel_support_request', async (data: { requestId: string }, callback?: (response: { success?: boolean; error?: string }) => void) => {
+      try {
+        const { requestId } = data || {};
+        
+        if (!requestId || typeof requestId !== 'string') {
+          this.emitSupportRequestError(socket, 'requestId is required', callback);
+          return;
+        }
+
+        await this.supportRequestService.cancelSupportRequest(requestId, userId);
+        callback?.({ success: true });
+      } catch (error: any) {
+        logger.error(`Error handling cancel_support_request for user ${userEmail}:`, error);
+        this.emitSupportRequestError(socket, error.message || 'Failed to cancel support request', callback);
+      }
+    });
+
+    // close_support_request event handler (her iki kullanıcı da close yapabilir, rating ile)
+    socket.on('close_support_request', async (data: { requestId: string; rating: number }, callback?: (response: { success?: boolean; error?: string }) => void) => {
+      try {
+        const { requestId, rating } = data || {};
+        
+        if (!requestId || typeof requestId !== 'string') {
+          this.emitSupportRequestError(socket, 'requestId is required', callback);
+          return;
+        }
+
+        const numericRating = Number(rating);
+        if (Number.isNaN(numericRating) || numericRating < 1 || numericRating > 5) {
+          this.emitSupportRequestError(socket, 'Rating must be between 1 and 5', callback);
+          return;
+        }
+
+        await this.supportRequestService.closeSupportRequest(requestId, userId, numericRating);
+        callback?.({ success: true });
+      } catch (error: any) {
+        logger.error(`Error handling close_support_request for user ${userEmail}:`, error);
+        this.emitSupportRequestError(socket, error.message || 'Failed to close support request', callback);
+      }
+    });
+
+    // report_support_request event handler
+    socket.on('report_support_request', async (data: { requestId: string; category: string; description?: string }, callback?: (response: { success?: boolean; error?: string }) => void) => {
+      try {
+        const { requestId, category, description } = data || {};
+
+        if (!requestId || typeof requestId !== 'string') {
+          this.emitSupportRequestError(socket, 'requestId is required', callback);
+          return;
+        }
+
+        if (!category || typeof category !== 'string') {
+          this.emitSupportRequestError(socket, 'category is required', callback);
+          return;
+        }
+
+        const normalizedCategory = category.toUpperCase();
+        if (!SupportRequestService.REPORT_CATEGORIES.includes(normalizedCategory as any)) {
+          this.emitSupportRequestError(socket, 'Invalid report category', callback);
+          return;
+        }
+
+        const sanitizedDescription = description?.trim();
+        if (sanitizedDescription && sanitizedDescription.length > 500) {
+          this.emitSupportRequestError(socket, 'Description is too long (max 500 chars)', callback);
+          return;
+        }
+
+        await this.supportRequestService.reportSupportRequest(
+          requestId,
+          userId,
+          normalizedCategory as any,
+          sanitizedDescription,
+        );
+
+        callback?.({ success: true });
+      } catch (error: any) {
+        logger.error(`Error handling report_support_request for user ${userEmail}:`, error);
+        this.emitSupportRequestError(socket, error.message || 'Failed to report support request', callback);
+      }
+    });
   }
 
   private emitTipsError(socket: AuthenticatedSocket, reason: string, callback?: (response: { error?: string }) => void) {

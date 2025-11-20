@@ -387,6 +387,15 @@ app.use(requestLogger);
 // Prometheus metrics middleware
 app.use(metricsMiddleware);
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+  });
+});
+
 // API root endpoint (dashboard'dan önce)
 app.get('/api', (req, res) => {
   res.json({ 
@@ -394,6 +403,7 @@ app.get('/api', (req, res) => {
     swagger: 'http://localhost:3000/api-docs',
     version: '1.0.0',
     endpoints: {
+      'GET /health': 'Health check endpoint',
       'GET /api-docs': 'Swagger API dokümantasyonu',
       'GET /metrics': 'Prometheus metrics endpoint',
       'POST /auth/login': 'Kullanıcı girişi',

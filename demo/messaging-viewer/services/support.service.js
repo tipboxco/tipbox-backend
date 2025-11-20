@@ -25,7 +25,7 @@ export async function openSupportChat(requestId, panelState, side, els, { thread
     
     // Pending veya declined durumlarında threadId olmamalı, bu durumda açma
     const status = directRequestData.status || 'pending';
-    if (status === 'pending' || status === 'declined') {
+    if (status === 'pending' || status === 'declined' || status === 'canceled') {
       alert('Support chat henüz açılamaz. Request accept edilmesi gerekiyor.');
       return;
     }
@@ -71,7 +71,7 @@ export async function openSupportChat(requestId, panelState, side, els, { thread
   
   // Pending veya declined durumlarında threadId olmamalı, bu durumda açma
   const status = supportRequestData?.status || 'pending';
-  if (status === 'pending' || status === 'declined') {
+  if (status === 'pending' || status === 'declined' || status === 'canceled') {
     alert('Support chat henüz açılamaz. Request accept edilmesi gerekiyor.');
     return;
   }
@@ -116,11 +116,20 @@ async function openSupportChatDirectly(requestId, threadId, supportRequestData, 
     };
   }
   
+  const fallbackCounterpartId = getCounterpartId(panelState);
+  const currentUserId = panelState.user?.id ? String(panelState.user.id) : null;
+  const normalizedRequestData = {
+    ...supportRequestData,
+    requestId: supportRequestData?.requestId || requestId,
+    fromUserId: supportRequestData?.fromUserId || currentUserId,
+    toUserId: supportRequestData?.toUserId || fallbackCounterpartId || null,
+  };
+
   panelState.supportChat = {
     requestId,
     threadId: threadId,
     parentThreadId: panelState.activeThread?.id,
-    data: supportRequestData,
+    data: normalizedRequestData,
   };
   
   // Support chat items'ı temizle - API'den yeniden yüklenecek
@@ -487,6 +496,41 @@ export async function rejectSupportRequest(requestId, panelState, side, els) {
   }
 }
 
+export async function cancelSupportRequest(requestId, panelState, side, els) {
+  if (!confirm('Destek talebini iptal etmek istediğine emin misiniz?')) {
+    return;
+  }
+
+  if (!panelState.socket) {
+    alert('Socket bağlantısı yok');
+    return;
+  }
+
+  try {
+    const errorHandler = (error) => {
+      alert(`Support request iptal edilemedi: ${error.reason || 'Bilinmeyen hata'}`);
+    };
+
+    panelState.socket.once('support_request_error', errorHandler);
+    panelState.socket.emit('cancel_support_request', { requestId }, (response) => {
+      panelState.socket.off('support_request_error', errorHandler);
+      if (response?.error) {
+        alert(`Support request iptal edilemedi: ${response.error}`);
+        return;
+      }
+      console.log(`[${side}] Support request cancelled via socket`);
+      // Socket event'i gelecek, support_request_cancelled handler'ı UI'ı güncelleyecek
+    });
+
+    setTimeout(() => {
+      panelState.socket?.off('support_request_error', errorHandler);
+    }, 5000);
+  } catch (error) {
+    console.error(error);
+    alert(`Support request iptal edilemedi: ${error.message}`);
+  }
+}
+
 export async function submitTips(event, activePanel, els) {
   event.preventDefault();
   if (!activePanel) return;
@@ -605,7 +649,7 @@ export function handleSupportRequestSearch(panelState, side, els) {
       if (statusValue === 'active') return req.status === 'active' || req.status === 'accepted';
       if (statusValue === 'completed') return req.status === 'completed' || req.status === 'awaiting_completion';
       if (statusValue === 'finalized') return req.status === 'finalized';
-      if (statusValue === 'declined') return req.status === 'declined';
+      if (statusValue === 'declined') return req.status === 'declined' || req.status === 'canceled';
       return true;
     });
   }
@@ -633,16 +677,26 @@ export function renderSupportRequests(panelState, side, els) {
     return;
   }
 
+  const currentUserId = String(panelState.user?.id);
+  
   const html = panelState.filteredSupportRequests
     .map((request) => {
       const status = request.status || 'pending';
       const hasThreadId = !!request.threadId && request.threadId !== null && request.threadId !== 'null';
       
+      // Request'in kullanıcıya ait olup olmadığını kontrol et (cancel butonu için)
+      const isOwnRequest = request.fromUserId && String(request.fromUserId) === currentUserId;
+      const isPending = status === 'pending';
+      
       // Pending ve declined durumlarında threadId olmamalı (henüz accept edilmemiş)
       // Sadece active, accepted, completed, finalized durumlarında threadId varsa butonu göster
       const canShowChatButton = hasThreadId && 
                                 status !== 'pending' && 
-                                status !== 'declined';
+                                status !== 'declined' &&
+                                status !== 'canceled';
+      
+      // Cancel butonu: Sadece kullanıcıya ait ve pending durumundaki request'lerde göster
+      const canShowCancelButton = isOwnRequest && isPending;
       
       // Debug: Eğer pending durumunda threadId varsa log'a yaz (backend hatası olabilir)
       if (status === 'pending' && hasThreadId) {
@@ -654,7 +708,7 @@ export function renderSupportRequests(panelState, side, els) {
         });
       }
       
-      // ThreadId varsa VE pending/declined değilse tıklanabilir
+      // ThreadId varsa VE pending/declined/canceled değilse tıklanabilir
       const isClickable = canShowChatButton;
       
       // Status class ve text
@@ -663,7 +717,8 @@ export function renderSupportRequests(panelState, side, els) {
                          status === 'pending' ? 'pending' : 
                          status === 'completed' ? 'completed' : 
                          status === 'awaiting_completion' ? 'completed' :
-                         status === 'declined' ? 'declined' : 
+                         status === 'declined' ? 'declined' :
+                         status === 'canceled' ? 'declined' : // Canceled durumu declined ile aynı stil
                          status === 'finalized' ? 'finalized' :
                          'pending';
       
@@ -673,6 +728,7 @@ export function renderSupportRequests(panelState, side, els) {
                         status === 'completed' ? 'Awaiting Completion' : 
                         status === 'awaiting_completion' ? 'Awaiting Completion' :
                         status === 'declined' ? 'Declined' :
+                        status === 'canceled' ? 'İptal Edildi' :
                         status === 'finalized' ? 'Finalized' :
                         status || 'Unknown';
       
@@ -700,6 +756,7 @@ export function renderSupportRequests(panelState, side, els) {
                 <span class="support-request-title">${userTitle || 'Technology Enthusiast'}</span>
               </div>
               ${canShowChatButton ? `<button class="support-chat-btn" data-support-chat="${request.threadId}" data-request-id="${request.id}">Sohbete Git</button>` : ''}
+              ${canShowCancelButton ? `<button class="support-cancel-btn" data-cancel-request="${request.id}">İptal Et</button>` : ''}
             </div>
             <div class="support-request-body">
               <div class="support-request-status">
@@ -748,8 +805,26 @@ export function renderSupportRequests(panelState, side, els) {
           threadId: threadId,
           type: supportRequest.type || 'GENERAL',
           amount: supportRequest.amount || 0,
+          requestId: supportRequest.id,
+          fromUserId: supportRequest.fromUserId,
+          toUserId: supportRequest.toUserId,
         },
       });
+    });
+  });
+  
+  // Add click handlers for cancel buttons
+  supportRequestsList.querySelectorAll('[data-cancel-request]').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation(); // Prevent card click
+      const requestId = btn.dataset.cancelRequest;
+      
+      if (!requestId) {
+        console.error('[Support Request] Missing requestId for cancel:', requestId);
+        return;
+      }
+      
+      await cancelSupportRequest(requestId, panelState, side, els);
     });
   });
   

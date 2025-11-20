@@ -48,6 +48,7 @@ const els = {
   supportSummaryLeft: document.getElementById('supportSummaryLeft'),
   supportMessagesLeft: document.getElementById('supportMessagesLeft'),
   supportTypingIndicatorLeft: document.getElementById('supportTypingIndicatorLeft'),
+  supportChatActionsLeft: document.getElementById('supportChatActionsLeft'),
   supportChatInputLeft: document.getElementById('supportChatInputLeft'),
   supportChatSendLeft: document.getElementById('supportChatSendLeft'),
 
@@ -91,6 +92,7 @@ const els = {
   supportSummaryRight: document.getElementById('supportSummaryRight'),
   supportMessagesRight: document.getElementById('supportMessagesRight'),
   supportTypingIndicatorRight: document.getElementById('supportTypingIndicatorRight'),
+  supportChatActionsRight: document.getElementById('supportChatActionsRight'),
   supportChatInputRight: document.getElementById('supportChatInputRight'),
   supportChatSendRight: document.getElementById('supportChatSendRight'),
 

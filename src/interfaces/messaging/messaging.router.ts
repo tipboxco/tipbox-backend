@@ -650,6 +650,66 @@ router.post(
 
 /**
  * @openapi
+ * /messages/support-requests/{requestId}/cancel:
+ *   post:
+ *     summary: Support request'i iptal et (sender)
+ *     description: Destek talebini gönderen kullanıcı, talep kabul edilmeden önce iptal edebilir.
+ *     tags: [Inbox]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: requestId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Support request başarıyla iptal edildi
+ *       400:
+ *         description: Sadece pending talepler iptal edilebilir
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Only sender can cancel
+ *       404:
+ *         description: Support request not found
+ */
+router.post(
+  '/support-requests/:requestId/cancel',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = (req as any).user;
+    const senderId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!senderId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { requestId } = req.params;
+    if (!requestId) {
+      return res.status(400).json({ message: 'requestId is required' });
+    }
+
+    try {
+      await supportRequestService.cancelSupportRequest(requestId, String(senderId));
+      return res.status(200).json({ message: 'Support request cancelled' });
+    } catch (error: any) {
+      if (error.message === 'Support request not found') {
+        return res.status(404).json({ message: error.message });
+      }
+      if (error.message.includes('Only the sender')) {
+        return res.status(403).json({ message: error.message });
+      }
+      if (error.message.includes('Only pending')) {
+        return res.status(400).json({ message: error.message });
+      }
+      throw error;
+    }
+  }),
+);
+
+/**
+ * @openapi
  * /messages/tips:
  *   post:
  *     summary: Kullanıcıya TIPS gönder

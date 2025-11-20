@@ -2,8 +2,9 @@ import dotenv from 'dotenv';
 import path from 'path';
 
 // Ortama göre ilgili .env dosyasını yükle
+// override: false - Don't override existing environment variables (e.g., from Docker Compose)
 const envFile = `.env${process.env.NODE_ENV ? `.${process.env.NODE_ENV}` : ''}`;
-dotenv.config({ path: path.resolve(process.cwd(), envFile) });
+dotenv.config({ path: path.resolve(process.cwd(), envFile), override: false });
 
 type Config = {
   databaseUrl: string;

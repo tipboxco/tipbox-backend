@@ -579,10 +579,17 @@ export class MessagingService {
 
         // Map DMRequestStatus to SupportRequestStatus
         let status: SupportRequestStatus;
-        if (request.status === DMRequestStatus.PENDING) {
+        const requestStatus = request.status as DMRequestStatus;
+        if (requestStatus === DMRequestStatus.PENDING) {
           status = 'pending';
-        } else if (request.status === DMRequestStatus.ACCEPTED) {
+        } else if (requestStatus === DMRequestStatus.ACCEPTED) {
           status = 'accepted';
+        } else if (requestStatus === DMRequestStatus.CANCELED) {
+          status = 'canceled';
+        } else if (requestStatus === DMRequestStatus.AWAITING_COMPLETION) {
+          status = 'awaiting_completion';
+        } else if (requestStatus === DMRequestStatus.COMPLETED) {
+          status = 'completed';
         } else {
           status = 'rejected';
         }
@@ -612,6 +619,9 @@ export class MessagingService {
           status,
           timestamp: request.sentAt.toISOString(),
           threadId: requestThreadId ?? null,
+          requestId: request.id,
+          fromUserId: request.fromUserId,
+          toUserId: request.toUserId,
         };
 
         threadItems.push({
@@ -825,17 +835,24 @@ export class MessagingService {
 
         // Map DMRequestStatus to SupportRequestStatus
         let status: SupportRequestStatus;
-        if (dmRequest.status === DMRequestStatus.PENDING) {
+        const requestStatus = dmRequest.status as DMRequestStatus;
+        if (requestStatus === DMRequestStatus.PENDING) {
           status = 'pending';
-        } else if (dmRequest.status === DMRequestStatus.ACCEPTED) {
+        } else if (requestStatus === DMRequestStatus.ACCEPTED) {
           status = 'accepted';
+        } else if (requestStatus === DMRequestStatus.CANCELED) {
+          status = 'canceled';
+        } else if (requestStatus === DMRequestStatus.AWAITING_COMPLETION) {
+          status = 'awaiting_completion';
+        } else if (requestStatus === DMRequestStatus.COMPLETED) {
+          status = 'completed';
         } else {
           status = 'rejected';
         }
 
         // SupportType mapping - Prisma enum'ından domain enum'a
         // Type assertion needed until TypeScript picks up the updated Prisma types
-        const dmRequestWithType = dmRequest as typeof dmRequest & { type: string; amount: number | any };
+        const dmRequestWithType = dmRequest as typeof dmRequest & { type: string; amount: number };
         const prismaType = dmRequestWithType.type;
         const supportType: SupportType = 
           prismaType === 'GENERAL' || prismaType === 'TECHNICAL' || prismaType === 'PRODUCT'
@@ -857,6 +874,10 @@ export class MessagingService {
           amount,
           status,
           timestamp: dmRequest.sentAt.toISOString(),
+          threadId: (dmRequest as any).threadId ?? null,
+          requestId: request.id,
+          fromUserId: dmRequest.fromUserId,
+          toUserId: dmRequest.toUserId,
         };
 
         feedItems.push({
