@@ -6,12 +6,13 @@ import { DMThreadPrismaRepository } from '../../infrastructure/repositories/dm-t
 import { UserPrismaRepository } from '../../infrastructure/repositories/user-prisma.repository';
 import SocketManager from '../../infrastructure/realtime/socket-manager';
 import logger from '../../infrastructure/logger/logger';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, DMMessageContext } from '@prisma/client';
 import {
   MessageFeed,
   MessageFeedItem,
   Message,
   SupportRequest,
+  SupportChatMessage,
   TipsInfo,
   SenderUser,
   MessageType,
@@ -45,25 +46,29 @@ export class MessagingService {
   private supportRequestService = new SupportRequestService();
   private prisma = new PrismaClient();
   async createThreadIfNotExists(senderId: string, recipientId: string) {
+    // Sadece normal DM thread'leri kontrol et (support thread'leri hariç)
     const existing = await this.prisma.dMThread.findFirst({
       where: {
+        isSupportThread: false, // Sadece normal DM thread'leri
         OR: [
           { userOneId: senderId, userTwoId: recipientId },
           { userOneId: recipientId, userTwoId: senderId },
         ],
-      },
+      } as any,
     });
 
     if (existing) return existing;
 
+    // Yeni normal DM thread oluştur
     return await this.prisma.dMThread.create({
       data: {
         userOneId: senderId,
         userTwoId: recipientId,
         isActive: true,
+        isSupportThread: false, // Normal DM thread
         startedAt: new Date(),
-      },
-    } as any);
+      } as any,
+    });
   }
 
   async sendDirectMessage(senderId: string, recipientId: string, message: string) {
@@ -79,7 +84,7 @@ export class MessagingService {
         senderId: String(senderId),
         message,
         isRead: false,
-        messageType: 'MESSAGE',
+        context: (DMMessageContext?.DM ?? 'DM') as any, // DM context'li mesaj
         sentAt: new Date(),
       } as any,
     });
@@ -98,6 +103,7 @@ export class MessagingService {
       recipientId: String(recipientId),
       message,
       messageType: 'message' as const,
+      context: 'DM' as const, // DM context bilgisi ekle
       timestamp: createdMessage.sentAt.toISOString(),
     };
 
@@ -137,7 +143,7 @@ export class MessagingService {
         senderId: String(senderId),
         message: body,
         isRead: false,
-        messageType: 'TIPS',
+        context: (DMMessageContext?.DM ?? 'DM') as any, // DM context'li mesaj
         sentAt: new Date(),
       } as any,
     });
@@ -147,28 +153,24 @@ export class MessagingService {
       data: { updatedAt: new Date() },
     });
 
-    // Socket bildirimi gönder - new_message event'i (messageType: 'send-tips')
     const socketHandler = SocketManager.getInstance().getSocketHandler();
-    const newMessageEvent = {
-      messageId: createdMessage.id,
+    const tipsEvent = {
+      messageId: tipsTransfer.id,
       threadId: thread.id,
       senderId: String(senderId),
       recipientId: String(recipientId),
-      message: body,
+      message: tipsMessage || '',
       messageType: 'send-tips' as const,
-      timestamp: createdMessage.sentAt.toISOString(),
+      amount,
+      context: 'DM' as const,
+      timestamp: tipsTransfer.createdAt.toISOString(),
     };
 
-    // Alıcıya kendi odasına gönder
-    socketHandler.sendMessageToUser(String(recipientId), 'new_message', newMessageEvent);
-    
-    // Thread room'una gönder
-    socketHandler.sendToRoom(`thread:${thread.id}`, 'new_message', newMessageEvent);
+    socketHandler.sendMessageToUser(String(recipientId), 'new_message', tipsEvent);
+    socketHandler.sendToRoom(`thread:${thread.id}`, 'new_message', tipsEvent);
+    socketHandler.sendMessageToUser(String(senderId), 'message_sent', tipsEvent);
 
-    // Göndericiye message_sent event'i gönder
-    socketHandler.sendMessageToUser(String(senderId), 'message_sent', newMessageEvent);
-
-    logger.info(`Tips sent from ${senderId} to ${recipientId}, amount: ${amount}, socket events emitted`);
+    logger.info(`TIPS sent from ${senderId} to ${recipientId}, amount: ${amount}, socket events emitted`);
   }
 
   /**
@@ -217,6 +219,78 @@ export class MessagingService {
   }
 
   /**
+   * Thread'deki tüm mesajları okundu olarak işaretle (join_thread için)
+   */
+  async markAllMessagesAsReadInThread(threadId: string, userId: string): Promise<void> {
+    try {
+      // Thread erişim kontrolü
+      const hasAccess = await this.validateThreadAccess(threadId, userId);
+      if (!hasAccess) {
+        throw new Error('User is not a participant of this thread');
+      }
+
+      // Okunmamış mesajları bul
+      const unreadMessages = await this.prisma.dMMessage.findMany({
+        where: {
+          threadId,
+          senderId: { not: userId },
+          isRead: false,
+        },
+        select: {
+          id: true,
+          senderId: true,
+        },
+      });
+
+      if (unreadMessages.length === 0) {
+        return; // Okunmamış mesaj yok
+      }
+
+      // Tüm mesajları okundu olarak işaretle
+      await this.dmMessageRepo.markAllAsReadInThread(threadId, userId);
+
+      // Her mesaj için message_read event'i gönder
+      const socketHandler = SocketManager.getInstance().getSocketHandler();
+      const timestamp = new Date().toISOString();
+
+      for (const message of unreadMessages) {
+        const senderId = String(message.senderId);
+        socketHandler.sendMessageToUser(senderId, 'message_read', {
+          messageId: message.id,
+          threadId,
+          readBy: userId,
+          timestamp,
+        });
+
+        // Thread room'una da gönder
+        socketHandler.sendToRoom(`thread:${threadId}`, 'message_read', {
+          messageId: message.id,
+          threadId,
+          readBy: userId,
+          timestamp,
+        });
+      }
+
+      logger.info(`Marked ${unreadMessages.length} messages as read in thread ${threadId} by user ${userId}`);
+    } catch (error) {
+      logger.error(`Failed to mark all messages as read in thread ${threadId} by user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Thread'i ID ile getir
+   */
+  async getThreadById(threadId: string): Promise<DMThread | null> {
+    try {
+      return await this.dmThreadRepo.findById(threadId);
+    } catch (error) {
+      logger.error(`Failed to get thread by ID ${threadId}:`, error);
+      return null;
+    }
+  }
+
+  /**
    * Kullanıcının thread'e erişim yetkisi olup olmadığını kontrol et
    */
   async validateThreadAccess(threadId: string, userId: string): Promise<boolean> {
@@ -238,7 +312,7 @@ export class MessagingService {
   /**
    * Thread'deki tüm mesajları al (DMMessage, TIPS, Support Request birleşik)
    */
-  async getThreadMessages(threadId: string, userId: string, limit = 50, offset = 0): Promise<MessageFeedItem[]> {
+  async getThreadMessages(threadId: string, userId: string, limit = 100, offset = 0): Promise<MessageFeedItem[]> {
     try {
       // Thread'e erişim kontrolü
       const thread = await this.dmThreadRepo.findById(threadId);
@@ -254,9 +328,91 @@ export class MessagingService {
 
       const threadItems: MessageFeedItem[] = [];
 
-      // 1. DMMessage'ları getir (Prisma'dan direkt include ile)
-      const messages = await this.prisma.dMMessage.findMany({
-        where: { threadId },
+      // Thread tipi kontrolü: Support thread ise sadece SUPPORT context'li mesajlar döndür
+      const isSupportThread = thread.isSupportContext();
+
+      // SUPPORT THREAD: Sadece SUPPORT context'li mesajları döndür
+      if (isSupportThread) {
+        // Sadece SUPPORT context'li mesajları getir (DM, NULL veya TIPS mesajlarını hariç tut)
+        const allMessages = await this.prisma.dMMessage.findMany({
+          where: { 
+            threadId,
+          },
+          include: {
+            sender: {
+              include: {
+                profile: true,
+                titles: { orderBy: { earnedAt: 'desc' }, take: 1 },
+                avatars: { where: { isActive: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+              },
+            },
+          },
+          orderBy: { sentAt: 'asc' },
+          take: Math.min(limit * 2, 1000), // Biraz fazla al, sonra filtrele
+        });
+
+        // Sadece SUPPORT context'li ve TIPS olmayan mesajları dahil et
+        const supportMessages = allMessages.filter((msg) => {
+          const context = (msg as any).context;
+          const messageText = (msg as any).message || '';
+          const messageType = (msg as any).messageType;
+          
+          // SUPPORT context kontrolü
+          const isSupportContext = context === 'SUPPORT' || context === (DMMessageContext?.SUPPORT ?? 'SUPPORT');
+          
+          // TIPS mesajı kontrolü - TIPS mesajlarını hariç tut
+          const isTipsMessage = messageType === 'TIPS' || 
+            (messageText.includes('Sent') && messageText.includes('TIPS'));
+          
+          // Sadece SUPPORT context'li ve TIPS olmayan mesajları dahil et
+          return isSupportContext && !isTipsMessage;
+        });
+
+        for (const message of supportMessages) {
+          const sender = message.sender;
+          if (!sender) continue;
+
+          const senderName = sender.profile?.displayName
+            || sender.profile?.userName
+            || sender.email
+            || 'Unknown';
+
+          const senderUser: SenderUser = {
+            id: message.senderId,
+            senderName,
+            senderTitle: sender.titles?.[0]?.title ?? '',
+            senderAvatar: sender.avatars?.[0]?.imageUrl ?? '',
+          };
+
+          const messageData: Message = {
+            id: message.id,
+            sender: senderUser,
+            lastMessage: message.message,
+            timestamp: message.sentAt.toISOString(),
+            isUnread: !message.isRead,
+          };
+
+          threadItems.push({
+            id: message.id,
+            type: 'message' as MessageType,
+            data: messageData,
+          });
+        }
+
+        // Support thread'lerde sadece mesajlar var, TIPS ve support-request yok
+        // Timestamp'e göre sırala (zaten asc ile geliyor)
+        const paginatedItems = threadItems.slice(offset, offset + limit);
+        logger.info(`Support thread ${threadId} messages: total=${threadItems.length}, messages=${threadItems.length}`);
+        return paginatedItems;
+      }
+
+      // NORMAL DM THREAD: DM context'li mesajlar + TIPS + support-request
+      // 1. DMMessage'ları getir (DM context'li veya context'i olmayan mesajlar)
+      // Eski mesajların context'i NULL olabilir, onları da dahil et
+      const allMessages = await this.prisma.dMMessage.findMany({
+        where: { 
+          threadId,
+        },
         include: {
           sender: {
             include: {
@@ -266,8 +422,15 @@ export class MessagingService {
             },
           },
         },
-        orderBy: { sentAt: 'desc' },
+        orderBy: { sentAt: 'asc' }, // En eski önce al, sonra timestamp'e göre sıralayacağız
         take: 1000, // Tüm mesajları al, sonra sıralayacağız
+      });
+      
+      // DM context'li mesajları filtrele (SUPPORT context'li mesajları hariç tut)
+      const messages = allMessages.filter((msg) => {
+        const context = (msg as any).context;
+        // NULL, undefined veya 'DM' olan mesajları dahil et, 'SUPPORT' olanları hariç tut
+        return context === null || context === undefined || context === 'DM' || context === (DMMessageContext?.DM ?? 'DM');
       });
       
       for (const message of messages) {
@@ -292,41 +455,25 @@ export class MessagingService {
         const isTipsMessage = prismaMessageType === 'TIPS' || 
           (message.message.includes('Sent') && message.message.includes('TIPS'));
         
+        // TIPS mesajlarını atla - zaten TipsTokenTransfer'den alıyoruz (duplicate önlemek için)
         if (isTipsMessage) {
-          // TIPS mesajı - TipsInfo olarak ekle
-          const tipsMatch = message.message.match(/Sent (\d+(?:\.\d+)?) TIPS(?:: (.+))?/);
-          const tipsAmount = tipsMatch ? parseFloat(tipsMatch[1]) : 0;
-          const tipsMessage = tipsMatch?.[2] || '';
-
-          const tipsInfo: TipsInfo = {
-            id: message.id,
-            sender: senderUser,
-            amount: tipsAmount,
-            message: tipsMessage,
-            timestamp: message.sentAt.toISOString(),
-          };
-
-          threadItems.push({
-            id: message.id,
-            type: 'send-tips' as MessageType,
-            data: tipsInfo,
-          });
-        } else {
-          // Normal mesaj
-          const messageData: Message = {
-            id: message.id,
-            sender: senderUser,
-            lastMessage: message.message,
-            timestamp: message.sentAt.toISOString(),
-            isUnread: !message.isRead,
-          };
-
-          threadItems.push({
-            id: message.id,
-            type: 'message' as MessageType,
-            data: messageData,
-          });
+          continue; // TIPS mesajlarını DMMessage'den ekleme, sadece TipsTokenTransfer'den al
         }
+
+        // Normal mesaj
+        const messageData: Message = {
+          id: message.id,
+          sender: senderUser,
+          lastMessage: message.message,
+          timestamp: message.sentAt.toISOString(),
+          isUnread: !message.isRead,
+        };
+
+        threadItems.push({
+          id: message.id,
+          type: 'message' as MessageType,
+          data: messageData,
+        });
       }
 
       // 2. Thread kullanıcıları arasındaki TIPS transferlerini getir
@@ -346,7 +493,7 @@ export class MessagingService {
             },
           },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: 'asc' }, // En eski önce, sonra timestamp'e göre sıralayacağız
       });
 
       for (const transfer of tipsTransfers) {
@@ -381,58 +528,68 @@ export class MessagingService {
       }
 
       // 3. Thread kullanıcıları arasındaki Support Request'leri getir
-      const supportRequests = await this.prisma.dMRequest.findMany({
-        where: {
-          OR: [
-            { fromUserId: thread.userOneId, toUserId: thread.userTwoId },
-            { fromUserId: thread.userTwoId, toUserId: thread.userOneId },
-          ],
-          description: { not: null }, // Sadece support request'ler (description olanlar)
-        },
-        include: {
-          fromUser: {
-            include: {
-              profile: true,
-              titles: { orderBy: { earnedAt: 'desc' }, take: 1 },
-              avatars: { where: { isActive: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+      // Sadece normal DM thread'lerde support request'leri göster (support thread'lerde değil)
+        const supportRequests = await this.prisma.dMRequest.findMany({
+          where: {
+            OR: [
+              { fromUserId: thread.userOneId, toUserId: thread.userTwoId },
+              { fromUserId: thread.userTwoId, toUserId: thread.userOneId },
+            ],
+            description: { not: null }, // Sadece support request'ler (description olanlar)
+          },
+          orderBy: { sentAt: 'asc' }, // En eski önce (sıralama için)
+          include: {
+            fromUser: {
+              include: {
+                profile: true,
+                titles: { orderBy: { earnedAt: 'desc' }, take: 1 },
+                avatars: { where: { isActive: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+              },
+            },
+            toUser: {
+              include: {
+                profile: true,
+                titles: { orderBy: { earnedAt: 'desc' }, take: 1 },
+                avatars: { where: { isActive: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+              },
             },
           },
-          toUser: {
-            include: {
-              profile: true,
-              titles: { orderBy: { earnedAt: 'desc' }, take: 1 },
-              avatars: { where: { isActive: true }, orderBy: { createdAt: 'desc' }, take: 1 },
-            },
-          },
-        },
-        orderBy: { sentAt: 'desc' },
-      });
+        });
 
-      for (const request of supportRequests) {
-        if (!request.description) continue;
+      // Her support request için threadId artık direkt DMRequest.threadId field'ından alınacak
+      // Her request accept edildiğinde yeni bir thread oluşturulur ve threadId DMRequest'e kaydedilir
+        for (const request of supportRequests) {
+          if (!request.description) continue;
 
-        const isFromUser = request.fromUserId === userIdStr;
-        const counterpart = isFromUser ? request.toUser : request.fromUser;
-        if (!counterpart) continue;
+          // Sender her zaman request'i oluşturan kişidir (fromUser)
+          const senderUser = request.fromUser;
+          if (!senderUser) continue;
 
-        const senderName = counterpart.profile?.displayName
-          || counterpart.profile?.userName
-          || counterpart.email
-          || 'Unknown';
+          const senderName = senderUser.profile?.displayName
+            || senderUser.profile?.userName
+            || senderUser.email
+            || 'Unknown';
 
-        const sender: SenderUser = {
-          id: isFromUser ? request.toUserId : request.fromUserId,
-          senderName,
-          senderTitle: counterpart.titles?.[0]?.title ?? '',
-          senderAvatar: counterpart.avatars?.[0]?.imageUrl ?? '',
-        };
+          const sender: SenderUser = {
+            id: request.fromUserId,
+            senderName,
+            senderTitle: senderUser.titles?.[0]?.title ?? '',
+            senderAvatar: senderUser.avatars?.[0]?.imageUrl ?? '',
+          };
 
         // Map DMRequestStatus to SupportRequestStatus
         let status: SupportRequestStatus;
-        if (request.status === DMRequestStatus.PENDING) {
+        const requestStatus = request.status as DMRequestStatus;
+        if (requestStatus === DMRequestStatus.PENDING) {
           status = 'pending';
-        } else if (request.status === DMRequestStatus.ACCEPTED) {
+        } else if (requestStatus === DMRequestStatus.ACCEPTED) {
           status = 'accepted';
+        } else if (requestStatus === DMRequestStatus.CANCELED) {
+          status = 'canceled';
+        } else if (requestStatus === DMRequestStatus.AWAITING_COMPLETION) {
+          status = 'awaiting_completion';
+        } else if (requestStatus === DMRequestStatus.COMPLETED) {
+          status = 'completed';
         } else {
           status = 'rejected';
         }
@@ -449,6 +606,10 @@ export class MessagingService {
           ? dmRequestWithType.amount
           : Number(dmRequestWithType.amount) || 0;
 
+        // DM ekranında support chat mesajlarını yüklemiyoruz
+        // Support chat açıldığında threadId ile GET /messages/{threadId} çağrısı yapılacak
+        // ThreadId artık direkt DMRequest.threadId field'ından alınacak
+        const requestThreadId = (request as any).threadId as string | null | undefined;
         const supportRequest: SupportRequest = {
           id: request.id,
           sender,
@@ -457,6 +618,10 @@ export class MessagingService {
           amount,
           status,
           timestamp: request.sentAt.toISOString(),
+          threadId: requestThreadId ?? null,
+          requestId: request.id,
+          fromUserId: request.fromUserId,
+          toUserId: request.toUserId,
         };
 
         threadItems.push({
@@ -466,12 +631,16 @@ export class MessagingService {
         });
       }
 
-      // 4. Tüm item'ları timestamp'e göre sırala (en yeni önce)
+      // 4. Tüm item'ları timestamp'e göre sırala (en eski önce - WhatsApp tarzı)
       threadItems.sort((a, b) => {
         const timestampA = this.getTimestampFromFeedItem(a);
         const timestampB = this.getTimestampFromFeedItem(b);
-        return new Date(timestampB).getTime() - new Date(timestampA).getTime();
+        return new Date(timestampA).getTime() - new Date(timestampB).getTime();
       });
+
+      // Debug log: Support request sayısını kontrol et
+      const supportRequestCount = threadItems.filter(item => item.type === 'support-request').length;
+      logger.info(`DM thread ${threadId} messages: total=${threadItems.length}, support-requests=${supportRequestCount}, messages=${threadItems.filter(item => item.type === 'message').length}, tips=${threadItems.filter(item => item.type === 'send-tips').length}`);
 
       // 5. Limit ve offset uygula
       const paginatedItems = threadItems.slice(offset, offset + limit);
@@ -649,36 +818,41 @@ export class MessagingService {
 
         if (!dmRequest) continue;
 
-        const isFromUser = dmRequest.fromUserId === userIdStr;
-        const counterpart = isFromUser ? dmRequest.toUser : dmRequest.fromUser;
-        
-        if (!counterpart) continue;
+        const requestCreator = dmRequest.fromUser;
+        if (!requestCreator) continue;
 
-        const senderName = counterpart.profile?.displayName
-          || counterpart.profile?.userName
-          || counterpart.email
+        const senderName = requestCreator.profile?.displayName
+          || requestCreator.profile?.userName
+          || requestCreator.email
           || 'Unknown';
 
         const sender: SenderUser = {
-          id: isFromUser ? dmRequest.toUserId : dmRequest.fromUserId,
+          id: dmRequest.fromUserId,
           senderName,
-          senderTitle: counterpart.titles?.[0]?.title ?? '',
-          senderAvatar: counterpart.avatars?.[0]?.imageUrl ?? '',
+          senderTitle: requestCreator.titles?.[0]?.title ?? '',
+          senderAvatar: requestCreator.avatars?.[0]?.imageUrl ?? '',
         };
 
         // Map DMRequestStatus to SupportRequestStatus
         let status: SupportRequestStatus;
-        if (dmRequest.status === DMRequestStatus.PENDING) {
+        const requestStatus = dmRequest.status as DMRequestStatus;
+        if (requestStatus === DMRequestStatus.PENDING) {
           status = 'pending';
-        } else if (dmRequest.status === DMRequestStatus.ACCEPTED) {
+        } else if (requestStatus === DMRequestStatus.ACCEPTED) {
           status = 'accepted';
+        } else if (requestStatus === DMRequestStatus.CANCELED) {
+          status = 'canceled';
+        } else if (requestStatus === DMRequestStatus.AWAITING_COMPLETION) {
+          status = 'awaiting_completion';
+        } else if (requestStatus === DMRequestStatus.COMPLETED) {
+          status = 'completed';
         } else {
           status = 'rejected';
         }
 
         // SupportType mapping - Prisma enum'ından domain enum'a
         // Type assertion needed until TypeScript picks up the updated Prisma types
-        const dmRequestWithType = dmRequest as typeof dmRequest & { type: string; amount: number | any };
+        const dmRequestWithType = dmRequest as typeof dmRequest & { type: string; amount: number };
         const prismaType = dmRequestWithType.type;
         const supportType: SupportType = 
           prismaType === 'GENERAL' || prismaType === 'TECHNICAL' || prismaType === 'PRODUCT'
@@ -690,6 +864,8 @@ export class MessagingService {
           ? dmRequestWithType.amount
           : Number(dmRequestWithType.amount) || 0;
 
+        // Feed'de messages array'i kullanılmıyor (sadece özet gösteriliyor)
+        // Thread items yüklendiğinde messages array'i dolu gelecek
         const supportRequest: SupportRequest = {
           id: request.id,
           sender,
@@ -698,6 +874,10 @@ export class MessagingService {
           amount,
           status,
           timestamp: dmRequest.sentAt.toISOString(),
+          threadId: (dmRequest as any).threadId ?? null,
+          requestId: request.id,
+          fromUserId: dmRequest.fromUserId,
+          toUserId: dmRequest.toUserId,
         };
 
         feedItems.push({
@@ -769,11 +949,11 @@ export class MessagingService {
         });
       }
 
-      // Tüm feed item'larını timestamp'e göre sırala (en yeni önce)
+      // Tüm feed item'larını timestamp'e göre sırala (en eski önce - WhatsApp tarzı)
       feedItems.sort((a, b) => {
         const timestampA = this.getTimestampFromFeedItem(a);
         const timestampB = this.getTimestampFromFeedItem(b);
-        return new Date(timestampB).getTime() - new Date(timestampA).getTime();
+        return new Date(timestampA).getTime() - new Date(timestampB).getTime();
       });
 
       // Limit uygula
@@ -782,6 +962,91 @@ export class MessagingService {
       return { messages: limitedItems };
     } catch (error) {
       logger.error(`Failed to get message feed for user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Support chat mesajlarını getir (belirli bir support request'e ait SUPPORT context'li mesajlar)
+   */
+  /**
+   * @deprecated Bu metod artık kullanılmıyor. getThreadMessages metodunu kullanın.
+   * getThreadMessages thread'in is_support_thread değerine göre otomatik olarak doğru veri döndürür.
+   */
+  async getSupportChatMessages(
+    threadId: string,
+    userId: string,
+    supportRequestId?: string,
+    limit = 200,
+  ): Promise<MessageFeedItem[]> {
+    // getThreadMessages'ı kullan (thread'in is_support_thread değerine göre otomatik olarak SUPPORT mesajları döner)
+    return this.getThreadMessages(threadId, userId, limit, 0);
+  }
+
+  /**
+   * Support chat mesajı gönder
+   */
+  async sendSupportChatMessage(threadId: string, senderId: string, message: string): Promise<void> {
+    try {
+      // Thread'e erişim kontrolü
+      const thread = await this.dmThreadRepo.findById(threadId);
+      if (!thread) {
+        throw new Error('Thread not found');
+      }
+
+      if (!thread.isSupportContext()) {
+        throw new Error('Thread is not a support chat');
+      }
+
+      const userIdStr = String(senderId);
+      if (!thread.belongsToUser(userIdStr)) {
+        throw new Error('User is not a participant of this thread');
+      }
+
+      const recipientId = thread.getOtherUserId(userIdStr);
+
+      // Support context ile mesaj oluştur
+      const createdMessage = await this.prisma.dMMessage.create({
+        data: {
+          threadId,
+          senderId: userIdStr,
+          message,
+          isRead: false,
+          context: (DMMessageContext?.SUPPORT ?? 'SUPPORT') as any,
+          sentAt: new Date(),
+        } as any,
+      });
+
+      await this.prisma.dMThread.update({
+        where: { id: thread.id },
+        data: { updatedAt: new Date() },
+      });
+
+      // Socket bildirimi gönder - new_message event'i (context: SUPPORT)
+      const socketHandler = SocketManager.getInstance().getSocketHandler();
+      const newMessageEvent = {
+        messageId: createdMessage.id,
+        threadId: thread.id,
+        senderId: userIdStr,
+        recipientId,
+        message,
+        messageType: 'message' as const,
+        context: 'SUPPORT' as const,
+        timestamp: createdMessage.sentAt.toISOString(),
+      };
+
+      // Alıcıya kendi odasına gönder
+      socketHandler.sendMessageToUser(String(recipientId), 'new_message', newMessageEvent);
+      
+      // Thread room'una gönder
+      socketHandler.sendToRoom(`thread:${thread.id}`, 'new_message', newMessageEvent);
+
+      // Göndericiye message_sent event'i gönder
+      socketHandler.sendMessageToUser(userIdStr, 'message_sent', newMessageEvent);
+
+      logger.info(`Support chat message sent from ${senderId} to ${recipientId} in thread ${threadId}, socket events emitted`);
+    } catch (error) {
+      logger.error(`Failed to send support chat message:`, error);
       throw error;
     }
   }

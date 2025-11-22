@@ -1,4 +1,6 @@
-import 'dotenv/config';
+// Load .env file but don't override existing environment variables (e.g., from Docker Compose)
+import dotenv from 'dotenv';
+dotenv.config({ override: false });
 import http from 'http';
 import { Server } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
@@ -10,7 +12,6 @@ import SocketManager from '../infrastructure/realtime/socket-manager';
 import { CacheService } from '../infrastructure/cache/cache.service';
 import QueueProvider from '../infrastructure/queue/queue.provider';
 import { getPrisma } from '../infrastructure/repositories/prisma.client';
-
 const PORT = process.env.PORT || 3000;
 
 async function startServer() {
@@ -48,6 +49,20 @@ async function startServer() {
     // Socket handler'ı başlat
     SocketManager.getInstance().initialize(io);
 
+    // Scheduled job'ları başlat (dynamic import - dosya yoksa hata vermez)
+    let supportRequestAutoCompleteJob: any = null;
+    try {
+      const jobModule = await import('../infrastructure/jobs/support-request-auto-complete.job');
+      if (jobModule?.SupportRequestAutoCompleteJob) {
+        supportRequestAutoCompleteJob = new jobModule.SupportRequestAutoCompleteJob();
+        supportRequestAutoCompleteJob.start();
+        logger.info('SupportRequestAutoCompleteJob started successfully');
+      }
+    } catch (error: any) {
+      // Dosya yoksa veya yüklenemezse, sadece uyarı ver ama sunucu başlamaya devam et
+      logger.warn('SupportRequestAutoCompleteJob could not be loaded (optional):', error?.message || error);
+    }
+
     // HTTP server'ı başlat
     httpServer.listen(PORT, () => {
       logger.info({ message: `Server running on port ${PORT} with Socket.IO, Redis Cache, and BullMQ support` });
@@ -59,6 +74,11 @@ async function startServer() {
       httpServer.close(() => {
         logger.info('HTTP server closed');
       });
+      
+      // Scheduled job'ları durdur
+      if (supportRequestAutoCompleteJob && typeof supportRequestAutoCompleteJob.stop === 'function') {
+        supportRequestAutoCompleteJob.stop();
+      }
       
       // Cache ve queue servislerini kapat
       await cacheService.disconnect();
@@ -72,6 +92,11 @@ async function startServer() {
       httpServer.close(() => {
         logger.info('HTTP server closed');
       });
+      
+      // Scheduled job'ları durdur
+      if (supportRequestAutoCompleteJob && typeof supportRequestAutoCompleteJob.stop === 'function') {
+        supportRequestAutoCompleteJob.stop();
+      }
       
       // Cache ve queue servislerini kapat
       await cacheService.disconnect();

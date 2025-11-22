@@ -2,8 +2,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 
 // Ortama göre ilgili .env dosyasını yükle
-const nodeEnv = process.env.NODE_ENV || 'development';
-const envFile = `.env${nodeEnv !== 'development' ? `.${nodeEnv}` : ''}`;
+const envFile = `.env${process.env.NODE_ENV ? `.${process.env.NODE_ENV}` : ''}`;
 dotenv.config({ path: path.resolve(process.cwd(), envFile) });
 
 type Config = {

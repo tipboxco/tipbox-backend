@@ -37,6 +37,7 @@ model User {
   dmSupportSessions       DMSupportSession[]
   dmThreadsAsUserOne      DMThread[]              @relation("DMThreadUserOne")
   dmThreadsAsUserTwo      DMThread[]              @relation("DMThreadUserTwo")
+  supportRequestReports   SupportRequestReport[]  @relation("SupportRequestReportReporter")
   emailVerificationCodes  EmailVerificationCode[]
   expertAnswers           ExpertAnswer[]
   expertRequests          ExpertRequest[]
@@ -1182,6 +1183,7 @@ model DMThread {
   userOneId          String             @map("user_one_id") @db.Uuid
   userTwoId          String             @map("user_two_id") @db.Uuid
   isActive           Boolean            @map("is_active")
+  isSupportThread    Boolean            @default(false) @map("is_support_thread")
   unreadCountUserOne Int                @default(0) @map("unread_count_user_one")
   unreadCountUserTwo Int                @default(0) @map("unread_count_user_two")
   startedAt          DateTime           @default(now()) @map("started_at")
@@ -1189,26 +1191,30 @@ model DMThread {
   updatedAt          DateTime           @updatedAt @map("updated_at")
   messages           DMMessage[]
   supportSessions    DMSupportSession[]
+  supportRequests    DMRequest[]        @relation("DMRequestThread")
   userOne            User               @relation("DMThreadUserOne", fields: [userOneId], references: [id], onDelete: Cascade)
   userTwo            User               @relation("DMThreadUserTwo", fields: [userTwoId], references: [id], onDelete: Cascade)
 
-  @@unique([userOneId, userTwoId])
+  // Unique constraint kaldırıldı: Her support request için yeni bir thread oluşturulabilir
+  // Normal DM thread'ler için uygulama seviyesinde kontrol yapılacak
   @@index([userOneId])
   @@index([userTwoId])
+  @@index([isSupportThread])
   @@map("dm_threads")
 }
 
 model DMMessage {
-  id        String   @id @default(uuid()) @db.Uuid
-  threadId  String   @map("thread_id") @db.Uuid
-  senderId  String   @map("sender_id") @db.Uuid
+  id        String           @id @default(uuid()) @db.Uuid
+  threadId  String           @map("thread_id") @db.Uuid
+  senderId  String           @map("sender_id") @db.Uuid
   message   String
-  sentAt    DateTime @default(now()) @map("sent_at")
-  isRead    Boolean  @map("is_read")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  sender    User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
-  thread    DMThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sentAt    DateTime         @default(now()) @map("sent_at")
+  isRead    Boolean          @map("is_read")
+  context   DMMessageContext @default(DM)
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+  sender    User             @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  thread    DMThread         @relation(fields: [threadId], references: [id], onDelete: Cascade)
 
   @@index([threadId])
   @@index([threadId, isRead])
@@ -1216,26 +1222,55 @@ model DMMessage {
   @@map("dm_messages")
 }
 
-model DMRequest {
-  id          String          @id @default(uuid()) @db.Uuid
-  fromUserId  String          @map("from_user_id") @db.Uuid
-  toUserId    String          @map("to_user_id") @db.Uuid
-  status      DMRequestStatus @default(PENDING)
-  type        SupportType     @default(GENERAL)
-  amount      Float           @default(0)
-  description String?         @db.Text
-  sentAt      DateTime        @default(now()) @map("sent_at")
-  respondedAt DateTime?       @map("responded_at")
-  createdAt   DateTime        @default(now()) @map("created_at")
-  updatedAt   DateTime        @updatedAt @map("updated_at")
-  fromUser    User            @relation("DMRequestSender", fields: [fromUserId], references: [id], onDelete: Cascade)
-  toUser      User            @relation("DMRequestReceiver", fields: [toUserId], references: [id], onDelete: Cascade)
+enum DMMessageContext {
+  DM
+  SUPPORT
+}
 
-  @@unique([fromUserId, toUserId])
+model DMRequest {
+  id                 String          @id @default(uuid()) @db.Uuid
+  fromUserId         String          @map("from_user_id") @db.Uuid
+  toUserId           String          @map("to_user_id") @db.Uuid
+  status             DMRequestStatus @default(PENDING)
+  type               SupportType     @default(GENERAL)
+  amount             Float           @default(0)
+  description        String?         @db.Text
+  threadId           String?         @map("thread_id") @db.Uuid
+  fromUserRating     Int?            @map("from_user_rating")
+  toUserRating       Int?            @map("to_user_rating")
+  closedByFromUserAt DateTime?       @map("closed_by_from_user_at")
+  closedByToUserAt   DateTime?       @map("closed_by_to_user_at")
+  sentAt             DateTime        @default(now()) @map("sent_at")
+  respondedAt        DateTime?       @map("responded_at")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+  fromUser           User            @relation("DMRequestSender", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser             User            @relation("DMRequestReceiver", fields: [toUserId], references: [id], onDelete: Cascade)
+  thread             DMThread?       @relation("DMRequestThread", fields: [threadId], references: [id], onDelete: SetNull)
+  reports            SupportRequestReport[]
+
+  @@index([fromUserId, toUserId])
   @@index([fromUserId])
   @@index([toUserId])
   @@index([status])
+  @@index([threadId])
   @@map("dm_requests")
+}
+
+model SupportRequestReport {
+  id          String   @id @default(uuid()) @db.Uuid
+  requestId   String   @map("request_id") @db.Uuid
+  reporterId  String   @map("reporter_id") @db.Uuid
+  category    String
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  request  DMRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  reporter User      @relation("SupportRequestReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+  @@index([reporterId])
+  @@map("support_request_reports")
 }
 
 model DMSupportSession {
@@ -1641,6 +1676,9 @@ enum DMRequestStatus {
   PENDING
   ACCEPTED
   DECLINED
+  CANCELED
+  AWAITING_COMPLETION
+  COMPLETED
 
   @@map("dm_request_status")
 }

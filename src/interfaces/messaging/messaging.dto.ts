@@ -7,7 +7,7 @@
  *       enum: [GENERAL, TECHNICAL, PRODUCT]
  *     SupportRequestStatus:
  *       type: string
- *       enum: [pending, accepted, rejected]
+ *       enum: [pending, accepted, rejected, canceled, awaiting_completion, completed]
  *     MessageType:
  *       type: string
  *       enum: [message, support-request, send-tips]
@@ -36,6 +36,18 @@
  *           format: date-time
  *         isUnread:
  *           type: boolean
+ *     SupportChatMessage:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *         senderId:
+ *           type: string
+ *         message:
+ *           type: string
+ *         timestamp:
+ *           type: string
+ *           format: date-time
  *     SupportRequest:
  *       type: object
  *       properties:
@@ -54,6 +66,19 @@
  *         timestamp:
  *           type: string
  *           format: date-time
+ *         threadId:
+ *           type: string
+ *           format: uuid
+ *           nullable: true
+ *           description: |
+ *             Support request'in bağlı olduğu support thread ID.
+ *             - status: "pending" → threadId: null (henüz accept edilmemiş, thread oluşturulmamış)
+ *             - status: "accepted" → threadId: "uuid" (accept edildiğinde oluşturulan unique support thread ID)
+ *             - status: "rejected" → threadId: null
+ *             
+ *             Her support request accept edildiğinde yeni bir unique support thread oluşturulur (is_support_thread=true) 
+ *             ve bu thread ID'si DMRequest.threadId field'ına kaydedilir. 
+ *             Bu ID ile support chat açılır ve GET /messages/{threadId} endpoint'i ile sadece SUPPORT context'li mesajlar yüklenir.
  *     TipsInfo:
  *       type: object
  *       properties:
@@ -141,7 +166,7 @@
 
 export type SupportType = 'GENERAL' | 'TECHNICAL' | 'PRODUCT';
 
-export type SupportRequestStatus = 'pending' | 'accepted' | 'rejected';
+export type SupportRequestStatus = 'pending' | 'accepted' | 'rejected' | 'canceled' | 'awaiting_completion' | 'completed';
 
 export type MessageType = 'message' | 'support-request' | 'send-tips';
 
@@ -160,6 +185,20 @@ export interface Message {
   isUnread: boolean;
 }
 
+/**
+ * Support request mesaj grubunun içerisinde yer alan bireysel mesajlar
+ */
+export interface SupportChatMessage {
+  id: string;
+  senderId: string;
+  message: string;
+  timestamp: string;
+}
+
+/**
+ * Support request (DM ekranında sadece özet gösterilir)
+ * Support chat açılırken threadId ile GET /messages/{threadId} çağrısı yapılarak mesajlar yüklenir.
+ */
 export interface SupportRequest {
   id: string;
   sender: SenderUser;
@@ -168,6 +207,10 @@ export interface SupportRequest {
   amount: number;
   status: SupportRequestStatus;
   timestamp: string;
+  threadId?: string | null; // Accept edilmişse thread ID, yoksa null. Support chat açılırken GET /messages/{threadId} ile mesajlar yüklenir.
+  requestId?: string;
+  fromUserId?: string;
+  toUserId?: string;
 }
 
 export interface TipsInfo {

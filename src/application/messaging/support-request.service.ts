@@ -5,6 +5,8 @@ import { DMRequestStatus } from '../../domain/messaging/dm-request-status.enum';
 import SocketManager from '../../infrastructure/realtime/socket-manager';
 import logger from '../../infrastructure/logger/logger';
 import { PrismaClient } from '@prisma/client';
+import { SupportRequestReportPrismaRepository } from '../../infrastructure/repositories/support-request-report-prisma.repository';
+import { SupportRequestReportCategory } from '../../domain/messaging/support-request-report-category.enum';
 
 export interface SupportRequestListItem {
   id: string;
@@ -13,6 +15,9 @@ export interface SupportRequestListItem {
   userAvatar: string | null;
   requestDescription: string;
   status: SupportRequestStatus;
+  threadId: string | null; // Accept edilmişse thread ID, yoksa null
+  fromUserId: string; // Request oluşturan kullanıcı ID
+  toUserId: string; // Request alıcı kullanıcı ID
 }
 
 export interface SupportRequestQueryOptions {
@@ -25,6 +30,13 @@ export class SupportRequestService {
   private dmRequestRepo = new DMRequestPrismaRepository();
   private dmThreadRepo = new DMThreadPrismaRepository();
   private prisma = new PrismaClient();
+  private supportRequestReportRepo = new SupportRequestReportPrismaRepository();
+
+  public static readonly REPORT_CATEGORIES: SupportRequestReportCategory[] = [
+    SupportRequestReportCategory.SPAM,
+    SupportRequestReportCategory.HARASSMENT,
+    SupportRequestReportCategory.SCAM,
+  ];
 
   /**
    * Kullanıcının birebir destek sohbetlerini listele
@@ -40,6 +52,8 @@ export class SupportRequestService {
         dmRequestStatus = DMRequestStatus.PENDING;
       } else if (options.status === SupportRequestStatus.ACTIVE) {
         dmRequestStatus = DMRequestStatus.ACCEPTED;
+      } else if (options.status === SupportRequestStatus.CANCELED) {
+        dmRequestStatus = DMRequestStatus.CANCELED;
       } else if (options.status === SupportRequestStatus.COMPLETED) {
         // Completed: include both DECLINED and ACCEPTED without active thread.
         // Do NOT pre-filter by status here; fetch all and filter at service layer.
@@ -52,8 +66,55 @@ export class SupportRequestService {
         status: dmRequestStatus,
       });
 
-      // Get thread activity map to determine support request status
-      const threadMap = await this.dmThreadRepo.getThreadActivityMap(userId);
+      // Get all support threads (is_support_thread = true) for these users
+      // Thread'leri userOneId ve userTwoId'ye göre bul
+      const userIdStr = String(userId);
+      const supportThreads = await this.prisma.dMThread.findMany({
+        where: {
+          isSupportThread: true,
+          OR: [
+            { userOneId: userIdStr },
+            { userTwoId: userIdStr },
+          ],
+        } as any,
+        select: { id: true, isActive: true, userOneId: true, userTwoId: true },
+      });
+
+      // Thread'leri request'lere eşleştir
+      // ÖNEMLİ: Request'in kendi threadId'sini kontrol et, yoksa userOneId/userTwoId'ye göre eşleştir
+      const threadMap = new Map<string, { threadId: string; isActive: boolean }>();
+      for (const request of requests) {
+        // Type assertion: Prisma type'ında threadId tanımlı olmayabilir
+        const requestThreadId = (request as any).threadId as string | null | undefined;
+        
+        // Önce request'in kendi threadId'sini kontrol et
+        // Pending request'lerde threadId null olmalı, bu durumda eşleştirme yapma
+        if (requestThreadId) {
+          // Request'in kendi threadId'si var, direkt bunu kullan
+          const matchingThread = supportThreads.find(thread => thread.id === requestThreadId);
+          if (matchingThread) {
+            threadMap.set(request.id, {
+              threadId: matchingThread.id,
+              isActive: matchingThread.isActive,
+            });
+          }
+        } else if (request.status === DMRequestStatus.ACCEPTED) {
+          // Request'in threadId'si yok ama ACCEPTED durumunda
+          // Bu durumda aynı kullanıcılar arasındaki thread'i bul (eski mantık - backward compatibility)
+          const matchingThread = supportThreads.find(
+            (thread) =>
+              (thread.userOneId === request.fromUserId && thread.userTwoId === request.toUserId) ||
+              (thread.userOneId === request.toUserId && thread.userTwoId === request.fromUserId)
+          );
+          if (matchingThread) {
+            threadMap.set(request.id, {
+              threadId: matchingThread.id,
+              isActive: matchingThread.isActive,
+            });
+          }
+        }
+        // PENDING durumunda threadId null kalır, eşleştirme yapılmaz
+      }
 
       // Map requests to support request list items
       const supportRequests: SupportRequestListItem[] = [];
@@ -71,19 +132,20 @@ export class SupportRequestService {
 
         // Determine support request status
         let supportStatus: SupportRequestStatus;
+        const threadInfo = threadMap.get(request.id);
         
-        if (request.status === DMRequestStatus.PENDING) {
+        const requestStatus = request.status as DMRequestStatus;
+        if (requestStatus === DMRequestStatus.PENDING) {
           supportStatus = SupportRequestStatus.PENDING;
-        } else if (request.status === DMRequestStatus.ACCEPTED) {
-          const threadInfo = threadMap.get(otherUserId);
-          
-          if (threadInfo && threadInfo.isActive) {
-            supportStatus = SupportRequestStatus.ACTIVE;
-          } else {
-            supportStatus = SupportRequestStatus.COMPLETED;
-          }
+        } else if (requestStatus === DMRequestStatus.ACCEPTED) {
+          supportStatus = threadInfo?.isActive ? SupportRequestStatus.ACTIVE : SupportRequestStatus.COMPLETED;
+        } else if (requestStatus === DMRequestStatus.CANCELED) {
+          supportStatus = SupportRequestStatus.CANCELED;
+        } else if (requestStatus === DMRequestStatus.AWAITING_COMPLETION) {
+          supportStatus = SupportRequestStatus.AWAITING_COMPLETION;
+        } else if (requestStatus === DMRequestStatus.COMPLETED) {
+          supportStatus = SupportRequestStatus.COMPLETED;
         } else {
-          // DECLINED requests are considered completed
           supportStatus = SupportRequestStatus.COMPLETED;
         }
 
@@ -101,6 +163,19 @@ export class SupportRequestService {
         const userTitle = counterpart?.titles?.[0]?.title ?? null;
         const userAvatar = counterpart?.avatars?.[0]?.imageUrl ?? null;
 
+        // ThreadId'yi belirle: Önce request'in kendi threadId'sini kontrol et, sonra threadMap'i kontrol et
+        // PENDING durumunda request.threadId null olmalı, bu durumda threadInfo da null olacak
+        const requestThreadId = (request as any).threadId as string | null | undefined;
+        let finalThreadId: string | null = null;
+        if (requestThreadId) {
+          // Request'in kendi threadId'si varsa onu kullan
+          finalThreadId = requestThreadId;
+        } else if (threadInfo?.threadId) {
+          // ThreadMap'ten bulunan threadId'yi kullan (backward compatibility)
+          finalThreadId = threadInfo.threadId;
+        }
+        // PENDING durumunda finalThreadId null kalır
+
         supportRequests.push({
           id: request.id,
           userName,
@@ -108,6 +183,9 @@ export class SupportRequestService {
           userAvatar,
           requestDescription: request.description,
           status: supportStatus,
+          threadId: finalThreadId,
+          fromUserId: request.fromUserId,
+          toUserId: request.toUserId,
         });
       }
 
@@ -165,49 +243,463 @@ export class SupportRequestService {
       description: payload.message,
     });
 
-    // Thread oluştur veya mevcut thread'i al
-    const existingThread = await this.prisma.dMThread.findFirst({
+    // Normal DM thread'i bul veya oluştur (support request normal DM thread'de görünecek)
+    // Support thread henüz oluşturulmadı - Accept edildiğinde oluşturulacak
+    const normalDMThread = await this.prisma.dMThread.findFirst({
       where: {
+        isSupportThread: false,
         OR: [
           { userOneId: senderId, userTwoId: payload.recipientUserId },
           { userOneId: payload.recipientUserId, userTwoId: senderId },
         ],
-      },
+      } as any,
     });
 
-    let threadId: string;
-    if (!existingThread) {
+    let dmThreadId: string | null = null;
+    if (normalDMThread) {
+      dmThreadId = normalDMThread.id;
+    } else {
+      // Normal DM thread yoksa oluştur
       const newThread = await this.dmThreadRepo.create({
         userOneId: senderId,
         userTwoId: payload.recipientUserId,
         isActive: true,
+        isSupportThread: false, // Normal DM thread
         startedAt: new Date(),
       });
-      threadId = newThread.id;
-    } else {
-      threadId = existingThread.id;
+      dmThreadId = newThread.id;
     }
 
-    // Socket bildirimi gönder - new_message event'i (messageType: 'support-request')
     const socketHandler = SocketManager.getInstance().getSocketHandler();
-    
-    const newMessageEvent = {
+    const supportEvent = {
       messageId: request.id,
-      threadId: threadId,
-      senderId: senderId,
+      threadId: dmThreadId,
+      senderId,
       recipientId: payload.recipientUserId,
       message: payload.message,
       messageType: 'support-request' as const,
+      type: payload.type,
+      amount: payload.amount,
+      status: 'pending' as const,
+      context: 'DM' as const,
       timestamp: request.sentAt.toISOString(),
     };
 
-    // Alıcıya kendi odasına gönder
-    socketHandler.sendMessageToUser(payload.recipientUserId, 'new_message', newMessageEvent);
-    
-    // Thread room'una gönder
-    socketHandler.sendToRoom(`thread:${threadId}`, 'new_message', newMessageEvent);
+    if (dmThreadId) {
+      socketHandler.sendToRoom(`thread:${dmThreadId}`, 'new_message', supportEvent);
+    }
+    socketHandler.sendMessageToUser(payload.recipientUserId, 'new_message', supportEvent);
+    socketHandler.sendMessageToUser(senderId, 'message_sent', supportEvent);
 
     logger.info(`Support request created from ${senderId} to ${payload.recipientUserId}, socket events emitted`);
+  }
+
+  /**
+   * Support request'i accept et ve thread oluştur
+   */
+  async acceptSupportRequest(
+    requestId: string,
+    expertUserId: string
+  ): Promise<{ requestId: string; threadId: string }> {
+    const request = await this.dmRequestRepo.findById(requestId);
+    if (!request) {
+      throw new Error('Support request not found');
+    }
+
+    // Sadece alıcı (expert) accept edebilir
+    if (request.toUserId !== expertUserId) {
+      throw new Error('Only the recipient can accept the support request');
+    }
+
+    // Sadece pending request'ler accept edilebilir
+    if (!request.isPending()) {
+      throw new Error('Only pending support requests can be accepted');
+    }
+
+    // Her support request için yeni bir thread oluştur (unique constraint kaldırıldı)
+    // Her request accept edildiğinde yeni bir support thread oluşturulur
+    const supportThread = await this.dmThreadRepo.create({
+      userOneId: request.fromUserId,
+      userTwoId: request.toUserId,
+      isActive: true,
+      isSupportThread: true, // Support thread
+      startedAt: new Date(),
+    });
+
+    // Request'i ACCEPTED yap ve threadId'yi kaydet
+    await this.dmRequestRepo.update(requestId, {
+      status: DMRequestStatus.ACCEPTED,
+      respondedAt: new Date(),
+      threadId: supportThread.id, // Thread ID'yi DMRequest'e kaydet
+    });
+
+    // Socket bildirimi gönder - support request accepted
+    const socketHandler = SocketManager.getInstance().getSocketHandler();
+    
+    const acceptedEvent = {
+      requestId: request.id,
+      threadId: supportThread.id,
+      senderId: request.fromUserId,
+      recipientId: request.toUserId,
+      messageType: 'support-request-accepted' as const,
+      timestamp: new Date().toISOString(),
+    };
+
+    // Her iki kullanıcıya da bildir
+    socketHandler.sendMessageToUser(request.fromUserId, 'support_request_accepted', acceptedEvent);
+    socketHandler.sendMessageToUser(request.toUserId, 'support_request_accepted', acceptedEvent);
+
+    logger.info(`Support request ${requestId} accepted by ${expertUserId}, thread ${supportThread.id} created`);
+
+    return {
+      requestId: request.id,
+      threadId: supportThread.id,
+    };
+  }
+
+  /**
+   * Support request'i sender tarafından cancel et
+   */
+  async cancelSupportRequest(
+    requestId: string,
+    requesterId: string
+  ): Promise<void> {
+    const request = await this.dmRequestRepo.findById(requestId);
+    if (!request) {
+      throw new Error('Support request not found');
+    }
+
+    if (request.fromUserId !== requesterId) {
+      throw new Error('Only the sender can cancel the support request');
+    }
+
+    if (!request.isPending()) {
+      throw new Error('Only pending support requests can be canceled');
+    }
+
+    await this.dmRequestRepo.update(requestId, {
+      status: DMRequestStatus.CANCELED,
+      respondedAt: new Date(),
+      threadId: null,
+    });
+
+    const socketHandler = SocketManager.getInstance().getSocketHandler();
+    const cancelledEvent = {
+      requestId: request.id,
+      status: 'canceled' as const,
+      timestamp: new Date().toISOString(),
+    };
+
+    socketHandler.sendMessageToUser(request.fromUserId, 'support_request_cancelled', cancelledEvent);
+    socketHandler.sendMessageToUser(request.toUserId, 'support_request_cancelled', cancelledEvent);
+
+    logger.info(`Support request ${requestId} cancelled by ${requesterId}`);
+  }
+
+  /**
+   * Support request'i reject et
+   */
+  async rejectSupportRequest(
+    requestId: string,
+    expertUserId: string
+  ): Promise<void> {
+    const request = await this.dmRequestRepo.findById(requestId);
+    if (!request) {
+      throw new Error('Support request not found');
+    }
+
+    // Sadece alıcı (expert) reject edebilir
+    if (request.toUserId !== expertUserId) {
+      throw new Error('Only the recipient can reject the support request');
+    }
+
+    // Sadece pending request'ler reject edilebilir
+    if (!request.isPending()) {
+      throw new Error('Only pending support requests can be rejected');
+    }
+
+    // Request'i DECLINED yap
+    await this.dmRequestRepo.update(requestId, {
+      status: DMRequestStatus.DECLINED,
+      respondedAt: new Date(),
+    });
+
+    // Socket bildirimi gönder - support request rejected
+    const socketHandler = SocketManager.getInstance().getSocketHandler();
+    
+    const rejectedEvent = {
+      requestId: request.id,
+      senderId: request.fromUserId,
+      recipientId: request.toUserId,
+      messageType: 'support-request-rejected' as const,
+      timestamp: new Date().toISOString(),
+    };
+
+    // Göndericiye bildir
+    socketHandler.sendMessageToUser(request.fromUserId, 'support_request_rejected', rejectedEvent);
+
+    logger.info(`Support request ${requestId} rejected by ${expertUserId}`);
+  }
+
+  /**
+   * Support request'i kapat ve rating ver
+   * Her iki kullanıcı da close yaptığında request COMPLETED olur
+   */
+  async closeSupportRequest(
+    requestId: string,
+    userId: string,
+    rating: number // 1-5 arası
+  ): Promise<void> {
+    const request = await this.dmRequestRepo.findById(requestId);
+    if (!request) {
+      throw new Error('Support request not found');
+    }
+
+    // Kullanıcının request'te rolü var mı kontrol et
+    if (!request.involveUser(userId)) {
+      throw new Error('User is not part of this support request');
+    }
+
+    // Sadece ACCEPTED request'ler close edilebilir
+    if (!request.isAccepted()) {
+      throw new Error('Only accepted support requests can be closed');
+    }
+
+    // Rating 1-5 arası olmalı
+    if (!rating || rating < 1 || rating > 5) {
+      throw new Error('Rating must be between 1 and 5');
+    }
+
+    // Zaten close yapmışsa tekrar yapamaz
+    if (request.isClosedByUser(userId)) {
+      throw new Error('User has already closed this request');
+    }
+
+    const now = new Date();
+    const isFromUser = request.belongsToSender(userId);
+    const updateData: {
+      fromUserRating?: number | null;
+      toUserRating?: number | null;
+      closedByFromUserAt?: Date | null;
+      closedByToUserAt?: Date | null;
+      status?: DMRequestStatus;
+    } = {};
+
+    // Rating ve close timestamp'i kaydet
+    if (isFromUser) {
+      updateData.fromUserRating = rating;
+      updateData.closedByFromUserAt = now;
+    } else {
+      updateData.toUserRating = rating;
+      updateData.closedByToUserAt = now;
+    }
+
+    // Diğer kullanıcı da close yaptı mı kontrol et
+    const otherUserClosed = isFromUser 
+      ? request.closedByToUserAt !== null
+      : request.closedByFromUserAt !== null;
+
+    if (otherUserClosed) {
+      // Her iki kullanıcı da close yaptı, COMPLETED yap
+      updateData.status = DMRequestStatus.COMPLETED;
+    } else {
+      // Sadece biri close yaptı, AWAITING_COMPLETION yap
+      updateData.status = DMRequestStatus.AWAITING_COMPLETION;
+      
+      // 1 gün sonra otomatik complete için scheduled job ekle
+      // TODO: Implement scheduled job for auto-completion after 1 day
+      // For now, we'll handle this in a daily cron job
+    }
+
+    await this.dmRequestRepo.update(requestId, updateData);
+
+    // Socket bildirimi gönder
+    const socketHandler = SocketManager.getInstance().getSocketHandler();
+    const closedEvent = {
+      requestId: request.id,
+      status: updateData.status === DMRequestStatus.COMPLETED ? 'completed' as const : 'awaiting_completion' as const,
+      userId,
+      rating,
+      timestamp: now.toISOString(),
+    };
+
+    // Her iki kullanıcıya da bildir
+    socketHandler.sendMessageToUser(request.fromUserId, 'support_request_closed', closedEvent);
+    socketHandler.sendMessageToUser(request.toUserId, 'support_request_closed', closedEvent);
+
+    logger.info(`Support request ${requestId} closed by ${userId} with rating ${rating}, status: ${updateData.status}`);
+  }
+
+  /**
+   * AWAITING_COMPLETION durumundaki request'leri 1 gün sonra otomatik olarak COMPLETED yap
+   * Sadece bir kullanıcı close yaptıysa ve 1 gün geçtiyse, diğer kullanıcının da close yapmış gibi işle
+   */
+  async autoCompleteAwaitingRequests(): Promise<void> {
+    try {
+      // AWAITING_COMPLETION durumundaki tüm request'leri bul
+      // Tüm kullanıcıların request'lerini almak için Prisma'yı direkt kullanıyoruz
+      const awaitingRequests = await this.prisma.dMRequest.findMany({
+        where: {
+          status: DMRequestStatus.AWAITING_COMPLETION as any,
+          description: { not: null }, // Support requests only
+        },
+        include: {
+          fromUser: {
+            include: {
+              profile: true,
+            },
+          },
+          toUser: {
+            include: {
+              profile: true,
+            },
+          },
+        },
+      });
+
+      const now = new Date();
+      const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 1 gün önce
+      const socketHandler = SocketManager.getInstance().getSocketHandler();
+
+      let completedCount = 0;
+
+      for (const prismaRequest of awaitingRequests) {
+        const request = this.dmRequestRepo.toDomain(prismaRequest as any);
+        if (!request) continue;
+
+        // Sadece AWAITING_COMPLETION durumundaki request'ler
+        if (request.status !== DMRequestStatus.AWAITING_COMPLETION) continue;
+
+        // Prisma request'inden closed timestamps'leri al (domain entity'de henüz güncel olmayabilir)
+        const closedByFromUserAt = (prismaRequest as any).closedByFromUserAt as Date | null;
+        const closedByToUserAt = (prismaRequest as any).closedByToUserAt as Date | null;
+
+        // Hangi kullanıcı close yaptı ve ne zaman?
+        let closedTimestamp: Date | null = null;
+        let closedByUserId: string | null = null;
+        let needsAutoClose = false;
+
+        if (closedByFromUserAt && !closedByToUserAt) {
+          // Sadece fromUser close yaptı, toUser yapmadı
+          if (closedByFromUserAt <= oneDayAgo) {
+            closedTimestamp = closedByFromUserAt;
+            closedByUserId = request.fromUserId;
+            needsAutoClose = true;
+          }
+        } else if (closedByToUserAt && !closedByFromUserAt) {
+          // Sadece toUser close yaptı, fromUser yapmadı
+          if (closedByToUserAt <= oneDayAgo) {
+            closedTimestamp = closedByToUserAt;
+            closedByUserId = request.toUserId;
+            needsAutoClose = true;
+          }
+        }
+
+        if (needsAutoClose && closedTimestamp && closedByUserId) {
+          // Diğer kullanıcının da close yapmış gibi işle
+          // Rating'i yoksa varsayılan olarak 3 ver (orta değer)
+          const isFromUser = closedByUserId === request.fromUserId;
+          const updateData: {
+            fromUserRating?: number | null;
+            toUserRating?: number | null;
+            closedByFromUserAt?: Date | null;
+            closedByToUserAt?: Date | null;
+            status?: DMRequestStatus;
+          } = {
+            status: DMRequestStatus.COMPLETED,
+          };
+
+          if (isFromUser) {
+            // fromUser close yaptı, toUser için otomatik close
+            updateData.toUserRating = 3; // Varsayılan rating
+            updateData.closedByToUserAt = now;
+          } else {
+            // toUser close yaptı, fromUser için otomatik close
+            updateData.fromUserRating = 3; // Varsayılan rating
+            updateData.closedByFromUserAt = now;
+          }
+
+          await this.dmRequestRepo.update(request.id, updateData);
+
+          // Socket bildirimi gönder
+          const completedEvent = {
+            requestId: request.id,
+            status: 'completed' as const,
+            userId: null, // Sistem otomatik olarak yaptı
+            rating: 3,
+            timestamp: now.toISOString(),
+            autoCompleted: true,
+          };
+
+          socketHandler.sendMessageToUser(request.fromUserId, 'support_request_closed', completedEvent);
+          socketHandler.sendMessageToUser(request.toUserId, 'support_request_closed', completedEvent);
+
+          completedCount++;
+          logger.info(`Auto-completed support request ${request.id} after 1 day (closed by ${closedByUserId})`);
+        }
+      }
+
+      if (completedCount > 0) {
+        logger.info(`Auto-completed ${completedCount} support request(s) after 1 day`);
+      }
+    } catch (error: any) {
+      logger.error('Error in autoCompleteAwaitingRequests:', error);
+    }
+  }
+
+  /**
+   * Support request için rapor oluştur
+   */
+  async reportSupportRequest(
+    requestId: string,
+    reporterId: string,
+    category: SupportRequestReportCategory,
+    description?: string | null,
+  ): Promise<void> {
+    const request = await this.dmRequestRepo.findById(requestId);
+    if (!request) {
+      throw new Error('Support request not found');
+    }
+
+    if (!request.involveUser(reporterId)) {
+      throw new Error('Only participants can report the support request');
+    }
+
+    // Aynı kullanıcı aynı request'i birden fazla kez raporlayamaz
+    const existingReport = await this.supportRequestReportRepo.findByRequestIdAndReporterId(requestId, reporterId);
+    if (existingReport) {
+      throw new Error('Bu destek talebi zaten raporlanmış. Her kullanıcı bir request için sadece bir kez rapor gönderebilir.');
+    }
+
+    const normalizedCategory = String(category || '').toUpperCase() as SupportRequestReportCategory;
+    if (!SupportRequestService.REPORT_CATEGORIES.includes(normalizedCategory)) {
+      throw new Error('Invalid report category');
+    }
+
+    const trimmedDescription = description?.trim();
+    if (trimmedDescription && trimmedDescription.length > 500) {
+      throw new Error('Description is too long');
+    }
+    await this.supportRequestReportRepo.create({
+      requestId,
+      reporterId,
+      category: normalizedCategory,
+      description: trimmedDescription || null,
+    });
+
+    const socketHandler = SocketManager.getInstance().getSocketHandler();
+    const reportEvent = {
+      requestId: request.id,
+      category: normalizedCategory,
+      description: trimmedDescription || null,
+      reporterId,
+      timestamp: new Date().toISOString(),
+    };
+
+    socketHandler.sendMessageToUser(request.fromUserId, 'support_request_reported', reportEvent);
+    socketHandler.sendMessageToUser(request.toUserId, 'support_request_reported', reportEvent);
+
+    logger.info(`Support request ${requestId} reported by ${reporterId} with category ${normalizedCategory}`);
   }
 }
 

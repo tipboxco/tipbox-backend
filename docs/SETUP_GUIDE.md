@@ -41,6 +41,15 @@ Bu komut şu servisleri başlatır:
 - PgAdmin (port: 5050)
 - Backend (port: 3000)
 
+> 🔔 **Not:** Container'lar ayağa kalktığında backend hazır olur olmaz tarayıcıda `http://localhost:3000` otomatik açılsın istiyorsanız aşağıdaki wrapper komutlarını kullanabilirsiniz:
+>
+> ```bash
+> npm run docker:up       # docker compose up (detached) + tarayıcı açılışı
+> npm run docker:start    # docker compose start + tarayıcı açılışı
+> npm run docker:restart  # docker compose restart + tarayıcı açılışı
+> ```
+
+
 ### 4. Veritabanı Şemasını Uygulayın
 
 ```bash
@@ -280,4 +289,3 @@ Yeni bir özellik eklerken:
 
 **Son Güncelleme:** 2024
 **Versiyon:** 1.0.0
-

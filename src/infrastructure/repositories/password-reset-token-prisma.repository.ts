@@ -125,8 +125,8 @@ export class PasswordResetTokenPrismaRepository {
       prismaToken.id,
       prismaToken.userId,
       prismaToken.token,
-      prismaToken.expiresAt,
       prismaToken.isUsed,
+      prismaToken.expiresAt,
       prismaToken.createdAt,
       prismaToken.updatedAt
     );

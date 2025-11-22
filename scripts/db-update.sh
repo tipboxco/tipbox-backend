@@ -404,3 +404,8 @@ trap 'error "Script hataya düştü. Log dosyasını kontrol edin: $LOG_FILE"; e
 main
 
 
+
+
+
+
+

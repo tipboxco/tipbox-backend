@@ -1,8 +1,8 @@
 export class DMSupportSession {
   constructor(
     public readonly id: string,
-    public readonly threadId: number,
-    public readonly helperId: number,
+    public readonly threadId: string,
+    public readonly helperId: string,
     public readonly tipsAmount: number,
     public readonly supportedAt: Date,
     public readonly createdAt: Date,
@@ -10,11 +10,11 @@ export class DMSupportSession {
   ) {}
 
   // Essential business methods only
-  belongsToThread(threadId: number): boolean {
+  belongsToThread(threadId: string): boolean {
     return this.threadId === threadId;
   }
 
-  belongsToHelper(helperId: number): boolean {
+  belongsToHelper(helperId: string): boolean {
     return this.helperId === helperId;
   }
 

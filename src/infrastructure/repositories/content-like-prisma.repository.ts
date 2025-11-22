@@ -57,7 +57,8 @@ export class ContentLikePrismaRepository {
     const like = await this.prisma.contentLike.create({
       data: {
         userId: data.userId!,
-        postId: data.postId!,
+        postId: data.postId ?? null,
+        commentId: data.commentId ?? null,
         createdAt: data.createdAt || new Date(),
       },
       include: {

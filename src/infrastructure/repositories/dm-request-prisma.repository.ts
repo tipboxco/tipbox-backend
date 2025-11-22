@@ -2,6 +2,7 @@ import { PrismaClient, Prisma } from '@prisma/client';
 import { DMRequest } from '../../domain/messaging/dm-request.entity';
 import { DMRequestStatus } from '../../domain/messaging/dm-request-status.enum';
 import { SupportType as DomainSupportType } from '../../domain/messaging/support-type.enum';
+import logger from '../logger/logger';
 
 // SupportType will be available from Prisma after TypeScript server restart
 type PrismaSupportType = 'GENERAL' | 'TECHNICAL' | 'PRODUCT';
@@ -84,7 +85,7 @@ export class DMRequestPrismaRepository {
 
     // Filter by status (DMRequestStatus)
     if (options.status) {
-      where.status = options.status as DMRequestStatus;
+      where.status = options.status ;
     }
 
     const requests = await this.prisma.dMRequest.findMany({
@@ -119,18 +120,20 @@ export class DMRequestPrismaRepository {
       }
     }
 
+    const now = new Date();
     const request = await this.prisma.dMRequest.create({
       data: {
         fromUserId: data.fromUserId,
         toUserId: data.toUserId,
         status: data.status || DMRequestStatus.PENDING,
-        type: supportType as any, // TypeScript will recognize after server restart
+        type: supportType as any,
         amount: data.amount ?? 0,
         description: data.description || null,
-        sentAt: new Date(),
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      } as any, // TypeScript will recognize after server restart
+        sentAt: now,
+        respondedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      } as any,
       include: DM_REQUEST_INCLUDE,
     });
     return this.toDomain(request);
@@ -140,23 +143,71 @@ export class DMRequestPrismaRepository {
     status?: DMRequestStatus;
     description?: string | null;
     respondedAt?: Date | null;
+    threadId?: string | null;
+    fromUserRating?: number | null;
+    toUserRating?: number | null;
+    closedByFromUserAt?: Date | null;
+    closedByToUserAt?: Date | null;
   }): Promise<DMRequest | null> {
     try {
+      // Prisma client'ın threadId field'ını tanıması için type assertion
+      const updateData: any = {
+        updatedAt: new Date(),
+      };
+      
+      // Her field'ı explicit olarak ekle
+      if (data.status !== undefined) {
+        updateData.status = data.status;
+      }
+      
+      if (data.description !== undefined) {
+        updateData.description = data.description;
+      }
+      
+      if (data.respondedAt !== undefined) {
+        updateData.respondedAt = data.respondedAt;
+      }
+      
+      if (data.threadId !== undefined) {
+        updateData.threadId = data.threadId;
+      }
+      
+      if (data.fromUserRating !== undefined) {
+        updateData.fromUserRating = data.fromUserRating;
+      }
+      
+      if (data.toUserRating !== undefined) {
+        updateData.toUserRating = data.toUserRating;
+      }
+      
+      if (data.closedByFromUserAt !== undefined) {
+        updateData.closedByFromUserAt = data.closedByFromUserAt;
+      }
+      
+      if (data.closedByToUserAt !== undefined) {
+        updateData.closedByToUserAt = data.closedByToUserAt;
+      }
+      
       const request = await this.prisma.dMRequest.update({
         where: { id },
-        data: {
-          ...data,
-          updatedAt: new Date(),
-        },
+        data: updateData,
         include: DM_REQUEST_INCLUDE,
       });
+      
+      logger.info(`DMRequest ${id} updated:`, {
+        status: data.status,
+        threadId: data.threadId,
+        hasThreadId: !!data.threadId,
+      });
+      
       return this.toDomain(request);
-    } catch {
+    } catch (error) {
+      logger.error(`Failed to update DMRequest ${id}:`, error);
       return null;
     }
   }
 
-  private toDomain(prismaRequest: DMRequestWithRelations): DMRequest {
+  public toDomain(prismaRequest: DMRequestWithRelations): DMRequest {
     // Map Prisma SupportType to domain SupportType
     // Type assertion needed until TypeScript picks up the updated Prisma types
     const prismaRequestWithType = prismaRequest as DMRequestWithRelations & { type: PrismaSupportType; amount: number | Prisma.Decimal };
@@ -179,6 +230,11 @@ export class DMRequestPrismaRepository {
       supportType,
       amount,
       prismaRequest.description,
+      (prismaRequest as any).threadId ?? null,
+      (prismaRequest as any).fromUserRating ?? null,
+      (prismaRequest as any).toUserRating ?? null,
+      (prismaRequest as any).closedByFromUserAt ?? null,
+      (prismaRequest as any).closedByToUserAt ?? null,
       prismaRequest.sentAt,
       prismaRequest.respondedAt,
       prismaRequest.createdAt,

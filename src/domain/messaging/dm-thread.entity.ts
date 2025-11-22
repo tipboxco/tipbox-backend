@@ -4,6 +4,7 @@ export class DMThread {
     public readonly userOneId: string,
     public readonly userTwoId: string,
     public readonly isActive: boolean,
+    public readonly isSupportThread: boolean,
     public readonly startedAt: Date,
     public readonly createdAt: Date,
     public readonly updatedAt: Date
@@ -23,8 +24,10 @@ export class DMThread {
   }
 
   isThreadBetweenUsers(userId1: string, userId2: string): boolean {
-    return (this.userOneId === userId1 && this.userTwoId === userId2) ||
-           (this.userOneId === userId2 && this.userTwoId === userId1);
+    return (
+      (this.userOneId === userId1 && this.userTwoId === userId2) ||
+      (this.userOneId === userId2 && this.userTwoId === userId1)
+    );
   }
 
   getDaysSinceStarted(): number {
@@ -66,5 +69,9 @@ export class DMThread {
 
   canReceiveMessages(): boolean {
     return this.isActive;
+  }
+
+  isSupportContext(): boolean {
+    return this.isSupportThread;
   }
 }
