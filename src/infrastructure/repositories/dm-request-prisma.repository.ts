@@ -85,7 +85,7 @@ export class DMRequestPrismaRepository {
 
     // Filter by status (DMRequestStatus)
     if (options.status) {
-      where.status = options.status ;
+      where.status = options.status as DMRequestStatus;
     }
 
     const requests = await this.prisma.dMRequest.findMany({

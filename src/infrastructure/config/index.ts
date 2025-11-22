@@ -62,6 +62,8 @@ function getConfig(): Config {
   if (!process.env.PORT) {
     throw new Error('PORT tanımlı değil!');
   }
+  
+  const nodeEnv = process.env.NODE_ENV || 'development';
   if (!nodeEnv) {
     throw new Error('NODE_ENV tanımlı değil!');
   }

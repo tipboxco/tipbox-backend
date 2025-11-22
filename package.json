@@ -122,7 +122,6 @@
     "jwks-rsa": "^3.2.0",
     "morgan": "^1.10.0",
     "multer": "^2.0.2",
-    "node-cron": "^4.2.1",
     "nodemailer": "^7.0.10",
     "prom-client": "^15.1.3",
     "redis": "^4.6.12",
