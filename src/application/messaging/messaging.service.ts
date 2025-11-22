@@ -6,7 +6,7 @@ import { DMThreadPrismaRepository } from '../../infrastructure/repositories/dm-t
 import { UserPrismaRepository } from '../../infrastructure/repositories/user-prisma.repository';
 import SocketManager from '../../infrastructure/realtime/socket-manager';
 import logger from '../../infrastructure/logger/logger';
-import { PrismaClient, Prisma, DMMessageContext } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import {
   MessageFeed,
   MessageFeedItem,
@@ -84,7 +84,7 @@ export class MessagingService {
         senderId: String(senderId),
         message,
         isRead: false,
-        context: DMMessageContext.DM,
+        context: "DM",
         sentAt: new Date(),
       },
     });
@@ -99,22 +99,22 @@ export class MessagingService {
     const newMessageEvent = {
       messageId: createdMessage.id,
       threadId: thread.id,
-      senderId: String(senderId),
-      recipientId: String(recipientId),
+      senderId: senderId,
+      recipientId: recipientId,
       message,
       messageType: 'message' as const,
-      context: DMMessageContext.DM,
+      context: "DM",
       timestamp: createdMessage.sentAt.toISOString(),
     };
 
     // Alıcıya kendi odasına gönder
-    socketHandler.sendMessageToUser(String(recipientId), 'new_message', newMessageEvent);
+    socketHandler.sendMessageToUser(recipientId, 'new_message', newMessageEvent);
     
     // Thread room'una gönder (her iki kullanıcı da thread room'unda olabilir)
     socketHandler.sendToRoom(`thread:${thread.id}`, 'new_message', newMessageEvent);
 
     // Göndericiye message_sent event'i gönder
-    socketHandler.sendMessageToUser(String(senderId), 'message_sent', newMessageEvent);
+    socketHandler.sendMessageToUser(senderId, 'message_sent', newMessageEvent);
 
     logger.info(`Direct message sent from ${senderId} to ${recipientId}, socket events emitted`);
   }
@@ -140,10 +140,10 @@ export class MessagingService {
     const createdMessage = await this.prisma.dMMessage.create({
       data: {
         threadId: thread.id,
-        senderId: String(senderId),
+        senderId: senderId,
         message: body,
         isRead: false,
-        context: DMMessageContext.DM,
+        context: "DM",
         sentAt: new Date(),
       },
     });
@@ -157,18 +157,18 @@ export class MessagingService {
     const tipsEvent = {
       messageId: tipsTransfer.id,
       threadId: thread.id,
-      senderId: String(senderId),
-      recipientId: String(recipientId),
+      senderId: senderId,
+      recipientId: recipientId,
       message: tipsMessage || '',
       messageType: 'send-tips' as const,
       amount,
-      context: DMMessageContext.DM,
+      context: "DM",
       timestamp: tipsTransfer.createdAt.toISOString(),
     };
 
-    socketHandler.sendMessageToUser(String(recipientId), 'new_message', tipsEvent);
+    socketHandler.sendMessageToUser(recipientId, 'new_message', tipsEvent);
     socketHandler.sendToRoom(`thread:${thread.id}`, 'new_message', tipsEvent);
-    socketHandler.sendMessageToUser(String(senderId), 'message_sent', tipsEvent);
+    socketHandler.sendMessageToUser(senderId, 'message_sent', tipsEvent);
 
     logger.info(`TIPS sent from ${senderId} to ${recipientId}, amount: ${amount}, socket events emitted`);
   }
@@ -199,13 +199,13 @@ export class MessagingService {
       await this.dmMessageRepo.update(messageId, { isRead: true });
 
       // Göndericiye okundu bildirimi gönder
-      const senderId = String(message.senderId);
+      const senderId = message.senderId;
       SocketManager.getInstance().getSocketHandler().sendMessageToUser(
         senderId,
         'message_read',
         {
           messageId: message.id,
-          threadId: String(thread.id),
+          threadId: thread.id,
           readBy: userIdStr,
           timestamp: new Date().toISOString(),
         }
@@ -254,7 +254,7 @@ export class MessagingService {
       const timestamp = new Date().toISOString();
 
       for (const message of unreadMessages) {
-        const senderId = String(message.senderId);
+        const senderId = message.senderId;
         socketHandler.sendMessageToUser(senderId, 'message_read', {
           messageId: message.id,
           threadId,
@@ -300,7 +300,7 @@ export class MessagingService {
         return false;
       }
 
-      const userIdStr = String(userId);
+      const userIdStr = userId;
       const isParticipant = thread.userOneId === userIdStr || thread.userTwoId === userIdStr;
       return isParticipant;
     } catch (error) {
@@ -320,7 +320,7 @@ export class MessagingService {
         throw new Error('Thread not found');
       }
 
-      const userIdStr = String(userId);
+        const userIdStr = userId;
       const isParticipant = thread.userOneId === userIdStr || thread.userTwoId === userIdStr;
       if (!isParticipant) {
         throw new Error('User is not a participant of this thread');
@@ -357,7 +357,7 @@ export class MessagingService {
           const messageText = msg.message || '';
           
           // SUPPORT context kontrolü
-          const isSupportContext = context === DMMessageContext.SUPPORT;
+          const isSupportContext = context === "SUPPORT";
           
           // TIPS mesajı kontrolü - TIPS mesajlarını hariç tut
           const isTipsMessage = messageText.includes('Sent') && messageText.includes('TIPS');
@@ -428,7 +428,7 @@ export class MessagingService {
       const messages = allMessages.filter((msg) => {
         const context = msg.context;
         // NULL, undefined veya DM olan mesajları dahil et, SUPPORT olanları hariç tut
-        return context === null || context === undefined || context === DMMessageContext.DM;
+        return context === null || context === undefined || context === "DM";
       });
       
       for (const message of messages) {
@@ -730,7 +730,7 @@ export class MessagingService {
    */
   async getUserMessageFeed(userId: string, limit = 50): Promise<MessageFeed> {
     try {
-      const userIdStr = String(userId);
+      const userIdStr = userId;
       const feedItems: MessageFeedItem[] = [];
 
       // 1. Mesajları getir (thread'lerden)
@@ -992,7 +992,7 @@ export class MessagingService {
         throw new Error('Thread is not a support chat');
       }
 
-      const userIdStr = String(senderId);
+      const userIdStr = senderId;
       if (!thread.belongsToUser(userIdStr)) {
         throw new Error('User is not a participant of this thread');
       }
@@ -1006,7 +1006,7 @@ export class MessagingService {
           senderId: userIdStr,
           message,
           isRead: false,
-          context: DMMessageContext.SUPPORT,
+          context: "SUPPORT",
           sentAt: new Date(),
         },
       });
@@ -1025,12 +1025,12 @@ export class MessagingService {
         recipientId,
         message,
         messageType: 'message' as const,
-        context: DMMessageContext.SUPPORT,
+        context: "SUPPORT",
         timestamp: createdMessage.sentAt.toISOString(),
       };
 
       // Alıcıya kendi odasına gönder
-      socketHandler.sendMessageToUser(String(recipientId), 'new_message', newMessageEvent);
+        socketHandler.sendMessageToUser(recipientId, 'new_message', newMessageEvent);
       
       // Thread room'una gönder
       socketHandler.sendToRoom(`thread:${thread.id}`, 'new_message', newMessageEvent);
