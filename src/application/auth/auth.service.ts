@@ -37,9 +37,9 @@ export class AuthService implements IAuthService {
   }
 
   /**
-   * Manuel signup - Email ve password ile kayıt başlatır, verification code gönderir
+   * Manuel signup - Email, password ve name ile kayıt başlatır, verification code gönderir
    */
-  async signup(email: string, password: string): Promise<{ success: boolean; message: string }> {
+  async signup(email: string, password: string, name?: string): Promise<{ success: boolean; message: string }> {
     // Email kontrolü
     const existingUser = await this.userRepo.findByEmail(email);
     if (existingUser) {
@@ -53,12 +53,18 @@ export class AuthService implements IAuthService {
     const passwordHash = await bcrypt.hash(password, 10);
 
     // Kullanıcı oluştur (emailVerified false olarak)
+    // Eğer name varsa profile da oluştur
     const user = await this.prisma.user.create({
       data: {
         email,
         passwordHash,
         emailVerified: false,
         status: 'PENDING_VERIFICATION',
+        profile: name ? {
+          create: {
+            displayName: name,
+          },
+        } : undefined,
       },
       include: {
         profile: true,

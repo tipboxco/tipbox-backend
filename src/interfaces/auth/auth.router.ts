@@ -179,8 +179,8 @@ router.post('/login', asyncHandler(async (req: Request, res: Response) => {
  * @openapi
  * /auth/register:
  *   post:
- *     summary: Yeni kullanıcı kaydı
- *     description: Email, şifre ve isim ile yeni kullanıcı oluşturur ve JWT token döner
+ *     summary: Manuel kullanıcı kaydı
+ *     description: Email, şifre ve isim ile kullanıcı kaydı başlatır. Email doğrulama kodu gönderilir.
  *     tags: [Authentication]
  *     requestBody:
  *       required: true
@@ -196,7 +196,7 @@ router.post('/login', asyncHandler(async (req: Request, res: Response) => {
  *               email:
  *                 type: string
  *                 format: email
- *                 example: omer@tipbox.co
+ *                 example: user@example.com
  *                 description: Kullanıcının email adresi (benzersiz olmalı)
  *               password:
  *                 type: string
@@ -209,83 +209,6 @@ router.post('/login', asyncHandler(async (req: Request, res: Response) => {
  *                 maxLength: 50
  *                 example: Ömer Faruk
  *                 description: Kullanıcının tam adı
- *     responses:
- *       201:
- *         description: Başarılı kayıt ve JWT token
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 token:
- *                   type: string
- *                   example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiZW1haWwiOiJvbWVyLmZhcnVrQHRpcGJveC5jb20iLCJpYXQiOjE3NjE3MjczNDMsImV4cCI6MTc2MTczMDk0M30.example_signature
- *                   description: JWT access token (1 saat geçerli)
- *       400:
- *         description: Geçersiz istek formatı
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: Email, şifre ve isim alanları zorunludur
- *       409:
- *         description: Email zaten kayıtlı
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: Bu email adresi zaten kayıtlı
- *       500:
- *         description: Sunucu hatası
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: Kayıt işlemi sırasında bir hata oluştu
- */
-router.post('/register', asyncHandler(async (req: Request, res: Response) => {
-  const { email, password, name } = req.body;
-  const user = await authService.register(email, password, name);
-  const token = authService.generateToken(user);
-  res.status(201).json({ token });
-}));
-
-/**
- * @openapi
- * /auth/signup:
- *   post:
- *     summary: Manuel kullanıcı kaydı
- *     description: Email ve şifre ile kullanıcı kaydı başlatır. Email doğrulama kodu gönderilir.
- *     tags: [Authentication]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - email
- *               - password
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *                 example: user@example.com
- *                 description: Kullanıcının email adresi (benzersiz olmalı)
- *               password:
- *                 type: string
- *                 minLength: 6
- *                 example: password123
- *                 description: Kullanıcının şifresi (minimum 6 karakter)
  *     responses:
  *       200:
  *         description: Kayıt başarılı, email doğrulama kodu gönderildi
@@ -312,7 +235,7 @@ router.post('/register', asyncHandler(async (req: Request, res: Response) => {
  *                   example: false
  *                 message:
  *                   type: string
- *                   example: Email ve şifre alanları zorunludur
+ *                   example: Email, şifre ve isim alanları zorunludur
  *       409:
  *         description: Email zaten kayıtlı
  *         content:
@@ -340,13 +263,13 @@ router.post('/register', asyncHandler(async (req: Request, res: Response) => {
  *                   type: string
  *                   example: Email gönderilemedi. Lütfen tekrar deneyin.
  */
-router.post('/signup', asyncHandler(async (req: Request, res: Response) => {
-  const { email, password } = req.body;
+router.post('/register', asyncHandler(async (req: Request, res: Response) => {
+  const { email, password, name } = req.body;
 
-  if (!email || !password) {
+  if (!email || !password || !name) {
     return res.status(400).json({
       success: false,
-      message: 'Email ve şifre alanları zorunludur',
+      message: 'Email, şifre ve isim alanları zorunludur',
     });
   }
 
@@ -357,7 +280,14 @@ router.post('/signup', asyncHandler(async (req: Request, res: Response) => {
     });
   }
 
-  const result = await authService.signup(email, password);
+  if (name.length < 2 || name.length > 50) {
+    return res.status(400).json({
+      success: false,
+      message: 'İsim en az 2, en fazla 50 karakter olmalıdır',
+    });
+  }
+
+  const result = await authService.signup(email, password, name);
 
   if (!result.success) {
     const statusCode = result.message.includes('zaten kayıtlı') ? 409 : 500;
