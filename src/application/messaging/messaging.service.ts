@@ -6,7 +6,7 @@ import { DMThreadPrismaRepository } from '../../infrastructure/repositories/dm-t
 import { UserPrismaRepository } from '../../infrastructure/repositories/user-prisma.repository';
 import SocketManager from '../../infrastructure/realtime/socket-manager';
 import logger from '../../infrastructure/logger/logger';
-import { PrismaClient, DMMessageContext } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import {
   MessageFeed,
   MessageFeedItem,
@@ -84,7 +84,7 @@ export class MessagingService {
         senderId: String(senderId),
         message,
         isRead: false,
-        context: (DMMessageContext?.DM ?? 'DM') as any, // DM context'li mesaj
+        context: 'DM' , // DM context'li mesaj
         sentAt: new Date(),
       } as any,
     });
@@ -143,7 +143,7 @@ export class MessagingService {
         senderId: String(senderId),
         message: body,
         isRead: false,
-        context: (DMMessageContext?.DM ?? 'DM') as any, // DM context'li mesaj
+        context: 'DM', // DM context'li mesaj
         sentAt: new Date(),
       } as any,
     });
@@ -358,9 +358,9 @@ export class MessagingService {
           const messageType = (msg as any).messageType;
           
           // SUPPORT context kontrolü
-          const isSupportContext = context === 'SUPPORT' || context === (DMMessageContext?.SUPPORT ?? 'SUPPORT');
+            const isSupportContext = context === 'SUPPORT';
           
-          // TIPS mesajı kontrolü - TIPS mesajlarını hariç tut
+          // TIPS mesajı kontrolü - TIPS mesajların ı hariç tut
           const isTipsMessage = messageType === 'TIPS' || 
             (messageText.includes('Sent') && messageText.includes('TIPS'));
           
@@ -430,7 +430,7 @@ export class MessagingService {
       const messages = allMessages.filter((msg) => {
         const context = (msg as any).context;
         // NULL, undefined veya 'DM' olan mesajları dahil et, 'SUPPORT' olanları hariç tut
-        return context === null || context === undefined || context === 'DM' || context === (DMMessageContext?.DM ?? 'DM');
+        return context === null || context === undefined || context === 'DM' ;
       });
       
       for (const message of messages) {
@@ -579,16 +579,16 @@ export class MessagingService {
 
         // Map DMRequestStatus to SupportRequestStatus
         let status: SupportRequestStatus;
-        const requestStatus = request.status as DMRequestStatus;
-        if (requestStatus === DMRequestStatus.PENDING) {
+        const requestStatus = request.status as string;
+        if (requestStatus === DMRequestStatus.PENDING || requestStatus === 'PENDING') {
           status = 'pending';
-        } else if (requestStatus === DMRequestStatus.ACCEPTED) {
+        } else if (requestStatus === DMRequestStatus.ACCEPTED || requestStatus === 'ACCEPTED') {
           status = 'accepted';
-        } else if (requestStatus === DMRequestStatus.CANCELED) {
+        } else if (requestStatus === DMRequestStatus.CANCELED || requestStatus === 'CANCELED') {
           status = 'canceled';
-        } else if (requestStatus === DMRequestStatus.AWAITING_COMPLETION) {
+        } else if (requestStatus === DMRequestStatus.AWAITING_COMPLETION || requestStatus === 'AWAITING_COMPLETION') {
           status = 'awaiting_completion';
-        } else if (requestStatus === DMRequestStatus.COMPLETED) {
+        } else if (requestStatus === DMRequestStatus.COMPLETED || requestStatus === 'COMPLETED') {
           status = 'completed';
         } else {
           status = 'rejected';
@@ -835,16 +835,16 @@ export class MessagingService {
 
         // Map DMRequestStatus to SupportRequestStatus
         let status: SupportRequestStatus;
-        const requestStatus = dmRequest.status as DMRequestStatus;
-        if (requestStatus === DMRequestStatus.PENDING) {
+        const requestStatus = dmRequest.status as string;
+        if (requestStatus === DMRequestStatus.PENDING || requestStatus === 'PENDING') {
           status = 'pending';
-        } else if (requestStatus === DMRequestStatus.ACCEPTED) {
+        } else if (requestStatus === DMRequestStatus.ACCEPTED || requestStatus === 'ACCEPTED') {
           status = 'accepted';
-        } else if (requestStatus === DMRequestStatus.CANCELED) {
+        } else if (requestStatus === DMRequestStatus.CANCELED || requestStatus === 'CANCELED') {
           status = 'canceled';
-        } else if (requestStatus === DMRequestStatus.AWAITING_COMPLETION) {
+        } else if (requestStatus === DMRequestStatus.AWAITING_COMPLETION || requestStatus === 'AWAITING_COMPLETION') {
           status = 'awaiting_completion';
-        } else if (requestStatus === DMRequestStatus.COMPLETED) {
+        } else if (requestStatus === DMRequestStatus.COMPLETED || requestStatus === 'COMPLETED') {
           status = 'completed';
         } else {
           status = 'rejected';
@@ -1012,7 +1012,7 @@ export class MessagingService {
           senderId: userIdStr,
           message,
           isRead: false,
-          context: (DMMessageContext?.SUPPORT ?? 'SUPPORT') as any,
+          context: 'SUPPORT',
           sentAt: new Date(),
         } as any,
       });
