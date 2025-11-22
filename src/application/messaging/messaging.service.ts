@@ -6,7 +6,7 @@ import { DMThreadPrismaRepository } from '../../infrastructure/repositories/dm-t
 import { UserPrismaRepository } from '../../infrastructure/repositories/user-prisma.repository';
 import SocketManager from '../../infrastructure/realtime/socket-manager';
 import logger from '../../infrastructure/logger/logger';
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient, Prisma, DMMessageContext } from '@prisma/client';
 import {
   MessageFeed,
   MessageFeedItem,
@@ -54,7 +54,7 @@ export class MessagingService {
           { userOneId: senderId, userTwoId: recipientId },
           { userOneId: recipientId, userTwoId: senderId },
         ],
-      } as any,
+      },
     });
 
     if (existing) return existing;
@@ -67,7 +67,7 @@ export class MessagingService {
         isActive: true,
         isSupportThread: false, // Normal DM thread
         startedAt: new Date(),
-      } as any,
+      },
     });
   }
 
@@ -84,9 +84,9 @@ export class MessagingService {
         senderId: String(senderId),
         message,
         isRead: false,
-        context: 'DM' , // DM context'li mesaj
+        context: DMMessageContext.DM,
         sentAt: new Date(),
-      } as any,
+      },
     });
 
     await this.prisma.dMThread.update({
@@ -103,7 +103,7 @@ export class MessagingService {
       recipientId: String(recipientId),
       message,
       messageType: 'message' as const,
-      context: 'DM' as const, // DM context bilgisi ekle
+      context: DMMessageContext.DM,
       timestamp: createdMessage.sentAt.toISOString(),
     };
 
@@ -126,7 +126,7 @@ export class MessagingService {
         toUserId: recipientId,
         amount,
         reason: tipsMessage || null,
-      } as any,
+      },
     });
 
     const body = tipsMessage
@@ -143,9 +143,9 @@ export class MessagingService {
         senderId: String(senderId),
         message: body,
         isRead: false,
-        context: 'DM', // DM context'li mesaj
+        context: DMMessageContext.DM,
         sentAt: new Date(),
-      } as any,
+      },
     });
 
     await this.prisma.dMThread.update({
@@ -162,7 +162,7 @@ export class MessagingService {
       message: tipsMessage || '',
       messageType: 'send-tips' as const,
       amount,
-      context: 'DM' as const,
+      context: DMMessageContext.DM,
       timestamp: tipsTransfer.createdAt.toISOString(),
     };
 
@@ -353,16 +353,14 @@ export class MessagingService {
 
         // Sadece SUPPORT context'li ve TIPS olmayan mesajları dahil et
         const supportMessages = allMessages.filter((msg) => {
-          const context = (msg as any).context;
-          const messageText = (msg as any).message || '';
-          const messageType = (msg as any).messageType;
+          const context = msg.context;
+          const messageText = msg.message || '';
           
           // SUPPORT context kontrolü
-            const isSupportContext = context === 'SUPPORT';
+          const isSupportContext = context === DMMessageContext.SUPPORT;
           
-          // TIPS mesajı kontrolü - TIPS mesajların ı hariç tut
-          const isTipsMessage = messageType === 'TIPS' || 
-            (messageText.includes('Sent') && messageText.includes('TIPS'));
+          // TIPS mesajı kontrolü - TIPS mesajlarını hariç tut
+          const isTipsMessage = messageText.includes('Sent') && messageText.includes('TIPS');
           
           // Sadece SUPPORT context'li ve TIPS olmayan mesajları dahil et
           return isSupportContext && !isTipsMessage;
@@ -428,9 +426,9 @@ export class MessagingService {
       
       // DM context'li mesajları filtrele (SUPPORT context'li mesajları hariç tut)
       const messages = allMessages.filter((msg) => {
-        const context = (msg as any).context;
-        // NULL, undefined veya 'DM' olan mesajları dahil et, 'SUPPORT' olanları hariç tut
-        return context === null || context === undefined || context === 'DM' ;
+        const context = msg.context;
+        // NULL, undefined veya DM olan mesajları dahil et, SUPPORT olanları hariç tut
+        return context === null || context === undefined || context === DMMessageContext.DM;
       });
       
       for (const message of messages) {
@@ -450,10 +448,8 @@ export class MessagingService {
           senderAvatar: sender.avatars?.[0]?.imageUrl ?? '',
         };
 
-        // Message type'a göre item oluştur (messageType field'ına bak)
-        const prismaMessageType = (message as any).messageType;
-        const isTipsMessage = prismaMessageType === 'TIPS' || 
-          (message.message.includes('Sent') && message.message.includes('TIPS'));
+        // TIPS mesajı kontrolü - message içeriğine göre
+        const isTipsMessage = message.message.includes('Sent') && message.message.includes('TIPS');
         
         // TIPS mesajlarını atla - zaten TipsTokenTransfer'den alıyoruz (duplicate önlemek için)
         if (isTipsMessage) {
@@ -609,7 +605,7 @@ export class MessagingService {
         // DM ekranında support chat mesajlarını yüklemiyoruz
         // Support chat açıldığında threadId ile GET /messages/{threadId} çağrısı yapılacak
         // ThreadId artık direkt DMRequest.threadId field'ından alınacak
-        const requestThreadId = (request as any).threadId as string | null | undefined;
+        const requestThreadId = request.threadId ?? null;
         const supportRequest: SupportRequest = {
           id: request.id,
           sender,
@@ -699,14 +695,13 @@ export class MessagingService {
 
       return threads.map((thread) => {
         const isUserOne = thread.userOneId === userIdStr;
-        const counterpart = (isUserOne ? thread.userTwo : thread.userOne) as any;
+        const counterpart = isUserOne ? thread.userTwo : thread.userOne;
         const unreadCount = isUserOne ? thread.unreadCountUserOne : thread.unreadCountUserTwo;
         const lastMessage = thread.messages?.[0];
         const timestamp = (lastMessage?.sentAt ?? thread.updatedAt).toISOString();
 
         const senderName = counterpart?.profile?.displayName
           || counterpart?.profile?.userName
-          || counterpart?.name
           || counterpart?.email
           || 'Unknown';
 
@@ -742,14 +737,13 @@ export class MessagingService {
       const threads = await this.dmThreadRepo.findDetailedByUserId(userIdStr, { limit: 100 });
       for (const thread of threads) {
         const isUserOne = thread.userOneId === userIdStr;
-        const counterpart = (isUserOne ? thread.userTwo : thread.userOne) as any;
+        const counterpart = isUserOne ? thread.userTwo : thread.userOne;
         const lastMessage = thread.messages?.[0];
 
         if (!lastMessage) continue;
 
         const senderName = counterpart?.profile?.displayName
           || counterpart?.profile?.userName
-          || counterpart?.name
           || counterpart?.email
           || 'Unknown';
 
@@ -874,7 +868,7 @@ export class MessagingService {
           amount,
           status,
           timestamp: dmRequest.sentAt.toISOString(),
-          threadId: (dmRequest as any).threadId ?? null,
+          threadId: dmRequest.threadId ?? null,
           requestId: request.id,
           fromUserId: dmRequest.fromUserId,
           toUserId: dmRequest.toUserId,
@@ -1012,9 +1006,9 @@ export class MessagingService {
           senderId: userIdStr,
           message,
           isRead: false,
-          context: 'SUPPORT',
+          context: DMMessageContext.SUPPORT,
           sentAt: new Date(),
-        } as any,
+        },
       });
 
       await this.prisma.dMThread.update({
@@ -1031,7 +1025,7 @@ export class MessagingService {
         recipientId,
         message,
         messageType: 'message' as const,
-        context: 'SUPPORT' as const,
+        context: DMMessageContext.SUPPORT,
         timestamp: createdMessage.sentAt.toISOString(),
       };
 
