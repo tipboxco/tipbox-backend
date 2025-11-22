@@ -85,7 +85,7 @@ export class DMRequestPrismaRepository {
 
     // Filter by status (DMRequestStatus)
     if (options.status) {
-      where.status = options.status as DMRequestStatus;
+      where.status = options.status ;
     }
 
     const requests = await this.prisma.dMRequest.findMany({
@@ -144,6 +144,10 @@ export class DMRequestPrismaRepository {
     description?: string | null;
     respondedAt?: Date | null;
     threadId?: string | null;
+    fromUserRating?: number | null;
+    toUserRating?: number | null;
+    closedByFromUserAt?: Date | null;
+    closedByToUserAt?: Date | null;
   }): Promise<DMRequest | null> {
     try {
       // Prisma client'ın threadId field'ını tanıması için type assertion
@@ -168,6 +172,22 @@ export class DMRequestPrismaRepository {
         updateData.threadId = data.threadId;
       }
       
+      if (data.fromUserRating !== undefined) {
+        updateData.fromUserRating = data.fromUserRating;
+      }
+      
+      if (data.toUserRating !== undefined) {
+        updateData.toUserRating = data.toUserRating;
+      }
+      
+      if (data.closedByFromUserAt !== undefined) {
+        updateData.closedByFromUserAt = data.closedByFromUserAt;
+      }
+      
+      if (data.closedByToUserAt !== undefined) {
+        updateData.closedByToUserAt = data.closedByToUserAt;
+      }
+      
       const request = await this.prisma.dMRequest.update({
         where: { id },
         data: updateData,
@@ -187,7 +207,7 @@ export class DMRequestPrismaRepository {
     }
   }
 
-  private toDomain(prismaRequest: DMRequestWithRelations): DMRequest {
+  public toDomain(prismaRequest: DMRequestWithRelations): DMRequest {
     // Map Prisma SupportType to domain SupportType
     // Type assertion needed until TypeScript picks up the updated Prisma types
     const prismaRequestWithType = prismaRequest as DMRequestWithRelations & { type: PrismaSupportType; amount: number | Prisma.Decimal };
@@ -211,6 +231,10 @@ export class DMRequestPrismaRepository {
       amount,
       prismaRequest.description,
       (prismaRequest as any).threadId ?? null,
+      (prismaRequest as any).fromUserRating ?? null,
+      (prismaRequest as any).toUserRating ?? null,
+      (prismaRequest as any).closedByFromUserAt ?? null,
+      (prismaRequest as any).closedByToUserAt ?? null,
       prismaRequest.sentAt,
       prismaRequest.respondedAt,
       prismaRequest.createdAt,

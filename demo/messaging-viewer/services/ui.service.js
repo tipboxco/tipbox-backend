@@ -1,6 +1,12 @@
 // UI Service
 import { formatRelative, formatTime, escapeHtml } from '../utils/formatters.js';
 
+const REPORT_CATEGORIES = [
+  { value: 'SPAM', label: 'Spam / İstenmeyen İçerik' },
+  { value: 'HARASSMENT', label: 'Taciz / Uygunsuz Davranış' },
+  { value: 'SCAM', label: 'Dolandırıcılık / Scam' },
+];
+
 export function showAppShell(panelState, side, els) {
   const authPanel = side === 'left' ? els.authPanelLeft : els.authPanelRight;
   const appShell = side === 'left' ? els.appShellLeft : els.appShellRight;
@@ -133,6 +139,13 @@ export function renderMessages(panelState, side, els) {
       rejectSupportRequest(btn.dataset.rejectRequest, panelState, side, els);
     });
   });
+
+  messagesContainer.querySelectorAll('[data-cancel-request]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const { cancelSupportRequest } = await import('./support.service.js');
+      cancelSupportRequest(btn.dataset.cancelRequest, panelState, side, els);
+    });
+  });
 }
 
 function renderMessageItem(item, panelState) {
@@ -198,15 +211,19 @@ function renderMessageItem(item, panelState) {
         <button class="action-btn accept-btn" data-accept-request="${item.id}">Accept</button>
         <button class="action-btn reject-btn" data-reject-request="${item.id}">Reject</button>
       `;
+    } else if (isSent && isPending) {
+      actionButtons = `<button class="action-btn reject-btn" data-cancel-request="${item.id}">Cancel</button>`;
     } else if (isAccepted) {
       // Accept edilmişse ve threadId varsa "Open Support Chat" butonu
       actionButtons = `<button class="action-btn" data-support-chat="${item.id}">Open Support Chat</button>`;
-    } else if (isPending) {
-      // Gönderen tarafında pending ise sadece durum göster
-      actionButtons = `<span class="tag pending-tag">Beklemede</span>`;
     } else {
-      // Rejected veya diğer durumlar
-      actionButtons = `<span class="tag rejected-tag">${status === 'rejected' ? 'Reddedildi' : status}</span>`;
+      // Rejected, canceled veya diğer durumlar
+      const statusLabel = status === 'rejected'
+        ? 'Reddedildi'
+        : status === 'canceled'
+          ? 'İptal Edildi'
+          : status;
+      actionButtons = `<span class="tag rejected-tag">${statusLabel}</span>`;
     }
     
     // Thread ID bilgisini göster (varsa)
@@ -367,5 +384,314 @@ export function renderSupportChat(panelState, side, els) {
     .join('');
   
   supportMessages.scrollTop = supportMessages.scrollHeight;
+
+  // Action buttons container - DM'deki gibi Report ve Close Support Request butonları
+  const supportChatActions = side === 'left' ? els.supportChatActionsLeft : els.supportChatActionsRight;
+  if (supportChatActions) {
+    const status = data?.status || 'pending';
+    const currentUserId = String(panelState.user?.id);
+    const fromUserId = data?.fromUserId;
+    const toUserId = data?.toUserId;
+    const requestId = data?.requestId || threadId;
+    
+    const isFromUser = fromUserId && String(fromUserId) === currentUserId;
+    const isToUser = toUserId && String(toUserId) === currentUserId;
+    
+    const canClose = (status === 'accepted' || status === 'active') && !data?.isClosedByCurrentUser && (isFromUser || isToUser);
+    const reportableStatuses = ['accepted', 'active', 'awaiting_completion', 'completed'];
+    const canReport = reportableStatuses.includes(status) && (isFromUser || isToUser);
+    
+    let actionButtonsHtml = '<div class="action-buttons-container">';
+    
+    if (canReport && requestId) {
+      actionButtonsHtml += `<button class="action-btn report-btn" data-report-request="${requestId}" data-side="${side}">⚠️ Report</button>`;
+    }
+    
+    if (canClose && requestId) {
+      actionButtonsHtml += `<button class="action-btn close-btn" data-close-request="${requestId}" data-side="${side}">✅ Close Support Request</button>`;
+    }
+    
+    actionButtonsHtml += '</div>';
+    
+    if (canReport || canClose) {
+      supportChatActions.innerHTML = actionButtonsHtml;
+      supportChatActions.style.display = 'block';
+      
+      const reportBtn = supportChatActions.querySelector('[data-report-request]');
+      if (reportBtn) {
+        reportBtn.addEventListener('click', () => {
+          showReportModal(requestId, panelState, side, els);
+        });
+      }
+      
+      const closeBtn = supportChatActions.querySelector('[data-close-request]');
+      if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+          showRatingModal(requestId, panelState, side, els);
+        });
+      }
+    } else {
+      supportChatActions.innerHTML = '';
+      supportChatActions.style.display = 'none';
+    }
+  }
+}
+
+function showRatingModal(requestId, panelState, side, els) {
+  // Rating modal oluştur
+  const modal = document.createElement('div');
+  modal.className = 'rating-modal-overlay';
+  modal.innerHTML = `
+    <div class="rating-modal">
+      <div class="rating-modal-header">
+        <h3>Destek Talebini Kapat</h3>
+        <button class="rating-modal-close">&times;</button>
+      </div>
+      <div class="rating-modal-body">
+        <p>Lütfen desteği 5 üzerinden değerlendirin:</p>
+        <div class="rating-stars">
+          <span class="star" data-rating="1">★</span>
+          <span class="star" data-rating="2">★</span>
+          <span class="star" data-rating="3">★</span>
+          <span class="star" data-rating="4">★</span>
+          <span class="star" data-rating="5">★</span>
+        </div>
+        <div class="rating-value">Seçilen: <span id="ratingValue">0</span>/5</div>
+      </div>
+      <div class="rating-modal-footer">
+        <button class="rating-modal-cancel">İptal</button>
+        <button class="rating-modal-submit" disabled>Kapat</button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+  
+  let selectedRating = 0;
+  const modalContent = modal.querySelector('.rating-modal');
+  const stars = modal.querySelectorAll('.star');
+  const ratingValueSpan = modal.querySelector('#ratingValue');
+  const submitBtn = modal.querySelector('.rating-modal-submit');
+  const cancelBtn = modal.querySelector('.rating-modal-cancel');
+  const closeBtn = modal.querySelector('.rating-modal-close');
+  
+  // Star click handler
+  stars.forEach((star, index) => {
+    star.addEventListener('click', (e) => {
+      e.stopPropagation();
+      selectedRating = index + 1;
+      updateStars(stars, selectedRating);
+      if (ratingValueSpan) {
+        ratingValueSpan.textContent = selectedRating;
+      }
+      if (submitBtn) {
+        submitBtn.disabled = selectedRating === 0;
+      }
+    });
+    
+    star.addEventListener('mouseenter', () => {
+      updateStars(stars, index + 1);
+    });
+  });
+  
+  // Modal içindeki rating-stars div'inden çıkınca seçili rating'i göster
+  const ratingStars = modal.querySelector('.rating-stars');
+  if (ratingStars) {
+    ratingStars.addEventListener('mouseleave', () => {
+      updateStars(stars, selectedRating);
+    });
+  }
+  
+  // Submit handler
+  if (submitBtn) {
+    submitBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (selectedRating > 0) {
+        modal.remove();
+        await closeSupportRequest(requestId, selectedRating, panelState, side, els);
+      }
+    });
+  }
+  
+  // Cancel/Close handlers
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      modal.remove();
+    });
+  }
+  
+  if (closeBtn) {
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      modal.remove();
+    });
+  }
+  
+  // Overlay'e tıklandığında modal'ı kapat (ama modal içeriğine tıklandığında kapatma)
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      modal.remove();
+    }
+  });
+  
+  // Modal içeriğine tıklandığında event'in yayılmasını engelle
+  if (modalContent) {
+    modalContent.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+  }
+}
+
+function updateStars(stars, rating) {
+  stars.forEach((star, index) => {
+    if (index < rating) {
+      star.classList.add('active');
+    } else {
+      star.classList.remove('active');
+    }
+  });
+}
+
+async function closeSupportRequest(requestId, rating, panelState, side, els) {
+  if (!panelState.socket) {
+    alert('Socket bağlantısı yok');
+    return;
+  }
+
+  try {
+    const errorHandler = (error) => {
+      alert(`Support request kapatılamadı: ${error.reason || 'Bilinmeyen hata'}`);
+    };
+
+    panelState.socket.once('support_request_error', errorHandler);
+    panelState.socket.emit('close_support_request', { requestId, rating }, (response) => {
+      panelState.socket.off('support_request_error', errorHandler);
+      if (response?.error) {
+        alert(`Support request kapatılamadı: ${response.error}`);
+        return;
+      }
+      console.log(`[${side}] Support request closed via socket with rating ${rating}`);
+      // Socket event'i gelecek, support_request_closed handler'ı UI'ı güncelleyecek
+    });
+
+    setTimeout(() => {
+      panelState.socket?.off('support_request_error', errorHandler);
+    }, 5000);
+  } catch (error) {
+    console.error(error);
+    alert(`Support request kapatılamadı: ${error.message}`);
+  }
+}
+
+function showReportModal(requestId, panelState, side, els) {
+  if (!requestId) {
+    alert('Support request bulunamadı.');
+    return;
+  }
+
+  const modal = document.createElement('div');
+  modal.className = 'report-modal-overlay';
+  modal.innerHTML = `
+    <div class="report-modal">
+      <div class="report-modal-header">
+        <h3>Destek Talebini Raporla</h3>
+        <button class="report-modal-close">&times;</button>
+      </div>
+      <div class="report-modal-body">
+        <label class="report-label">Rapor Kategorisi</label>
+        <div class="report-category-list">
+          ${REPORT_CATEGORIES.map(
+            (category) => `
+              <label class="report-category-option">
+                <input type="radio" name="reportCategory" value="${category.value}">
+                <span>${category.label}</span>
+              </label>
+            `,
+          ).join('')}
+        </div>
+        <label class="report-label" for="reportDescription">Açıklama (opsiyonel)</label>
+        <textarea id="reportDescription" class="report-description-input" maxlength="500" placeholder="Kısaca açıklayın..."></textarea>
+      </div>
+      <div class="report-modal-footer">
+        <button class="report-modal-cancel">Vazgeç</button>
+        <button class="report-modal-submit" disabled>Raporla</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  let selectedCategory = '';
+  const submitBtn = modal.querySelector('.report-modal-submit');
+  const cancelBtn = modal.querySelector('.report-modal-cancel');
+  const closeBtn = modal.querySelector('.report-modal-close');
+  const categoryInputs = modal.querySelectorAll('input[name="reportCategory"]');
+  const descriptionInput = modal.querySelector('.report-description-input');
+
+  categoryInputs.forEach((input) => {
+    input.addEventListener('change', () => {
+      selectedCategory = input.value;
+      submitBtn.disabled = !selectedCategory;
+    });
+  });
+
+  submitBtn.addEventListener('click', async () => {
+    if (!selectedCategory) return;
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Gönderiliyor...';
+
+    const description = descriptionInput.value?.trim() || '';
+    const success = await submitReport(requestId, selectedCategory, description, panelState, side);
+
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Raporla';
+
+    if (success) {
+      modal.remove();
+    }
+  });
+
+  const closeModal = () => modal.remove();
+  cancelBtn.addEventListener('click', closeModal);
+  closeBtn.addEventListener('click', closeModal);
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      closeModal();
+    }
+  });
+}
+
+async function submitReport(requestId, category, description, panelState, side) {
+  if (!panelState.socket) {
+    alert('Socket bağlantısı yok');
+    return false;
+  }
+
+  return new Promise((resolve) => {
+    const errorHandler = (error) => {
+      alert(`Rapor gönderilemedi: ${error.reason || 'Bilinmeyen hata'}`);
+      clearTimeout(timeoutId);
+      resolve(false);
+    };
+
+    panelState.socket.once('support_request_error', errorHandler);
+    panelState.socket.emit('report_support_request', { requestId, category, description }, (response) => {
+      panelState.socket.off('support_request_error', errorHandler);
+      clearTimeout(timeoutId);
+      if (response?.error) {
+        alert(`Rapor gönderilemedi: ${response.error}`);
+        resolve(false);
+        return;
+      }
+      resolve(true);
+    });
+
+    const timeoutId = setTimeout(() => {
+      panelState.socket?.off('support_request_error', errorHandler);
+      alert('Rapor isteği zaman aşımına uğradı. Lütfen tekrar deneyin.');
+      resolve(false);
+    }, 5000);
+  });
 }
 

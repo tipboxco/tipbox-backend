@@ -11,6 +11,10 @@ export class DMRequest {
     public readonly amount: number,
     public readonly description: string | null,
     public readonly threadId: string | null,
+    public readonly fromUserRating: number | null,
+    public readonly toUserRating: number | null,
+    public readonly closedByFromUserAt: Date | null,
+    public readonly closedByToUserAt: Date | null,
     public readonly sentAt: Date,
     public readonly respondedAt: Date | null,
     public readonly createdAt: Date,
@@ -42,6 +46,32 @@ export class DMRequest {
     return this.status === DMRequestStatus.DECLINED;
   }
 
+  isCanceled(): boolean {
+    return this.status === DMRequestStatus.CANCELED;
+  }
+
+  isAwaitingCompletion(): boolean {
+    return this.status === DMRequestStatus.AWAITING_COMPLETION;
+  }
+
+  isCompleted(): boolean {
+    return this.status === DMRequestStatus.COMPLETED;
+  }
+
+  isClosedByUser(userId: string): boolean {
+    if (this.belongsToSender(userId)) {
+      return this.closedByFromUserAt !== null;
+    }
+    if (this.belongsToReceiver(userId)) {
+      return this.closedByToUserAt !== null;
+    }
+    return false;
+  }
+
+  hasBothUsersClosed(): boolean {
+    return this.closedByFromUserAt !== null && this.closedByToUserAt !== null;
+  }
+
   hasBeenResponded(): boolean {
     return this.respondedAt !== null;
   }
@@ -69,6 +99,9 @@ export class DMRequest {
       case DMRequestStatus.PENDING: return 'Beklemede';
       case DMRequestStatus.ACCEPTED: return 'Kabul Edildi';
       case DMRequestStatus.DECLINED: return 'Reddedildi';
+      case DMRequestStatus.CANCELED: return 'İptal Edildi';
+      case DMRequestStatus.AWAITING_COMPLETION: return 'Tamamlanmayı Bekliyor';
+      case DMRequestStatus.COMPLETED: return 'Tamamlandı';
     }
   }
 
@@ -77,6 +110,9 @@ export class DMRequest {
       case DMRequestStatus.PENDING: return '#f59e0b';    // Yellow
       case DMRequestStatus.ACCEPTED: return '#22c55e';   // Green
       case DMRequestStatus.DECLINED: return '#ef4444';   // Red
+      case DMRequestStatus.CANCELED: return '#ef4444';   // Red (same as declined)
+      case DMRequestStatus.AWAITING_COMPLETION: return '#3b82f6'; // Blue
+      case DMRequestStatus.COMPLETED: return '#10b981';  // Emerald green
     }
   }
 
@@ -85,6 +121,9 @@ export class DMRequest {
       case DMRequestStatus.PENDING: return '⏳';
       case DMRequestStatus.ACCEPTED: return '✅';
       case DMRequestStatus.DECLINED: return '❌';
+      case DMRequestStatus.CANCELED: return '🚫';
+      case DMRequestStatus.AWAITING_COMPLETION: return '⏰';
+      case DMRequestStatus.COMPLETED: return '🎉';
     }
   }
 

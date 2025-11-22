@@ -1,5 +1,5 @@
 // Socket Service
-import { loadSupportChatMessages } from './support.service.js';
+import { loadSupportChatMessages, loadSupportRequests } from './support.service.js';
 import { renderThreads, renderMessages, renderSupportChat } from './ui.service.js';
 
 export function initSocket(panelState, side, els) {
@@ -94,6 +94,8 @@ export function initSocket(panelState, side, els) {
       // Thread listesini de güncelle (support request'in durumu değişti)
       const { loadThreads } = await import('./thread.service.js');
       await loadThreads(panelState, side, els);
+
+      await loadSupportRequests(panelState, side, els);
     });
 
     panelState.socket.on('support_request_rejected', async (event) => {
@@ -111,6 +113,64 @@ export function initSocket(panelState, side, els) {
       }
       
       // Eğer aktif thread'de değilse, thread items'ı yeniden yükle
+      if (panelState.activeThread?.id) {
+        const { loadThreadItems } = await import('./thread.service.js');
+        await loadThreadItems(panelState.activeThread.id, panelState, side, els);
+      }
+
+      await loadSupportRequests(panelState, side, els);
+    });
+
+    panelState.socket.on('support_request_cancelled', async (event) => {
+      console.log(`[${side}] Support request cancelled event:`, event);
+      const { requestId } = event;
+
+      const supportItem = panelState.activeThreadItems.find(
+        (item) => item.id === requestId && item.type === 'support-request'
+      );
+
+      if (supportItem && supportItem.data) {
+        supportItem.data.status = 'canceled';
+        supportItem.data.threadId = null;
+        renderMessages(panelState, side, els);
+      }
+
+      if (panelState.activeThread?.id) {
+        const { loadThreadItems } = await import('./thread.service.js');
+        await loadThreadItems(panelState.activeThread.id, panelState, side, els);
+      }
+
+      await loadSupportRequests(panelState, side, els);
+    });
+
+    panelState.socket.on('support_request_reported', (event) => {
+      console.log(`[${side}] Support request reported event:`, event);
+      const currentUserId = String(panelState.user?.id);
+      if (event.reporterId === currentUserId) {
+        alert('Raporunuz alındı. Destek ekibimiz kısa sürede inceleyecek.');
+      } else {
+        console.warn(`[${side}] Karşı kullanıcı support request'i raporladı:`, event.category);
+      }
+    });
+
+    panelState.socket.on('support_request_closed', async (event) => {
+      console.log(`[${side}] Support request closed event:`, event);
+      const { requestId, status, userId, rating } = event;
+
+      // Support chat açıksa ve bu request için ise, UI'ı güncelle
+      if (panelState.supportChat?.data?.requestId === requestId) {
+        panelState.supportChat.data.status = status;
+        // Eğer current user close yaptıysa, isClosedByCurrentUser flag'i ekle
+        if (userId === String(panelState.user?.id)) {
+          panelState.supportChat.data.isClosedByCurrentUser = true;
+        }
+        renderSupportChat(panelState, side, els);
+      }
+
+      // Support request listesini güncelle
+      await loadSupportRequests(panelState, side, els);
+
+      // Eğer thread view açıksa, thread items'ı güncelle
       if (panelState.activeThread?.id) {
         const { loadThreadItems } = await import('./thread.service.js');
         await loadThreadItems(panelState.activeThread.id, panelState, side, els);

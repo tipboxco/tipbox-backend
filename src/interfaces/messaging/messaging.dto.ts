@@ -7,7 +7,7 @@
  *       enum: [GENERAL, TECHNICAL, PRODUCT]
  *     SupportRequestStatus:
  *       type: string
- *       enum: [pending, accepted, rejected]
+ *       enum: [pending, accepted, rejected, canceled, awaiting_completion, completed]
  *     MessageType:
  *       type: string
  *       enum: [message, support-request, send-tips]
@@ -166,7 +166,7 @@
 
 export type SupportType = 'GENERAL' | 'TECHNICAL' | 'PRODUCT';
 
-export type SupportRequestStatus = 'pending' | 'accepted' | 'rejected';
+export type SupportRequestStatus = 'pending' | 'accepted' | 'rejected' | 'canceled' | 'awaiting_completion' | 'completed';
 
 export type MessageType = 'message' | 'support-request' | 'send-tips';
 
@@ -208,6 +208,9 @@ export interface SupportRequest {
   status: SupportRequestStatus;
   timestamp: string;
   threadId?: string | null; // Accept edilmişse thread ID, yoksa null. Support chat açılırken GET /messages/{threadId} ile mesajlar yüklenir.
+  requestId?: string;
+  fromUserId?: string;
+  toUserId?: string;
 }
 
 export interface TipsInfo {

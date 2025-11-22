@@ -1576,7 +1576,17 @@ body {
   opacity: 0.9;
 }
 
-.support-messages-container {
+/* Support Chat Content Wrapper - DM thread-content-wrapper ile aynı yapı */
+.support-chat-content-wrapper {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Support Messages Container - support chat içindeki messages */
+.support-chat-content-wrapper .messages-container {
   flex: 1;
   overflow-y: auto;
   padding: 1rem;
@@ -1675,6 +1685,345 @@ body {
 .support-message-input-container input:focus {
   border-color: #D0F205; /* Primary Color */
   background: rgba(255, 255, 255, 0.08); /* Hover Background */
+}
+
+/* Support Chat Actions - DM action buttons ile aynı stil ve konum */
+.support-chat-actions {
+  display: none;
+  position: absolute;
+  bottom: 5.5rem;
+  right: 1rem;
+  z-index: 10;
+}
+
+.support-chat-actions .action-buttons-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.support-chat-actions .action-btn {
+  background: rgba(208, 242, 5, 0.1);
+  color: #D0F205;
+  border: 1px solid rgba(208, 242, 5, 0.3);
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 0.9375rem;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.support-chat-actions .action-btn:hover {
+  background: rgba(208, 242, 5, 0.2);
+  border-color: rgba(208, 242, 5, 0.5);
+  transform: translateY(-1px);
+}
+
+.support-chat-actions .action-btn:active {
+  transform: translateY(0);
+}
+
+.support-chat-actions .action-btn.report-btn {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.support-chat-actions .action-btn.report-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+.support-chat-actions .action-btn.close-btn {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.support-chat-actions .action-btn.close-btn:hover {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.5);
+}
+
+/* Rating Modal */
+.rating-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.rating-modal {
+  background: #272727;
+  border-radius: 12px;
+  padding: 2rem;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.rating-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.rating-modal-header h3 {
+  color: #FAFAFA;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.rating-modal-close {
+  background: transparent;
+  border: none;
+  color: #FAFAFA;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.rating-modal-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.rating-modal-body {
+  margin-bottom: 1.5rem;
+}
+
+.rating-modal-body p {
+  color: #FAFAFA;
+  margin-bottom: 1rem;
+  font-size: 0.9375rem;
+}
+
+.rating-stars {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.rating-stars .star {
+  font-size: 2rem;
+  color: #667781;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  display: inline-block;
+  line-height: 1;
+}
+
+.rating-stars .star:hover {
+  transform: scale(1.1);
+}
+
+.rating-stars .star.active {
+  color: #D0F205;
+}
+
+.rating-value {
+  text-align: center;
+  color: #FAFAFA;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.rating-modal-footer {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+}
+
+.rating-modal-footer button {
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 0.9375rem;
+  border: none;
+  transition: all 0.2s ease;
+}
+
+.rating-modal-cancel {
+  background: transparent;
+  color: #FAFAFA;
+  border: 1px solid rgba(163, 163, 163, 0.3);
+}
+
+.rating-modal-cancel:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.rating-modal-submit {
+  background: #D0F205;
+  color: #272727;
+}
+
+.rating-modal-submit:hover:not(:disabled) {
+  background: #B8D904;
+  transform: translateY(-1px);
+}
+
+.rating-modal-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Report Modal */
+.report-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.report-modal {
+  background: #272727;
+  border-radius: 12px;
+  padding: 2rem;
+  max-width: 480px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.report-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.report-modal-header h3 {
+  color: #FAFAFA;
+  font-size: 1.25rem;
+}
+
+.report-modal-close {
+  background: transparent;
+  border: none;
+  color: #FAFAFA;
+  font-size: 1.5rem;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.report-modal-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.report-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.report-label {
+  color: #FAFAFA;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.report-category-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.report-category-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgba(163, 163, 163, 0.3);
+  border-radius: 8px;
+  cursor: pointer;
+  color: #FAFAFA;
+  font-size: 0.9rem;
+}
+
+.report-category-option input {
+  accent-color: #D0F205;
+}
+
+.report-description-input {
+  width: 100%;
+  min-height: 100px;
+  border-radius: 8px;
+  border: 1px solid rgba(163, 163, 163, 0.3);
+  background: rgba(255, 255, 255, 0.05);
+  color: #FAFAFA;
+  padding: 0.75rem;
+  resize: none;
+  font-family: inherit;
+}
+
+.report-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.report-modal-footer button {
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s ease;
+}
+
+.report-modal-cancel {
+  background: transparent;
+  color: #FAFAFA;
+  border: 1px solid rgba(163, 163, 163, 0.3);
+}
+
+.report-modal-cancel:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.report-modal-submit {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.report-modal-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.report-modal-submit:not(:disabled):hover {
+  background: rgba(239, 68, 68, 0.3);
+  border-color: rgba(239, 68, 68, 0.6);
 }
 
 /* Responsive */
