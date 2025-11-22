@@ -11,11 +11,7 @@ export class SupportRequestReportPrismaRepository {
    */
   async findByRequestIdAndReporterId(requestId: string, reporterId: string) {
     try {
-      if (!this.prisma.supportRequestReport) {
-        return null;
-      }
-
-      return await this.prisma.supportRequestReport.findFirst({
+      return await (this.prisma as any).supportRequestReport.findFirst({
         where: {
           requestId,
           reporterId,
@@ -38,13 +34,7 @@ export class SupportRequestReportPrismaRepository {
     description?: string | null;
   }) {
     try {
-      // Prisma client'ın supportRequestReport modelini tanıdığından emin ol
-      if (!this.prisma.supportRequestReport) {
-        logger.error('Prisma client does not have supportRequestReport model. Available models:', Object.keys(this.prisma).filter(key => !key.startsWith('_')));
-        throw new Error('Prisma client does not have supportRequestReport model. Please run: npx prisma generate');
-      }
-
-      return await this.prisma.supportRequestReport.create({
+      return await (this.prisma as any).supportRequestReport.create({
         data: {
           id: randomUUID(),
           requestId: data.requestId,

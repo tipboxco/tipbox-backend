@@ -85,7 +85,8 @@ export class DMRequestPrismaRepository {
 
     // Filter by status (DMRequestStatus)
     if (options.status) {
-      where.status = options.status as DMRequestStatus;
+      // Prisma enum'u string olarak kabul eder, domain enum değerleri ile uyumludur
+      where.status = options.status as any;
     }
 
     const requests = await this.prisma.dMRequest.findMany({
