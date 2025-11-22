@@ -1,6 +1,7 @@
 import { JWT } from 'google-auth-library';
 import logger from '../logger/logger';
 import path from 'path';
+import fs from 'fs';
 
 export interface EmailOptions {
   to: string;
@@ -46,11 +47,62 @@ export class EmailService {
         ? credentialsPath
         : path.resolve(process.cwd(), credentialsPath);
 
+      // Dosyanın var olup olmadığını ve bir dosya olduğunu kontrol et
+      if (!fs.existsSync(keyFilePath)) {
+        throw new Error(
+          `Google credentials file not found at path: ${keyFilePath}. ` +
+          `Please check GOOGLE_APPLICATION_CREDENTIALS environment variable.`
+        );
+      }
+
+      // Path'in bir dosya olduğunu kontrol et (dizin değil)
+      const stats = fs.statSync(keyFilePath);
+      if (!stats.isFile()) {
+        throw new Error(
+          `GOOGLE_APPLICATION_CREDENTIALS path points to a directory, not a file: ${keyFilePath}. ` +
+          `Please provide the full path to the JSON credentials file.`
+        );
+      }
+
+      // Dosyanın okunabilir olduğunu kontrol et
+      try {
+        fs.accessSync(keyFilePath, fs.constants.R_OK);
+      } catch (accessError) {
+        throw new Error(
+          `Google credentials file is not readable: ${keyFilePath}. ` +
+          `Please check file permissions.`
+        );
+      }
+
+      logger.info({
+        message: 'Google credentials file validated',
+        path: keyFilePath,
+      });
+
+      // JSON dosyasını oku ve parse et
+      let keyData: any;
+      try {
+        const keyFileContent = fs.readFileSync(keyFilePath, 'utf8');
+        keyData = JSON.parse(keyFileContent);
+        
+        // JSON dosyasının geçerli bir service account key olduğunu kontrol et
+        if (!keyData.private_key || !keyData.client_email) {
+          throw new Error('Invalid Google service account key file. Missing required fields.');
+        }
+      } catch (parseError) {
+        throw new Error(
+          `Failed to read or parse Google credentials file: ${keyFilePath}. ` +
+          `Error: ${parseError instanceof Error ? parseError.message : String(parseError)}`
+        );
+      }
+
       const userToImpersonate = this.fromEmail;
 
       // JWT Client oluştur - Domain-wide delegation için subject parametresi
+      // keyFile yerine key kullanarak dosya okuma sorunlarını önle
       this.authClient = new JWT({
-        keyFile: keyFilePath,
+        email: keyData.client_email,
+        key: keyData.private_key,
         scopes: ['https://www.googleapis.com/auth/gmail.send'],
         subject: userToImpersonate, // Impersonation için
       });
