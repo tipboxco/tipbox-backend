@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
 import { UserRole } from '../../domain/user/user-role.entity';
+import { getPrisma } from './prisma.client';
 
 export class UserRolePrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<UserRole | null> {
     const role = await this.prisma.userRole.findUnique({ where: { id } });

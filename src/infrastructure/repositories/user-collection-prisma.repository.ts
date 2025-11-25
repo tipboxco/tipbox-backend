@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
 import { UserCollection } from '../../domain/user/user-collection.entity';
+import { getPrisma } from './prisma.client';
 
 export class UserCollectionPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<UserCollection | null> {
     const collection = await this.prisma.userCollection.findUnique({ where: { id } });

@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
 import { UserTheme } from '../../domain/user/user-theme.entity';
+import { getPrisma } from './prisma.client';
 
 export class UserThemePrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<UserTheme | null> {
     const theme = await this.prisma.userTheme.findUnique({ where: { id } });

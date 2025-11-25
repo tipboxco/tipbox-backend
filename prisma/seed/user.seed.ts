@@ -5,6 +5,7 @@ const prisma = new PrismaClient()
 
 // Static IDs (same as in main seed)
 const TEST_USER_ID = '480f5de9-b691-4d70-a6a8-2789226f4e07' // omer@tipbox.co
+const TARGET_USER_ID = '248cc91f-b551-4ecc-a885-db1163571330' // markettest@tipbox.co
 const TRUST_USER_IDS = [
   '11111111-1111-4111-a111-111111111111',
   '22222222-2222-4222-a222-222222222222',
@@ -86,6 +87,30 @@ export async function seedUsersAndProfiles(): Promise<void> {
     })
   }
   console.log('✅ Avatar set')
+
+  // Create or get TARGET_USER
+  const TARGET_USER_ID = '248cc91f-b551-4ecc-a885-db1163571330'
+  let targetUser = await prisma.user.findUnique({ where: { id: TARGET_USER_ID } })
+  if (!targetUser) {
+    targetUser = (await prisma.user.findUnique({ where: { email: 'markettest@tipbox.co' } })) || null
+  }
+  if (!targetUser) {
+    targetUser = await prisma.user.create({
+      data: {
+        id: TARGET_USER_ID,
+        email: 'markettest@tipbox.co',
+        passwordHash,
+        emailVerified: true,
+        status: 'ACTIVE',
+      },
+    })
+  }
+  await prisma.profile.upsert({
+    where: { userId: targetUser.id },
+    update: { displayName: 'Market Test User', userName: 'markettest' },
+    create: { userId: targetUser.id, displayName: 'Market Test User', userName: 'markettest' },
+  })
+  console.log('✅ Target user created')
 
   // Trust users (5) and trust relations (test user trusts them)
   const trustUserIds: string[] = []

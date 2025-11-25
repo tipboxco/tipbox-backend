@@ -1,9 +1,9 @@
-import { PrismaClient } from '@prisma/client';
 import { PostTip } from '../../domain/content/post-tip.entity';
+import { getPrisma } from './prisma.client';
 import { TipCategory } from '../../domain/content/tip-category.enum';
 
 export class PostTipPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<PostTip | null> {
     const tip = await this.prisma.postTip.findUnique({ 

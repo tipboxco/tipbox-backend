@@ -1,10 +1,10 @@
-import { PrismaClient } from '@prisma/client';
 import { User } from '../../domain/user/user.entity';
 import { Wallet, WalletProvider } from '../../domain/wallet/wallet.entity';
 import { EmailAlreadyExistsError } from '../errors/custom-errors';
+import { getPrisma } from './prisma.client';
 
 export class UserPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<User | null> {
     const user = await this.prisma.user.findUnique({ 

@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
 import { PasswordResetToken } from '../../domain/user/password-reset-token.entity';
+import { getPrisma } from './prisma.client';
 
 export class PasswordResetTokenPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<PasswordResetToken | null> {
     const token = await this.prisma.passwordResetToken.findUnique({ where: { id } });

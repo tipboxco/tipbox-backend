@@ -1,9 +1,9 @@
-import { PrismaClient } from '@prisma/client';
 import { PostQuestion } from '../../domain/content/post-question.entity';
+import { getPrisma } from './prisma.client';
 import { QuestionAnswerFormat } from '../../domain/content/question-answer-format.enum';
 
 export class PostQuestionPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<PostQuestion | null> {
     const question = await this.prisma.postQuestion.findUnique({ 

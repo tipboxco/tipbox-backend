@@ -28,7 +28,7 @@
     "test:report": "node scripts/serve-test-report.js",
     "postinstall": "echo 'Skipping build for Docker'",
     "db:seed": "ts-node prisma/seed.ts",
-    "db:seed:all": "ts-node prisma/seed/index.ts",
+    "db:seed:all": "ts-node --transpile-only prisma/seed/index.ts",
     "db:seed:user": "ts-node prisma/seed/user.seed.ts",
     "db:seed:content": "ts-node prisma/seed/content.seed.ts",
     "db:seed:feed": "ts-node prisma/seed/feed.seed.ts",

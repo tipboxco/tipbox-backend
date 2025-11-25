@@ -1,9 +1,9 @@
-import { PrismaClient } from '@prisma/client';
 import { InventoryMedia } from '../../domain/inventory/inventory-media.entity';
+import { getPrisma } from './prisma.client';
 import { InventoryMediaType } from '../../domain/inventory/inventory-media-type.enum';
 
 export class InventoryMediaPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<InventoryMedia | null> {
     const media = await this.prisma.inventoryMedia.findUnique({ 

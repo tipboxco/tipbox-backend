@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
 import { UserTrustScore } from '../../domain/user/user-trust-score.entity';
+import { getPrisma } from './prisma.client';
 
 export class UserTrustScorePrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<UserTrustScore | null> {
     const score = await this.prisma.userTrustScore.findUnique({ where: { id } });

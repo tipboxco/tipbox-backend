@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
 import { UserFeedPreferences } from '../../domain/user/user-feed-preferences.entity';
+import { getPrisma } from './prisma.client';
 
 export class UserFeedPreferencesPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<UserFeedPreferences | null> {
     const preferences = await this.prisma.userFeedPreferences.findUnique({ where: { id } });

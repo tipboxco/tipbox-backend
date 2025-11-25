@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
 import { ProductExperience } from '../../domain/inventory/product-experience.entity';
+import { getPrisma } from './prisma.client';
 
 export class ProductExperiencePrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<ProductExperience | null> {
     const experience = await this.prisma.productExperience.findUnique({ 

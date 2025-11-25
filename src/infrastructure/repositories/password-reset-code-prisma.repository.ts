@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { getPrisma } from './prisma.client';
 
 export interface PasswordResetCodeData {
   id: string;
@@ -12,7 +12,7 @@ export interface PasswordResetCodeData {
 }
 
 export class PasswordResetCodePrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async create(userId: string, email: string, code: string, expiresAt: Date): Promise<PasswordResetCodeData> {
     // Kullanıcının aktif olmayan kodlarını iptal et

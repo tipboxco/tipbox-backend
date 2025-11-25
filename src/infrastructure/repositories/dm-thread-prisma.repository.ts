@@ -1,4 +1,5 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { Prisma  } from '@prisma/client';
+import { getPrisma } from './prisma.client';
 import { DMThread } from '../../domain/messaging/dm-thread.entity';
 
 const THREAD_INCLUDE = {
@@ -41,7 +42,7 @@ type ThreadWithRelations = Prisma.DMThreadGetPayload<{
 }>;
 
 export class DMThreadPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<DMThread | null> {
     const thread = await this.prisma.dMThread.findUnique({

@@ -1,9 +1,9 @@
-import { PrismaClient } from '@prisma/client';
 import { Feed } from '../../domain/admin/feed.entity';
+import { getPrisma } from './prisma.client';
 import { FeedSource } from '../../domain/admin/feed-source.enum';
 
 export class FeedPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<Feed | null> {
     const feed = await this.prisma.feed.findUnique({ where: { id } });

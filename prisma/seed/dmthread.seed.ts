@@ -94,8 +94,8 @@ export async function seedDMThreads(existingClient?: typeof prisma): Promise<DMT
       where: {
         userOneId: threadSeed.userOneId,
         userTwoId: threadSeed.userTwoId,
-        isSupportThread: false as any, // Only normal DM threads
-      } as any,
+        isSupportThread: false, // Only normal DM threads
+      },
     });
     
     if (existingThread) {
@@ -108,13 +108,13 @@ export async function seedDMThreads(existingClient?: typeof prisma): Promise<DMT
         userOneId: threadSeed.userOneId,
         userTwoId: threadSeed.userTwoId,
         isActive: true,
-        isSupportThread: false as any, // Normal DM thread
+        isSupportThread: false, // Normal DM thread
         unreadCountUserOne: threadSeed.unreadCountUserOne,
         unreadCountUserTwo: threadSeed.unreadCountUserTwo,
         startedAt: new Date(),
         createdAt: new Date(),
         updatedAt: new Date(),
-      } as any,
+      },
     });
     threadMap.set(`${threadSeed.userOneId}:${threadSeed.userTwoId}`, thread.id);
 
@@ -128,7 +128,7 @@ export async function seedDMThreads(existingClient?: typeof prisma): Promise<DMT
         sentAt: minutesAgoToDate(msg.minutesAgo),
       }));
       
-      const batchResult = await client.dMMessage.createMany({ data } as any);
+      const batchResult = await client.dMMessage.createMany({ data });
       insertedMessages += batchResult.count;
     }
   }

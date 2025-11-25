@@ -1,4 +1,5 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { Prisma  } from '@prisma/client';
+import { getPrisma } from './prisma.client';
 import { DMRequest } from '../../domain/messaging/dm-request.entity';
 import { DMRequestStatus } from '../../domain/messaging/dm-request-status.enum';
 import { SupportType as DomainSupportType } from '../../domain/messaging/support-type.enum';
@@ -43,7 +44,7 @@ type DMRequestWithRelations = Prisma.DMRequestGetPayload<{
 }>;
 
 export class DMRequestPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<DMRequest | null> {
     const request = await this.prisma.dMRequest.findUnique({

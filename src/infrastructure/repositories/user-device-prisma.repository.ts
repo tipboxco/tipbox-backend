@@ -1,12 +1,8 @@
-import { PrismaClient } from '@prisma/client';
+import { getPrisma } from './prisma.client';
 
 // Geçici olarak userDevice modeli eksik olduğu için minimal implementation
 export class UserDevicePrismaRepository {
-  private prisma: PrismaClient;
-
-  constructor() {
-    this.prisma = new PrismaClient();
-  }
+  private prisma = getPrisma();
 
   async create(data: any): Promise<any> {
     // TODO: userDevice modeli schema'ya eklendiğinde implement edilecek

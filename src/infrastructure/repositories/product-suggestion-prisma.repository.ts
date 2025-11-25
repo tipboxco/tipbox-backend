@@ -1,9 +1,9 @@
-import { PrismaClient } from '@prisma/client';
 import { ProductSuggestion } from '../../domain/product/product-suggestion.entity';
+import { getPrisma } from './prisma.client';
 import { ProductSuggestionStatus } from '../../domain/product/product-suggestion-status.enum';
 
 export class ProductSuggestionPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<ProductSuggestion | null> {
     const suggestion = await this.prisma.productSuggestion.findUnique({ 

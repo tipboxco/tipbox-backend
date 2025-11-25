@@ -1,9 +1,9 @@
-import { PrismaClient } from '@prisma/client';
 import { UserSettings } from '../../domain/user/user-settings.entity';
+import { getPrisma } from './prisma.client';
 import { UserVisibility } from '../../domain/user/user-visibility.enum';
 
 export class UserSettingsPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<UserSettings | null> {
     const settings = await this.prisma.userSettings.findUnique({ where: { id } });

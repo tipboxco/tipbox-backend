@@ -1,10 +1,10 @@
-import { PrismaClient } from '@prisma/client';
 import { SupportRequestReportCategory } from '../../domain/messaging/support-request-report-category.enum';
+import { getPrisma } from './prisma.client';
 import { randomUUID } from 'crypto';
 import logger from '../logger/logger';
 
 export class SupportRequestReportPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   /**
    * Belirli bir request için belirli bir kullanıcının daha önce rapor oluşturup oluşturmadığını kontrol et

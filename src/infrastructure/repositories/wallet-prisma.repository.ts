@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
 import { Wallet, WalletProvider } from '../../domain/wallet/wallet.entity';
+import { getPrisma } from './prisma.client';
 
 export class WalletPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findByUserId(userId: string): Promise<Wallet[]> {
     const wallets = await this.prisma.wallet.findMany({

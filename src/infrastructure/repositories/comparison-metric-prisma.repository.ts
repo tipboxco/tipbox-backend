@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
 import { ComparisonMetric } from '../../domain/product/comparison-metric.entity';
+import { getPrisma } from './prisma.client';
 
 export class ComparisonMetricPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<ComparisonMetric | null> {
     const metric = await this.prisma.comparisonMetric.findUnique({ 

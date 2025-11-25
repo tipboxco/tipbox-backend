@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
 import { DMMessage } from '../../domain/messaging/dm-message.entity';
+import { getPrisma } from './prisma.client';
 
 export class DmMessagePrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<DMMessage | null> {
     const message = await this.prisma.dMMessage.findUnique({ 
