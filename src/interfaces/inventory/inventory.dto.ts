@@ -1,3 +1,6 @@
+import { ExperienceStatus } from '../../domain/content/experience-status.enum';
+import { ExperienceType } from '../../domain/content/experience-type.enum';
+
 export interface InventoryListItemResponse {
   id: string;
   brand: {
@@ -34,5 +37,23 @@ export interface InventoryItemResponse {
     brand: string | null;
     description: string | null;
   };
+}
+
+export interface InventoryExperienceRequest {
+  type: ExperienceType;
+  content: string;
+  rating: number;
+}
+
+export interface CreateInventoryRequest {
+  productId: string;
+  selectedDurationId: string;
+  selectedLocationId: string;
+  selectedPurposeId: string;
+  content: string;
+  experience: InventoryExperienceRequest[];
+  status: ExperienceStatus;
+  images?: string[];
+  userId?: string;
 }
 

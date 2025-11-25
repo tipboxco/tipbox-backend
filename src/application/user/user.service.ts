@@ -13,6 +13,53 @@ import { CacheService } from '../../infrastructure/cache/cache.service';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import logger from '../../infrastructure/logger/logger';
+import { DEFAULT_PROFILE_BANNER_URL } from '../../domain/user/profile.constants';
+
+type CosmeticSummary = {
+  id: string;
+  title: string;
+  image: string | null;
+} | null;
+
+type ProfileBadgeSummary = {
+  id: string;
+  name: string;
+  value: string;
+};
+
+type CollectionTask = {
+  id: string;
+  title: string;
+  icon: string;
+  targetCount: number;
+  currentCount: number;
+};
+
+type CollectionResponse = {
+  id: string;
+  type: 'achievement' | 'bridge';
+  title: string;
+  rarity: 'usual' | 'rare';
+  image: string | null;
+  isClaimed: boolean;
+  nftId: string | null;
+  earnDate: string | null;
+  totalOwners: number;
+  tasks: CollectionTask[];
+};
+
+type UserProfileDetails = {
+  id: string;
+  name: string;
+  avatar: string | null;
+  banner: string | null;
+  biography: string | null;
+  cosmetic: string | null;
+  cosmeticDetail: CosmeticSummary;
+  titles: string[];
+  stats: { posts: number; trust: number; truster: number };
+  badges: ProfileBadgeSummary[];
+};
 
 export class UserService {
   private readonly s3Service: S3Service;
@@ -146,13 +193,13 @@ export class UserService {
       id: user.id,
       name: profile?.displayName || user.name || 'Anonymous User',
       avatarUrl: activeAvatar?.imageUrl ?? null,
-      bannerUrl: profile?.bannerUrl ?? null,
+      bannerUrl: profile?.bannerUrl ?? DEFAULT_PROFILE_BANNER_URL,
       description: profile?.bio ?? null,
       titles: titles.map(t => t.title),
       stats: {
-        posts: profile?.postsCount || 0,
-        trust: profile?.trustCount || 0,
-        truster: profile?.trusterCount || 0,
+        posts: profile?.postsCount ?? 0,
+        trust: profile?.trustCount ?? 0,
+        truster: profile?.trusterCount ?? 0,
       },
       badges: userBadges.map(ub => ({ imageUrl: ub.badge.imageUrl ?? null, title: ub.badge.name })),
     };
@@ -161,39 +208,49 @@ export class UserService {
   /**
    * Self profile (for account page) - maps to required UserProfile shape
    */
-  async getSelfUserProfile(userId: string): Promise<{
-    id: string;
-    name: string;
-    avatarUrl: string | null;
-    bannerUrl: string | null;
-    biography: string | null;
-    titles: string[];
-    stats: { posts: number; trust: number; truster: number };
-    badges: Array<{ id: string; title: string; image: string | null }>;
-  } | null> {
+  async getSelfUserProfile(userId: string): Promise<UserProfileDetails | null> {
     const card = await this.getUserProfileCard(userId);
     if (!card) return null;
 
-    // Fetch badge ids alongside names for edit/collection UX
-    const userBadges = await this.prisma.userBadge.findMany({
-      where: { userId },
-      include: { badge: true },
-      orderBy: { claimedAt: 'desc' },
-      take: 6,
-    });
+    const profileRecord = await this.prisma.profile.findUnique({ where: { userId } });
+    const cosmeticBadgeId = profileRecord ? ((profileRecord as any).cosmeticBadgeId ?? null) : null;
+    const [cosmeticBadge, userBadges] = await Promise.all([
+      cosmeticBadgeId
+        ? this.prisma.badge.findUnique({
+            where: { id: cosmeticBadgeId },
+            select: { id: true, name: true, imageUrl: true },
+          })
+        : Promise.resolve(null),
+      this.prisma.userBadge.findMany({
+        where: { userId },
+        include: { badge: true },
+        orderBy: { claimedAt: 'desc' },
+        take: 6,
+      }),
+    ]);
+
+    const cosmeticDetail: CosmeticSummary = cosmeticBadge
+      ? {
+          id: cosmeticBadge.id,
+          title: cosmeticBadge.name,
+          image: cosmeticBadge.imageUrl ?? null,
+        }
+      : null;
 
     return {
       id: card.id,
       name: card.name,
-      avatarUrl: card.avatarUrl,
-      bannerUrl: card.bannerUrl,
+      avatar: card.avatarUrl,
+      banner: card.bannerUrl,
       biography: card.description,
+      cosmetic: cosmeticBadgeId,
+      cosmeticDetail,
       titles: card.titles,
       stats: card.stats,
-      badges: userBadges.map(ub => ({
+      badges: userBadges.map((ub) => ({
         id: String(ub.badgeId),
-        title: ub.badge.name,
-        image: ub.badge.imageUrl ?? null,
+        name: ub.badge.name,
+        value: ub.badge.rarity ?? '',
       })),
     };
   }
@@ -201,17 +258,10 @@ export class UserService {
   /**
    * Other user's profile for a viewer, includes isTrusted flag
    */
-  async getUserProfileForViewer(viewerUserId: string, targetUserId: string): Promise<{
-    id: string;
-    name: string;
-    avatarUrl: string | null;
-    bannerUrl: string | null;
-    biography: string | null;
-    titles: string[];
-    stats: { posts: number; trust: number; truster: number };
-    badges: Array<{ id: string; title: string; image: string | null }>;
-    isTrusted: boolean;
-  } | null> {
+  async getUserProfileForViewer(
+    viewerUserId: string,
+    targetUserId: string,
+  ): Promise<(UserProfileDetails & { isTrusted: boolean }) | null> {
     const base = await this.getSelfUserProfile(targetUserId);
     if (!base) return null;
 
@@ -223,6 +273,124 @@ export class UserService {
       ...base,
       isTrusted: !!rel,
     };
+  }
+
+  async updateProfileDetails(userId: string, payload: {
+    name?: string;
+    biography?: string;
+    banner?: string | null;
+    avatar?: string;
+    cosmeticId?: string | null;
+    badges?: Array<{ id: string }>;
+  }): Promise<void> {
+    const { name, biography, banner, avatar, cosmeticId, badges } = payload;
+
+    await this.prisma.$transaction(async (tx) => {
+      let validatedCosmeticId: string | null | undefined = undefined;
+      if (typeof cosmeticId !== 'undefined') {
+        if (cosmeticId) {
+          const badge = await tx.badge.findUnique({
+            where: { id: cosmeticId },
+            select: { id: true, type: true },
+          });
+          if (!badge || badge.type !== 'COSMETIC') {
+            throw new Error('Geçersiz cosmetic seçimi');
+          }
+          const ownsCosmetic = await tx.userBadge.findUnique({
+            where: { userId_badgeId: { userId, badgeId: cosmeticId } },
+          });
+          if (!ownsCosmetic) {
+            throw new Error('Bu cosmetic kullanıcıya ait değil');
+          }
+          validatedCosmeticId = cosmeticId;
+        } else {
+          validatedCosmeticId = null;
+        }
+      }
+
+      const profileData: any = {};
+      if (typeof name === 'string') {
+        const trimmed = name.trim();
+        if (!trimmed) {
+          throw new Error('İsim alanı boş olamaz');
+        }
+        profileData.displayName = trimmed;
+      }
+      if (typeof biography !== 'undefined') {
+        profileData.bio = biography ?? null;
+      }
+      if (typeof banner !== 'undefined') {
+        profileData.bannerUrl = banner || DEFAULT_PROFILE_BANNER_URL;
+      }
+      if (typeof validatedCosmeticId !== 'undefined') {
+        profileData.cosmeticBadgeId = validatedCosmeticId;
+      }
+
+      const existingProfile = await tx.profile.findUnique({ where: { userId } });
+      if (Object.keys(profileData).length > 0) {
+        if (existingProfile) {
+          await tx.profile.update({
+            where: { userId },
+            data: profileData,
+          });
+        } else {
+          await tx.profile.create({
+            data: {
+              userId,
+              displayName: profileData.displayName ?? name ?? 'Anonymous User',
+              userName: null,
+              bio: typeof biography !== 'undefined' ? biography : null,
+              bannerUrl: typeof banner !== 'undefined' ? (banner || DEFAULT_PROFILE_BANNER_URL) : DEFAULT_PROFILE_BANNER_URL,
+              cosmeticBadgeId: typeof validatedCosmeticId !== 'undefined' ? validatedCosmeticId : undefined,
+            } as any,
+          });
+        }
+      }
+
+      if (avatar) {
+        await tx.userAvatar.updateMany({
+          where: { userId, isActive: true },
+          data: { isActive: false },
+        });
+        await tx.userAvatar.create({
+          data: {
+            userId,
+            imageUrl: avatar,
+            isActive: true,
+          },
+        });
+      }
+
+      if (Array.isArray(badges)) {
+        await tx.userBadge.updateMany({
+          where: { userId },
+          data: { isVisible: false, displayOrder: null },
+        });
+
+        for (const [index, badge] of badges.entries()) {
+          if (!badge?.id) continue;
+          await tx.userBadge.upsert({
+            where: { userId_badgeId: { userId, badgeId: badge.id } },
+            update: {
+              isVisible: true,
+              displayOrder: index,
+              visibility: 'PUBLIC',
+            },
+            create: {
+              userId,
+              badgeId: badge.id,
+              isVisible: true,
+              displayOrder: index,
+              visibility: 'PUBLIC',
+              claimed: true,
+              claimedAt: new Date(),
+            } as any,
+          });
+        }
+      }
+    });
+
+    await this.cacheService.del(`user:${userId}:profile`);
   }
 
   async listTrustedUsers(userId: string, query?: string): Promise<Array<{
@@ -456,17 +624,7 @@ export class UserService {
     }
   }
 
-  async listAchievementBadges(userId: string, query?: string): Promise<Array<{
-    id: string;
-    image: string | null;
-    title: string;
-    rarity: 'Usual' | 'Rare';
-    isClaimed: boolean;
-    nftAddress: string | null;
-    totalEarned: number;
-    earnedDate: Date | null;
-    tasks: Array<{ id: string; title: string; type: 'Yorum Yap' | 'Beğeni' | 'Paylaşma' }>;
-  }>> {
+  async listAchievementBadges(userId: string, query?: string): Promise<CollectionResponse[]> {
     const where: any = {
       userId,
       badge: {
@@ -486,7 +644,15 @@ export class UserService {
         badge: {
           include: {
             achievementGoals: {
-              include: { chain: true },
+              include: {
+                chain: true,
+                userAchievements: {
+                  where: { userId },
+                },
+              },
+            },
+            _count: {
+              select: { userBadges: true },
             },
           },
         },
@@ -494,48 +660,42 @@ export class UserService {
       orderBy: { claimedAt: 'desc' },
     });
 
-    const rarityMap: Record<string, 'Usual' | 'Rare'> = {
-      COMMON: 'Usual',
-      RARE: 'Rare',
-      EPIC: 'Rare', // EPIC de Rare olarak göster
+    const rarityMap: Record<string, 'usual' | 'rare'> = {
+      COMMON: 'usual',
+      RARE: 'rare',
+      EPIC: 'rare',
     };
 
-    return userBadges.map(ub=> {
+    return userBadges.map((ub) => {
       const badge = (ub as any).badge;
       const goals = (badge?.achievementGoals || []) as any[];
-      // Task type'ları goal title/requirement'dan çıkar (basitleştirilmiş)
-      const tasks = goals.map(goal => ({
-        id: goal.id,
-        title: goal.title,
-        type: (goal.requirement?.toLowerCase().includes('yorum') ? 'Yorum Yap' :
-               goal.requirement?.toLowerCase().includes('beğen') ? 'Beğeni' :
-               goal.requirement?.toLowerCase().includes('paylaş') ? 'Paylaşma' : 'Yorum Yap') as 'Yorum Yap' | 'Beğeni' | 'Paylaşma',
-      }));
+      const tasks: CollectionTask[] = goals.map((goal) => {
+        const userAchievement = (goal.userAchievements || []).find((ua: any) => ua.userId === userId);
+        return {
+          id: String(goal.id),
+          title: goal.title,
+          icon: 'default',
+          targetCount: goal.pointsRequired ?? 0,
+          currentCount: userAchievement?.progress ?? 0,
+        };
+      });
 
       return {
         id: String(badge?.id || ''),
-        image: badge?.imageUrl ?? null,
+        type: 'achievement' as const,
         title: badge?.name || '',
-        rarity: rarityMap[badge?.rarity || 'COMMON'] || 'Usual',
-        isClaimed: ub.claimed,
-        nftAddress: null, // şimdilik null
-        totalEarned: ub.claimed ? 1 : 0,
-        earnedDate: ub.claimedAt,
-        tasks: tasks.map(t => ({ ...t, id: String(t.id) })),
-      };
+        rarity: rarityMap[badge?.rarity || 'COMMON'] || 'usual',
+        image: badge?.imageUrl ?? null,
+        isClaimed: !!ub.claimed,
+        nftId: null,
+        earnDate: ub.claimedAt ? ub.claimedAt.toISOString() : null,
+        totalOwners: badge?._count?.userBadges ?? 0,
+        tasks,
+      } as CollectionResponse;
     });
   }
 
-  async listBridgeBadges(userId: string, query?: string): Promise<Array<{
-    id: string;
-    image: string | null;
-    title: string;
-    rarity: 'Usual' | 'Rare';
-    isClaimed: boolean;
-    nftAddress: string | null;
-    earnDate: Date | null;
-    totalEarned: number;
-  }>> {
+  async listBridgeBadges(userId: string, query?: string): Promise<CollectionResponse[]> {
     const rewards = await this.prisma.bridgeReward.findMany({
       where: {
         userId,
@@ -548,25 +708,33 @@ export class UserService {
             }
           : undefined,
       } as any,
-      include: { badge: true },
+      include: {
+        badge: {
+          include: {
+            _count: { select: { bridgeRewards: true } },
+          },
+        },
+      },
       orderBy: { awardedAt: 'desc' },
     } as any);
 
-    const rarityMap: Record<string, 'Usual' | 'Rare'> = {
-      COMMON: 'Usual',
-      RARE: 'Rare',
-      EPIC: 'Rare',
+    const rarityMap: Record<string, 'usual' | 'rare'> = {
+      COMMON: 'usual',
+      RARE: 'rare',
+      EPIC: 'rare',
     };
 
     return rewards.map((rw: any) => ({
       id: String(rw.badge?.id || ''),
-      image: rw.badge?.imageUrl ?? null,
+      type: 'bridge' as const,
       title: rw.badge?.name || '',
-      rarity: rarityMap[rw.badge?.rarity || 'COMMON'] || 'Usual',
+      rarity: rarityMap[rw.badge?.rarity || 'COMMON'] || 'usual',
+      image: rw.badge?.imageUrl ?? null,
       isClaimed: true,
-      nftAddress: null,
-      earnDate: rw.awardedAt,
-      totalEarned: 1,
+      nftId: null,
+      earnDate: rw.awardedAt ? rw.awardedAt.toISOString() : null,
+      totalOwners: rw.badge?._count?.bridgeRewards ?? 0,
+      tasks: [],
     }));
   }
 
@@ -654,10 +822,38 @@ export class UserService {
     });
 
     const userBase = await this.getUserBase(userId);
+    
+    // Batch fetch images from InventoryMedia for posts with products
+    const postProductIds = posts.map((p) => p.productId).filter(Boolean) as string[];
+    const inventoryMediaMap = new Map<string, string[]>();
+    
+    if (postProductIds.length > 0) {
+      const inventoriesWithMedia = await this.prisma.inventory.findMany({
+        where: {
+          userId,
+          productId: { in: postProductIds },
+        },
+        include: {
+          media: {
+            where: { type: 'IMAGE' },
+            orderBy: { createdAt: 'asc' },
+          },
+        },
+      });
+
+      for (const inventory of inventoriesWithMedia) {
+        const imageUrls = inventory.media.map((m) => m.mediaUrl);
+        if (imageUrls.length > 0) {
+          inventoryMediaMap.set(inventory.productId, imageUrls);
+        }
+      }
+    }
+    
     const results = await Promise.all(
       posts.map(async (post) => {
         const stats = await this.getPostStats(post.id);
         const product = await this.getProductBase(post.productId);
+        const images = post.productId ? (inventoryMediaMap.get(post.productId) || []) : [];
         return {
           id: String(post.id),
           type: 'post' as const,
@@ -666,7 +862,7 @@ export class UserService {
           createdAt: post.createdAt.toISOString(),
           product,
           content: post.body,
-          images: [], // TODO: InventoryMedia'dan çekilecek
+          images,
         };
       })
     );
@@ -1176,6 +1372,7 @@ export class UserService {
       fullName: string;
       userName: string;
       avatarUrl?: string;
+      bannerUrl?: string;
       selectedCategories?: Array<{
         categoryId: string;
         subCategoryIds: string[];
@@ -1210,6 +1407,7 @@ export class UserService {
           data: {
             displayName: data.fullName,
             userName: data.userName,
+            ...(data.bannerUrl !== undefined && { bannerUrl: data.bannerUrl }),
           },
         });
       } else {
@@ -1218,6 +1416,7 @@ export class UserService {
             userId,
             displayName: data.fullName,
             userName: data.userName,
+            ...(data.bannerUrl !== undefined && { bannerUrl: data.bannerUrl }),
           },
         });
       }

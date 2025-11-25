@@ -54,10 +54,14 @@ export class SupportRequestService {
         dmRequestStatus = DMRequestStatus.ACCEPTED;
       } else if (options.status === SupportRequestStatus.CANCELED) {
         dmRequestStatus = DMRequestStatus.CANCELED;
+      } else if (options.status === SupportRequestStatus.AWAITING_COMPLETION) {
+        dmRequestStatus = DMRequestStatus.AWAITING_COMPLETION;
       } else if (options.status === SupportRequestStatus.COMPLETED) {
         // Completed: include both DECLINED and ACCEPTED without active thread.
         // Do NOT pre-filter by status here; fetch all and filter at service layer.
         dmRequestStatus = undefined;
+      } else if (options.status === SupportRequestStatus.REPORTED) {
+        dmRequestStatus = DMRequestStatus.REPORTED;
       }
 
       // Get support requests (requests with description)
@@ -145,6 +149,8 @@ export class SupportRequestService {
           supportStatus = SupportRequestStatus.AWAITING_COMPLETION;
         } else if (requestStatus === DMRequestStatus.COMPLETED) {
           supportStatus = SupportRequestStatus.COMPLETED;
+        } else if (requestStatus === DMRequestStatus.REPORTED) {
+          supportStatus = SupportRequestStatus.REPORTED;
         } else {
           supportStatus = SupportRequestStatus.COMPLETED;
         }
@@ -175,6 +181,11 @@ export class SupportRequestService {
           finalThreadId = threadInfo.threadId;
         }
         // PENDING durumunda finalThreadId null kalır
+
+        // Map completed to finalized for frontend compatibility
+        const displayStatus = supportStatus === SupportRequestStatus.COMPLETED 
+          ? 'finalized' as const 
+          : supportStatus;
 
         supportRequests.push({
           id: request.id,
@@ -685,6 +696,11 @@ export class SupportRequestService {
       reporterId,
       category: normalizedCategory,
       description: trimmedDescription || null,
+    });
+
+    // Update request status to REPORTED
+    await this.dmRequestRepo.update(requestId, {
+      status: DMRequestStatus.REPORTED,
     });
 
     const socketHandler = SocketManager.getInstance().getSocketHandler();

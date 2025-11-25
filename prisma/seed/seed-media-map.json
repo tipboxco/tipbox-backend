@@ -1,0 +1,86 @@
+{
+  "user.avatar.primary": {
+    "targetKey": "profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg"
+  },
+  "user.banner.primary": {
+    "targetKey": "profile-banners/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-banner.png"
+  },
+  "user.avatar.market": {
+    "targetKey": "profile-pictures/248cc91f-b551-4ecc-a885-db1163571330/seed-avatar.jpg"
+  },
+  "inventory.dyson-media": {
+    "targetKey": "inventory/dyson-default.png"
+  },
+  "catalog.air-conditioner": {
+    "targetKey": "catalog/air-conditioner.png"
+  },
+  "catalog.cameras": {
+    "targetKey": "catalog/cameras.png"
+  },
+  "catalog.computers-tablets": {
+    "targetKey": "catalog/computers-tablets.png"
+  },
+  "catalog.drone": {
+    "targetKey": "catalog/drone.png"
+  },
+  "catalog.games": {
+    "targetKey": "catalog/games.png"
+  },
+  "catalog.headphones": {
+    "targetKey": "catalog/headphones.png"
+  },
+  "catalog.home-appliances": {
+    "targetKey": "catalog/home-appliances.png"
+  },
+  "catalog.kucukev": {
+    "targetKey": "catalog/kucukev.png"
+  },
+  "catalog.phones": {
+    "targetKey": "catalog/phones.png"
+  },
+  "catalog.printers": {
+    "targetKey": "catalog/printers.png"
+  },
+  "catalog.smart-home-devices": {
+    "targetKey": "catalog/smart-home-devices.png"
+  },
+  "catalog.tv": {
+    "targetKey": "catalog/tv.png"
+  },
+  "catalog.otomotiv": {
+    "targetKey": "catalog/otomotiv.png"
+  },
+  "badge.early-bird": {
+    "targetKey": "badges/480f5de9-b691-4d70-a6a8-2789226f4e07/early-bird.png"
+  },
+  "badge.welcome": {
+    "targetKey": "badges/480f5de9-b691-4d70-a6a8-2789226f4e07/welcome.png"
+  },
+  "badge.tip-master": {
+    "targetKey": "badges/480f5de9-b691-4d70-a6a8-2789226f4e07/tip-master.png"
+  },
+  "badge.first-post": {
+    "targetKey": "badges/480f5de9-b691-4d70-a6a8-2789226f4e07/first-post.png"
+  },
+  "post.image.primary": {
+    "targetKey": "post-media/480f5de9-b691-4d70-a6a8-2789226f4e07/post.jpg"
+  },
+  "product.phone.phone1": {
+    "targetKey": "products/phones/phone1.png"
+  },
+  "product.phone.phone2": {
+    "targetKey": "products/phones/phone2.png"
+  },
+  "product.phone.phone3": {
+    "targetKey": "products/phones/phone3.png"
+  },
+  "product.phone.phone4": {
+    "targetKey": "products/phones/phone4.png"
+  },
+  "product.phone.phone5": {
+    "targetKey": "products/phones/phone5.png"
+  },
+  "product.phone.phone6": {
+    "targetKey": "products/phones/phone6.png"
+  }
+}

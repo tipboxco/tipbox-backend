@@ -7,7 +7,7 @@
  *       enum: [GENERAL, TECHNICAL, PRODUCT]
  *     SupportRequestStatus:
  *       type: string
- *       enum: [pending, accepted, rejected, canceled, awaiting_completion, completed]
+ *       enum: [pending, accepted, rejected, canceled, awaiting_completion, completed, reported]
  *     MessageType:
  *       type: string
  *       enum: [message, support-request, send-tips]
@@ -166,7 +166,7 @@
 
 export type SupportType = 'GENERAL' | 'TECHNICAL' | 'PRODUCT';
 
-export type SupportRequestStatus = 'pending' | 'accepted' | 'rejected' | 'canceled' | 'awaiting_completion' | 'completed';
+export type SupportRequestStatus = 'pending' | 'accepted' | 'rejected' | 'canceled' | 'awaiting_completion' | 'completed' | 'reported';
 
 export type MessageType = 'message' | 'support-request' | 'send-tips';
 

@@ -216,8 +216,8 @@ router.post(
  *         name: status
  *         schema:
  *           type: string
- *           enum: [pending, active, completed]
- *         description: Destek sohbetlerinin durumuna göre filtreleme yapar.
+ *           enum: [pending, active, awaiting_completion, completed, finalized, reported]
+ *         description: Destek sohbetlerinin durumuna göre filtreleme yapar. finalized = completed (aynı durum).
  *       - in: query
  *         name: search
  *         schema:
@@ -256,7 +256,8 @@ router.post(
  *                     type: string
  *                   status:
  *                     type: string
- *                     enum: [active, pending, completed]
+ *                     enum: [active, pending, awaiting_completion, completed, finalized, reported]
+ *                     description: finalized durumu completed ile aynıdır, frontend uyumluluğu için ayrı değer olarak döner.
  *                   threadId:
  *                     type: string
  *                     format: uuid
@@ -284,7 +285,10 @@ router.get(
     let status: SupportRequestStatus | undefined;
     if (typeof req.query.status === 'string') {
       const statusValue = req.query.status.toLowerCase();
-      if (Object.values(SupportRequestStatus).includes(statusValue as SupportRequestStatus)) {
+      // Handle finalized as completed (same status, different name for frontend compatibility)
+      if (statusValue === 'finalized') {
+        status = SupportRequestStatus.COMPLETED;
+      } else if (Object.values(SupportRequestStatus).includes(statusValue as SupportRequestStatus)) {
         status = statusValue as SupportRequestStatus;
       }
     }
@@ -855,8 +859,23 @@ router.post(
  * @openapi
  * /messages/{messageId}/read:
  *   post:
- *     summary: Mesajı okundu olarak işaretle
- *     description: Belirtilen mesajı okundu olarak işaretler. Mesaj okundu olarak işaretlendiğinde `message_read` socket event'i tetiklenir.
+ *     summary: [DEPRECATED] Mesajı okundu olarak işaretle
+ *     description: |
+ *       **DEPRECATED:** Bu endpoint artık kullanılmamalıdır. Bunun yerine socket event'i kullanın: `mark_message_read`
+ *       
+ *       Belirtilen mesajı okundu olarak işaretler. Mesaj okundu olarak işaretlendiğinde `message_read` socket event'i tetiklenir.
+ *       
+ *       **Yeni Kullanım:** Socket üzerinden `mark_message_read` event'i gönderin:
+ *       ```javascript
+ *       socket.emit('mark_message_read', { messageId: '...' }, (response) => {
+ *         if (response.success) {
+ *           // Mesaj okundu olarak işaretlendi
+ *         } else {
+ *           // Hata: response.error
+ *         }
+ *       });
+ *       ```
+ *     deprecated: true
  *     tags: [Inbox]
  *     security:
  *       - bearerAuth: []

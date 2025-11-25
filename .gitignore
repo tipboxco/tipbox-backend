@@ -53,3 +53,6 @@ prisma/seed/seed-metadata.json
 
 # Docusaurus documentation (development phase)
 tipbox-docs/
+
+# Test results (ana dizindeki - sadece tests/test-results kullanılıyor)
+/test-results/

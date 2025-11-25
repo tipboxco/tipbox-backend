@@ -6,8 +6,13 @@ import {
   InventoryListItemResponse,
   UpdateInventoryItemDto,
   InventoryItemResponse,
+  CreateInventoryRequest,
+  InventoryExperienceRequest,
 } from '../../interfaces/inventory/inventory.dto';
 import logger from '../../infrastructure/logger/logger';
+import { ExperienceType } from '../../domain/content/experience-type.enum';
+import { ExperienceStatus } from '../../domain/content/experience-status.enum';
+import { InventoryMediaType } from '../../domain/inventory/inventory-media-type.enum';
 
 export class InventoryService {
   private readonly prisma: PrismaClient;
@@ -131,6 +136,99 @@ export class InventoryService {
   }
 
   /**
+   * Inventory'ye yeni ürün ekle
+   */
+  async createInventoryItem(
+    userId: string,
+    dto: CreateInventoryRequest
+  ): Promise<InventoryItemResponse> {
+    try {
+      const product = await this.prisma.product.findUnique({
+        where: { id: dto.productId },
+      });
+
+      if (!product) {
+        throw new Error('Product not found');
+      }
+
+      const hasOwned = dto.status === ExperienceStatus.OWN;
+
+      const inventory = await this.prisma.$transaction(async (tx) => {
+        const createdInventory = await tx.inventory.create({
+          data: {
+            userId,
+            productId: dto.productId,
+            hasOwned,
+            experienceSummary: dto.content,
+          },
+        });
+
+        if (dto.experience?.length) {
+          await tx.productExperience.createMany({
+            data: dto.experience.map((exp) => ({
+              inventoryId: createdInventory.id,
+              title: this.formatExperienceTitle(exp),
+              experienceText: exp.content,
+            })),
+          });
+        }
+
+        if (dto.images?.length) {
+          await tx.inventoryMedia.createMany({
+            data: dto.images.map((imageUrl) => ({
+              inventoryId: createdInventory.id,
+              mediaUrl: imageUrl,
+              type: InventoryMediaType.IMAGE,
+            })),
+          });
+        }
+
+        return createdInventory;
+      });
+
+      logger.info({
+        message: 'Inventory item created',
+        userId,
+        productId: dto.productId,
+        inventoryId: inventory.id,
+      });
+
+      return {
+        id: inventory.id,
+        userId: inventory.userId,
+        productId: inventory.productId,
+        hasOwned: inventory.hasOwned,
+        experienceSummary: inventory.experienceSummary,
+        createdAt: inventory.createdAt.toISOString(),
+        updatedAt: inventory.updatedAt.toISOString(),
+        product: {
+          id: product.id,
+          name: product.name,
+          brand: product.brand,
+          description: product.description,
+        },
+      };
+    } catch (error: any) {
+      if (error?.code === 'P2002') {
+        logger.warn({
+          message: 'Inventory already exists for this product and user',
+          userId,
+          productId: dto.productId,
+        });
+        throw new Error('Inventory already exists for this product');
+      }
+
+      logger.error({
+        message: 'Error creating inventory item',
+        userId,
+        productId: dto.productId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  /**
    * Kullanıcının sahip olduğu ürünlerin listesinde düzenleme yap
    */
   async updateInventoryItem(
@@ -246,6 +344,15 @@ export class InventoryService {
       });
       throw error;
     }
+  }
+
+  private formatExperienceTitle(experience: InventoryExperienceRequest): string {
+    const readable =
+      experience.type === ExperienceType.PRICE_AND_SHOPPING
+        ? 'Price and Shopping Experience'
+        : 'Product and Usage Experience';
+    const safeRating = Math.min(Math.max(Math.round(experience.rating), 1), 5);
+    return `${readable} (${safeRating}/5)`;
   }
 }
 

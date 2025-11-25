@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { User } from '../../domain/user/user.entity';
 import { Wallet, WalletProvider } from '../../domain/wallet/wallet.entity';
 import { EmailAlreadyExistsError } from '../errors/custom-errors';
+import { DEFAULT_PROFILE_BANNER_URL } from '../../domain/user/profile.constants';
 
 export class UserPrismaRepository {
   private prisma = new PrismaClient();
@@ -22,9 +23,14 @@ export class UserPrismaRepository {
       const user = await this.prisma.user.create({
         data: { 
           email,
-          profile: displayName ? {
-            create: { displayName }
-          } : undefined
+          profile: displayName
+            ? {
+                create: {
+                  displayName,
+                  bannerUrl: DEFAULT_PROFILE_BANNER_URL,
+                },
+              }
+            : undefined,
         },
         include: { 
           profile: true,
@@ -57,9 +63,14 @@ export class UserPrismaRepository {
         data: { 
           email, 
           passwordHash,
-          profile: displayName ? {
-            create: { displayName }
-          } : undefined
+          profile: displayName
+            ? {
+                create: {
+                  displayName,
+                  bannerUrl: DEFAULT_PROFILE_BANNER_URL,
+                },
+              }
+            : undefined,
         },
         include: { 
           profile: true,

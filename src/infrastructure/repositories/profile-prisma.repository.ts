@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { Profile } from '../../domain/user/profile.entity';
+import { DEFAULT_PROFILE_BANNER_URL } from '../../domain/user/profile.constants';
 
 export class ProfilePrismaRepository {
   private prisma = new PrismaClient();
@@ -14,14 +15,15 @@ export class ProfilePrismaRepository {
     return profile ? this.toDomain(profile) : null;
   }
 
-  async create(userId: string, displayName?: string, userName?: string, bio?: string, country?: string, birthDate?: Date): Promise<Profile> {
+  async create(userId: string, displayName?: string, userName?: string, bio?: string, country?: string, birthDate?: Date, cosmeticBadgeId?: string | null): Promise<Profile> {
     const profile = await this.prisma.profile.create({
       data: {
         userId,
         displayName,
         userName,
         bio,
-        bannerUrl: undefined,
+        bannerUrl: DEFAULT_PROFILE_BANNER_URL,
+        cosmeticBadgeId,
         country,
         birthDate
       } as any
@@ -29,7 +31,7 @@ export class ProfilePrismaRepository {
     return this.toDomain(profile);
   }
 
-  async update(id: string, data: { displayName?: string; userName?: string; bio?: string; bannerUrl?: string | null; country?: string; birthDate?: Date }): Promise<Profile | null> {
+  async update(id: string, data: { displayName?: string; userName?: string; bio?: string; bannerUrl?: string | null; cosmeticBadgeId?: string | null; country?: string; birthDate?: Date }): Promise<Profile | null> {
     const profile = await this.prisma.profile.update({
       where: { id } as any,
       data: data as any
@@ -37,7 +39,7 @@ export class ProfilePrismaRepository {
     return profile ? this.toDomain(profile) : null;
   }
 
-  async updateByUserId(userId: string, data: { displayName?: string; userName?: string; bio?: string; bannerUrl?: string | null; country?: string; birthDate?: Date }): Promise<Profile | null> {
+  async updateByUserId(userId: string, data: { displayName?: string; userName?: string; bio?: string; bannerUrl?: string | null; cosmeticBadgeId?: string | null; country?: string; birthDate?: Date }): Promise<Profile | null> {
     const profile = await this.prisma.profile.update({
       where: { userId } as any,
       data: data as any
@@ -71,13 +73,14 @@ export class ProfilePrismaRepository {
       prismaProfile.displayName,
       prismaProfile.userName,
       prismaProfile.bio,
-      prismaProfile.bannerUrl ?? null,
+      prismaProfile.bannerUrl ?? DEFAULT_PROFILE_BANNER_URL,
+      prismaProfile.cosmeticBadgeId ?? null,
       prismaProfile.country,
       prismaProfile.birthDate,
-      prismaProfile.postsCount ?? 0,
-      prismaProfile.trustCount ?? 0,
-      prismaProfile.trusterCount ?? 0,
-      prismaProfile.unseenFeedCount ?? 0,
+      prismaProfile.postsCount || 0,
+      prismaProfile.trustCount || 0,
+      prismaProfile.trusterCount || 0,
+      prismaProfile.unseenFeedCount || 0,
       prismaProfile.createdAt,
       prismaProfile.updatedAt
     );

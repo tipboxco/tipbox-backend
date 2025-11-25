@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import multer, { FileFilterCallback } from 'multer';
 import { UserService } from '../../application/user/user.service';
-import { CreateUserRequest, UserResponse } from './user.dto';
+import { CreateUserRequest, UpdateUserProfileRequest, UserResponse } from './user.dto';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { S3Service } from '../../infrastructure/s3/s3.service';
 import { v4 as uuidv4 } from 'uuid';
@@ -27,30 +27,7 @@ const s3Service = new S3Service();
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               properties:
- *                 id: { type: string }
- *                 name: { type: string }
- *                 avatarUrl: { type: string, nullable: true }
- *                 bannerUrl: { type: string, nullable: true }
- *                 biography: { type: string, nullable: true }
- *                 titles:
- *                   type: array
- *                   items: { type: string }
- *                 stats:
- *                   type: object
- *                   properties:
- *                     posts: { type: integer }
- *                     trust: { type: integer }
- *                     truster: { type: integer }
- *                 badges:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       id: { type: string }
- *                       title: { type: string }
- *                       image: { type: string, nullable: true }
+ *               $ref: '#/components/schemas/UserProfileDetailsResponse'
  *       401:
  *         description: Unauthorized
  */
@@ -62,6 +39,59 @@ router.get('/me/profile', asyncHandler(async (req: Request, res: Response) => {
   const profile = await userService.getSelfUserProfile(String(userId));
   if (!profile) return res.status(404).json({ message: 'User not found' });
   return res.json(profile);
+}));
+
+/**
+ * @openapi
+ * /users/me/profile:
+ *   put:
+ *     summary: Profil bilgilerini güncelle
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UpdateUserProfileRequest'
+ *     responses:
+ *       200:
+ *         description: Güncellenmiş profil
+ */
+router.put('/me/profile', asyncHandler(async (req: Request<{}, {}, UpdateUserProfileRequest>, res: Response) => {
+  const userPayload = (req as any).user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+  const body = req.body || {};
+
+  if (body.name && body.name.trim().length < 2) {
+    return res.status(400).json({ message: 'İsim en az 2 karakter olmalıdır' });
+  }
+
+  if (body.biography && body.biography.length > 500) {
+    return res.status(400).json({ message: 'Biyografi en fazla 500 karakter olabilir' });
+  }
+
+  if (body.badge && !Array.isArray(body.badge)) {
+    return res.status(400).json({ message: 'badge alanı bir dizi olmalıdır' });
+  }
+
+  await userService.updateProfileDetails(String(userId), {
+    name: body.name,
+    biography: body.biography,
+    banner: typeof body.banner !== 'undefined' ? body.banner : undefined,
+    avatar: body.avatar,
+    cosmeticId: typeof body.cosmetic !== 'undefined' ? body.cosmetic : undefined,
+    badges: body.badge,
+  });
+
+  const profile = await userService.getSelfUserProfile(String(userId));
+  return res.json({
+    success: true,
+    profile,
+  });
 }));
 
 /**
@@ -143,16 +173,17 @@ router.get('/:id/profile', asyncHandler(async (req: Request, res: Response) => {
  *         required: true
  *         schema: { type: string }
  *       - in: query
- *         name: search
+ *         name: q
  *         schema: { type: string }
+ *         description: İsim veya kullanıcı adına göre arama (case-insensitive)
  *     responses:
  *       200:
  *         description: Trust list
  */
 router.get('/:id/trusts', asyncHandler(async (req: Request, res: Response) => {
   const id = String(req.params.id);
-  const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
-  const list = await userService.listTrustedUsers(id, search);
+  const q = typeof req.query.q === 'string' ? req.query.q.trim() : undefined;
+  const list = await userService.listTrustedUsers(id, q);
   return res.json(list);
 }));
 
@@ -170,16 +201,17 @@ router.get('/:id/trusts', asyncHandler(async (req: Request, res: Response) => {
  *         required: true
  *         schema: { type: string }
  *       - in: query
- *         name: search
+ *         name: q
  *         schema: { type: string }
+ *         description: İsim veya kullanıcı adına göre arama (case-insensitive)
  *     responses:
  *       200:
  *         description: Truster listesi
  */
 router.get('/:id/trusters', asyncHandler(async (req: Request, res: Response) => {
   const id = String(req.params.id);
-  const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
-  const list = await userService.listTrusters(id, search);
+  const q = typeof req.query.q === 'string' ? req.query.q.trim() : undefined;
+  const list = await userService.listTrusters(id, q);
   return res.json(list);
 }));
 
@@ -213,7 +245,8 @@ router.delete('/:id/trusts/:targetUserId', asyncHandler(async (req: Request, res
   const id = String(req.params.id);
   if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
   const targetUserId = String(req.params.targetUserId);
-  await userService.removeTrust(id, targetUserId);
+  const ok = await userService.removeTrust(id, targetUserId);
+  if (!ok) return res.status(404).json({ message: 'Kayıt bulunamadı' });
   return res.status(204).end();
 }));
 
@@ -393,8 +426,9 @@ router.post('/:id/unmute', asyncHandler(async (req: Request, res: Response) => {
  *         required: true
  *         schema: { type: string }
  *       - in: query
- *         name: search
+ *         name: q
  *         schema: { type: string }
+ *         description: İsim veya kullanıcı adına göre arama (case-insensitive)
  */
 router.get('/:id/collections/achievements', asyncHandler(async (req: Request, res: Response) => {
   const id = String(req.params.id);
@@ -415,8 +449,9 @@ router.get('/:id/collections/achievements', asyncHandler(async (req: Request, re
  *         required: true
  *         schema: { type: string }
  *       - in: query
- *         name: search
+ *         name: q
  *         schema: { type: string }
+ *         description: İsim veya kullanıcı adına göre arama (case-insensitive)
  */
 router.get('/:id/collections/bridges', asyncHandler(async (req: Request, res: Response) => {
   const id = String(req.params.id);
@@ -676,7 +711,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
  * /users/setup-profile:
  *   post:
  *     summary: Kullanıcı profilini tamamlar (Set Up Profile)
- *     description: Email doğrulaması sonrası kullanıcı profilini tamamlar. FullName, UserName, Avatar ve ilgi alanlarını kaydeder.
+ *     description: Email doğrulaması sonrası kullanıcı profilini tamamlar. FullName, UserName, Avatar, Banner ve ilgi alanlarını kaydeder.
  *     operationId: setupUserProfile
  *     tags:
  *       - Users
@@ -710,6 +745,10 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
  *                 type: string
  *                 format: binary
  *                 description: Profil fotoğrafı (opsiyonel, max 5MB)
+ *               Banner:
+ *                 type: string
+ *                 format: binary
+ *                 description: Profil banner görseli (opsiyonel, max 5MB)
  *               selectCategories:
  *                 type: string
  *                 example: '{"userId":"1","selectedCategories":[{"categoryId":"1","subCategoryIds":["1","2"]}]}'
@@ -783,7 +822,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
  *                   type: string
  *                   example: Profil tamamlanırken bir hata oluştu
  */
-router.post('/setup-profile', upload.single('Avatar'), asyncHandler(async (req: Request & { file?: Express.Multer.File }, res: Response) => {
+router.post('/setup-profile', upload.fields([{ name: 'Avatar', maxCount: 1 }, { name: 'Banner', maxCount: 1 }]), asyncHandler(async (req: Request & { files?: { [fieldname: string]: Express.Multer.File[] } }, res: Response) => {
   const userPayload = (req as any).user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
@@ -820,72 +859,101 @@ router.post('/setup-profile', upload.single('Avatar'), asyncHandler(async (req: 
     });
   }
 
+  // Helper function: Dosya yükleme
+  const uploadImageFile = async (file: Express.Multer.File, folder: string, fileType: string): Promise<string> => {
+    // File extension'ı güvenli şekilde al (dosya adından veya MIME type'dan)
+    let fileExtension = 'jpg'; // Default extension
+    
+    // Önce dosya adından extension al
+    if (file.originalname && file.originalname.includes('.')) {
+      const parts = file.originalname.split('.');
+      if (parts.length > 1) {
+        fileExtension = parts[parts.length - 1].toLowerCase();
+      }
+    }
+    
+    // MIME type'dan extension mapping (güvenlik için)
+    const mimeToExtension: Record<string, string> = {
+      'image/jpeg': 'jpg',
+      'image/jpg': 'jpg',
+      'image/png': 'png',
+      'image/gif': 'gif',
+      'image/webp': 'webp',
+      'image/svg+xml': 'svg',
+    };
+    
+    // MIME type varsa onu kullan (daha güvenilir)
+    if (file.mimetype && mimeToExtension[file.mimetype]) {
+      fileExtension = mimeToExtension[file.mimetype];
+    }
+    
+    // Extension'ı validate et (sadece izin verilen formatlar)
+    const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    if (!allowedExtensions.includes(fileExtension)) {
+      throw new Error('Desteklenmeyen dosya formatı. Sadece JPG, PNG, GIF ve WebP formatları desteklenmektedir.');
+    }
+    
+    // Dosya adını oluştur
+    const fileName = `${folder}/${userIdStr}/${uuidv4()}.${fileExtension}`;
+    
+    // Dosyayı yükle
+    const fileUrl = await s3Service.uploadFile(fileName, file.buffer, file.mimetype);
+    
+    logger.info({
+      message: `${fileType} başarıyla yüklendi`,
+      userId: userIdStr,
+      fileName,
+      fileSize: file.size,
+      mimeType: file.mimetype,
+    });
+    
+    return fileUrl;
+  };
+
   // Avatar yükleme
   let avatarUrl: string | undefined;
-  if (req.file) {
+  const avatarFile = req.files?.['Avatar']?.[0];
+  if (avatarFile) {
     try {
-      // File extension'ı güvenli şekilde al (dosya adından veya MIME type'dan)
-      let fileExtension = 'jpg'; // Default extension
-      
-      // Önce dosya adından extension al
-      if (req.file.originalname && req.file.originalname.includes('.')) {
-        const parts = req.file.originalname.split('.');
-        if (parts.length > 1) {
-          fileExtension = parts[parts.length - 1].toLowerCase();
-        }
-      }
-      
-      // MIME type'dan extension mapping (güvenlik için)
-      const mimeToExtension: Record<string, string> = {
-        'image/jpeg': 'jpg',
-        'image/jpg': 'jpg',
-        'image/png': 'png',
-        'image/gif': 'gif',
-        'image/webp': 'webp',
-        'image/svg+xml': 'svg',
-      };
-      
-      // MIME type varsa onu kullan (daha güvenilir)
-      if (req.file.mimetype && mimeToExtension[req.file.mimetype]) {
-        fileExtension = mimeToExtension[req.file.mimetype];
-      }
-      
-      // Extension'ı validate et (sadece izin verilen formatlar)
-      const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-      if (!allowedExtensions.includes(fileExtension)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Desteklenmeyen dosya formatı. Sadece JPG, PNG, GIF ve WebP formatları desteklenmektedir.',
-        });
-      }
-      
-      // Dosya adını oluştur
-      const fileName = `profile-pictures/${userIdStr}/${uuidv4()}.${fileExtension}`;
-      
-      // Avatar'ı yükle
-      avatarUrl = await s3Service.uploadFile(fileName, req.file.buffer, req.file.mimetype);
-      
-      logger.info({
-        message: 'Avatar başarıyla yüklendi',
-        userId: userIdStr,
-        fileName,
-        fileSize: req.file.size,
-        mimeType: req.file.mimetype,
-      });
+      avatarUrl = await uploadImageFile(avatarFile, 'profile-pictures', 'Avatar');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata';
       logger.error({
         message: 'Avatar yükleme hatası',
         error: errorMessage,
         userId: userIdStr,
-        fileName: req.file.originalname,
-        fileSize: req.file.size,
-        mimeType: req.file.mimetype,
+        fileName: avatarFile.originalname,
+        fileSize: avatarFile.size,
+        mimeType: avatarFile.mimetype,
       });
       
       return res.status(500).json({
         success: false,
         message: `Avatar yüklenirken bir hata oluştu: ${errorMessage}`,
+      });
+    }
+  }
+
+  // Banner yükleme
+  let bannerUrl: string | undefined;
+  const bannerFile = req.files?.['Banner']?.[0];
+  if (bannerFile) {
+    try {
+      bannerUrl = await uploadImageFile(bannerFile, 'profile-banners', 'Banner');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata';
+      logger.error({
+        message: 'Banner yükleme hatası',
+        error: errorMessage,
+        userId: userIdStr,
+        fileName: bannerFile.originalname,
+        fileSize: bannerFile.size,
+        mimeType: bannerFile.mimetype,
+      });
+      
+      return res.status(500).json({
+        success: false,
+        message: `Banner yüklenirken bir hata oluştu: ${errorMessage}`,
       });
     }
   }
@@ -896,6 +964,7 @@ router.post('/setup-profile', upload.single('Avatar'), asyncHandler(async (req: 
       fullName: FullName,
       userName: UserName,
       avatarUrl,
+      bannerUrl,
       selectedCategories: categoriesData.selectedCategories || [],
     });
 
@@ -1140,118 +1209,8 @@ router.get('/:id/profile-card', asyncHandler(async (req: Request, res: Response)
   res.json(card);
 }));
 
-/**
- * @openapi
- * /users/{id}/trusts:
- *   get:
- *     summary: Kullanıcının trust ettiği kullanıcıları listele
- *     tags: [Users]
- *     parameters:
- *       - in: path
- *         name: id
- *         schema:
- *           type: string
- *         required: true
- *         description: Kullanıcı ID
- *       - in: query
- *         name: q
- *         schema:
- *           type: string
- *         description: İsim veya kullanıcı adına göre arama (case-insensitive)
- *     responses:
- *       200:
- *         description: Trust listesi
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   id: { type: string, example: "b6d8c1f2-4a9b-4d1c-9e2a-123456789abc" }
- *                   userName: { type: string, nullable: true, example: "omerfaruk" }
- *                   name: { type: string, nullable: true, example: "Ömer Faruk" }
- *                   titles:
- *                     type: array
- *                     items: { type: string }
- *                     example: ["Technology Enthusiast","Digital Surfer","Hardware Expert"]
- *                   avatar: { type: string, nullable: true, example: "https://cdn.tipbox.co/avatars/omer.jpg" }
- */
-router.get('/:id/trusts', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const q = (req.query.q as string) || undefined;
-  const list = await userService.listTrustedUsers(id, q);
-  res.json(list);
-}));
 
-/**
- * @openapi
- * /users/{id}/trusters:
- *   get:
- *     summary: Kullanıcıyı trust eden kullanıcıları listele
- *     tags: [Users]
- *     parameters:
- *       - in: path
- *         name: id
- *         schema:
- *           type: string
- *         required: true
- *         description: Kullanıcı ID
- *       - in: query
- *         name: q
- *         schema:
- *           type: string
- *         description: İsim veya kullanıcı adına göre arama (case-insensitive)
- *     responses:
- *       200:
- *         description: Truster listesi
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   id: { type: string, example: "7a2d..." }
- *                   userName: { type: string, nullable: true, example: "techguy" }
- *                   name: { type: string, nullable: true, example: "Ali Veli" }
- *                   titles:
- *                     type: array
- *                     items: { type: string }
- *                     example: ["Hardware Expert"]
- *                   avatar: { type: string, nullable: true }
- *                   isTrusted: { type: boolean, example: true }
- */
-router.get('/:id/trusters', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const q = (req.query.q as string) || undefined;
-  const list = await userService.listTrusters(id, q);
-  res.json(list);
-}));
 
-/**
- * @openapi
- * /users/{id}/trust/{targetUserId}:
- *   post:
- *     summary: Bir kullanıcıyı trust et
- *     tags: [Users]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *       - in: path
- *         name: targetUserId
- *         required: true
- *         schema: { type: string }
- *     responses:
- *       204: { description: Başarılı }
- */
-router.post('/:id/trust/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
-  const { id, targetUserId } = req.params;
-  await userService.addTrust(id, targetUserId);
-  res.status(204).send();
-}));
 
 /**
  * @openapi
@@ -1305,7 +1264,12 @@ router.delete('/:id/trusts/:targetUserId', asyncHandler(async (req: Request, res
  *         description: Geçersiz istek
  */
 router.post('/:id/block/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
-  const { id, targetUserId } = req.params;
+  const userPayload = (req as any).user;
+  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
+  const id = String(req.params.id);
+  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
+  const targetUserId = String(req.params.targetUserId);
   await userService.blockUser(id, targetUserId);
   res.status(204).send();
 }));
@@ -1336,7 +1300,12 @@ router.post('/:id/block/:targetUserId', asyncHandler(async (req: Request, res: R
  *         description: Engelleme kaydı bulunamadı
  */
 router.delete('/:id/block/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
-  const { id, targetUserId } = req.params;
+  const userPayload = (req as any).user;
+  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
+  const id = String(req.params.id);
+  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
+  const targetUserId = String(req.params.targetUserId);
   const ok = await userService.unblockUser(id, targetUserId);
   if (!ok) return res.status(404).json({ message: 'Engelleme kaydı bulunamadı' });
   res.status(204).send();
@@ -1368,7 +1337,12 @@ router.delete('/:id/block/:targetUserId', asyncHandler(async (req: Request, res:
  *         description: Geçersiz istek
  */
 router.post('/:id/mute/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
-  const { id, targetUserId } = req.params;
+  const userPayload = (req as any).user;
+  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
+  const id = String(req.params.id);
+  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
+  const targetUserId = String(req.params.targetUserId);
   await userService.muteUser(id, targetUserId);
   res.status(204).send();
 }));
@@ -1399,7 +1373,12 @@ router.post('/:id/mute/:targetUserId', asyncHandler(async (req: Request, res: Re
  *         description: Susturma kaydı bulunamadı
  */
 router.delete('/:id/mute/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
-  const { id, targetUserId } = req.params;
+  const userPayload = (req as any).user;
+  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
+  const id = String(req.params.id);
+  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
+  const targetUserId = String(req.params.targetUserId);
   const ok = await userService.unmuteUser(id, targetUserId);
   if (!ok) return res.status(404).json({ message: 'Susturma kaydı bulunamadı' });
   res.status(204).send();
@@ -1485,7 +1464,7 @@ router.get('/:id/collections/achievements', asyncHandler(async (req: Request, re
   const badges = await userService.listAchievementBadges(id, q);
   res.json(badges.map(b => ({
     ...b,
-    earnedDate: b.earnedDate?.toISOString() ?? null,
+    earnDate: b.earnDate ?? null,
   })));
 }));
 

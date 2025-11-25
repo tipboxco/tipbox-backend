@@ -100,6 +100,9 @@ export class SocketHandler {
       // Message sending handlers
       this.setupMessageHandlers(socket);
 
+      // Message read handler
+      this.setupMessageReadHandler(socket);
+
       // Hata yakalama
       socket.on('error', (error) => {
         logger.error(`Socket error for user ${userEmail}:`, error);
@@ -496,6 +499,42 @@ export class SocketHandler {
   private emitSupportRequestError(socket: AuthenticatedSocket, reason: string, callback?: (response: { error?: string }) => void) {
     socket.emit('support_request_error', { reason });
     callback?.({ error: reason });
+  }
+
+  /**
+   * Mesaj okundu işaretleme için event handler
+   */
+  private setupMessageReadHandler(socket: AuthenticatedSocket): void {
+    const userId = socket.data.userId;
+    const userEmail = socket.data.userEmail;
+
+    // mark_message_read event handler
+    socket.on('mark_message_read', async (data: { messageId: string }, callback?: (response: { success?: boolean; error?: string }) => void) => {
+      try {
+        const { messageId } = data || {};
+        
+        if (!messageId || typeof messageId !== 'string') {
+          socket.emit('message_read_error', {
+            reason: 'messageId is required',
+          });
+          callback?.({ error: 'messageId is required' });
+          return;
+        }
+
+        // Mesajı okundu olarak işaretle
+        await this.messagingService.markMessageAsRead(messageId, userId);
+        
+        logger.info(`Message ${messageId} marked as read via socket by user ${userEmail} (${userId})`);
+        callback?.({ success: true });
+      } catch (error: any) {
+        logger.error(`Error handling mark_message_read for user ${userEmail}:`, error);
+        const errorMessage = error.message || 'Failed to mark message as read';
+        socket.emit('message_read_error', {
+          reason: errorMessage,
+        });
+        callback?.({ error: errorMessage });
+      }
+    });
   }
 
   /**

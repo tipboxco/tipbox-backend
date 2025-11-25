@@ -34,8 +34,9 @@ const THREAD_INCLUDE = {
       },
     },
   },
-} satisfies Prisma.DMThreadInclude;
+} as const;
 
+// Prisma payload for thread with all relations we include in this repository
 type ThreadWithRelations = Prisma.DMThreadGetPayload<{
   include: typeof THREAD_INCLUDE;
 }>;
@@ -83,9 +84,9 @@ export class DMThreadPrismaRepository {
       include: THREAD_INCLUDE,
       orderBy: { updatedAt: 'desc' },
       take: options.limit ?? 50,
-    });
+    }) as ThreadWithRelations[];
 
-    let filteredThreads = threads as ThreadWithRelations[];
+    let filteredThreads = threads;
 
     if (options.unreadOnly) {
       filteredThreads = filteredThreads.filter((thread) => {

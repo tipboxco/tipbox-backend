@@ -1,7 +1,11 @@
 import { PrismaClient } from '@prisma/client'
 import * as bcrypt from 'bcryptjs'
+import { DEFAULT_PROFILE_BANNER_URL } from '../../src/domain/user/profile.constants'
+import { getSeedMediaUrl } from './helpers/media.helper'
 
 const prisma = new PrismaClient()
+const DEFAULT_BANNER_URL = DEFAULT_PROFILE_BANNER_URL || getSeedMediaUrl('user.banner.primary')
+const PRIMARY_AVATAR_URL = getSeedMediaUrl('user.avatar.primary')
 
 // Static IDs (same as in main seed)
 const TEST_USER_ID = '480f5de9-b691-4d70-a6a8-2789226f4e07' // omer@tipbox.co
@@ -58,7 +62,7 @@ export async function seedUsersAndProfiles(): Promise<void> {
       displayName: 'Ömer Faruk',
       userName: 'omerfaruk',
       bio: 'Passionate about exploring the latest gadgets and digital lifestyles. Sharing honest reviews and real-life experiences with tech products.',
-      bannerUrl: 'https://cdn.tipbox.co/banners/omer-banner.jpg',
+      bannerUrl: DEFAULT_BANNER_URL,
       country: 'Turkey',
     },
     create: {
@@ -66,7 +70,7 @@ export async function seedUsersAndProfiles(): Promise<void> {
       displayName: 'Ömer Faruk',
       userName: 'omerfaruk',
       bio: 'Passionate about exploring the latest gadgets and digital lifestyles. Sharing honest reviews and real-life experiences with tech products.',
-      bannerUrl: 'https://cdn.tipbox.co/banners/omer-banner.jpg',
+      bannerUrl: DEFAULT_BANNER_URL,
       country: 'Turkey',
     },
   })
@@ -77,12 +81,12 @@ export async function seedUsersAndProfiles(): Promise<void> {
   if (existingAvatar) {
     await prisma.userAvatar.update({
       where: { id: existingAvatar.id },
-      data: { imageUrl: 'https://cdn.tipbox.co/avatars/omer.jpg', isActive: true },
+        data: { imageUrl: PRIMARY_AVATAR_URL, isActive: true },
     })
   } else {
     await prisma.userAvatar.updateMany({ where: { userId: userIdToUse }, data: { isActive: false } })
     await prisma.userAvatar.create({
-      data: { userId: userIdToUse, imageUrl: 'https://cdn.tipbox.co/avatars/omer.jpg', isActive: true },
+      data: { userId: userIdToUse, imageUrl: PRIMARY_AVATAR_URL || 'https://cdn.tipbox.co/avatars/omer.jpg', isActive: true },
     })
   }
   console.log('✅ Avatar set')
@@ -105,8 +109,17 @@ export async function seedUsersAndProfiles(): Promise<void> {
     trustUserIds.push(trustUser.id)
     await prisma.profile.upsert({
       where: { userId: trustUser.id },
-      update: { displayName: `Trust User ${i + 1}`, userName: `trustuser${i + 1}` },
-      create: { userId: trustUser.id, displayName: `Trust User ${i + 1}`, userName: `trustuser${i + 1}` },
+      update: {
+        displayName: `Trust User ${i + 1}`,
+        userName: `trustuser${i + 1}`,
+        bannerUrl: DEFAULT_BANNER_URL,
+      },
+      create: {
+        userId: trustUser.id,
+        displayName: `Trust User ${i + 1}`,
+        userName: `trustuser${i + 1}`,
+        bannerUrl: DEFAULT_BANNER_URL,
+      },
     })
     await prisma.trustRelation.create({ data: { trusterId: userIdToUse, trustedUserId: trustUser.id } }).catch(() => {})
   }
@@ -128,8 +141,17 @@ export async function seedUsersAndProfiles(): Promise<void> {
     // Not: Seed kullanıcı ID'leri artık seed/index.ts'de otomatik olarak metadata'ya ekleniyor
     await prisma.profile.upsert({
       where: { userId: trusterUser.id },
-      update: { displayName: `Truster User ${i + 1}`, userName: `truster${i + 1}` },
-      create: { userId: trusterUser.id, displayName: `Truster User ${i + 1}`, userName: `truster${i + 1}` },
+      update: {
+        displayName: `Truster User ${i + 1}`,
+        userName: `truster${i + 1}`,
+        bannerUrl: DEFAULT_BANNER_URL,
+      },
+      create: {
+        userId: trusterUser.id,
+        displayName: `Truster User ${i + 1}`,
+        userName: `truster${i + 1}`,
+        bannerUrl: DEFAULT_BANNER_URL,
+      },
     })
     await prisma.trustRelation.create({ data: { trusterId: trusterUser.id, trustedUserId: userIdToUse } }).catch(() => {})
   }
@@ -172,6 +194,11 @@ export async function seedUsersAndProfiles(): Promise<void> {
     }
   }
   console.log('✅ User badges linked (if badges exist)')
+
+  await prisma.profile.updateMany({
+    where: { bannerUrl: null },
+    data: { bannerUrl: DEFAULT_PROFILE_BANNER_URL },
+  })
 
   console.log('🎉 User seeding completed')
 }

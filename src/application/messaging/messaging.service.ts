@@ -198,18 +198,21 @@ export class MessagingService {
       // Mesajı okundu olarak işaretle
       await this.dmMessageRepo.update(messageId, { isRead: true });
 
-      // Göndericiye okundu bildirimi gönder
+      // Okundu bildirimi gönder
       const senderId = message.senderId;
-      SocketManager.getInstance().getSocketHandler().sendMessageToUser(
-        senderId,
-        'message_read',
-        {
-          messageId: message.id,
-          threadId: thread.id,
-          readBy: userIdStr,
-          timestamp: new Date().toISOString(),
-        }
-      );
+      const socketHandler = SocketManager.getInstance().getSocketHandler();
+      const readEvent = {
+        messageId: message.id,
+        threadId: thread.id,
+        readBy: userIdStr,
+        timestamp: new Date().toISOString(),
+      };
+
+      // Göndericiye okundu bildirimi gönder (thread açık değilse bile bildirim gelsin)
+      socketHandler.sendMessageToUser(senderId, 'message_read', readEvent);
+      
+      // Thread room'una da gönder (thread açık olan kullanıcılar için)
+      socketHandler.sendToRoom(`thread:${thread.id}`, 'message_read', readEvent);
 
       logger.info(`Message ${messageId} marked as read by user ${userId}`);
     } catch (error) {
@@ -586,6 +589,8 @@ export class MessagingService {
           status = 'awaiting_completion';
         } else if (requestStatus === DMRequestStatus.COMPLETED || requestStatus === 'COMPLETED') {
           status = 'completed';
+        } else if (requestStatus === DMRequestStatus.REPORTED || requestStatus === 'REPORTED') {
+          status = 'reported';
         } else {
           status = 'rejected';
         }
@@ -840,6 +845,8 @@ export class MessagingService {
           status = 'awaiting_completion';
         } else if (requestStatus === DMRequestStatus.COMPLETED || requestStatus === 'COMPLETED') {
           status = 'completed';
+        } else if (requestStatus === DMRequestStatus.REPORTED || requestStatus === 'REPORTED') {
+          status = 'reported';
         } else {
           status = 'rejected';
         }

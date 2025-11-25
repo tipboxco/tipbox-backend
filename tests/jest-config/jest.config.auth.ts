@@ -21,21 +21,7 @@ const config: Config = {
       },
     ],
   },
-  reporters: [
-    'default',
-    [
-      'jest-html-reporters',
-      {
-        publicPath: './tests/test-results',
-        filename: 'auth-report.html',
-        openReport: false,
-        inlineSource: true,
-        expand: true,
-        pageTitle: 'Tipbox API Auth Test Results',
-      },
-    ],
-    ['<rootDir>/scripts/custom-jest-reporter.js', {}],
-  ],
+  reporters: ['default'],
   testTimeout: 30000,
 };
 

@@ -6,6 +6,7 @@ export class Profile {
     public readonly userName: string | null,
     public readonly bio: string | null,
     public readonly bannerUrl: string | null,
+    public readonly cosmeticBadgeId: string | null,
     public readonly country: string | null,
     public readonly birthDate: Date | null,
     public readonly postsCount: number,

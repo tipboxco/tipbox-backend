@@ -58,6 +58,10 @@ export class DMRequest {
     return this.status === DMRequestStatus.COMPLETED;
   }
 
+  isReported(): boolean {
+    return this.status === DMRequestStatus.REPORTED;
+  }
+
   isClosedByUser(userId: string): boolean {
     if (this.belongsToSender(userId)) {
       return this.closedByFromUserAt !== null;
@@ -102,6 +106,8 @@ export class DMRequest {
       case DMRequestStatus.CANCELED: return 'İptal Edildi';
       case DMRequestStatus.AWAITING_COMPLETION: return 'Tamamlanmayı Bekliyor';
       case DMRequestStatus.COMPLETED: return 'Tamamlandı';
+      case DMRequestStatus.REPORTED: return 'Raporlandı';
+      default: return 'Bilinmeyen';
     }
   }
 
@@ -113,6 +119,8 @@ export class DMRequest {
       case DMRequestStatus.CANCELED: return '#ef4444';   // Red (same as declined)
       case DMRequestStatus.AWAITING_COMPLETION: return '#3b82f6'; // Blue
       case DMRequestStatus.COMPLETED: return '#10b981';  // Emerald green
+      case DMRequestStatus.REPORTED: return '#dc2626';  // Dark red
+      default: return '#6b7280'; // Gray
     }
   }
 
@@ -124,6 +132,8 @@ export class DMRequest {
       case DMRequestStatus.CANCELED: return '🚫';
       case DMRequestStatus.AWAITING_COMPLETION: return '⏰';
       case DMRequestStatus.COMPLETED: return '🎉';
+      case DMRequestStatus.REPORTED: return '🚩';
+      default: return '❓';
     }
   }
 

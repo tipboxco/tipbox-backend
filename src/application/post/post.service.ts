@@ -330,20 +330,57 @@ export class PostService {
    * Boost option getir
    */
   async getBoostOption(boostOptionId: string): Promise<BoostOption | null> {
-    // This should be implemented based on your boost options storage
-    // For now, returning a mock implementation
-    // TODO: Implement actual boost option retrieval from database
-    return null;
+    try {
+      const boostOption = await this.prisma.boostOption.findUnique({
+        where: { 
+          id: boostOptionId,
+          isActive: true 
+        },
+      });
+
+      if (!boostOption) {
+        return null;
+      }
+
+      return {
+        id: boostOption.id,
+        image: boostOption.image || '',
+        title: boostOption.title,
+        description: boostOption.description || '',
+        amount: boostOption.amount,
+        isPopular: boostOption.isPopular,
+      };
+    } catch (error) {
+      logger.error(`Failed to get boost option: ${boostOptionId}`, error);
+      throw error;
+    }
   }
 
   /**
    * Boost option listesi getir
    */
   async getBoostOptions(): Promise<BoostOption[]> {
-    // This should be implemented based on your boost options storage
-    // For now, returning a mock implementation
-    // TODO: Implement actual boost options retrieval from database
-    return [];
+    try {
+      const boostOptions = await this.prisma.boostOption.findMany({
+        where: { isActive: true },
+        orderBy: [
+          { isPopular: 'desc' },
+          { amount: 'asc' },
+        ],
+      });
+
+      return boostOptions.map((option) => ({
+        id: option.id,
+        image: option.image || '',
+        title: option.title,
+        description: option.description || '',
+        amount: option.amount,
+        isPopular: option.isPopular,
+      }));
+    } catch (error) {
+      logger.error('Failed to get boost options', error);
+      throw error;
+    }
   }
 
   /**
@@ -620,29 +657,31 @@ export class PostService {
     locations: Array<{ id: string; name: string }>;
     purposes: Array<{ id: string; name: string }>;
   }> {
-    // TODO: Implement actual retrieval from database
-    // For now, returning mock data
-    return {
-      durations: [
-        { id: '1', name: 'Less than 1 month' },
-        { id: '2', name: '1-3 months' },
-        { id: '3', name: '3-6 months' },
-        { id: '4', name: '6-12 months' },
-        { id: '5', name: 'More than 1 year' },
-      ],
-      locations: [
-        { id: '1', name: 'Home' },
-        { id: '2', name: 'Office' },
-        { id: '3', name: 'Outdoor' },
-        { id: '4', name: 'Other' },
-      ],
-      purposes: [
-        { id: '1', name: 'Personal use' },
-        { id: '2', name: 'Professional use' },
-        { id: '3', name: 'Gift' },
-        { id: '4', name: 'Other' },
-      ],
-    };
+    try {
+      const [durations, locations, purposes] = await Promise.all([
+        this.prisma.experienceDuration.findMany({
+          where: { isActive: true },
+          orderBy: { name: 'asc' },
+        }),
+        this.prisma.experienceLocation.findMany({
+          where: { isActive: true },
+          orderBy: { name: 'asc' },
+        }),
+        this.prisma.experiencePurpose.findMany({
+          where: { isActive: true },
+          orderBy: { name: 'asc' },
+        }),
+      ]);
+
+      return {
+        durations: durations.map((d) => ({ id: d.id, name: d.name })),
+        locations: locations.map((l) => ({ id: l.id, name: l.name })),
+        purposes: purposes.map((p) => ({ id: p.id, name: p.name })),
+      };
+    } catch (error) {
+      logger.error('Failed to get experience options', error);
+      throw error;
+    }
   }
 }
 

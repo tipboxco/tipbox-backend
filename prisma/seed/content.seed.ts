@@ -1,4 +1,9 @@
 import { prisma, generateUlid, TEST_USER_ID } from './types';
+import { getSeedMediaUrl } from './helpers/media.helper';
+
+const HOME_APPLIANCE_IMAGE = getSeedMediaUrl('catalog.home-appliances');
+const PHONE_IMAGE = getSeedMediaUrl('catalog.phones');
+const INVENTORY_MEDIA_URL = getSeedMediaUrl('inventory.dyson-media', 'https://cdn.tipbox.co/inventory/dyson-1.jpg');
 
 export async function seedProductsAndContent(): Promise<void> {
   console.log('🧩 [seed] products & content (full)');
@@ -15,7 +20,15 @@ export async function seedProductsAndContent(): Promise<void> {
         name: 'Temizlik Ürünleri',
         description: 'Süpürge, temizlik robotu vb.',
         mainCategoryId: evYasamCategory.id,
+        imageUrl: null, // ID oluşturulduktan sonra güncellenecek
       },
+    });
+    // Sub category imageUrl güncelle
+    await prisma.subCategory.update({
+      where: { id: evYasamSubCategory.id },
+      data: {
+        imageUrl: HOME_APPLIANCE_IMAGE
+      }
     });
   }
 
@@ -34,7 +47,15 @@ export async function seedProductsAndContent(): Promise<void> {
       name: 'Dyson Vakum Temizleyiciler',
       description: 'Dyson marka vakum temizleyiciler',
       subCategoryId: evYasamSubCategory?.id!,
+      imageUrl: null, // ID oluşturulduktan sonra güncellenecek
     },
+  });
+  // Product group imageUrl güncelle
+  await prisma.productGroup.update({
+    where: { id: productGroup.id },
+    data: {
+      imageUrl: HOME_APPLIANCE_IMAGE
+    }
   });
 
   const product1 = await prisma.product.create({
@@ -43,7 +64,15 @@ export async function seedProductsAndContent(): Promise<void> {
       brand: 'Dyson',
       description: 'Gelişmiş sensörlü kablosuz süpürge',
       groupId: productGroup.id,
+      imageUrl: null, // ID oluşturulduktan sonra güncellenecek
     },
+  });
+  // Product imageUrl güncelle
+  await prisma.product.update({
+    where: { id: product1.id },
+    data: {
+      imageUrl: HOME_APPLIANCE_IMAGE
+    }
   });
 
   const product2 = await prisma.product.create({
@@ -52,7 +81,15 @@ export async function seedProductsAndContent(): Promise<void> {
       brand: 'Dyson',
       description: 'Hafif ve güçlü kablosuz süpürge',
       groupId: productGroup.id,
+      imageUrl: null, // ID oluşturulduktan sonra güncellenecek
     },
+  });
+  // Product imageUrl güncelle
+  await prisma.product.update({
+    where: { id: product2.id },
+    data: {
+      imageUrl: HOME_APPLIANCE_IMAGE
+    }
   });
 
   const phoneProductGroup = await prisma.productGroup.create({
@@ -60,7 +97,15 @@ export async function seedProductsAndContent(): Promise<void> {
       name: 'Apple iPhone Serisi',
       description: 'Apple iPhone modelleri',
       subCategoryId: akilliTelefonSubCat?.id!,
+      imageUrl: null, // ID oluşturulduktan sonra güncellenecek
     },
+  });
+  // Product group imageUrl güncelle
+  await prisma.productGroup.update({
+    where: { id: phoneProductGroup.id },
+    data: {
+      imageUrl: PHONE_IMAGE
+    }
   });
 
   const product3 = await prisma.product.create({
@@ -69,7 +114,15 @@ export async function seedProductsAndContent(): Promise<void> {
       brand: 'Apple',
       description: "Apple'ın en yeni flagship telefonu",
       groupId: phoneProductGroup.id,
+      imageUrl: null, // ID oluşturulduktan sonra güncellenecek
     },
+  });
+  // Product imageUrl güncelle
+  await prisma.product.update({
+    where: { id: product3.id },
+    data: {
+      imageUrl: PHONE_IMAGE
+    }
   });
 
   // Inventory & Product Experience for TEST_USER
@@ -104,7 +157,7 @@ export async function seedProductsAndContent(): Promise<void> {
   await prisma.inventoryMedia.create({
     data: {
       inventoryId: inventory1.id,
-      mediaUrl: 'https://cdn.tipbox.co/inventory/dyson-1.jpg',
+      mediaUrl: INVENTORY_MEDIA_URL,
       type: 'IMAGE',
     },
   });

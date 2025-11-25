@@ -1,5 +1,7 @@
 import { PrismaClient } from '@prisma/client'
 import * as bcrypt from 'bcryptjs'
+import { DEFAULT_PROFILE_BANNER_URL } from '../src/domain/user/profile.constants'
+import { getSeedMediaUrl, SeedMediaKey } from './seed/helpers/media.helper'
 
 const prisma = new PrismaClient()
 
@@ -26,6 +28,11 @@ const TRUSTER_USER_IDS = [
 // Hash the default password for all users
 const DEFAULT_PASSWORD = 'password123'
 let passwordHash: string
+
+const DEFAULT_BANNER_URL = DEFAULT_PROFILE_BANNER_URL || getSeedMediaUrl('user.banner.primary')
+const PRIMARY_AVATAR_URL = getSeedMediaUrl('user.avatar.primary')
+const MARKET_AVATAR_URL = getSeedMediaUrl('user.avatar.market')
+const INVENTORY_MEDIA_URL = getSeedMediaUrl('inventory.dyson-media', 'https://cdn.tipbox.co/inventory/dyson-1.jpg')
 
 // Simple ULID generator for seed (avoids import issues)
 function generateUlid(): string {
@@ -70,57 +77,51 @@ async function main() {
 
   // 2. Main Categories
   console.log('📂 Creating main categories...')
-  const mainCategories = await Promise.all([
-    prisma.mainCategory.create({
-      data: {
-        name: 'Teknoloji',
-        description: 'Elektronik cihazlar, yazılım, mobil uygulamalar'
-      }
-    }),
-    prisma.mainCategory.create({
-      data: {
-        name: 'Ev & Yaşam',
-        description: 'Ev eşyaları, dekorasyon, temizlik ürünleri'
-      }
-    }),
-    prisma.mainCategory.create({
-      data: {
-        name: 'Gıda & İçecek',
-        description: 'Yiyecek, içecek, gıda takviyesi ürünleri'
-      }
-    }),
-    prisma.mainCategory.create({
-      data: {
-        name: 'Moda & Aksesuar',
-        description: 'Giyim, ayakkabı, çanta, takı ve aksesuarlar'
-      }
-    }),
-    prisma.mainCategory.create({
-      data: {
-        name: 'Sağlık & Güzellik',
-        description: 'Kişisel bakım, kozmetik, sağlık ürünleri'
-      }
-    }),
-    prisma.mainCategory.create({
-      data: {
-        name: 'Spor & Outdoor',
-        description: 'Spor ekipmanları, outdoor aktiviteler, fitness'
-      }
-    }),
-    prisma.mainCategory.create({
-      data: {
-        name: 'Hobi & Eğlence',
-        description: 'Kitap, oyun, müzik, sanat malzemeleri'
-      }
-    }),
-    prisma.mainCategory.create({
-      data: {
-        name: 'Otomotiv',
-        description: 'Araç aksesuarları, bakım ürünleri, parçalar'
+  // Görsel eşleştirmeleri: kategori isimlerine göre assets/catalog görselleri
+  const categoryConfigs = [
+    { name: 'Teknoloji', description: 'Elektronik cihazlar, yazılım, mobil uygulamalar', imageKey: 'catalog.computers-tablets' },
+    { name: 'Ev & Yaşam', description: 'Ev eşyaları, dekorasyon, temizlik ürünleri', imageKey: 'catalog.home-appliances' },
+    { name: 'Gıda & İçecek', description: 'Yiyecek, içecek, gıda takviyesi ürünleri', imageKey: 'catalog.air-conditioner' },
+    { name: 'Moda & Aksesuar', description: 'Giyim, ayakkabı, çanta, takı ve aksesuarlar', imageKey: 'catalog.printers' },
+    { name: 'Sağlık & Güzellik', description: 'Kişisel bakım, kozmetik, sağlık ürünleri', imageKey: 'catalog.smart-home-devices' },
+    { name: 'Spor & Outdoor', description: 'Spor ekipmanları, outdoor aktiviteler, fitness', imageKey: 'catalog.drone' },
+    { name: 'Hobi & Eğlence', description: 'Kitap, oyun, müzik, sanat malzemeleri', imageKey: 'catalog.games' },
+    { name: 'Otomotiv', description: 'Araç aksesuarları, bakım ürünleri, parçalar', imageKey: 'catalog.otomotiv' },
+  ];
+
+  // Mevcut kategorileri bul veya oluştur (tekrar önleme)
+  const mainCategories = await Promise.all(
+    categoryConfigs.map(async (config) => {
+      // Önce mevcut kategoriyi bul
+      const existing = await prisma.mainCategory.findFirst({
+        where: { name: config.name }
+      });
+
+      if (existing) {
+        // Mevcut kategoriyi güncelle
+        const imageUrl = getSeedMediaUrl(config.imageKey as any);
+        return prisma.mainCategory.update({
+          where: { id: existing.id },
+          data: {
+            description: config.description,
+            imageUrl: imageUrl,
+          }
+        });
+      } else {
+        // Yeni kategori oluştur
+        const imageUrl = getSeedMediaUrl(config.imageKey as any);
+        return prisma.mainCategory.create({
+          data: {
+            name: config.name,
+            description: config.description,
+            imageUrl: imageUrl,
+          }
+        });
       }
     })
-  ])
-  console.log(`✅ ${mainCategories.length} ana kategori oluşturuldu`)
+  );
+
+  console.log(`✅ ${mainCategories.length} ana kategori oluşturuldu/güncellendi`)
 
   // 3. Badge Categories
   console.log('🏆 Creating badge categories...')
@@ -158,77 +159,96 @@ async function main() {
   const eventCategory = badgeCategories.find(c => c.name === 'Event')!
   const communityCategory = badgeCategories.find(c => c.name === 'Community')!
 
-  const badges = await Promise.all([
-    // Achievement Badges
-    prisma.badge.create({
-      data: {
-        name: 'Welcome',
-        description: 'Tipbox\'a hoş geldin! İlk kayıt rozetin.',
-        type: 'ACHIEVEMENT',
-        rarity: 'COMMON',
-        boostMultiplier: 1.0,
-        rewardMultiplier: 1.0,
-        categoryId: achievementCategory.id
-      }
-    }),
-    prisma.badge.create({
-      data: {
-        name: 'First Post',
-        description: 'İlk gönderini paylaştın! İyi başlangıç.',
-        type: 'ACHIEVEMENT',
-        rarity: 'COMMON',
-        boostMultiplier: 1.1,
-        rewardMultiplier: 1.1,
-        categoryId: achievementCategory.id
-      }
-    }),
-    prisma.badge.create({
-      data: {
-        name: 'Tip Master',
-        description: '10 faydalı ipucu paylaştın. Sen bir uzman!',
-        type: 'ACHIEVEMENT',
-        rarity: 'RARE',
-        boostMultiplier: 1.3,
-        rewardMultiplier: 1.3,
-        categoryId: achievementCategory.id
-      }
-    }),
-    prisma.badge.create({
-      data: {
-        name: 'Community Hero',
-        description: '100 faydalı yorum yaptın. Topluluk kahramanı!',
-        type: 'ACHIEVEMENT',
-        rarity: 'EPIC',
-        boostMultiplier: 1.5,
-        rewardMultiplier: 1.5,
-        categoryId: communityCategory.id
-      }
-    }),
-    // Event Badges
-    prisma.badge.create({
-      data: {
-        name: 'Early Bird',
-        description: 'Tipbox\'un ilk kullanıcılarından birisin!',
-        type: 'EVENT',
-        rarity: 'RARE',
-        boostMultiplier: 1.2,
-        rewardMultiplier: 1.4,
-        categoryId: eventCategory.id
-      }
-    }),
-    prisma.badge.create({
-      data: {
-        name: 'Beta Tester',
-        description: 'Beta sürecinde bize yardım ettin. Teşekkürler!',
-        type: 'EVENT',
-        rarity: 'EPIC',
-        boostMultiplier: 1.4,
-        rewardMultiplier: 1.6,
-        categoryId: eventCategory.id
+  const badgeConfigs = [
+    {
+      name: 'Welcome',
+      description: 'Tipbox\'a hoş geldin! İlk kayıt rozetin.',
+      type: 'ACHIEVEMENT',
+      rarity: 'COMMON',
+      boostMultiplier: 1.0,
+      rewardMultiplier: 1.0,
+      categoryId: achievementCategory.id,
+      imageUrl: getSeedMediaUrl('badge.welcome'),
+    },
+    {
+      name: 'First Post',
+      description: 'İlk gönderini paylaştın! İyi başlangıç.',
+      type: 'ACHIEVEMENT',
+      rarity: 'COMMON',
+      boostMultiplier: 1.1,
+      rewardMultiplier: 1.1,
+      categoryId: achievementCategory.id,
+      imageUrl: getSeedMediaUrl('badge.first-post'),
+    },
+    {
+      name: 'Tip Master',
+      description: '10 faydalı ipucu paylaştın. Sen bir uzman!',
+      type: 'ACHIEVEMENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.3,
+      rewardMultiplier: 1.3,
+      categoryId: achievementCategory.id,
+      imageUrl: getSeedMediaUrl('badge.tip-master'),
+    },
+    {
+      name: 'Community Hero',
+      description: '100 faydalı yorum yaptın. Topluluk kahramanı!',
+      type: 'ACHIEVEMENT',
+      rarity: 'EPIC',
+      boostMultiplier: 1.5,
+      rewardMultiplier: 1.5,
+      categoryId: communityCategory.id,
+      imageUrl: null,
+    },
+    {
+      name: 'Early Bird',
+      description: 'Tipbox\'un ilk kullanıcılarından birisin!',
+      type: 'EVENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.2,
+      rewardMultiplier: 1.4,
+      categoryId: eventCategory.id,
+      imageUrl: getSeedMediaUrl('badge.early-bird'),
+    },
+    {
+      name: 'Beta Tester',
+      description: 'Beta sürecinde bize yardım ettin. Teşekkürler!',
+      type: 'EVENT',
+      rarity: 'EPIC',
+      boostMultiplier: 1.4,
+      rewardMultiplier: 1.6,
+      categoryId: eventCategory.id,
+      imageUrl: null,
+    },
+  ];
+
+  const badges = await Promise.all(
+    badgeConfigs.map(async (config) => {
+      const existing = await prisma.badge.findFirst({
+        where: { name: config.name }
+      }).catch(() => null);
+
+      if (existing) {
+        // Mevcut badge'i güncelle (özellikle imageUrl için)
+        return prisma.badge.update({
+          where: { id: existing.id },
+          data: {
+            imageUrl: config.imageUrl ?? existing.imageUrl,
+          }
+        });
+      } else {
+        // Yeni badge oluştur
+        return prisma.badge.create({
+          data: {
+            ...config,
+            type: config.type as any,
+            rarity: config.rarity as any,
+          }
+        });
       }
     })
-  ])
-  console.log(`✅ ${badges.length} varsayılan badge oluşturuldu`)
+  );
+  console.log(`✅ ${badges.length} varsayılan badge oluşturuldu/güncellendi`)
 
   // 5. Comparison Metrics
   console.log('📊 Creating comparison metrics...')
@@ -287,37 +307,52 @@ async function main() {
   // 6. Sub Categories for Technology
   console.log('📁 Creating sub categories for Technology...')
   const techCategory = mainCategories.find(c => c.name === 'Teknoloji')!
-  const techSubCategories = await Promise.all([
-    prisma.subCategory.create({
-      data: {
-        name: 'Akıllı Telefonlar',
-        description: 'iPhone, Android, Samsung, Xiaomi vs.',
-        mainCategoryId: techCategory.id
-      }
-    }),
-    prisma.subCategory.create({
-      data: {
-        name: 'Laptoplar',
-        description: 'Dizüstü bilgisayarlar, ultrabook, gaming laptop',
-        mainCategoryId: techCategory.id
-      }
-    }),
-    prisma.subCategory.create({
-      data: {
-        name: 'Kulaklıklar',
-        description: 'Kablosuz, kablolu, gaming, studio kulaklık',
-        mainCategoryId: techCategory.id
-      }
-    }),
-    prisma.subCategory.create({
-      data: {
-        name: 'Akıllı Saatler',
-        description: 'Apple Watch, Samsung Galaxy Watch, fitness tracker',
-        mainCategoryId: techCategory.id
+  
+  // SubCategory konfigürasyonları
+  const subCategoryConfigs = [
+    { name: 'Akıllı Telefonlar', description: 'iPhone, Android, Samsung, Xiaomi vs.', imageKey: 'catalog.phones' },
+    { name: 'Laptoplar', description: 'Dizüstü bilgisayarlar, ultrabook, gaming laptop', imageKey: 'catalog.computers-tablets' },
+    { name: 'Kulaklıklar', description: 'Kablosuz, kablolu, gaming, studio kulaklık', imageKey: 'catalog.headphones' },
+    { name: 'Akıllı Saatler', description: 'Apple Watch, Samsung Galaxy Watch, fitness tracker', imageKey: 'catalog.tv' },
+  ];
+
+  // Mevcut sub kategorileri bul veya oluştur (tekrar önleme)
+  const techSubCategories = await Promise.all(
+    subCategoryConfigs.map(async (config) => {
+      // Önce mevcut sub category'yi bul (aynı isim ve main category'de)
+      const existing = await prisma.subCategory.findFirst({
+        where: { 
+          name: config.name,
+          mainCategoryId: techCategory.id
+        }
+      });
+
+      if (existing) {
+        // Mevcut sub category'yi güncelle
+        const imageUrl = getSeedMediaUrl(config.imageKey as any);
+        return prisma.subCategory.update({
+          where: { id: existing.id },
+          data: {
+            description: config.description,
+            imageUrl: imageUrl,
+          }
+        });
+      } else {
+        // Yeni sub category oluştur
+        const imageUrl = getSeedMediaUrl(config.imageKey as any);
+        return prisma.subCategory.create({
+          data: {
+            name: config.name,
+            description: config.description,
+            mainCategoryId: techCategory.id,
+            imageUrl: imageUrl,
+          }
+        });
       }
     })
-  ])
-  console.log(`✅ ${techSubCategories.length} teknoloji alt kategorisi oluşturuldu`)
+  );
+
+  console.log(`✅ ${techSubCategories.length} teknoloji alt kategorisi oluşturuldu/güncellendi`)
 
   // 7. Test User için veriler
   console.log('👤 Creating test user data for Ömer Faruk...')
@@ -370,7 +405,7 @@ async function main() {
         displayName: 'Ömer Faruk',
         userName: 'omerfaruk',
         bio: 'Passionate about exploring the latest gadgets and digital lifestyles. Sharing honest reviews and real-life experiences with tech products.',
-        bannerUrl: 'https://cdn.tipbox.co/banners/omer-banner.jpg',
+        bannerUrl: DEFAULT_BANNER_URL,
         country: 'Turkey',
       }
     })
@@ -383,7 +418,7 @@ async function main() {
         displayName: 'Ömer Faruk',
         userName: 'omerfaruk',
         bio: 'Passionate about exploring the latest gadgets and digital lifestyles. Sharing honest reviews and real-life experiences with tech products.',
-        bannerUrl: 'https://cdn.tipbox.co/banners/omer-banner.jpg',
+        bannerUrl: DEFAULT_BANNER_URL,
         country: 'Turkey',
       }
     })
@@ -399,7 +434,7 @@ async function main() {
     await prisma.userAvatar.update({
       where: { id: existingAvatar.id },
       data: {
-        imageUrl: 'https://cdn.tipbox.co/avatars/omer.jpg',
+        imageUrl: PRIMARY_AVATAR_URL,
         isActive: true,
       }
     })
@@ -413,7 +448,7 @@ async function main() {
     await prisma.userAvatar.create({
       data: {
         userId: userIdToUse,
-        imageUrl: 'https://cdn.tipbox.co/avatars/omer.jpg',
+        imageUrl: PRIMARY_AVATAR_URL,
         isActive: true,
       }
     })
@@ -575,11 +610,13 @@ async function main() {
       update: {
         displayName: `Trust User ${i + 1}`,
         userName: `trustuser${i + 1}`,
+        bannerUrl: DEFAULT_BANNER_URL,
       },
       create: {
         userId: trustUser.id,
         displayName: `Trust User ${i + 1}`,
         userName: `trustuser${i + 1}`,
+        bannerUrl: DEFAULT_BANNER_URL,
       }
     })
 
@@ -627,11 +664,13 @@ async function main() {
       update: {
         displayName: `Truster User ${i + 1}`,
         userName: `truster${i + 1}`,
+        bannerUrl: DEFAULT_BANNER_URL,
       },
       create: {
         userId: trusterUser.id,
         displayName: `Truster User ${i + 1}`,
         userName: `truster${i + 1}`,
+        bannerUrl: DEFAULT_BANNER_URL,
       }
     })
 
@@ -654,16 +693,36 @@ async function main() {
       name: 'Temizlik Ürünleri',
       description: 'Süpürge, temizlik robotu vb.',
       mainCategoryId: evYasamCategory.id,
+      imageUrl: null // ID oluşturulduktan sonra güncellenecek
     }
   })
+
+  // Sub category imageUrl güncelle
+  if (evYasamSubCategory && !evYasamSubCategory.imageUrl) {
+    await prisma.subCategory.update({
+      where: { id: evYasamSubCategory.id },
+      data: {
+        imageUrl: getSeedMediaUrl('catalog.home-appliances')
+      }
+    });
+  }
 
   const productGroup = await prisma.productGroup.create({
     data: {
       name: 'Dyson Vakum Temizleyiciler',
       description: 'Dyson marka vakum temizleyiciler',
       subCategoryId: evYasamSubCategory.id,
+      imageUrl: null // ID oluşturulduktan sonra güncellenecek
     }
   })
+
+  // Product group imageUrl güncelle
+  await prisma.productGroup.update({
+    where: { id: productGroup.id },
+    data: {
+      imageUrl: getSeedMediaUrl('catalog.home-appliances')
+    }
+  });
 
   const product1 = await prisma.product.create({
     data: {
@@ -671,8 +730,17 @@ async function main() {
       brand: 'Dyson',
       description: 'Gelişmiş sensörlü kablosuz süpürge',
       groupId: productGroup.id,
+      imageUrl: null // ID oluşturulduktan sonra güncellenecek
     }
   })
+
+  // Product imageUrl güncelle
+  await prisma.product.update({
+    where: { id: product1.id },
+    data: {
+      imageUrl: getSeedMediaUrl('catalog.home-appliances')
+    }
+  });
 
   const product2 = await prisma.product.create({
     data: {
@@ -680,27 +748,125 @@ async function main() {
       brand: 'Dyson',
       description: 'Hafif ve güçlü kablosuz süpürge',
       groupId: productGroup.id,
+      imageUrl: null // ID oluşturulduktan sonra güncellenecek
     }
   })
+
+  // Product imageUrl güncelle
+  await prisma.product.update({
+    where: { id: product2.id },
+    data: {
+      imageUrl: getSeedMediaUrl('catalog.home-appliances')
+    }
+  });
 
   const akilliTelefonSubCat = techSubCategories.find(c => c.name === 'Akıllı Telefonlar')!
-  const phoneProductGroup = await prisma.productGroup.create({
-    data: {
-      name: 'Apple iPhone Serisi',
-      description: 'Apple iPhone modelleri',
-      subCategoryId: akilliTelefonSubCat.id,
-    }
-  })
+  
+  // Telefon markaları ve görsel eşleştirmeleri
+  const phoneBrands = [
+    { name: 'Samsung', brand: 'Samsung', phoneImage: 'product.phone.phone1' },
+    { name: 'iPhone', brand: 'Apple', phoneImage: 'product.phone.phone2' },
+    { name: 'Redmi', brand: 'Redmi', phoneImage: 'product.phone.phone3' },
+    { name: 'Oppo', brand: 'Oppo', phoneImage: 'product.phone.phone4' },
+    { name: 'Nokia', brand: 'Nokia', phoneImage: 'product.phone.phone5' },
+    { name: 'Blackberry', brand: 'Blackberry', phoneImage: 'product.phone.phone6' },
+  ];
 
+  // Her marka için product group oluştur
+  console.log('📱 Creating phone product groups...');
+  const phoneProductGroups = await Promise.all(
+    phoneBrands.map(async (brand) => {
+      const existing = await prisma.productGroup.findFirst({
+        where: { 
+          name: `${brand.name} Serisi`,
+          subCategoryId: akilliTelefonSubCat.id 
+        }
+      }).catch(() => null);
+
+      if (existing) {
+        return existing;
+      }
+
+      const group = await prisma.productGroup.create({
+        data: {
+          name: `${brand.name} Serisi`,
+          description: `${brand.brand} marka telefon modelleri`,
+          subCategoryId: akilliTelefonSubCat.id,
+          imageUrl: getSeedMediaUrl(brand.phoneImage as any),
+        }
+      });
+      return group;
+    })
+  );
+  console.log(`✅ ${phoneProductGroups.length} phone product groups created`);
+
+  // Category seviyesinde: Phone kategorisine tıklayınca 24 adet telefon (rastgele görseller)
+  // Bu ürünler product group'a atanmaz (groupId: null) - category view için özel
+  console.log('📱 Creating 24 random phone products for category view...');
+  const phoneImages = ['product.phone.phone1', 'product.phone.phone2', 'product.phone.phone3', 'product.phone.phone4', 'product.phone.phone5', 'product.phone.phone6'];
+  const categoryPhoneProducts: any[] = [];
+  
+  for (let i = 0; i < 24; i++) {
+    // Rastgele marka ve görsel seç
+    const randomBrandIndex = Math.floor(Math.random() * phoneBrands.length);
+    const brand = phoneBrands[randomBrandIndex];
+    const randomImageIndex = Math.floor(Math.random() * phoneImages.length);
+    const selectedImage = phoneImages[randomImageIndex];
+    
+    const product = await prisma.product.create({
+      data: {
+        name: `${brand.brand} Model ${String(i + 1).padStart(2, '0')}`,
+        brand: brand.brand,
+        description: `${brand.brand} marka telefon modeli - ${i + 1}. ürün (Category View)`,
+        groupId: null, // Category view için product group yok
+        imageUrl: getSeedMediaUrl(selectedImage as any),
+      }
+    });
+    categoryPhoneProducts.push(product);
+  }
+  console.log(`✅ ${categoryPhoneProducts.length} random phone products created for category view (no product group)`);
+
+  // Product Group seviyesinde: Her marka için 20 adet telefon (aynı görsel)
+  console.log('📱 Creating 20 products per brand for product group view...');
+  const brandPhoneProducts: any[] = [];
+  
+  for (let brandIdx = 0; brandIdx < phoneBrands.length; brandIdx++) {
+    const brand = phoneBrands[brandIdx];
+    const productGroup = phoneProductGroups[brandIdx];
+    const brandImage = brand.phoneImage;
+    
+    for (let i = 0; i < 20; i++) {
+      // Model isimleri: Samsung A4, Samsung A5, Samsung A6... gibi
+      const modelNames = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T'];
+      const modelName = modelNames[i % modelNames.length];
+      const modelNumber = Math.floor(i / modelNames.length) + 4; // A4, A5, A6... veya B4, B5...
+      
+      const product = await prisma.product.create({
+        data: {
+          name: `${brand.brand} ${modelName}${modelNumber}`,
+          brand: brand.brand,
+          description: `${brand.brand} ${modelName}${modelNumber} model telefon`,
+          groupId: productGroup.id,
+          imageUrl: getSeedMediaUrl(brandImage as any), // Hepsi aynı görsel (markanın görseli)
+        }
+      });
+      brandPhoneProducts.push(product);
+    }
+  }
+  console.log(`✅ ${brandPhoneProducts.length} brand-specific phone products created (20 per brand)`);
+
+  // Eski iPhone product'ı oluştur (geriye dönük uyumluluk için)
   const product3 = await prisma.product.create({
     data: {
       name: 'iPhone 15 Pro',
       brand: 'Apple',
-      description: 'Apple\'ın en yeni flagship telefonu',
-      groupId: phoneProductGroup.id,
+      description: "Apple'ın en yeni flagship telefonu",
+      groupId: phoneProductGroups.find(g => g.name === 'iPhone Serisi')!.id,
+      imageUrl: getSeedMediaUrl('product.phone.phone2' as any),
     }
-  })
-  console.log('✅ Products created')
+  });
+
+  console.log('✅ Phone products created')
 
   // Inventory & Product Experience (Reviews için)
   const inventory1 = await prisma.inventory.create({
@@ -731,10 +897,22 @@ async function main() {
   await prisma.inventoryMedia.create({
     data: {
       inventoryId: inventory1.id,
-      mediaUrl: 'https://cdn.tipbox.co/inventory/dyson-1.jpg',
+      mediaUrl: INVENTORY_MEDIA_URL,
       type: 'IMAGE',
     }
   })
+
+  // Post görseli için de aynı inventory'ye ekle (post görselleri InventoryMedia'dan çekiliyor)
+  const postImageUrl = getSeedMediaUrl('post.image.primary');
+  if (postImageUrl) {
+    await prisma.inventoryMedia.create({
+      data: {
+        inventoryId: inventory1.id,
+        mediaUrl: postImageUrl,
+        type: 'IMAGE',
+      }
+    })
+  }
   console.log('✅ Inventory & Product Experiences created')
 
   // Content Posts
@@ -1052,10 +1230,12 @@ async function main() {
         userName: 'markettest',
         bio: 'Aktif bir NFT koleksiyoneri ve trader',
         country: 'Turkey',
+        bannerUrl: DEFAULT_BANNER_URL,
       },
       update: {
         displayName: 'Market Test User',
         userName: 'markettest',
+        bannerUrl: DEFAULT_BANNER_URL,
       }
     })
     
@@ -1063,7 +1243,7 @@ async function main() {
     await prisma.userAvatar.create({
       data: {
         userId: TARGET_USER_ID,
-        imageUrl: 'https://cdn.tipbox.co/avatars/market-test.jpg',
+        imageUrl: MARKET_AVATAR_URL,
         isActive: true,
       }
     }).catch(() => {})
@@ -2099,6 +2279,11 @@ async function main() {
   }
 
   console.log(`✅ ${supportRequestsCount} support requests, ${supportThreadsCount} support threads, and ${supportMessagesCount} support messages created`)
+
+  await prisma.profile.updateMany({
+    where: { bannerUrl: null },
+    data: { bannerUrl: DEFAULT_BANNER_URL },
+  });
 
   console.log('✨ Seed process completed successfully!')
   

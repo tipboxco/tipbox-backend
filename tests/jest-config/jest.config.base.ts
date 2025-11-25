@@ -20,10 +20,7 @@ export const baseConfig: Config = {
       },
     ],
   },
-  reporters: [
-    'default',
-    ['<rootDir>/scripts/custom-jest-reporter.js', {}],
-  ],
+  reporters: ['default'],
   testTimeout: 30000,
 };
 

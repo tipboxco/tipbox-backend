@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, PutBucketPolicyCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { s3Config } from '../config/s3.config';
 import logger from '../logger/logger';
@@ -67,6 +67,11 @@ export class S3Service {
         message: 'S3 bucket mevcut',
         bucketName: s3Config.bucketName,
       });
+
+      // Mevcut bucket için de public policy ayarlamayı dene (hata olursa ignore et)
+      this.setBucketPublicPolicy().catch(() => {
+        // Policy zaten ayarlanmış olabilir veya yetki sorunu olabilir, kritik değil
+      });
     } catch (error: any) {
       // Bucket yoksa oluştur
       const isNotFound = error.name === 'NotFound' 
@@ -84,6 +89,9 @@ export class S3Service {
             message: 'S3 bucket oluşturuldu',
             bucketName: s3Config.bucketName,
           });
+
+          // Bucket oluşturulduktan sonra public read policy ekle
+          await this.setBucketPublicPolicy();
         } catch (createError: any) {
           // Bucket zaten oluşturulmuşsa bu bir hata değil
           const isAlreadyOwned = createError.name === 'BucketAlreadyOwnedByYou'
@@ -113,6 +121,42 @@ export class S3Service {
         });
         throw new Error(`S3 bucket kontrolü yapılamadı: ${error.message || String(error)}`);
       }
+    }
+  }
+
+  /**
+   * Bucket'a public read policy ekler (MinIO için)
+   */
+  private async setBucketPublicPolicy(): Promise<void> {
+    try {
+      const policy = {
+        Version: '2012-10-17',
+        Statement: [
+          {
+            Effect: 'Allow',
+            Principal: { AWS: ['*'] },
+            Action: ['s3:GetObject'],
+            Resource: [`arn:aws:s3:::${s3Config.bucketName}/*`],
+          },
+        ],
+      };
+
+      await this.s3Client.send(new PutBucketPolicyCommand({
+        Bucket: s3Config.bucketName,
+        Policy: JSON.stringify(policy),
+      }));
+
+      logger.info({
+        message: 'S3 bucket public read policy eklendi',
+        bucketName: s3Config.bucketName,
+      });
+    } catch (error: any) {
+      // Policy ayarlama hatası kritik değil, sadece log'la
+      logger.warn({
+        message: 'S3 bucket public policy ayarlanamadı (dosyalar pre-signed URL ile erişilebilir)',
+        error: error instanceof Error ? error.message : String(error),
+        bucketName: s3Config.bucketName,
+      });
     }
   }
 

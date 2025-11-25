@@ -21,21 +21,7 @@ const config: Config = {
       },
     ],
   },
-  reporters: [
-    'default',
-    [
-      'jest-html-reporters',
-      {
-        publicPath: './tests/test-results',
-        filename: 'user-settings-report.html',
-        openReport: false,
-        inlineSource: true,
-        expand: true,
-        pageTitle: 'Tipbox API User Settings Test Results',
-      },
-    ],
-    ['<rootDir>/scripts/custom-jest-reporter.js', {}],
-  ],
+  reporters: ['default'],
   testTimeout: 30000,
 };
 

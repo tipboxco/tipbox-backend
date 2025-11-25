@@ -1,7 +1,7 @@
-import { PrismaClient, Prisma, DMRequestStatus as PrismaDMRequestStatus, SupportType as PrismaSupportType } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { DMRequest } from '../../domain/messaging/dm-request.entity';
 import { DMRequestStatus } from '../../domain/messaging/dm-request-status.enum';
-import { SupportType as DomainSupportType } from '../../domain/messaging/support-type.enum';
+import { SupportType } from '../../domain/messaging/support-type.enum';
 import logger from '../logger/logger';
 
 const DM_REQUEST_INCLUDE = {
@@ -83,7 +83,7 @@ export class DMRequestPrismaRepository {
     // Domain enum değerleri (PENDING, ACCEPTED, etc.) Prisma enum değerleri ile uyumludur
     if (options.status) {
       // Type-safe: Domain enum string değerleri Prisma enum değerleri ile uyumlu
-      where.status = options.status as PrismaDMRequestStatus;
+      where.status = options.status as DMRequestStatus;
     }
 
     const requests = await this.prisma.dMRequest.findMany({
@@ -100,22 +100,22 @@ export class DMRequestPrismaRepository {
     fromUserId: string;
     toUserId: string;
     status?: DMRequestStatus;
-    type?: PrismaSupportType | DomainSupportType | string;
+    type?: SupportType;
     amount?: number;
     description?: string | null;
   }): Promise<DMRequest> {
     // Map string or domain enum to Prisma SupportType enum
-    let supportType: PrismaSupportType = PrismaSupportType.GENERAL;
+    let supportType: SupportType = SupportType.GENERAL;
     if (data.type) {
       if (typeof data.type === 'string') {
         const upperType = data.type.toUpperCase();
-        // Validate and map to Prisma enum
+        // Validate and map to domain enum
         if (upperType === 'GENERAL' || upperType === 'TECHNICAL' || upperType === 'PRODUCT') {
-          supportType = upperType as PrismaSupportType;
+          supportType = upperType as SupportType;
         }
-      } else if (data.type in PrismaSupportType) {
-        // Domain enum value, convert to Prisma enum
-        supportType = data.type as PrismaSupportType;
+      } else if (data.type in SupportType) {
+        // Domain enum value, use directly
+        supportType = data.type as SupportType;
       }
     }
 
@@ -124,8 +124,8 @@ export class DMRequestPrismaRepository {
       data: {
         fromUserId: data.fromUserId,
         toUserId: data.toUserId,
-        status: (data.status || DMRequestStatus.PENDING) as PrismaDMRequestStatus,
-        type: supportType,
+        status: (data.status || DMRequestStatus.PENDING) ,
+        type: supportType ,
         amount: data.amount ?? 0,
         description: data.description || null,
         sentAt: now,
@@ -155,7 +155,7 @@ export class DMRequestPrismaRepository {
       
       // Her field'ı explicit olarak ekle
       if (data.status !== undefined) {
-        updateData.status = data.status as PrismaDMRequestStatus;
+        updateData.status = data.status ;
       }
       
       if (data.description !== undefined) {
@@ -208,16 +208,9 @@ export class DMRequestPrismaRepository {
   }
 
   public toDomain(prismaRequest: DMRequestWithRelations): DMRequest {
-    // Map Prisma SupportType to domain SupportType
-    const prismaType = prismaRequest.type;
-    const supportType: DomainSupportType = 
-      prismaType === PrismaSupportType.GENERAL 
-        ? DomainSupportType.GENERAL
-        : prismaType === PrismaSupportType.TECHNICAL
-        ? DomainSupportType.TECHNICAL
-        : prismaType === PrismaSupportType.PRODUCT
-        ? DomainSupportType.PRODUCT
-        : DomainSupportType.GENERAL;
+    // Domain enum'ları Prisma enum'ları ile aynı string değerleri kullanır
+    // Bu yüzden doğrudan cast edebiliriz
+    const supportType = prismaRequest.type as SupportType;
 
     // Convert amount (may be Decimal) to number
     const amount = typeof prismaRequest.amount === 'number' 
@@ -244,4 +237,3 @@ export class DMRequestPrismaRepository {
     );
   }
 }
-

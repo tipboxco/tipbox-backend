@@ -9,16 +9,89 @@ export async function seedTaxonomy(): Promise<void> {
   ]).catch(() => {});
 
   console.log('📂 [seed] main categories');
-  await Promise.all([
-    prisma.mainCategory.create({ data: { name: 'Teknoloji', description: 'Elektronik cihazlar, yazılım, mobil uygulamalar' } }),
-    prisma.mainCategory.create({ data: { name: 'Ev & Yaşam', description: 'Ev eşyaları, dekorasyon, temizlik ürünleri' } }),
-    prisma.mainCategory.create({ data: { name: 'Gıda & İçecek', description: 'Yiyecek, içecek, gıda takviyesi ürünleri' } }),
-    prisma.mainCategory.create({ data: { name: 'Moda & Aksesuar', description: 'Giyim, ayakkabı, çanta, takı ve aksesuarlar' } }),
-    prisma.mainCategory.create({ data: { name: 'Sağlık & Güzellik', description: 'Kişisel bakım, kozmetik, sağlık ürünleri' } }),
-    prisma.mainCategory.create({ data: { name: 'Spor & Outdoor', description: 'Spor ekipmanları, outdoor aktiviteler, fitness' } }),
-    prisma.mainCategory.create({ data: { name: 'Hobi & Eğlence', description: 'Kitap, oyun, müzik, sanat malzemeleri' } }),
-    prisma.mainCategory.create({ data: { name: 'Otomotiv', description: 'Araç aksesuarları, bakım ürünleri, parçalar' } }),
-  ]).catch(() => {});
+  // Görsel eşleştirmeleri: kategori isimlerine göre assets/catalog görselleri
+  const categoryImageMap: Record<string, string | null> = {
+    'Teknoloji': 'computers-tablets.png',
+    'Ev & Yaşam': 'home appliances.png',
+    'Gıda & İçecek': 'air conditioner.png', // Rastgele eşleştirme
+    'Moda & Aksesuar': 'printers.png', // Rastgele eşleştirme
+    'Sağlık & Güzellik': 'smart home devices.png', // Rastgele eşleştirme
+    'Spor & Outdoor': 'drone.png', // Rastgele eşleştirme
+    'Hobi & Eğlence': 'games.png',
+    'Otomotiv': null, // Bir tane null bırakıyoruz
+  };
+
+  const mainCategories = await Promise.all([
+    prisma.mainCategory.create({ 
+      data: { 
+        name: 'Teknoloji', 
+        description: 'Elektronik cihazlar, yazılım, mobil uygulamalar',
+        imageUrl: null // ID oluşturulduktan sonra güncellenecek
+      } 
+    }),
+    prisma.mainCategory.create({ 
+      data: { 
+        name: 'Ev & Yaşam', 
+        description: 'Ev eşyaları, dekorasyon, temizlik ürünleri',
+        imageUrl: null // ID oluşturulduktan sonra güncellenecek
+      } 
+    }),
+    prisma.mainCategory.create({ 
+      data: { 
+        name: 'Gıda & İçecek', 
+        description: 'Yiyecek, içecek, gıda takviyesi ürünleri',
+        imageUrl: null // ID oluşturulduktan sonra güncellenecek
+      } 
+    }),
+    prisma.mainCategory.create({ 
+      data: { 
+        name: 'Moda & Aksesuar', 
+        description: 'Giyim, ayakkabı, çanta, takı ve aksesuarlar',
+        imageUrl: null // ID oluşturulduktan sonra güncellenecek
+      } 
+    }),
+    prisma.mainCategory.create({ 
+      data: { 
+        name: 'Sağlık & Güzellik', 
+        description: 'Kişisel bakım, kozmetik, sağlık ürünleri',
+        imageUrl: null // ID oluşturulduktan sonra güncellenecek
+      } 
+    }),
+    prisma.mainCategory.create({ 
+      data: { 
+        name: 'Spor & Outdoor', 
+        description: 'Spor ekipmanları, outdoor aktiviteler, fitness',
+        imageUrl: null // ID oluşturulduktan sonra güncellenecek
+      } 
+    }),
+    prisma.mainCategory.create({ 
+      data: { 
+        name: 'Hobi & Eğlence', 
+        description: 'Kitap, oyun, müzik, sanat malzemeleri',
+        imageUrl: null // ID oluşturulduktan sonra güncellenecek
+      } 
+    }),
+    prisma.mainCategory.create({ 
+      data: { 
+        name: 'Otomotiv', 
+        description: 'Araç aksesuarları, bakım ürünleri, parçalar',
+        imageUrl: null // ID oluşturulduktan sonra güncellenecek
+      } 
+    }),
+  ]).catch(() => []);
+
+  // Kategoriler oluşturulduktan sonra imageUrl'leri güncelle
+  for (const category of mainCategories) {
+    const imageName = categoryImageMap[category.name];
+    if (imageName) {
+      await prisma.mainCategory.update({
+        where: { id: category.id },
+        data: {
+          imageUrl: `catalog-images/category/${category.id}/${imageName}`
+        }
+      });
+    }
+  }
 
   console.log('🏆 [seed] badge categories');
   await Promise.all([
@@ -115,6 +188,63 @@ export async function seedTaxonomy(): Promise<void> {
     prisma.comparisonMetric.create({ data: { name: 'Özellikler', description: 'Ürünün sahip olduğu özellikler (1-10)' } }),
     prisma.comparisonMetric.create({ data: { name: 'Çevre Dostu', description: 'Ürünün çevreye olan etkisi (1-10)' } }),
   ]).catch(() => {});
+
+  console.log('🚀 [seed] boost options');
+  await Promise.all([
+    prisma.boostOption.create({
+      data: {
+        title: 'Standard Boost',
+        description: 'Standart görünürlük artışı',
+        amount: 0,
+        isPopular: false,
+        isActive: true,
+      },
+    }),
+    prisma.boostOption.create({
+      data: {
+        title: 'Popular Boost',
+        description: 'Popüler gönderiler için özel boost',
+        amount: 10,
+        isPopular: true,
+        isActive: true,
+      },
+    }),
+    prisma.boostOption.create({
+      data: {
+        title: 'Premium Boost',
+        description: 'Maksimum görünürlük için premium boost',
+        amount: 25,
+        isPopular: true,
+        isActive: true,
+      },
+    }),
+  ]).catch(() => {});
+
+  console.log('⏱️ [seed] experience durations');
+  await Promise.all([
+    prisma.experienceDuration.create({ data: { name: 'Less than 1 month', isActive: true } }),
+    prisma.experienceDuration.create({ data: { name: '1-3 months', isActive: true } }),
+    prisma.experienceDuration.create({ data: { name: '3-6 months', isActive: true } }),
+    prisma.experienceDuration.create({ data: { name: '6-12 months', isActive: true } }),
+    prisma.experienceDuration.create({ data: { name: 'More than 1 year', isActive: true } }),
+  ]).catch(() => {});
+
+  console.log('📍 [seed] experience locations');
+  await Promise.all([
+    prisma.experienceLocation.create({ data: { name: 'Home', isActive: true } }),
+    prisma.experienceLocation.create({ data: { name: 'Office', isActive: true } }),
+    prisma.experienceLocation.create({ data: { name: 'Outdoor', isActive: true } }),
+    prisma.experienceLocation.create({ data: { name: 'Other', isActive: true } }),
+  ]).catch(() => {});
+
+  console.log('🎯 [seed] experience purposes');
+  await Promise.all([
+    prisma.experiencePurpose.create({ data: { name: 'Personal use', isActive: true } }),
+    prisma.experiencePurpose.create({ data: { name: 'Professional use', isActive: true } }),
+    prisma.experiencePurpose.create({ data: { name: 'Gift', isActive: true } }),
+    prisma.experiencePurpose.create({ data: { name: 'Other', isActive: true } }),
+  ]).catch(() => {});
+
   console.log('🎉 Taxonomy seeding completed');
 }
 

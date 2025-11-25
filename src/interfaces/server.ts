@@ -49,9 +49,10 @@ async function startServer() {
     // Socket handler'ı başlat
     SocketManager.getInstance().initialize(io);
 
-    // HTTP server'ı başlat
-    httpServer.listen(PORT, () => {
+    // HTTP server'ı başlat - 0.0.0.0 tüm ağ arayüzlerinde dinler (local network erişimi için)
+    httpServer.listen(PORT, '0.0.0.0', () => {
       logger.info({ message: `Server running on port ${PORT} with Socket.IO, Redis Cache, and BullMQ support` });
+      logger.info({ message: `Server accessible at http://localhost:${PORT} and http://<your-ip>:${PORT}` });
     });
 
     // Graceful shutdown
