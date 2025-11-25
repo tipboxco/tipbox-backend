@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
 import { TrustRelation } from '../../domain/user/trust-relation.entity';
+import { getPrisma } from './prisma.client';
 
 export class TrustRelationPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<TrustRelation | null> {
     const relation = await this.prisma.trustRelation.findUnique({ where: { id } });

@@ -1,12 +1,8 @@
-import { PrismaClient } from '@prisma/client';
 import { MarketplaceBanner } from '../../domain/marketplace/marketplace-banner.entity';
+import { getPrisma } from './prisma.client';
 
 export class MarketplaceBannerPrismaRepository {
-  private prisma: PrismaClient;
-
-  constructor() {
-    this.prisma = new PrismaClient();
-  }
+  private prisma = getPrisma();
 
   async findActive(): Promise<MarketplaceBanner[]> {
     const now = new Date();
@@ -126,4 +122,3 @@ export class MarketplaceBannerPrismaRepository {
     });
   }
 }
-

@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
 import { MainCategory } from '../../domain/product/main-category.entity';
+import { getPrisma } from './prisma.client';
 
 export class MainCategoryPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<MainCategory | null> {
     const category = await this.prisma.mainCategory.findUnique({ 

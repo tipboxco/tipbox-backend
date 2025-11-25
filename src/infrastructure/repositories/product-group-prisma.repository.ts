@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
 import { ProductGroup } from '../../domain/product/product-group.entity';
+import { getPrisma } from './prisma.client';
 
 export class ProductGroupPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<ProductGroup | null> {
     const group = await this.prisma.productGroup.findUnique({ 

@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
 import { UserAvatar } from '../../domain/user/user-avatar.entity';
+import { getPrisma } from './prisma.client';
 
 export class UserAvatarPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<UserAvatar | null> {
     const avatar = await this.prisma.userAvatar.findUnique({ where: { id } });

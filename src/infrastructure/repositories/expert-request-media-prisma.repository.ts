@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
 import { ExpertRequestMedia } from '../../domain/expert/expert-request-media.entity';
+import { getPrisma } from './prisma.client';
 
 export class ExpertRequestMediaPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findByRequestId(requestId: string): Promise<ExpertRequestMedia[]> {
     const media = await this.prisma.expertRequestMedia.findMany({

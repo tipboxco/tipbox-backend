@@ -1,6 +1,4 @@
-import { DMMessage } from '../../domain/messaging/dm-message.entity';
 import { DMThread } from '../../domain/messaging/dm-thread.entity';
-import { User } from '../../domain/user/user.entity';
 import { DmMessagePrismaRepository } from '../../infrastructure/repositories/dm-message-prisma.repository';
 import { DMThreadPrismaRepository } from '../../infrastructure/repositories/dm-thread-prisma.repository';
 import { UserPrismaRepository } from '../../infrastructure/repositories/user-prisma.repository';
@@ -12,7 +10,6 @@ import {
   MessageFeedItem,
   Message,
   SupportRequest,
-  SupportChatMessage,
   TipsInfo,
   SenderUser,
   MessageType,
@@ -136,8 +133,8 @@ export class MessagingService {
     // Thread oluştur veya mevcut thread'i al
     const thread = await this.createThreadIfNotExists(senderId, recipientId);
 
-    // Mesaj oluştur
-    const createdMessage = await this.prisma.dMMessage.create({
+    // Mesaj oluştur (tips mesajı için DM mesajı oluşturuluyor)
+    await this.prisma.dMMessage.create({
       data: {
         threadId: thread.id,
         senderId: senderId,
@@ -977,7 +974,7 @@ export class MessagingService {
   async getSupportChatMessages(
     threadId: string,
     userId: string,
-    supportRequestId?: string,
+    _supportRequestId?: string,
     limit = 200,
   ): Promise<MessageFeedItem[]> {
     // getThreadMessages'ı kullan (thread'in is_support_thread değerine göre otomatik olarak SUPPORT mesajları döner)

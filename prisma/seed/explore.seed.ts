@@ -114,7 +114,7 @@ export async function seedExplore(): Promise<void> {
 
     await Promise.all(
       events.flatMap((event) =>
-        allUserIds.map((userId, index) =>
+        allUserIds.map((userId) =>
           prisma.wishboxStats.create({
             data: {
               userId,

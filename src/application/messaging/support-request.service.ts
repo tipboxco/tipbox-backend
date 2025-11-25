@@ -2,6 +2,7 @@ import { DMRequestPrismaRepository } from '../../infrastructure/repositories/dm-
 import { DMThreadPrismaRepository } from '../../infrastructure/repositories/dm-thread-prisma.repository';
 import { SupportRequestStatus } from '../../domain/messaging/support-request-status.enum';
 import { DMRequestStatus } from '../../domain/messaging/dm-request-status.enum';
+import { SupportType } from '../../domain/messaging/support-type.enum';
 import SocketManager from '../../infrastructure/realtime/socket-manager';
 import logger from '../../infrastructure/logger/logger';
 import { PrismaClient } from '@prisma/client';
@@ -127,7 +128,6 @@ export class SupportRequestService {
         // Determine the other user (counterpart)
         const isFromUser = request.fromUserId === userId;
         const counterpart = isFromUser ? request.toUser : request.fromUser;
-        const otherUserId = isFromUser ? request.toUserId : request.fromUserId;
 
         // Skip if no description
         if (!request.description) {
@@ -181,11 +181,6 @@ export class SupportRequestService {
           finalThreadId = threadInfo.threadId;
         }
         // PENDING durumunda finalThreadId null kalır
-
-        // Map completed to finalized for frontend compatibility
-        const displayStatus = supportStatus === SupportRequestStatus.COMPLETED 
-          ? 'finalized' as const 
-          : supportStatus;
 
         supportRequests.push({
           id: request.id,
@@ -245,11 +240,16 @@ export class SupportRequestService {
     senderId: string,
     payload: { recipientUserId: string; type: string; message: string; amount: number }
   ) {
+    // Convert string type to SupportType enum
+    const supportType = Object.values(SupportType).includes(payload.type.toUpperCase() as SupportType)
+      ? (payload.type.toUpperCase() as SupportType)
+      : SupportType.GENERAL;
+
     const request = await this.dmRequestRepo.create({
       fromUserId: senderId,
       toUserId: payload.recipientUserId,
       status: DMRequestStatus.PENDING,
-      type: payload.type,
+      type: supportType,
       amount: payload.amount,
       description: payload.message,
     });

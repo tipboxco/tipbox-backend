@@ -16,7 +16,8 @@ RUN npx prisma generate
 # Source code'u kopyala
 COPY . .
 
-# TypeScript build
+# TypeScript build (bellek sorunlarını önlemek için NODE_OPTIONS ayarla)
+ENV NODE_OPTIONS=--max-old-space-size=4096
 RUN npm run build
 
 # Production image

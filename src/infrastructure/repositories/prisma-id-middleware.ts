@@ -4,7 +4,9 @@ import { generateIdForModel } from '../ids/id.strategy';
 // Bu middleware, publicId alanı olan modellerde create sırasında otomatik ID üretir
 // Prisma 6.x'te $use kaldırıldı, $extends kullanılıyor
 export function createPrismaWithIdMiddleware() {
-  return new PrismaClient().$extends({
+  return new PrismaClient({
+    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+  }).$extends({
     query: {
       $allModels: {
         async create({ model, args, query }) {

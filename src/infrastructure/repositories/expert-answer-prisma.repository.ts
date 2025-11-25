@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
 import { ExpertAnswer } from '../../domain/expert/expert-answer.entity';
+import { getPrisma } from './prisma.client';
 
 export class ExpertAnswerPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<ExpertAnswer | null> {
     const answer = await this.prisma.expertAnswer.findUnique({

@@ -1,9 +1,9 @@
-import { PrismaClient } from '@prisma/client';
 import { Profile } from '../../domain/user/profile.entity';
 import { DEFAULT_PROFILE_BANNER_URL } from '../../domain/user/profile.constants';
+import { getPrisma } from './prisma.client';
 
 export class ProfilePrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<Profile | null> {
     const profile = await this.prisma.profile.findUnique({ where: { id } as any });

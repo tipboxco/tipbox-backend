@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
 import { PostComparison } from '../../domain/product/post-comparison.entity';
+import { getPrisma } from './prisma.client';
 
 export class PostComparisonPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<PostComparison | null> {
     const comparison = await this.prisma.postComparison.findUnique({ 

@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
 import { PostTag } from '../../domain/content/post-tag.entity';
+import { getPrisma } from './prisma.client';
 
 export class PostTagPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<PostTag | null> {
     const tag = await this.prisma.postTag.findUnique({ 

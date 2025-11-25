@@ -1,32 +1,33 @@
-import fs from 'fs';
-import path from 'path';
+const fs = require('fs');
+const path = require('path');
 
 // Seed metadata dosyasının path'ini belirle
 // process.cwd() proje root'unu verir, prisma/seed klasörüne ekliyoruz
 const SEED_DIR = path.join(process.cwd(), 'prisma', 'seed');
 const METADATA_FILE = path.join(SEED_DIR, 'seed-metadata.json');
 
-// Internal interface - not exported to avoid ts-node issues
-type SeedMetadata = {
-  lastSeedRun: Date | null;
-  seedRunId: string | null;
-  seedUserIds: string[];
-  seedPostIds: string[];
-  seedFeedIds: string[];
-  seedNFTIds: string[];
-};
+// Internal type definition (JSDoc)
+/**
+ * @typedef {Object} SeedMetadata
+ * @property {Date | null} lastSeedRun
+ * @property {string | null} seedRunId
+ * @property {string[]} seedUserIds
+ * @property {string[]} seedPostIds
+ * @property {string[]} seedFeedIds
+ * @property {string[]} seedNFTIds
+ */
 
-let metadataCache: SeedMetadata | null = null;
+let metadataCache = null;
 
 /**
  * Metadata dosyasını yükle
  */
-function loadSeedMetadata(): SeedMetadata {
+function loadSeedMetadata() {
   if (metadataCache) {
     return metadataCache;
   }
 
-  const defaultMetadata: SeedMetadata = {
+  const defaultMetadata = {
     lastSeedRun: null,
     seedRunId: null,
     seedUserIds: [],
@@ -44,7 +45,7 @@ function loadSeedMetadata(): SeedMetadata {
         ...parsed,
         lastSeedRun: parsed.lastSeedRun ? new Date(parsed.lastSeedRun) : null,
       };
-      return metadataCache!;
+      return metadataCache;
     }
   } catch (error) {
     console.warn('⚠️  Seed metadata dosyası okunamadı, varsayılan değerler kullanılıyor:', error);
@@ -57,7 +58,7 @@ function loadSeedMetadata(): SeedMetadata {
 /**
  * Metadata dosyasını kaydet
  */
-function saveSeedMetadata(metadata: SeedMetadata): void {
+function saveSeedMetadata(metadata) {
   try {
     metadataCache = metadata;
     const dataToSave = {
@@ -74,7 +75,7 @@ function saveSeedMetadata(metadata: SeedMetadata): void {
 /**
  * Seed çalıştırma başlangıcını kaydet
  */
-function markSeedStart(): string {
+function markSeedStart() {
   const metadata = loadSeedMetadata();
   const seedRunId = `seed-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
   
@@ -92,7 +93,7 @@ function markSeedStart(): string {
 /**
  * Seed çalıştırma sonunu kaydet
  */
-function markSeedEnd(): void {
+function markSeedEnd() {
   const metadata = loadSeedMetadata();
   // Seed run ID'yi temizle (artık gerekmiyor)
   metadata.seedRunId = null;
@@ -102,7 +103,7 @@ function markSeedEnd(): void {
 /**
  * Seed kullanıcı ID'sini ekle
  */
-function addSeedUserId(userId: string): void {
+function addSeedUserId(userId) {
   const metadata = loadSeedMetadata();
   if (!metadata.seedUserIds.includes(userId)) {
     metadata.seedUserIds.push(userId);
@@ -113,7 +114,7 @@ function addSeedUserId(userId: string): void {
 /**
  * Seed post ID'sini ekle
  */
-function addSeedPostId(postId: string): void {
+function addSeedPostId(postId) {
   const metadata = loadSeedMetadata();
   if (!metadata.seedPostIds.includes(postId)) {
     metadata.seedPostIds.push(postId);
@@ -124,7 +125,7 @@ function addSeedPostId(postId: string): void {
 /**
  * Seed feed ID'sini ekle
  */
-function addSeedFeedId(feedId: string): void {
+function addSeedFeedId(feedId) {
   const metadata = loadSeedMetadata();
   if (!metadata.seedFeedIds.includes(feedId)) {
     metadata.seedFeedIds.push(feedId);
@@ -135,7 +136,7 @@ function addSeedFeedId(feedId: string): void {
 /**
  * Seed NFT ID'sini ekle
  */
-function addSeedNFTId(nftId: string): void {
+function addSeedNFTId(nftId) {
   const metadata = loadSeedMetadata();
   if (!metadata.seedNFTIds.includes(nftId)) {
     metadata.seedNFTIds.push(nftId);
@@ -146,7 +147,7 @@ function addSeedNFTId(nftId: string): void {
 /**
  * Seed data çalıştırıldı mı kontrol et
  */
-function hasSeedData(): boolean {
+function hasSeedData() {
   const metadata = loadSeedMetadata();
   return metadata.lastSeedRun !== null;
 }
@@ -154,7 +155,7 @@ function hasSeedData(): boolean {
 /**
  * Seed data timestamp'ini al
  */
-function getLastSeedRunTime(): Date | null {
+function getLastSeedRunTime() {
   const metadata = loadSeedMetadata();
   return metadata.lastSeedRun;
 }
@@ -162,7 +163,7 @@ function getLastSeedRunTime(): Date | null {
 /**
  * Seed kullanıcı ID'lerini al
  */
-function getSeedUserIds(): string[] {
+function getSeedUserIds() {
   const metadata = loadSeedMetadata();
   return [...metadata.seedUserIds];
 }
@@ -170,7 +171,7 @@ function getSeedUserIds(): string[] {
 /**
  * Seed post ID'lerini al
  */
-function getSeedPostIds(): string[] {
+function getSeedPostIds() {
   const metadata = loadSeedMetadata();
   return [...metadata.seedPostIds];
 }
@@ -178,7 +179,7 @@ function getSeedPostIds(): string[] {
 /**
  * Seed feed ID'lerini al
  */
-function getSeedFeedIds(): string[] {
+function getSeedFeedIds() {
   const metadata = loadSeedMetadata();
   return [...metadata.seedFeedIds];
 }
@@ -186,7 +187,7 @@ function getSeedFeedIds(): string[] {
 /**
  * Seed NFT ID'lerini al
  */
-function getSeedNFTIds(): string[] {
+function getSeedNFTIds() {
   const metadata = loadSeedMetadata();
   return [...metadata.seedNFTIds];
 }
@@ -194,8 +195,8 @@ function getSeedNFTIds(): string[] {
 /**
  * Metadata'yı temizle (clear seed data çalıştırıldığında)
  */
-function clearSeedMetadata(): void {
-  const defaultMetadata: SeedMetadata = {
+function clearSeedMetadata() {
+  const defaultMetadata = {
     lastSeedRun: null,
     seedRunId: null,
     seedUserIds: [],

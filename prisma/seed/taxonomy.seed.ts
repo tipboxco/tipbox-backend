@@ -191,7 +191,7 @@ export async function seedTaxonomy(): Promise<void> {
 
   console.log('🚀 [seed] boost options');
   await Promise.all([
-    prisma.boostOption.create({
+    (prisma as any).boostOption.create({
       data: {
         title: 'Standard Boost',
         description: 'Standart görünürlük artışı',
@@ -200,7 +200,7 @@ export async function seedTaxonomy(): Promise<void> {
         isActive: true,
       },
     }),
-    prisma.boostOption.create({
+    (prisma as any).boostOption.create({
       data: {
         title: 'Popular Boost',
         description: 'Popüler gönderiler için özel boost',
@@ -209,7 +209,7 @@ export async function seedTaxonomy(): Promise<void> {
         isActive: true,
       },
     }),
-    prisma.boostOption.create({
+    (prisma as any).boostOption.create({
       data: {
         title: 'Premium Boost',
         description: 'Maksimum görünürlük için premium boost',
@@ -222,27 +222,27 @@ export async function seedTaxonomy(): Promise<void> {
 
   console.log('⏱️ [seed] experience durations');
   await Promise.all([
-    prisma.experienceDuration.create({ data: { name: 'Less than 1 month', isActive: true } }),
-    prisma.experienceDuration.create({ data: { name: '1-3 months', isActive: true } }),
-    prisma.experienceDuration.create({ data: { name: '3-6 months', isActive: true } }),
-    prisma.experienceDuration.create({ data: { name: '6-12 months', isActive: true } }),
-    prisma.experienceDuration.create({ data: { name: 'More than 1 year', isActive: true } }),
+    (prisma as any).experienceDuration.create({ data: { name: 'Less than 1 month', isActive: true } }),
+    (prisma as any).experienceDuration.create({ data: { name: '1-3 months', isActive: true } }),
+    (prisma as any).experienceDuration.create({ data: { name: '3-6 months', isActive: true } }),
+    (prisma as any).experienceDuration.create({ data: { name: '6-12 months', isActive: true } }),
+    (prisma as any).experienceDuration.create({ data: { name: 'More than 1 year', isActive: true } }),
   ]).catch(() => {});
 
   console.log('📍 [seed] experience locations');
   await Promise.all([
-    prisma.experienceLocation.create({ data: { name: 'Home', isActive: true } }),
-    prisma.experienceLocation.create({ data: { name: 'Office', isActive: true } }),
-    prisma.experienceLocation.create({ data: { name: 'Outdoor', isActive: true } }),
-    prisma.experienceLocation.create({ data: { name: 'Other', isActive: true } }),
+    (prisma as any).experienceLocation.create({ data: { name: 'Home', isActive: true } }),
+    (prisma as any).experienceLocation.create({ data: { name: 'Office', isActive: true } }),
+    (prisma as any).experienceLocation.create({ data: { name: 'Outdoor', isActive: true } }),
+    (prisma as any).experienceLocation.create({ data: { name: 'Other', isActive: true } }),
   ]).catch(() => {});
 
   console.log('🎯 [seed] experience purposes');
   await Promise.all([
-    prisma.experiencePurpose.create({ data: { name: 'Personal use', isActive: true } }),
-    prisma.experiencePurpose.create({ data: { name: 'Professional use', isActive: true } }),
-    prisma.experiencePurpose.create({ data: { name: 'Gift', isActive: true } }),
-    prisma.experiencePurpose.create({ data: { name: 'Other', isActive: true } }),
+    (prisma as any).experiencePurpose.create({ data: { name: 'Personal use', isActive: true } }),
+    (prisma as any).experiencePurpose.create({ data: { name: 'Professional use', isActive: true } }),
+    (prisma as any).experiencePurpose.create({ data: { name: 'Gift', isActive: true } }),
+    (prisma as any).experiencePurpose.create({ data: { name: 'Other', isActive: true } }),
   ]).catch(() => {});
 
   console.log('🎉 Taxonomy seeding completed');

@@ -1,9 +1,9 @@
-import { PrismaClient } from '@prisma/client';
 import { ExpertRequest } from '../../domain/expert/expert-request.entity';
+import { getPrisma } from './prisma.client';
 import { ExpertRequestStatus } from '../../domain/expert/expert-request-status.enum';
 
 export class ExpertRequestPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<ExpertRequest | null> {
     const request = await this.prisma.expertRequest.findUnique({

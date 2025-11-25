@@ -94,11 +94,11 @@ export async function seedDMRequests(existingClient?: typeof prisma): Promise<DM
           userOneId: supportRequest.fromUserId,
           userTwoId: supportRequest.toUserId,
           isActive: true,
-          isSupportThread: true as any, // Support thread
+          isSupportThread: true, // Support thread
           startedAt: minutesAgoToDate(supportRequest.minutesAgo),
           createdAt: minutesAgoToDate(supportRequest.minutesAgo),
           updatedAt: minutesAgoToDate(supportRequest.minutesAgo),
-        } as any,
+        },
       });
       threadId = supportThread.id;
       supportThreadsCount++;
@@ -130,18 +130,19 @@ export async function seedDMRequests(existingClient?: typeof prisma): Promise<DM
             context: 'SUPPORT',
             sentAt: minutesAgoToDate(supportRequest.minutesAgo - 3),
           },
-        ] as any,
+        ],
       });
       supportMessagesCount += supportMessages.count;
     }
     
     // Create the support request
-    const createdRequest = await client.dMRequest.create({
+    await client.dMRequest.create({
       data: {
         id: supportRequest.id,
         fromUserId: supportRequest.fromUserId,
         toUserId: supportRequest.toUserId,
         description: supportRequest.description,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         status: supportRequest.status as any,
         type: supportRequest.type,
         amount: supportRequest.amount,
@@ -150,6 +151,7 @@ export async function seedDMRequests(existingClient?: typeof prisma): Promise<DM
         respondedAt: supportRequest.status !== 'PENDING' ? minutesAgoToDate(supportRequest.minutesAgo - 10) : null,
         createdAt: minutesAgoToDate(supportRequest.minutesAgo),
         updatedAt: minutesAgoToDate(supportRequest.minutesAgo),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any,
     });
     

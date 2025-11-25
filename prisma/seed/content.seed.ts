@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-non-null-asserted-optional-chain */
 import { prisma, generateUlid, TEST_USER_ID } from './types';
 import { getSeedMediaUrl } from './helpers/media.helper';
 
@@ -164,7 +165,7 @@ export async function seedProductsAndContent(): Promise<void> {
 
   // Content Posts: FREE
   const freePostId = generateUlid();
-  const feedPost = await prisma.contentPost.create({
+  await prisma.contentPost.create({
     data: {
       id: freePostId,
       userId: userIdToUse,

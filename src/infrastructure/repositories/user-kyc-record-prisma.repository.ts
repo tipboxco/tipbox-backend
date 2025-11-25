@@ -1,9 +1,9 @@
-import { PrismaClient } from '@prisma/client';
 import { UserKycRecord } from '../../domain/user/user-kyc-record.entity';
+import { getPrisma } from './prisma.client';
 import { KycReviewStatus, KycReviewResult, KycProvider } from '../../domain/user/kyc-enums';
 
 export class UserKycRecordPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<UserKycRecord | null> {
     const record = await this.prisma.userKycRecord.findUnique({ where: { id } });

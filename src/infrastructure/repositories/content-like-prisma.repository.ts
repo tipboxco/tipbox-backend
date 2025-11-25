@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
 import { ContentLike } from '../../domain/interaction/content-like.entity';
+import { getPrisma } from './prisma.client';
 
 export class ContentLikePrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<ContentLike | null> {
     const like = await this.prisma.contentLike.findUnique({ 

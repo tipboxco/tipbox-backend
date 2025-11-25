@@ -1,12 +1,8 @@
-import { PrismaClient } from '@prisma/client';
+import { getPrisma } from './prisma.client';
 
 // Geçici olarak userPrivacySetting modeli eksik olduğu için minimal implementation
 export class UserPrivacySettingPrismaRepository {
-  private prisma: PrismaClient;
-
-  constructor() {
-    this.prisma = new PrismaClient();
-  }
+  private prisma = getPrisma();
 
   async create(setting: any): Promise<any> {
     // TODO: userPrivacySetting modeli schema'ya eklendiğinde implement edilecek

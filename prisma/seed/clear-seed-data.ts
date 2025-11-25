@@ -1,5 +1,7 @@
 import { prisma } from './types';
-import { getLastSeedRunTime, clearSeedMetadata, getSeedUserIds } from './seed-metadata';
+// Import from JS file (no ts-node issues)
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { getLastSeedRunTime, clearSeedMetadata, getSeedUserIds } = require('./seed-metadata');
 
 /**
  * Seed data ile test sonrası eklenen datayı ayırt etmek için iki yöntem kullanılır:

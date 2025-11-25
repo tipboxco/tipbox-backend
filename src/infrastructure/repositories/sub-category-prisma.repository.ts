@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
 import { SubCategory } from '../../domain/product/sub-category.entity';
+import { getPrisma } from './prisma.client';
 
 export class SubCategoryPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<SubCategory | null> {
     const category = await this.prisma.subCategory.findUnique({ 

@@ -1,4 +1,4 @@
-import { prisma, generateUlid, TEST_USER_ID, TRUSTER_USER_IDS, TRUST_USER_IDS } from './types';
+import { prisma, generateUlid, TEST_USER_ID } from './types';
 
 export async function seedFeedAndTrending(): Promise<void> {
   console.log('📰 [seed] feed & trending (full)');

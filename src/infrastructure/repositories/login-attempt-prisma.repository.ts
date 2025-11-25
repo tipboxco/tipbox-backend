@@ -1,9 +1,9 @@
-import { PrismaClient } from '@prisma/client';
 import { LoginAttempt } from '../../domain/user/login-attempt.entity';
+import { getPrisma } from './prisma.client';
 import { LoginAttemptStatus } from '../../domain/user/login-attempt-status.enum';
 
 export class LoginAttemptPrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<LoginAttempt | null> {
     const attempt = await this.prisma.loginAttempt.findUnique({ where: { id } });

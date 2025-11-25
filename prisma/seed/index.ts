@@ -7,7 +7,9 @@ import { seedFeedAndTrending } from './feed.seed';
 import { seedMarketplace } from './marketplace.seed';
 import { seedExplore } from './explore.seed';
 import { seedMessaging } from './messaging.seed';
-import { markSeedStart, markSeedEnd, addSeedUserId } from './seed-metadata';
+// Import from JS file (no ts-node issues)
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { markSeedStart, markSeedEnd, addSeedUserId } = require('./seed-metadata');
 
 export async function runAllSeeds(): Promise<void> {
   console.log('🌱 Modular seed start');

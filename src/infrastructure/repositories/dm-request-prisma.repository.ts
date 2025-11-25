@@ -1,4 +1,5 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { Prisma  } from '@prisma/client';
+import { getPrisma } from './prisma.client';
 import { DMRequest } from '../../domain/messaging/dm-request.entity';
 import { DMRequestStatus } from '../../domain/messaging/dm-request-status.enum';
 import { SupportType } from '../../domain/messaging/support-type.enum';
@@ -40,7 +41,7 @@ type DMRequestWithRelations = Prisma.DMRequestGetPayload<{
 }>;
 
 export class DMRequestPrismaRepository {
-  constructor(private readonly prisma: PrismaClient = new PrismaClient()) {}
+  private prisma = getPrisma();
 
   async findById(id: string): Promise<DMRequest | null> {
     const request = await this.prisma.dMRequest.findUnique({
@@ -83,7 +84,7 @@ export class DMRequestPrismaRepository {
     // Domain enum değerleri (PENDING, ACCEPTED, etc.) Prisma enum değerleri ile uyumludur
     if (options.status) {
       // Type-safe: Domain enum string değerleri Prisma enum değerleri ile uyumlu
-      where.status = options.status as DMRequestStatus;
+      where.status = options.status as unknown as Prisma.EnumDMRequestStatusFilter;
     }
 
     const requests = await this.prisma.dMRequest.findMany({
@@ -124,8 +125,8 @@ export class DMRequestPrismaRepository {
       data: {
         fromUserId: data.fromUserId,
         toUserId: data.toUserId,
-        status: (data.status || DMRequestStatus.PENDING) ,
-        type: supportType ,
+        status: (data.status || DMRequestStatus.PENDING) as any,
+        type: supportType as any,
         amount: data.amount ?? 0,
         description: data.description || null,
         sentAt: now,
@@ -155,7 +156,7 @@ export class DMRequestPrismaRepository {
       
       // Her field'ı explicit olarak ekle
       if (data.status !== undefined) {
-        updateData.status = data.status ;
+        updateData.status = data.status as unknown as Prisma.EnumDMRequestStatusFieldUpdateOperationsInput;
       }
       
       if (data.description !== undefined) {

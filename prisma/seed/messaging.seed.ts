@@ -51,9 +51,9 @@ export async function seedMessaging(existingClient?: typeof prisma): Promise<Mes
   // Get thread map for TIPS and support sessions
   const threadMap = new Map<string, string>();
   const normalThreads = await client.dMThread.findMany({
-    where: { isSupportThread: false as any },
+    where: { isSupportThread: false },
     select: { id: true, userOneId: true, userTwoId: true },
-  } as any);
+  });
   
   for (const thread of normalThreads) {
     const key1 = `${thread.userOneId}:${thread.userTwoId}`;
@@ -97,7 +97,7 @@ export async function seedMessaging(existingClient?: typeof prisma): Promise<Mes
           context: 'DM',
           sentAt: minutesAgoToDate(TIPS_TRANSFER_SEEDS[0].minutesAgo - 1),
         },
-      } as any)
+      })
       .then(() => 1)
       .catch(() => 0);
   } else {

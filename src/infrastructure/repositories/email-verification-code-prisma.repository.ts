@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { getPrisma } from './prisma.client';
 
 export interface EmailVerificationCodeData {
   id: string;
@@ -12,7 +12,7 @@ export interface EmailVerificationCodeData {
 }
 
 export class EmailVerificationCodePrismaRepository {
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async create(userId: string, email: string, code: string, expiresAt: Date): Promise<EmailVerificationCodeData> {
     // Kullanıcının aktif olmayan kodlarını iptal et

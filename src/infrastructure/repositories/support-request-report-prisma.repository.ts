@@ -1,9 +1,10 @@
-import { PrismaClient, Prisma } from '@prisma/client';
 import { SupportRequestReportCategory } from '../../domain/messaging/support-request-report-category.enum';
+import { getPrisma } from './prisma.client';
 import logger from '../logger/logger';
+import { Prisma } from '@prisma/client';
 
 export class SupportRequestReportPrismaRepository {
-  constructor(private readonly prisma: PrismaClient = new PrismaClient()) {}
+  private prisma = getPrisma();
 
   /**
    * Belirli bir request için belirli bir kullanıcının daha önce rapor oluşturup oluşturmadığını kontrol et
