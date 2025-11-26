@@ -5,6 +5,11 @@ import { getSeedMediaUrl } from './helpers/media.helper';
 const HOME_APPLIANCE_IMAGE = getSeedMediaUrl('catalog.home-appliances');
 const PHONE_IMAGE = getSeedMediaUrl('catalog.phones');
 const INVENTORY_MEDIA_URL = getSeedMediaUrl('inventory.dyson-media', 'https://cdn.tipbox.co/inventory/dyson-1.jpg');
+const DYSON_PRODUCT_IMAGE = getSeedMediaUrl('product.vacuum.dyson');
+const MACBOOK_PRODUCT_IMAGE = getSeedMediaUrl('product.laptop.macbook');
+
+// Üretilen ekstra FREE post sayısı (default: 2, env ile arttırılabilir)
+const EXTRA_FREE_POST_COUNT = Number.parseInt(process.env.SEED_FREE_POST_COUNT || '2', 10);
 
 export async function seedProductsAndContent(): Promise<void> {
   console.log('🧩 [seed] products & content (full)');
@@ -72,7 +77,7 @@ export async function seedProductsAndContent(): Promise<void> {
   await prisma.product.update({
     where: { id: product1.id },
     data: {
-      imageUrl: HOME_APPLIANCE_IMAGE
+      imageUrl: DYSON_PRODUCT_IMAGE
     }
   });
 
@@ -89,7 +94,7 @@ export async function seedProductsAndContent(): Promise<void> {
   await prisma.product.update({
     where: { id: product2.id },
     data: {
-      imageUrl: HOME_APPLIANCE_IMAGE
+      imageUrl: DYSON_PRODUCT_IMAGE
     }
   });
 
@@ -122,7 +127,7 @@ export async function seedProductsAndContent(): Promise<void> {
   await prisma.product.update({
     where: { id: product3.id },
     data: {
-      imageUrl: PHONE_IMAGE
+      imageUrl: MACBOOK_PRODUCT_IMAGE
     }
   });
 
@@ -253,8 +258,8 @@ export async function seedProductsAndContent(): Promise<void> {
       data: { comparisonId: comparison.id, metricId: kaliteMetric.id, scoreProduct1: 9, scoreProduct2: 8, comment: 'V15s kalite açısından daha üstün' },
     });
 
-  // More FREE posts (5)
-  for (let i = 0; i < 5; i++) {
+  // More FREE posts (kontrollü sayıda)
+  for (let i = 0; i < EXTRA_FREE_POST_COUNT; i++) {
     const postId = generateUlid();
     await prisma.contentPost.create({
       data: {

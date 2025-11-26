@@ -23,7 +23,15 @@ interface SeedAsset {
 const TEST_USER_ID = '480f5de9-b691-4d70-a6a8-2789226f4e07';
 const TARGET_USER_ID = '248cc91f-b551-4ecc-a885-db1163571330';
 const bucketName = process.env.S3_BUCKET_NAME || 'tipbox-media';
-const publicEndpoint = (process.env.MINIO_PUBLIC_ENDPOINT || 'http://10.20.0.17:9000').replace(/\/$/, '');
+
+// Frontend'in erişeceği public MinIO endpoint'i
+// Öncelik: SEED_MEDIA_BASE_URL > MINIO_PUBLIC_ENDPOINT > S3_ENDPOINT (minio:9000 -> localhost:9000) > http://localhost:9000
+const rawPublicEndpoint =
+  process.env.SEED_MEDIA_BASE_URL ||
+  process.env.MINIO_PUBLIC_ENDPOINT ||
+  process.env.S3_ENDPOINT ||
+  'http://localhost:9000';
+const publicEndpoint = rawPublicEndpoint.replace('minio:9000', 'localhost:9000').replace(/\/$/, '');
 const publicBucketBase = `${publicEndpoint}/${bucketName}`;
 const outputMapPath = path.join(__dirname, '../prisma/seed/seed-media-map.json');
 
@@ -50,6 +58,15 @@ const badgeFiles = [
   { fileName: 'HardwareExpert.png', badgeName: 'Welcome' },
   { fileName: 'PremiumShoper.png', badgeName: 'Tip Master' },
   { fileName: 'WishMarker.png', badgeName: 'First Post' },
+];
+
+// Brand ve product için kullanılacak product görselleri
+const productFiles = [
+  { key: 'product.vacuum.dyson', fileName: 'dyson.png' },
+  { key: 'product.laptop.macbook', fileName: 'macbook.png' },
+  { key: 'product.headphone.primary', fileName: 'headphone.png' },
+  { key: 'product.headphone.secondary', fileName: 'headphone2.png' },
+  { key: 'product.phone.samsung', fileName: 'samsun.png' },
 ];
 
 const slugify = (value: string) =>
@@ -160,6 +177,17 @@ for (const phoneFile of phoneFiles) {
     targetKey: `products/phones/phone${phoneNumber}.png`,
     contentType: 'image/png',
     description: `Telefon görseli: ${phoneFile.brand} (phone${phoneNumber})`,
+  });
+}
+
+// Product görsellerini ekle (brand / product / mainCategory / SubCategory seed'lerinde kullanılacak)
+for (const pf of productFiles) {
+  seedAssets.push({
+    key: pf.key,
+    localPath: path.join(assetsBasePath, 'product', pf.fileName),
+    targetKey: `products/${pf.fileName.toLowerCase()}`,
+    contentType: inferContentType(pf.fileName),
+    description: `Ürün görseli: ${pf.key}`,
   });
 }
 

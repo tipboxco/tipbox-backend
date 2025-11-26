@@ -129,6 +129,10 @@ const swaggerOptions = {
             user: { $ref: '#/components/schemas/BaseUser' },
             stats: { $ref: '#/components/schemas/BaseStats' },
             createdAt: { type: 'string', format: 'date-time' },
+            contextType: {
+              type: 'string',
+              enum: ['PRODUCT_GROUP', 'PRODUCT', 'SUB_CATEGORIES'],
+            },
             product: {
               oneOf: [
                 { $ref: '#/components/schemas/PostProduct' },
@@ -153,6 +157,10 @@ const swaggerOptions = {
             user: { $ref: '#/components/schemas/BaseUser' },
             stats: { $ref: '#/components/schemas/BaseStats' },
             createdAt: { type: 'string', format: 'date-time' },
+            contextType: {
+              type: 'string',
+              enum: ['PRODUCT_GROUP', 'PRODUCT', 'SUB_CATEGORIES'],
+            },
             products: {
               type: 'array',
               items: { $ref: '#/components/schemas/BenchmarkProduct' },
@@ -171,6 +179,10 @@ const swaggerOptions = {
             user: { $ref: '#/components/schemas/BaseUser' },
             stats: { $ref: '#/components/schemas/BaseStats' },
             createdAt: { type: 'string', format: 'date-time' },
+            contextType: {
+              type: 'string',
+              enum: ['PRODUCT_GROUP', 'PRODUCT', 'SUB_CATEGORIES'],
+            },
             product: {
               oneOf: [
                 { $ref: '#/components/schemas/PostProduct' },

@@ -11,6 +11,8 @@ import {
 } from '../../interfaces/explore/explore.dto';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
 import { FeedItemType } from '../../domain/feed/feed-item-type.enum';
+import { ContextType } from '../../domain/content/context-type.enum';
+import { ContextData } from '../../interfaces/feed/feed.dto';
 
 export class ExploreService {
   private readonly prisma: PrismaClient;
@@ -173,6 +175,7 @@ export class ExploreService {
           user: userBase,
           stats,
           createdAt: post.createdAt.toISOString(),
+          contextType: this.mapContextType(post),
         };
 
         const postKey = `${post.userId}-${post.productId || ''}`;
@@ -520,6 +523,49 @@ export class ExploreService {
       id: String(product.id),
       name: product.name,
       subName: product.brand || product.group?.name || '',
+      image: product.imageUrl || null,
+    };
+  }
+
+  private mapContextType(post: any): ContextType {
+    if (post?.productId) {
+      return ContextType.PRODUCT;
+    }
+    if (post?.productGroupId) {
+      return ContextType.PRODUCT_GROUP;
+    }
+    return ContextType.SUB_CATEGORY;
+  }
+
+  private buildContextData(post: any): ContextData {
+    const contextType = this.mapContextType(post);
+
+    if (contextType === ContextType.PRODUCT && post.product) {
+      const product = post.product;
+      const group = product.group;
+      const subCategory = group?.subCategory;
+
+      return {
+        id: String(product.id),
+        name: product.name,
+        subName: group?.name || subCategory?.name || '',
+        image: product.imageUrl || null,
+      };
+    }
+
+    if (contextType === ContextType.PRODUCT_GROUP) {
+      return {
+        id: String(post.productGroupId),
+        name: '',
+        subName: '',
+        image: null,
+      };
+    }
+
+    return {
+      id: String(post.subCategoryId),
+      name: '',
+      subName: '',
       image: null,
     };
   }
@@ -529,6 +575,7 @@ export class ExploreService {
     const postData = {
       ...basePost,
       type,
+      contextData: this.buildContextData(post),
       product: product || null,
       content: post.body,
       images,
@@ -568,6 +615,7 @@ export class ExploreService {
     const benchmarkData = {
       ...basePost,
       type: FeedItemType.BENCHMARK,
+      contextData: this.buildContextData(post),
       products,
       content: comparison.comparisonSummary || post.body,
     };
@@ -585,6 +633,7 @@ export class ExploreService {
     const tipsData = {
       ...basePost,
       type: FeedItemType.TIPS_AND_TRICKS,
+      contextData: this.buildContextData(post),
       product: product || null,
       content: post.body,
       tag,

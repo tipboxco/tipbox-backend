@@ -8,11 +8,26 @@ const seedMedia = mediaMap as Record<string, MediaEntry>;
 
 export type SeedMediaKey = keyof typeof seedMedia;
 
-// MinIO public endpoint'ini environment variable'dan al
+// MinIO public endpoint'ini environment variable'lardan al
 function getMinioPublicEndpoint(): string {
-  // Environment variable'dan al, yoksa default olarak http://10.20.0.17:9000 kullan
-  const endpoint = process.env.MINIO_PUBLIC_ENDPOINT || 'http://10.20.0.17:9000';
-  return endpoint.replace(/\/$/, ''); // Trailing slash'i temizle
+  /**
+   * Öncelik sırası:
+   * 1) SEED_MEDIA_BASE_URL    -> Seed görselleri için tek kontrol noktası (önerilen)
+   * 2) MINIO_PUBLIC_ENDPOINT  -> Frontend'in doğrudan eriştiği host
+   * 3) S3_ENDPOINT            -> Container içi endpoint, minio:9000 ise localhost:9000'a çevir
+   * 4) Varsayılan: http://localhost:9000
+   */
+  const raw =
+    process.env.SEED_MEDIA_BASE_URL ||
+    process.env.MINIO_PUBLIC_ENDPOINT ||
+    process.env.S3_ENDPOINT ||
+    'http://localhost:9000';
+
+  // Container içi "minio:9000" adresini frontend'in erişebileceği localhost'a çevir
+  const normalized = raw.replace('minio:9000', 'localhost:9000');
+
+  // Trailing slash'i temizle
+  return normalized.replace(/\/$/, '');
 }
 
 function getBucketName(): string {

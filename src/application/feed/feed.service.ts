@@ -14,8 +14,8 @@ import {
   BaseStats,
   BaseProduct,
   BenchmarkProduct,
-  PostProduct,
-  TipsAndTricksProduct,
+  ContextType,
+  ContextData,
 } from '../../interfaces/feed/feed.dto';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
 import logger from '../../infrastructure/logger/logger';
@@ -86,7 +86,15 @@ export class FeedService {
         },
         product: {
           include: {
-            group: true,
+            group: {
+              include: {
+                subCategory: {
+                  include: {
+                    mainCategory: true,
+                  },
+                },
+              },
+            },
           },
         },
         comparison: {
@@ -174,6 +182,7 @@ export class FeedService {
           user: userBase,
           stats,
           createdAt: post.createdAt.toISOString(),
+          contextType: this.mapContextType(post),
         };
 
         // Get images for this post
@@ -290,11 +299,19 @@ export class FeedService {
                 profile: true,
               },
             },
-            product: {
+        product: {
+          include: {
+            group: {
               include: {
-                group: true,
+                subCategory: {
+                  include: {
+                    mainCategory: true,
+                  },
+                },
               },
             },
+          },
+        },
             comparison: {
               include: {
                 product1: {
@@ -422,6 +439,7 @@ export class FeedService {
           user: userBase,
           stats,
           createdAt: post.createdAt.toISOString(),
+          contextType: this.mapContextType(post),
         };
 
         // Get images for this post
@@ -476,7 +494,60 @@ export class FeedService {
       id: String(product.id),
       name: product.name,
       subName: product.brand || product.group?.name || '',
-      image: null, // TODO: Product image URL
+      image: product.imageUrl || null,
+    };
+  }
+
+  private mapContextType(post: any): ContextType {
+    if (post?.productId) {
+      return 'PRODUCT';
+    }
+    if (post?.productGroupId) {
+      return 'PRODUCT_GROUP';
+    }
+    return 'SUB_CATEGORIES';
+  }
+
+  /**
+   * Kart header / navigasyon için context bilgisini oluşturur.
+   */
+  private buildContextData(post: any): ContextData {
+    const contextType = this.mapContextType(post);
+
+    if (contextType === 'PRODUCT' && post.product) {
+      const product = post.product;
+      const group = product.group;
+      const subCategory = group?.subCategory;
+
+      const base: ContextData = {
+        id: String(product.id),
+        name: product.name,
+        subName: group?.name || subCategory?.name || '',
+        image: product.imageUrl || null,
+      };
+
+      // isOwned bilgisi sadece PRODUCT context'inde ve inventorde sahiplik bilgimiz varsa anlamlı.
+      // Şu an için burada set etmiyoruz; ileride user inventory bilgisi geçirildiğinde doldurulabilir.
+      return base;
+    }
+
+    if (contextType === 'PRODUCT_GROUP') {
+      // Şu an contentPost sorgusunda productGroup join'i yok, bu nedenle
+      // eldeki alanlarla en azından id bilgisini dönüyoruz.
+      return {
+        id: String(post.productGroupId),
+        name: '', // İleride productGroup ilişkisi eklendiğinde doldurulabilir
+        subName: '',
+        image: null,
+      };
+    }
+
+    // SUB_CATEGORIES
+    return {
+      id: String(post.subCategoryId),
+      name: '', // İleride subCategory ilişkisi eklendiğinde doldurulabilir
+      subName: '',
+      image: null,
     };
   }
 
@@ -486,11 +557,11 @@ export class FeedService {
     type: FeedItemType.FEED | FeedItemType.POST | FeedItemType.QUESTION,
     images: string[] = []
   ): FeedItem {
-    const product = this.getProductBase(post.product);
+    const contextData = this.buildContextData(post);
     const postData: Post = {
       ...basePost,
       type,
-      product: product ? (product as PostProduct) : null,
+      contextData,
       content: post.body,
       images,
     };
@@ -535,6 +606,7 @@ export class FeedService {
     const benchmarkData: BenchmarkPost = {
       ...basePost,
       type: FeedItemType.BENCHMARK,
+      contextData: this.buildContextData(post),
       products,
       content: comparison.comparisonSummary || post.body,
     };
@@ -546,14 +618,13 @@ export class FeedService {
   }
 
   private mapToTipsAndTricksItem(post: any, basePost: any, images: string[] = []): FeedItem {
-    const product = this.getProductBase(post.product);
     const tip = post.tip;
     const tag = post.tags?.[0]?.tag || post.contentPostTags?.[0]?.tag || '';
 
     const tipsData: TipsAndTricksPost = {
       ...basePost,
       type: FeedItemType.TIPS_AND_TRICKS,
-      product: product ? (product as TipsAndTricksProduct) : null,
+      contextData: this.buildContextData(post),
       content: post.body,
       tag,
       images,

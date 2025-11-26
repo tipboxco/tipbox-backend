@@ -683,5 +683,37 @@ export class PostService {
       throw error;
     }
   }
+
+  /**
+   * Gönderi sil
+   * - Sadece gönderi sahibi silebilir
+   * - İlişkili kayıtlar FK ile otomatik temizlenir (post_tips, post_questions, post_comparisons vb.)
+   */
+  async deletePost(userId: string, postId: string): Promise<boolean> {
+    try {
+      const post = await this.postRepo.findById(postId);
+
+      if (!post) {
+        return false; // Router 404 dönecek
+      }
+
+      if (!post.belongsToUser(userId)) {
+        throw new Error('Forbidden: user does not own this post');
+      }
+
+      const deleted = await this.postRepo.delete(postId);
+
+      if (deleted) {
+        logger.info(`Post deleted: ${postId} by user ${userId}`);
+      } else {
+        logger.warn(`Post delete returned false for id: ${postId}`);
+      }
+
+      return deleted;
+    } catch (error) {
+      logger.error(`Failed to delete post ${postId} by user ${userId}`, error);
+      throw error;
+    }
+  }
 }
 

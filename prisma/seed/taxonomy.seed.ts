@@ -1,4 +1,5 @@
 import { prisma } from './types';
+import { getSeedMediaUrl } from './helpers/media.helper';
 
 export async function seedTaxonomy(): Promise<void> {
   console.log('📱 [seed] user themes');
@@ -9,16 +10,16 @@ export async function seedTaxonomy(): Promise<void> {
   ]).catch(() => {});
 
   console.log('📂 [seed] main categories');
-  // Görsel eşleştirmeleri: kategori isimlerine göre assets/catalog görselleri
-  const categoryImageMap: Record<string, string | null> = {
-    'Teknoloji': 'computers-tablets.png',
-    'Ev & Yaşam': 'home appliances.png',
-    'Gıda & İçecek': 'air conditioner.png', // Rastgele eşleştirme
-    'Moda & Aksesuar': 'printers.png', // Rastgele eşleştirme
-    'Sağlık & Güzellik': 'smart home devices.png', // Rastgele eşleştirme
-    'Spor & Outdoor': 'drone.png', // Rastgele eşleştirme
-    'Hobi & Eğlence': 'games.png',
-    'Otomotiv': null, // Bir tane null bırakıyoruz
+  // Görsel eşleştirmeleri: kategori isimlerine göre seed media key'leri
+  const categoryImageKeyMap: Record<string, string | null> = {
+    'Teknoloji': 'catalog.computers-tablets',
+    'Ev & Yaşam': 'catalog.home-appliances',
+    'Gıda & İçecek': 'catalog.air-conditioner', // Rastgele eşleştirme
+    'Moda & Aksesuar': 'catalog.printers', // Rastgele eşleştirme
+    'Sağlık & Güzellik': 'catalog.smart-home-devices', // Rastgele eşleştirme
+    'Spor & Outdoor': 'catalog.drone', // Rastgele eşleştirme
+    'Hobi & Eğlence': 'catalog.games',
+    'Otomotiv': 'catalog.otomotiv',
   };
 
   const mainCategories = await Promise.all([
@@ -80,15 +81,15 @@ export async function seedTaxonomy(): Promise<void> {
     }),
   ]).catch(() => []);
 
-  // Kategoriler oluşturulduktan sonra imageUrl'leri güncelle
+  // Kategoriler oluşturulduktan sonra imageUrl'leri seed media üzerinden güncelle
   for (const category of mainCategories) {
-    const imageName = categoryImageMap[category.name];
-    if (imageName) {
+    const key = categoryImageKeyMap[category.name];
+    if (key) {
       await prisma.mainCategory.update({
         where: { id: category.id },
         data: {
-          imageUrl: `catalog-images/category/${category.id}/${imageName}`
-        }
+          imageUrl: getSeedMediaUrl(key as any),
+        },
       });
     }
   }

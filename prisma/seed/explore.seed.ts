@@ -1,4 +1,8 @@
 import { prisma, generateUlid, TEST_USER_ID, TARGET_USER_ID, TRUST_USER_IDS } from './types';
+import { getSeedMediaUrl } from './helpers/media.helper';
+
+// Wishbox istatistikleri için kullanılacak maksimum kullanıcı sayısı (default: 5)
+const MAX_WISHBOX_STATS_USERS = Number.parseInt(process.env.SEED_WISHBOX_USER_LIMIT || '5', 10);
 
 export async function seedExplore(): Promise<void> {
   console.log('🔍 [seed] explore (full)');
@@ -8,7 +12,7 @@ export async function seedExplore(): Promise<void> {
       data: {
         title: 'Yeni Sezon NFT Koleksiyonu',
         description: "Sınırlı sayıda özel avatar ve badge NFT'leri şimdi satışta!",
-        imageUrl: 'https://images.unsplash.com/photo-1634193295627-1cdddf751ebf?w=800',
+        imageUrl: getSeedMediaUrl('product.vacuum.dyson'),
         linkUrl: '/marketplace/listings?type=BADGE',
         isActive: true,
         displayOrder: 1,
@@ -18,7 +22,7 @@ export async function seedExplore(): Promise<void> {
       data: {
         title: 'Epic Rarity İndirimi',
         description: "%30 indirimli EPIC rarity NFT'lere göz at",
-        imageUrl: 'https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=800',
+        imageUrl: getSeedMediaUrl('product.headphone.primary'),
         linkUrl: '/marketplace/listings?rarity=EPIC',
         isActive: true,
         displayOrder: 2,
@@ -28,7 +32,7 @@ export async function seedExplore(): Promise<void> {
       data: {
         title: 'Yeni Markalar Platformda',
         description: "Ünlü markalar TipBox'a katıldı! Hemen keşfet.",
-        imageUrl: 'https://images.unsplash.com/photo-1556742400-b5a9d4555f7c?w=800',
+        imageUrl: getSeedMediaUrl('product.phone.samsung'),
         linkUrl: '/explore/brands/new',
         isActive: true,
         displayOrder: 3,
@@ -36,18 +40,20 @@ export async function seedExplore(): Promise<void> {
     }),
   ]).catch(() => {});
 
-  // Brands (subset matching original names)
+  // Brands (subset matching original names) - logoUrl seed media üzerinden
   await Promise.all(
     [
-      { name: 'TechVision', description: 'Yenilikçi teknoloji ürünleri ve çözümleri sunan global marka', category: 'Technology' },
-      { name: 'SmartHome Pro', description: 'Akıllı ev sistemleri ve IoT cihazları konusunda uzman', category: 'Home & Living' },
-      { name: 'CoffeeDelight', description: 'Premium kahve makineleri ve barista ekipmanları', category: 'Kitchen' },
-      { name: 'FitnessTech', description: 'Akıllı spor ekipmanları ve sağlık takip cihazları', category: 'Health & Fitness' },
-      { name: 'StyleHub', description: 'Modern ve şık yaşam ürünleri markası', category: 'Fashion' },
+      { name: 'TechVision', description: 'Yenilikçi teknoloji ürünleri ve çözümleri sunan global marka', category: 'Technology', logoKey: 'product.laptop.macbook' },
+      { name: 'SmartHome Pro', description: 'Akıllı ev sistemleri ve IoT cihazları konusunda uzman', category: 'Home & Living', logoKey: 'product.vacuum.dyson' },
+      { name: 'CoffeeDelight', description: 'Premium kahve makineleri ve barista ekipmanları', category: 'Kitchen', logoKey: 'product.headphone.secondary' },
+      { name: 'FitnessTech', description: 'Akıllı spor ekipmanları ve sağlık takip cihazları', category: 'Health & Fitness', logoKey: 'product.headphone.primary' },
+      { name: 'StyleHub', description: 'Modern ve şık yaşam ürünleri markası', category: 'Fashion', logoKey: 'product.phone.samsung' },
     ].map((b) =>
-      prisma.brand.create({
-        data: { ...b, logoUrl: 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=200' },
-      }).catch(() => null)
+      prisma.brand
+        .create({
+          data: { name: b.name, description: b.description, category: b.category, logoUrl: getSeedMediaUrl(b.logoKey as any) },
+        })
+        .catch(() => null)
     )
   );
 
@@ -112,9 +118,11 @@ export async function seedExplore(): Promise<void> {
       ...TRUST_USER_IDS,
     ].filter(Boolean) as string[];
 
+    const limitedUserIds = allUserIds.slice(0, MAX_WISHBOX_STATS_USERS);
+
     await Promise.all(
-      events.flatMap((event) =>
-        allUserIds.map((userId) =>
+      events.flatMap((event: any) =>
+        limitedUserIds.map((userId) =>
           prisma.wishboxStats.create({
             data: {
               userId,

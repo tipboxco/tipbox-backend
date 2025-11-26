@@ -507,6 +507,61 @@ router.get(
 
 /**
  * @openapi
+ * /posts/{id}:
+ *   delete:
+ *     summary: Gönderi sil
+ *     description: Sadece gönderinin sahibi kendi gönderisini silebilir.
+ *     tags: [Posts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Silinecek post ID'si
+ *     responses:
+ *       204:
+ *         description: Gönderi başarıyla silindi
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ *       403:
+ *         description: Kullanıcının bu gönderiyi silme yetkisi yok
+ *       404:
+ *         description: Gönderi bulunamadı
+ */
+router.delete(
+  '/:id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: 'id is required' });
+    }
+
+    try {
+      const deleted = await postService.deletePost(String(userId), id);
+      if (!deleted) {
+        return res.status(404).json({ message: 'Post not found' });
+      }
+      return res.status(204).send();
+    } catch (error: any) {
+      if (error instanceof Error && error.message.startsWith('Forbidden')) {
+        return res.status(403).json({ message: 'You are not allowed to delete this post' });
+      }
+      throw error;
+    }
+  })
+);
+
+/**
+ * @openapi
  * /posts/update:
  *   post:
  *     summary: Güncelleme gönderisi oluştur

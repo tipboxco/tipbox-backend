@@ -7,6 +7,17 @@ export { FeedItemType };
 export type ID = string;
 export type URLString = string;
 
+export type ContextType = 'PRODUCT_GROUP' | 'PRODUCT' | 'SUB_CATEGORIES';
+
+// Context metadata used for card header
+export interface ContextData {
+  id: string;        // contextType'e göre: productId / productGroupId / subCategoryId
+  name: string;      // kart başlığı: ürün / grup / subcategory adı
+  subName?: string;  // bir üst seviye adı (örn. product -> product group)
+  image?: any;       // görsel URL'si
+  isOwned?: boolean; // sadece PRODUCT context'inde anlamlı
+}
+
 export interface BaseUser {
   id: ID;
   name: string;
@@ -27,6 +38,7 @@ export interface BasePost {
   user: BaseUser;
   stats: BaseStats;
   createdAt: string;
+  contextType: ContextType;
 }
 
 export interface BaseProduct {
@@ -34,15 +46,12 @@ export interface BaseProduct {
   name: string;
   subName: string;
   image: any; // URL or image object
+  isOwned?: boolean;
 }
 
 // Post Item Types
-export interface PostProduct extends BaseProduct {
-  // İleride ürünün genel ortalama grafiği için gerekli tanımlamalar burada yapılacak
-}
-
 export interface Post extends BasePost {
-  product: PostProduct | null;
+  contextData: ContextData;
   content: string;
   images?: any[];
 }
@@ -54,47 +63,34 @@ export interface BenchmarkProduct extends BaseProduct {
 }
 
 export interface BenchmarkPost extends BasePost {
+  contextData: ContextData;
   products: BenchmarkProduct[];
   content: string;
 }
 
-// Review Post Item Types (Experience Post)
+// Review / Experience Post Item Types
 export interface ExperienceContent {
   title: string;
   content: string;
   rating: number;
 }
 
-export interface ReviewProduct extends BaseProduct {
-  // İleride ürünün genel ortalama grafiği için gerekli tanımlamalar burada yapılacak
-}
-
 export interface ExperiencePost extends BasePost {
-  product: ReviewProduct | null;
+  contextData: ContextData;
   content: ExperienceContent[];
   tags: string[];
   images?: any[];
 }
 
-// Tips And Tricks Post Item Types
-export interface TipsAndTricksProduct extends BaseProduct {
-  // İleride ürünün genel ortalama grafiği için gerekli tanımlamalar burada yapılacak
-}
-
 export interface TipsAndTricksPost extends BasePost {
-  product: TipsAndTricksProduct | null;
+  contextData: ContextData;
   content: string;
   tag: string;
   images?: any[];
 }
 
-// Replies Post Item Types
-export interface RepliesProduct extends BaseProduct {
-  // İleride ürünün genel ortalama grafiği için gerekli tanımlamalar burada yapılacak
-}
-
 export interface RepliesPost extends BasePost {
-  product: RepliesProduct | null;
+  contextData: ContextData;
   content: string;
   isBoosted: boolean;
   images?: any[];

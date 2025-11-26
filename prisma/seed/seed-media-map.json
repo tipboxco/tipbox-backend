@@ -82,5 +82,20 @@
   },
   "product.phone.phone6": {
     "targetKey": "products/phones/phone6.png"
+  },
+  "product.vacuum.dyson": {
+    "targetKey": "products/dyson.png"
+  },
+  "product.laptop.macbook": {
+    "targetKey": "products/macbook.png"
+  },
+  "product.headphone.primary": {
+    "targetKey": "products/headphone.png"
+  },
+  "product.headphone.secondary": {
+    "targetKey": "products/headphone2.png"
+  },
+  "product.phone.samsung": {
+    "targetKey": "products/samsun.png"
   }
 }

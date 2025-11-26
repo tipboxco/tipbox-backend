@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client'
 import * as bcrypt from 'bcryptjs'
 import { DEFAULT_PROFILE_BANNER_URL } from '../src/domain/user/profile.constants'
-import { getSeedMediaUrl, SeedMediaKey } from './seed/helpers/media.helper'
+import { getSeedMediaUrl } from './seed/helpers/media.helper'
 
 const prisma = new PrismaClient()
 
@@ -1881,7 +1881,7 @@ async function main() {
   const allUserIds = [userIdToUse, TARGET_USER_ID, ...TRUST_USER_IDS.slice(0, 3)]
   const eventStats = await Promise.all(
     events.flatMap((event) =>
-      allUserIds.map((userId, index) =>
+      allUserIds.map((userId) =>
         prisma.wishboxStats.create({
           data: {
             userId,
