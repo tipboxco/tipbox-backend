@@ -460,6 +460,20 @@ body {
   flex-shrink: 0;
 }
 
+.thread-avatar.has-image {
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+
+.thread-avatar.has-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 1px solid rgba(208, 242, 5, 0.4);
+}
+
 .thread-content {
   flex: 1;
   min-width: 0;
@@ -548,6 +562,19 @@ body {
   font-size: 1.1rem;
   font-family: 'Jura', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   flex-shrink: 0;
+}
+
+.support-request-avatar.has-image {
+  padding: 0;
+  background: transparent;
+  display: flex;
+}
+
+.support-request-avatar.has-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
 }
 
 /* Status'a göre avatar border rengi */

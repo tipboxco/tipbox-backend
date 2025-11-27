@@ -139,67 +139,6 @@
  *               type: array
  *               items:
  *                 $ref: '#/components/schemas/WalletResponse'
- *     BadgeSelection:
- *       type: object
- *       properties:
- *         id:
- *           type: string
- *           description: Badge ID
- *         name:
- *           type: string
- *         value:
- *           type: string
- *     UserProfileDetailsResponse:
- *       type: object
- *       properties:
- *         id: { type: string }
- *         name: { type: string }
- *         avatar: { type: string, nullable: true }
- *         banner: { type: string, nullable: true }
- *         cosmetic:
- *           type: string
- *           nullable: true
- *         cosmeticDetail:
- *           type: object
- *           nullable: true
- *           properties:
- *             id: { type: string }
- *             title: { type: string }
- *             image: { type: string, nullable: true }
- *         biography: { type: string, nullable: true }
- *         titles:
- *           type: array
- *           items: { type: string }
- *         stats:
- *           type: object
- *           properties:
- *             posts: { type: integer }
- *             trust: { type: integer }
- *             truster: { type: integer }
- *         badges:
- *           type: array
- *           items:
- *             $ref: '#/components/schemas/BadgeSelection'
- *     UpdateUserProfileRequest:
- *       type: object
- *       properties:
- *         avatar:
- *           type: string
- *           description: Avatar URL
- *         banner:
- *           type: string
- *           nullable: true
- *         cosmetic:
- *           type: string
- *           nullable: true
- *         name:
- *           type: string
- *         biography:
- *           type: string
- *         badge:
- *           type: array
- *           items:
- *             $ref: '#/components/schemas/BadgeSelection'
  */
 export interface CreateUserRequest {
   email: string;
@@ -258,31 +197,3 @@ export interface UserFullResponse extends UserResponse {
   profile?: ProfileResponse;
   wallets: any[]; // Import from wallet.dto when needed
 } 
-
-export interface BadgeSelection {
-  id: string;
-  name?: string;
-  value?: string;
-}
-
-export interface UserProfileDetailsResponse {
-  id: string;
-  name: string;
-  avatar: string | null;
-  banner: string | null;
-  cosmetic: string | null;
-  cosmeticDetail: { id: string; title: string; image: string | null } | null;
-  biography: string | null;
-  titles: string[];
-  stats: { posts: number; trust: number; truster: number };
-  badges: BadgeSelection[];
-}
-
-export interface UpdateUserProfileRequest {
-  avatar?: string;
-  banner?: string | null;
-  cosmetic?: string | null;
-  name?: string;
-  biography?: string;
-  badge?: BadgeSelection[];
-}

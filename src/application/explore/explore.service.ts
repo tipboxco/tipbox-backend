@@ -129,7 +129,7 @@ export class ExploreService {
       statsMap.set(post.id, {
         likes: (post as any).likesCount || 0,
         comments: (post as any).commentsCount || 0,
-        shares: 0,
+        shares: (post as any).sharesCount || 0,
         bookmarks: (post as any).favoritesCount || 0,
       });
     });
@@ -529,12 +529,12 @@ export class ExploreService {
 
   private mapContextType(post: any): ContextType {
     if (post?.productId) {
-      return ContextType.PRODUCT;
+      return 'product' as ContextType;
     }
     if (post?.productGroupId) {
-      return ContextType.PRODUCT_GROUP;
+      return 'product_group' as ContextType;
     }
-    return ContextType.SUB_CATEGORY;
+    return 'sub_category' as ContextType;
   }
 
   private buildContextData(post: any): ContextData {

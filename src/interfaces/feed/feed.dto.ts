@@ -1,4 +1,5 @@
 import { FeedItemType } from '../../domain/feed/feed-item-type.enum';
+import { ContextType as DomainContextType } from '../../domain/content/context-type.enum';
 
 // Re-export FeedItemType for convenience
 export { FeedItemType };
@@ -7,7 +8,7 @@ export { FeedItemType };
 export type ID = string;
 export type URLString = string;
 
-export type ContextType = 'PRODUCT_GROUP' | 'PRODUCT' | 'SUB_CATEGORIES';
+export type ContextType = DomainContextType;
 
 // Context metadata used for card header
 export interface ContextData {

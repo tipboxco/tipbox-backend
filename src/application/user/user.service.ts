@@ -24,8 +24,8 @@ type CosmeticSummary = {
 
 type ProfileBadgeSummary = {
   id: string;
-  name: string;
-  value: string;
+  title: string;
+  image: string | null;
 };
 
 type CollectionTask = {
@@ -61,6 +61,10 @@ type UserProfileDetails = {
   stats: { posts: number; trust: number; truster: number };
   badges: ProfileBadgeSummary[];
 };
+
+const BADGE_PLACEHOLDER_URL =
+  process.env.DEFAULT_BADGE_IMAGE_URL ||
+  'https://cdn.tipbox.co/assets/badges/default.png';
 
 export class UserService {
   private readonly s3Service: S3Service;
@@ -250,8 +254,8 @@ export class UserService {
       stats: card.stats,
       badges: userBadges.map((ub) => ({
         id: String(ub.badgeId),
-        name: ub.badge.name,
-        value: ub.badge.rarity ?? '',
+        title: ub.badge.name,
+        image: ub.badge.imageUrl ?? null,
       })),
     };
   }
@@ -777,14 +781,15 @@ export class UserService {
         likesCount: true,
         commentsCount: true,
         favoritesCount: true,
-        viewsCount: true
+        viewsCount: true,
+        sharesCount: true,
       } as any
     });
 
     return {
       likes: post?.likesCount || 0,
       comments: post?.commentsCount || 0,
-      shares: 0,
+      shares: post?.sharesCount || 0,
       bookmarks: post?.favoritesCount || 0
     };
   }
@@ -815,20 +820,115 @@ export class UserService {
     };
   }
 
+  private normalizeContextType(value?: string | null): ContextType {
+    const normalized = (value ?? ContextType.PRODUCT).toString().toLowerCase();
+    switch (normalized) {
+      case ContextType.PRODUCT_GROUP:
+      case ContextType.PRODUCT:
+      case ContextType.SUB_CATEGORY:
+        return normalized as ContextType;
+      default:
+        return ContextType.PRODUCT;
+    }
+  }
+
   private mapContextType(post: any): ContextType {
     if (post?.productId) {
-      return ContextType.PRODUCT;
+      return this.normalizeContextType(ContextType.PRODUCT);
     }
     if (post?.productGroupId) {
-      return ContextType.PRODUCT_GROUP;
+      return this.normalizeContextType(ContextType.PRODUCT_GROUP);
     }
-    return ContextType.SUB_CATEGORY;
+    return this.normalizeContextType(ContextType.SUB_CATEGORY);
+  }
+
+  private buildContextDataFromPost(post: any, ownedProductIds?: Set<string> | null) {
+    const contextType = this.mapContextType(post);
+
+    if (contextType === ContextType.PRODUCT && post.product) {
+      const product = post.product;
+      const group = product.group;
+      const subCategory = group?.subCategory;
+      const mainCategory = subCategory?.mainCategory || post.subCategory?.mainCategory || post.mainCategory;
+      return {
+        id: String(product.id),
+        name: product.name,
+        subName: group?.name || subCategory?.name || mainCategory?.name || '',
+        image: product.imageUrl || group?.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null,
+        isOwned: ownedProductIds ? ownedProductIds.has(String(product.id)) : undefined,
+      };
+    }
+
+    if (contextType === ContextType.PRODUCT_GROUP && post.productGroup) {
+      const group = post.productGroup;
+      const subCategory = group.subCategory;
+      const mainCategory = subCategory?.mainCategory || post.mainCategory;
+      return {
+        id: String(group.id),
+        name: group.name,
+        subName: subCategory?.name || mainCategory?.name || '',
+        image: group.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null,
+      };
+    }
+
+    if (contextType === ContextType.SUB_CATEGORY && post.subCategory) {
+      const subCategory = post.subCategory;
+      return {
+        id: String(subCategory.id),
+        name: subCategory.name,
+        subName: subCategory.mainCategory?.name || '',
+        image: subCategory.imageUrl || subCategory.mainCategory?.imageUrl || null,
+      };
+    }
+
+    if (post.mainCategory) {
+      return {
+        id: String(post.mainCategory.id),
+        name: post.mainCategory.name,
+        subName: '',
+        image: post.mainCategory.imageUrl || null,
+      };
+    }
+
+    return null;
   }
 
   async getUserPosts(userId: string): Promise<any[]> {
     const posts = await this.prisma.contentPost.findMany({
       where: { userId, type: 'FREE' } as any,
-      include: { product: true, likes: true, comments: true, favorites: true } as any,
+      include: {
+        product: {
+          include: {
+            group: {
+              include: {
+                subCategory: {
+                  include: {
+                    mainCategory: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        productGroup: {
+          include: {
+            subCategory: {
+              include: {
+                mainCategory: true,
+              },
+            },
+          },
+        },
+        subCategory: {
+          include: {
+            mainCategory: true,
+          },
+        },
+        mainCategory: true,
+        likes: true,
+        comments: true,
+        favorites: true,
+      } as any,
       orderBy: { createdAt: 'desc' },
     });
 
@@ -837,6 +937,7 @@ export class UserService {
     // Batch fetch images from InventoryMedia for posts with products
     const postProductIds = posts.map((p) => p.productId).filter(Boolean) as string[];
     const inventoryMediaMap = new Map<string, string[]>();
+    const ownedProductIds = new Set<string>();
     
     if (postProductIds.length > 0) {
       const inventoriesWithMedia = await this.prisma.inventory.findMany({
@@ -853,6 +954,7 @@ export class UserService {
       });
 
       for (const inventory of inventoriesWithMedia) {
+        ownedProductIds.add(String(inventory.productId));
         const imageUrls = inventory.media.map((m) => m.mediaUrl);
         if (imageUrls.length > 0) {
           inventoryMediaMap.set(inventory.productId, imageUrls);
@@ -863,16 +965,8 @@ export class UserService {
     const results = await Promise.all(
       posts.map(async (post) => {
         const stats = await this.getPostStats(post.id);
-        const product = await this.getProductBase(post.productId);
-        const contextData = product
-          ? {
-              id: product.id,
-              name: product.name,
-              subName: product.subName,
-              image: product.image,
-              isOwned: false, // İleride inventory bilgisinden doldurulabilir
-            }
-          : null;
+        const contextType = this.mapContextType(post);
+        const contextData = this.buildContextDataFromPost(post, ownedProductIds);
         const images = post.productId ? (inventoryMediaMap.get(post.productId) || []) : [];
         return {
           id: String(post.id),
@@ -880,7 +974,7 @@ export class UserService {
           user: userBase,
           stats,
           createdAt: post.createdAt.toISOString(),
-          contextType: this.mapContextType(post),
+          contextType,
           contextData,
           content: post.body,
           images,
@@ -904,49 +998,129 @@ export class UserService {
 
     const userBase = await this.getUserBase(userId);
     const results: any[] = [];
+
     for (const inv of inventories) {
-      const experiences = (inv as any).productExperiences || [];
-      for (const exp of experiences) {
-        const postIds = await this.prisma.contentPost.findMany({ 
-          where: { productId: String(inv.productId) } as any, 
-          select: { id: true } 
-        }).then((ps) => ps.map((p) => String(p.id)));
-        const tags = await this.prisma.contentPostTag.findMany({
-          where: { postId: { in: postIds } } as any,
-        });
-        const invProduct = (inv as any).product;
-        const invMedia = (inv as any).media || [];
-        results.push({
-          id: String(exp.id),
-          type: 'feed' as const,
-          user: userBase,
-          stats: await this.getPostStats(''), // TODO: Review için post ID gerekli
-          createdAt: exp.createdAt.toISOString(),
-          product: {
-            id: String(invProduct?.id || ''),
-            name: invProduct?.name || '',
-            subName: invProduct?.brand || '',
-            image: null,
-          },
-          content: [
-            {
-              title: 'Experience' as const,
-              content: exp.experienceText,
-              rating: 0, // TODO: Rating modeli gerekli
-            },
-          ],
-          tags: tags.map((t) => t.tag),
-          images: invMedia.filter((m: any) => m.type === 'IMAGE').map((m: any) => m.mediaUrl),
-        });
+      const experiences = ((inv as any).productExperiences || []) as Array<{
+        id: string;
+        title: string;
+        experienceText: string;
+        createdAt: Date;
+      }>;
+
+      const postIds = await this.prisma.contentPost
+        .findMany({
+          where: { productId: String(inv.productId) } as any,
+          select: { id: true },
+        })
+        .then((ps) => ps.map((p) => String(p.id)));
+
+      const tags = await this.prisma.contentPostTag.findMany({
+        where: { postId: { in: postIds } } as any,
+      });
+
+      const invProduct = (inv as any).product;
+      const invMedia = (inv as any).media || [];
+
+      const experienceContent = this.mapExperiencesToContentBlocks(
+        experiences,
+        (inv as any).experienceSummary ?? null,
+      );
+
+      const latestExperienceAt =
+        experiences.reduce<Date | null>((latest, exp) => {
+          if (!latest || exp.createdAt > latest) {
+            return exp.createdAt;
+          }
+          return latest;
+        }, null) ?? (inv as any).createdAt ?? new Date();
+
+      results.push({
+        id: String(inv.id),
+        type: 'feed' as const,
+        user: userBase,
+        stats: await this.getPostStats(''), // TODO: Review için post ID gerekli
+        createdAt: latestExperienceAt.toISOString(),
+        product: {
+          id: String(invProduct?.id || ''),
+          name: invProduct?.name || '',
+          subName: invProduct?.brand || '',
+          image: invProduct?.imageUrl || null,
+          isOwned: true,
+        },
+        content: experienceContent,
+        tags: tags.map((t) => t.tag),
+        images: invMedia
+          .filter((m: any) => m.type === 'IMAGE')
+          .map((m: any) => m.mediaUrl),
+      });
+    }
+
+    return results;
+  }
+
+  private mapExperiencesToContentBlocks(
+    experiences: Array<{ title: string; experienceText: string }> = [],
+    summary?: string | null,
+  ): Array<{ title: string; content: string; rating: number }> {
+    const defaultTitles = {
+      price: 'Price and Shopping Experience',
+      usage: 'Product and Usage Experience',
+    };
+
+    const normalized = {
+      price: null as string | null,
+      usage: null as string | null,
+    };
+
+    const miscContents: string[] = [];
+
+    for (const exp of experiences) {
+      const title = (exp.title || '').toLowerCase();
+      if (title.includes('price')) {
+        normalized.price = exp.experienceText;
+      } else if (title.includes('product') || title.includes('usage')) {
+        normalized.usage = exp.experienceText;
+      } else if (exp.experienceText) {
+        miscContents.push(exp.experienceText);
       }
     }
-    return results;
+
+    const fallback =
+      summary ||
+      miscContents[0] ||
+      experiences[0]?.experienceText ||
+      '';
+
+    const priceContent = normalized.price ?? miscContents.shift() ?? fallback;
+    const usageContent =
+      normalized.usage ?? miscContents.shift() ?? priceContent;
+
+    return [
+      {
+        title: defaultTitles.price,
+        content: priceContent,
+        rating: 0,
+      },
+      {
+        title: defaultTitles.usage,
+        content: usageContent,
+        rating: 0,
+      },
+    ];
   }
 
   async getUserBenchmarks(userId: string): Promise<any[]> {
     const posts = await this.prisma.contentPost.findMany({
       where: { userId, type: 'COMPARE' } as any,
-      include: { comparison: { include: { product1: true, product2: true } } } as any,
+      include: {
+        comparison: {
+          include: {
+            product1: true,
+            product2: true,
+            scores: true,
+          },
+        },
+      } as any,
       orderBy: { createdAt: 'desc' },
     });
 
@@ -963,6 +1137,7 @@ export class UserService {
         .map(async (post) => {
           const comp = (post as any).comparison!;
           const stats = await this.getPostStats(String(post.id));
+          const choiceProductId = this.selectComparisonWinner(comp);
           return {
             id: String(post.id),
             type: 'benchmark' as const,
@@ -974,12 +1149,16 @@ export class UserService {
               {
                 ...(await this.getProductBase(String(comp.product1Id)))!,
                 isOwned: ownedSet.has(String(comp.product1Id)),
-                choice: false, // TODO: Comparison score'dan çıkarılacak
+                choice: choiceProductId
+                  ? choiceProductId === String(comp.product1Id)
+                  : true,
               },
               {
                 ...(await this.getProductBase(String(comp.product2Id)))!,
                 isOwned: ownedSet.has(String(comp.product2Id)),
-                choice: false,
+                choice: choiceProductId
+                  ? choiceProductId === String(comp.product2Id)
+                  : false,
               },
             ],
             content: post.body,
@@ -989,27 +1168,83 @@ export class UserService {
     return results;
   }
 
+  private selectComparisonWinner(
+    comparison: {
+      product1Id: string;
+      product2Id: string;
+      scores?: Array<{ scoreProduct1?: number | null; scoreProduct2?: number | null }>;
+    } | null,
+  ): string | null {
+    if (!comparison || !comparison.scores || comparison.scores.length === 0) {
+      return null;
+    }
+
+    let product1Score = 0;
+    let product2Score = 0;
+
+    for (const score of comparison.scores) {
+      product1Score += score.scoreProduct1 ?? 0;
+      product2Score += score.scoreProduct2 ?? 0;
+    }
+
+    if (product1Score === product2Score) {
+      return String(comparison.product1Id);
+    }
+
+    return product1Score > product2Score
+      ? String(comparison.product1Id)
+      : String(comparison.product2Id);
+  }
+
   async getUserTips(userId: string): Promise<any[]> {
     const posts = await this.prisma.contentPost.findMany({
       where: { userId, type: 'TIPS' } as any,
-      include: { tip: true, product: true } as any,
+      include: {
+        tip: true,
+        product: {
+          include: {
+            group: {
+              include: {
+                subCategory: {
+                  include: {
+                    mainCategory: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        productGroup: {
+          include: {
+            subCategory: {
+              include: {
+                mainCategory: true,
+              },
+            },
+          },
+        },
+        subCategory: {
+          include: {
+            mainCategory: true,
+          },
+        },
+        mainCategory: true,
+      } as any,
       orderBy: { createdAt: 'desc' },
     });
 
     const userBase = await this.getUserBase(userId);
+    const ownedProducts = await this.prisma.inventory.findMany({
+      where: { userId } as any,
+      select: { productId: true },
+    });
+    const ownedProductIds = new Set(ownedProducts.map((inv) => String(inv.productId)));
+
     const results = await Promise.all(
       posts.map(async (post) => {
         const stats = await this.getPostStats(String(post.id));
-        const product = await this.getProductBase(post.productId ? String(post.productId) : null);
-        const contextData = product
-          ? {
-              id: product.id,
-              name: product.name,
-              subName: product.subName,
-              image: product.image,
-              isOwned: false,
-            }
-          : null;
+        const contextType = this.mapContextType(post);
+        const contextData = this.buildContextDataFromPost(post, ownedProductIds);
         const tags = await this.prisma.postTag.findMany({ where: { postId: String(post.id) } as any });
         return {
           id: String(post.id),
@@ -1017,7 +1252,7 @@ export class UserService {
           user: userBase,
           stats,
           createdAt: post.createdAt.toISOString(),
-          contextType: this.mapContextType(post),
+          contextType,
           contextData,
           content: post.body,
           tag: tags[0]?.tag || '',
@@ -1030,35 +1265,69 @@ export class UserService {
 
   async getUserReplies(userId: string): Promise<any[]> {
     const comments = await this.prisma.contentComment.findMany({
-      where: { userId } as any,
-      include: { post: { include: { product: true } } } as any,
+      where: {
+        userId,
+        post: {
+          type: 'QUESTION',
+        },
+      } as any,
+      include: {
+        post: {
+          include: {
+            product: {
+              include: {
+                group: {
+                  include: {
+                    subCategory: {
+                      include: {
+                        mainCategory: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            productGroup: {
+              include: {
+                subCategory: {
+                  include: {
+                    mainCategory: true,
+                  },
+                },
+              },
+            },
+            subCategory: {
+              include: {
+                mainCategory: true,
+              },
+            },
+            mainCategory: true,
+          },
+        },
+      } as any,
       orderBy: { createdAt: 'desc' },
     });
 
     const userBase = await this.getUserBase(userId);
+    const ownedProducts = await this.prisma.inventory.findMany({
+      where: { userId } as any,
+      select: { productId: true },
+    });
+    const ownedProductIds = new Set(ownedProducts.map((inv) => String(inv.productId)));
+
     const results = await Promise.all(
       comments.map(async (comment) => {
         const stats = await this.getPostStats(String(comment.postId));
         const commentPost = (comment as any).post;
-        const product = await this.getProductBase(
-          commentPost?.productId ? String(commentPost.productId) : null
-        );
-        const contextData = product
-          ? {
-              id: product.id,
-              name: product.name,
-              subName: product.subName,
-              image: product.image,
-              isOwned: false,
-            }
-          : null;
+        const contextType = this.mapContextType(commentPost);
+        const contextData = this.buildContextDataFromPost(commentPost, ownedProductIds);
         return {
           id: String(comment.id),
-          type: 'feed' as const,
+          type: 'question' as const,
           user: userBase,
           stats,
           createdAt: comment.createdAt.toISOString(),
-          contextType: this.mapContextType(commentPost),
+          contextType,
           contextData,
           content: comment.comment,
           isBoosted: false, // TODO: Post'tan alınacak
@@ -1070,12 +1339,47 @@ export class UserService {
   }
 
   async getUserLadderBadges(userId: string): Promise<any[]> {
-    // Ladder = kazanılmış badge'ler (sıralama önemli)
-    const userBadges = await this.prisma.userBadge.findMany({
-      where: { userId, claimed: true } as any,
-      include: { badge: true } as any,
-      orderBy: { claimedAt: 'asc' }, // Ladder sırasına göre
-    });
+    const [userBadges, totalUsers] = await Promise.all([
+      this.prisma.userBadge.findMany({
+        where: { userId } as any,
+        include: {
+          badge: {
+            include: {
+              achievementGoals: {
+                include: {
+                  userAchievements: {
+                    where: { userId },
+                  },
+                },
+              },
+            },
+          },
+        },
+        orderBy: [
+          { claimed: 'desc' },
+          { displayOrder: 'asc' },
+          { claimedAt: 'asc' },
+        ],
+      }),
+      this.prisma.user.count(),
+    ]);
+
+    const badgeIds = Array.from(new Set(userBadges.map((ub) => ub.badgeId))).filter(Boolean);
+    const claimedCounts = badgeIds.length
+      ? await this.prisma.userBadge.groupBy({
+          by: ['badgeId'],
+          where: {
+            badgeId: { in: badgeIds },
+            claimed: true,
+          },
+          _count: {
+            badgeId: true,
+          },
+        })
+      : [];
+    const claimedCountMap = new Map<string, number>(
+      claimedCounts.map((entry) => [entry.badgeId, entry._count.badgeId]),
+    );
 
     const rarityMap: Record<string, 'Usual' | 'Rare'> = {
       COMMON: 'Usual',
@@ -1084,16 +1388,32 @@ export class UserService {
     };
 
     return userBadges.map((ub) => {
-      const badge = (ub as any).badge;
+      const badge = ub.badge as any;
+      const tasks = this.buildBadgeTasks(badge);
+      const currentProgress = tasks.reduce(
+        (sum, task) => sum + Math.min(task.current, task.total),
+        0,
+      );
+      const totalProgress = tasks.reduce((sum, task) => sum + task.total, 0);
+      const totalEarned = claimedCountMap.get(ub.badgeId) ?? 0;
+      const totalPercentage =
+        totalUsers > 0
+          ? Number(((totalEarned / totalUsers) * 100).toFixed(2))
+          : 0;
+
       return {
         id: String(badge?.id || ''),
-        image: badge?.imageUrl ?? null,
+        image: this.resolveBadgeImage(badge),
         title: badge?.name || '',
+        description: badge?.description || '',
         rarity: rarityMap[badge?.rarity || 'COMMON'] || 'Usual',
         isClaimed: ub.claimed,
-        nftAddress: null,
-        totalEarned: 1,
-        earnedDate: ub.claimedAt?.toISOString() ?? null,
+        nftAddress: ub.claimed ? this.buildNftAddress(badge?.id, ub.id) : null,
+        totalEarned,
+        totalPercentage,
+        current: currentProgress,
+        total: totalProgress,
+        tasks,
       };
     });
   }
@@ -1105,7 +1425,34 @@ export class UserService {
       include: {
         post: {
           include: {
-            product: true,
+            product: {
+              include: {
+                group: {
+                  include: {
+                    subCategory: {
+                      include: {
+                        mainCategory: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            productGroup: {
+              include: {
+                subCategory: {
+                  include: {
+                    mainCategory: true,
+                  },
+                },
+              },
+            },
+            subCategory: {
+              include: {
+                mainCategory: true,
+              },
+            },
+            mainCategory: true,
             comparison: { include: { product1: true, product2: true } } as any,
             tip: true,
             question: true,
@@ -1162,29 +1509,21 @@ export class UserService {
       };
 
       const stats = await this.getPostStats(String(post.id));
-      const product = await this.getProductBase(post.productId ? String(post.productId) : null);
+
+      const contextType = this.mapContextType(post);
+      const contextData = this.buildContextDataFromPost(post, ownedSet);
 
       // Post type'ına göre formatla
       switch (post.type) {
         case 'FREE': {
           // FREE -> "post" veya "feed" tipi
-          const productBase = await this.getProductBase(post.productId ? String(post.productId) : null);
-          const contextData = productBase
-            ? {
-                id: productBase.id,
-                name: productBase.name,
-                subName: productBase.subName,
-                image: productBase.image,
-                isOwned: ownedSet.has(productBase.id),
-              }
-            : null;
           results.push({
             id: String(post.id),
             type: 'post' as const,
             user: userBase,
             stats,
             createdAt: post.createdAt.toISOString(),
-            contextType: this.mapContextType(post),
+            contextType,
             contextData,
             content: post.body,
             images: [], // TODO: InventoryMedia
@@ -1224,23 +1563,13 @@ export class UserService {
         case 'TIPS': {
           // TIPS -> "tipsAndTricks" tipi
           const tags = await this.prisma.postTag.findMany({ where: { postId: String(post.id) } as any });
-          const productBase = await this.getProductBase(post.productId ? String(post.productId) : null);
-          const contextData = productBase
-            ? {
-                id: productBase.id,
-                name: productBase.name,
-                subName: productBase.subName,
-                image: productBase.image,
-                isOwned: ownedSet.has(productBase.id),
-              }
-            : null;
           results.push({
             id: String(post.id),
             type: 'tipsAndTricks' as const,
             user: userBase,
             stats,
             createdAt: post.createdAt.toISOString(),
-            contextType: this.mapContextType(post),
+            contextType,
             contextData,
             content: post.body,
             tag: tags[0]?.tag || '',
@@ -1252,23 +1581,13 @@ export class UserService {
         case 'QUESTION': {
           // QUESTION -> "question" tipi
           const question = (post as any).question;
-          const productBase = await this.getProductBase(post.productId ? String(post.productId) : null);
-          const contextData = productBase
-            ? {
-                id: productBase.id,
-                name: productBase.name,
-                subName: productBase.subName,
-                image: productBase.image,
-                isOwned: ownedSet.has(productBase.id),
-              }
-            : null;
           results.push({
             id: String(post.id),
             type: 'question' as const,
             user: userBase,
             stats,
             createdAt: post.createdAt.toISOString(),
-            contextType: this.mapContextType(post),
+            contextType,
             contextData,
             content: post.body,
             expectedAnswerFormat: question?.expectedAnswerFormat || 'short',
@@ -1279,23 +1598,13 @@ export class UserService {
 
         default: {
           // Unknown type -> "feed" olarak döndür
-          const productBase = await this.getProductBase(post.productId ? String(post.productId) : null);
-          const contextData = productBase
-            ? {
-                id: productBase.id,
-                name: productBase.name,
-                subName: productBase.subName,
-                image: productBase.image,
-                isOwned: ownedSet.has(productBase.id),
-              }
-            : null;
           results.push({
             id: String(post.id),
             type: 'feed' as const,
             user: userBase,
             stats,
             createdAt: post.createdAt.toISOString(),
-            contextType: this.mapContextType(post),
+            contextType,
             contextData,
             content: post.body,
             images: [],
@@ -1305,6 +1614,41 @@ export class UserService {
     }
 
     return results;
+  }
+
+  private buildBadgeTasks(
+    badge?: {
+      achievementGoals?: Array<{
+        id: string;
+        title: string;
+        difficulty?: string | null;
+        pointsRequired: number;
+        userAchievements?: Array<{ progress: number }>;
+      }>;
+    },
+  ): Array<{ id: string; type: string; title: string; current: number; total: number }> {
+    if (!badge?.achievementGoals?.length) {
+      return [];
+    }
+
+    return badge.achievementGoals.map((goal) => {
+      const progressEntry = goal.userAchievements?.[0];
+      return {
+        id: String(goal.id),
+        type: (goal.difficulty || 'standard').toString().toLowerCase(),
+        title: goal.title,
+        current: progressEntry?.progress ?? 0,
+        total: goal.pointsRequired,
+      };
+    });
+  }
+
+  private resolveBadgeImage(badge?: { imageUrl?: string | null }): string {
+    return badge?.imageUrl || BADGE_PLACEHOLDER_URL;
+  }
+
+  private buildNftAddress(badgeId?: string | null, userBadgeId?: string): string {
+    return `badge://${badgeId || userBadgeId || ''}`;
   }
 
   /**

@@ -14,9 +14,9 @@ import {
   BaseStats,
   BaseProduct,
   BenchmarkProduct,
-  ContextType,
   ContextData,
 } from '../../interfaces/feed/feed.dto';
+import { ContextType } from '../../domain/content/context-type.enum';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
 import logger from '../../infrastructure/logger/logger';
 
@@ -97,6 +97,21 @@ export class FeedService {
             },
           },
         },
+        productGroup: {
+          include: {
+            subCategory: {
+              include: {
+                mainCategory: true,
+              },
+            },
+          },
+        },
+        subCategory: {
+          include: {
+            mainCategory: true,
+          },
+        },
+        mainCategory: true,
         comparison: {
           include: {
             product1: {
@@ -127,7 +142,7 @@ export class FeedService {
       statsMap.set(post.id, {
         likes: (post as any).likesCount || 0,
         comments: (post as any).commentsCount || 0,
-        shares: 0,
+        shares: (post as any).sharesCount || 0,
         bookmarks: (post as any).favoritesCount || 0,
       });
     });
@@ -299,9 +314,20 @@ export class FeedService {
                 profile: true,
               },
             },
-        product: {
-          include: {
-            group: {
+            product: {
+              include: {
+                group: {
+                  include: {
+                    subCategory: {
+                      include: {
+                        mainCategory: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            productGroup: {
               include: {
                 subCategory: {
                   include: {
@@ -310,8 +336,12 @@ export class FeedService {
                 },
               },
             },
-          },
-        },
+            subCategory: {
+              include: {
+                mainCategory: true,
+              },
+            },
+            mainCategory: true,
             comparison: {
               include: {
                 product1: {
@@ -370,7 +400,7 @@ export class FeedService {
       statsMap.set(post.id, {
         likes: (post as any).likesCount || 0,
         comments: (post as any).commentsCount || 0,
-        shares: 0,
+        shares: (post as any).sharesCount || 0,
         bookmarks: (post as any).favoritesCount || 0,
       });
     });
@@ -500,12 +530,12 @@ export class FeedService {
 
   private mapContextType(post: any): ContextType {
     if (post?.productId) {
-      return 'PRODUCT';
+      return 'product' as ContextType;
     }
     if (post?.productGroupId) {
-      return 'PRODUCT_GROUP';
+      return 'product_group' as ContextType;
     }
-    return 'SUB_CATEGORIES';
+    return 'sub_category' as ContextType;
   }
 
   /**
@@ -514,7 +544,7 @@ export class FeedService {
   private buildContextData(post: any): ContextData {
     const contextType = this.mapContextType(post);
 
-    if (contextType === 'PRODUCT' && post.product) {
+    if (contextType === ContextType.PRODUCT && post.product) {
       const product = post.product;
       const group = product.group;
       const subCategory = group?.subCategory;
@@ -531,21 +561,49 @@ export class FeedService {
       return base;
     }
 
-    if (contextType === 'PRODUCT_GROUP') {
-      // Şu an contentPost sorgusunda productGroup join'i yok, bu nedenle
-      // eldeki alanlarla en azından id bilgisini dönüyoruz.
+    if (contextType === ContextType.PRODUCT_GROUP) {
+      const group = post.productGroup;
+      if (group) {
+        const subCategory = group.subCategory;
+        return {
+          id: String(group.id),
+          name: group.name,
+          subName: subCategory?.name || '',
+          image: group.imageUrl || subCategory?.imageUrl || subCategory?.mainCategory?.imageUrl || null,
+        };
+      }
+
       return {
-        id: String(post.productGroupId),
-        name: '', // İleride productGroup ilişkisi eklendiğinde doldurulabilir
+        id: post.productGroupId ? String(post.productGroupId) : 'unknown',
+        name: '',
         subName: '',
         image: null,
       };
     }
 
-    // SUB_CATEGORIES
+    // SUB_CATEGORIES (fallback olarak mainCategory bilgisini de kullan)
+    if (post.subCategory) {
+      const subCategory = post.subCategory;
+      return {
+        id: String(subCategory.id),
+        name: subCategory.name,
+        subName: subCategory.mainCategory?.name || '',
+        image: subCategory.imageUrl || subCategory.mainCategory?.imageUrl || null,
+      };
+    }
+
+    if (post.mainCategory) {
+      return {
+        id: String(post.mainCategory.id),
+        name: post.mainCategory.name,
+        subName: '',
+        image: post.mainCategory.imageUrl || null,
+      };
+    }
+
     return {
-      id: String(post.subCategoryId),
-      name: '', // İleride subCategory ilişkisi eklendiğinde doldurulabilir
+      id: post.subCategoryId ? String(post.subCategoryId) : 'unknown',
+      name: '',
       subName: '',
       image: null,
     };

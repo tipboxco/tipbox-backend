@@ -23,6 +23,7 @@ import postRouter from './post/post.router';
 import { getMetricsService } from '../infrastructure/metrics/metrics.service';
 import { metricsMiddleware } from '../infrastructure/metrics/metrics.middleware';
 import config from '../infrastructure/config';
+import path from 'path';
 
 const PORT = process.env.PORT || 3000;
 const nodeEnv = config.nodeEnv;
@@ -131,7 +132,7 @@ const swaggerOptions = {
             createdAt: { type: 'string', format: 'date-time' },
             contextType: {
               type: 'string',
-              enum: ['PRODUCT_GROUP', 'PRODUCT', 'SUB_CATEGORIES'],
+              enum: ['product_group', 'product', 'sub_category'],
             },
             product: {
               oneOf: [
@@ -159,7 +160,7 @@ const swaggerOptions = {
             createdAt: { type: 'string', format: 'date-time' },
             contextType: {
               type: 'string',
-              enum: ['PRODUCT_GROUP', 'PRODUCT', 'SUB_CATEGORIES'],
+              enum: ['product_group', 'product', 'sub_category'],
             },
             products: {
               type: 'array',
@@ -181,7 +182,7 @@ const swaggerOptions = {
             createdAt: { type: 'string', format: 'date-time' },
             contextType: {
               type: 'string',
-              enum: ['PRODUCT_GROUP', 'PRODUCT', 'SUB_CATEGORIES'],
+              enum: ['product_group', 'product', 'sub_category'],
             },
             product: {
               oneOf: [
@@ -420,6 +421,10 @@ app.use(requestLogger);
 
 // Prometheus metrics middleware
 app.use(metricsMiddleware);
+
+// Socket Messaging UI statik servis (Docker konteynerleri ayağa kalktığında kullanılacak)
+const socketMessagingUiPath = path.resolve(process.cwd(), 'DmMessagingUI');
+app.use('/Socket', express.static(socketMessagingUiPath));
 
 // Health check endpoint
 app.get('/health', (req, res) => {

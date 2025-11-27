@@ -7,6 +7,19 @@ const REPORT_CATEGORIES = [
   { value: 'SCAM', label: 'Dolandırıcılık / Scam' },
 ];
 
+function buildAvatarHtml({ url, fallbackText, baseClass, displayName }) {
+  const safeName = escapeHtml(displayName || 'User');
+  if (url) {
+    const safeUrl = escapeHtml(url);
+    return `
+      <div class="${baseClass} has-image">
+        <img src="${safeUrl}" alt="${safeName}" />
+      </div>
+    `;
+  }
+  return `<div class="${baseClass}">${fallbackText}</div>`;
+}
+
 export function showAppShell(panelState, side, els) {
   const authPanel = side === 'left' ? els.authPanelLeft : els.authPanelRight;
   const appShell = side === 'left' ? els.appShellLeft : els.appShellRight;
@@ -39,6 +52,12 @@ export function renderThreads(panelState, side, els) {
     .map((thread) => {
       const isActive = panelState.activeThread?.id === thread.id;
       const avatarText = (thread.senderName || '?').slice(0, 2).toUpperCase();
+      const avatarHtml = buildAvatarHtml({
+        url: thread.senderAvatar,
+        fallbackText: avatarText,
+        baseClass: 'thread-avatar',
+        displayName: thread.senderName,
+      });
       
       // Thread ID'yi string'e çevir ve typing kontrolü yap
       const threadId = String(thread.id);
@@ -54,7 +73,7 @@ export function renderThreads(panelState, side, els) {
       
       return `
         <div class="thread-item ${isActive ? 'active' : ''}" data-thread="${thread.id}">
-          <div class="thread-avatar">${avatarText}</div>
+          ${avatarHtml}
           <div class="thread-content">
             <div class="thread-top">
               <span class="thread-name">${thread.senderName || 'Bilinmeyen'}</span>

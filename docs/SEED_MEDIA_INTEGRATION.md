@@ -226,6 +226,29 @@ private async getProductBase(productId: string | null) {
    - Key bulunamazsa `fallbackUrl` kullanılır
    - Fallback yoksa hata fırlatılır
 
+## 🚀 Lokal Kurulum Akışı
+
+Yeni bir geliştiricinin aynı görsel + veri setini çalıştırması için önerilen adımlar:
+
+1. **Bağımlılıkları kur:** `npm install`
+2. **MinIO servisini başlat:** Docker Compose içindeki MinIO container'ını ayağa kaldır ve `.env` dosyasında `S3_ENDPOINT / MINIO_PUBLIC_ENDPOINT / SEED_MEDIA_BASE_URL / S3_BUCKET_NAME` değerlerini doğrula.
+3. **Gerekirse görselleri yükle:** İlk kez kuruluyorsa veya bucket boşsa
+   ```bash
+   npm run upload:seed-media
+   # veya
+   npx ts-node scripts/upload-seed-media.ts
+   ```
+   Bu script `tests/assets/**` klasöründen dosyaları okuyup MinIO'ya yükler ve `prisma/seed/seed-media-map.json` haritasını günceller. Bucket'ta aynı dosyalar zaten varsa bu adım atlanabilir.
+4. **Veritabanını sıfırla ve seed et:**
+   ```bash
+   npx prisma migrate reset --skip-seed
+   npx prisma db seed
+   ```
+   Seed, kullanıcıları, ilişkileri, görsel URL'lerini ve profil istatistiklerini otomatik olarak oluşturur.
+5. **Doğrulama (opsiyonel):** `/users/me/profile`, `/feed`, `/marketplace/listings` gibi endpoint'lere istek atarak görsellerin doğru döndüğünü kontrol et.
+
+Bu akış sayesinde MinIO'ya manuel upload veya tabloya tek tek URL girme ihtiyacı kalmaz; repo'yu pull eden herkes birkaç komutla aynı veriyi elde eder.
+
 ## 🛠️ Yeni Görsel Ekleme Adımları
 
 1. **Görseli `tests/assets/` altına ekle** (örn: `tests/assets/product/new-phone.png`)

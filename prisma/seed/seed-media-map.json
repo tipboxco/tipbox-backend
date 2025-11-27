@@ -8,6 +8,30 @@
   "user.avatar.market": {
     "targetKey": "profile-pictures/248cc91f-b551-4ecc-a885-db1163571330/seed-avatar.jpg"
   },
+  "user.avatar.trust1": {
+    "targetKey": "userprofile/useravatar.jpg"
+  },
+  "user.avatar.trust2": {
+    "targetKey": "userprofile/useravatar2.jpg"
+  },
+  "user.avatar.trust3": {
+    "targetKey": "userprofile/useravatar3.jpg"
+  },
+  "user.avatar.trust4": {
+    "targetKey": "userprofile/useravatar4.png"
+  },
+  "user.avatar.trust5": {
+    "targetKey": "userprofile/ozan.jpg"
+  },
+  "user.avatar.truster1": {
+    "targetKey": "userprofile/useravatar2.jpg"
+  },
+  "user.avatar.truster2": {
+    "targetKey": "userprofile/useravatar3.jpg"
+  },
+  "user.avatar.truster3": {
+    "targetKey": "userprofile/useravatar4.png"
+  },
   "inventory.dyson-media": {
     "targetKey": "inventory/dyson-default.png"
   },

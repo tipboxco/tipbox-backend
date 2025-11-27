@@ -1470,9 +1470,9 @@ router.get('/:id/collections/achievements', asyncHandler(async (req: Request, re
 
 /**
  * @openapi
- * /users/{id}/posts:
+ * /users/{id}/feed:
  *   get:
- *     summary: Kullanıcının paylaştığı post'ları listele
+ *     summary: Kullanıcının paylaştığı feed gönderilerini listele
  *     tags: [Users]
  *     parameters:
  *       - in: path
@@ -1483,7 +1483,7 @@ router.get('/:id/collections/achievements', asyncHandler(async (req: Request, re
  *       200:
  *         description: Post listesi
  */
-router.get('/:id/posts', asyncHandler(async (req: Request, res: Response) => {
+router.get('/:id/feed', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const posts = await userService.getUserPosts(id);
   res.json(posts);
@@ -1554,9 +1554,9 @@ router.get('/:id/tips', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /users/{id}/replies:
+ * /users/{id}/questions:
  *   get:
- *     summary: Kullanıcının yaptığı reply'leri listele
+ *     summary: Kullanıcının soru cevaplarını (reply) listele
  *     tags: [Users]
  *     parameters:
  *       - in: path
@@ -1565,9 +1565,9 @@ router.get('/:id/tips', asyncHandler(async (req: Request, res: Response) => {
  *         schema: { type: string }
  *     responses:
  *       200:
- *         description: Reply listesi
+ *         description: Question reply listesi
  */
-router.get('/:id/replies', asyncHandler(async (req: Request, res: Response) => {
+router.get('/:id/questions', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const replies = await userService.getUserReplies(id);
   res.json(replies);

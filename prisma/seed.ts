@@ -1,7 +1,8 @@
 import { PrismaClient } from '@prisma/client'
+import { randomUUID } from 'crypto'
 import * as bcrypt from 'bcryptjs'
 import { DEFAULT_PROFILE_BANNER_URL } from '../src/domain/user/profile.constants'
-import { getSeedMediaUrl } from './seed/helpers/media.helper'
+import { getSeedMediaUrl, SeedMediaKey } from './seed/helpers/media.helper'
 
 const prisma = new PrismaClient()
 
@@ -33,6 +34,34 @@ const DEFAULT_BANNER_URL = DEFAULT_PROFILE_BANNER_URL || getSeedMediaUrl('user.b
 const PRIMARY_AVATAR_URL = getSeedMediaUrl('user.avatar.primary')
 const MARKET_AVATAR_URL = getSeedMediaUrl('user.avatar.market')
 const INVENTORY_MEDIA_URL = getSeedMediaUrl('inventory.dyson-media', 'https://cdn.tipbox.co/inventory/dyson-1.jpg')
+const TRUST_USER_AVATAR_KEYS: SeedMediaKey[] = [
+  'user.avatar.trust1',
+  'user.avatar.trust2',
+  'user.avatar.trust3',
+  'user.avatar.trust4',
+  'user.avatar.trust5',
+]
+const TRUSTER_USER_AVATAR_KEYS: SeedMediaKey[] = [
+  'user.avatar.truster1',
+  'user.avatar.truster2',
+  'user.avatar.truster3',
+]
+const TRUST_USER_TITLE_OPTIONS = [
+  'Smart Home Mentor',
+  'Product Coach',
+  'Experience Designer',
+  'Gadget Reviewer',
+  'Community Advisor',
+]
+const TRUSTER_USER_TITLE_OPTIONS = [
+  'Growth Strategist',
+  'AI Explorer',
+  'Platform Researcher',
+]
+const COMMUNITY_COACH_USER_ID = '66666666-6666-4666-a666-666666666666'
+const COMMUNITY_COACH_EMAIL = 'coach@tipbox.co'
+const COMMUNITY_COACH_AVATAR_URL = getSeedMediaUrl('user.avatar.truster3')
+const TARGET_USER_TITLE = 'Marketplace Strategist'
 
 // Simple ULID generator for seed (avoids import issues)
 function generateUlid(): string {
@@ -40,6 +69,10 @@ function generateUlid(): string {
   const timestamp = Date.now().toString(36).toUpperCase().padStart(10, '0')
   const randomPart = Math.random().toString(36).substring(2, 18).toUpperCase().padStart(16, '0')
   return (timestamp + randomPart).substring(0, 26)
+}
+
+function randomBetween(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min
 }
 
 async function main() {
@@ -87,6 +120,11 @@ async function main() {
     { name: 'Spor & Outdoor', description: 'Spor ekipmanları, outdoor aktiviteler, fitness', imageKey: 'catalog.drone' },
     { name: 'Hobi & Eğlence', description: 'Kitap, oyun, müzik, sanat malzemeleri', imageKey: 'catalog.games' },
     { name: 'Otomotiv', description: 'Araç aksesuarları, bakım ürünleri, parçalar', imageKey: 'catalog.otomotiv' },
+    { name: 'Technology', description: 'Consumer electronics, gadgets and digital services', imageKey: 'catalog.computers-tablets' },
+    { name: 'Fashion', description: 'Lifestyle, apparel and accessory brands', imageKey: 'catalog.games' },
+    { name: 'Health & Fitness', description: 'Health monitoring, wellness and fitness devices', imageKey: 'catalog.smart-home-devices' },
+    { name: 'Kitchen', description: 'Kitchen appliances and coffee/brewing equipment', imageKey: 'catalog.home-appliances' },
+    { name: 'Home & Living', description: 'Home comfort, living and decoration products', imageKey: 'catalog.kucukev' },
   ];
 
   // Mevcut kategorileri bul veya oluştur (tekrar önleme)
@@ -159,7 +197,18 @@ async function main() {
   const eventCategory = badgeCategories.find(c => c.name === 'Event')!
   const communityCategory = badgeCategories.find(c => c.name === 'Community')!
 
-  const badgeConfigs = [
+  type BadgeSeedConfig = {
+    name: string;
+    description: string;
+    type: 'ACHIEVEMENT' | 'EVENT';
+    rarity: 'COMMON' | 'RARE' | 'EPIC';
+    boostMultiplier: number;
+    rewardMultiplier: number;
+    categoryId: string;
+    imageKey?: SeedMediaKey;
+  };
+
+  const badgeConfigs: BadgeSeedConfig[] = [
     {
       name: 'Welcome',
       description: 'Tipbox\'a hoş geldin! İlk kayıt rozetin.',
@@ -168,7 +217,7 @@ async function main() {
       boostMultiplier: 1.0,
       rewardMultiplier: 1.0,
       categoryId: achievementCategory.id,
-      imageUrl: getSeedMediaUrl('badge.welcome'),
+      imageKey: 'badge.welcome',
     },
     {
       name: 'First Post',
@@ -178,7 +227,7 @@ async function main() {
       boostMultiplier: 1.1,
       rewardMultiplier: 1.1,
       categoryId: achievementCategory.id,
-      imageUrl: getSeedMediaUrl('badge.first-post'),
+      imageKey: 'badge.first-post',
     },
     {
       name: 'Tip Master',
@@ -188,7 +237,7 @@ async function main() {
       boostMultiplier: 1.3,
       rewardMultiplier: 1.3,
       categoryId: achievementCategory.id,
-      imageUrl: getSeedMediaUrl('badge.tip-master'),
+      imageKey: 'badge.tip-master',
     },
     {
       name: 'Community Hero',
@@ -198,7 +247,6 @@ async function main() {
       boostMultiplier: 1.5,
       rewardMultiplier: 1.5,
       categoryId: communityCategory.id,
-      imageUrl: null,
     },
     {
       name: 'Early Bird',
@@ -208,7 +256,7 @@ async function main() {
       boostMultiplier: 1.2,
       rewardMultiplier: 1.4,
       categoryId: eventCategory.id,
-      imageUrl: getSeedMediaUrl('badge.early-bird'),
+      imageKey: 'badge.early-bird',
     },
     {
       name: 'Beta Tester',
@@ -218,22 +266,28 @@ async function main() {
       boostMultiplier: 1.4,
       rewardMultiplier: 1.6,
       categoryId: eventCategory.id,
-      imageUrl: null,
     },
   ];
 
   const badges = await Promise.all(
-    badgeConfigs.map(async (config) => {
+    badgeConfigs.map(async ({ imageKey, ...config }) => {
+      const imageUrl = imageKey ? getSeedMediaUrl(imageKey) : null;
       const existing = await prisma.badge.findFirst({
         where: { name: config.name }
       }).catch(() => null);
 
       if (existing) {
-        // Mevcut badge'i güncelle (özellikle imageUrl için)
+        // Mevcut badge'i senkronize et
         return prisma.badge.update({
           where: { id: existing.id },
           data: {
-            imageUrl: config.imageUrl ?? existing.imageUrl,
+            description: config.description,
+            type: config.type as any,
+            rarity: config.rarity as any,
+            boostMultiplier: config.boostMultiplier,
+            rewardMultiplier: config.rewardMultiplier,
+            categoryId: config.categoryId,
+            imageUrl: imageUrl ?? existing.imageUrl,
           }
         });
       } else {
@@ -241,6 +295,7 @@ async function main() {
         return prisma.badge.create({
           data: {
             ...config,
+            imageUrl,
             type: config.type as any,
             rarity: config.rarity as any,
           }
@@ -620,6 +675,27 @@ async function main() {
       }
     })
 
+    const trustAvatarKey = TRUST_USER_AVATAR_KEYS[i % TRUST_USER_AVATAR_KEYS.length]
+    const trustAvatarUrl = getSeedMediaUrl(trustAvatarKey)
+    await prisma.userAvatar.deleteMany({ where: { userId: trustUser.id } })
+    await prisma.userAvatar.create({
+      data: {
+        userId: trustUser.id,
+        imageUrl: trustAvatarUrl,
+        isActive: true,
+      },
+    })
+
+    const trustUserTitle = TRUST_USER_TITLE_OPTIONS[i % TRUST_USER_TITLE_OPTIONS.length]
+    await prisma.userTitle.deleteMany({ where: { userId: trustUser.id } })
+    await prisma.userTitle.create({
+      data: {
+        userId: trustUser.id,
+        title: trustUserTitle,
+        earnedAt: new Date(Date.now() - (i + 1) * 5 * 24 * 60 * 60 * 1000),
+      },
+    }).catch(() => {})
+
     await prisma.trustRelation.create({
       data: {
         trusterId: userIdToUse,
@@ -674,6 +750,27 @@ async function main() {
       }
     })
 
+    const trusterAvatarKey = TRUSTER_USER_AVATAR_KEYS[i % TRUSTER_USER_AVATAR_KEYS.length]
+    const trusterAvatarUrl = getSeedMediaUrl(trusterAvatarKey)
+    await prisma.userAvatar.deleteMany({ where: { userId: trusterUser.id } })
+    await prisma.userAvatar.create({
+      data: {
+        userId: trusterUser.id,
+        imageUrl: trusterAvatarUrl,
+        isActive: true,
+      },
+    })
+
+    const trusterUserTitle = TRUSTER_USER_TITLE_OPTIONS[i % TRUSTER_USER_TITLE_OPTIONS.length]
+    await prisma.userTitle.deleteMany({ where: { userId: trusterUser.id } })
+    await prisma.userTitle.create({
+      data: {
+        userId: trusterUser.id,
+        title: trusterUserTitle,
+        earnedAt: new Date(Date.now() - (i + 1) * 4 * 24 * 60 * 60 * 1000),
+      },
+    }).catch(() => {})
+
     await prisma.trustRelation.create({
       data: {
         trusterId: trusterUser.id,
@@ -682,6 +779,55 @@ async function main() {
     }).catch(() => {})
   }
   console.log('✅ Trust relations created')
+
+  // Community coach user for DM seeds
+  let communityCoach = await prisma.user.findUnique({ where: { id: COMMUNITY_COACH_USER_ID } })
+  if (!communityCoach) {
+    communityCoach = await prisma.user.create({
+      data: {
+        id: COMMUNITY_COACH_USER_ID,
+        email: COMMUNITY_COACH_EMAIL,
+        passwordHash,
+        emailVerified: true,
+        status: 'ACTIVE',
+      },
+    })
+  }
+
+  await prisma.profile.upsert({
+    where: { userId: COMMUNITY_COACH_USER_ID },
+    update: {
+      displayName: 'Community Coach',
+      userName: 'communitycoach',
+      bannerUrl: DEFAULT_BANNER_URL,
+      bio: 'Tipbox kullanıcılarına birebir destek veren koç',
+    },
+    create: {
+      userId: COMMUNITY_COACH_USER_ID,
+      displayName: 'Community Coach',
+      userName: 'communitycoach',
+      bannerUrl: DEFAULT_BANNER_URL,
+      bio: 'Tipbox kullanıcılarına birebir destek veren koç',
+    },
+  })
+
+  await prisma.userAvatar.deleteMany({ where: { userId: COMMUNITY_COACH_USER_ID } })
+  await prisma.userAvatar.create({
+    data: {
+      userId: COMMUNITY_COACH_USER_ID,
+      imageUrl: COMMUNITY_COACH_AVATAR_URL,
+      isActive: true,
+    },
+  })
+
+  await prisma.userTitle.deleteMany({ where: { userId: COMMUNITY_COACH_USER_ID } })
+  await prisma.userTitle.create({
+    data: {
+      userId: COMMUNITY_COACH_USER_ID,
+      title: 'Support Mentor',
+      earnedAt: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000),
+    },
+  }).catch(() => {})
 
   // Products & Product Groups
   // Ev & Yaşam kategorisi için sub category bul
@@ -915,33 +1061,333 @@ async function main() {
   }
   console.log('✅ Inventory & Product Experiences created')
 
+  // Ek ürünler için inventory & görseller (context bazlı post görselleri)
+  const heroInventoryConfigs = [
+    {
+      productId: product2.id,
+      hasOwned: true,
+      summary: 'Dyson V12 Slim\'i seyahatlerde yanımda taşıyorum; hafif yapısı kısa temizlikler için ideal.',
+      mediaKeys: ['product.vacuum.dyson'],
+    },
+    {
+      productId: product3.id,
+      hasOwned: true,
+      summary: 'iPhone 15 Pro günlük sürücüm, fotoğraf ve video testlerini bununla yapıyorum.',
+      mediaKeys: ['product.phone.phone2'],
+    },
+  ];
+
+  for (const config of heroInventoryConfigs) {
+    let inventory = await prisma.inventory.findUnique({
+      where: {
+        userId_productId: {
+          userId: userIdToUse,
+          productId: config.productId,
+        },
+      },
+    });
+
+    if (!inventory) {
+      inventory = await prisma.inventory.create({
+        data: {
+          userId: userIdToUse,
+          productId: config.productId,
+          hasOwned: config.hasOwned,
+          experienceSummary: config.summary,
+        },
+      });
+    } else {
+      inventory = await prisma.inventory.update({
+        where: { id: inventory.id },
+        data: {
+          hasOwned: config.hasOwned,
+          experienceSummary: config.summary,
+        },
+      });
+    }
+
+    await prisma.inventoryMedia.deleteMany({ where: { inventoryId: inventory.id } });
+    const mediaData = config.mediaKeys
+      .map((key) => {
+        const mediaUrl = getSeedMediaUrl(key as SeedMediaKey);
+        if (!mediaUrl) {
+          return null;
+        }
+        return {
+          inventoryId: inventory.id,
+          mediaUrl,
+          type: 'IMAGE' as const,
+        };
+      })
+      .filter((item): item is { inventoryId: string; mediaUrl: string; type: 'IMAGE' } => !!item);
+
+    if (mediaData.length) {
+      await prisma.inventoryMedia.createMany({ data: mediaData });
+    }
+  }
+  console.log('✅ Additional inventory media created for hero products');
+
   // Content Posts
-  // FREE Post (Feed)
-  const freePostId = generateUlid()
-  await prisma.contentPost.create({
-    data: {
-      id: freePostId,
+  console.log('🧹 Resetting FREE posts for balanced context coverage...');
+  await prisma.contentPost.deleteMany({
+    where: {
       userId: userIdToUse,
       type: 'FREE',
-      title: 'Dyson V15s Daily Experience',
-      body: 'Using the Dyson V15s Submarine daily has completely changed how I clean my home. The wet cleaning head works brilliantly for kitchen and bathroom floors, picking up spills and dirt effortlessly.',
-      productId: product1.id,
+    },
+  });
+
+  const akilliTelefonlarSubCategory = techSubCategories.find((cat) => cat.name === 'Akıllı Telefonlar');
+  const laptoplarSubCategory = techSubCategories.find((cat) => cat.name === 'Laptoplar');
+  const kulakliklarSubCategory = techSubCategories.find((cat) => cat.name === 'Kulaklıklar');
+  const samsungGroup = phoneProductGroups.find((group) => group.name === 'Samsung Serisi');
+  const iphoneGroup = phoneProductGroups.find((group) => group.name === 'iPhone Serisi');
+  const redmiGroup = phoneProductGroups.find((group) => group.name === 'Redmi Serisi');
+
+  if (!akilliTelefonlarSubCategory || !laptoplarSubCategory || !kulakliklarSubCategory) {
+    throw new Error('Teknoloji alt kategorileri bulunamadı (Akıllı Telefonlar, Laptoplar, Kulaklıklar)');
+  }
+
+  if (!samsungGroup || !iphoneGroup || !redmiGroup) {
+    throw new Error('Telefon product group verileri eksik (Samsung/iPhone/Redmi)');
+  }
+
+  type ContextPostSeed = {
+    title: string;
+    body: string;
+    mainCategoryId: string;
+    subCategoryId?: string | null;
+    productGroupId?: string | null;
+    productId?: string | null;
+    inventoryRequired?: boolean;
+    isBoosted?: boolean;
+    tags?: string[];
+  };
+
+  const productContextPosts: ContextPostSeed[] = [
+    {
+      title: 'Dyson V15s ile Derin Temizlik Rutinim',
+      body: 'Submarine başlığı mutfak zeminindeki kurumuş lekeleri tek geçişte aldı. Dyson V15s ile halıdan sert zemine geçişte hiçbir ayar yapmadan devam etmek büyük konfor sağlıyor.',
       mainCategoryId: evYasamCategory.id,
       subCategoryId: evYasamSubCategory.id,
+      productGroupId: productGroup.id,
+      productId: product1.id,
       inventoryRequired: true,
       isBoosted: false,
-    }
-  })
+      tags: ['Dyson', 'Submarine', 'WetCleaning'],
+    },
+    {
+      title: 'Dyson V12 Slim’i Seyahat Ekipmanına Eklemek',
+      body: 'V12 Slim, küçük apartmanlarda veya kısa konaklamalarda büyük cihaz taşımadan derli toplu bir temizlik yapmama izin veriyor. Özellikle dar alanlarda ağırlığı hissedilmiyor.',
+      mainCategoryId: evYasamCategory.id,
+      subCategoryId: evYasamSubCategory.id,
+      productGroupId: productGroup.id,
+      productId: product2.id,
+      inventoryRequired: true,
+      isBoosted: true,
+      tags: ['Dyson', 'Slim', 'Travel'],
+    },
+    {
+      title: 'iPhone 15 Pro Kamera Günlük Notlarım',
+      body: 'Doğal log video çekimleri ve tetraprism lensle 5x zoom, hafta sonu vlog’larını çok daha temiz hale getirdi. USB-C ile SSD’ye aktarmak workflow’u hızlandırdı.',
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      productGroupId: iphoneGroup.id,
+      productId: product3.id,
+      inventoryRequired: true,
+      isBoosted: false,
+      tags: ['iPhone', 'Camera', 'USB-C'],
+    },
+  ];
 
-  // Add tags for feed post
-  await prisma.contentPostTag.createMany({
-    data: [
-      { postId: freePostId, tag: 'Dyson' },
-      { postId: freePostId, tag: 'Vacuum Cleaner' },
-      { postId: freePostId, tag: 'Home Cleaning' },
-    ],
-    skipDuplicates: true,
-  })
+  const productGroupContextPosts: ContextPostSeed[] = [
+    {
+      title: 'Dyson Vakum Serisinin Farklı Kullanım Alanları',
+      body: 'Dyson serisi; evcil hayvan tüyü, parke parlaklığı veya hızlı mutfak toplama gibi farklı görevler için tek gövdede çok başlık sunuyor. Seriyi aile içi kullanım rolleriyle paylaştırdım.',
+      mainCategoryId: evYasamCategory.id,
+      subCategoryId: evYasamSubCategory.id,
+      productGroupId: productGroup.id,
+      productId: null,
+      inventoryRequired: false,
+      isBoosted: true,
+      tags: ['Dyson', 'ProductGroup', 'Attachments'],
+    },
+    {
+      title: 'Samsung Serisi İçin Güncel One UI Deneyimi',
+      body: 'Samsung Serisi cihazlarda Good Lock modülleri ile çok ekranlı kullanımda üretkenliği artıran kurulumlar paylaşıyorum. Aynı gruptaki farklı modellerde bile aynı tema akıyor.',
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      productGroupId: samsungGroup.id,
+      productId: null,
+      inventoryRequired: false,
+      isBoosted: false,
+      tags: ['Samsung', 'OneUI', 'GoodLock'],
+    },
+    {
+      title: 'Redmi Serisini Uygun Fiyatlı Ekosistem Olarak Kullanmak',
+      body: 'Redmi Serisi ürünleri aile üyeleri arasında paylaştırırken otomasyon, paylaşılabilir pil tasarruf profilleri ve Mi Home sahneleri oluşturmak çok pratik oldu.',
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      productGroupId: redmiGroup.id,
+      productId: null,
+      inventoryRequired: false,
+      isBoosted: false,
+      tags: ['Redmi', 'Automation', 'Budget'],
+    },
+  ];
+
+  const subCategoryContextPosts: ContextPostSeed[] = [
+    {
+      title: 'Akıllı Telefonlarda eSIM ve Dual-SIM Senaryoları',
+      body: 'Akıllı Telefonlar alt kategorisinde eSIM profil değişimleri ve fiziksel SIM kombinasyonlarını anlatıyorum. Özellikle sık seyahat edenler için ideal tarifeler listesi var.',
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      inventoryRequired: false,
+      isBoosted: false,
+      tags: ['Akıllı Telefonlar', 'eSIM', 'Roaming'],
+    },
+    {
+      title: 'Laptoplarda Taşınabilirlik vs Performans Dengesi',
+      body: 'Laptoplar alt kategorisinde 14 inç üstü cihazlarda termal tasarım, batarya dayanımı ve USB4 aksesuar ekosistemi arasında nasıl seçim yaptığımı paylaştım.',
+      mainCategoryId: techCategory.id,
+      subCategoryId: laptoplarSubCategory.id,
+      inventoryRequired: false,
+      isBoosted: true,
+      tags: ['Laptoplar', 'USB4', 'Thermals'],
+    },
+    {
+      title: 'Kulaklıklar Alt Kategorisinde ANC Karşılaştırma Rehberi',
+      body: 'Kulaklıklar kategorisinde ANC seviyelerini ofis, uçak ve ev ortamında ölçtüm. Hangi modelin hangi frekansları daha iyi bastırdığını grafikli şekilde özetledim.',
+      mainCategoryId: techCategory.id,
+      subCategoryId: kulakliklarSubCategory.id,
+      inventoryRequired: false,
+      isBoosted: false,
+      tags: ['Kulaklıklar', 'ANC', 'Focus'],
+    },
+  ];
+
+  const contextAwarePosts: ContextPostSeed[] = [
+    ...productContextPosts,
+    ...productGroupContextPosts,
+    ...subCategoryContextPosts,
+  ];
+
+  for (const postSeed of contextAwarePosts) {
+    const postId = generateUlid();
+    await prisma.contentPost.create({
+      data: {
+        id: postId,
+        userId: userIdToUse,
+        type: 'FREE',
+        title: postSeed.title,
+        body: postSeed.body,
+        mainCategoryId: postSeed.mainCategoryId,
+        subCategoryId: postSeed.subCategoryId ?? null,
+        productGroupId: postSeed.productGroupId ?? null,
+        productId: postSeed.productId ?? null,
+        inventoryRequired: postSeed.inventoryRequired ?? false,
+        isBoosted: postSeed.isBoosted ?? false,
+      },
+    });
+
+    if (postSeed.tags && postSeed.tags.length) {
+      await prisma.contentPostTag.createMany({
+        data: postSeed.tags.map((tag) => ({
+          postId,
+          tag,
+        })),
+        skipDuplicates: true,
+      });
+    }
+  }
+
+  console.log(`✅ ${contextAwarePosts.length} FREE posts created across PRODUCT, PRODUCT_GROUP, and SUB_CATEGORIES contexts`)
+
+  // QUESTION Posts (asked by trust users, answered by test user)
+  console.log('❓ Creating question posts for reply seeds...');
+  const questionSeeds = [
+    {
+      askerId: TRUST_USER_IDS[0],
+      title: 'Dyson Submarine mop başlığı gerçekten gerekli mi?',
+      body: 'Kuru süpürme için V15 kullanıyorum, ıslak başlığa yatırım yapmalı mıyım? Mutfak ve banyo için performansı nasıldır?',
+      mainCategoryId: evYasamCategory.id,
+      subCategoryId: evYasamSubCategory.id,
+      productGroupId: productGroup.id,
+      productId: product1.id,
+    },
+    {
+      askerId: TRUST_USER_IDS[1],
+      title: 'iPhone 15 Pro’da USB-C aksesuarları nasıl etkiliyor?',
+      body: 'Harici SSD ile ProRes kayıt yapmak isteyenler için en stabil aksesuar/hız kombinasyonu nedir?',
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      productGroupId: iphoneGroup.id,
+      productId: product3.id,
+    },
+  ];
+
+  const questionPosts: Array<{ id: string }> = [];
+  for (const seed of questionSeeds) {
+    const questionPost = await prisma.contentPost.create({
+      data: {
+        id: generateUlid(),
+        userId: seed.askerId,
+        type: 'QUESTION',
+        title: seed.title,
+        body: seed.body,
+        mainCategoryId: seed.mainCategoryId,
+        subCategoryId: seed.subCategoryId,
+        productGroupId: seed.productGroupId,
+        productId: seed.productId,
+        inventoryRequired: false,
+        isBoosted: true,
+      },
+    });
+
+    await prisma.postQuestion.create({
+      data: {
+        postId: questionPost.id,
+        expectedAnswerFormat: 'LONG',
+      },
+    });
+
+    questionPosts.push({ id: questionPost.id });
+  }
+  console.log(`✅ ${questionPosts.length} question posts created for reply seeds`);
+
+  console.log('💬 Creating question replies for test user...');
+  const questionReplySeeds = [
+    {
+      postIndex: 0,
+      comment:
+        'Submarine başlığı özellikle mutfak zeminindeki kurumuş lekelerde fark yaratıyor. Temizlik sonrası hazneyi hemen boşaltırsan bakım kolay.',
+    },
+    {
+      postIndex: 1,
+      comment:
+        'USB-C ile Angelbird SSD kullanıyorum; ProRes 4K60 kayıtları hiç kesilmedi. Kablo olarak Thunderbolt 4 sertifikalı olanları tercih et.',
+    },
+  ];
+
+  for (const replySeed of questionReplySeeds) {
+    const targetPost = questionPosts[replySeed.postIndex];
+    if (!targetPost) continue;
+
+    await prisma.contentComment.create({
+      data: {
+        id: generateUlid(),
+        postId: targetPost.id,
+        userId: userIdToUse,
+        comment: replySeed.comment,
+        isAnswer: true,
+      },
+    });
+
+    await prisma.contentPost.update({
+      where: { id: targetPost.id },
+      data: { commentsCount: { increment: 1 } },
+    }).catch(() => {});
+  }
+  console.log('✅ Question replies for test user created');
 
   // TIPS Post (Tips&Tricks)
   const tipsPostId = generateUlid()
@@ -1033,25 +1479,7 @@ async function main() {
     }
   })
 
-  // More FREE posts for feed
-  for (let i = 0; i < 5; i++) {
-    const postId = generateUlid()
-    await prisma.contentPost.create({
-      data: {
-        id: postId,
-        userId: userIdToUse,
-        type: 'FREE',
-        title: `Tech Review Post ${i + 1}`,
-        body: `This is a sample review post ${i + 1}. Sharing my experience with various tech products and how they fit into my daily life.`,
-        productId: i % 2 === 0 ? product1.id : product3.id,
-        mainCategoryId: i % 2 === 0 ? evYasamCategory.id : techCategory.id,
-        subCategoryId: i % 2 === 0 ? evYasamSubCategory.id : techSubCategories[0].id,
-        inventoryRequired: i % 2 === 0,
-        isBoosted: i === 0,
-      }
-    })
-  }
-  console.log('✅ Content posts created (Feed, Tips, Benchmarks)')
+  console.log('✅ Content posts created (Free context mix, Tips, Benchmarks)')
 
   // Content Comments (Replies için)
   const comments = await prisma.contentPost.findMany({
@@ -1127,6 +1555,38 @@ async function main() {
   }
   console.log('✅ Content interactions (likes, favorites, views) created')
 
+  // Enrich stats for all posts with realistic numbers
+  const statTemplates = [
+    { likes: 84, comments: 18, shares: 7, bookmarks: 26 },
+    { likes: 52, comments: 11, shares: 4, bookmarks: 14 },
+    { likes: 67, comments: 9, shares: 3, bookmarks: 10 },
+    { likes: 33, comments: 6, shares: 2, bookmarks: 6 },
+    { likes: 105, comments: 22, shares: 8, bookmarks: 32 },
+  ]
+
+  for (let idx = 0; idx < allPosts.length; idx++) {
+    const post = allPosts[idx]
+    const template = statTemplates[idx % statTemplates.length]
+    const variance = 0.7 + Math.random() * 0.9
+    const likes = Math.max(6, Math.round(template.likes * variance))
+    const comments = Math.max(2, Math.round(template.comments * (0.6 + Math.random() * 0.8)))
+    const shares = Math.max(1, Math.round(template.shares * (0.5 + Math.random())))
+    const bookmarks = Math.max(1, Math.round(template.bookmarks * (0.5 + Math.random())))
+    const views = Math.max(likes * randomBetween(6, 15) + randomBetween(30, 140), likes + comments + shares + bookmarks)
+
+    await prisma.contentPost.update({
+      where: { id: post.id },
+      data: {
+        likesCount: likes,
+        commentsCount: comments,
+        sharesCount: shares,
+        favoritesCount: bookmarks,
+        viewsCount: views,
+      },
+    }).catch(() => {})
+  }
+  console.log('✅ Content stats enriched (likes/comments/shares/bookmarks)')
+
   // Feed Entries - Kullanıcıların feed'inde görünecek post'lar
   console.log('📰 Creating feed entries...')
   
@@ -1201,6 +1661,35 @@ async function main() {
 
   console.log(`✅ Feed entries created for ${allUsers.length} users`)
 
+  // Profil istatistiklerini (post/trust/truster) senkronize et
+  console.log('📈 Syncing profile stats for test user...')
+  const [postCount, trustCount, trusterCount] = await Promise.all([
+    prisma.contentPost.count({ where: { userId: userIdToUse } }),
+    prisma.trustRelation.count({ where: { trusterId: userIdToUse } }),
+    prisma.trustRelation.count({ where: { trustedUserId: userIdToUse } }),
+  ])
+
+  await prisma.profile.upsert({
+    where: { userId: userIdToUse },
+    update: {
+      postsCount: postCount,
+      trustCount,
+      trusterCount,
+    },
+    create: {
+      userId: userIdToUse,
+      displayName: 'Ömer Faruk',
+      userName: 'omerfaruk',
+      bannerUrl: DEFAULT_BANNER_URL,
+      bio: 'Passionate about exploring the latest gadgets and digital lifestyles. Sharing honest reviews and real-life experiences with tech products.',
+      country: 'Turkey',
+      postsCount: postCount,
+      trustCount,
+      trusterCount,
+    },
+  })
+  console.log('✅ Profile stats synced')
+
   // NFTs and Marketplace Listings
   console.log('🎨 Creating comprehensive NFTs and Marketplace listings...')
   
@@ -1239,17 +1728,27 @@ async function main() {
       }
     })
     
-    // Avatar oluştur
-    await prisma.userAvatar.create({
-      data: {
-        userId: TARGET_USER_ID,
-        imageUrl: MARKET_AVATAR_URL,
-        isActive: true,
-      }
-    }).catch(() => {})
   } else {
     console.log(`✅ Target user already exists: ${TARGET_USER_ID}`)
   }
+  
+  await prisma.userAvatar.deleteMany({ where: { userId: TARGET_USER_ID } })
+  await prisma.userAvatar.create({
+    data: {
+      userId: TARGET_USER_ID,
+      imageUrl: MARKET_AVATAR_URL,
+      isActive: true,
+    }
+  })
+
+  await prisma.userTitle.deleteMany({ where: { userId: TARGET_USER_ID } })
+  await prisma.userTitle.create({
+    data: {
+      userId: TARGET_USER_ID,
+      title: TARGET_USER_TITLE,
+      earnedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+    },
+  }).catch(() => {})
   
   // NFT örnekleri oluştur
   // const nftTypes = ['BADGE', 'COSMETIC', 'LOOTBOX'] as const
@@ -2021,61 +2520,94 @@ async function main() {
     }>;
   };
 
-  const NORMAL_DM_THREAD_SEEDS: ThreadSeed[] = [
+  const DM_PARTNER_IDS = [
+    TARGET_USER_ID,
+    ...TRUST_USER_IDS,
+    ...TRUSTER_USER_IDS,
+    COMMUNITY_COACH_USER_ID,
+  ];
+
+  const dmConversationTemplates = [
     {
-      userOneId: TEST_USER_ID,
-      userTwoId: TARGET_USER_ID,
-      unreadCountUserOne: 1,
-      unreadCountUserTwo: 0,
-      isSupportThread: false,
-      messages: [
-        {
-          senderId: TEST_USER_ID,
-          message: 'Selam! Yeni ürün incelemesini gördün mü?',
-          minutesAgo: 30,
-          isRead: true,
-          context: 'DM',
-        },
-        {
-          senderId: TARGET_USER_ID,
-          message: 'Evet, mükemmel olmuş. Birkaç önerim olacak 👌',
-          minutesAgo: 10,
-          isRead: false,
-          context: 'DM',
-        },
-      ],
+      partnerOpening: 'Selam! Yeni Dyson karşılaştırmanı okudum.',
+      testReply: 'Çok sevindim, sorularını gönderebilirsin.',
+      partnerFollow: 'Boost modu bataryayı çok tüketiyor mu?',
+      testFollow: 'Yoğun kullanımda evet, eco modda daha dengeli.',
     },
     {
-      userOneId: TRUST_USER_IDS[0],
-      userTwoId: TEST_USER_ID,
-      unreadCountUserOne: 0,
-      unreadCountUserTwo: 2,
-      isSupportThread: false,
-      messages: [
-        {
-          senderId: TRUST_USER_IDS[0],
-          message: 'Merhaba! Mini destek görüşmesi için uygun musun?',
-          minutesAgo: 45,
-          isRead: false,
-          context: 'DM',
-        },
-        {
-          senderId: TRUST_USER_IDS[0],
-          message: 'Bu arada geçen hafta gönderdiğim TIPS için teşekkür ederim.',
-          minutesAgo: 40,
-          isRead: false,
-          context: 'DM',
-        },
-        {
-          senderId: TEST_USER_ID,
-          message: 'Ben de teşekkür ederim, çok yardımcı oldun 🙏',
-          minutesAgo: 5,
-          isRead: true,
-          context: 'DM',
-        },
-      ],
+      partnerOpening: 'Marketplace’deki yeni badge’i inceledim.',
+      testReply: 'Feedback gönderirsen geliştirme listesine eklerim.',
+      partnerFollow: 'Elbette, screenshot ile yollarım.',
+      testFollow: 'Harika, bekliyorum.',
+    },
+    {
+      partnerOpening: 'Smartwatch rehberini paylaştığın için teşekkürler!',
+      testReply: 'Rica ederim, hangi modeli düşünüyorsun?',
+      partnerFollow: 'Galaxy Watch 7 ile Pixel Watch arasında kaldım.',
+      testFollow: 'Android kullanıyorsan Galaxy öneririm.',
+    },
+    {
+      partnerOpening: 'Yeni kulaklık benchmark’ı efsane olmuş.',
+      testReply: 'Ses profillerini karşılaştırmak epey sürdü.',
+      partnerFollow: 'Noise-cancel testleri için metodun neydi?',
+      testFollow: 'Standart 70db fan + metro kaydı kullanıyorum.',
+    },
+    {
+      partnerOpening: 'Subcategory feed’deki yeni formatı beğendim.',
+      testReply: 'UI ekibi çok emek verdi, paylaştığın için sağ ol.',
+      partnerFollow: 'Belki dark mode varyantı da eklenebilir.',
+      testFollow: 'Çalışıyoruz, roadmap’te var.',
     },
   ];
+
+  const NORMAL_DM_THREAD_SEEDS: ThreadSeed[] = DM_PARTNER_IDS.slice(0, 10).map((partnerId, index) => {
+    const template = dmConversationTemplates[index % dmConversationTemplates.length];
+    const baseMinutes = 35 + index * 6;
+    const unreadForTestUser = index < 5;
+    const messages = [
+      {
+        senderId: partnerId,
+        message: template.partnerOpening,
+        minutesAgo: baseMinutes + 15,
+        isRead: true,
+        context: 'DM' as const,
+      },
+      {
+        senderId: TEST_USER_ID,
+        message: template.testReply,
+        minutesAgo: baseMinutes + 8,
+        isRead: true,
+        context: 'DM' as const,
+      },
+    ];
+
+    if (unreadForTestUser) {
+      messages.push({
+        senderId: partnerId,
+        message: template.partnerFollow,
+        minutesAgo: baseMinutes,
+        isRead: false,
+        context: 'DM' as const,
+      });
+    } else {
+      messages.push({
+        senderId: TEST_USER_ID,
+        message: template.testFollow,
+        minutesAgo: baseMinutes,
+        isRead: true,
+        context: 'DM' as const,
+      });
+    }
+
+    return {
+      userOneId: TEST_USER_ID,
+      userTwoId: partnerId,
+      unreadCountUserOne: unreadForTestUser ? 2 : 0,
+      unreadCountUserTwo: unreadForTestUser ? 0 : 1,
+      isSupportThread: false,
+      messages,
+    };
+  });
 
   function minutesAgoToDate(minutesAgo: number): Date {
     return new Date(Date.now() - minutesAgo * 60 * 1000);
@@ -2142,63 +2674,73 @@ async function main() {
     fromUserId: string;
     toUserId: string;
     description: string;
-    status: 'PENDING' | 'ACCEPTED' | 'DECLINED';
+    status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'CANCELED' | 'AWAITING_COMPLETION' | 'COMPLETED' | 'REPORTED';
     type: 'GENERAL' | 'TECHNICAL' | 'PRODUCT';
     amount: number;
     minutesAgo: number;
     threadId: null;
   };
 
-  const SUPPORT_REQUEST_SEEDS: SupportRequestSeed[] = [
-    // Pending request - threadId yok
-    {
-      id: '00000000-0000-4000-8000-000000000101',
-      fromUserId: TARGET_USER_ID,
-      toUserId: TEST_USER_ID,
-      description: 'Beta paneldeki yeni metrikler için rehberlik rica ediyorum.',
-      status: 'PENDING',
-      type: 'GENERAL',
-      amount: 50,
-      minutesAgo: 60,
-      threadId: null,
-    },
-    // Accepted request - threadId var, support thread oluşturulacak
-    {
-      id: '00000000-0000-4000-8000-000000000102',
-      fromUserId: TEST_USER_ID,
-      toUserId: TARGET_USER_ID,
-      description: 'Smartwatch kurulumu için yardıma ihtiyacım var. Hangi modeli kullanıyorsunuz?',
-      status: 'ACCEPTED',
-      type: 'TECHNICAL',
-      amount: 100,
-      minutesAgo: 120,
-      threadId: null,
-    },
-    // Declined request - threadId yok
-    {
-      id: '00000000-0000-4000-8000-000000000103',
-      fromUserId: TRUST_USER_IDS[0],
-      toUserId: TEST_USER_ID,
-      description: 'Ürün önerisi için destek istiyorum.',
-      status: 'DECLINED',
-      type: 'PRODUCT',
-      amount: 75,
-      minutesAgo: 180,
-      threadId: null,
-    },
-    // Another accepted request - farklı kullanıcılar arasında
-    {
-      id: '00000000-0000-4000-8000-000000000104',
-      fromUserId: TRUST_USER_IDS[1],
-      toUserId: TEST_USER_ID,
-      description: 'Yazılım geliştirme konusunda danışmanlık almak istiyorum.',
-      status: 'ACCEPTED',
-      type: 'GENERAL',
-      amount: 150,
-      minutesAgo: 90,
-      threadId: null,
-    },
+  const supportStatusCycle: SupportRequestSeed['status'][] = [
+    'PENDING',
+    'ACCEPTED',
+    'AWAITING_COMPLETION',
+    'COMPLETED',
+    'CANCELED',
+    'ACCEPTED',
+    'PENDING',
+    'AWAITING_COMPLETION',
+    'DECLINED',
+    'COMPLETED',
   ];
+
+  const supportSecondaryStatusCycle: SupportRequestSeed['status'][] = [
+    'ACCEPTED',
+    'CANCELED',
+    'AWAITING_COMPLETION',
+    'COMPLETED',
+    'REPORTED',
+    'ACCEPTED',
+    'PENDING',
+    'COMPLETED',
+    'AWAITING_COMPLETION',
+    'CANCELED',
+  ];
+
+  const supportTypeCycle: SupportRequestSeed['type'][] = ['GENERAL', 'TECHNICAL', 'PRODUCT'];
+
+  const SUPPORT_REQUEST_SEEDS: SupportRequestSeed[] = [];
+
+  DM_PARTNER_IDS.slice(0, 10).forEach((partnerId, index) => {
+    const primaryStatus = supportStatusCycle[index % supportStatusCycle.length];
+    const secondaryStatus = supportSecondaryStatusCycle[index % supportSecondaryStatusCycle.length];
+    const primaryType = supportTypeCycle[index % supportTypeCycle.length];
+    const secondaryType = supportTypeCycle[(index + 1) % supportTypeCycle.length];
+
+    SUPPORT_REQUEST_SEEDS.push({
+      id: randomUUID(),
+      fromUserId: partnerId,
+      toUserId: TEST_USER_ID,
+      description: `(${index + 1}A) ${primaryType} desteği için hızlı görüşme talebi.`,
+      status: primaryStatus,
+      type: primaryType,
+      amount: 40 + index * 5,
+      minutesAgo: 70 + index * 9,
+      threadId: null,
+    });
+
+    SUPPORT_REQUEST_SEEDS.push({
+      id: randomUUID(),
+      fromUserId: TEST_USER_ID,
+      toUserId: partnerId,
+      description: `(${index + 1}B) Son seans sonrası geri bildirimin var mı?`,
+      status: secondaryStatus,
+      type: secondaryType,
+      amount: 55 + index * 6,
+      minutesAgo: 45 + index * 7,
+      threadId: null,
+    });
+  });
 
   let supportRequestsCount = 0;
   let supportThreadsCount = 0;
@@ -2211,7 +2753,8 @@ async function main() {
     let threadId: string | null = null;
     
     // If status is ACCEPTED, create a support thread
-    if (supportRequest.status === 'ACCEPTED') {
+    const shouldCreateSupportThread = ['ACCEPTED', 'AWAITING_COMPLETION', 'COMPLETED'].includes(supportRequest.status);
+    if (shouldCreateSupportThread) {
       const supportThread = await prisma.dMThread.create({
         data: {
           userOneId: supportRequest.fromUserId,
@@ -2280,6 +2823,39 @@ async function main() {
 
   console.log(`✅ ${supportRequestsCount} support requests, ${supportThreadsCount} support threads, and ${supportMessagesCount} support messages created`)
 
+  console.log('💸 Creating tips token transfers...')
+  await prisma.tipsTokenTransfer.deleteMany({
+    where: {
+      OR: [
+        { fromUserId: TEST_USER_ID },
+        { toUserId: TEST_USER_ID },
+      ],
+    },
+  })
+
+  const tipsTransferSeeds = DM_PARTNER_IDS.slice(0, 6).map((partnerId, index) => ({
+    fromUserId: partnerId,
+    toUserId: TEST_USER_ID,
+    amount: 25 + index * 8,
+    reason: `Teşekkürler, ${index + 1}. destek için`,
+    minutesAgo: 30 + index * 4,
+  }))
+
+  for (const tipsSeed of tipsTransferSeeds) {
+    const createdAt = minutesAgoToDate(tipsSeed.minutesAgo)
+    await prisma.tipsTokenTransfer.create({
+      data: {
+        fromUserId: tipsSeed.fromUserId,
+        toUserId: tipsSeed.toUserId,
+        amount: tipsSeed.amount,
+        reason: tipsSeed.reason,
+        createdAt,
+        updatedAt: createdAt,
+      } as any,
+    })
+  }
+  console.log(`✅ ${tipsTransferSeeds.length} tips transfers created`)
+
   await prisma.profile.updateMany({
     where: { bannerUrl: null },
     data: { bannerUrl: DEFAULT_BANNER_URL },
@@ -2308,6 +2884,7 @@ async function main() {
   summaryLines.push(`• ${expertAnswers.length} Expert Answers`)
   summaryLines.push(`• ${dmThreadsCount} DM Threads, ${dmMessagesCount} DM Messages`)
   summaryLines.push(`• ${supportRequestsCount} Support Requests, ${supportThreadsCount} Support Threads, ${supportMessagesCount} Support Messages`)
+  summaryLines.push(`• ${tipsTransferSeeds.length} Tips Transfers`)
   summaryLines.push(`• Target User (Market Test) - ID: ${TARGET_USER_ID}`)
   summaryLines.push(`  - Owned NFTs: 4 (not listed)`)
   summaryLines.push(`  - Listed NFTs: 6 (on marketplace)`)

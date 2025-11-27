@@ -11,6 +11,7 @@ const router = Router();
 const services = [
   { name: 'Backend API', port: 3000, url: 'http://localhost:3000', description: 'Ana backend servisi', icon: 'fa-server' },
   { name: 'Swagger Docs', port: 3000, url: 'http://localhost:3000/api-docs', description: 'API dokümantasyonu', path: '/api-docs', icon: 'fa-book' },
+  { name: 'Socket Messaging UI', port: 3000, url: 'http://localhost:3000/Socket', description: 'Socket.IO tabanlı Messaging demo arayüzü', path: '/Socket', icon: 'fa-comments' },
   { name: 'Tipbox Docs', port: 3000, url: 'http://localhost:3000/docs/', description: 'Docusaurus dokümantasyonu', path: '/docs/', icon: 'fa-book-open' },
   { name: 'Prisma Studio', port: 5555, url: 'http://localhost:5555', description: 'Database GUI', icon: 'fa-table' },
   { name: 'pgAdmin', port: 5050, url: 'http://localhost:5050', description: 'PostgreSQL yönetim arayüzü', icon: 'fa-database' },
