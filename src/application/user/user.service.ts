@@ -35,29 +35,25 @@ type BasicStats = {
   bookmarks: number;
 };
 
-type CollectionTaskType = 'Yorum Yap' | 'Beğeni' | 'Paylaşma' | 'Görev';
+type TaskType = 'Comment' | 'Like' | 'Share';
 
 type CollectionTask = {
   id: string;
   title: string;
-  icon: string;
-  type: CollectionTaskType;
-  targetCount: number;
-  currentCount: number;
+  type: TaskType;
 };
 
-type CollectionRarity = 'Usual' | 'Rare' | 'Epic' | 'Legendary';
+type RarityType = 'Usual' | 'Rare' | 'Epic' | 'Legendary';
 
 type CollectionResponse = {
   id: string;
-  type: 'achievement' | 'bridge';
-  title: string;
-  rarity: CollectionRarity;
   image: string | null;
+  title: string;
+  rarity: RarityType;
   isClaimed: boolean;
   nftAddress: string | null;
-  earnDate: string | null;
   totalEarned: number;
+  earnedDate: string | null;
   tasks: CollectionTask[];
 };
 
@@ -88,24 +84,24 @@ const BADGE_PLACEHOLDER_URL =
   process.env.DEFAULT_BADGE_IMAGE_URL ||
   'https://cdn.tipbox.co/assets/badges/default.png';
 
-const COLLECTION_RARITY_MAP: Record<string, CollectionRarity> = {
+const COLLECTION_RARITY_MAP: Record<string, RarityType> = {
   COMMON: 'Usual',
   RARE: 'Rare',
   EPIC: 'Epic',
   LEGENDARY: 'Legendary',
 };
 
-const TASK_TYPE_KEYWORDS: Array<{ matcher: RegExp; type: CollectionTaskType }> = [
-  { matcher: /yorum/i, type: 'Yorum Yap' },
-  { matcher: /beğeni|like/i, type: 'Beğeni' },
-  { matcher: /paylaş/i, type: 'Paylaşma' },
+const TASK_TYPE_KEYWORDS: Array<{ matcher: RegExp; type: TaskType }> = [
+  { matcher: /yorum|comment/i, type: 'Comment' },
+  { matcher: /beğeni|like/i, type: 'Like' },
+  { matcher: /paylaş|share/i, type: 'Share' },
 ];
 
-const inferTaskType = (title?: string, requirement?: string): CollectionTaskType => {
+const inferTaskType = (title?: string, requirement?: string): TaskType => {
   const source = `${title ?? ''} ${requirement ?? ''}`.trim();
-  if (!source) return 'Görev';
+  if (!source) return 'Comment';
   const match = TASK_TYPE_KEYWORDS.find(({ matcher }) => matcher.test(source));
-  return match?.type ?? 'Görev';
+  return match?.type ?? 'Comment';
 };
 
 export const PROFILE_FEED_CARD_TYPES = ['post', 'feed', 'benchmark', 'tipsAndTricks', 'question'] as const;
@@ -713,27 +709,20 @@ export class UserService {
     return userBadges.map((ub) => {
       const badge = (ub as any).badge;
       const goals = (badge?.achievementGoals || []) as any[];
-      const tasks: CollectionTask[] = goals.map((goal) => {
-        const userAchievement = (goal.userAchievements || []).find((ua: any) => ua.userId === userId);
-        return {
-          id: String(goal.id),
-          title: goal.title,
-          icon: 'default',
-          type: inferTaskType(goal.title, goal.requirement),
-          targetCount: goal.pointsRequired ?? 0,
-          currentCount: userAchievement?.progress ?? 0,
-        };
-      });
+      const tasks: CollectionTask[] = goals.map((goal) => ({
+        id: String(goal.id),
+        title: goal.title,
+        type: inferTaskType(goal.title, goal.requirement),
+      }));
 
       return {
         id: String(badge?.id || ''),
-        type: 'achievement' as const,
         title: badge?.name || '',
         rarity: COLLECTION_RARITY_MAP[badge?.rarity || 'COMMON'] || 'Usual',
         image: badge?.imageUrl ?? BADGE_PLACEHOLDER_URL,
         isClaimed: !!ub.claimed,
-        nftAddress: null,
-        earnDate: ub.claimedAt ? ub.claimedAt.toISOString() : null,
+        nftAddress: badge?.nftAddress ?? null,
+        earnedDate: ub.claimedAt ? ub.claimedAt.toISOString() : null,
         totalEarned: badge?._count?.userBadges ?? 0,
         tasks,
       } as CollectionResponse;
@@ -765,13 +754,12 @@ export class UserService {
 
     return rewards.map((rw: any) => ({
       id: String(rw.badge?.id || ''),
-      type: 'bridge' as const,
       title: rw.badge?.name || '',
       rarity: COLLECTION_RARITY_MAP[rw.badge?.rarity || 'COMMON'] || 'Usual',
       image: rw.badge?.imageUrl ?? BADGE_PLACEHOLDER_URL,
       isClaimed: true,
-      nftAddress: null,
-      earnDate: rw.awardedAt ? rw.awardedAt.toISOString() : null,
+      nftAddress: rw.nftAddress ?? null,
+      earnedDate: rw.awardedAt ? rw.awardedAt.toISOString() : null,
       totalEarned: rw.badge?._count?.bridgeRewards ?? 0,
       tasks: [],
     }));
@@ -1063,7 +1051,7 @@ export class UserService {
 
       results.push({
         id: String(inv.id),
-        type: 'feed' as const,
+        type: 'experience' as const,
         user: userBase,
         stats: this.buildExperienceStats(String(inv.id)),
         createdAt: inv.createdAt.toISOString(),

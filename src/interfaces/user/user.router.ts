@@ -499,6 +499,9 @@ router.post('/:id/unmute', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/:id/collections/bridges', asyncHandler(async (req: Request, res: Response) => {
   const id = String(req.params.id);
+  if (!/^[0-9a-fA-F-]{36}$/.test(id)) {
+    return res.status(400).json({ message: 'Invalid user id format' });
+  }
   const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : undefined;
   const keyword = q || search || undefined;
@@ -1471,7 +1474,7 @@ router.delete('/:id/mute/:targetUserId', asyncHandler(async (req: Request, res: 
  *                     example: "Builder Badge"
  *                   rarity:
  *                     type: string
- *                     enum: [Usual, Rare]
+ *                     enum: [Usual, Rare, Epic, Legendary]
  *                     example: "Rare"
  *                   isClaimed:
  *                     type: boolean
@@ -1501,11 +1504,14 @@ router.delete('/:id/mute/:targetUserId', asyncHandler(async (req: Request, res: 
  *                           example: "10 Yorum Yap"
  *                         type:
  *                           type: string
- *                           enum: [Yorum Yap, Beğeni, Paylaşma]
- *                           example: "Yorum Yap"
+ *                           enum: [Comment, Like, Share]
+ *                           example: "Comment"
  */
 router.get('/:id/collections/achievements', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
+  if (!/^[0-9a-fA-F-]{36}$/.test(id)) {
+    return res.status(400).json({ message: 'Invalid user id format' });
+  }
   const querySearch = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
   const queryQ = typeof req.query.q === 'string' ? req.query.q.trim() : undefined;
   const badges = await userService.listAchievementBadges(id, queryQ || querySearch || undefined);

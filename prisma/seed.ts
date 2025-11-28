@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, Prisma } from '@prisma/client'
 import { randomUUID } from 'crypto'
 import * as bcrypt from 'bcryptjs'
 import { DEFAULT_PROFILE_BANNER_URL } from '../src/domain/user/profile.constants'
@@ -79,6 +79,30 @@ function daysAgo(days: number): Date {
   const date = new Date()
   date.setDate(date.getDate() - days)
   return date
+}
+
+async function ensureBookmarkFor(userId: string, postId: string): Promise<boolean> {
+  const existingFavorite = await prisma.contentFavorite.findFirst({
+    where: { userId, postId },
+  })
+
+  if (existingFavorite) {
+    return false
+  }
+
+  await prisma.contentFavorite.create({
+    data: {
+      userId,
+      postId,
+    },
+  }).catch(() => {})
+
+  await prisma.contentPost.update({
+    where: { id: postId },
+    data: { favoritesCount: { increment: 1 } },
+  }).catch(() => {})
+
+  return true
 }
 
 async function main() {
@@ -253,6 +277,7 @@ async function main() {
       boostMultiplier: 1.5,
       rewardMultiplier: 1.5,
       categoryId: communityCategory.id,
+      imageKey: 'badge.community-hero',
     },
     {
       name: 'Early Bird',
@@ -272,6 +297,7 @@ async function main() {
       boostMultiplier: 1.4,
       rewardMultiplier: 1.6,
       categoryId: eventCategory.id,
+      imageKey: 'badge.beta-tester',
     },
     {
       name: 'Benchmark Sage',
@@ -281,6 +307,7 @@ async function main() {
       boostMultiplier: 1.35,
       rewardMultiplier: 1.35,
       categoryId: achievementCategory.id,
+      imageKey: 'badge.benchmark-sage',
     },
     {
       name: 'Experience Curator',
@@ -290,6 +317,7 @@ async function main() {
       boostMultiplier: 1.5,
       rewardMultiplier: 1.6,
       categoryId: achievementCategory.id,
+      imageKey: 'badge.experience-curator',
     },
     {
       name: 'Bridge Ambassador',
@@ -299,6 +327,7 @@ async function main() {
       boostMultiplier: 1.25,
       rewardMultiplier: 1.35,
       categoryId: eventCategory.id,
+      imageKey: 'badge.bridge-ambassador',
     },
     {
       name: 'Brand Visionary',
@@ -308,6 +337,7 @@ async function main() {
       boostMultiplier: 1.55,
       rewardMultiplier: 1.65,
       categoryId: eventCategory.id,
+      imageKey: 'badge.brand-visionary',
     },
   ];
 
@@ -2219,6 +2249,86 @@ async function main() {
     }
   }
 
+  console.log('🔖 Ensuring bookmark coverage across card/context combinations...')
+  type BookmarkCoverageConfig = {
+    label: string
+    where: Prisma.ContentPostWhereInput
+  }
+
+  const bookmarkCoverageConfigs: BookmarkCoverageConfig[] = [
+    {
+      label: 'FREE::product',
+      where: { userId: userIdToUse, type: 'FREE', NOT: { productId: null } },
+    },
+    {
+      label: 'FREE::productGroup',
+      where: {
+        userId: userIdToUse,
+        type: 'FREE',
+        productId: null,
+        NOT: { productGroupId: null },
+      },
+    },
+    {
+      label: 'FREE::subCategory',
+      where: {
+        userId: userIdToUse,
+        type: 'FREE',
+        productId: null,
+        productGroupId: null,
+        NOT: { subCategoryId: null },
+      },
+    },
+    {
+      label: 'COMPARE::product',
+      where: { userId: userIdToUse, type: 'COMPARE' },
+    },
+    {
+      label: 'TIPS::product',
+      where: { userId: userIdToUse, type: 'TIPS', NOT: { productId: null } },
+    },
+    {
+      label: 'TIPS::subCategory',
+      where: {
+        userId: userIdToUse,
+        type: 'TIPS',
+        productId: null,
+        NOT: { subCategoryId: null },
+      },
+    },
+    {
+      label: 'QUESTION::product',
+      where: { type: 'QUESTION', NOT: { productId: null } },
+    },
+    {
+      label: 'QUESTION::subCategory',
+      where: {
+        type: 'QUESTION',
+        productId: null,
+        NOT: { subCategoryId: null },
+      },
+    },
+  ]
+
+  let bookmarkCoverageCreated = 0
+  for (const config of bookmarkCoverageConfigs) {
+    const targetPost = await prisma.contentPost.findFirst({
+      where: config.where,
+      orderBy: { createdAt: 'desc' },
+    })
+
+    if (!targetPost) {
+      console.warn(`⚠️  Bookmark coverage skipped for ${config.label} (no matching post)`)
+      continue
+    }
+
+    const created = await ensureBookmarkFor(userIdToUse, targetPost.id)
+    if (created) {
+      bookmarkCoverageCreated += 1
+    }
+  }
+  console.log(`✅ Bookmark coverage ensured (${bookmarkCoverageCreated} new favorites)`)
+
   // Content Post Views
   for (const post of allPosts.slice(0, 2)) {
     await prisma.contentPostView.create({
@@ -2589,7 +2699,7 @@ async function main() {
       data: {
         name: 'Premium Tipbox Badge',
         description: 'Tipbox platformunda aktif olan kullanıcılara özel nadir badge',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/premium-badge.png',
+        imageUrl: getSeedMediaUrl('badge.premium-shoper' as any),
         type: 'BADGE',
         rarity: 'EPIC',
         isTransferable: true,
@@ -2600,7 +2710,7 @@ async function main() {
       data: {
         name: 'Early Adopter Badge',
         description: 'Platformun ilk kullanıcılarına özel badge',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/early-adopter.png',
+        imageUrl: getSeedMediaUrl('badge.early-adapter' as any),
         type: 'BADGE',
         rarity: 'RARE',
         isTransferable: true,
@@ -2611,7 +2721,7 @@ async function main() {
       data: {
         name: 'Golden Frame',
         description: 'Profil çerçevesi için özel altın renkli cosmetic item',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/golden-frame.png',
+        imageUrl: getSeedMediaUrl('badge.hardware-expert' as any),
         type: 'COSMETIC',
         rarity: 'EPIC',
         isTransferable: true,
@@ -2624,7 +2734,7 @@ async function main() {
       data: {
         name: 'Silver Badge',
         description: 'Gümüş renkli özel badge',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/silver-badge.png',
+        imageUrl: getSeedMediaUrl('badge.wish-marker' as any),
         type: 'BADGE',
         rarity: 'COMMON',
         isTransferable: true,
@@ -2635,7 +2745,7 @@ async function main() {
       data: {
         name: 'Rainbow Avatar Border',
         description: 'Profil avatarı için renkli çerçeve',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/rainbow-border.png',
+        imageUrl: getSeedMediaUrl('marketplace.rainbow-border' as any),
         type: 'COSMETIC',
         rarity: 'RARE',
         isTransferable: true,
@@ -2646,7 +2756,7 @@ async function main() {
       data: {
         name: 'Mystery Lootbox',
         description: 'İçinde rastgele ödül bulunan gizemli kutu',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/mystery-lootbox.png',
+        imageUrl: getSeedMediaUrl('badge.premium-shoper' as any),
         type: 'LOOTBOX',
         rarity: 'EPIC',
         isTransferable: true,

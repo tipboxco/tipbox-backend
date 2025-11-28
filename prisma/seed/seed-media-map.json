@@ -86,6 +86,24 @@
   "badge.first-post": {
     "targetKey": "badges/480f5de9-b691-4d70-a6a8-2789226f4e07/first-post.png"
   },
+  "badge.community-hero": {
+    "targetKey": "badges/480f5de9-b691-4d70-a6a8-2789226f4e07/community-hero.png"
+  },
+  "badge.beta-tester": {
+    "targetKey": "badges/480f5de9-b691-4d70-a6a8-2789226f4e07/beta-tester.png"
+  },
+  "badge.benchmark-sage": {
+    "targetKey": "badges/480f5de9-b691-4d70-a6a8-2789226f4e07/benchmark-sage.png"
+  },
+  "badge.experience-curator": {
+    "targetKey": "badges/480f5de9-b691-4d70-a6a8-2789226f4e07/experience-curator.png"
+  },
+  "badge.bridge-ambassador": {
+    "targetKey": "badges/480f5de9-b691-4d70-a6a8-2789226f4e07/bridge-ambassador.png"
+  },
+  "badge.brand-visionary": {
+    "targetKey": "badges/480f5de9-b691-4d70-a6a8-2789226f4e07/brand-visionary.png"
+  },
   "post.image.primary": {
     "targetKey": "post-media/480f5de9-b691-4d70-a6a8-2789226f4e07/post.jpg"
   },
@@ -121,5 +139,20 @@
   },
   "product.phone.samsung": {
     "targetKey": "products/samsun.png"
+  },
+  "marketplace.rainbow-border": {
+    "targetKey": "marketplace/rainbow-border.jpg"
+  },
+  "badge.hardware-expert": {
+    "targetKey": "badges/custom/HardwareExpert.png"
+  },
+  "badge.premium-shoper": {
+    "targetKey": "badges/custom/PremiumShoper.png"
+  },
+  "badge.wish-marker": {
+    "targetKey": "badges/custom/WishMarker.png"
+  },
+  "badge.early-adapter": {
+    "targetKey": "badges/custom/EarlyAdapter.png"
   }
 }

@@ -659,20 +659,25 @@ export class BrandService {
 
     const product1 = this.getProductBase(comparison.product1);
     const product2 = this.getProductBase(comparison.product2);
+    const choiceProductId = this.selectComparisonWinner(comparison);
 
     const products: any[] = [];
     if (product1) {
       products.push({
         ...product1,
         isOwned: ownedProductIds.has(product1.id),
-        choice: false,
+        choice: choiceProductId
+          ? choiceProductId === String(comparison.product1Id)
+          : true,
       });
     }
     if (product2) {
       products.push({
         ...product2,
         isOwned: ownedProductIds.has(product2.id),
-        choice: false,
+        choice: choiceProductId
+          ? choiceProductId === String(comparison.product2Id)
+          : false,
       });
     }
 
@@ -703,6 +708,34 @@ export class BrandService {
         images,
       },
     };
+  }
+
+  private selectComparisonWinner(
+    comparison?: {
+      product1Id?: string | null;
+      product2Id?: string | null;
+      scores?: Array<{ scoreProduct1?: number | null; scoreProduct2?: number | null }>;
+    }
+  ): string | null {
+    if (!comparison || !comparison.scores || comparison.scores.length === 0) {
+      return null;
+    }
+
+    let product1Score = 0;
+    let product2Score = 0;
+
+    for (const score of comparison.scores) {
+      product1Score += score.scoreProduct1 ?? 0;
+      product2Score += score.scoreProduct2 ?? 0;
+    }
+
+    if (product1Score === product2Score) {
+      return comparison.product1Id ? String(comparison.product1Id) : null;
+    }
+
+    return product1Score > product2Score
+      ? (comparison.product1Id ? String(comparison.product1Id) : null)
+      : (comparison.product2Id ? String(comparison.product2Id) : null);
   }
 }
 

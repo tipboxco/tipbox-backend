@@ -58,6 +58,12 @@ const badgeFiles = [
   { fileName: 'HardwareExpert.png', badgeName: 'Welcome' },
   { fileName: 'PremiumShoper.png', badgeName: 'Tip Master' },
   { fileName: 'WishMarker.png', badgeName: 'First Post' },
+  { fileName: 'HardwareExpert.png', badgeName: 'Community Hero' },
+  { fileName: 'PremiumShoper.png', badgeName: 'Beta Tester' },
+  { fileName: 'HardwareExpert.png', badgeName: 'Benchmark Sage' },
+  { fileName: 'PremiumShoper.png', badgeName: 'Experience Curator' },
+  { fileName: 'WishMarker.png', badgeName: 'Bridge Ambassador' },
+  { fileName: 'EarlyAdapter.png', badgeName: 'Brand Visionary' },
 ];
 
 // Brand ve product için kullanılacak product görselleri
@@ -117,6 +123,30 @@ seedAssets.push({
   contentType: 'image/jpeg',
   description: 'Market test kullanıcısının profil fotoğrafı (placeholder)',
 });
+
+const trustAvatarSeeds = [
+  { key: 'user.avatar.trust1', fileName: 'useravatar.jpg' },
+  { key: 'user.avatar.trust2', fileName: 'useravatar2.jpg' },
+  { key: 'user.avatar.trust3', fileName: 'useravatar3.jpg' },
+  { key: 'user.avatar.trust4', fileName: 'useravatar4.png' },
+  { key: 'user.avatar.trust5', fileName: 'ozan.jpg' },
+];
+
+const trusterAvatarSeeds = [
+  { key: 'user.avatar.truster1', fileName: 'useravatar2.jpg' },
+  { key: 'user.avatar.truster2', fileName: 'useravatar3.jpg' },
+  { key: 'user.avatar.truster3', fileName: 'useravatar4.png' },
+];
+
+for (const seed of [...trustAvatarSeeds, ...trusterAvatarSeeds]) {
+  seedAssets.push({
+    key: seed.key,
+    localPath: path.join(assetsBasePath, 'userprofile', seed.fileName),
+    targetKey: `userprofile/${seed.fileName}`,
+    contentType: inferContentType(seed.fileName),
+    description: `Trust/Truster avatar: ${seed.key}`,
+  });
+}
 
 seedAssets.push({
   key: 'inventory.dyson-media',

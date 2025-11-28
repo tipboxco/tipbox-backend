@@ -145,7 +145,7 @@ export class FeedService {
       });
     });
 
-    const shuffledPosts = this.shuffleFeedItems(posts);
+    const orderedPosts = this.sortPostsByCreatedAt(posts);
 
     // Get user inventories for benchmark isOwned check
     const inventories = await this.prisma.inventory.findMany({
@@ -189,7 +189,7 @@ export class FeedService {
 
     // Convert posts to feed items
     const feedItems = await Promise.all(
-      shuffledPosts.map(async (post) => {
+      orderedPosts.map(async (post) => {
         const userBase = userBaseMap.get(String(post.userId)) || (await this.getUserBase(String(post.userId)));
         const stats = statsMap.get(post.id) || { likes: 0, comments: 0, shares: 0, bookmarks: 0 };
         const basePost = {
@@ -639,16 +639,27 @@ export class FeedService {
       leftovers.push(item);
     }
 
-    return this.shuffleFeedItems([...prioritized, ...leftovers]);
+    return this.sortFeedItemsByTimestamp([...prioritized, ...leftovers]);
   }
 
-  private shuffleFeedItems<T>(items: T[]): T[] {
-    const arr = [...items];
-    for (let i = arr.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
-    return arr;
+  private sortPostsByCreatedAt<T extends { createdAt?: Date | string }>(items: T[]): T[] {
+    const toTime = (value?: Date | string): number => {
+      if (!value) return 0;
+      if (value instanceof Date) return value.getTime();
+      const parsed = Date.parse(value);
+      return Number.isNaN(parsed) ? 0 : parsed;
+    };
+    return [...items].sort((a, b) => toTime(b.createdAt) - toTime(a.createdAt));
+  }
+
+  private sortFeedItemsByTimestamp(items: FeedItem[]): FeedItem[] {
+    const toTime = (item: FeedItem): number => {
+      const value = item?.data?.createdAt;
+      if (!value) return 0;
+      const parsed = Date.parse(value);
+      return Number.isNaN(parsed) ? 0 : parsed;
+    };
+    return [...items].sort((a, b) => toTime(b) - toTime(a));
   }
 
   private mapToPostItem(
