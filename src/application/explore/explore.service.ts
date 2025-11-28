@@ -320,7 +320,7 @@ export class ExploreService {
 
         return {
           eventId: event.id,
-          image: null, // TODO: Add event image URL if available
+          image: (event as any).imageUrl || null,
           title: event.title,
           description: event.description || '',
           startDate: event.startDate.toISOString(),

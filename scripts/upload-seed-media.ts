@@ -53,11 +53,17 @@ const catalogFiles = [
   'otomotiv.png',
 ];
 
-const badgeFiles = [
-  { fileName: 'EarlyAdapter.png', badgeName: 'Early Bird' },
-  { fileName: 'HardwareExpert.png', badgeName: 'Welcome' },
-  { fileName: 'PremiumShoper.png', badgeName: 'Tip Master' },
-  { fileName: 'WishMarker.png', badgeName: 'First Post' },
+type BadgeFileConfig = {
+  fileName: string;
+  badgeName: string;
+  extraKeys?: string[];
+};
+
+const badgeFiles: BadgeFileConfig[] = [
+  { fileName: 'EarlyAdapter.png', badgeName: 'Early Bird', extraKeys: ['badge.early-adapter'] },
+  { fileName: 'HardwareExpert.png', badgeName: 'Welcome', extraKeys: ['badge.hardware-expert'] },
+  { fileName: 'PremiumShoper.png', badgeName: 'Tip Master', extraKeys: ['badge.premium-shoper'] },
+  { fileName: 'WishMarker.png', badgeName: 'First Post', extraKeys: ['badge.wish-marker'] },
   { fileName: 'HardwareExpert.png', badgeName: 'Community Hero' },
   { fileName: 'PremiumShoper.png', badgeName: 'Beta Tester' },
   { fileName: 'HardwareExpert.png', badgeName: 'Benchmark Sage' },
@@ -171,14 +177,35 @@ for (const fileName of catalogFiles) {
 // Badge görsellerini ekle (TEST_USER_ID için)
 for (const badgeFile of badgeFiles) {
   const slug = slugify(badgeFile.badgeName);
+  const targetFileName = badgeFile.fileName;
   seedAssets.push({
     key: `badge.${slug}`,
     localPath: path.join(assetsBasePath, 'badge', badgeFile.fileName),
-    targetKey: `badges/${TEST_USER_ID}/${slug}${path.extname(badgeFile.fileName).toLowerCase() || '.png'}`,
+    targetKey: `badges/custom/${targetFileName}`,
     contentType: inferContentType(badgeFile.fileName),
-    description: `Badge görseli: ${badgeFile.badgeName} (User: ${TEST_USER_ID})`,
+    description: `Badge görseli: ${badgeFile.badgeName} (custom path)`,
   });
+
+  if (badgeFile.extraKeys) {
+    for (const extraKey of badgeFile.extraKeys) {
+      seedAssets.push({
+        key: extraKey,
+        localPath: path.join(assetsBasePath, 'badge', badgeFile.fileName),
+        targetKey: `badges/custom/${targetFileName}`,
+        contentType: inferContentType(badgeFile.fileName),
+        description: `Ek badge görseli alias: ${extraKey}`,
+      });
+    }
+  }
 }
+
+seedAssets.push({
+  key: 'marketplace.rainbow-border',
+  localPath: path.join(assetsBasePath, 'marketplace', 'marketplace.jpg'),
+  targetKey: 'marketplace/rainbow-border.jpg',
+  contentType: 'image/jpeg',
+  description: 'Marketplace listing varsayılan görseli',
+});
 
 // Post görselini ekle (TEST_USER_ID için)
 seedAssets.push({

@@ -496,6 +496,60 @@ router.post('/:id/unmute', asyncHandler(async (req: Request, res: Response) => {
  *         name: q
  *         schema: { type: string }
  *         description: İsim veya kullanıcı adına göre arama (case-insensitive)
+ *     responses:
+ *       200:
+ *         description: Kullanıcının bridge koleksiyon rozetleri
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                     example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+ *                   image:
+ *                     type: string
+ *                     nullable: true
+ *                     example: "http://localhost:9000/tipbox-media/badges/480f5de9-b691-4d70-a6a8-2789226f4e07/bridge-ambassador.png"
+ *                   title:
+ *                     type: string
+ *                     example: "Bridge Ambassador"
+ *                   rarity:
+ *                     type: string
+ *                     enum: [Usual, Rare, Epic, Legendary]
+ *                     example: "Rare"
+ *                   isClaimed:
+ *                     type: boolean
+ *                     example: true
+ *                   nftAddress:
+ *                     type: string
+ *                     nullable: true
+ *                     example: null
+ *                   totalEarned:
+ *                     type: integer
+ *                     example: 3
+ *                   earnedDate:
+ *                     type: string
+ *                     format: date-time
+ *                     nullable: true
+ *                     example: "2024-02-10T10:30:00.000Z"
+ *                   tasks:
+ *                     type: array
+ *                     items:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: string
+ *                           example: "goal-123"
+ *                         title:
+ *                           type: string
+ *                           example: "10 Yorum Yap"
+ *                         type:
+ *                           type: string
+ *                           enum: [Comment, Like, Share]
+ *                           example: "Comment"
  */
 router.get('/:id/collections/bridges', asyncHandler(async (req: Request, res: Response) => {
   const id = String(req.params.id);

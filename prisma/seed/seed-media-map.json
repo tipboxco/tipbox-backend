@@ -75,34 +75,49 @@
     "targetKey": "catalog/otomotiv.png"
   },
   "badge.early-bird": {
-    "targetKey": "badges/480f5de9-b691-4d70-a6a8-2789226f4e07/early-bird.png"
+    "targetKey": "badges/custom/EarlyAdapter.png"
+  },
+  "badge.early-adapter": {
+    "targetKey": "badges/custom/EarlyAdapter.png"
   },
   "badge.welcome": {
-    "targetKey": "badges/480f5de9-b691-4d70-a6a8-2789226f4e07/welcome.png"
+    "targetKey": "badges/custom/HardwareExpert.png"
+  },
+  "badge.hardware-expert": {
+    "targetKey": "badges/custom/HardwareExpert.png"
   },
   "badge.tip-master": {
-    "targetKey": "badges/480f5de9-b691-4d70-a6a8-2789226f4e07/tip-master.png"
+    "targetKey": "badges/custom/PremiumShoper.png"
+  },
+  "badge.premium-shoper": {
+    "targetKey": "badges/custom/PremiumShoper.png"
   },
   "badge.first-post": {
-    "targetKey": "badges/480f5de9-b691-4d70-a6a8-2789226f4e07/first-post.png"
+    "targetKey": "badges/custom/WishMarker.png"
+  },
+  "badge.wish-marker": {
+    "targetKey": "badges/custom/WishMarker.png"
   },
   "badge.community-hero": {
-    "targetKey": "badges/480f5de9-b691-4d70-a6a8-2789226f4e07/community-hero.png"
+    "targetKey": "badges/custom/HardwareExpert.png"
   },
   "badge.beta-tester": {
-    "targetKey": "badges/480f5de9-b691-4d70-a6a8-2789226f4e07/beta-tester.png"
+    "targetKey": "badges/custom/PremiumShoper.png"
   },
   "badge.benchmark-sage": {
-    "targetKey": "badges/480f5de9-b691-4d70-a6a8-2789226f4e07/benchmark-sage.png"
+    "targetKey": "badges/custom/HardwareExpert.png"
   },
   "badge.experience-curator": {
-    "targetKey": "badges/480f5de9-b691-4d70-a6a8-2789226f4e07/experience-curator.png"
+    "targetKey": "badges/custom/PremiumShoper.png"
   },
   "badge.bridge-ambassador": {
-    "targetKey": "badges/480f5de9-b691-4d70-a6a8-2789226f4e07/bridge-ambassador.png"
+    "targetKey": "badges/custom/WishMarker.png"
   },
   "badge.brand-visionary": {
-    "targetKey": "badges/480f5de9-b691-4d70-a6a8-2789226f4e07/brand-visionary.png"
+    "targetKey": "badges/custom/EarlyAdapter.png"
+  },
+  "marketplace.rainbow-border": {
+    "targetKey": "marketplace/rainbow-border.jpg"
   },
   "post.image.primary": {
     "targetKey": "post-media/480f5de9-b691-4d70-a6a8-2789226f4e07/post.jpg"
@@ -139,20 +154,5 @@
   },
   "product.phone.samsung": {
     "targetKey": "products/samsun.png"
-  },
-  "marketplace.rainbow-border": {
-    "targetKey": "marketplace/rainbow-border.jpg"
-  },
-  "badge.hardware-expert": {
-    "targetKey": "badges/custom/HardwareExpert.png"
-  },
-  "badge.premium-shoper": {
-    "targetKey": "badges/custom/PremiumShoper.png"
-  },
-  "badge.wish-marker": {
-    "targetKey": "badges/custom/WishMarker.png"
-  },
-  "badge.early-adapter": {
-    "targetKey": "badges/custom/EarlyAdapter.png"
   }
 }

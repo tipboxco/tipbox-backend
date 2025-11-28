@@ -63,6 +63,21 @@ const COMMUNITY_COACH_EMAIL = 'coach@tipbox.co'
 const COMMUNITY_COACH_AVATAR_URL = getSeedMediaUrl('user.avatar.truster3')
 const TARGET_USER_TITLE = 'Marketplace Strategist'
 
+const MARKETPLACE_NFT_IMAGE_KEYS: SeedMediaKey[] = [
+  'badge.wish-marker',
+  'badge.premium-shoper',
+  'badge.hardware-expert',
+  'badge.early-adapter',
+  'marketplace.rainbow-border',
+]
+
+let marketplaceImageCursor = 0
+const nextMarketplaceImage = (): string => {
+  const key = MARKETPLACE_NFT_IMAGE_KEYS[marketplaceImageCursor % MARKETPLACE_NFT_IMAGE_KEYS.length]
+  marketplaceImageCursor += 1
+  return getSeedMediaUrl(key)
+}
+
 // Simple ULID generator for seed (avoids import issues)
 function generateUlid(): string {
   // ULID format: timestamp (10 chars) + randomness (16 chars) = 26 chars
@@ -2409,6 +2424,29 @@ async function main() {
     console.log('✅ Additional stats enriched for non-primary user posts')
   }
 
+  // Zamana göre sıralanan feed'in tek tip bloklar halinde gelmemesi için
+  // tüm post'ların createdAt değerlerini rastgele geçmiş zamanlara dağıtıyoruz.
+  console.log('🕒 Randomizing content post timestamps for mixed feed ordering...')
+  const postsForTimeline = await prisma.contentPost.findMany({
+    orderBy: { createdAt: 'asc' },
+  })
+
+  if (postsForTimeline.length > 0) {
+    const maxMinutes = Math.max(60, postsForTimeline.length * 3)
+    for (const post of postsForTimeline) {
+      const minutes = randomBetween(0, maxMinutes)
+      const createdAt = new Date(Date.now() - minutes * 60 * 1000)
+      await prisma.contentPost.update({
+        where: { id: post.id },
+        data: {
+          createdAt,
+          updatedAt: createdAt,
+        },
+      }).catch(() => {})
+    }
+  }
+  console.log('✅ Content post timestamps randomized')
+
   // Feed Entries - Kullanıcıların feed'inde görünecek post'lar
   console.log('📰 Creating feed entries...')
   
@@ -2584,7 +2622,7 @@ async function main() {
       data: {
         name: 'Tipbox Pioneer Badge',
         description: 'Platformun ilk günlerinden beri burada olanlar için özel efsanevi badge. Sadece 100 adet basılmıştır.',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/pioneer-badge.png',
+        imageUrl: nextMarketplaceImage(),
         type: 'BADGE',
         rarity: 'EPIC',
         isTransferable: true,
@@ -2595,7 +2633,7 @@ async function main() {
       data: {
         name: 'Diamond Profile Frame',
         description: 'Elmas işlemeli, parlayan profil çerçevesi. Profilinize lüks bir görünüm katar.',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/diamond-frame.png',
+        imageUrl: nextMarketplaceImage(),
         type: 'COSMETIC',
         rarity: 'EPIC',
         isTransferable: true,
@@ -2606,7 +2644,7 @@ async function main() {
       data: {
         name: 'Top Contributor Badge',
         description: 'En değerli içerik üreticilerine verilen nadir badge. Topluluğa katkılarınızdan dolayı teşekkürler!',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/contributor-badge.png',
+        imageUrl: nextMarketplaceImage(),
         type: 'BADGE',
         rarity: 'RARE',
         isTransferable: true,
@@ -2617,7 +2655,7 @@ async function main() {
       data: {
         name: 'Neon Pulse Avatar Border',
         description: 'Neon ışıklı, nabız gibi atan avatar çerçevesi. Dikkat çekici ve modern bir görünüm.',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/neon-pulse-border.png',
+        imageUrl: nextMarketplaceImage(),
         type: 'COSMETIC',
         rarity: 'RARE',
         isTransferable: true,
@@ -2630,7 +2668,7 @@ async function main() {
       data: {
         name: 'Gold Star Badge',
         description: 'Altın yıldız şeklinde parlayan badge. Başarılı kullanıcılara özel.',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/gold-star-badge.png',
+        imageUrl: nextMarketplaceImage(),
         type: 'BADGE',
         rarity: 'RARE',
         isTransferable: true,
@@ -2641,7 +2679,7 @@ async function main() {
       data: {
         name: 'Platinum Crown Frame',
         description: 'Platin taç şeklinde profil çerçevesi. Kraliyet ailesi üyesi gibi görünün!',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/platinum-crown.png',
+        imageUrl: nextMarketplaceImage(),
         type: 'COSMETIC',
         rarity: 'EPIC',
         isTransferable: true,
@@ -2652,7 +2690,7 @@ async function main() {
       data: {
         name: 'Rainbow Holographic Badge',
         description: 'Gökkuşağı renklerinde, hologram efektli badge. Işığa göre renk değiştirir.',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/rainbow-holographic.png',
+        imageUrl: nextMarketplaceImage(),
         type: 'BADGE',
         rarity: 'EPIC',
         isTransferable: true,
@@ -2663,7 +2701,7 @@ async function main() {
       data: {
         name: 'Cyber Neon Glow Effect',
         description: 'Siberpunk temalı neon ışıltı efekti. Avatarınızın etrafında mavi-pembe neon hale.',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/cyber-neon-glow.png',
+        imageUrl: nextMarketplaceImage(),
         type: 'COSMETIC',
         rarity: 'RARE',
         isTransferable: true,
@@ -2674,7 +2712,7 @@ async function main() {
       data: {
         name: 'Mystery Treasure Box',
         description: 'İçinde rastgele nadir ödül bulunan gizemli hazine kutusu. Açınca ne çıkacak?',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/treasure-box.png',
+        imageUrl: nextMarketplaceImage(),
         type: 'LOOTBOX',
         rarity: 'EPIC',
         isTransferable: true,
@@ -2685,7 +2723,7 @@ async function main() {
       data: {
         name: 'Silver Achievement Badge',
         description: 'Gümüş başarı rozeti. Önemli milestone\'ları temsil eder.',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/silver-achievement.png',
+        imageUrl: nextMarketplaceImage(),
         type: 'BADGE',
         rarity: 'COMMON',
         isTransferable: true,
@@ -2771,7 +2809,7 @@ async function main() {
         data: {
           name: 'Community Helper Badge',
           description: 'Toplulukta yardımseverlik gösterenlere özel badge',
-          imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/helper-badge.png',
+          imageUrl: nextMarketplaceImage(),
           type: 'BADGE',
           rarity: 'RARE',
           isTransferable: true,
@@ -2782,7 +2820,7 @@ async function main() {
         data: {
           name: 'Blue Neon Frame',
           description: 'Mavi neon efektli profil çerçevesi',
-          imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/blue-neon-frame.png',
+          imageUrl: nextMarketplaceImage(),
           type: 'COSMETIC',
           rarity: 'COMMON',
           isTransferable: true,
@@ -2794,7 +2832,7 @@ async function main() {
         data: {
           name: 'Top Reviewer Badge',
           description: 'En çok değerlendirme yapan kullanıcılara özel badge',
-          imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/reviewer-badge.png',
+          imageUrl: nextMarketplaceImage(),
           type: 'BADGE',
           rarity: 'EPIC',
           isTransferable: true,
@@ -2805,7 +2843,7 @@ async function main() {
         data: {
           name: 'Purple Glow Effect',
           description: 'Profil için mor ışıltı efekti',
-          imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/purple-glow.png',
+          imageUrl: nextMarketplaceImage(),
           type: 'COSMETIC',
           rarity: 'RARE',
           isTransferable: true,
@@ -2816,7 +2854,7 @@ async function main() {
         data: {
           name: 'Legendary Lootbox',
           description: 'Efsanevi ödüller içeren özel kutu',
-          imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/legendary-lootbox.png',
+          imageUrl: nextMarketplaceImage(),
           type: 'LOOTBOX',
           rarity: 'EPIC',
           isTransferable: true,
@@ -2913,7 +2951,7 @@ async function main() {
         data: {
           name: `User${userIdx + 1} Collector Badge`,
           description: `${userIdx + 1}. kullanıcının özel koleksiyoner badge'i`,
-          imageUrl: `https://tipbox-assets.s3.amazonaws.com/nfts/collector-${userIdx + 1}.png`,
+          imageUrl: nextMarketplaceImage(),
           type: 'BADGE',
           rarity: userIdx === 0 ? 'EPIC' : userIdx === 1 ? 'RARE' : 'COMMON',
           isTransferable: true,
@@ -2924,7 +2962,7 @@ async function main() {
         data: {
           name: `Vintage Frame ${userIdx + 1}`,
           description: `Klasik ve şık görünümlü profil çerçevesi #${userIdx + 1}`,
-          imageUrl: `https://tipbox-assets.s3.amazonaws.com/nfts/vintage-frame-${userIdx + 1}.png`,
+          imageUrl: nextMarketplaceImage(),
           type: 'COSMETIC',
           rarity: userIdx === 0 ? 'RARE' : 'COMMON',
           isTransferable: true,
@@ -2935,7 +2973,7 @@ async function main() {
         data: {
           name: `Lucky Box #${userIdx + 1}`,
           description: `Şanslı numara ${userIdx + 1}! İçinde ne var?`,
-          imageUrl: `https://tipbox-assets.s3.amazonaws.com/nfts/lucky-box-${userIdx + 1}.png`,
+          imageUrl: nextMarketplaceImage(),
           type: 'LOOTBOX',
           rarity: 'RARE',
           isTransferable: true,
