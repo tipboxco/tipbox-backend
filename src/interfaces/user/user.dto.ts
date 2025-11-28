@@ -139,6 +139,32 @@
  *               type: array
  *               items:
  *                 $ref: '#/components/schemas/WalletResponse'
+ *     UpdateUserProfileRequest:
+ *       type: object
+ *       properties:
+ *         name:
+ *           type: string
+ *           description: Profilde gösterilecek isim
+ *         biography:
+ *           type: string
+ *           description: Kullanıcı biyografisi (max 500 karakter)
+ *         banner:
+ *           type: string
+ *           nullable: true
+ *           description: Banner görsel URL'si
+ *         avatar:
+ *           type: string
+ *           nullable: true
+ *           description: Avatar görsel URL'si (MinIO/S3)
+ *         cosmetic:
+ *           type: string
+ *           nullable: true
+ *           description: Aktif kozmetik badge/çerçeve ID'si
+ *         badge:
+ *           type: array
+ *           items:
+ *             type: string
+ *           description: Aktif olarak seçilen badge ID listesi
  */
 export interface CreateUserRequest {
   email: string;
@@ -197,3 +223,12 @@ export interface UserFullResponse extends UserResponse {
   profile?: ProfileResponse;
   wallets: any[]; // Import from wallet.dto when needed
 } 
+
+export interface UpdateUserProfileRequest {
+  name?: string;
+  biography?: string;
+  banner?: string | null;
+  avatar?: string | null;
+  cosmetic?: string | null;
+  badge?: string[];
+}

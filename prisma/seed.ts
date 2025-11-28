@@ -75,6 +75,12 @@ function randomBetween(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min
 }
 
+function daysAgo(days: number): Date {
+  const date = new Date()
+  date.setDate(date.getDate() - days)
+  return date
+}
+
 async function main() {
   console.error('🌱 Starting seed process...') // Using stderr to ensure output
   console.log('🌱 Starting seed process...')
@@ -267,6 +273,42 @@ async function main() {
       rewardMultiplier: 1.6,
       categoryId: eventCategory.id,
     },
+    {
+      name: 'Benchmark Sage',
+      description: 'Benchmark paylaşımların topluluk için referans noktası oldu.',
+      type: 'ACHIEVEMENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.35,
+      rewardMultiplier: 1.35,
+      categoryId: achievementCategory.id,
+    },
+    {
+      name: 'Experience Curator',
+      description: 'Birden fazla kategoride derinlemesine 15+ deneyim paylaştın.',
+      type: 'ACHIEVEMENT',
+      rarity: 'EPIC',
+      boostMultiplier: 1.5,
+      rewardMultiplier: 1.6,
+      categoryId: achievementCategory.id,
+    },
+    {
+      name: 'Bridge Ambassador',
+      description: 'Bridge topluluk etkinliklerinde marka elçisi seçildin.',
+      type: 'EVENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.25,
+      rewardMultiplier: 1.35,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Brand Visionary',
+      description: 'En yaratıcı bridge kampanyasını yöneterek vitrine çıktın.',
+      type: 'EVENT',
+      rarity: 'EPIC',
+      boostMultiplier: 1.55,
+      rewardMultiplier: 1.65,
+      categoryId: eventCategory.id,
+    },
   ];
 
   const badges = await Promise.all(
@@ -304,6 +346,15 @@ async function main() {
     })
   );
   console.log(`✅ ${badges.length} varsayılan badge oluşturuldu/güncellendi`)
+
+  const benchmarkSageBadge = badges.find(b => b.name === 'Benchmark Sage')
+  const experienceCuratorBadge = badges.find(b => b.name === 'Experience Curator')
+  const bridgeAmbassadorBadge = badges.find(b => b.name === 'Bridge Ambassador')
+  const brandVisionaryBadge = badges.find(b => b.name === 'Brand Visionary')
+
+  if (!benchmarkSageBadge || !experienceCuratorBadge || !bridgeAmbassadorBadge || !brandVisionaryBadge) {
+    throw new Error('Beklenen varsayılan badge tanımları oluşturulamadı')
+  }
 
   // 5. Comparison Metrics
   console.log('📊 Creating comparison metrics...')
@@ -551,6 +602,14 @@ async function main() {
       }
     }),
   ])
+  const priceMetric = metrics.find((metric) => metric.name === 'Fiyat')
+  const qualityMetric = metrics.find((metric) => metric.name === 'Kalite')
+  const usabilityMetric = metrics.find((metric) => metric.name === 'Kullanım Kolaylığı')
+  const durabilityMetric = metrics.find((metric) => metric.name === 'Dayanıklılık')
+  const designMetric = metrics.find((metric) => metric.name === 'Tasarım')
+  if (!priceMetric || !qualityMetric || !usabilityMetric || !durabilityMetric || !designMetric) {
+    throw new Error('Comparison metrics eksik; seed devam edemiyor.')
+  }
 
   // Link achievement goals to badges (already done above)
   console.log('✅ Achievement goals created')
@@ -601,6 +660,8 @@ async function main() {
     { badgeId: firstPostBadge.id, claimed: true, claimedAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000) },
     { badgeId: tipMasterBadge.id, claimed: true, claimedAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
     { badgeId: earlyBirdBadge.id, claimed: true, claimedAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) },
+    { badgeId: benchmarkSageBadge.id, claimed: false, claimedAt: null },
+    { badgeId: experienceCuratorBadge.id, claimed: false, claimedAt: null },
   ]
 
   for (const badgeData of userBadgesData) {
@@ -1001,6 +1062,10 @@ async function main() {
   }
   console.log(`✅ ${brandPhoneProducts.length} brand-specific phone products created (20 per brand)`);
 
+  const samsungPhone = brandPhoneProducts.find((product) => product.brand === 'Samsung') || brandPhoneProducts[0];
+  const applePhone = brandPhoneProducts.find((product) => product.brand === 'Apple') || brandPhoneProducts[1] || samsungPhone;
+  const redmiPhone = brandPhoneProducts.find((product) => product.brand === 'Redmi') || brandPhoneProducts[2] || samsungPhone;
+
   // Eski iPhone product'ı oluştur (geriye dönük uyumluluk için)
   const product3 = await prisma.product.create({
     data: {
@@ -1074,6 +1139,24 @@ async function main() {
       hasOwned: true,
       summary: 'iPhone 15 Pro günlük sürücüm, fotoğraf ve video testlerini bununla yapıyorum.',
       mediaKeys: ['product.phone.phone2'],
+    },
+    {
+      productId: samsungPhone?.id || product2.id,
+      hasOwned: true,
+      summary: 'Samsung cihazı Dex + üretkenlik modunda ofis görevlerini üstleniyor.',
+      mediaKeys: ['product.phone.phone1'],
+    },
+    {
+      productId: applePhone?.id || product3.id,
+      hasOwned: true,
+      summary: 'Apple ekosisteminde LOG çekim ve içerik üretimi için temel cihazım.',
+      mediaKeys: ['product.phone.phone2'],
+    },
+    {
+      productId: redmiPhone?.id || product2.id,
+      hasOwned: false,
+      summary: 'MIUI betalarını test ettiğim bütçe dostu cihaz.',
+      mediaKeys: ['product.phone.phone3'],
     },
   ];
 
@@ -1265,10 +1348,144 @@ async function main() {
     },
   ];
 
+  const templateReplacer = (template: string, replacements: Record<string, string>): string => {
+    return Object.entries(replacements).reduce((acc, [key, value]) => {
+      const regex = new RegExp(`\\{${key}\\}`, 'g');
+      return acc.replace(regex, value);
+    }, template);
+  };
+
+  const phoneNarrativeTemplates = [
+    {
+      title: '{product} ile gece fotoğraf turu #{index}',
+      body: '{brand} ekosistemindeki {product} modeliyle İstanbul sokaklarında düşük ışık testleri yaptım. RAW çekimlerde gürültü kontrolü ve tripod kullanmadan elde edilen kareler beklentimin üstünde oldu.',
+      tag: 'NightMode',
+    },
+    {
+      title: '{brand} {product} pil dayanımı raporu #{index}',
+      body: '{product} modelini 120 Hz ekran, Wi-Fi hotspot ve kamera kayıt kombosu ile 12 saatlik mobil ofis olarak kullandım. Gün sonu kalan yüzde değerleri ve şarj etme frekanslarımı tabloya döktüm.',
+      tag: 'Battery',
+    },
+    {
+      title: '{product} ile oyun performansı #{index}',
+      body: '{product}, Genshin Impact ve Asphalt 9 testlerimde sıcaklık kontrolünü iyi yaptı. Dokunmatik gecikme ölçümlerini ve kare sabitliğini paylaşarak hangi aksesuarları kullandığımı anlattım.',
+      tag: 'Gaming',
+    },
+    {
+      title: '{product} kamera logbook #{index}',
+      body: '{brand} cihazında LOG video + LUT kombinasyonu ile sosyal medya içerikleri üretiyorum. {product} ile hangi LUT’ların doğal ten tonu verdiğini ve post prod sürecimi aktarıyorum.',
+      tag: 'Creator',
+    },
+  ];
+
+  const dynamicPhoneProductSeeds: ContextPostSeed[] = brandPhoneProducts.slice(0, 36).map((product: any, index) => {
+    const narrative = phoneNarrativeTemplates[index % phoneNarrativeTemplates.length];
+    const replacements = {
+      product: product.name,
+      brand: product.brand || 'Tipbox',
+      index: (index + 1).toString(),
+    };
+
+    return {
+      title: templateReplacer(narrative.title, replacements),
+      body: templateReplacer(narrative.body, replacements),
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      productGroupId: product.groupId || null,
+      productId: product.id,
+      inventoryRequired: index % 3 === 0,
+      isBoosted: index % 5 === 0,
+      tags: [product.brand || 'Mobile', narrative.tag, 'Feed'],
+    };
+  });
+
+  const groupStoryTemplates = [
+    {
+      title: '{group} topluluğu haftalık öne çıkanlar #{index}',
+      body: '{group} takibinde olan 40 kullanıcının haftalık kullanım alışkanlıklarını karşılaştırdım. Yazılım güncellemeleri ve aksesuar tercihleri tek tabloda.',
+      tag: 'Community',
+    },
+    {
+      title: '{group} ekosistem rehberi #{index}',
+      body: '{group} ailesinde yeni olanlar için başlangıç düzeni hazırladım. Hangi aksesuar önce alınmalı, hangi senaryoda ikinci cihaz daha anlamlı olur sorularına yanıt verdim.',
+      tag: 'Setup',
+    },
+  ];
+
+  const phoneGroupsForStories = [productGroup, ...phoneProductGroups];
+  const dynamicProductGroupSeeds: ContextPostSeed[] = phoneGroupsForStories
+    .flatMap((group, index) => {
+      const template = groupStoryTemplates[index % groupStoryTemplates.length];
+      const replacements = {
+        group: group.name,
+        index: (index + 1).toString(),
+      };
+      const isHomeCategory = group.subCategoryId === evYasamSubCategory.id;
+      return {
+        title: templateReplacer(template.title, replacements),
+        body: templateReplacer(template.body, replacements),
+        mainCategoryId: isHomeCategory ? evYasamCategory.id : techCategory.id,
+        subCategoryId: group.subCategoryId,
+        productGroupId: group.id,
+        inventoryRequired: false,
+        isBoosted: index % 4 === 0,
+        tags: [group.name, template.tag, 'Series'],
+      };
+    })
+    .slice(0, 12);
+
+  const subCategoryStoryTemplates = [
+    {
+      subCategory: akilliTelefonlarSubCategory,
+      mainCategoryId: techCategory.id,
+      title: 'Akıllı Telefonlar kategorisinde trendler #{index}',
+      body: 'Yeni çıkan aksesuarlar, pil performansı ve kamera karşılaştırmalarını tek listede topladım. #{index}. haftada özellikle ekran kalibrasyonu gündemdeydi.',
+      tag: 'Trends',
+    },
+    {
+      subCategory: laptoplarSubCategory,
+      mainCategoryId: techCategory.id,
+      title: 'Laptop kategorisinde taşınabilirlik notları #{index}',
+      body: '14 inç üstü modellerde 65W GaN adaptörleriyle yaptığım seyahat testlerini paylaştım. #{index}. rota için ağırlık/ısı dengesi kritikti.',
+      tag: 'Mobility',
+    },
+    {
+      subCategory: kulakliklarSubCategory,
+      mainCategoryId: techCategory.id,
+      title: 'Kulaklık kategorisinde ANC laboratuvarı #{index}',
+      body: 'ANC seviyelerini uçak, metro ve açık ofis ortamlarında ölçtüm. #{index}. testte özellikle orta frekans sızıntıları öne çıktı.',
+      tag: 'Audio',
+    },
+    {
+      subCategory: evYasamSubCategory,
+      mainCategoryId: evYasamCategory.id,
+      title: 'Ev & Yaşam kategorisinde bakım rutini #{index}',
+      body: 'Kombine temizlik gündeminde robot + manuel süpürge kullanımını anlattım. #{index}. güncellemede deterjan dozajı önerilerini ekledim.',
+      tag: 'HomeCare',
+    },
+  ];
+
+  const subCategoryExpansionSeeds: ContextPostSeed[] = subCategoryStoryTemplates.flatMap((scenario) => {
+    return Array.from({ length: 3 }).map((_, idx) => ({
+      title: templateReplacer(scenario.title, { index: (idx + 1).toString() }),
+      body: templateReplacer(scenario.body, { index: (idx + 1).toString() }),
+      mainCategoryId: scenario.mainCategoryId,
+      subCategoryId: scenario.subCategory?.id || null,
+      productGroupId: null,
+      productId: null,
+      inventoryRequired: false,
+      isBoosted: idx === 0,
+      tags: [scenario.tag, 'Category', scenario.subCategory?.name || 'Context'],
+    }));
+  });
+
   const contextAwarePosts: ContextPostSeed[] = [
     ...productContextPosts,
     ...productGroupContextPosts,
     ...subCategoryContextPosts,
+    ...dynamicPhoneProductSeeds,
+    ...dynamicProductGroupSeeds,
+    ...subCategoryExpansionSeeds,
   ];
 
   for (const postSeed of contextAwarePosts) {
@@ -1304,29 +1521,80 @@ async function main() {
 
   // QUESTION Posts (asked by trust users, answered by test user)
   console.log('❓ Creating question posts for reply seeds...');
-  const questionSeeds = [
+  type QuestionTemplate = {
+    title: string;
+    body: string;
+    mainCategoryId: string;
+    subCategoryId: string;
+    productGroupId?: string | null;
+    productId?: string | null;
+    answerFormat: 'SHORT' | 'LONG';
+  };
+
+  const baseQuestionTemplates: QuestionTemplate[] = [
     {
-      askerId: TRUST_USER_IDS[0],
-      title: 'Dyson Submarine mop başlığı gerçekten gerekli mi?',
-      body: 'Kuru süpürme için V15 kullanıyorum, ıslak başlığa yatırım yapmalı mıyım? Mutfak ve banyo için performansı nasıldır?',
+      title: 'Dyson Submarine mop başlığı gerekli mi? #{index}',
+      body: 'V15 sürümünde ıslak başlık #{index}. kullanımda tüyleri topluyor mu? mutfak ve banyo için önerilerin nedir?',
       mainCategoryId: evYasamCategory.id,
       subCategoryId: evYasamSubCategory.id,
       productGroupId: productGroup.id,
       productId: product1.id,
+      answerFormat: 'LONG',
     },
     {
-      askerId: TRUST_USER_IDS[1],
-      title: 'iPhone 15 Pro’da USB-C aksesuarları nasıl etkiliyor?',
-      body: 'Harici SSD ile ProRes kayıt yapmak isteyenler için en stabil aksesuar/hız kombinasyonu nedir?',
+      title: 'iPhone 15 Pro USB-C senaryoları #{index}',
+      body: 'ProRes kayıt + harici SSD ile #{index}. sahnede ısı yönetimi ve aksesuar önerilerin neler?',
       mainCategoryId: techCategory.id,
       subCategoryId: akilliTelefonlarSubCategory.id,
       productGroupId: iphoneGroup.id,
-      productId: product3.id,
+      productId: applePhone?.id || product3.id,
+      answerFormat: 'LONG',
+    },
+    {
+      title: 'Samsung Dex üretkenlik sorusu #{index}',
+      body: 'Dex modunda çift ekran ve klavye kombinasyonlarında hangi aksesuarları önerirsin? #{index}. güncellemede stabilite nasıl?',
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      productGroupId: samsungGroup.id,
+      productId: samsungPhone?.id || product2.id,
+      answerFormat: 'SHORT',
+    },
+    {
+      title: 'Redmi batarya kalibrasyonu #{index}',
+      body: 'Budget cihazlarda MIUI arka plan ayarlarını nasıl optimize ediyorsun? #{index}. testte ekran süren kaç saat oldu?',
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      productGroupId: redmiGroup.id,
+      productId: redmiPhone?.id || product2.id,
+      answerFormat: 'SHORT',
+    },
+    {
+      title: 'Kulaklık ANC kıyas sorusu #{index}',
+      body: 'ANC seviyelerini uçakta ölçerken hangi filtreleri kullanıyorsun? #{index}. uçuş için önerin nedir?',
+      mainCategoryId: techCategory.id,
+      subCategoryId: kulakliklarSubCategory.id,
+      productGroupId: null,
+      productId: null,
+      answerFormat: 'LONG',
     },
   ];
 
+  const questionSeeds = Array.from({ length: 20 }).map((_, idx) => {
+    const template = baseQuestionTemplates[idx % baseQuestionTemplates.length];
+    return {
+      askerId: TRUST_USER_IDS[idx % TRUST_USER_IDS.length],
+      title: templateReplacer(template.title, { index: (idx + 1).toString() }),
+      body: templateReplacer(template.body, { index: (idx + 1).toString() }),
+      mainCategoryId: template.mainCategoryId,
+      subCategoryId: template.subCategoryId,
+      productGroupId: template.productGroupId ?? null,
+      productId: template.productId ?? null,
+      answerFormat: template.answerFormat,
+    };
+  });
+
   const questionPosts: Array<{ id: string }> = [];
-  for (const seed of questionSeeds) {
+  for (const [index, seed] of questionSeeds.entries()) {
     const questionPost = await prisma.contentPost.create({
       data: {
         id: generateUlid(),
@@ -1339,14 +1607,15 @@ async function main() {
         productGroupId: seed.productGroupId,
         productId: seed.productId,
         inventoryRequired: false,
-        isBoosted: true,
+        isBoosted: index % 4 === 0,
       },
     });
 
     await prisma.postQuestion.create({
       data: {
         postId: questionPost.id,
-        expectedAnswerFormat: 'LONG',
+        expectedAnswerFormat: seed.answerFormat,
+        relatedProductId: seed.productId,
       },
     });
 
@@ -1389,45 +1658,133 @@ async function main() {
   }
   console.log('✅ Question replies for test user created');
 
-  // TIPS Post (Tips&Tricks)
-  const tipsPostId = generateUlid()
-  await prisma.contentPost.create({
-    data: {
-      id: tipsPostId,
-      userId: userIdToUse,
-      type: 'TIPS',
-      title: 'Dyson Maintenance Tips',
-      body: 'Dyson V15s\'i uzun süre kullanmak için düzenli olarak filtreleri temizlemek ve şarj ederken tamamen boşaltmamak önemli. Ayrıca fırçaları ayda bir kez yıkamak performansı artırır.',
+  type TipSeed = {
+    title: string;
+    body: string;
+    productId: string | null;
+    mainCategoryId: string;
+    subCategoryId: string;
+    productGroupId?: string | null;
+    inventoryRequired?: boolean;
+    isBoosted?: boolean;
+    tags: string[];
+    tipCategory: 'USAGE' | 'PURCHASE' | 'CARE' | 'OTHER';
+  };
+
+  const baseTipTemplates: TipSeed[] = [
+    {
+      title: 'Dyson bakım rutini #{index}',
+      body: "Submarine modülünü #{index}. haftada nasıl temizlediğimi ve filtreleri hangi sırayla kuruttuğumu paylaşıyorum.",
       productId: product1.id,
       mainCategoryId: evYasamCategory.id,
       subCategoryId: evYasamSubCategory.id,
       inventoryRequired: true,
       isBoosted: false,
-    }
-  })
-
-  await prisma.postTip.create({
-    data: {
-      postId: tipsPostId,
+      tags: ['Maintenance', 'Care Tips'],
       tipCategory: 'CARE',
-      isVerified: true,
-    }
-  })
+    },
+    {
+      title: 'Samsung pil optimizasyonu #{index}',
+      body: `Good Lock + Routines ile ${samsungPhone?.name || 'Samsung'} cihazında ekran yenilemesini profil bazlı ayarlıyorum. #{index} numaralı profil akşamları otomatik devreye giriyor.`,
+      productId: samsungPhone?.id || product2.id,
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      inventoryRequired: true,
+      isBoosted: false,
+      tags: ['Battery Care', 'Samsung'],
+      tipCategory: 'USAGE',
+    },
+    {
+      title: 'iPhone lens bakımı #{index}',
+      body: `${applePhone?.name || 'iPhone'} çekimlerinden sonra mag-safe tripodları nasıl temizlediğimi ve hangi lens pen kombinasyonunu seçtiğimi anlattım.`,
+      productId: applePhone?.id || product3.id,
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      inventoryRequired: false,
+      isBoosted: true,
+      tags: ['Camera', 'Cleaning'],
+      tipCategory: 'CARE',
+    },
+    {
+      title: 'Redmi aksesuar sepeti #{index}',
+      body: `${redmiPhone?.name || 'Redmi'} için GaN adaptörleri kıyaslayıp ısı ölçümlerini paylaştım. #{index}. testte USB-C hub performansı öne çıktı.`,
+      productId: redmiPhone?.id || product2.id,
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      inventoryRequired: false,
+      isBoosted: false,
+      tags: ['Budget', 'Accessories'],
+      tipCategory: 'PURCHASE',
+    },
+    {
+      title: 'Laptop USB4 istasyonu #{index}',
+      body: 'Laptop kategorisinde seyahat ederken kullandığım USB4 hub ve kablo kombinasyonlarını listeledim. #{index}. rota için hız ölçümlerini ekledim.',
+      productId: null,
+      mainCategoryId: techCategory.id,
+      subCategoryId: laptoplarSubCategory.id,
+      inventoryRequired: false,
+      isBoosted: true,
+      tags: ['Productivity', 'Laptop'],
+      tipCategory: 'USAGE',
+    },
+  ];
 
-  await prisma.postTag.create({
-    data: {
-      postId: tipsPostId,
-      tag: 'Maintenance',
-    }
-  })
+  const expandedTipSeeds: TipSeed[] = Array.from({ length: 20 }).map((_, idx) => {
+    const template = baseTipTemplates[idx % baseTipTemplates.length];
+    const replacements = { index: (idx + 1).toString() };
+    return {
+      title: templateReplacer(template.title, replacements),
+      body: templateReplacer(template.body, replacements),
+      productId: template.productId ?? null,
+      mainCategoryId: template.mainCategoryId,
+      subCategoryId: template.subCategoryId,
+      productGroupId: template.productGroupId ?? null,
+      inventoryRequired: template.inventoryRequired ?? false,
+      isBoosted: template.isBoosted ?? idx % 6 === 0,
+      tags: template.tags,
+      tipCategory: template.tipCategory,
+    };
+  });
 
-  await prisma.contentPostTag.createMany({
-    data: [
-      { postId: tipsPostId, tag: 'Maintenance' },
-      { postId: tipsPostId, tag: 'Care Tips' },
-    ],
-    skipDuplicates: true,
-  })
+  for (const tipSeed of expandedTipSeeds) {
+    const tipPostId = generateUlid();
+    await prisma.contentPost.create({
+      data: {
+        id: tipPostId,
+        userId: userIdToUse,
+        type: 'TIPS',
+        title: tipSeed.title,
+        body: tipSeed.body,
+        productId: tipSeed.productId,
+        mainCategoryId: tipSeed.mainCategoryId,
+        subCategoryId: tipSeed.subCategoryId,
+        inventoryRequired: tipSeed.inventoryRequired ?? false,
+        isBoosted: tipSeed.isBoosted ?? false,
+      },
+    });
+
+    await prisma.postTip.create({
+      data: {
+        postId: tipPostId,
+        tipCategory: tipSeed.tipCategory,
+        isVerified: true,
+      },
+    });
+
+    if (tipSeed.tags.length) {
+      await prisma.postTag.create({
+        data: {
+          postId: tipPostId,
+          tag: tipSeed.tags[0],
+        },
+      }).catch(() => {});
+
+      await prisma.contentPostTag.createMany({
+        data: tipSeed.tags.map((tag) => ({ postId: tipPostId, tag })),
+        skipDuplicates: true,
+      });
+    }
+  }
 
   // COMPARE Post (Benchmark)
   const comparePostId = generateUlid()
@@ -1456,13 +1813,10 @@ async function main() {
   })
 
   // Comparison Scores
-  const fiyatMetric = metrics.find(m => m.name === 'Fiyat')!
-  const kaliteMetric = metrics.find(m => m.name === 'Kalite')!
-
   await prisma.postComparisonScore.create({
     data: {
       comparisonId: comparison.id,
-      metricId: fiyatMetric.id,
+      metricId: priceMetric.id,
       scoreProduct1: 7,
       scoreProduct2: 8,
       comment: 'V12 daha uygun fiyatlı',
@@ -1472,14 +1826,275 @@ async function main() {
   await prisma.postComparisonScore.create({
     data: {
       comparisonId: comparison.id,
-      metricId: kaliteMetric.id,
+      metricId: qualityMetric.id,
       scoreProduct1: 9,
       scoreProduct2: 8,
       comment: 'V15s kalite açısından daha üstün',
     }
   })
 
-  console.log('✅ Content posts created (Free context mix, Tips, Benchmarks)')
+  type BenchmarkSeed = {
+    title: string;
+    body: string;
+    product1Id: string;
+    product2Id: string;
+    summary: string;
+    mainCategoryId: string;
+    subCategoryId: string;
+    isBoosted?: boolean;
+    metricScores: Array<{
+      metricId: string;
+      scoreProduct1: number;
+      scoreProduct2: number;
+      comment?: string;
+    }>;
+  };
+
+  const baseBenchmarkTemplates: BenchmarkSeed[] = [
+    {
+      title: 'Samsung vs iPhone Pil Dayanımı Karşılaştırması #{index}',
+      body: 'İki cihazı da 120 Hz ekran, hotspot ve kamera kaydı ile aynı rotada kullandım. Pil yüzdeleri ve şarj alışkanlıklarını #{index}. rota için tabloya döktüm.',
+      product1Id: samsungPhone?.id || product2.id,
+      product2Id: applePhone?.id || product3.id,
+      summary: 'Galaxy daha yüksek pil kapasitesiyle günü çıkardı fakat iPhone daha stabil sıcaklık sundu (#{index}).',
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      metricScores: [
+        {
+          metricId: priceMetric.id,
+          scoreProduct1: 7,
+          scoreProduct2: 6,
+          comment: 'Galaxy fiyat avantajı sağlıyor',
+        },
+        {
+          metricId: usabilityMetric.id,
+          scoreProduct1: 8,
+          scoreProduct2: 9,
+          comment: 'iPhone daha kararlı yazılım sunuyor',
+        },
+      ],
+    },
+    {
+      title: 'Redmi vs Samsung Ekran Parlaklığı Testi #{index}',
+      body: 'Güneş altında HDR içerik tüketirken ölçtüğüm nit değerlerini ve uzun kullanım sonucunda oluşan ısınmayı anlattım (#{index}).',
+      product1Id: redmiPhone?.id || product2.id,
+      product2Id: samsungPhone?.id || product2.id,
+      summary: 'Samsung daha yüksek tepe parlaklığına sahip fakat Redmi enerji tüketiminde daha verimli kaldı.',
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      metricScores: [
+        {
+          metricId: qualityMetric.id,
+          scoreProduct1: 8,
+          scoreProduct2: 9,
+          comment: 'Ekran kalitesi Samsung tarafında daha rafine',
+        },
+        {
+          metricId: designMetric.id,
+          scoreProduct1: 7,
+          scoreProduct2: 8,
+        },
+      ],
+    },
+    {
+      title: 'Dyson V15s vs Samsung Jet Temizlik Karşılaştırması #{index}',
+      body: 'Ev & yaşam rutinimde iki cihazı da mutfak + salon kombinasyonunda karşılaştırdım. Islak başlıktaki kolaylık vs hafif gövde tercihi öne çıktı (#{index}).',
+      product1Id: product1.id,
+      product2Id: product2.id,
+      summary: 'V15s güçte önde, Jet ise manevra kabiliyetiyle fark yaratıyor.',
+      mainCategoryId: evYasamCategory.id,
+      subCategoryId: evYasamSubCategory.id,
+      isBoosted: true,
+      metricScores: [
+        {
+          metricId: durabilityMetric.id,
+          scoreProduct1: 9,
+          scoreProduct2: 7,
+        },
+        {
+          metricId: usabilityMetric.id,
+          scoreProduct1: 8,
+          scoreProduct2: 9,
+        },
+      ],
+    },
+    {
+      title: 'iPhone 15 Pro vs Redmi Kamera Seçimi #{index}',
+      body: 'LOG video çekimleri ve sosyal medya hazır filtreleri için iki cihazı da aynı sahnede kullandım. Lens değişim hızını ve aksesuar uyumunu anlattım (#{index}).',
+      product1Id: applePhone?.id || product3.id,
+      product2Id: redmiPhone?.id || product2.id,
+      summary: 'iPhone video tarafında üstünken Redmi sosyal içerik üreticileri için hızlı filtre seçenekleri sunuyor.',
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      metricScores: [
+        {
+          metricId: qualityMetric.id,
+          scoreProduct1: 9,
+          scoreProduct2: 7,
+        },
+        {
+          metricId: priceMetric.id,
+          scoreProduct1: 5,
+          scoreProduct2: 9,
+        },
+      ],
+    },
+  ];
+
+  const benchmarkSeeds: BenchmarkSeed[] = Array.from({ length: 20 }).map((_, idx) => {
+    const template = baseBenchmarkTemplates[idx % baseBenchmarkTemplates.length];
+    const replacements = { index: (idx + 1).toString() };
+    return {
+      title: templateReplacer(template.title, replacements),
+      body: templateReplacer(template.body, replacements),
+      product1Id: template.product1Id,
+      product2Id: template.product2Id,
+      summary: templateReplacer(template.summary, replacements),
+      mainCategoryId: template.mainCategoryId,
+      subCategoryId: template.subCategoryId,
+      isBoosted: template.isBoosted ?? idx % 5 === 0,
+      metricScores: template.metricScores,
+    };
+  });
+
+  for (const benchmarkSeed of benchmarkSeeds) {
+    const compareId = generateUlid();
+    await prisma.contentPost.create({
+      data: {
+        id: compareId,
+        userId: userIdToUse,
+        type: 'COMPARE',
+        title: benchmarkSeed.title,
+        body: benchmarkSeed.body,
+        mainCategoryId: benchmarkSeed.mainCategoryId,
+        subCategoryId: benchmarkSeed.subCategoryId,
+        productId: benchmarkSeed.product1Id,
+        inventoryRequired: false,
+        isBoosted: benchmarkSeed.isBoosted ?? false,
+      },
+    });
+
+    const comparisonEntry = await prisma.postComparison.create({
+      data: {
+        postId: compareId,
+        product1Id: benchmarkSeed.product1Id,
+        product2Id: benchmarkSeed.product2Id,
+        comparisonSummary: benchmarkSeed.summary,
+      },
+    });
+
+    for (const score of benchmarkSeed.metricScores) {
+      await prisma.postComparisonScore.create({
+        data: {
+          comparisonId: comparisonEntry.id,
+          metricId: score.metricId,
+          scoreProduct1: score.scoreProduct1,
+          scoreProduct2: score.scoreProduct2,
+          comment: score.comment,
+        },
+      });
+    }
+  }
+
+  console.log(`✅ ${benchmarkSeeds.length} benchmark posts created`)
+
+  console.log('📝 Creating experience posts for FeedItemType.POST...');
+  type ExperienceSeed = {
+    title: string;
+    body: string;
+    mainCategoryId: string;
+    subCategoryId: string;
+    productId: string;
+    tags: string[];
+    isBoosted?: boolean;
+    inventoryRequired?: boolean;
+  };
+
+  const baseExperienceTemplates: ExperienceSeed[] = [
+    {
+      title: 'Dyson günlük rutin #{index}',
+      body: 'Islak + kuru mod arasında geçişte #{index}. gün uyguladığım temizlik sırasını ve bakım notlarını listeledim.',
+      mainCategoryId: evYasamCategory.id,
+      subCategoryId: evYasamSubCategory.id,
+      productId: product1.id,
+      tags: ['Dyson', 'Rutin'],
+      inventoryRequired: true,
+    },
+    {
+      title: 'Samsung Dex çalışma masası #{index}',
+      body: 'Dex modunda iki monitör + bluetooth klavye kombinasyonuyla nasıl remote ofis kurduğumu anlattım.',
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      productId: samsungPhone?.id || product2.id,
+      tags: ['Productivity', 'Samsung'],
+    },
+    {
+      title: 'iPhone Pro video workflow #{index}',
+      body: 'LOG video çekip SSD aktarırken DaVinci kurgu pipeline’ımı paylaştım. #{index}. proje için LUT notları ekledim.',
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      productId: applePhone?.id || product3.id,
+      tags: ['Creator', 'Video'],
+      isBoosted: true,
+    },
+    {
+      title: 'Redmi MIUI test günlüğü #{index}',
+      body: 'MIUI beta sürümlerini yüklerken aldığım hataları ve pil gözlemlerini aktardım.',
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      productId: redmiPhone?.id || product2.id,
+      tags: ['MIUI', 'Beta'],
+    },
+    {
+      title: 'Laptop seyahat çantası #{index}',
+      body: 'USB4 dock, GaN adaptör ve kablosuz mouse kombinasyonunu #{index}. şehirde nasıl düzenlediğimi anlattım.',
+      mainCategoryId: techCategory.id,
+      subCategoryId: laptoplarSubCategory.id,
+      productId: product3.id,
+      tags: ['Laptop', 'Travel'],
+    },
+  ];
+
+  const experienceSeeds: ExperienceSeed[] = Array.from({ length: 20 }).map((_, idx) => {
+    const template = baseExperienceTemplates[idx % baseExperienceTemplates.length];
+    return {
+      ...template,
+      title: templateReplacer(template.title, { index: (idx + 1).toString() }),
+      body: templateReplacer(template.body, { index: (idx + 1).toString() }),
+      isBoosted: template.isBoosted ?? idx % 4 === 0,
+    };
+  });
+
+  for (const seed of experienceSeeds) {
+    const postId = generateUlid();
+    await prisma.contentPost.create({
+      data: {
+        id: postId,
+        userId: userIdToUse,
+        type: 'EXPERIENCE',
+        title: seed.title,
+        body: seed.body,
+        mainCategoryId: seed.mainCategoryId,
+        subCategoryId: seed.subCategoryId,
+        productId: seed.productId,
+        inventoryRequired: seed.inventoryRequired ?? false,
+        isBoosted: seed.isBoosted ?? false,
+      },
+    });
+
+    if (seed.tags.length) {
+      await prisma.contentPostTag.createMany({
+        data: seed.tags.map((tag) => ({
+          postId,
+          tag,
+        })),
+        skipDuplicates: true,
+      });
+    }
+  }
+  console.log(`✅ ${experienceSeeds.length} experience posts created`)
+
+  console.log('✅ Content posts created (Free context mix, Tips, Benchmarks, Experience)')
 
   // Content Comments (Replies için)
   const comments = await prisma.contentPost.findMany({
@@ -1587,13 +2202,45 @@ async function main() {
   }
   console.log('✅ Content stats enriched (likes/comments/shares/bookmarks)')
 
+  // Ensure non-primary user posts (e.g. trust users' questions) also have non-zero stats
+  const postsNeedingStats = await prisma.contentPost.findMany({
+    where: { sharesCount: 0 },
+  })
+
+  if (postsNeedingStats.length) {
+    console.log(`ℹ️  Found ${postsNeedingStats.length} posts with zero share stats, enriching...`)
+    for (let idx = 0; idx < postsNeedingStats.length; idx++) {
+      const post = postsNeedingStats[idx]
+      const template = statTemplates[(idx + allPosts.length) % statTemplates.length]
+      const variance = 0.65 + Math.random() * 0.85
+      const likes = Math.max(4, Math.round(template.likes * variance))
+      const comments = Math.max(1, Math.round(template.comments * (0.5 + Math.random() * 0.7)))
+      const shares = Math.max(1, Math.round(template.shares * (0.5 + Math.random())))
+      const bookmarks = Math.max(1, Math.round(template.bookmarks * (0.4 + Math.random())))
+      const views = Math.max(likes * randomBetween(5, 12) + randomBetween(20, 100), likes + comments + shares + bookmarks)
+
+      await prisma.contentPost.update({
+        where: { id: post.id },
+        data: {
+          likesCount: likes,
+          commentsCount: comments,
+          sharesCount: shares,
+          favoritesCount: bookmarks,
+          viewsCount: views,
+        },
+      }).catch(() => {})
+    }
+    console.log('✅ Additional stats enriched for non-primary user posts')
+  }
+
   // Feed Entries - Kullanıcıların feed'inde görünecek post'lar
   console.log('📰 Creating feed entries...')
   
   // Tüm post'ları al
   const allPostsForFeed = await prisma.contentPost.findMany({
     where: {},
-    take: 20, // İlk 20 post'u feed'e ekle
+    orderBy: { createdAt: 'desc' },
+    take: 80, // Daha geniş feed testi için 80 post ekle
   })
 
   // Her post için test kullanıcısının feed'ine ekle
@@ -2439,6 +3086,48 @@ async function main() {
   )
   const createdBrands = brands.filter(Boolean)
   console.log(`✅ ${createdBrands.length} brand oluşturuldu`)
+
+  console.log('🏅 Creating bridge rewards for profile collections...')
+  const bridgeBrandNames = ['TechVision', 'SmartHome Pro', 'CoffeeDelight']
+  const bridgeBrandRecords = await prisma.brand.findMany({
+    where: { name: { in: bridgeBrandNames } }
+  })
+  const bridgeBrandMap = new Map(bridgeBrandRecords.map((brand) => [brand.name, brand]))
+
+  const bridgeRewardSeeds = [
+    { userId: userIdToUse, badgeId: bridgeAmbassadorBadge.id, brandName: 'TechVision', daysAgoValue: 45 },
+    { userId: userIdToUse, badgeId: brandVisionaryBadge.id, brandName: 'SmartHome Pro', daysAgoValue: 12 },
+    { userId: TARGET_USER_ID, badgeId: bridgeAmbassadorBadge.id, brandName: 'SmartHome Pro', daysAgoValue: 30 },
+    { userId: TRUST_USER_IDS[0], badgeId: bridgeAmbassadorBadge.id, brandName: 'CoffeeDelight', daysAgoValue: 20 },
+    { userId: TRUST_USER_IDS[1], badgeId: brandVisionaryBadge.id, brandName: 'TechVision', daysAgoValue: 8 },
+  ]
+
+  let createdBridgeRewards = 0
+  for (const seed of bridgeRewardSeeds) {
+    const brand = bridgeBrandMap.get(seed.brandName)
+    if (!brand) continue
+
+    const existingReward = await prisma.bridgeReward.findFirst({
+      where: {
+        userId: seed.userId,
+        badgeId: seed.badgeId,
+        brandId: brand.id,
+      }
+    }).catch(() => null)
+
+    if (existingReward) continue
+
+    await prisma.bridgeReward.create({
+      data: {
+        userId: seed.userId,
+        brandId: brand.id,
+        badgeId: seed.badgeId,
+        awardedAt: daysAgo(seed.daysAgoValue),
+      }
+    })
+    createdBridgeRewards++
+  }
+  console.log(`✅ ${createdBridgeRewards} bridge rewards created`)
 
   // 5. Create Expert Requests and Answers
   console.log('💡 Creating expert requests...')

@@ -35,24 +35,29 @@ type BasicStats = {
   bookmarks: number;
 };
 
+type CollectionTaskType = 'Yorum Yap' | 'Beğeni' | 'Paylaşma' | 'Görev';
+
 type CollectionTask = {
   id: string;
   title: string;
   icon: string;
+  type: CollectionTaskType;
   targetCount: number;
   currentCount: number;
 };
+
+type CollectionRarity = 'Usual' | 'Rare' | 'Epic' | 'Legendary';
 
 type CollectionResponse = {
   id: string;
   type: 'achievement' | 'bridge';
   title: string;
-  rarity: 'usual' | 'rare';
+  rarity: CollectionRarity;
   image: string | null;
   isClaimed: boolean;
-  nftId: string | null;
+  nftAddress: string | null;
   earnDate: string | null;
-  totalOwners: number;
+  totalEarned: number;
   tasks: CollectionTask[];
 };
 
@@ -82,6 +87,29 @@ const EXPERIENCE_SECTION_CODES = {
 const BADGE_PLACEHOLDER_URL =
   process.env.DEFAULT_BADGE_IMAGE_URL ||
   'https://cdn.tipbox.co/assets/badges/default.png';
+
+const COLLECTION_RARITY_MAP: Record<string, CollectionRarity> = {
+  COMMON: 'Usual',
+  RARE: 'Rare',
+  EPIC: 'Epic',
+  LEGENDARY: 'Legendary',
+};
+
+const TASK_TYPE_KEYWORDS: Array<{ matcher: RegExp; type: CollectionTaskType }> = [
+  { matcher: /yorum/i, type: 'Yorum Yap' },
+  { matcher: /beğeni|like/i, type: 'Beğeni' },
+  { matcher: /paylaş/i, type: 'Paylaşma' },
+];
+
+const inferTaskType = (title?: string, requirement?: string): CollectionTaskType => {
+  const source = `${title ?? ''} ${requirement ?? ''}`.trim();
+  if (!source) return 'Görev';
+  const match = TASK_TYPE_KEYWORDS.find(({ matcher }) => matcher.test(source));
+  return match?.type ?? 'Görev';
+};
+
+export const PROFILE_FEED_CARD_TYPES = ['post', 'feed', 'benchmark', 'tipsAndTricks', 'question'] as const;
+export type ProfileFeedCardType = (typeof PROFILE_FEED_CARD_TYPES)[number];
 
 export class UserService {
   private readonly s3Service: S3Service;
@@ -682,12 +710,6 @@ export class UserService {
       orderBy: { claimedAt: 'desc' },
     });
 
-    const rarityMap: Record<string, 'usual' | 'rare'> = {
-      COMMON: 'usual',
-      RARE: 'rare',
-      EPIC: 'rare',
-    };
-
     return userBadges.map((ub) => {
       const badge = (ub as any).badge;
       const goals = (badge?.achievementGoals || []) as any[];
@@ -697,6 +719,7 @@ export class UserService {
           id: String(goal.id),
           title: goal.title,
           icon: 'default',
+          type: inferTaskType(goal.title, goal.requirement),
           targetCount: goal.pointsRequired ?? 0,
           currentCount: userAchievement?.progress ?? 0,
         };
@@ -706,12 +729,12 @@ export class UserService {
         id: String(badge?.id || ''),
         type: 'achievement' as const,
         title: badge?.name || '',
-        rarity: rarityMap[badge?.rarity || 'COMMON'] || 'usual',
-        image: badge?.imageUrl ?? null,
+        rarity: COLLECTION_RARITY_MAP[badge?.rarity || 'COMMON'] || 'Usual',
+        image: badge?.imageUrl ?? BADGE_PLACEHOLDER_URL,
         isClaimed: !!ub.claimed,
-        nftId: null,
+        nftAddress: null,
         earnDate: ub.claimedAt ? ub.claimedAt.toISOString() : null,
-        totalOwners: badge?._count?.userBadges ?? 0,
+        totalEarned: badge?._count?.userBadges ?? 0,
         tasks,
       } as CollectionResponse;
     });
@@ -740,22 +763,16 @@ export class UserService {
       orderBy: { awardedAt: 'desc' },
     } as any);
 
-    const rarityMap: Record<string, 'usual' | 'rare'> = {
-      COMMON: 'usual',
-      RARE: 'rare',
-      EPIC: 'rare',
-    };
-
     return rewards.map((rw: any) => ({
       id: String(rw.badge?.id || ''),
       type: 'bridge' as const,
       title: rw.badge?.name || '',
-      rarity: rarityMap[rw.badge?.rarity || 'COMMON'] || 'usual',
-      image: rw.badge?.imageUrl ?? null,
+      rarity: COLLECTION_RARITY_MAP[rw.badge?.rarity || 'COMMON'] || 'Usual',
+      image: rw.badge?.imageUrl ?? BADGE_PLACEHOLDER_URL,
       isClaimed: true,
-      nftId: null,
+      nftAddress: null,
       earnDate: rw.awardedAt ? rw.awardedAt.toISOString() : null,
-      totalOwners: rw.badge?._count?.bridgeRewards ?? 0,
+      totalEarned: rw.badge?._count?.bridgeRewards ?? 0,
       tasks: [],
     }));
   }
@@ -1730,6 +1747,49 @@ export class UserService {
     return Math.abs(hash);
   }
 
+  async getUserProfileFeed(
+    userId: string,
+    options?: {
+      limit?: number;
+      types?: ProfileFeedCardType[];
+    }
+  ): Promise<any[]> {
+    const limit = options?.limit && options.limit > 0 ? options.limit : undefined;
+    const requestedTypes = options?.types?.length
+      ? Array.from(new Set(options.types))
+      : PROFILE_FEED_CARD_TYPES;
+
+    const fetchers = requestedTypes.map((cardType) => {
+      switch (cardType) {
+        case 'feed':
+          return this.getUserReviews(userId);
+        case 'benchmark':
+          return this.getUserBenchmarks(userId);
+        case 'tipsAndTricks':
+          return this.getUserTips(userId);
+        case 'question':
+          return this.getUserReplies(userId);
+        case 'post':
+        default:
+          return this.getUserPosts(userId);
+      }
+    });
+
+    const chunks = await Promise.all(fetchers);
+    const merged = chunks.flat();
+    const resolveTimestamp = (item: any): number => {
+      const value = item?.createdAt;
+      return value ? new Date(value).getTime() : 0;
+    };
+    merged.sort((a, b) => resolveTimestamp(b) - resolveTimestamp(a));
+
+    if (limit) {
+      return merged.slice(0, limit);
+    }
+
+    return merged;
+  }
+
   /**
    * Batch endpoint: Profile card + tab verilerini tek istekte döner
    * Performance optimizasyonu için: İlk ekran için gerekli tüm verileri tek seferde getirir
@@ -1785,7 +1845,7 @@ export class UserService {
 
     const tabPromises: Promise<any[]>[] = [];
     if (includeTabs.includes('feed')) {
-      tabPromises.push(this.getUserPosts(userId));
+      tabPromises.push(this.getUserProfileFeed(userId, { limit }));
     }
     if (includeTabs.includes('reviews')) {
       tabPromises.push(this.getUserReviews(userId));

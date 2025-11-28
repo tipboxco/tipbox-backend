@@ -1,0 +1,48 @@
+Endpoint Workflow Rule
+======================
+
+Trigger
+-------
+- Manual command: `check endpoint <name>`
+- Optional cron: Notion MCP endpoint scan
+
+Actions
+-------
+1. **Notion Endpoint Reader**
+   - Read all GET response templates for `<name>` from Notion dataset pages.
+   - Diff against last snapshot and list altered fields/structures.
+
+2. **Current State Check**
+   - Inspect backend router/service/DTO/domain for the endpoint.
+   - Run real GET requests via terminal (e.g. `/users/{id}/posts`) and capture JSON.
+   - Compare actual responses to Notion templates.
+
+3. **Gap Analysis**
+   - Record missing/wrong fields (enum casing, empty `contextData.image`, absent `isOwned`, etc.).
+   - Flag insufficient seed diversity (context types, unread counts, support statuses).
+
+4. **Seed Plan**
+   - Design new seed blocks inside `prisma/seed.ts`.
+   - Select visuals from local `@assets`, plan upload flow asset → MinIO → DB URL (via `getSeedMediaUrl`).
+   - Document required FK/context relationships (`userId`, `contextId`, media, etc.).
+
+5. **Implementation & Seed Execution**
+   - Apply router/service/DTO/domain updates based on gaps.
+   - Implement seed plan and run `npm run db:seed` (or Prisma CLI).
+   - After seeding, verify DB counts (e.g. ≥3 records per `contextType`).
+
+6. **Manual Validation**
+   - Re-run endpoint requests.
+   - Ensure responses mirror DB values (`contextType`, `contextData`, `stats`, images).
+   - Log any mismatches.
+
+7. **Report & Fix**
+   - Document discrepancies.
+   - Open Cursor auto-fix tasks/PRs for outstanding issues.
+
+Notes
+-----
+- All seed additions must live in `prisma/seed.ts`.
+- Image references: local assets → MinIO upload → DB URL storage.
+- Use manual HTTP + DB verification (not Jest) for this workflow.
+
