@@ -320,6 +320,7 @@ export class ExploreService {
 
         return {
           eventId: event.id,
+          eventType: (event as any).eventType || 'SURVEY',
           image: (event as any).imageUrl || null,
           title: event.title,
           description: event.description || '',
@@ -571,12 +572,10 @@ export class ExploreService {
   }
 
   private mapToPostItem(post: any, basePost: any, type: any, images: string[] = []) {
-    const product = this.getProductBase(post.product);
     const postData = {
       ...basePost,
       type,
       contextData: this.buildContextData(post),
-      product: product || null,
       content: post.body,
       images,
     };
@@ -627,14 +626,12 @@ export class ExploreService {
   }
 
   private mapToTipsAndTricksItem(post: any, basePost: any, images: string[] = []) {
-    const product = this.getProductBase(post.product);
     const tag = post.tags?.[0]?.tag || post.contentPostTags?.[0]?.tag || '';
 
     const tipsData = {
       ...basePost,
       type: FeedItemType.TIPS_AND_TRICKS,
       contextData: this.buildContextData(post),
-      product: product || null,
       content: post.body,
       tag,
       images,

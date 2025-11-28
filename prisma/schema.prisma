@@ -1093,6 +1093,7 @@ model WishboxEvent {
   startDate   DateTime           @map("start_date")
   endDate     DateTime           @map("end_date")
   status      WishboxEventStatus @default(DRAFT)
+  eventType   WishboxEventType   @default(SURVEY) @map("event_type")
   createdAt   DateTime           @default(now()) @map("created_at")
   updatedAt   DateTime           @updatedAt @map("updated_at")
   rewards     WishboxReward[]
@@ -1665,6 +1666,16 @@ enum WishboxEventStatus {
   CLOSED
 
   @@map("wishbox_event_status")
+}
+
+enum WishboxEventType {
+  SURVEY
+  POLL
+  CONTEST
+  CHALLENGE
+  PROMOTION
+
+  @@map("wishbox_event_type")
 }
 
 enum WishboxRewardType {

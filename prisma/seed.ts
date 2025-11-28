@@ -3128,19 +3128,52 @@ async function main() {
   ])
   console.log(`✅ ${banners.length} marketplace banner oluşturuldu`)
 
-  // 2. Trending Posts - Add some posts to trending
+  // 2. Trending Posts - Add diverse posts by type to trending
   console.log('📈 Creating trending posts...')
-  const allContentPosts = await prisma.contentPost.findMany({ take: 10 })
-  const postsForTrending = allContentPosts.slice(0, 8) // Top 8 posts will be trending
+  // Get posts by type to ensure diversity
+  const freePosts = await prisma.contentPost.findMany({
+    where: { type: 'FREE' },
+    take: 8,
+    orderBy: { createdAt: 'desc' },
+  })
+  const tipsPosts = await prisma.contentPost.findMany({
+    where: { type: 'TIPS' },
+    take: 6,
+    orderBy: { createdAt: 'desc' },
+  })
+  const comparePosts = await prisma.contentPost.findMany({
+    where: { type: 'COMPARE' },
+    take: 6,
+    orderBy: { createdAt: 'desc' },
+  })
+  const questionPostsForTrending = await prisma.contentPost.findMany({
+    where: { type: 'QUESTION' },
+    take: 5,
+    orderBy: { createdAt: 'desc' },
+  })
+  const experiencePosts = await prisma.contentPost.findMany({
+    where: { type: 'EXPERIENCE' },
+    take: 5,
+    orderBy: { createdAt: 'desc' },
+  })
+
+  const allPostsForTrending = [
+    ...freePosts,
+    ...tipsPosts,
+    ...comparePosts,
+    ...questionPostsForTrending,
+    ...experiencePosts,
+  ].slice(0, 30) // Top 30 posts will be trending
+
   const trendingPosts: any[] = []
-  for (const post of postsForTrending) {
-    const index = postsForTrending.indexOf(post)
+  for (let i = 0; i < allPostsForTrending.length; i++) {
+    const post = allPostsForTrending[i]
     try {
       const trendingPost = await prisma.trendingPost.create({
         data: {
           id: generateUlid(),
           postId: post.id,
-          score: 100 - index * 10, // Descending scores
+          score: 100 - i * 3, // Descending scores
           trendPeriod: 'DAILY',
           calculatedAt: new Date(),
         },
@@ -3148,100 +3181,109 @@ async function main() {
       trendingPosts.push(trendingPost)
     } catch (error) {
       // Skip if already exists (unique constraint)
-      console.log(`⚠️  Trending post for ${post.id} already exists, skipping...`)
     }
   }
-  console.log(`✅ ${trendingPosts.length} trending post oluşturuldu`)
+  console.log(`✅ ${trendingPosts.length} trending post oluşturuldu (çeşitli type'larda)`)
 
-  // 3. Wishbox Events (What's News)
+  // 3. Wishbox Events (What's News) - Diverse event types
   console.log('🎪 Creating wishbox events...')
   const today = new Date()
   const nextWeek = new Date()
   nextWeek.setDate(today.getDate() + 7)
   const nextMonth = new Date()
   nextMonth.setMonth(today.getMonth() + 1)
+  const nextTwoWeeks = new Date()
+  nextTwoWeeks.setDate(today.getDate() + 14)
 
-  const events = await Promise.all([
-    prisma.wishboxEvent.create({
-      data: {
-        id: generateUlid(),
-        title: 'Yılbaşı Mega Ödül Anketi',
-        description: 'Yılın en iyi ürünlerini belirle, büyük ödüller kazan! 1000 TIPS havuzu seni bekliyor.',
-        startDate: today,
-        endDate: nextMonth,
-        status: 'PUBLISHED',
-      },
-    }),
-    prisma.wishboxEvent.create({
-      data: {
-        id: generateUlid(),
-        title: 'Teknoloji Trendleri 2024',
-        description: '2024\'ün en çok beklenen teknoloji ürünlerini seçiyoruz. Senin tercihin ne?',
-        startDate: today,
-        endDate: nextWeek,
-        status: 'PUBLISHED',
-      },
-    }),
-    prisma.wishboxEvent.create({
-      data: {
-        id: generateUlid(),
-        title: 'Kahve Tutkunlarının Anketi',
-        description: 'En iyi kahve makinesi hangisi? Kahve severlerin tercihleri bu etkinlikte belirleniyor.',
-        startDate: today,
-        endDate: nextWeek,
-        status: 'PUBLISHED',
-      },
-    }),
-  ])
-  console.log(`✅ ${events.length} wishbox event oluşturuldu`)
+  const eventTemplates = [
+    // SURVEY events
+    { title: 'Yılbaşı Mega Ödül Anketi', description: 'Yılın en iyi ürünlerini belirle, büyük ödüller kazan! 1000 TIPS havuzu seni bekliyor.', eventType: 'SURVEY' as const, endDate: nextMonth },
+    { title: 'Kullanıcı Memnuniyet Anketi', description: 'Platform deneyimini değerlendir, görüşlerini paylaş!', eventType: 'SURVEY' as const, endDate: nextTwoWeeks },
+    { title: 'Ürün Tercih Anketi', description: 'Hangi ürünleri tercih ediyorsun? Tercihlerini paylaş!', eventType: 'SURVEY' as const, endDate: nextWeek },
+    // POLL events
+    { title: 'Teknoloji Trendleri 2024', description: '2024\'ün en çok beklenen teknoloji ürünlerini seçiyoruz. Senin tercihin ne?', eventType: 'POLL' as const, endDate: nextWeek },
+    { title: 'En İyi Marka Oylaması', description: 'Hangi markayı tercih ediyorsun? Oyunu kullan!', eventType: 'POLL' as const, endDate: nextTwoWeeks },
+    { title: 'Yılın Ürünü Oylaması', description: '2024\'ün en iyi ürününü belirle!', eventType: 'POLL' as const, endDate: nextMonth },
+    // CONTEST events
+    { title: 'Kahve Tutkunlarının Anketi', description: 'En iyi kahve makinesi hangisi? Kahve severlerin tercihleri bu etkinlikte belirleniyor.', eventType: 'CONTEST' as const, endDate: nextWeek },
+    { title: 'Fotoğraf Yarışması', description: 'En güzel ürün fotoğraflarını paylaş, ödüller kazan!', eventType: 'CONTEST' as const, endDate: nextTwoWeeks },
+    { title: 'İçerik Yarışması', description: 'En yaratıcı içerikleri oluştur, büyük ödüller kazan!', eventType: 'CONTEST' as const, endDate: nextMonth },
+    // CHALLENGE events
+    { title: '30 Günlük Ürün Deneyimi', description: '30 gün boyunca ürün deneyimini paylaş, rozet kazan!', eventType: 'CHALLENGE' as const, endDate: nextMonth },
+    { title: 'Topluluk Meydan Okuması', description: 'Diğer kullanıcılarla yarış, liderlik tablosunda yer al!', eventType: 'CHALLENGE' as const, endDate: nextTwoWeeks },
+    { title: 'Aylık Görevler', description: 'Aylık görevleri tamamla, özel ödüller kazan!', eventType: 'CHALLENGE' as const, endDate: nextMonth },
+    // PROMOTION events
+    { title: 'Özel İndirim Kampanyası', description: 'Sınırlı süre özel indirimler! Kaçırma!', eventType: 'PROMOTION' as const, endDate: nextWeek },
+    { title: 'Yeni Üye Ödülleri', description: 'Yeni üyelere özel hediyeler ve avantajlar!', eventType: 'PROMOTION' as const, endDate: nextTwoWeeks },
+    { title: 'Sezon Sonu Fırsatları', description: 'Sezon sonu özel fırsatlar ve kampanyalar!', eventType: 'PROMOTION' as const, endDate: nextMonth },
+  ]
 
-  // Create scenarios for events
+  const events = await Promise.all(
+    eventTemplates.map((template) =>
+      prisma.wishboxEvent.create({
+        data: {
+          id: generateUlid(),
+          title: template.title,
+          description: template.description,
+          startDate: today,
+          endDate: template.endDate,
+          status: 'PUBLISHED',
+          eventType: template.eventType,
+        } as any,
+      }).catch(() => null)
+    )
+  )
+  const createdEvents = events.filter(Boolean) as any[]
+  console.log(`✅ ${createdEvents.length} wishbox event oluşturuldu (tüm eventType'larda çeşitli)`)
+
+  // Create scenarios for events (first 3 events)
   console.log('🎯 Creating event scenarios...')
   const scenarios = await Promise.all([
     // Event 1 - Yılbaşı scenarios
-    prisma.wishboxScenario.create({
+    createdEvents[0] ? prisma.wishboxScenario.create({
       data: {
-        eventId: events[0].id,
+        eventId: createdEvents[0].id,
         title: 'Yılın En İyi Telefonu',
         description: 'Hangi telefon 2024\'ün şampiyonu olmalı?',
         orderIndex: 1,
       },
-    }),
-    prisma.wishboxScenario.create({
+    }).catch(() => null) : null,
+    createdEvents[0] ? prisma.wishboxScenario.create({
       data: {
-        eventId: events[0].id,
+        eventId: createdEvents[0].id,
         title: 'Yılın En İyi Laptop\'u',
         description: 'En iyi performansı hangi laptop verdi?',
         orderIndex: 2,
       },
-    }),
+    }).catch(() => null) : null,
     // Event 2 - Technology scenarios
-    prisma.wishboxScenario.create({
+    createdEvents[1] ? prisma.wishboxScenario.create({
       data: {
-        eventId: events[1].id,
+        eventId: createdEvents[1].id,
         title: 'En Beklenen Akıllı Saat',
         description: '2024\'te hangi akıllı saati almayı düşünüyorsun?',
         orderIndex: 1,
       },
-    }),
+    }).catch(() => null) : null,
     // Event 3 - Coffee scenarios
-    prisma.wishboxScenario.create({
+    createdEvents[2] ? prisma.wishboxScenario.create({
       data: {
-        eventId: events[2].id,
+        eventId: createdEvents[2].id,
         title: 'Tam Otomatik vs Manuel',
         description: 'Tam otomatik mı, manuel kahve makinesi mi?',
         orderIndex: 1,
       },
-    }),
+    }).catch(() => null) : null,
   ])
-  console.log(`✅ ${scenarios.length} scenario oluşturuldu`)
+  const createdScenarios = scenarios.filter(Boolean)
+  console.log(`✅ ${createdScenarios.length} scenario oluşturuldu`)
 
   // Add event statistics for some users
   console.log('📊 Creating event statistics...')
   const allUserIds = [userIdToUse, TARGET_USER_ID, ...TRUST_USER_IDS.slice(0, 3)]
   const eventStats = await Promise.all(
-    events.flatMap((event) =>
-      allUserIds.map((userId) =>
+    createdEvents.flatMap((event) =>
+      event ? allUserIds.map((userId) =>
         prisma.wishboxStats.create({
           data: {
             userId,
@@ -3251,43 +3293,118 @@ async function main() {
             helpfulVotesReceived: Math.floor(Math.random() * 20),
           },
         })
-      )
+      ) : []
     )
   )
   console.log(`✅ ${eventStats.length} event stat oluşturuldu`)
 
-  // 4. Create some brands (if not exist)
+  // 4. Create diverse brands with imageUrl
   console.log('🏢 Creating brands...')
   const brandsData = [
     {
       name: 'TechVision',
       description: 'Yenilikçi teknoloji ürünleri ve çözümleri sunan global marka',
       logoUrl: 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=200',
+      imageUrl: 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=800',
       category: 'Technology',
     },
     {
       name: 'SmartHome Pro',
       description: 'Akıllı ev sistemleri ve IoT cihazları konusunda uzman',
       logoUrl: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=200',
+      imageUrl: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800',
       category: 'Home & Living',
     },
     {
       name: 'CoffeeDelight',
       description: 'Premium kahve makineleri ve barista ekipmanları',
       logoUrl: 'https://images.unsplash.com/photo-1511920170033-f8396924c348?w=200',
+      imageUrl: 'https://images.unsplash.com/photo-1511920170033-f8396924c348?w=800',
       category: 'Kitchen',
     },
     {
       name: 'FitnessTech',
       description: 'Akıllı spor ekipmanları ve sağlık takip cihazları',
       logoUrl: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=200',
+      imageUrl: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=800',
       category: 'Health & Fitness',
     },
     {
       name: 'StyleHub',
       description: 'Modern ve şık yaşam ürünleri markası',
       logoUrl: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=200',
+      imageUrl: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800',
       category: 'Fashion',
+    },
+    {
+      name: 'AudioMax',
+      description: 'Premium ses sistemleri ve kulaklıklar',
+      logoUrl: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=200',
+      imageUrl: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800',
+      category: 'Electronics',
+    },
+    {
+      name: 'EcoLife',
+      description: 'Sürdürülebilir ve çevre dostu ürünler',
+      logoUrl: 'https://images.unsplash.com/photo-1473341304170-971dccb5ac1e?w=200',
+      imageUrl: 'https://images.unsplash.com/photo-1473341304170-971dccb5ac1e?w=800',
+      category: 'Sustainability',
+    },
+    {
+      name: 'GameZone',
+      description: 'Oyun konsolları ve aksesuarları',
+      logoUrl: 'https://images.unsplash.com/photo-1606144042614-b2417e99c4e3?w=200',
+      imageUrl: 'https://images.unsplash.com/photo-1606144042614-b2417e99c4e3?w=800',
+      category: 'Gaming',
+    },
+    {
+      name: 'BeautyCare',
+      description: 'Kişisel bakım ve güzellik ürünleri',
+      logoUrl: 'https://images.unsplash.com/photo-1522338242992-e1a54906a8da?w=200',
+      imageUrl: 'https://images.unsplash.com/photo-1522338242992-e1a54906a8da?w=800',
+      category: 'Beauty',
+    },
+    {
+      name: 'OutdoorGear',
+      description: 'Açık hava ve kamp ekipmanları',
+      logoUrl: 'https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?w=200',
+      imageUrl: 'https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?w=800',
+      category: 'Outdoor',
+    },
+    {
+      name: 'PetCare Plus',
+      description: 'Evcil hayvan bakım ürünleri ve aksesuarları',
+      logoUrl: 'https://images.unsplash.com/photo-1601758228041-f3b2795255f1?w=200',
+      imageUrl: 'https://images.unsplash.com/photo-1601758228041-f3b2795255f1?w=800',
+      category: 'Pets',
+    },
+    {
+      name: 'KitchenMaster',
+      description: 'Profesyonel mutfak ekipmanları ve aletleri',
+      logoUrl: 'https://images.unsplash.com/photo-1556911220-bff31c812dba?w=200',
+      imageUrl: 'https://images.unsplash.com/photo-1556911220-bff31c812dba?w=800',
+      category: 'Kitchen',
+    },
+    {
+      name: 'TravelEssentials',
+      description: 'Seyahat ve gezi ekipmanları',
+      logoUrl: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=200',
+      imageUrl: 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800',
+      category: 'Travel',
+    },
+    {
+      name: 'BabyCare',
+      description: 'Bebek bakım ürünleri ve oyuncakları',
+      logoUrl: 'https://images.unsplash.com/photo-1503454537195-1dcabb73ffb9?w=200',
+      imageUrl: 'https://images.unsplash.com/photo-1503454537195-1dcabb73ffb9?w=800',
+      category: 'Baby',
+    },
+    {
+      name: 'AutoParts Pro',
+      description: 'Otomotiv yedek parça ve aksesuarları',
+      logoUrl: 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?w=200',
+      imageUrl: 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?w=800',
+      category: 'Automotive',
     },
   ]
 
@@ -3299,7 +3416,7 @@ async function main() {
     )
   )
   const createdBrands = brands.filter(Boolean)
-  console.log(`✅ ${createdBrands.length} brand oluşturuldu`)
+  console.log(`✅ ${createdBrands.length} brand oluşturuldu (imageUrl ile)`)
 
   console.log('🏅 Creating bridge rewards for profile collections...')
   const bridgeBrandNames = ['TechVision', 'SmartHome Pro', 'CoffeeDelight']
@@ -3779,7 +3896,7 @@ async function main() {
   summaryLines.push(`• ${marketplaceListings.length} Marketplace Listings`)
   summaryLines.push(`• ${banners.length} Marketplace Banners`)
   summaryLines.push(`• ${trendingPosts.length} Trending Posts`)
-  summaryLines.push(`• ${events.length} Wishbox Events`)
+  summaryLines.push(`• ${createdEvents.length} Wishbox Events`)
   summaryLines.push(`• ${scenarios.length} Event Scenarios`)
   summaryLines.push(`• ${eventStats.length} Event Statistics`)
   summaryLines.push(`• ${createdBrands.length} Brands`)

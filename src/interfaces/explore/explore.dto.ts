@@ -26,8 +26,11 @@ export interface EventParticipant {
   userName: string;
 }
 
+export type EventType = 'SURVEY' | 'POLL' | 'CONTEST' | 'CHALLENGE' | 'PROMOTION';
+
 export interface EventResponse {
   eventId: string;
+  eventType: EventType;
   image: any;
   title: string;
   description: string;
