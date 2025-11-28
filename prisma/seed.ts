@@ -602,6 +602,37 @@ async function main() {
       }
     }),
   ])
+
+  const advancedAchievementChain = await prisma.achievementChain.create({
+    data: {
+      name: 'Collection Journey',
+      description: 'Benchmark ve deneyim paylaşımlarını ödüllendiren seri',
+      category: 'Engagement',
+    }
+  })
+
+  const advancedAchievementGoals = await Promise.all([
+    prisma.achievementGoal.create({
+      data: {
+        chainId: advancedAchievementChain.id,
+        title: '3 Benchmark Serisi Yayınla',
+        requirement: '3 detaylı benchmark karşılaştırması paylaş',
+        rewardBadgeId: benchmarkSageBadge.id,
+        pointsRequired: 3,
+        difficulty: 'MEDIUM',
+      }
+    }),
+    prisma.achievementGoal.create({
+      data: {
+        chainId: advancedAchievementChain.id,
+        title: '15 Deneyim Yazısı Tamamla',
+        requirement: '15 farklı kart tipinde uzun deneyim yaz',
+        rewardBadgeId: experienceCuratorBadge.id,
+        pointsRequired: 15,
+        difficulty: 'HARD',
+      }
+    }),
+  ])
   const priceMetric = metrics.find((metric) => metric.name === 'Fiyat')
   const qualityMetric = metrics.find((metric) => metric.name === 'Kalite')
   const usabilityMetric = metrics.find((metric) => metric.name === 'Kullanım Kolaylığı')
@@ -613,6 +644,41 @@ async function main() {
 
   // Link achievement goals to badges (already done above)
   console.log('✅ Achievement goals created')
+
+  const advancedUserAchievementSeeds = [
+    {
+      goalId: advancedAchievementGoals[0].id,
+      progress: 1,
+      completed: false,
+    },
+    {
+      goalId: advancedAchievementGoals[1].id,
+      progress: 0,
+      completed: false,
+    },
+  ]
+
+  for (const seed of advancedUserAchievementSeeds) {
+    await prisma.userAchievement.upsert({
+      where: {
+        userId_goalId: {
+          userId: userIdToUse,
+          goalId: seed.goalId,
+        },
+      },
+      update: {
+        progress: seed.progress,
+        completed: seed.completed,
+      },
+      create: {
+        userId: userIdToUse,
+        goalId: seed.goalId,
+        progress: seed.progress,
+        completed: seed.completed,
+      },
+    })
+  }
+  console.log('✅ Advanced user achievements initialized')
 
   // User Titles
   const titles = [
