@@ -231,4 +231,4 @@ export interface UpdateUserProfileRequest {
   avatar?: string | null;
   cosmetic?: string | null;
   badge?: string[];
-}
+} 

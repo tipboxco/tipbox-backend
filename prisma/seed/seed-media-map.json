@@ -122,6 +122,51 @@
   "post.image.primary": {
     "targetKey": "post-media/480f5de9-b691-4d70-a6a8-2789226f4e07/post.jpg"
   },
+  "explore.event.primary": {
+    "targetKey": "explore/events/event.jpg"
+  },
+  "brand.category.technology": {
+    "targetKey": "brand-categories/computers-tablets.png"
+  },
+  "brand.category.home-living": {
+    "targetKey": "brand-categories/home appliances.png"
+  },
+  "brand.category.kitchen": {
+    "targetKey": "brand-categories/home appliances.png"
+  },
+  "brand.category.health-fitness": {
+    "targetKey": "brand-categories/cameras.png"
+  },
+  "brand.category.fashion": {
+    "targetKey": "brand-categories/phones.png"
+  },
+  "brand.category.electronics": {
+    "targetKey": "brand-categories/headphones.png"
+  },
+  "brand.category.sustainability": {
+    "targetKey": "brand-categories/air conditioner.png"
+  },
+  "brand.category.gaming": {
+    "targetKey": "brand-categories/games.png"
+  },
+  "brand.category.beauty": {
+    "targetKey": "brand-categories/phones.png"
+  },
+  "brand.category.outdoor": {
+    "targetKey": "brand-categories/drone.png"
+  },
+  "brand.category.pets": {
+    "targetKey": "brand-categories/cameras.png"
+  },
+  "brand.category.travel": {
+    "targetKey": "brand-categories/phones.png"
+  },
+  "brand.category.baby": {
+    "targetKey": "brand-categories/cameras.png"
+  },
+  "brand.category.automotive": {
+    "targetKey": "brand-categories/otomotiv.png"
+  },
   "product.phone.phone1": {
     "targetKey": "products/phones/phone1.png"
   },
@@ -153,6 +198,69 @@
     "targetKey": "products/headphone2.png"
   },
   "product.phone.samsung": {
+    "targetKey": "products/samsun.png"
+  },
+  "product.explore.1": {
+    "targetKey": "products/dyson.png"
+  },
+  "product.explore.2": {
+    "targetKey": "products/macbook.png"
+  },
+  "product.explore.3": {
+    "targetKey": "products/headphone.png"
+  },
+  "product.explore.4": {
+    "targetKey": "products/headphone2.png"
+  },
+  "product.explore.5": {
+    "targetKey": "products/samsun.png"
+  },
+  "product.explore.6": {
+    "targetKey": "products/phone1.png"
+  },
+  "product.explore.7": {
+    "targetKey": "products/phone2.png"
+  },
+  "product.explore.8": {
+    "targetKey": "products/phone3.png"
+  },
+  "product.explore.9": {
+    "targetKey": "products/phone4.png"
+  },
+  "product.explore.10": {
+    "targetKey": "products/phone5.png"
+  },
+  "product.generic.1": {
+    "targetKey": "products/phone1.png"
+  },
+  "product.generic.2": {
+    "targetKey": "products/phone2.png"
+  },
+  "product.generic.3": {
+    "targetKey": "products/phone3.png"
+  },
+  "product.generic.4": {
+    "targetKey": "products/phone4.png"
+  },
+  "product.generic.5": {
+    "targetKey": "products/phone5.png"
+  },
+  "product.generic.6": {
+    "targetKey": "products/phone6.png"
+  },
+  "product.generic.7": {
+    "targetKey": "products/macbook.png"
+  },
+  "product.generic.8": {
+    "targetKey": "products/headphone.png"
+  },
+  "product.generic.9": {
+    "targetKey": "products/headphone2.png"
+  },
+  "product.generic.10": {
+    "targetKey": "products/dyson.png"
+  },
+  "product.generic.11": {
     "targetKey": "products/samsun.png"
   }
 }

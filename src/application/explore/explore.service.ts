@@ -320,7 +320,7 @@ export class ExploreService {
 
         return {
           eventId: event.id,
-          eventType: (event as any).eventType || 'SURVEY',
+          eventType: event.eventType || 'SURVEY',
           image: (event as any).imageUrl || null,
           title: event.title,
           description: event.description || '',

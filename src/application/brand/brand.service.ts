@@ -1,10 +1,10 @@
 import { PrismaClient } from '@prisma/client';
 import { FeedService } from '../feed/feed.service';
-import { FeedItem, FeedItemType } from '../../interfaces/feed/feed.dto';
+import { FeedItem, FeedItemType, ContextData } from '../../interfaces/feed/feed.dto';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
+import { ContextType } from '../../domain/content/context-type.enum';
 import logger from '../../infrastructure/logger/logger';
-
-const prisma = new PrismaClient();
+import { NotFoundError } from '../../infrastructure/errors/custom-errors';
 
 export interface BrandCategoryItem {
   categoryId: string;
@@ -22,6 +22,7 @@ export interface BrandCatalogResponse {
   brandId: string;
   name: string;
   description: string | null;
+  bannerImage: string | null;
   followers: number;
   isJoined: boolean;
   posts: FeedItem[];
@@ -45,10 +46,12 @@ export interface BrandProduct {
 }
 
 export class BrandService {
-  private feedService: FeedService;
+  private readonly feedService: FeedService;
+  private readonly prisma: PrismaClient;
 
   constructor() {
     this.feedService = new FeedService();
+    this.prisma = new PrismaClient();
   }
 
   /**
@@ -56,27 +59,17 @@ export class BrandService {
    */
   async getAllBrandCategories(): Promise<BrandCategoryItem[]> {
     try {
-      // Brand.category'den distinct değerleri al
-      const brands = await prisma.brand.findMany({
-        where: {
-          category: {
-            not: null,
-          },
+      const categories = await this.prisma.brandCategory.findMany({
+        orderBy: {
+          name: 'asc',
         },
-        select: {
-          category: true,
-        },
-        distinct: ['category'],
       });
 
-      // Kategorileri map'le (şu an için imageUrl yok, category string değeri kullanılıyor)
-      return brands
-        .filter((brand) => brand.category)
-        .map((brand) => ({
-          categoryId: brand.category!,
-          name: brand.category!,
-          image: null, // TODO: Brand category için image eklenebilir
-        }));
+      return categories.map((category) => ({
+        categoryId: category.id,
+        name: category.name,
+        image: category.imageUrl,
+      }));
     } catch (error) {
       logger.error('Failed to get all brand categories:', error);
       throw error;
@@ -85,12 +78,27 @@ export class BrandService {
 
   /**
    * Kategoriye göre markaları listele
+   * categoryId UUID veya kategori adı olabilir
    */
   async getBrandsByCategoryId(categoryId: string): Promise<BrandItem[]> {
     try {
-      const brands = await prisma.brand.findMany({
+      // Önce kategoriyi bul (UUID veya name ile)
+      const category = await this.prisma.brandCategory.findFirst({
         where: {
-          category: categoryId,
+          OR: [
+            { id: categoryId },
+            { name: categoryId },
+          ],
+        },
+      });
+
+      if (!category) {
+        throw new NotFoundError(`Category not found: ${categoryId}`);
+      }
+
+      const brands = await this.prisma.brand.findMany({
+        where: {
+          categoryId: category.id,
         },
         select: {
           id: true,
@@ -118,7 +126,7 @@ export class BrandService {
    */
   async getBrandCatalog(brandId: string, userId?: string): Promise<BrandCatalogResponse> {
     try {
-      const brand = await prisma.brand.findUnique({
+      const brand = await this.prisma.brand.findUnique({
         where: { id: brandId },
         select: {
           id: true,
@@ -129,18 +137,18 @@ export class BrandService {
       });
 
       if (!brand) {
-        throw new Error('Brand not found');
+        throw new NotFoundError('Brand not found');
       }
 
       // Followers count
-      const followersCount = await prisma.bridgeFollower.count({
+      const followersCount = await this.prisma.bridgeFollower.count({
         where: { brandId },
       });
 
       // Is user following this brand?
       let isJoined = false;
       if (userId) {
-        const follow = await prisma.bridgeFollower.findUnique({
+        const follow = await this.prisma.bridgeFollower.findUnique({
           where: {
             userId_brandId: {
               userId: userId,
@@ -152,7 +160,7 @@ export class BrandService {
       }
 
       // Get brand posts (BridgePost)
-      const bridgePosts = await prisma.bridgePost.findMany({
+      const bridgePosts = await this.prisma.bridgePost.findMany({
         where: { brandId },
         include: {
           user: {
@@ -176,13 +184,20 @@ export class BrandService {
 
       // Map bridge posts to feed items
       // BridgePost'ları ContentPost formatına dönüştürmemiz gerekiyor
-      // Şimdilik basit bir mapping yapıyoruz
       const posts: FeedItem[] = bridgePosts.map((post) => {
         const userBase = {
           id: post.user.id,
           name: post.user.profile?.displayName || post.user.email || 'Anonymous',
           title: post.user.titles?.[0]?.title || '',
           avatarUrl: post.user.avatars?.[0]?.imageUrl || '',
+        };
+
+        // BridgePost için brand-based context oluştur
+        const contextData: ContextData = {
+          id: brand.id,
+          name: brand.name,
+          subName: brand.description || '',
+          image: brand.imageUrl || null,
         };
 
         return {
@@ -198,7 +213,8 @@ export class BrandService {
               bookmarks: 0,
             },
             createdAt: post.createdAt.toISOString(),
-            product: null,
+            contextType: ContextType.SUB_CATEGORY, // BridgePost için generic context type
+            contextData,
             content: post.content,
             images: [],
           },
@@ -209,6 +225,7 @@ export class BrandService {
         brandId: brand.id,
         name: brand.name,
         description: brand.description,
+        bannerImage: brand.imageUrl,
         followers: followersCount,
         isJoined,
         posts,
@@ -226,17 +243,17 @@ export class BrandService {
     try {
       // Brand'a ait ürünleri bul (Product.brand field'ından)
       // Önce brand name'i al
-      const brand = await prisma.brand.findUnique({
+      const brand = await this.prisma.brand.findUnique({
         where: { id: brandId },
         select: { name: true },
       });
 
       if (!brand) {
-        throw new Error('Brand not found');
+        throw new NotFoundError('Brand not found');
       }
 
       // Brand name'e göre ürünleri bul
-      const products = await prisma.product.findMany({
+      const products = await this.prisma.product.findMany({
         where: {
           brand: brand.name,
         },
@@ -305,27 +322,27 @@ export class BrandService {
   ): Promise<FeedItem[]> {
     try {
       // Brand name'i al
-      const brand = await prisma.brand.findUnique({
+      const brand = await this.prisma.brand.findUnique({
         where: { id: brandId },
         select: { name: true },
       });
 
       if (!brand) {
-        throw new Error('Brand not found');
+        throw new NotFoundError('Brand not found');
       }
 
       // Product'ı kontrol et
-      const product = await prisma.product.findUnique({
+      const product = await this.prisma.product.findUnique({
         where: { id: productId },
         select: { id: true, brand: true },
       });
 
       if (!product || product.brand !== brand.name) {
-        throw new Error('Product not found or does not belong to this brand');
+        throw new NotFoundError('Product not found or does not belong to this brand');
       }
 
       // Ürüne ait deneyim paylaşımlarını getir (FREE type posts)
-      const posts = await prisma.contentPost.findMany({
+      const posts = await this.prisma.contentPost.findMany({
         where: {
           productId: productId,
           type: ContentPostType.FREE,
@@ -378,27 +395,27 @@ export class BrandService {
   ): Promise<FeedItem[]> {
     try {
       // Brand name'i al
-      const brand = await prisma.brand.findUnique({
+      const brand = await this.prisma.brand.findUnique({
         where: { id: brandId },
         select: { name: true },
       });
 
       if (!brand) {
-        throw new Error('Brand not found');
+        throw new NotFoundError('Brand not found');
       }
 
       // Product'ı kontrol et
-      const product = await prisma.product.findUnique({
+      const product = await this.prisma.product.findUnique({
         where: { id: productId },
         select: { id: true, brand: true },
       });
 
       if (!product || product.brand !== brand.name) {
-        throw new Error('Product not found or does not belong to this brand');
+        throw new NotFoundError('Product not found or does not belong to this brand');
       }
 
       // Ürüne ait karşılaştırma gönderilerini getir (COMPARE type posts)
-      const posts = await prisma.contentPost.findMany({
+      const posts = await this.prisma.contentPost.findMany({
         where: {
           OR: [
             { productId: productId, type: ContentPostType.COMPARE },
@@ -474,28 +491,28 @@ export class BrandService {
   ): Promise<FeedItem[]> {
     try {
       // Brand name'i al
-      const brand = await prisma.brand.findUnique({
+      const brand = await this.prisma.brand.findUnique({
         where: { id: brandId },
         select: { name: true },
       });
 
       if (!brand) {
-        throw new Error('Brand not found');
+        throw new NotFoundError('Brand not found');
       }
 
       // Product'ı kontrol et
-      const product = await prisma.product.findUnique({
+      const product = await this.prisma.product.findUnique({
         where: { id: productId },
         select: { id: true, brand: true },
       });
 
       if (!product || product.brand !== brand.name) {
-        throw new Error('Product not found or does not belong to this brand');
+        throw new NotFoundError('Product not found or does not belong to this brand');
       }
 
       // Ürüne dair haberleri getir (şu an için tüm post tiplerini dahil ediyoruz)
       // Haberler için özel bir tip yok, feed tipinde olabilir
-      const posts = await prisma.contentPost.findMany({
+      const posts = await this.prisma.contentPost.findMany({
         where: {
           productId: productId,
           // Haberler için özel bir filtre yok, tüm post tiplerini dahil ediyoruz
@@ -544,7 +561,7 @@ export class BrandService {
   private async mapPostsToFeedItems(posts: any[], userId?: string): Promise<FeedItem[]> {
     // User inventories for benchmark isOwned check
     const inventories = userId
-      ? await prisma.inventory.findMany({
+      ? await this.prisma.inventory.findMany({
           where: { userId },
           select: { productId: true },
         })
@@ -555,7 +572,7 @@ export class BrandService {
     const postProductIds = posts.map((p) => p.productId).filter(Boolean) as string[];
     const inventoryMediaMap = new Map<string, string[]>();
     if (postProductIds.length > 0 && userId) {
-      const inventoriesWithMedia = await prisma.inventory.findMany({
+      const inventoriesWithMedia = await this.prisma.inventory.findMany({
         where: {
           userId: userId,
           productId: { in: postProductIds },

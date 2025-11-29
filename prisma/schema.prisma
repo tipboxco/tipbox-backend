@@ -812,6 +812,17 @@ model RewardClaim {
   @@map("reward_claims")
 }
 
+model BrandCategory {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique
+  imageUrl  String?  @map("image_url")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  brands    Brand[]
+
+  @@map("brand_categories")
+}
+
 model Brand {
   id           String              @id @default(uuid()) @db.Uuid
   name         String
@@ -819,6 +830,7 @@ model Brand {
   logoUrl      String?             @map("logo_url")
   imageUrl     String?             @map("image_url")
   category     String?
+  categoryId   String?             @map("category_id") @db.Uuid
   createdAt    DateTime            @default(now()) @map("created_at")
   updatedAt    DateTime            @updatedAt @map("updated_at")
   surveys      BrandSurvey[]
@@ -827,6 +839,7 @@ model Brand {
   bridgePosts  BridgePost[]
   rewards      BridgeReward[]
   userStats    BridgeUserStats[]
+  brandCategory BrandCategory?     @relation(fields: [categoryId], references: [id])
 
   @@map("brands")
 }
@@ -1090,6 +1103,7 @@ model WishboxEvent {
   id          String             @id @db.VarChar(26)
   title       String
   description String?
+  imageUrl    String?            @map("image_url")
   startDate   DateTime           @map("start_date")
   endDate     DateTime           @map("end_date")
   status      WishboxEventStatus @default(DRAFT)

@@ -710,8 +710,8 @@ export class UserService {
       const badge = (ub as any).badge;
       const goals = (badge?.achievementGoals || []) as any[];
       const tasks: CollectionTask[] = goals.map((goal) => ({
-        id: String(goal.id),
-        title: goal.title,
+          id: String(goal.id),
+          title: goal.title,
         type: inferTaskType(goal.title, goal.requirement),
       }));
 
@@ -1049,10 +1049,10 @@ export class UserService {
 
       const contextData = this.buildContextDataFromInventory(inv as any);
 
-      results.push({
+        results.push({
         id: String(inv.id),
         type: 'experience' as const,
-        user: userBase,
+          user: userBase,
         stats: this.buildExperienceStats(String(inv.id)),
         createdAt: inv.createdAt.toISOString(),
         contextType: ContextType.PRODUCT,
@@ -1060,8 +1060,8 @@ export class UserService {
         content: experiences,
         tags,
         images,
-      });
-    }
+        });
+      }
 
     return results;
   }

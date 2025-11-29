@@ -7,6 +7,7 @@ import { seedFeedAndTrending } from './feed.seed';
 import { seedMarketplace } from './marketplace.seed';
 import { seedExplore } from './explore.seed';
 import { seedMessaging } from './messaging.seed';
+import { seedBrandProducts } from './brand-products.seed';
 // Import from JS file (no ts-node issues)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { markSeedStart, markSeedEnd, addSeedUserId } = require('./seed-metadata');
@@ -39,6 +40,7 @@ export async function runAllSeeds(): Promise<void> {
     await seedMarketplace();
     await seedExplore();
     await seedMessaging();
+    await seedBrandProducts();
     
     // Seed sonunu işaretle
     markSeedEnd();

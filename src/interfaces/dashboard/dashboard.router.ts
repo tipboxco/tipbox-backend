@@ -23,7 +23,8 @@ const services = [
 
 // Seed bilgileri
 const seedCommands = [
-  { name: 'Tümü', command: 'db:seed:all', description: 'Tüm seed verilerini ekle', icon: 'fa-seedling' },
+  { name: 'Tüm Seed Verileri', command: 'db:seed', description: 'Tüm seed verilerini ekle (prisma/seed.ts)', icon: 'fa-database' },
+  { name: 'Tümü (Ayrı Seed)', command: 'db:seed:all', description: 'Tüm seed verilerini ekle (ayrı dosyalar)', icon: 'fa-seedling' },
   { name: 'User Seed', command: 'db:seed:user', description: 'Kullanıcı ve profil verileri', icon: 'fa-users' },
   { name: 'Content Seed', command: 'db:seed:content', description: 'Ürün ve içerik verileri', icon: 'fa-box' },
   { name: 'Feed Seed', command: 'db:seed:feed', description: 'Feed ve trending verileri', icon: 'fa-stream' },
@@ -272,9 +273,10 @@ const dashboardScript = `
       button.disabled = true;
       status.innerHTML = '<div class="status loading">Çalıştırılıyor...</div>';
       
+      let response = null;
       try {
         console.log('Fetching /seed with command:', command);
-        const response = await fetch('/seed', {
+        response = await fetch('/seed', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -288,6 +290,10 @@ const dashboardScript = `
         
         if (response.ok) {
           status.innerHTML = '<div class="status success">✓ ' + data.message + '</div>';
+          // Seed işlemi başarılı olduğunda sayfayı 2 saniye sonra yenile
+          setTimeout(function() {
+            window.location.reload();
+          }, 2000);
         } else {
           status.innerHTML = '<div class="status error">✗ ' + (data.error || 'Bilinmeyen hata') + '</div>';
         }
@@ -297,9 +303,11 @@ const dashboardScript = `
         alert('Hata: ' + error.message);
       } finally {
         button.disabled = false;
-        setTimeout(function() {
-          status.innerHTML = '';
-        }, 5000);
+        if (!response || !response.ok) {
+          setTimeout(function() {
+            status.innerHTML = '';
+          }, 5000);
+        }
       }
     }
     
