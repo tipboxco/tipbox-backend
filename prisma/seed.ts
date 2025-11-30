@@ -1,7 +1,7 @@
 import { PrismaClient, Prisma } from '@prisma/client'
 import { randomUUID } from 'crypto'
 import * as bcrypt from 'bcryptjs'
-import { readFileSync } from 'fs'
+import { readFileSync, existsSync } from 'fs'
 import path from 'path'
 import { DEFAULT_PROFILE_BANNER_URL } from '../src/domain/user/profile.constants'
 import { getSeedMediaUrl, SeedMediaKey } from './seed/helpers/media.helper'
@@ -99,6 +99,63 @@ function daysAgo(days: number): Date {
   return date
 }
 
+async function ensureProductImages(userIdToUse: string): Promise<void> {
+  // Tüm product'ları al
+  const allProducts = await prisma.product.findMany({
+    where: {
+      imageUrl: { not: null },
+    },
+    take: 100, // İlk 100 product
+  })
+
+  let addedCount = 0
+  for (const product of allProducts) {
+    // Product için inventory var mı kontrol et
+    let inventory = await prisma.inventory.findFirst({
+      where: {
+        userId: userIdToUse,
+        productId: product.id,
+      },
+    })
+
+    // Eğer inventory yoksa oluştur
+    if (!inventory) {
+      inventory = await prisma.inventory.create({
+        data: {
+          userId: userIdToUse,
+          productId: product.id,
+          hasOwned: true,
+          experienceSummary: `${product.name} hakkında deneyim paylaşımı`,
+        },
+      })
+    }
+
+    // Inventory media var mı kontrol et
+    const existingMedia = await prisma.inventoryMedia.findFirst({
+      where: {
+        inventoryId: inventory.id,
+        type: 'IMAGE',
+      },
+    })
+
+    // Eğer media yoksa ve product'ın imageUrl'i varsa ekle
+    if (!existingMedia && product.imageUrl) {
+      await prisma.inventoryMedia.create({
+        data: {
+          inventoryId: inventory.id,
+          mediaUrl: product.imageUrl,
+          type: 'IMAGE',
+        },
+      }).catch(() => {})
+      addedCount++
+    }
+  }
+
+  if (addedCount > 0) {
+    console.log(`✅ ${addedCount} product için inventory media eklendi`)
+  }
+}
+
 async function ensureBookmarkFor(userId: string, postId: string): Promise<boolean> {
   const existingFavorite = await prisma.contentFavorite.findFirst({
     where: { userId, postId },
@@ -124,6 +181,8 @@ async function ensureBookmarkFor(userId: string, postId: string): Promise<boolea
 }
 
 async function seedBrandProducts(userIdToUse: string): Promise<void> {
+  console.log('🏷️ [seedBrandProducts] Fonksiyon başlatılıyor...')
+  
   // Kategorileri bul
   const techCategory = await prisma.mainCategory.findFirst({ where: { name: 'Teknoloji' } })
   const evYasamCategory = await prisma.mainCategory.findFirst({ where: { name: 'Ev & Yaşam' } })
@@ -132,6 +191,8 @@ async function seedBrandProducts(userIdToUse: string): Promise<void> {
     console.warn('⚠️ Kategoriler bulunamadı, brand products seed atlanıyor')
     return
   }
+  
+  console.log('✅ Kategoriler bulundu')
 
   // Sub kategorileri bul veya oluştur
   let techSubCategory = await prisma.subCategory.findFirst({ where: { mainCategoryId: techCategory.id } })
@@ -167,6 +228,13 @@ async function seedBrandProducts(userIdToUse: string): Promise<void> {
     console.warn('⚠️ Brand\'lar bulunamadı, brand products seed atlanıyor')
     return
   }
+  
+  console.log(`📦 ${brands.length} brand bulundu. İşlenecek brand'lar:`)
+  brands.forEach((brand, index) => {
+    const configCount = getProductConfigsForBrand(brand.name).length
+    const configStatus = configCount > 0 ? `✅ ${configCount} config` : '❌ Config yok'
+    console.log(`  ${index + 1}. ${brand.name} - ${configStatus}`)
+  })
 
   // Her brand için product'lar ve post'lar oluştur
   for (const brand of brands) {
@@ -198,6 +266,13 @@ async function seedBrandProducts(userIdToUse: string): Promise<void> {
 
     // Brand'a özel product'lar oluştur
     const productConfigs = getProductConfigsForBrand(brand.name)
+    
+    // Debug: Product config kontrolü
+    if (productConfigs.length === 0) {
+      console.log(`⚠️ ${brand.name} için product config bulunamadı, bu brand için görsel yükleme atlanıyor`)
+    } else {
+      console.log(`✅ ${brand.name} için ${productConfigs.length} product config bulundu`)
+    }
     
     for (const productConfig of productConfigs) {
       // Product'ı oluştur veya bul
@@ -237,15 +312,28 @@ async function seedBrandProducts(userIdToUse: string): Promise<void> {
             experienceSummary: `${product.name} hakkında deneyim paylaşımı`,
           },
         })
+      }
 
-        // Inventory media ekle
-        await prisma.inventoryMedia.create({
-          data: {
-            inventoryId: inventory.id,
-            mediaUrl: getSeedMediaUrl(productConfig.imageKey as any),
-            type: 'IMAGE',
-          },
-        }).catch(() => {})
+      // Inventory media kontrolü - eğer yoksa ekle
+      const existingMedia = await prisma.inventoryMedia.findFirst({
+        where: {
+          inventoryId: inventory.id,
+          type: 'IMAGE',
+        },
+      })
+
+      if (!existingMedia) {
+        // Product imageUrl'i kullan veya seed media'dan al
+        const mediaUrl = product.imageUrl || getSeedMediaUrl(productConfig.imageKey as any)
+        if (mediaUrl) {
+          await prisma.inventoryMedia.create({
+            data: {
+              inventoryId: inventory.id,
+              mediaUrl: mediaUrl,
+              type: 'IMAGE',
+            },
+          }).catch(() => {})
+        }
       }
 
       // EXPERIENCES için FREE type post'lar oluştur
@@ -343,28 +431,70 @@ async function seedBrandProducts(userIdToUse: string): Promise<void> {
       })
 
       // event.jpg görselini MinIO'ya yükle (10 adet news post için)
+      console.log(`🖼️ [${brand.name} - ${product.name}] Görsel yükleme başlatılıyor...`)
       const eventImagePath = path.join(__dirname, '../tests/assets/WhatsNews/event.jpg')
       let eventImageUrls: string[] = []
       
-      try {
-        const s3Service = new S3Service()
-        const eventImageBuffer = readFileSync(eventImagePath)
-        
-        // 10 adet farklı URL için görseli yükle
-        for (let i = 0; i < 10; i++) {
-          const objectKey = `news/${brand.name.toLowerCase().replace(/\s+/g, '-')}/${product.id}/${Date.now()}-${i}-event.jpg`
-          const uploadedUrl = await s3Service.uploadFile(objectKey, eventImageBuffer, 'image/jpeg')
-          // Localhost uyumlu URL oluştur
-          const localhostUrl = uploadedUrl.replace('minio:9000', 'localhost:9000')
-          eventImageUrls.push(localhostUrl)
+      // Önce MinIO bağlantısını ve dosya varlığını kontrol et
+      const fileExists = existsSync(eventImagePath)
+      console.log(`  📁 Dosya kontrolü: ${fileExists ? '✅ Mevcut' : '❌ Bulunamadı'} (${eventImagePath})`)
+      
+      if (!fileExists) {
+        console.warn(`  ⚠️ event.jpg dosyası bulunamadı: ${eventImagePath}`)
+      } else {
+        try {
+          console.log(`  🔗 MinIO bağlantısı test ediliyor...`)
+          // MinIO bağlantısını test et
+          const s3Service = new S3Service()
+          await s3Service.checkAndCreateBucket()
+          console.log(`  ✅ MinIO bağlantısı başarılı, görseller yükleniyor...`)
+          
+          console.log(`  📤 MinIO'ya görsel yükleniyor: ${brand.name} - ${product.name}`)
+          const eventImageBuffer = readFileSync(eventImagePath)
+          console.log(`  📦 Görsel boyutu: ${(eventImageBuffer.length / 1024 / 1024).toFixed(2)} MB`)
+          
+          // 10 adet farklı URL için görseli yükle (önce MinIO'ya)
+          for (let i = 0; i < 10; i++) {
+            const objectKey = `news/${brand.name.toLowerCase().replace(/\s+/g, '-')}/${product.id}/${Date.now()}-${i}-event.jpg`
+            try {
+              const uploadedUrl = await s3Service.uploadFile(objectKey, eventImageBuffer, 'image/jpeg')
+              // URL zaten localhost formatında dönüyor (S3Service içinde düzeltildi)
+              eventImageUrls.push(uploadedUrl)
+              
+              // Her 5 görselden sonra progress göster
+              if ((i + 1) % 5 === 0) {
+                console.log(`    📤 ${i + 1}/10 görsel yüklendi...`)
+              }
+            } catch (uploadError: any) {
+              const uploadErrorMsg = uploadError instanceof Error ? uploadError.message : String(uploadError)
+              console.error(`    ❌ Görsel ${i + 1} yükleme hatası: ${uploadErrorMsg}`)
+              // Tek bir görsel başarısız olsa bile devam et
+            }
+          }
+          
+          if (eventImageUrls.length > 0) {
+            console.log(`  ✅ ${eventImageUrls.length}/10 adet event.jpg görseli MinIO'ya yüklendi ve URL'ler hazır`)
+          } else {
+            console.error(`  ❌ Hiçbir görsel yüklenemedi!`)
+          }
+        } catch (error: any) {
+          const errorMsg = error instanceof Error ? error.message : String(error)
+          const errorStack = error instanceof Error ? error.stack : undefined
+          console.error(`  ❌ MinIO'ya görsel yükleme hatası: ${errorMsg}`)
+          if (errorStack) {
+            console.error(`  📋 Hata detayı: ${errorStack.substring(0, 200)}...`)
+          }
+          console.warn(`  ⚠️ Görseller yüklenemedi, görsel olmadan devam ediliyor...`)
+          // Görsel yüklenemezse boş array ile devam et
         }
-        console.log(`✅ ${eventImageUrls.length} adet event.jpg görseli MinIO'ya yüklendi`)
-      } catch (error) {
-        console.warn('⚠️ event.jpg yüklenemedi, görsel olmadan devam ediliyor:', error)
-        // Görsel yüklenemezse boş array ile devam et
       }
+      
+      console.log(`  🖼️ [${brand.name} - ${product.name}] Görsel yükleme tamamlandı. Toplam ${eventImageUrls.length} URL hazır.`)
 
       // Her product için en az 10 news post oluştur (çeşitli tipler + event.jpg görselleri)
+      // NOT: Görseller yukarıda yüklendi, şimdi news post'lar oluşturulacak
+      console.log(`  📰 [${brand.name} - ${product.name}] News post kontrolü: ${existingNewsPosts.length}/10 mevcut`)
+      
       if (existingNewsPosts.length < 10) {
         // Mevcut post tiplerini kontrol et
         const existingTypes = existingNewsPosts.map(p => p.type)
@@ -3828,6 +3958,177 @@ async function main() {
   }
   console.log('✅ NFT attributes created')
 
+  // ===== SELL NFT ENDPOINT'LERİ İÇİN EK TRANSACTION'LAR =====
+  // Viewer count, total owner ve earn date testleri için ek transaction'lar ekle
+  console.log('🔄 Creating additional NFT transactions for Sell NFT endpoints...')
+  
+  // TARGET_USER_ID'ye ait ilk 4 NFT'yi al (satışta olmayan koleksiyon NFT'leri)
+  const targetUserNFTs = allNFTs.filter((nft: any) => nft && nft.currentOwnerId === TARGET_USER_ID).slice(0, 4)
+  
+  if (targetUserNFTs.length === 0) {
+    console.warn('⚠️ Target user için NFT bulunamadı, ek transaction\'lar atlanıyor')
+  } else {
+    console.log(`✅ ${targetUserNFTs.length} target user NFT'si bulundu, ek transaction'lar ekleniyor...`)
+  }
+  
+  // Her NFT için farklı senaryolar oluştur
+  for (let i = 0; i < Math.min(4, targetUserNFTs.length); i++) {
+    const nft = targetUserNFTs[i]
+    if (!nft || !nft.id) continue
+    
+    // İlk NFT: Çok sayıda transaction (yüksek viewer count)
+    if (i === 0) {
+      // 5-10 arası ek transaction ekle (viewer count için)
+      const extraTransactions = 5 + Math.floor(Math.random() * 6)
+      for (let j = 0; j < extraTransactions; j++) {
+        await prisma.nFTTransaction.create({
+          data: {
+            nftId: nft.id,
+            fromUserId: null,
+            toUserId: TARGET_USER_ID, // Aynı kullanıcı (mint-like views)
+            transactionType: 'MINT',
+            price: null,
+            createdAt: daysAgo(30 - j * 3), // Farklı tarihlerde
+          }
+        }).catch(() => {})
+      }
+    }
+    
+    // İkinci NFT: Transfer transaction'ları (totalOwner > 1 için)
+    if (i === 1 && otherUsers.length > 0) {
+      // İlk transfer: TARGET_USER'dan diğer kullanıcıya
+      await prisma.nFTTransaction.create({
+        data: {
+          nftId: nft.id,
+          fromUserId: TARGET_USER_ID,
+          toUserId: otherUsers[0]?.id || userIdToUse,
+          transactionType: 'TRANSFER',
+          price: null,
+          createdAt: daysAgo(20),
+        }
+      }).catch(() => {})
+      
+      // İkinci transfer: Diğer kullanıcıdan tekrar TARGET_USER'a
+      await prisma.nFTTransaction.create({
+        data: {
+          nftId: nft.id,
+          fromUserId: otherUsers[0]?.id || userIdToUse,
+          toUserId: TARGET_USER_ID,
+          transactionType: 'TRANSFER',
+          price: null,
+          createdAt: daysAgo(10),
+        }
+      }).catch(() => {})
+      
+      // Üçüncü transfer: Tekrar diğer bir kullanıcıya
+      if (otherUsers.length > 1) {
+        await prisma.nFTTransaction.create({
+          data: {
+            nftId: nft.id,
+            fromUserId: TARGET_USER_ID,
+            toUserId: otherUsers[1]?.id || userIdToUse,
+            transactionType: 'TRANSFER',
+            price: null,
+            createdAt: daysAgo(5),
+          }
+        }).catch(() => {})
+      }
+      
+      // Son transfer: Geri TARGET_USER'a
+      await prisma.nFTTransaction.create({
+        data: {
+          nftId: nft.id,
+          fromUserId: otherUsers[0]?.id || otherUsers[1]?.id || userIdToUse,
+          toUserId: TARGET_USER_ID,
+          transactionType: 'TRANSFER',
+          price: null,
+          createdAt: daysAgo(2),
+        }
+      }).catch(() => {})
+    }
+    
+    // Üçüncü NFT: Purchase transaction'ları (fiyatlı işlemler)
+    if (i === 2 && otherUsers.length > 0) {
+      await prisma.nFTTransaction.create({
+        data: {
+          nftId: nft.id,
+          fromUserId: otherUsers[0]?.id || userIdToUse,
+          toUserId: TARGET_USER_ID,
+          transactionType: 'PURCHASE',
+          price: 100.0 + Math.random() * 200,
+          createdAt: daysAgo(15),
+        }
+      }).catch(() => {})
+      
+      // İkinci purchase
+      await prisma.nFTTransaction.create({
+        data: {
+          nftId: nft.id,
+          fromUserId: TARGET_USER_ID,
+          toUserId: otherUsers[0]?.id || userIdToUse,
+          transactionType: 'PURCHASE',
+          price: 150.0 + Math.random() * 200,
+          createdAt: daysAgo(8),
+        }
+      }).catch(() => {})
+      
+      // Üçüncü purchase (tekrar TARGET_USER'a)
+      await prisma.nFTTransaction.create({
+        data: {
+          nftId: nft.id,
+          fromUserId: otherUsers[0]?.id || userIdToUse,
+          toUserId: TARGET_USER_ID,
+          transactionType: 'PURCHASE',
+          price: 200.0 + Math.random() * 200,
+          createdAt: daysAgo(3),
+        }
+      }).catch(() => {})
+    }
+    
+    // Dördüncü NFT: Eski tarihli transaction (earnDate testi için)
+    if (i === 3) {
+      // Orijinal mint transaction'ını daha eski bir tarihe güncelle
+      const firstTransaction = await prisma.nFTTransaction.findFirst({
+        where: { nftId: nft.id },
+        orderBy: { createdAt: 'asc' },
+      })
+      
+      if (firstTransaction) {
+        await prisma.nFTTransaction.update({
+          where: { id: firstTransaction.id },
+          data: {
+            createdAt: daysAgo(180), // 6 ay önce
+          }
+        }).catch(() => {})
+      }
+      
+      // Birkaç eski transaction daha ekle
+      await prisma.nFTTransaction.create({
+        data: {
+          nftId: nft.id,
+          fromUserId: null,
+          toUserId: TARGET_USER_ID,
+          transactionType: 'MINT',
+          price: null,
+          createdAt: daysAgo(120),
+        }
+      }).catch(() => {})
+      
+      await prisma.nFTTransaction.create({
+        data: {
+          nftId: nft.id,
+          fromUserId: null,
+          toUserId: TARGET_USER_ID,
+          transactionType: 'MINT',
+          price: null,
+          createdAt: daysAgo(90),
+        }
+      }).catch(() => {})
+    }
+  }
+  
+  console.log('✅ Additional NFT transactions created for Sell NFT endpoints')
+
   // ===== EXPLORE SECTION - Marketplace Banners, Trending Posts, Events =====
   console.log('🔍 Creating explore data...')
 
@@ -3976,6 +4277,39 @@ async function main() {
   const createdEvents = events.filter(Boolean) as any[]
   console.log(`✅ ${createdEvents.length} wishbox event oluşturuldu (tüm eventType'larda çeşitli)`)
 
+  // Create upcoming events (future events)
+  console.log('🔮 Creating upcoming events...')
+  const nextMonthPlus = new Date()
+  nextMonthPlus.setMonth(today.getMonth() + 2)
+  const nextThreeMonths = new Date()
+  nextThreeMonths.setMonth(today.getMonth() + 3)
+
+  const upcomingEventTemplates = [
+    { title: 'Yaz Sezonu Ürün Anketi', description: 'Yaz sezonu için en iyi ürünleri seçiyoruz!', eventType: 'SURVEY' as const, startDate: nextMonthPlus, endDate: nextThreeMonths },
+    { title: 'Yeni Teknoloji Lansmanı', description: 'Yeni teknoloji ürünlerini keşfet, ödüller kazan!', eventType: 'POLL' as const, startDate: nextMonthPlus, endDate: nextThreeMonths },
+    { title: 'Yaz Fotoğraf Yarışması', description: 'Yaz temalı ürün fotoğraflarını paylaş!', eventType: 'CONTEST' as const, startDate: nextMonthPlus, endDate: nextThreeMonths },
+    { title: 'Yaz Görevleri', description: 'Yaz görevlerini tamamla, özel rozetler kazan!', eventType: 'CHALLENGE' as const, startDate: nextMonthPlus, endDate: nextThreeMonths },
+  ]
+
+  const upcomingEvents = await Promise.all(
+    upcomingEventTemplates.map((template) =>
+      prisma.wishboxEvent.create({
+        data: {
+          id: generateUlid(),
+          title: template.title,
+          description: template.description,
+          imageUrl: getSeedMediaUrl('explore.event.primary'),
+          startDate: template.startDate,
+          endDate: template.endDate,
+          status: 'PUBLISHED',
+          eventType: template.eventType,
+        } as any,
+      }).catch(() => null)
+    )
+  )
+  const createdUpcomingEvents = upcomingEvents.filter(Boolean) as any[]
+  console.log(`✅ ${createdUpcomingEvents.length} yaklaşan event oluşturuldu`)
+
   // Create scenarios for events (first 3 events)
   console.log('🎯 Creating event scenarios...')
   const scenarios = await Promise.all([
@@ -4038,7 +4372,146 @@ async function main() {
   )
   console.log(`✅ ${eventStats.length} event stat oluşturuldu`)
 
-  // 4. Create brand categories
+  // Add badge rewards to events
+  console.log('🏅 Creating event badge rewards...')
+  const allEvents = [...createdEvents, ...createdUpcomingEvents].filter(Boolean)
+  const eventBadges = await prisma.badge.findMany({
+    where: { type: 'EVENT' },
+    take: 10,
+  })
+
+  // Get achievement goals that have badge rewards (to map rewardId)
+  const eventAchievementGoals = await prisma.achievementGoal.findMany({
+    where: { rewardBadgeId: { not: null } },
+    include: { rewardBadge: true },
+    take: 20,
+  })
+
+  if (eventBadges.length > 0 && allEvents.length > 0 && eventAchievementGoals.length > 0) {
+    let rewardCount = 0
+    for (const event of allEvents.slice(0, 5)) {
+      // Her event'e 2-3 badge reward ekle
+      const goalsToAdd = eventAchievementGoals.slice(0, Math.min(3, eventAchievementGoals.length))
+      for (const goal of goalsToAdd) {
+        if (!goal.rewardBadgeId) continue
+        try {
+          // Her event için farklı kullanıcılara reward ver
+          const randomUser = allUserIds[Math.floor(Math.random() * allUserIds.length)]
+          // rewardId için achievement goal'un id'sini kullan (Int olarak)
+          const rewardIdInt = parseInt(goal.id.replace(/-/g, '').substring(0, 8), 16) % 2147483647
+          await prisma.wishboxReward.create({
+            data: {
+              userId: randomUser,
+              eventId: event.id,
+              rewardType: 'BADGE',
+              rewardId: rewardIdInt,
+              amount: null,
+            },
+          })
+          rewardCount++
+        } catch (error) {
+          // Duplicate veya başka bir hata - devam et
+        }
+      }
+    }
+    console.log(`✅ ${rewardCount} event badge reward oluşturuldu`)
+  }
+
+  // 4. Yeni product'lar ve inventory media'ları ekle (explore/products/new için)
+  console.log('📦 Creating new products with inventory media for explore...')
+  const exploreTechCategory = await prisma.mainCategory.findFirst({ where: { name: 'Teknoloji' } })
+  const exploreEvYasamCategory = await prisma.mainCategory.findFirst({ where: { name: 'Ev & Yaşam' } })
+  
+  if (exploreTechCategory && exploreEvYasamCategory) {
+    const exploreTechSubCategory = await prisma.subCategory.findFirst({ where: { mainCategoryId: exploreTechCategory.id } })
+    const exploreEvYasamSubCategory = await prisma.subCategory.findFirst({ where: { mainCategoryId: exploreEvYasamCategory.id } })
+
+    if (exploreTechSubCategory && exploreEvYasamSubCategory) {
+      let exploreTechGroup = await prisma.productGroup.findFirst({ where: { subCategoryId: exploreTechSubCategory.id } })
+      if (!exploreTechGroup) {
+        exploreTechGroup = await prisma.productGroup.create({
+          data: {
+            name: 'Explore Tech Products',
+            description: 'Explore için teknoloji ürünleri',
+            subCategoryId: exploreTechSubCategory.id,
+            imageUrl: getSeedMediaUrl('product.laptop.macbook'),
+          },
+        })
+      }
+      
+      let exploreHomeGroup = await prisma.productGroup.findFirst({ where: { subCategoryId: exploreEvYasamSubCategory.id } })
+      if (!exploreHomeGroup) {
+        exploreHomeGroup = await prisma.productGroup.create({
+          data: {
+            name: 'Explore Home Products',
+            description: 'Explore için ev ürünleri',
+            subCategoryId: exploreEvYasamSubCategory.id,
+            imageUrl: getSeedMediaUrl('product.vacuum.dyson'),
+          },
+        })
+      }
+      
+      const exploreProductGroups = [exploreTechGroup, exploreHomeGroup]
+
+      
+      const exploreProducts = [
+        { name: 'FitnessTech Heart Rate Monitor', brand: 'FitnessTech', group: exploreProductGroups[0]!, mediaKey: 'product.explore.1' },
+        { name: 'FitnessTech Dumbbells', brand: 'FitnessTech', group: exploreProductGroups[0]!, mediaKey: 'product.explore.2' },
+        { name: 'FitnessTech Yoga Mat', brand: 'FitnessTech', group: exploreProductGroups[0]!, mediaKey: 'product.explore.3' },
+        { name: 'SmartHome Pro Smart Light', brand: 'SmartHome Pro', group: exploreProductGroups[1]!, mediaKey: 'product.explore.4' },
+        { name: 'SmartHome Pro Thermostat', brand: 'SmartHome Pro', group: exploreProductGroups[1]!, mediaKey: 'product.explore.5' },
+        { name: 'TechVision Smart Watch', brand: 'TechVision', group: exploreProductGroups[0]!, mediaKey: 'product.explore.6' },
+        { name: 'TechVision Wireless Earbuds', brand: 'TechVision', group: exploreProductGroups[0]!, mediaKey: 'product.explore.7' },
+        { name: 'CoffeeDelight Espresso Machine', brand: 'CoffeeDelight', group: exploreProductGroups[1]!, mediaKey: 'product.explore.8' },
+        { name: 'StyleHub Designer Lamp', brand: 'StyleHub', group: exploreProductGroups[1]!, mediaKey: 'product.explore.9' },
+        { name: 'StyleHub Modern Chair', brand: 'StyleHub', group: exploreProductGroups[1]!, mediaKey: 'product.explore.10' },
+      ]
+
+      if (userIdToUse) {
+        for (const productData of exploreProducts) {
+          try {
+            const product = await prisma.product.create({
+              data: {
+                name: productData.name,
+                brand: productData.brand,
+                description: `Yeni eklenen ${productData.name} ürünü`,
+                groupId: productData.group.id,
+                imageUrl: getSeedMediaUrl(productData.mediaKey as any),
+              },
+            })
+
+            // Inventory oluştur
+            const inventory = await prisma.inventory.create({
+              data: {
+                userId: userIdToUse,
+                productId: product.id,
+                hasOwned: true,
+                experienceSummary: `${productData.name} hakkında deneyim paylaşımı`,
+              },
+            })
+
+            // Inventory media ekle
+            const mediaUrl = getSeedMediaUrl(productData.mediaKey as any)
+            if (mediaUrl) {
+              await prisma.inventoryMedia.create({
+                data: {
+                  inventoryId: inventory.id,
+                  mediaUrl,
+                  type: 'IMAGE',
+                },
+              })
+            }
+          } catch (error) {
+            // Product zaten varsa veya hata oluşursa devam et
+            console.warn(`Product oluşturulamadı: ${productData.name}`, error)
+          }
+        }
+        console.log(`✅ Explore için ${exploreProducts.length} product ve inventory media oluşturuldu`)
+      }
+    }
+  }
+
+  // 5. Create brand categories
   console.log('🏷️  Creating brand categories...')
   const brandCategoryConfigs = [
     { name: 'Technology', imageKey: 'brand.category.technology' },
@@ -4375,6 +4848,13 @@ async function main() {
     { content: 'Yeni özellikler ve iyileştirmeler için çalışıyoruz. Yakında büyük bir sürpriz var! 🎁' },
     { content: 'Kullanıcı deneyimlerinizi okumak bizi çok mutlu ediyor. Paylaşımlarınız için teşekkürler! 🙏' },
     { content: 'Özel kampanyalar ve indirimler için bizi takip etmeye devam edin. Fırsatları kaçırmayın! 🎯' },
+    { content: '2024 yılında sizlerle birlikte büyük adımlar attık. 2025\'te daha da iyisini yapacağız! 🎉' },
+    { content: 'Ürün geliştirme ekibimiz sürekli çalışıyor. Yakında çok özel bir duyuru yapacağız! 🔥' },
+    { content: 'Müşteri memnuniyeti bizim önceliğimiz. Her geri bildiriminiz bizim için çok değerli! 💎' },
+    { content: 'Yeni nesil teknoloji ile tanışmaya hazır mısınız? Çok yakında! 🚀' },
+    { content: 'Sizlerin desteği ile büyüyoruz. Topluluk olarak birlikte daha güçlüyüz! 💪' },
+    { content: 'Kalite ve güvenilirlik bizim önceliğimiz. Her ürünümüzü özenle tasarlıyoruz! ✨' },
+    { content: 'Yeni özellikler ve güncellemeler için bizi takip etmeye devam edin! 📱' },
   ]
 
   let bridgePostsCount = 0
@@ -4383,38 +4863,98 @@ async function main() {
   for (const brand of createdBrands.slice(0, 10)) {
     if (!brand) continue
     
-    // Her brand için 3-5 arası BridgePost oluştur
-    const postCount = Math.floor(Math.random() * 3) + 3
-    const selectedTemplates = bridgePostTemplates
-      .sort(() => Math.random() - 0.5)
-      .slice(0, postCount)
+    // Her brand için en az 10-15 arası BridgePost oluştur (posts[] dolu gelsin)
+    const existingPosts = await prisma.bridgePost.count({
+      where: { brandId: brand.id },
+    })
     
-    for (let i = 0; i < selectedTemplates.length; i++) {
-      const template = selectedTemplates[i]
-      const randomUser = allUserIdsForBridgePosts[Math.floor(Math.random() * allUserIdsForBridgePosts.length)]
-      const daysAgoValue = Math.floor(Math.random() * 30) + 1
+    // Eğer yeterli post yoksa ekle
+    const targetPostCount = 15
+    const postsToCreate = Math.max(0, targetPostCount - existingPosts)
+    
+    if (postsToCreate > 0) {
+      const selectedTemplates = bridgePostTemplates
+        .sort(() => Math.random() - 0.5)
+        .slice(0, postsToCreate)
       
-      try {
-        // ULID oluştur (26 karakter)
-        const ulid = generateUlid()
+      for (let i = 0; i < selectedTemplates.length; i++) {
+        const template = selectedTemplates[i]
+        const randomUser = allUserIdsForBridgePosts[Math.floor(Math.random() * allUserIdsForBridgePosts.length)]
+        const daysAgoValue = Math.floor(Math.random() * 30) + 1
         
-        await prisma.bridgePost.create({
-          data: {
-            id: ulid,
-            brandId: brand.id,
-            userId: randomUser,
-            content: template.content,
-            createdAt: daysAgo(daysAgoValue),
-          }
-        })
-        bridgePostsCount++
-      } catch (error) {
-        // Duplicate veya başka bir hata - devam et
-        console.warn(`BridgePost oluşturulamadı: ${error}`)
+        try {
+          // ULID oluştur (26 karakter)
+          const ulid = generateUlid()
+          
+          await prisma.bridgePost.create({
+            data: {
+              id: ulid,
+              brandId: brand.id,
+              userId: randomUser,
+              content: template.content,
+              createdAt: daysAgo(daysAgoValue),
+            }
+          })
+          bridgePostsCount++
+        } catch (error) {
+          // Duplicate veya başka bir hata - devam et
+          console.warn(`BridgePost oluşturulamadı: ${error}`)
+        }
       }
     }
   }
   console.log(`✅ ${bridgePostsCount} bridge post oluşturuldu`)
+
+  // AutoParts Pro için özel bridge posts ekle
+  console.log('📝 Creating bridge posts for AutoParts Pro...')
+  const autopartsBrandForPosts = await prisma.brand.findFirst({
+    where: { name: 'AutoParts Pro' },
+  })
+  
+  if (autopartsBrandForPosts) {
+    const autopartsPostTemplates = [
+      { content: 'Yeni otomotiv yedek parça koleksiyonumuz çıktı! Motor performansını artıran premium ürünler 🚗✨' },
+      { content: 'Araç bakımı için kaliteli ve uygun fiyatlı çözümler. Güvenli sürüş için doğru parçaları seçin! 🔧' },
+      { content: 'Kış sezonu yaklaşıyor! Araçlarınızı kışa hazırlayın. Silecek lastikleri, antifriz ve diğer kış ekipmanları stokta! ❄️' },
+      { content: 'Müşterilerimizden gelen olumlu geri bildirimler bizi çok mutlu ediyor. Kalite ve güvenilirlik önceliğimiz! 💪' },
+    ]
+    
+    const existingAutopartsPosts = await prisma.bridgePost.count({
+      where: { brandId: autopartsBrandForPosts.id },
+    })
+    
+    // Eğer 4'ten az post varsa ekle
+    const postsToCreate = Math.max(0, 4 - existingAutopartsPosts)
+    
+    if (postsToCreate > 0) {
+      const selectedTemplates = autopartsPostTemplates.slice(0, postsToCreate)
+      
+      for (let i = 0; i < selectedTemplates.length; i++) {
+        const template = selectedTemplates[i]
+        const randomUser = allUserIdsForBridgePosts[Math.floor(Math.random() * allUserIdsForBridgePosts.length)]
+        const daysAgoValue = Math.floor(Math.random() * 30) + 1
+        
+        try {
+          const ulid = generateUlid()
+          await prisma.bridgePost.create({
+            data: {
+              id: ulid,
+              brandId: autopartsBrandForPosts.id,
+              userId: randomUser,
+              content: template.content,
+              createdAt: daysAgo(daysAgoValue),
+            }
+          })
+          bridgePostsCount++
+        } catch (error) {
+          console.warn(`AutoParts Pro BridgePost oluşturulamadı: ${error}`)
+        }
+      }
+      console.log(`✅ AutoParts Pro için ${postsToCreate} bridge post eklendi`)
+    } else {
+      console.log(`✅ AutoParts Pro için zaten yeterli bridge post var (${existingAutopartsPosts} adet)`)
+    }
+  }
 
   // Create products for seed brands - Her brand için en az 10 adet product
   console.log('📦 Creating products for seed brands...')
@@ -4758,7 +5298,7 @@ async function main() {
       // BrandCategory'ye göre bir MainCategory bul (BrandCategory ile Category arasında direkt ilişki yok)
       // Bu durumda, genel bir SubCategory kullan (Teknoloji kategorisinden)
       const techCategory = mainCategories.find(c => c.name === 'Teknoloji')
-      let subCategory = null
+      let subCategory: Awaited<ReturnType<typeof prisma.subCategory.findFirst>> | null = null
       
       if (techCategory) {
         subCategory = await prisma.subCategory.findFirst({
@@ -4862,7 +5402,7 @@ async function main() {
       // Brand'ın category'sine göre SubCategory bul
       // Electronics category için Kulaklıklar subcategory'sini kullan
       const techCategory = mainCategories.find(c => c.name === 'Teknoloji' || c.name === 'Technology')
-      let subCategory = null
+      let subCategory: Awaited<ReturnType<typeof prisma.subCategory.findFirst>> | null = null
       
       if (techCategory) {
         // Kulaklıklar subcategory'sini bul (AudioMax için uygun)
@@ -4978,7 +5518,7 @@ async function main() {
       // Otomotiv kategorisi için SubCategory bul veya oluştur
       // Önce "Otomotiv" main category'sini bul
       const automotiveMainCategory = mainCategories.find(c => c.name === 'Otomotiv')
-      let subCategory = null
+      let subCategory: Awaited<ReturnType<typeof prisma.subCategory.findFirst>> | null = null
       
       if (automotiveMainCategory) {
         // Otomotiv subcategory'sini bul
@@ -5093,8 +5633,8 @@ async function main() {
 
   // Create experience and news posts for seed brand products
   console.log('📰 Creating experience and news posts for seed brand products...')
-  const allBrandNames = createdBrands.filter(Boolean).map(b => b.name)
-  const seedBrandProducts = await prisma.product.findMany({
+  const allBrandNames = createdBrands.filter((b): b is NonNullable<typeof b> => b !== null && b !== undefined).map(b => b.name)
+  const seedBrandProductsData = await prisma.product.findMany({
     where: {
       brand: { in: allBrandNames }
     },
@@ -5117,7 +5657,7 @@ async function main() {
     'Kullanıcı geri bildirimlerine göre yapılan iyileştirmeler duyuruldu.',
   ]
 
-  for (const product of seedBrandProducts.slice(0, 10)) {
+  for (const product of seedBrandProductsData.slice(0, 10)) {
     // Her product için 2 experience post (FREE type)
     for (let i = 0; i < 2; i++) {
       try {
@@ -5590,6 +6130,11 @@ async function main() {
   await seedBrandProducts(userIdToUse)
   console.log('✅ Brand products seeding completed')
 
+  // Tüm product'lar için inventory media ekle (explore/products/new için)
+  console.log('🖼️ Adding inventory media for all products...')
+  await ensureProductImages(userIdToUse)
+  console.log('✅ Product images ensured')
+
   console.log('✨ Seed process completed successfully!')
   
   // Build summary text
@@ -5672,6 +6217,10 @@ async function main() {
   summaryLines.push('• Update Price: PUT /marketplace/listings/:listingId/price')
   summaryLines.push('  Body: { "amount": 150.0 }')
   summaryLines.push('• Cancel Listing: DELETE /marketplace/listings/:listingId')
+  summaryLines.push('• Sell NFT Info: GET /marketplace/sell/:nftId (with auth token)')
+  summaryLines.push('  Returns: viewer, rarity, price, suggestedPrice, gasFee, earningsAfterSales')
+  summaryLines.push('• Sell NFT Detail: GET /marketplace/sell/:nftId/detail (with auth token)')
+  summaryLines.push('  Returns: Detailed sell info including earnDate, totalOwner, ownerUser')
   summaryLines.push('')
   summaryLines.push('🔍 Explore Endpoints:')
   summaryLines.push('• Hottest/Trending: GET /explore/hottest (with auth token)')
@@ -5679,6 +6228,13 @@ async function main() {
   summaryLines.push('• What\'s News (Events): GET /explore/events')
   summaryLines.push('• New Brands: GET /explore/brands/new')
   summaryLines.push('• New Products: GET /explore/products/new')
+  summaryLines.push('')
+  summaryLines.push('🎉 Events Endpoints:')
+  summaryLines.push('• Active Events: GET /events/active?limit=20&cursor=...')
+  summaryLines.push('• Upcoming Events: GET /events/upcoming?limit=20&cursor=...')
+  summaryLines.push('• Event Detail: GET /events/:eventId')
+  summaryLines.push('• Event Posts: GET /events/:eventId/posts?limit=20&cursor=...')
+  summaryLines.push('• Event Badges: GET /events/:eventId/badges?limit=20&cursor=...')
   summaryLines.push('')
   summaryLines.push('💡 Expert Endpoints:')
   summaryLines.push('• Create Request: POST /expert/request')

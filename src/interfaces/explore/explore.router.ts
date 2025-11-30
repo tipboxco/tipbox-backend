@@ -177,6 +177,10 @@ router.get(
  *                     properties:
  *                       eventId:
  *                         type: string
+ *                       eventType:
+ *                         type: string
+ *                         enum: [SURVEY, POLL, CONTEST, CHALLENGE, PROMOTION]
+ *                         description: Event tipi
  *                       image:
  *                         type: string
  *                       title:

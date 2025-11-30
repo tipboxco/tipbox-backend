@@ -20,6 +20,7 @@ import brandRouter from './brand/brand.router';
 import searchRouter from './search/search.router';
 import dashboardRouter from './dashboard/dashboard.router';
 import postRouter from './post/post.router';
+import eventRouter from './event/event.router';
 import { getMetricsService } from '../infrastructure/metrics/metrics.service';
 import { metricsMiddleware } from '../infrastructure/metrics/metrics.middleware';
 import config from '../infrastructure/config';
@@ -537,6 +538,7 @@ app.use('/catalog', catalogRouter);
 app.use('/brands', brandRouter);
 app.use('/search', searchRouter);
 app.use('/posts', postRouter);
+app.use('/events', eventRouter);
 
 // Dashboard endpoint - en sona eklenmeli ki diğer route'lar çalışabilsin
 // Dashboard hem root'ta hem de /dashboard'da çalışabilir

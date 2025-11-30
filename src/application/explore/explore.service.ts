@@ -481,7 +481,7 @@ export class ExploreService {
     const response = {
       items: resultProducts.map((product) => ({
         productId: product.id,
-        images: productImageMap.get(product.id) || null,
+        images: productImageMap.get(product.id) || product.imageUrl || null,
         title: product.name,
       })),
       pagination: {

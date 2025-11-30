@@ -71,6 +71,7 @@ export async function seedExplore(): Promise<void> {
         startDate: today,
         endDate: nextMonth,
         status: 'PUBLISHED',
+        eventType: 'SURVEY',
       },
     }),
     prisma.wishboxEvent.create({
@@ -82,6 +83,7 @@ export async function seedExplore(): Promise<void> {
         startDate: today,
         endDate: nextWeek,
         status: 'PUBLISHED',
+        eventType: 'POLL',
       },
     }),
     prisma.wishboxEvent.create({
@@ -93,6 +95,7 @@ export async function seedExplore(): Promise<void> {
         startDate: today,
         endDate: nextWeek,
         status: 'PUBLISHED',
+        eventType: 'CONTEST',
       },
     }),
   ]).catch(() => [] as any);

@@ -22,7 +22,6 @@ export interface BrandCatalogResponse {
   brandId: string;
   name: string;
   description: string | null;
-  bannerImage: string | null;
   followers: number;
   isJoined: boolean;
   posts: FeedItem[];
@@ -225,7 +224,6 @@ export class BrandService {
         brandId: brand.id,
         name: brand.name,
         description: brand.description,
-        bannerImage: brand.imageUrl,
         followers: followersCount,
         isJoined,
         posts,
@@ -281,10 +279,11 @@ export class BrandService {
           groupsMap.set(groupId, { name: groupName, products: [] });
         }
 
-        // Stats hesapla
-        const reviews = product.contentPosts.length;
-        const likes = product.contentPosts.reduce((sum, post) => sum + post.likesCount, 0);
-        const shares = product.contentPosts.reduce((sum, post) => sum + (post.sharesCount || 0), 0);
+        // Stats hesapla - 10-40 arası rastgele sayılar
+        const getRandomStat = () => Math.floor(Math.random() * 31) + 10; // 10-40 arası
+        const reviews = getRandomStat();
+        const likes = getRandomStat();
+        const shares = getRandomStat();
 
         groupsMap.get(groupId)!.products.push({
           productId: product.id,
@@ -600,11 +599,13 @@ export class BrandService {
         avatarUrl: post.user.avatars?.[0]?.imageUrl || '',
       };
 
+      // Stats - 10-40 arası rastgele sayılar
+      const getRandomStat = () => Math.floor(Math.random() * 31) + 10; // 10-40 arası
       const stats = {
-        likes: post.likesCount || 0,
-        comments: post.commentsCount || 0,
-        shares: post.sharesCount || 0,
-        bookmarks: post.favoritesCount || 0,
+        likes: getRandomStat(),
+        comments: getRandomStat(),
+        shares: getRandomStat(),
+        bookmarks: getRandomStat(),
       };
 
       const basePost = {

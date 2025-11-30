@@ -5,10 +5,39 @@ import logger from '../logger/logger';
 
 export class S3Service {
   private s3Client: S3Client;
+  private effectiveEndpoint: string;
 
   constructor() {
+    // Container dışında çalışıyorsa (seed script gibi) localhost kullan
+    // Container içinde çalışıyorsa minio hostname kullan
+    // Seed script container dışında çalıştığı için her zaman localhost kontrolü yap
+    let effectiveEndpoint = s3Config.endpoint;
+    
+    // Eğer endpoint minio:9000 içeriyorsa ve container dışındaysak localhost'a çevir
+    // Seed script container dışında çalıştığı için otomatik localhost kullanmalı
+    if (effectiveEndpoint.includes('minio:9000')) {
+      // Container içinde çalışıp çalışmadığımızı kontrol et
+      // DOCKER_CONTAINER env var yoksa veya false ise localhost kullan
+      // Ayrıca NODE_ENV development ise de localhost kullan (seed script için)
+      const isContainerEnvironment = process.env.DOCKER_CONTAINER === 'true';
+      const isDevelopment = process.env.NODE_ENV === 'development';
+      
+      if (!isContainerEnvironment || isDevelopment) {
+        effectiveEndpoint = effectiveEndpoint.replace(/minio:9000/g, 'localhost:9000');
+        logger.info({
+          message: 'S3Service: Container dışında veya development ortamında çalışıldığı için localhost endpoint kullanılıyor',
+          originalEndpoint: s3Config.endpoint,
+          effectiveEndpoint,
+          isContainerEnvironment,
+          isDevelopment,
+        });
+      }
+    }
+    
+    this.effectiveEndpoint = effectiveEndpoint;
+    
     this.s3Client = new S3Client({
-      endpoint: s3Config.endpoint,
+      endpoint: this.effectiveEndpoint,
       region: s3Config.region,
       credentials: {
         accessKeyId: s3Config.accessKeyId,
@@ -166,10 +195,11 @@ export class S3Service {
    * @returns Dosyanın erişilebilir URL'i
    */
   getFileUrl(fileName: string): string {
-    // Development ortamında localhost kullan (tarayıcıdan erişim için)
-    const endpoint = process.env.NODE_ENV === 'development' 
-      ? process.env.S3_ENDPOINT?.replace('minio:9000', 'localhost:9000') || 'http://localhost:9000'
-      : s3Config.endpoint;
+    // Development ortamında veya container dışında çalışırken localhost kullan (tarayıcıdan erişim için)
+    let endpoint = this.effectiveEndpoint;
+    if (process.env.NODE_ENV === 'development' || !process.env.DOCKER_CONTAINER) {
+      endpoint = endpoint.replace(/minio:9000/g, 'localhost:9000');
+    }
     
     return `${endpoint}/${s3Config.bucketName}/${fileName}`;
   }

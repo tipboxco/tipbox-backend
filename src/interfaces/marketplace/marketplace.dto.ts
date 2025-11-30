@@ -48,3 +48,29 @@ export interface MarketplaceNFTDetailResponse extends MarketplaceNFTResponse {
   nftId: string;
 }
 
+export type RarityType = 'usual' | 'rare' | 'epic' | 'legendary';
+
+export interface SellNFT {
+  id: string;
+  viewer: number;
+  rarity: RarityType;
+  price: number; // TIPS
+  suggestedPrice: number; // TIPS
+  gasFee: number;
+  earningsAfterSales: number;
+}
+
+export interface SellNFTDetail {
+  id: string;
+  viewer: number;
+  rarity: RarityType;
+  price: number; // TIPS
+  suggestedPrice: number; // TIPS
+  earnDate: string;
+  totalOwner: number;
+  ownerUser: {
+    id: string;
+    name: string;
+  };
+}
+
