@@ -4795,6 +4795,73 @@ async function main() {
   const createdBrands = brands.filter(Boolean)
   console.log(`✅ ${createdBrands.length} brand oluşturuldu (imageUrl ile)`)
 
+  // ===== MARKETPLACE.JPG GÖRSELLERİNİ TÜM BRAND'LARA EKLE =====
+  console.log('🖼️ Brand catalog için marketplace.jpg görselleri yükleniyor...')
+  const marketplaceImagePath = path.join(__dirname, '../tests/assets/marketplace/marketplace.jpg')
+  
+  // Dosya varlık kontrolü
+  if (existsSync(marketplaceImagePath)) {
+    try {
+      console.log('  📁 marketplace.jpg dosyası bulundu, MinIO\'ya yükleniyor...')
+      const s3Service = new S3Service()
+      await s3Service.checkAndCreateBucket()
+      
+      const marketplaceImageBuffer = readFileSync(marketplaceImagePath)
+      console.log(`  📦 Görsel boyutu: ${(marketplaceImageBuffer.length / 1024 / 1024).toFixed(2)} MB`)
+      
+      // Tüm brand'ları al
+      const allBrands = await prisma.brand.findMany()
+      console.log(`  📋 ${allBrands.length} brand için görsel yükleme başlatılıyor...`)
+      
+      let successCount = 0
+      let failCount = 0
+      
+      // Her brand için marketplace.jpg'yi yükle
+      for (const brand of allBrands) {
+        try {
+          // Her brand için unique bir object key oluştur
+          const objectKey = `brands/catalog/${brand.id}/marketplace.jpg`
+          
+          // MinIO'ya yükle
+          const uploadedUrl = await s3Service.uploadFile(objectKey, marketplaceImageBuffer, 'image/jpeg')
+          
+          // Localhost URL'ine çevir (tarayıcıdan erişim için)
+          const localhostUrl = uploadedUrl.replace(/minio:9000/g, 'localhost:9000')
+          
+          // Brand'ı güncelle - imageUrl'e ekle (varsa koru, yoksa ekle)
+          await prisma.brand.update({
+            where: { id: brand.id },
+            data: {
+              imageUrl: localhostUrl,
+            },
+          })
+          
+          successCount++
+          
+          // Her 10 brand'ta bir progress göster
+          if (successCount % 10 === 0) {
+            console.log(`    ✅ ${successCount}/${allBrands.length} brand için görsel yüklendi...`)
+          }
+        } catch (brandError: any) {
+          const errorMsg = brandError instanceof Error ? brandError.message : String(brandError)
+          console.error(`    ❌ ${brand.name} için görsel yüklenemedi: ${errorMsg}`)
+          failCount++
+        }
+      }
+      
+      console.log(`  ✅ ${successCount} brand için marketplace.jpg görseli başarıyla yüklendi ve DB'ye kaydedildi`)
+      if (failCount > 0) {
+        console.warn(`  ⚠️ ${failCount} brand için görsel yüklenemedi`)
+      }
+    } catch (error: any) {
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      console.error(`  ❌ Marketplace görsel yükleme hatası: ${errorMsg}`)
+      console.warn('  ⚠️ Görseller yüklenemedi, brand\'lar görsel olmadan devam ediyor...')
+    }
+  } else {
+    console.warn(`  ⚠️ marketplace.jpg dosyası bulunamadı: ${marketplaceImagePath}`)
+  }
+
   console.log('🏅 Creating bridge rewards for profile collections...')
   const bridgeBrandNames = ['TechVision', 'SmartHome Pro', 'CoffeeDelight']
   const bridgeBrandRecords = await prisma.brand.findMany({
