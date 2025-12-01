@@ -23,7 +23,10 @@ export interface BaseUser {
   id: ID;
   name: string;
   title: string;
-  avatarUrl: URLString;
+  /**
+   * Yeni tercih edilen alan adı - avatar
+   */
+  avatar?: URLString;
 }
 
 export interface BaseStats {

@@ -375,7 +375,7 @@ export class EventService {
               id: post.user.id,
               name: post.user.profile?.displayName || post.user.email || 'Anonymous',
               title: post.user.titles?.[0]?.title || '',
-              avatarUrl: post.user.avatars?.[0]?.imageUrl || '',
+              avatar: post.user.avatars?.[0]?.imageUrl || '',
             },
             stats: {
               likes: post.likesCount,

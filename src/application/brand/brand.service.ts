@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { FeedService } from '../feed/feed.service';
-import { FeedItem, FeedItemType, ContextData } from '../../interfaces/feed/feed.dto';
+import { FeedItem, FeedItemType, ContextData, FeedResponse } from '../../interfaces/feed/feed.dto';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
 import { ContextType } from '../../domain/content/context-type.enum';
 import logger from '../../infrastructure/logger/logger';
@@ -22,6 +22,11 @@ export interface BrandCatalogResponse {
   brandId: string;
   name: string;
   description: string | null;
+  /**
+   * Brand catalog ekranında kullanılacak banner görseli
+   * (seed sırasında brand.imageUrl olarak dolduruluyor)
+   */
+  bannerImage: string | null;
   followers: number;
   isJoined: boolean;
   posts: FeedItem[];
@@ -42,6 +47,116 @@ export interface BrandProduct {
     likes: number;
     share: number;
   };
+}
+
+// ===== Brand Survey & Gamification DTO'ları =====
+
+export type SurveyStatusType = 'start' | 'continue' | 'viewresults';
+
+export interface BrandInfo {
+  id: string;
+  name: string;
+  category: string;
+  logo: string | null;
+}
+
+export interface SurveyCard {
+  id: string;
+  title: string;
+  description: string;
+  type: string; // Anket tipi (WishboxEventType veya özel tip)
+  duration: string; // Tahmini tamamlama süresi
+  points: number;
+  status: SurveyStatusType;
+  progress: number;
+}
+
+export interface SurveyEndPoint {
+  brand: BrandInfo;
+  surveyList: SurveyCard[];
+}
+
+export type BrandEventType = 'default' | 'product';
+
+export interface BrandEventCard {
+  id: string;
+  title: string;
+  description: string;
+  type: BrandEventType;
+  startDate: string;
+  endDate: string;
+  status: 'joined' | 'join';
+  image: string;
+}
+
+export interface EventTasks {
+  id: string;
+  title: string;
+  progress: number;
+  total: number;
+  icon: string; // Feather icon name
+}
+
+export interface EventStatistics {
+  percentage: number;
+  totalUser: number;
+}
+
+export interface EventRewards {
+  title: string;
+  badgeImage: string;
+}
+
+export interface BrandEventDetail {
+  id: string;
+  title: string;
+  description: string;
+  status: 'joined' | 'join';
+  image: string;
+  statistics: EventStatistics;
+  rewards: EventRewards;
+  requirements: EventTasks[];
+}
+
+// ===== Brand History DTO'ları =====
+
+export interface BrandHistoryStats {
+  surveys: number;
+  shares: number;
+  events: number;
+}
+
+export interface BrandHistoryPointsItem {
+  id: string;
+  title: string;
+  image: string;
+  points: number;
+  createdAt: string;
+}
+
+export interface BrandHistoryBadge {
+  id: string;
+  title: string;
+  image: string;
+}
+
+export interface BrandHistory {
+  id: string;
+  name: string;
+  category: string;
+  image: string;
+  totalPoints: number;
+  stats: BrandHistoryStats;
+  pointsHistory: BrandHistoryPointsItem[];
+  badgeList: BrandHistoryBadge[];
+}
+
+export interface SurveyList {
+  surveylist: SurveyCard[];
+}
+
+export interface BrandHistoryEvents {
+  events: BrandEventCard[];
 }
 
 export class BrandService {
@@ -121,6 +236,80 @@ export class BrandService {
   }
 
   /**
+   * Brand Survey & Gamification - Anketler tab'ı
+   */
+  async getBrandSurveys(brandId: string, userId: string): Promise<SurveyEndPoint> {
+    // Brand ve category bilgisini al
+    const brand = await this.prisma.brand.findUnique({
+      where: { id: brandId },
+      include: {
+        brandCategory: true,
+      },
+    });
+
+    if (!brand) {
+      throw new NotFoundError(`Brand not found: ${brandId}`);
+    }
+
+    const brandInfo: BrandInfo = {
+      id: brand.id,
+      name: brand.name,
+      category: brand.brandCategory?.name || 'General',
+      logo: brand.logoUrl,
+    };
+
+    // Şimdilik tüm aktif WishboxEvent'leri survey listesi olarak kullanıyoruz
+    const events = await this.prisma.wishboxEvent.findMany({
+      where: {
+        status: 'PUBLISHED',
+      },
+      orderBy: { startDate: 'asc' },
+      take: 20,
+    });
+
+    // Kullanıcının event istatistiklerine göre status/progress hesapla
+    const stats = await this.prisma.wishboxStats.findMany({
+      where: {
+        userId,
+        eventId: { in: events.map((e) => e.id) },
+      },
+    });
+
+    const statsMap = new Map<string, (typeof stats)[number]>();
+    stats.forEach((s) => statsMap.set(s.eventId, s));
+
+    const surveyList: SurveyCard[] = events.map((event) => {
+      const eventStats = statsMap.get(event.id);
+      const totalParticipated = eventStats?.totalParticipated ?? 0;
+
+      let status: SurveyStatusType = 'start';
+      if (totalParticipated > 0 && totalParticipated < 3) {
+        status = 'continue';
+      } else if (totalParticipated >= 3) {
+        status = 'viewresults';
+      }
+
+      const progress = Math.min(100, totalParticipated * 25);
+
+      return {
+        id: event.id,
+        title: event.title,
+        description: event.description || '',
+        type: event.eventType || 'SURVEY',
+        duration: '5-10 dk',
+        points: 100 + (totalParticipated || 1) * 25,
+        status,
+        progress,
+      };
+    });
+
+    return {
+      brand: brandInfo,
+      surveyList,
+    };
+  }
+
+  /**
    * Brand catalog detayları (brand bilgisi + posts)
    */
   async getBrandCatalog(brandId: string, userId?: string): Promise<BrandCatalogResponse> {
@@ -188,7 +377,7 @@ export class BrandService {
           id: post.user.id,
           name: post.user.profile?.displayName || post.user.email || 'Anonymous',
           title: post.user.titles?.[0]?.title || '',
-          avatarUrl: post.user.avatars?.[0]?.imageUrl || '',
+          avatar: post.user.avatars?.[0]?.imageUrl || '',
         };
 
         // BridgePost için brand-based context oluştur
@@ -199,6 +388,9 @@ export class BrandService {
           image: brand.imageUrl || null,
         };
 
+        // Stats değerlerini her respons'ta 10-40 arasında random üret
+        const randomStat = () => Math.floor(Math.random() * (40 - 10 + 1)) + 10;
+
         return {
           type: FeedItemType.FEED,
           data: {
@@ -206,16 +398,17 @@ export class BrandService {
             type: FeedItemType.FEED,
             user: userBase,
             stats: {
-              likes: 0,
-              comments: 0,
-              shares: 0,
-              bookmarks: 0,
+              likes: randomStat(),
+              comments: randomStat(),
+              shares: randomStat(),
+              bookmarks: randomStat(),
             },
             createdAt: post.createdAt.toISOString(),
             contextType: ContextType.SUB_CATEGORY, // BridgePost için generic context type
             contextData,
             content: post.content,
-            images: [],
+            // Brand catalog kartında görsel göstermek için brand görselini images[] içine ekle
+            images: contextData.image ? [contextData.image] : [],
           },
         };
       });
@@ -224,6 +417,7 @@ export class BrandService {
         brandId: brand.id,
         name: brand.name,
         description: brand.description,
+        bannerImage: brand.imageUrl || null,
         followers: followersCount,
         isJoined,
         posts,
@@ -232,6 +426,214 @@ export class BrandService {
       logger.error(`Failed to get brand catalog for ${brandId}:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Brand Survey & Gamification - Eventler tab'ı
+   */
+  async getBrandEvents(brandId: string, userId: string): Promise<BrandEventCard[]> {
+    // Event'leri global olarak kullanıyoruz, brandId sadece context bilgisi için
+    const events = await this.prisma.wishboxEvent.findMany({
+      where: {
+        status: 'PUBLISHED',
+      },
+      orderBy: { startDate: 'asc' },
+      take: 20,
+    });
+
+    const stats = await this.prisma.wishboxStats.findMany({
+      where: {
+        userId,
+        eventId: { in: events.map((e) => e.id) },
+      },
+    });
+    const statsSet = new Set(stats.map((s) => s.eventId));
+
+    return events.map<BrandEventCard>((event) => ({
+      id: event.id,
+      title: event.title,
+      description: event.description || '',
+      type: 'default',
+      startDate: event.startDate.toISOString(),
+      endDate: event.endDate.toISOString(),
+      status: statsSet.has(event.id) ? 'joined' : 'join',
+      image: event.imageUrl || '',
+    }));
+  }
+
+  /**
+   * Brand Survey & Gamification - Event detay endpoint'i
+   */
+  async getBrandEventDetail(brandId: string, eventId: string, userId: string): Promise<BrandEventDetail> {
+    const event = await this.prisma.wishboxEvent.findUnique({
+      where: { id: eventId },
+    });
+
+    if (!event) {
+      throw new NotFoundError(`Event not found: ${eventId}`);
+    }
+
+    const stats = await this.prisma.wishboxStats.findMany({
+      where: { eventId },
+    });
+
+    const totalUser = stats.length || 0;
+    const totalParticipated = stats.reduce((sum, s) => sum + s.totalParticipated, 0);
+    const maxParticipated = Math.max(1, totalParticipated);
+
+    const joined = stats.some((s) => s.userId === userId);
+
+    // Basit bir yüzde hesabı: katılımcı sayısına göre normalize
+    const percentage = totalUser === 0 ? 0 : Math.min(100, Math.round((totalParticipated / (totalUser * 5)) * 100));
+
+    // Ödül için event'e bağlı ilk badge reward'u bulmaya çalış
+    const reward = await this.prisma.wishboxReward.findFirst({
+      where: { eventId },
+      include: {
+        user: true,
+      },
+    });
+
+    const rewards: EventRewards = {
+      title: reward ? `Badge Reward #${reward.rewardId}` : 'Participation Badge',
+      badgeImage: reward ? 'http://localhost:9000/tipbox-media/brandbadge/badge1.png' : 'http://localhost:9000/tipbox-media/brandbadge/badge1.png',
+    };
+
+    // Basit görev listesi
+    const requirements: EventTasks[] = [
+      {
+        id: `${eventId}-1`,
+        title: 'Anketi tamamla',
+        progress: joined ? maxParticipated : 0,
+        total: maxParticipated,
+        icon: 'check-circle',
+      },
+      {
+        id: `${eventId}-2`,
+        title: 'En az 1 paylaşım yap',
+        progress: joined ? 1 : 0,
+        total: 1,
+        icon: 'share-2',
+      },
+    ];
+
+    return {
+      id: event.id,
+      title: event.title,
+      description: event.description || '',
+      status: joined ? 'joined' : 'join',
+      image: event.imageUrl || '',
+      statistics: {
+        percentage,
+        totalUser,
+      },
+      rewards,
+      requirements,
+    };
+  }
+
+  /**
+   * Brand Survey & Gamification - Trendler tab'ı
+   * Şimdilik brand catalog'daki feed kartlarını aynen döner.
+   */
+  async getBrandTrends(brandId: string, userId: string): Promise<FeedResponse> {
+    const catalog = await this.getBrandCatalog(brandId, userId);
+
+    return {
+      items: catalog.posts,
+      pagination: {
+        hasMore: false,
+        limit: catalog.posts.length,
+      },
+    };
+  }
+
+  // ===== Brand History =====
+
+  async getBrandHistory(brandId: string, userId: string): Promise<BrandHistory> {
+    const brand = await this.prisma.brand.findUnique({
+      where: { id: brandId },
+      include: { brandCategory: true },
+    });
+
+    if (!brand) {
+      throw new NotFoundError(`Brand not found: ${brandId}`);
+    }
+
+    // Toplam puan: o brand için bridgeReward + wishboxReward miktarlarının toplamı (yaklaşık)
+    const bridgeRewards = await this.prisma.bridgeReward.findMany({
+      where: { brandId },
+      include: { badge: true },
+    });
+
+    const wishboxRewards = await this.prisma.wishboxReward.findMany({
+      where: { userId },
+    });
+
+    const totalPoints =
+      bridgeRewards.length * 50 +
+      wishboxRewards.reduce((sum, r) => sum + (r.amount || 0), 0);
+
+    // Stats: surveys & events WishboxStats'tan, shares ise bridgePost sayısından
+    const wishboxStats = await this.prisma.wishboxStats.findMany();
+    const surveysCount = wishboxStats.length;
+
+    const bridgePostsCount = await this.prisma.bridgePost.count({
+      where: { brandId },
+    });
+
+    const eventsCount = await this.prisma.wishboxEvent.count({
+      where: { status: 'PUBLISHED' },
+    });
+
+    const stats: BrandHistoryStats = {
+      surveys: surveysCount,
+      shares: bridgePostsCount,
+      events: eventsCount,
+    };
+
+    // Points history: son 10 wishboxReward kaydı
+    const pointsHistory: BrandHistoryPointsItem[] = wishboxRewards
+      .slice(0, 10)
+      .map((r) => ({
+        id: r.id,
+        title: 'Event Reward',
+        image: 'http://localhost:9000/tipbox-media/badge/badge1.png',
+        points: r.amount || 50,
+        createdAt: r.awardedAt.toISOString(),
+      }));
+
+    // Badge list: bridgeRewards üzerinden
+    const badgeList: BrandHistoryBadge[] = bridgeRewards.map((br) => ({
+      id: br.badgeId,
+      title: br.badge.name,
+      image: br.badge.imageUrl || 'http://localhost:9000/tipbox-media/badge/badge1.png',
+    }));
+
+    return {
+      id: brand.id,
+      name: brand.name,
+      category: brand.brandCategory?.name || 'General',
+      image: brand.imageUrl || '',
+      totalPoints,
+      stats,
+      pointsHistory,
+      badgeList,
+    };
+  }
+
+  async getBrandHistorySurveys(brandId: string, userId: string): Promise<SurveyList> {
+    const surveyEndpoint = await this.getBrandSurveys(brandId, userId);
+    return { surveylist: surveyEndpoint.surveyList };
+  }
+
+  async getBrandHistoryPosts(brandId: string, userId: string): Promise<FeedResponse> {
+    return this.getBrandTrends(brandId, userId);
+  }
+
+  async getBrandHistoryEvents(brandId: string, userId: string): Promise<BrandHistoryEvents> {
+    const events = await this.getBrandEvents(brandId, userId);
+    return { events };
   }
 
   /**
@@ -596,7 +998,7 @@ export class BrandService {
         id: post.user.id,
         name: post.user.profile?.displayName || post.user.email || 'Anonymous',
         title: post.user.titles?.[0]?.title || '',
-        avatarUrl: post.user.avatars?.[0]?.imageUrl || '',
+        avatar: post.user.avatars?.[0]?.imageUrl || '',
       };
 
       // Stats - 10-40 arası rastgele sayılar

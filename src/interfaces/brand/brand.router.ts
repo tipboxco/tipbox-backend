@@ -224,6 +224,280 @@ router.get(
 
 /**
  * @openapi
+ * /brands/{brandId}/surveys:
+ *   get:
+ *     summary: Brand Survey & Gamification - Anketler
+ *     description: Seçili marka için survey/gamification kartlarını döner.
+ *     tags: [Brand]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: brandId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Brand ID'si
+ *     responses:
+ *       200:
+ *         description: Survey listesi başarıyla getirildi.
+ *       401:
+ *         description: Kimlik doğrulaması başarısız.
+ */
+router.get(
+  '/:brandId/surveys',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { brandId } = req.params;
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    const result = await brandService.getBrandSurveys(brandId, userId);
+    res.json(result);
+  }),
+);
+
+/**
+ * @openapi
+ * /brands/{brandId}/events:
+ *   get:
+ *     summary: Brand Survey & Gamification - Eventler
+ *     description: Seçili marka için event kartlarını döner.
+ *     tags: [Brand]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: brandId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Brand ID'si
+ *     responses:
+ *       200:
+ *         description: Event listesi başarıyla getirildi.
+ *       401:
+ *         description: Kimlik doğrulaması başarısız.
+ */
+router.get(
+  '/:brandId/events',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { brandId } = req.params;
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    const result = await brandService.getBrandEvents(brandId, userId);
+    res.json(result);
+  }),
+);
+
+/**
+ * @openapi
+ * /brands/{brandId}/events/{eventId}:
+ *   get:
+ *     summary: Brand Survey & Gamification - Event detayı
+ *     description: Seçili marka için belirli bir event'in detaylarını döner.
+ *     tags: [Brand]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: brandId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: path
+ *         name: eventId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Event ID'si
+ *     responses:
+ *       200:
+ *         description: Event detayı başarıyla getirildi.
+ *       401:
+ *         description: Kimlik doğrulaması başarısız.
+ *       404:
+ *         description: Event bulunamadı.
+ */
+router.get(
+  '/:brandId/events/:eventId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { brandId, eventId } = req.params;
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    const result = await brandService.getBrandEventDetail(brandId, eventId, userId);
+    res.json(result);
+  }),
+);
+
+/**
+ * @openapi
+ * /brands/{brandId}/trends:
+ *   get:
+ *     summary: Brand Survey & Gamification - Trendler
+ *     description: Brand'e ait trend içerikleri (feed formatında) döner.
+ *     tags: [Brand]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: brandId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Trend içerikleri başarıyla getirildi.
+ *       401:
+ *         description: Kimlik doğrulaması başarısız.
+ */
+router.get(
+  '/:brandId/trends',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { brandId } = req.params;
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    const result = await brandService.getBrandTrends(brandId, userId);
+    res.json(result);
+  }),
+);
+
+/**
+ * @openapi
+ * /brands/{brandId}/history:
+ *   get:
+ *     summary: Marka geçmişi ana sayfa bilgilerini getir
+ *     description: Kullanıcının seçtiği markaya ait geçmiş (puanlar, rozetler, istatistikler) bilgisini döner.
+ *     tags: [Brand]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: brandId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Marka geçmişi başarıyla getirildi.
+ *       401:
+ *         description: Kimlik doğrulaması başarısız.
+ */
+router.get(
+  '/:brandId/history',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { brandId } = req.params;
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    const result = await brandService.getBrandHistory(brandId, userId);
+    res.json(result);
+  }),
+);
+
+/**
+ * @openapi
+ * /brands/{brandId}/history/surveys:
+ *   get:
+ *     summary: Marka geçmişine ait anketleri getir
+ *     description: Geçmişteki survey kartlarını döner.
+ *     tags: [Brand]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: brandId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Marka geçmişi anketleri başarıyla getirildi.
+ *       401:
+ *         description: Kimlik doğrulaması başarısız.
+ */
+router.get(
+  '/:brandId/history/surveys',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { brandId } = req.params;
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    const result = await brandService.getBrandHistorySurveys(brandId, userId);
+    res.json(result);
+  }),
+);
+
+/**
+ * @openapi
+ * /brands/{brandId}/history/posts:
+ *   get:
+ *     summary: Marka geçmişine ait paylaşımları getir
+ *     description: Marka geçmişi için feed formatında paylaşımları döner.
+ *     tags: [Brand]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: brandId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Marka geçmişi paylaşımları başarıyla getirildi.
+ *       401:
+ *         description: Kimlik doğrulaması başarısız.
+ */
+router.get(
+  '/:brandId/history/posts',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { brandId } = req.params;
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    const result = await brandService.getBrandHistoryPosts(brandId, userId);
+    res.json(result);
+  }),
+);
+
+/**
+ * @openapi
+ * /brands/{brandId}/history/events:
+ *   get:
+ *     summary: Marka geçmişine ait event'leri getir
+ *     description: Marka geçmişi ekranı için event kartlarını döner.
+ *     tags: [Brand]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: brandId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Marka geçmişi event'leri başarıyla getirildi.
+ *       401:
+ *         description: Kimlik doğrulaması başarısız.
+ */
+router.get(
+  '/:brandId/history/events',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { brandId } = req.params;
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    const result = await brandService.getBrandHistoryEvents(brandId, userId);
+    res.json(result);
+  }),
+);
+
+/**
+ * @openapi
  * /brands/{brandId}/products/{productId}/experiences:
  *   get:
  *     summary: Marka ürününe ait deneyim paylaşımlarını listele

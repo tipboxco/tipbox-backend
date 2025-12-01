@@ -6202,6 +6202,99 @@ async function main() {
   await ensureProductImages(userIdToUse)
   console.log('✅ Product images ensured')
 
+  // ===== BRAND EXPERIENCES BOOST (SPECIFIC BRAND) =====
+  // Belirli bir brand için (ID: 8386190d-39ad-4f55-b994-84a753eacacf) tüm product'larda
+  // /brands/{brandId}/products/{productId}/experiences endpoint'ine en az 10 FREE deneyim post'u üret
+  console.log('📝 Ensuring at least 10 FREE experience posts for specific brand products...')
+  const TARGET_BRAND_ID_FOR_EXPERIENCES = '8386190d-39ad-4f55-b994-84a753eacacf'
+
+  const targetBrand = await prisma.brand.findUnique({
+    where: { id: TARGET_BRAND_ID_FOR_EXPERIENCES },
+  })
+
+  if (!targetBrand) {
+    console.warn(`⚠️ Brand not found for experiences boost (id: ${TARGET_BRAND_ID_FOR_EXPERIENCES})`)
+  } else {
+    const targetBrandName = targetBrand.name
+    console.log(`✅ Experiences boost for brand: ${targetBrandName} (${targetBrand.id})`)
+
+    // Bu brand'e ait tüm product'ları bul (Product.brand alanı isim tutuyor)
+    const brandProducts = await prisma.product.findMany({
+      where: { brand: targetBrandName },
+      orderBy: { createdAt: 'asc' },
+    })
+
+    console.log(`  📦 Found ${brandProducts.length} products for brand ${targetBrandName}`)
+
+    for (const product of brandProducts) {
+      // Mevcut FREE deneyim post sayısını kontrol et
+      const existingExperiences = await prisma.contentPost.findMany({
+        where: {
+          productId: product.id,
+          type: 'FREE',
+        },
+      })
+
+      const existingCount = existingExperiences.length
+      const minRequired = 10
+
+      if (existingCount >= minRequired) {
+        console.log(`  ✅ Product "${product.name}" already has ${existingCount} FREE experiences (>= ${minRequired})`)
+        continue
+      }
+
+      const toCreate = minRequired - existingCount
+      console.log(`  ✏️  Creating ${toCreate} additional FREE experiences for product "${product.name}"`)
+
+      const experienceTemplates = [
+        ` ${product.name} ürününü günlük kullanımda detaylıca test ettim. Performansı ve dayanıklılığı açısından beni şaşırttı.`,
+        ` ${product.name} ile ilk haftam: Kurulumdan itibaren yaşadığım deneyimleri ve dikkat çeken artı/eksi yönleri paylaştım.`,
+        ` Uzun vadeli kullanım sonrası ${product.name} hakkında gerçek kullanıcı yorumu. Hangi senaryoda parlıyor, nerede zorlanıyor?`,
+        ` ${product.name} için fiyat/performans değerlendirmesi yaptım. Aynı segmentteki rakipleriyle kısa bir kıyaslama içeriyor.`,
+        ` ${product.name} ile birlikte gelen aksesuarlar ve günlük rutine etkileri üzerine gözlemlerimi yazdım.`,
+      ]
+
+      for (let i = 0; i < toCreate; i++) {
+        const experiencePostId = generateUlid()
+        const templateBody = experienceTemplates[i % experienceTemplates.length]
+        const title = `${product.name} ile Deneyim Notları #${existingCount + i + 1}`
+
+        await prisma.contentPost.create({
+          data: {
+            id: experiencePostId,
+            userId: userIdToUse,
+            type: 'FREE',
+            title,
+            body: `${templateBody} (Brand: ${targetBrandName})`,
+            productId: product.id,
+            inventoryRequired: false,
+            isBoosted: (existingCount + i) % 3 === 0,
+            createdAt: daysAgo(randomBetween(3, 45)),
+          },
+        })
+
+        // Basit istatistikler ekle (0'dan büyük değerler)
+        const likes = randomBetween(3, 40)
+        const comments = randomBetween(1, 12)
+        const shares = randomBetween(0, 8)
+        const bookmarks = randomBetween(1, 15)
+
+        await prisma.contentPost.update({
+          where: { id: experiencePostId },
+          data: {
+            likesCount: likes,
+            commentsCount: comments,
+            sharesCount: shares,
+            favoritesCount: bookmarks,
+            viewsCount: likes * randomBetween(5, 12) + randomBetween(20, 100),
+          },
+        }).catch(() => {})
+      }
+
+      console.log(`  ✅ Ensured ${minRequired} FREE experiences for product "${product.name}"`)
+    }
+  }
+
   console.log('✨ Seed process completed successfully!')
   
   // Build summary text

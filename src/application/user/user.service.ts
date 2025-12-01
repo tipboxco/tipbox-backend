@@ -826,7 +826,7 @@ export class UserService {
       id: userId,
       name: profile?.displayName || 'Anonymous',
       title: title?.title || '',
-      avatarUrl: avatar?.imageUrl ?? '',
+      avatar: avatar?.imageUrl ?? '',
     };
   }
 
