@@ -5,7 +5,7 @@ services:
     restart: always
     environment:
       POSTGRES_USER: tipbox_user
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: tipbox_prod_password
       POSTGRES_DB: tipbox_prod
     volumes:
       - postgres_production_data:/var/lib/postgresql/data
@@ -28,8 +28,8 @@ services:
     restart: always
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
     volumes:
       - minio_production_data:/data
       - minio_backup:/backup
@@ -52,7 +52,7 @@ services:
       - redis_production_data:/data
     networks:
       - tipbox_network
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD} --maxmemory 512mb --maxmemory-policy allkeys-lru
+    command: redis-server --appendonly yes --requirepass tipbox_redis_prod --maxmemory 512mb --maxmemory-policy allkeys-lru
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
       interval: 10s
@@ -68,24 +68,20 @@ services:
       dockerfile: Dockerfile.prod
     container_name: tipbox_backend_production
     restart: always
+    env_file:
+      - .env.production
     environment:
       - NODE_ENV=production
       - NODE_OPTIONS=--max-old-space-size=4096
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - DATABASE_URL=postgresql://tipbox_user:tipbox_prod_password@postgres:5432/tipbox_prod
+      - REDIS_URL=redis://:tipbox_redis_prod@redis:6379
       - S3_ENDPOINT=http://minio:9000
-      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
-      - S3_REGION=${S3_REGION}
-      - S3_ACCESS_KEY=${MINIO_ROOT_USER}
-      - S3_SECRET_KEY=${MINIO_ROOT_PASSWORD}
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
-      - JWT_SECRET=${JWT_SECRET}
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/tipboxbackend-3e2c3d3c0b31.json
-      - EMAIL_USER_TO_IMPERSONATE=${EMAIL_USER_TO_IMPERSONATE}
-      - EMAIL_FROM_NAME=${EMAIL_FROM_NAME}
-      - CORS_ORIGINS=${CORS_ORIGINS}
-      - CORS_METHODS=${CORS_METHODS}
+      - S3_BUCKET_NAME=tipbox-media
+      - S3_REGION=eu-central-1
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=minioadmin123
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin123
       - PORT=3000
     depends_on:
       postgres:
