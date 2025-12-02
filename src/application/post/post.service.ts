@@ -109,15 +109,12 @@ export class PostService {
    * Image URL'lerini post body'sine ekler
    */
   private appendImagesToBody(body: string, images?: string[]): string {
-    if (!images || images.length === 0) {
-      return body;
-    }
-
-    const imageMarkdown = images
-      .map((url) => `![Image](${url})`)
-      .join('\n\n');
-
-    return `${body}\n\n${imageMarkdown}`;
+    // NOTE:
+    // Artık görselleri sadece ayrı `images` alanında tutuyoruz.
+    // Content (body) kullanıcı açıklamasını temsil edecek ve
+    // feed card'larında sade, okunabilir metin olarak kullanılacak.
+    // Bu nedenle image URL'lerini markdown olarak body'ye eklemiyoruz.
+    return body;
   }
 
   /**

@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import multer, { FileFilterCallback } from 'multer';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { authMiddleware } from '../auth/auth.middleware';
 import { PostService } from '../../application/post/post.service';
@@ -15,9 +16,116 @@ import { ContextType } from '../../domain/content/context-type.enum';
 import { TipsAndTricksBenefitCategory } from '../../domain/content/tips-and-tricks-benefit-category.enum';
 import { ExperienceType } from '../../domain/content/experience-type.enum';
 import { ExperienceStatus } from '../../domain/content/experience-status.enum';
+import { S3Service } from '../../infrastructure/s3/s3.service';
+import { v4 as uuidv4 } from 'uuid';
+import logger from '../../infrastructure/logger/logger';
 
 const router = Router();
 const postService = new PostService();
+const s3Service = new S3Service();
+
+// Multer configuration for Post media uploads (images only for now)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB per file
+  },
+  fileFilter: (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
+    const allowedMimeTypes = [
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
+      'image/gif',
+      'image/webp',
+    ];
+
+    if (file.mimetype && allowedMimeTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(
+        new Error(
+          'Sadece resim dosyaları yüklenebilir (JPG, PNG, GIF, WebP)'
+        )
+      );
+    }
+  },
+});
+
+const uploadPostImages = async (
+  userId: string,
+  files: Express.Multer.File[] | undefined | null
+): Promise<string[]> => {
+  if (!files || files.length === 0) {
+    return [];
+  }
+
+  const imageUrls: string[] = [];
+
+  for (const file of files) {
+    try {
+      // Determine file extension
+      let fileExtension = 'jpg';
+      const mimeToExtension: Record<string, string> = {
+        'image/jpeg': 'jpg',
+        'image/jpg': 'jpg',
+        'image/png': 'png',
+        'image/gif': 'gif',
+        'image/webp': 'webp',
+      };
+
+      if (file.mimetype && mimeToExtension[file.mimetype]) {
+        fileExtension = mimeToExtension[file.mimetype];
+      } else if (file.originalname && file.originalname.includes('.')) {
+        const parts = file.originalname.split('.');
+        if (parts.length > 1) {
+          fileExtension = parts[parts.length - 1].toLowerCase();
+        }
+      }
+
+      const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+      if (!allowedExtensions.includes(fileExtension)) {
+        throw new Error(
+          'Desteklenmeyen dosya formatı. Sadece JPG, PNG, GIF ve WebP formatları desteklenmektedir.'
+        );
+      }
+
+      const fileName = `posts/${userId}/${uuidv4()}.${fileExtension}`;
+      const imageUrl = await s3Service.uploadFile(
+        fileName,
+        file.buffer,
+        file.mimetype
+      );
+
+      imageUrls.push(imageUrl);
+
+      logger.info({
+        message: 'Post image uploaded',
+        userId,
+        fileName,
+        imageUrl,
+        fileSize: file.size,
+        mimeType: file.mimetype,
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      logger.error({
+        message: 'Post image upload failed',
+        userId,
+        fileName: file.originalname,
+        error: errorMessage,
+        fileSize: file.size,
+        mimeType: file.mimetype,
+      });
+
+      throw new Error(
+        `Image upload failed: ${errorMessage}`
+      );
+    }
+  }
+
+  return imageUrls;
+};
 
 router.use(authMiddleware);
 
@@ -33,9 +141,26 @@ router.use(authMiddleware);
  *     requestBody:
  *       required: true
  *       content:
- *         application/json:
+ *         multipart/form-data:
  *           schema:
- *             $ref: '#/components/schemas/CreatePostRequest'
+ *             type: object
+ *             required:
+ *               - contextType
+ *               - contextId
+ *               - description
+ *             properties:
+ *               contextType:
+ *                 $ref: '#/components/schemas/ContextType'
+ *               contextId:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               images:
+ *                 type: array
+ *                 description: Gönderiye eklenecek görseller (opsiyonel, birden fazla dosya yüklenebilir)
+ *                 items:
+ *                   type: string
+ *                   format: binary
  *     responses:
  *       201:
  *         description: Gönderi başarıyla oluşturuldu
@@ -53,6 +178,7 @@ router.use(authMiddleware);
  */
 router.post(
   '/free',
+  upload.array('images', 10),
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = (req as any).user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
@@ -60,11 +186,18 @@ router.post(
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
+    const multerReq = req as any;
+    const files: Express.Multer.File[] = Array.isArray(multerReq.files)
+      ? multerReq.files
+      : [];
+
+    const images = await uploadPostImages(String(userId), files);
+
     const request: CreatePostRequest = {
       contextType: req.body.contextType as ContextType,
       contextId: req.body.contextId,
       description: req.body.description,
-      images: req.body.images || [],
+      images,
     };
 
     if (!request.contextType || !request.contextId || !request.description) {
@@ -90,9 +223,29 @@ router.post(
  *     requestBody:
  *       required: true
  *       content:
- *         application/json:
+ *         multipart/form-data:
  *           schema:
- *             $ref: '#/components/schemas/CreateTipsAndTricksPostRequest'
+ *             type: object
+ *             required:
+ *               - contextType
+ *               - contextId
+ *               - description
+ *               - benefitCategory
+ *             properties:
+ *               contextType:
+ *                 $ref: '#/components/schemas/ContextType'
+ *               contextId:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               benefitCategory:
+ *                 $ref: '#/components/schemas/TipsAndTricksBenefitCategory'
+ *               images:
+ *                 type: array
+ *                 description: Gönderiye eklenecek görseller (opsiyonel, birden fazla dosya yüklenebilir)
+ *                 items:
+ *                   type: string
+ *                   format: binary
  *     responses:
  *       201:
  *         description: İpucu gönderisi başarıyla oluşturuldu
@@ -110,6 +263,7 @@ router.post(
  */
 router.post(
   '/tips-and-tricks',
+  upload.array('images', 10),
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = (req as any).user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
@@ -117,12 +271,19 @@ router.post(
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
+    const multerReq = req as any;
+    const files: Express.Multer.File[] = Array.isArray(multerReq.files)
+      ? multerReq.files
+      : [];
+
+    const images = await uploadPostImages(String(userId), files);
+
     const request: CreateTipsAndTricksPostRequest = {
       contextType: req.body.contextType as ContextType,
       contextId: req.body.contextId,
       description: req.body.description,
       benefitCategory: req.body.benefitCategory as TipsAndTricksBenefitCategory,
-      images: req.body.images || [],
+      images,
     };
 
     if (
@@ -157,9 +318,29 @@ router.post(
  *     requestBody:
  *       required: true
  *       content:
- *         application/json:
+ *         multipart/form-data:
  *           schema:
- *             $ref: '#/components/schemas/CreateQuestionPostRequest'
+ *             type: object
+ *             required:
+ *               - contextType
+ *               - contextId
+ *               - description
+ *               - selectedBoostOptionId
+ *             properties:
+ *               contextType:
+ *                 $ref: '#/components/schemas/ContextType'
+ *               contextId:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               selectedBoostOptionId:
+ *                 type: string
+ *               images:
+ *                 type: array
+ *                 description: Gönderiye eklenecek görseller (opsiyonel, birden fazla dosya yüklenebilir)
+ *                 items:
+ *                   type: string
+ *                   format: binary
  *     responses:
  *       201:
  *         description: Soru gönderisi başarıyla oluşturuldu
@@ -177,6 +358,7 @@ router.post(
  */
 router.post(
   '/question',
+  upload.array('images', 10),
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = (req as any).user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
@@ -184,11 +366,18 @@ router.post(
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
+    const multerReq = req as any;
+    const files: Express.Multer.File[] = Array.isArray(multerReq.files)
+      ? multerReq.files
+      : [];
+
+    const images = await uploadPostImages(String(userId), files);
+
     const request: CreateQuestionPostRequest = {
       contextType: req.body.contextType as ContextType,
       contextId: req.body.contextId,
       description: req.body.description,
-      images: req.body.images || [],
+      images,
       selectedBoostOptionId: req.body.selectedBoostOptionId,
     };
 
@@ -324,9 +513,43 @@ router.post(
  *     requestBody:
  *       required: true
  *       content:
- *         application/json:
+ *         multipart/form-data:
  *           schema:
- *             $ref: '#/components/schemas/CreateExperiencePostRequest'
+ *             type: object
+ *             required:
+ *               - contextType
+ *               - contextId
+ *               - selectedDurationId
+ *               - selectedLocationId
+ *               - selectedPurposeId
+ *               - content
+ *               - experience
+ *               - status
+ *             properties:
+ *               contextType:
+ *                 $ref: '#/components/schemas/ContextType'
+ *               contextId:
+ *                 type: string
+ *               selectedDurationId:
+ *                 type: string
+ *               selectedLocationId:
+ *                 type: string
+ *               selectedPurposeId:
+ *                 type: string
+ *               content:
+ *                 type: string
+ *               experience:
+ *                 type: array
+ *                 items:
+ *                   $ref: '#/components/schemas/Experience'
+ *               status:
+ *                 $ref: '#/components/schemas/ExperienceStatus'
+ *               images:
+ *                 type: array
+ *                 description: Gönderiye eklenecek görseller (opsiyonel, birden fazla dosya yüklenebilir)
+ *                 items:
+ *                   type: string
+ *                   format: binary
  *     responses:
  *       201:
  *         description: Deneyim paylaşımı gönderisi başarıyla oluşturuldu
@@ -344,12 +567,20 @@ router.post(
  */
 router.post(
   '/experience',
+  upload.array('images', 10),
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = (req as any).user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
       return res.status(401).json({ message: 'Unauthorized' });
     }
+
+    const multerReq = req as any;
+    const files: Express.Multer.File[] = Array.isArray(multerReq.files)
+      ? multerReq.files
+      : [];
+
+    const images = await uploadPostImages(String(userId), files);
 
     const request: CreateExperiencePostRequest = {
       contextType: req.body.contextType as ContextType,
@@ -360,7 +591,7 @@ router.post(
       content: req.body.content,
       experience: req.body.experience,
       status: req.body.status as ExperienceStatus,
-      images: req.body.images || [],
+      images,
     };
 
     if (
@@ -572,9 +803,26 @@ router.delete(
  *     requestBody:
  *       required: true
  *       content:
- *         application/json:
+ *         multipart/form-data:
  *           schema:
- *             $ref: '#/components/schemas/CreateUpdatePostRequest'
+ *             type: object
+ *             required:
+ *               - contextType
+ *               - contextId
+ *               - content
+ *             properties:
+ *               contextType:
+ *                 $ref: '#/components/schemas/ContextType'
+ *               contextId:
+ *                 type: string
+ *               content:
+ *                 type: string
+ *               images:
+ *                 type: array
+ *                 description: Gönderiye eklenecek görseller (opsiyonel, birden fazla dosya yüklenebilir)
+ *                 items:
+ *                   type: string
+ *                   format: binary
  *     responses:
  *       201:
  *         description: Güncelleme gönderisi başarıyla oluşturuldu
@@ -592,6 +840,7 @@ router.delete(
  */
 router.post(
   '/update',
+  upload.array('images', 10),
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = (req as any).user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
@@ -599,11 +848,18 @@ router.post(
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
+    const multerReq = req as any;
+    const files: Express.Multer.File[] = Array.isArray(multerReq.files)
+      ? multerReq.files
+      : [];
+
+    const images = await uploadPostImages(String(userId), files);
+
     const request: CreateUpdatePostRequest = {
       contextType: req.body.contextType as ContextType,
       contextId: req.body.contextId,
       content: req.body.content,
-      images: req.body.images || [],
+      images,
     };
 
     if (!request.contextType || !request.contextId || !request.content) {

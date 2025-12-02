@@ -125,7 +125,7 @@ async function ensureProductImages(userIdToUse: string): Promise<void> {
           userId: userIdToUse,
           productId: product.id,
           hasOwned: true,
-          experienceSummary: `${product.name} hakkında deneyim paylaşımı`,
+          experienceSummary: `Real‑life ownership experience with ${product.name}`,
         },
       })
     }
@@ -219,10 +219,8 @@ async function seedBrandProducts(userIdToUse: string): Promise<void> {
     })
   }
 
-  // Brand'ları bul (tüm brand'ları al, sadece belirli brand'ları değil)
-  const brands = await prisma.brand.findMany({
-    take: 10, // İlk 10 brand'ı al
-  })
+  // Brand'ları bul (tüm brand'ları al)
+  const brands = await prisma.brand.findMany()
 
   if (brands.length === 0) {
     console.warn('⚠️ Brand\'lar bulunamadı, brand products seed atlanıyor')
@@ -309,7 +307,7 @@ async function seedBrandProducts(userIdToUse: string): Promise<void> {
             userId: userIdToUse,
             productId: product.id,
             hasOwned: true,
-            experienceSummary: `${product.name} hakkında deneyim paylaşımı`,
+            experienceSummary: `Real‑life ownership experience with ${product.name}`,
           },
         })
       }
@@ -347,28 +345,52 @@ async function seedBrandProducts(userIdToUse: string): Promise<void> {
       // Her product için en az 5-6 experience post oluştur
       const experienceTemplates = [
         {
-          title: `${product.name} ile İlk Günlerim`,
-          body: `${product.name} ürününü aldıktan sonraki ilk günlerimde yaşadığım deneyimler. ${productConfig.experienceText} Gerçekten beklediğimden çok daha iyi bir kullanıcı deneyimi sunuyor.`,
+          title: `${product.name} – First Days of Use`,
+          body:
+            `${product.name} has been in my hands for only a few days, but it already feels like part of my routine. ` +
+            `The setup was straightforward and I did not have to dig through manuals to start using it. ` +
+            `In the first week I focused on learning how ${productConfig.experienceText.toLowerCase()} actually behaves in real life. ` +
+            `So far it feels more natural and reliable than most similar products I tried before.`,
         },
         {
-          title: `${product.name} - Günlük Kullanım Deneyimi`,
-          body: `${product.name} ürününü günlük hayatımda düzenli olarak kullanıyorum. Performansı ve dayanıklılığı açısından gerçekten memnunum. Özellikle ${productConfig.experienceText} özelliği beni çok etkiledi.`,
+          title: `${product.name} – Daily Usage Experience`,
+          body:
+            `I use ${product.name} almost every day and it has settled into a very clear role in my home. ` +
+            `It saves me a few minutes each time I reach for it, which adds up over a busy week. ` +
+            `Little touches like ${productConfig.experienceText.toLowerCase()} make it feel designed for real people instead of spec sheets. ` +
+            `If it disappeared tomorrow, I would immediately notice the extra friction in my daily routine.`,
         },
         {
-          title: `${product.name} Detaylı İnceleme`,
-          body: `${product.name} ürününü detaylı bir şekilde test ettim. Kullanım kolaylığı, tasarım ve fonksiyonellik açısından çok başarılı. ${productConfig.experienceText} özellikleri ile günlük ihtiyaçlarımı karşılıyor.`,
+          title: `${product.name} – In‑Depth Review`,
+          body:
+            `After spending several weeks with ${product.name}, I started to notice the smaller design decisions. ` +
+            `The hardware feels solid, the controls are predictable and there are no hidden surprises in normal use. ` +
+            `When I push it harder, ${productConfig.experienceText.toLowerCase()} still stays consistent and responsive. ` +
+            `Overall it feels like a product that was tested by people who actually live with it every day.`,
         },
         {
-          title: `${product.name} - Uzun Vadeli Kullanım`,
-          body: `${product.name} ürününü birkaç aydır kullanıyorum ve uzun vadeli performansı gerçekten etkileyici. ${productConfig.experienceText} Özellikle dayanıklılığı ve kalitesi konusunda hiçbir sorun yaşamadım.`,
+          title: `${product.name} – Long‑Term Ownership`,
+          body:
+            `I have owned ${product.name} for a few months now and it still performs as well as the first week. ` +
+            `Battery, materials and moving parts have not shown any obvious wear so far. ` +
+            `Even after repeated use, ${productConfig.experienceText.toLowerCase()} remains stable and does not require constant tweaking. ` +
+            `It is the kind of device you forget about until you need it, which is exactly what I want from a dependable tool.`,
         },
         {
-          title: `${product.name} ile Yaşam Kalitesi`,
-          body: `${product.name} ürünü hayatımı gerçekten kolaylaştırdı. Kullanımı çok pratik ve sonuçlar beklediğimden çok daha iyi. ${productConfig.experienceText} Özelliklerini kullanarak daha verimli bir günlük rutin oluşturdum.`,
+          title: `${product.name} – How It Changes My Day`,
+          body:
+            `${product.name} genuinely changed the way I plan small tasks during the day. ` +
+            `Instead of postponing things, I handle them immediately because the device is quick to start and easy to put away. ` +
+            `The fact that ${productConfig.experienceText.toLowerCase()} works reliably means I do not have to double‑check its results. ` +
+            `Over time that reduction in mental effort is just as valuable as the time it saves.`,
         },
         {
-          title: `${product.name} - Profesyonel Bakış Açısı`,
-          body: `${product.name} ürününü profesyonel bir bakış açısıyla değerlendirdim. Kalite, performans ve kullanıcı deneyimi açısından gerçekten üst seviye. ${productConfig.experienceText} Özelliği ile işlerimi çok daha hızlı hallettim.`,
+          title: `${product.name} – Professional Perspective`,
+          body:
+            `Looking at ${product.name} from a more professional angle, it balances performance and usability very well. ` +
+            `In tests with different workloads it behaved predictably and did not slow me down. ` +
+            `Features like ${productConfig.experienceText.toLowerCase()} translate into concrete productivity gains rather than marketing buzzwords. ` +
+            `For someone who relies on their tools to get consistent results, this makes the product easy to recommend.`,
         },
       ]
 
@@ -834,6 +856,67 @@ async function seedBrandProducts(userIdToUse: string): Promise<void> {
 
         if (createdCount > 0) {
           console.log(`✅ ${createdCount} news post oluşturuldu: ${product.name}`)
+        }
+      }
+    }
+
+    // Bu brand için toplam product sayısını kontrol et, minimum 5 olmasını sağla
+    const minProductsPerBrand = 5
+    const currentProductCount = await prisma.product.count({
+      where: { brand: brand.name },
+    })
+
+    if (currentProductCount < minProductsPerBrand) {
+      const productsToCreate = minProductsPerBrand - currentProductCount
+      console.log(
+        `ℹ️ ${brand.name} için ek ürün oluşturuluyor: mevcut=${currentProductCount}, hedef=${minProductsPerBrand}`
+      )
+
+      for (let i = 0; i < productsToCreate; i++) {
+        const genericProductName = `${brand.name} Ürün ${currentProductCount + i + 1}`
+
+        // Product oluştur
+        const genericProduct = await prisma.product.create({
+          data: {
+            name: genericProductName,
+            brand: brand.name,
+            description: `${brand.name} için otomatik oluşturulan seed ürün`,
+            groupId: productGroup.id,
+            imageUrl: brand.imageUrl || getSeedMediaUrl('product.laptop.macbook'),
+          },
+        })
+
+        // Inventory oluştur (experiences ve news akışları için)
+        let genericInventory = await prisma.inventory.findFirst({
+          where: {
+            userId: userIdToUse,
+            productId: genericProduct.id,
+          },
+        })
+
+        if (!genericInventory) {
+          genericInventory = await prisma.inventory.create({
+            data: {
+              userId: userIdToUse,
+              productId: genericProduct.id,
+              hasOwned: true,
+              experienceSummary: `${genericProduct.name} hakkında otomatik oluşturulan deneyim`,
+            },
+          })
+        }
+
+        // Inventory media ekle (brand image veya default görsel)
+        const genericMediaUrl = genericProduct.imageUrl || brand.imageUrl || getSeedMediaUrl('product.laptop.macbook')
+        if (genericMediaUrl) {
+          await prisma.inventoryMedia
+            .create({
+              data: {
+                inventoryId: genericInventory.id,
+                mediaUrl: genericMediaUrl,
+                type: 'IMAGE',
+              },
+            })
+            .catch(() => {})
         }
       }
     }
@@ -2065,23 +2148,32 @@ async function main() {
       userId: userIdToUse,
       productId: product1.id,
       hasOwned: true,
-      experienceSummary: 'Mükemmel bir ürün, günlük kullanımda çok etkili',
-    }
+      experienceSummary:
+        'A solid daily driver that makes routine cleaning feel lighter and more structured in my apartment.',
+    },
   })
 
   await prisma.productExperience.create({
     data: {
       inventoryId: inventory1.id,
       title: 'Price and Shopping Experience',
-      experienceText: 'Dyson V15s Detect Submarine\'i $949\'a aldım. Premium fiyat diğer kablosuz süpürgelere göre ama kalitesi buna değer. Alışveriş deneyimi çok profesyonel.',
-    }
+      experienceText:
+        "I paid around $949 for the Dyson V15s Detect Submarine, which clearly sits in the premium segment compared to most cordless vacuums. " +
+        'The upfront price felt high at checkout, but the build quality, accessories and suction performance justify most of that gap over time. ' +
+        'The in‑store buying experience was smooth as well, with staff who actually understood the product and helped me choose the right bundle. ' +
+        'Overall it felt like a considered investment rather than a random impulse purchase.',
+    },
   })
 
   await prisma.productExperience.create({
     data: {
       inventoryId: inventory1.id,
       title: 'Product and Usage Experience',
-      experienceText: 'Günlük kullanımda Dyson V15s Submarine ev temizliğimi tamamen değiştirdi. Islak temizlik başlığı mutfak ve banyo zeminleri için mükemmel çalışıyor, döküntüleri hemen topluyor.',
+      experienceText:
+        'Using the Dyson V15s Submarine every day has completely changed how I approach cleaning at home. ' +
+        'The wet cleaning head is especially useful in the kitchen and bathroom where sticky spills or dried stains used to require separate tools. ' +
+        'Now I can move from hard floors to rugs without constantly thinking about settings or swapping devices. ' +
+        'It feels like a single tool that replaces a mop, a classic vacuum and a quick spot cleaner in one routine.',
     }
   })
 
@@ -2111,31 +2203,36 @@ async function main() {
     {
       productId: product2.id,
       hasOwned: true,
-      summary: 'Dyson V12 Slim\'i seyahatlerde yanımda taşıyorum; hafif yapısı kısa temizlikler için ideal.',
+      summary:
+        'I keep the Dyson V12 Slim as my travel vacuum; its light body makes quick hotel or small‑flat cleaning sessions much easier.',
       mediaKeys: ['product.vacuum.dyson'],
     },
     {
       productId: product3.id,
       hasOwned: true,
-      summary: 'iPhone 15 Pro günlük sürücüm, fotoğraf ve video testlerini bununla yapıyorum.',
+      summary:
+        'The iPhone 15 Pro is my daily driver and the main phone I use for camera and video workflow tests.',
       mediaKeys: ['product.phone.phone2'],
     },
     {
       productId: samsungPhone?.id || product2.id,
       hasOwned: true,
-      summary: 'Samsung cihazı Dex + üretkenlik modunda ofis görevlerini üstleniyor.',
+      summary:
+        'My Samsung phone takes over office tasks when I dock it into Dex with a keyboard, mouse and an external monitor.',
       mediaKeys: ['product.phone.phone1'],
     },
     {
       productId: applePhone?.id || product3.id,
       hasOwned: true,
-      summary: 'Apple ekosisteminde LOG çekim ve içerik üretimi için temel cihazım.',
+      summary:
+        'Inside the Apple ecosystem this device is my main camera for LOG recording and day‑to‑day content production.',
       mediaKeys: ['product.phone.phone2'],
     },
     {
       productId: redmiPhone?.id || product2.id,
       hasOwned: false,
-      summary: 'MIUI betalarını test ettiğim bütçe dostu cihaz.',
+      summary:
+        'This Redmi phone is my budget device for testing MIUI betas and experimental settings without risking my main phone.',
       mediaKeys: ['product.phone.phone3'],
     },
   ];
@@ -2228,8 +2325,12 @@ async function main() {
 
   const productContextPosts: ContextPostSeed[] = [
     {
-      title: 'Dyson V15s ile Derin Temizlik Rutinim',
-      body: 'Submarine başlığı mutfak zeminindeki kurumuş lekeleri tek geçişte aldı. Dyson V15s ile halıdan sert zemine geçişte hiçbir ayar yapmadan devam etmek büyük konfor sağlıyor.',
+      title: 'My Deep Cleaning Routine with Dyson V15s',
+      body:
+        'The Submarine head lifts dried stains from the kitchen floor in a single pass, which used to take multiple tools. ' +
+        'With the Dyson V15s I can move from carpets to hard floors without changing settings or worrying about modes. ' +
+        'It turned weekend deep cleaning into a single, predictable routine instead of a long list of separate chores. ' +
+        'I now schedule one focused session and the rest of the week only needs light touch‑ups.',
       mainCategoryId: evYasamCategory.id,
       subCategoryId: evYasamSubCategory.id,
       productGroupId: productGroup.id,
@@ -2239,8 +2340,12 @@ async function main() {
       tags: ['Dyson', 'Submarine', 'WetCleaning'],
     },
     {
-      title: 'Dyson V12 Slim’i Seyahat Ekipmanına Eklemek',
-      body: 'V12 Slim, küçük apartmanlarda veya kısa konaklamalarda büyük cihaz taşımadan derli toplu bir temizlik yapmama izin veriyor. Özellikle dar alanlarda ağırlığı hissedilmiyor.',
+      title: 'Adding Dyson V12 Slim to My Travel Kit',
+      body:
+        'The V12 Slim lets me keep small apartments and short‑term stays under control without dragging a full‑size vacuum around. ' +
+        'It fits easily into a corner of the car trunk or travel bag and is quick to set up after long trips. ' +
+        'In narrow corridors and around furniture the lighter body is noticeable, especially compared to bulkier cordless models. ' +
+        'For short getaways it feels like the right compromise between power, size and convenience.',
       mainCategoryId: evYasamCategory.id,
       subCategoryId: evYasamSubCategory.id,
       productGroupId: productGroup.id,
@@ -2250,8 +2355,12 @@ async function main() {
       tags: ['Dyson', 'Slim', 'Travel'],
     },
     {
-      title: 'iPhone 15 Pro Kamera Günlük Notlarım',
-      body: 'Doğal log video çekimleri ve tetraprism lensle 5x zoom, hafta sonu vlog’larını çok daha temiz hale getirdi. USB-C ile SSD’ye aktarmak workflow’u hızlandırdı.',
+      title: 'My Daily Notes on the iPhone 15 Pro Camera',
+      body:
+        'Shooting LOG video and using the tetraprism lens at 5x zoom has made my weekend vlog footage look much cleaner. ' +
+        'USB‑C with an external SSD means I can offload long clips without waiting on old‑school transfer speeds. ' +
+        'I now treat the phone like a compact cinema tool rather than just a casual camera. ' +
+        'Most of my travel content goes straight from the phone into the edit without needing an extra dedicated camera body.',
       mainCategoryId: techCategory.id,
       subCategoryId: akilliTelefonlarSubCategory.id,
       productGroupId: iphoneGroup.id,
@@ -2264,8 +2373,12 @@ async function main() {
 
   const productGroupContextPosts: ContextPostSeed[] = [
     {
-      title: 'Dyson Vakum Serisinin Farklı Kullanım Alanları',
-      body: 'Dyson serisi; evcil hayvan tüyü, parke parlaklığı veya hızlı mutfak toplama gibi farklı görevler için tek gövdede çok başlık sunuyor. Seriyi aile içi kullanım rolleriyle paylaştırdım.',
+      title: 'Different Use Cases Across the Dyson Vacuum Series',
+      body:
+        'The Dyson series covers pet hair, shiny hardwood floors and quick kitchen cleanups with different heads on the same body. ' +
+        'In our home I split the attachments by role: one stays docked for daily crumbs, another for deep weekend carpet runs. ' +
+        'It is easier to explain “which head for which task” to the family than to keep multiple machines plugged in. ' +
+        'Over time this setup has reduced clutter in the storage closet while keeping cleaning surprisingly flexible.',
       mainCategoryId: evYasamCategory.id,
       subCategoryId: evYasamSubCategory.id,
       productGroupId: productGroup.id,
@@ -2275,8 +2388,12 @@ async function main() {
       tags: ['Dyson', 'ProductGroup', 'Attachments'],
     },
     {
-      title: 'Samsung Serisi İçin Güncel One UI Deneyimi',
-      body: 'Samsung Serisi cihazlarda Good Lock modülleri ile çok ekranlı kullanımda üretkenliği artıran kurulumlar paylaşıyorum. Aynı gruptaki farklı modellerde bile aynı tema akıyor.',
+      title: 'Current One UI Experience Across the Samsung Series',
+      body:
+        'On Samsung phones in the same product group I use Good Lock modules to turn a desk setup into a mini workstation. ' +
+        'Multi‑window layouts, custom gestures and a shared theme carry nicely from one device to the next. ' +
+        'Even mid‑range models feel more consistent once you mirror the same One UI profile across them. ' +
+        'For people who switch phones often inside the ecosystem this makes each upgrade feel familiar on day one.',
       mainCategoryId: techCategory.id,
       subCategoryId: akilliTelefonlarSubCategory.id,
       productGroupId: samsungGroup.id,
@@ -2286,8 +2403,12 @@ async function main() {
       tags: ['Samsung', 'OneUI', 'GoodLock'],
     },
     {
-      title: 'Redmi Serisini Uygun Fiyatlı Ekosistem Olarak Kullanmak',
-      body: 'Redmi Serisi ürünleri aile üyeleri arasında paylaştırırken otomasyon, paylaşılabilir pil tasarruf profilleri ve Mi Home sahneleri oluşturmak çok pratik oldu.',
+      title: 'Using the Redmi Series as a Budget Ecosystem',
+      body:
+        'We use Redmi phones as a budget friendly ecosystem that can be shared across family members. ' +
+        'Automation rules, shared battery‑saving profiles and Mi Home scenes make it easy to tune each phone without micro‑managing settings. ' +
+        'Older relatives still get a simple, reliable setup while power users can keep their advanced tweaks. ' +
+        'For the price range it creates a surprisingly coherent multi‑device experience.',
       mainCategoryId: techCategory.id,
       subCategoryId: akilliTelefonlarSubCategory.id,
       productGroupId: redmiGroup.id,
@@ -2300,8 +2421,12 @@ async function main() {
 
   const subCategoryContextPosts: ContextPostSeed[] = [
     {
-      title: 'Akıllı Telefonlarda eSIM ve Dual-SIM Senaryoları',
-      body: 'Akıllı Telefonlar alt kategorisinde eSIM profil değişimleri ve fiziksel SIM kombinasyonlarını anlatıyorum. Özellikle sık seyahat edenler için ideal tarifeler listesi var.',
+      title: 'eSIM and Dual‑SIM Scenarios on Smartphones',
+      body:
+        'In the smartphones subcategory I walk through how I juggle eSIM profiles and physical SIM combinations on different trips. ' +
+        'There is a short list of carrier setups that work especially well for frequent travelers who jump between countries. ' +
+        'I also explain which phones handle profile switching smoothly and which ones still feel clunky. ' +
+        'If you rely on dual numbers for work and personal life this guide can save a lot of trial and error.',
       mainCategoryId: techCategory.id,
       subCategoryId: akilliTelefonlarSubCategory.id,
       inventoryRequired: false,
@@ -2309,8 +2434,12 @@ async function main() {
       tags: ['Akıllı Telefonlar', 'eSIM', 'Roaming'],
     },
     {
-      title: 'Laptoplarda Taşınabilirlik vs Performans Dengesi',
-      body: 'Laptoplar alt kategorisinde 14 inç üstü cihazlarda termal tasarım, batarya dayanımı ve USB4 aksesuar ekosistemi arasında nasıl seçim yaptığımı paylaştım.',
+      title: 'Balancing Portability and Performance on Laptops',
+      body:
+        'In the laptops subcategory I compare 14‑inch and larger machines by looking at thermal design, battery life and USB4 accessory support. ' +
+        'The post explains when it actually makes sense to carry a heavier device just for extra GPU power. ' +
+        'There are also a few concrete travel setups showing how a single USB4 cable can replace a whole dock. ' +
+        'If you commute with your laptop every day this trade‑off matters more than raw benchmark scores.',
       mainCategoryId: techCategory.id,
       subCategoryId: laptoplarSubCategory.id,
       inventoryRequired: false,
@@ -2318,8 +2447,12 @@ async function main() {
       tags: ['Laptoplar', 'USB4', 'Thermals'],
     },
     {
-      title: 'Kulaklıklar Alt Kategorisinde ANC Karşılaştırma Rehberi',
-      body: 'Kulaklıklar kategorisinde ANC seviyelerini ofis, uçak ve ev ortamında ölçtüm. Hangi modelin hangi frekansları daha iyi bastırdığını grafikli şekilde özetledim.',
+      title: 'ANC Comparison Guide for the Headphones Subcategory',
+      body:
+        'In the headphones subcategory I measured active noise cancelling performance in the office, on planes and at home. ' +
+        'The guide summarizes which models handle low‑frequency rumble, mid‑range chatter and high‑frequency hiss the best. ' +
+        'Simple charts make it easy to see where each pair shines without reading pages of lab data. ' +
+        'It is written for people who want focus in real environments rather than perfect silence in a test booth.',
       mainCategoryId: techCategory.id,
       subCategoryId: kulakliklarSubCategory.id,
       inventoryRequired: false,
@@ -5710,18 +5843,18 @@ async function main() {
 
   let experienceNewsPostsCount = 0
   const experienceTemplates = [
-    'Bu ürünü kullanmaya başladığımdan beri günlük rutinim tamamen değişti. Performansı gerçekten etkileyici!',
-    'İlk günden itibaren memnun kaldım. Kalite ve kullanım kolaylığı açısından beklentilerimi aştı.',
-    'Uzun süreli kullanım sonrası görüşlerim: Dayanıklılık ve performans açısından çok başarılı bir ürün.',
-    'Detaylı inceleme yaptım ve sonuçlar oldukça olumlu. Özellikle bu özelliği çok beğendim.',
-    'Kullanıcı deneyimi açısından mükemmel. Her gün kullanıyorum ve hiç sorun yaşamadım.',
+    'Since I started using this product my daily routine has become much more predictable and relaxed. It quietly takes care of repetitive tasks that used to eat up chunks of my evening. Over a few weeks the small time savings add up to a noticeable difference in how much energy I have left after work. It feels less like a gadget and more like part of the way my home runs.',
+    'From the very first day I could tell this device was built better than many alternatives in the same price range. Buttons, hinges and the overall finish feel reassuring instead of flimsy. Even when I push it a bit harder it continues to behave in a stable, consistent way. It has comfortably exceeded my expectations for both quality and ease of use.',
+    'Looking at the product after several months of use, I am still pleasantly surprised by its long‑term performance. There are no worrying noises, big drops in battery life or obvious signs of wear yet. It simply does the same job today that it did in the first week. For a tool I reach for so often, that kind of reliability is exactly what I want.',
+    'I spent some time testing the product more systematically to understand where it really shines. In everyday scenarios it delivers the same strengths I saw in early reviews, without hidden trade‑offs. The few compromises it makes are reasonable given the price and category. Overall it feels like a well‑balanced choice for most people rather than a niche, specialist device.',
+    'From a user‑experience point of view this is one of those products that “just works” once you set it up. The interface is simple enough that I do not have to re‑learn it every time I come back to it. When something goes wrong, the behavior is predictable and easy to recover from. That calm, dependable feeling is ultimately what keeps it in my daily setup.',
   ]
   const newsTemplates = [
-    'Yeni özellik güncellemesi yayınlandı! Artık daha fazla fonksiyon mevcut.',
-    'Marka yeni kampanya duyurusu: Sınırlı süre özel fırsatlar!',
-    'Ürün hakkında yeni bilgiler paylaşıldı. Detaylar için takip etmeye devam edin.',
-    'Yakında çıkacak yeni model hakkında ilk bilgiler sızdırıldı!',
-    'Kullanıcı geri bildirimlerine göre yapılan iyileştirmeler duyuruldu.',
+    'A new feature update has been rolled out with several small but meaningful improvements. Navigation feels a bit smoother and a couple of long‑standing edge cases have finally been fixed. Power users will appreciate the extra settings, while casual users simply notice that things break less often. It is the kind of update that rewards people who keep their devices current.',
+    'The brand has launched a limited‑time campaign with special pricing and curated bundles. It is clearly designed for users who have been waiting for the right moment to upgrade. Quantities and the campaign window are both finite, so early decisions matter more than usual. If this product has been on your wish list, now is a very good time to take another look.',
+    'New details about the product line have been shared, along with a clearer roadmap for the next few months. Several community‑requested improvements have been confirmed for upcoming releases. While timelines may still shift, it is reassuring to see an active commitment to iteration. Staying informed about these changes helps you decide when it makes sense to upgrade.',
+    'Early information about an upcoming model has started circulating within the community. The focus seems to be on better endurance, smarter software and a more refined physical design. Nothing is official until launch day, but the direction looks promising for power users. If you enjoy testing new hardware, this is definitely a release worth tracking.',
+    'A batch of refinements based on real‑world feedback has just been announced for the current generation. Many of the changes are small on their own, but together they make the product feel more polished and mature. Bugs that slipped through early versions have been addressed without adding extra complexity. It is a good sign that the brand is listening closely to everyday users.',
   ]
 
   for (const product of seedBrandProductsData.slice(0, 10)) {

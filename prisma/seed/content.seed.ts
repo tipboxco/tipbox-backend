@@ -176,7 +176,11 @@ export async function seedProductsAndContent(): Promise<void> {
       userId: userIdToUse,
       type: 'FREE',
       title: 'Dyson V15s Daily Experience',
-      body: 'Using the Dyson V15s Submarine daily has completely changed how I clean my home... ',
+      body:
+        'Using the Dyson V15s Submarine every day has completely changed how I clean my apartment. ' +
+        'I can vacuum the whole place in one pass without feeling like I am dragging around a heavy machine. ' +
+        'The green laser that reveals dust on the floor is surprisingly helpful and shows spots I would normally miss. ' +
+        'Noise levels are acceptable even on the higher modes, and the battery easily lasts through a full weekly deep clean.',
       productId: product1.id,
       mainCategoryId: evYasamCategory?.id!,
       subCategoryId: evYasamSubCategory?.id!,
@@ -202,7 +206,11 @@ export async function seedProductsAndContent(): Promise<void> {
       userId: userIdToUse,
       type: 'TIPS',
       title: 'Dyson Maintenance Tips',
-      body: "Dyson V15s'i uzun süre kullanmak için düzenli olarak filtreleri temizlemek...",
+      body:
+        'To keep the Dyson V15s running like new, I always empty the bin after any serious cleaning session. ' +
+        'Once a week I rinse the main filter with cold water, let it dry for at least twenty‑four hours and never put it back while it is still damp. ' +
+        'I also remove any hair wrapped around the brush head before it starts to affect suction or make noise. ' +
+        'Storing the vacuum on the wall dock and avoiding full battery drain helps the pack keep a stable runtime over the long term.',
       productId: product1.id,
       mainCategoryId: evYasamCategory?.id!,
       subCategoryId: evYasamSubCategory?.id!,
@@ -229,7 +237,11 @@ export async function seedProductsAndContent(): Promise<void> {
       userId: userIdToUse,
       type: 'COMPARE',
       title: 'Dyson V15s vs V12 Slim Comparison',
-      body: 'Her iki modeli de test ettim...',
+      body:
+        'I have been using both the Dyson V15s and the V12 Slim in the same flat for several weeks. ' +
+        'The V15s clearly has more raw power and feels better for deep weekend cleaning, especially on carpets and rugs. ' +
+        'The V12 Slim is lighter and easier to grab for quick daily runs, but its smaller bin fills faster and the battery drains sooner. ' +
+        'If you live in a larger home or have thick carpets the V15s makes more sense, while for small apartments the V12 Slim is usually the more comfortable option.',
       productId: product1.id,
       mainCategoryId: evYasamCategory?.id!,
       subCategoryId: evYasamSubCategory?.id!,
@@ -267,7 +279,11 @@ export async function seedProductsAndContent(): Promise<void> {
         userId: userIdToUse,
         type: 'FREE',
         title: `Tech Review Post ${i + 1}`,
-        body: `This is a sample review post ${i + 1}. Sharing my experience with various tech products and how they fit into my daily life.`,
+        body:
+          `This is tech review post ${i + 1}, where I describe how this device actually fits into my daily routine. ` +
+          'I explain when I reach for it during the week and which small design details make it pleasant or annoying to use. ' +
+          'I also share one or two concrete situations where the product genuinely saved me time or solved a real problem at home or at work. ' +
+          'Finally I close with a short verdict about who this product is really for and who should probably skip it.',
         productId: i % 2 === 0 ? product1.id : product3.id,
         mainCategoryId: i % 2 === 0 ? evYasamCategory?.id! : techCategory?.id!,
         subCategoryId: i % 2 === 0 ? evYasamSubCategory?.id! : akilliTelefonSubCat?.id!,

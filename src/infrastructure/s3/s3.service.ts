@@ -2,6 +2,7 @@ import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, Put
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { s3Config } from '../config/s3.config';
 import logger from '../logger/logger';
+import fs from 'fs';
 
 export class S3Service {
   private s3Client: S3Client;
@@ -12,20 +13,26 @@ export class S3Service {
     // Container içinde çalışıyorsa minio hostname kullan
     // Seed script container dışında çalıştığı için her zaman localhost kontrolü yap
     let effectiveEndpoint = s3Config.endpoint;
-    
-    // Eğer endpoint minio:9000 içeriyorsa ve container dışındaysak localhost'a çevir
-    // Seed script container dışında çalıştığı için otomatik localhost kullanmalı
-    if (effectiveEndpoint.includes('minio:9000')) {
-      // Container içinde çalışıp çalışmadığımızı kontrol et
-      // DOCKER_CONTAINER env var yoksa veya false ise localhost kullan
-      // Ayrıca NODE_ENV development ise de localhost kullan (seed script için)
-      const isContainerEnvironment = process.env.DOCKER_CONTAINER === 'true';
-      const isDevelopment = process.env.NODE_ENV === 'development';
-      
-      if (!isContainerEnvironment || isDevelopment) {
-        effectiveEndpoint = effectiveEndpoint.replace(/minio:9000/g, 'localhost:9000');
+
+    // Eğer endpoint minio:9000 içeriyorsa ve container dışındaysak localhost'a çevir.
+    // ÖNEMLİ:
+    // - S3_ENDPOINT env değişkeni açıkça set edildiyse asla override etme.
+    // - Container içinde olduğumuzu hem DOCKER_CONTAINER env'i hem de /.dockerenv dosyasıyla tespit et.
+    const isEndpointFromEnv = Boolean(process.env.S3_ENDPOINT);
+    const isContainerEnvironment =
+      process.env.DOCKER_CONTAINER === 'true' || fs.existsSync('/.dockerenv');
+    const isDevelopment = process.env.NODE_ENV === 'development';
+
+    if (effectiveEndpoint.includes('minio:9000') && !isEndpointFromEnv) {
+      // Seed script gibi container DIŞI process'lerde, development'ta localhost'a çevir.
+      if (!isContainerEnvironment && isDevelopment) {
+        effectiveEndpoint = effectiveEndpoint.replace(
+          /minio:9000/g,
+          'localhost:9000'
+        );
         logger.info({
-          message: 'S3Service: Container dışında veya development ortamında çalışıldığı için localhost endpoint kullanılıyor',
+          message:
+            'S3Service: Container dışında ve development ortamında çalışıldığı için localhost endpoint kullanılıyor',
           originalEndpoint: s3Config.endpoint,
           effectiveEndpoint,
           isContainerEnvironment,
