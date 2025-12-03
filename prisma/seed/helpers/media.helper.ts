@@ -18,12 +18,13 @@ function getMinioPublicEndpoint(): string {
    * 4) Varsayılan: http://localhost:9000
    */
   const raw =
+    process.env.SEED_MEDIA_HOST || // Eski isim (seed.ts ile uyumlu)
     process.env.SEED_MEDIA_BASE_URL ||
     process.env.MINIO_PUBLIC_ENDPOINT ||
     process.env.S3_ENDPOINT ||
     'http://localhost:9000';
 
-  // Container içi "minio:9000" adresini frontend'in erişebileceği localhost'a çevir
+  // Container içi "minio:9000" adresini frontend'in erişebileceği host'a çevir
   const normalized = raw.replace('minio:9000', 'localhost:9000');
 
   // Trailing slash'i temizle

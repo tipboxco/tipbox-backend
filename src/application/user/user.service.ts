@@ -213,7 +213,7 @@ export class UserService {
   async getUserProfileCard(userId: string): Promise<{
     id: string;
     name: string;
-    avatarUrl: string | null;
+    avatar: string | null;
     bannerUrl: string | null;
     description: string | null;
     titles: string[];
@@ -238,7 +238,7 @@ export class UserService {
     return {
       id: user.id,
       name: profile?.displayName || user.name || 'Anonymous User',
-      avatarUrl: activeAvatar?.imageUrl ?? null,
+      avatar: activeAvatar?.imageUrl ?? null,
       bannerUrl: profile?.bannerUrl ?? DEFAULT_PROFILE_BANNER_URL,
       description: profile?.bio ?? null,
       titles: titles.map(t => t.title),
@@ -286,7 +286,7 @@ export class UserService {
     return {
       id: card.id,
       name: card.name,
-      avatar: card.avatarUrl,
+      avatar: card.avatar,
       banner: card.bannerUrl,
       biography: card.description,
       cosmetic: cosmeticBadgeId,

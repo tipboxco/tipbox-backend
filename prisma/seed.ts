@@ -75,6 +75,10 @@ const MARKETPLACE_NFT_IMAGE_KEYS: SeedMediaKey[] = [
 ]
 
 let marketplaceImageCursor = 0
+
+// Seed görselleri için dış erişim host'u (frontend'in bağlandığı IP)
+// Tüm seed URL'leri buradan üretilecek ki IP değişimi tek yerden yönetilebilsin.
+const SEED_MEDIA_HOST = process.env.SEED_MEDIA_HOST || 'http://192.168.1.164:9000'
 const nextMarketplaceImage = (): string => {
   const key = MARKETPLACE_NFT_IMAGE_KEYS[marketplaceImageCursor % MARKETPLACE_NFT_IMAGE_KEYS.length]
   marketplaceImageCursor += 1
@@ -1248,7 +1252,7 @@ async function main() {
     },
     {
       name: 'Early Bird',
-      description: 'Tipbox\'un ilk kullanıcılarından birisin!',
+      description: "You are one of the very first users of Tipbox!",
       type: 'EVENT',
       rarity: 'RARE',
       boostMultiplier: 1.2,
@@ -1258,7 +1262,7 @@ async function main() {
     },
     {
       name: 'Beta Tester',
-      description: 'Beta sürecinde bize yardım ettin. Teşekkürler!',
+      description: 'You helped us throughout the beta period. Thank you!',
       type: 'EVENT',
       rarity: 'EPIC',
       boostMultiplier: 1.4,
@@ -1562,7 +1566,7 @@ async function main() {
   const achievementChain = await prisma.achievementChain.create({
     data: {
       name: 'Content Creator',
-      description: 'İçerik oluşturma başarıları',
+      description: 'Milestones for content creation',
       category: 'Content',
     }
   })
@@ -1571,8 +1575,8 @@ async function main() {
     prisma.achievementGoal.create({
       data: {
         chainId: achievementChain.id,
-        title: '10 Yorum Yap',
-        requirement: '10 adet yorum yap',
+        title: 'Post 10 Comments',
+        requirement: 'Write 10 comments',
         rewardBadgeId: badges.find(b => b.name === 'Community Hero')?.id,
         pointsRequired: 10,
         difficulty: 'EASY',
@@ -1581,8 +1585,8 @@ async function main() {
     prisma.achievementGoal.create({
       data: {
         chainId: achievementChain.id,
-        title: '50 Beğeni Topla',
-        requirement: 'Paylaştığın içeriklere 50 beğeni al',
+        title: 'Collect 50 Likes',
+        requirement: 'Get 50 likes on the content you share',
         rewardBadgeId: badges.find(b => b.name === 'Tip Master')?.id,
         pointsRequired: 50,
         difficulty: 'MEDIUM',
@@ -1591,8 +1595,8 @@ async function main() {
     prisma.achievementGoal.create({
       data: {
         chainId: achievementChain.id,
-        title: '20 Paylaşma Yap',
-        requirement: '20 içerik paylaş',
+        title: 'Share 20 Posts',
+        requirement: 'Share 20 pieces of content',
         rewardBadgeId: badges.find(b => b.name === 'First Post')?.id,
         pointsRequired: 20,
         difficulty: 'MEDIUM',
@@ -1603,7 +1607,7 @@ async function main() {
   const advancedAchievementChain = await prisma.achievementChain.create({
     data: {
       name: 'Collection Journey',
-      description: 'Benchmark ve deneyim paylaşımlarını ödüllendiren seri',
+      description: 'A series that rewards benchmark and experience sharing',
       category: 'Engagement',
     }
   })
@@ -1612,8 +1616,8 @@ async function main() {
     prisma.achievementGoal.create({
       data: {
         chainId: advancedAchievementChain.id,
-        title: '3 Benchmark Serisi Yayınla',
-        requirement: '3 detaylı benchmark karşılaştırması paylaş',
+        title: 'Publish 3 Benchmark Series',
+        requirement: 'Share 3 detailed benchmark comparisons',
         rewardBadgeId: benchmarkSageBadge.id,
         pointsRequired: 3,
         difficulty: 'MEDIUM',
@@ -1622,8 +1626,8 @@ async function main() {
     prisma.achievementGoal.create({
       data: {
         chainId: advancedAchievementChain.id,
-        title: '15 Deneyim Yazısı Tamamla',
-        requirement: '15 farklı kart tipinde uzun deneyim yaz',
+        title: 'Complete 15 Experience Posts',
+        requirement: 'Write long-form experiences across 15 different card types',
         rewardBadgeId: experienceCuratorBadge.id,
         pointsRequired: 15,
         difficulty: 'HARD',
@@ -1924,14 +1928,14 @@ async function main() {
       displayName: 'Community Coach',
       userName: 'communitycoach',
       bannerUrl: DEFAULT_BANNER_URL,
-      bio: 'Tipbox kullanıcılarına birebir destek veren koç',
+      bio: 'Coach providing one-to-one support for Tipbox users',
     },
     create: {
       userId: COMMUNITY_COACH_USER_ID,
       displayName: 'Community Coach',
       userName: 'communitycoach',
       bannerUrl: DEFAULT_BANNER_URL,
-      bio: 'Tipbox kullanıcılarına birebir destek veren koç',
+      bio: 'Coach providing one-to-one support for Tipbox users',
     },
   })
 
@@ -2514,13 +2518,13 @@ async function main() {
 
   const groupStoryTemplates = [
     {
-      title: '{group} topluluğu haftalık öne çıkanlar #{index}',
-      body: '{group} takibinde olan 40 kullanıcının haftalık kullanım alışkanlıklarını karşılaştırdım. Yazılım güncellemeleri ve aksesuar tercihleri tek tabloda.',
+      title: '{group} community weekly highlights #{index}',
+      body: 'I compared the weekly usage patterns of 40 users who follow {group}. Software update habits and accessory choices are summarized in a single table.',
       tag: 'Community',
     },
     {
-      title: '{group} ekosistem rehberi #{index}',
-      body: '{group} ailesinde yeni olanlar için başlangıç düzeni hazırladım. Hangi aksesuar önce alınmalı, hangi senaryoda ikinci cihaz daha anlamlı olur sorularına yanıt verdim.',
+      title: '{group} ecosystem guide #{index}',
+      body: 'I prepared a starter setup for people who are new to the {group} ecosystem. It answers which accessory to buy first and in which scenarios a second device makes more sense.',
       tag: 'Setup',
     },
   ];
@@ -2708,33 +2712,41 @@ async function main() {
 
   const questionPosts: Array<{ id: string }> = [];
   for (const [index, seed] of questionSeeds.entries()) {
-    const questionPost = await prisma.contentPost.create({
-      data: {
-        id: generateUlid(),
-        userId: seed.askerId,
-        type: 'QUESTION',
+    try {
+      const questionPost = await prisma.contentPost.create({
+        data: {
+          id: generateUlid(),
+          userId: seed.askerId,
+          type: 'QUESTION',
+          title: seed.title,
+          body: seed.body,
+          mainCategoryId: seed.mainCategoryId,
+          subCategoryId: seed.subCategoryId,
+          productGroupId: seed.productGroupId,
+          productId: seed.productId,
+          inventoryRequired: false,
+          isBoosted: index % 4 === 0,
+        },
+      });
+
+      await prisma.postQuestion.create({
+        data: {
+          postId: questionPost.id,
+          expectedAnswerFormat: seed.answerFormat,
+          relatedProductId: seed.productId,
+        },
+      });
+
+      questionPosts.push({ id: questionPost.id });
+    } catch (error) {
+      console.warn('⚠️ Question post oluşturulamadı, devam ediliyor:', {
+        index,
         title: seed.title,
-        body: seed.body,
-        mainCategoryId: seed.mainCategoryId,
-        subCategoryId: seed.subCategoryId,
-        productGroupId: seed.productGroupId,
-        productId: seed.productId,
-        inventoryRequired: false,
-        isBoosted: index % 4 === 0,
-      },
-    });
-
-    await prisma.postQuestion.create({
-      data: {
-        postId: questionPost.id,
-        expectedAnswerFormat: seed.answerFormat,
-        relatedProductId: seed.productId,
-      },
-    });
-
-    questionPosts.push({ id: questionPost.id });
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
-  console.log(`✅ ${questionPosts.length} question posts created for reply seeds`);
+  console.log(`✅ ${questionPosts.length} question posts created for reply seeds (toplam seed: ${questionSeeds.length})`);
 
   console.log('💬 Creating question replies for test user...');
   const questionReplySeeds = [
@@ -3449,6 +3461,41 @@ async function main() {
   }
   console.log('✅ Content post timestamps randomized')
 
+  // 23. Test kullanıcısının (omer@tipbox.co) tüm gönderileri için 10-40 arası rastgele stats ver
+  console.log('📊 Enriching stats for primary test user posts (10-40 range)...')
+  const primaryUserPosts = await prisma.contentPost.findMany({
+    where: { userId: TEST_USER_ID },
+  })
+
+  if (primaryUserPosts.length > 0) {
+    for (const post of primaryUserPosts) {
+      const likes = randomBetween(10, 40)
+      const comments = randomBetween(10, 40)
+      const shares = randomBetween(10, 40)
+      const bookmarks = randomBetween(10, 40)
+      const views = Math.max(
+        likes * randomBetween(8, 20) + randomBetween(50, 200),
+        likes + comments + shares + bookmarks,
+      )
+
+      await prisma.contentPost
+        .update({
+          where: { id: post.id },
+          data: {
+            likesCount: likes,
+            commentsCount: comments,
+            sharesCount: shares,
+            favoritesCount: bookmarks,
+            viewsCount: views,
+          },
+        })
+        .catch(() => {})
+    }
+    console.log(`✅ ${primaryUserPosts.length} primary user posts enriched with 10-40 stats`)
+  } else {
+    console.log('ℹ️  No primary test user posts found for stats enrichment')
+  }
+
   // Feed Entries - Kullanıcıların feed'inde görünecek post'lar
   console.log('📰 Creating feed entries...')
   
@@ -3669,7 +3716,7 @@ async function main() {
     prisma.nFT.create({
       data: {
         name: 'Gold Star Badge',
-        description: 'Altın yıldız şeklinde parlayan badge. Başarılı kullanıcılara özel.',
+        description: 'A glowing gold star badge, reserved for standout users.',
         imageUrl: nextMarketplaceImage(),
         type: 'BADGE',
         rarity: 'RARE',
@@ -3680,7 +3727,7 @@ async function main() {
     prisma.nFT.create({
       data: {
         name: 'Platinum Crown Frame',
-        description: 'Platin taç şeklinde profil çerçevesi. Kraliyet ailesi üyesi gibi görünün!',
+        description: 'A platinum crown-shaped profile frame. Look like a member of royalty!',
         imageUrl: nextMarketplaceImage(),
         type: 'COSMETIC',
         rarity: 'EPIC',
@@ -3691,7 +3738,7 @@ async function main() {
     prisma.nFT.create({
       data: {
         name: 'Rainbow Holographic Badge',
-        description: 'Gökkuşağı renklerinde, hologram efektli badge. Işığa göre renk değiştirir.',
+        description: 'A rainbow-colored holographic badge with a hologram effect that changes color with the light.',
         imageUrl: nextMarketplaceImage(),
         type: 'BADGE',
         rarity: 'EPIC',
@@ -3702,7 +3749,7 @@ async function main() {
     prisma.nFT.create({
       data: {
         name: 'Cyber Neon Glow Effect',
-        description: 'Siberpunk temalı neon ışıltı efekti. Avatarınızın etrafında mavi-pembe neon hale.',
+        description: 'A cyberpunk-themed neon glow effect with a blue-pink halo around your avatar.',
         imageUrl: nextMarketplaceImage(),
         type: 'COSMETIC',
         rarity: 'RARE',
@@ -3738,7 +3785,7 @@ async function main() {
     prisma.nFT.create({
       data: {
         name: 'Premium Tipbox Badge',
-        description: 'Tipbox platformunda aktif olan kullanıcılara özel nadir badge',
+        description: 'A rare badge for highly active users on the Tipbox platform',
         imageUrl: getSeedMediaUrl('badge.premium-shoper' as any),
         type: 'BADGE',
         rarity: 'EPIC',
@@ -3749,7 +3796,7 @@ async function main() {
     prisma.nFT.create({
       data: {
         name: 'Early Adopter Badge',
-        description: 'Platformun ilk kullanıcılarına özel badge',
+        description: 'A badge reserved for the very first users of the platform',
         imageUrl: getSeedMediaUrl('badge.early-adapter' as any),
         type: 'BADGE',
         rarity: 'RARE',
@@ -3952,7 +3999,7 @@ async function main() {
       prisma.nFT.create({
         data: {
           name: `User${userIdx + 1} Collector Badge`,
-          description: `${userIdx + 1}. kullanıcının özel koleksiyoner badge'i`,
+          description: `Special collector badge for user #${userIdx + 1}`,
           imageUrl: nextMarketplaceImage(),
           type: 'BADGE',
           rarity: userIdx === 0 ? 'EPIC' : userIdx === 1 ? 'RARE' : 'COMMON',
@@ -3963,7 +4010,7 @@ async function main() {
       prisma.nFT.create({
         data: {
           name: `Vintage Frame ${userIdx + 1}`,
-          description: `Klasik ve şık görünümlü profil çerçevesi #${userIdx + 1}`,
+          description: `Classic and elegant profile frame #${userIdx + 1}`,
           imageUrl: nextMarketplaceImage(),
           type: 'COSMETIC',
           rarity: userIdx === 0 ? 'RARE' : 'COMMON',
@@ -3974,7 +4021,7 @@ async function main() {
       prisma.nFT.create({
         data: {
           name: `Lucky Box #${userIdx + 1}`,
-          description: `Şanslı numara ${userIdx + 1}! İçinde ne var?`,
+          description: `Lucky number ${userIdx + 1}! What's inside?`,
           imageUrl: nextMarketplaceImage(),
           type: 'LOOTBOX',
           rarity: 'RARE',
@@ -4378,17 +4425,17 @@ async function main() {
     { title: 'En İyi Marka Oylaması', description: 'Hangi markayı tercih ediyorsun? Oyunu kullan!', eventType: 'POLL' as const, endDate: nextTwoWeeks },
     { title: 'Yılın Ürünü Oylaması', description: '2024\'ün en iyi ürününü belirle!', eventType: 'POLL' as const, endDate: nextMonth },
     // CONTEST events
-    { title: 'Kahve Tutkunlarının Anketi', description: 'En iyi kahve makinesi hangisi? Kahve severlerin tercihleri bu etkinlikte belirleniyor.', eventType: 'CONTEST' as const, endDate: nextWeek },
-    { title: 'Fotoğraf Yarışması', description: 'En güzel ürün fotoğraflarını paylaş, ödüller kazan!', eventType: 'CONTEST' as const, endDate: nextTwoWeeks },
-    { title: 'İçerik Yarışması', description: 'En yaratıcı içerikleri oluştur, büyük ödüller kazan!', eventType: 'CONTEST' as const, endDate: nextMonth },
+    { title: 'Coffee Lovers Survey', description: 'Which coffee machine is the best? Coffee lovers cast their votes in this event.', eventType: 'CONTEST' as const, endDate: nextWeek },
+    { title: 'Photo Contest', description: 'Share your best product photos and win rewards!', eventType: 'CONTEST' as const, endDate: nextTwoWeeks },
+    { title: 'Content Challenge', description: 'Create the most creative content and win big prizes!', eventType: 'CONTEST' as const, endDate: nextMonth },
     // CHALLENGE events
-    { title: '30 Günlük Ürün Deneyimi', description: '30 gün boyunca ürün deneyimini paylaş, rozet kazan!', eventType: 'CHALLENGE' as const, endDate: nextMonth },
-    { title: 'Topluluk Meydan Okuması', description: 'Diğer kullanıcılarla yarış, liderlik tablosunda yer al!', eventType: 'CHALLENGE' as const, endDate: nextTwoWeeks },
-    { title: 'Aylık Görevler', description: 'Aylık görevleri tamamla, özel ödüller kazan!', eventType: 'CHALLENGE' as const, endDate: nextMonth },
+    { title: '30-Day Product Experience', description: 'Share your product experience for 30 days and earn a badge!', eventType: 'CHALLENGE' as const, endDate: nextMonth },
+    { title: 'Community Challenge', description: 'Compete with other users and climb the leaderboard!', eventType: 'CHALLENGE' as const, endDate: nextTwoWeeks },
+    { title: 'Monthly Missions', description: 'Complete monthly missions and unlock special rewards!', eventType: 'CHALLENGE' as const, endDate: nextMonth },
     // PROMOTION events
-    { title: 'Özel İndirim Kampanyası', description: 'Sınırlı süre özel indirimler! Kaçırma!', eventType: 'PROMOTION' as const, endDate: nextWeek },
-    { title: 'Yeni Üye Ödülleri', description: 'Yeni üyelere özel hediyeler ve avantajlar!', eventType: 'PROMOTION' as const, endDate: nextTwoWeeks },
-    { title: 'Sezon Sonu Fırsatları', description: 'Sezon sonu özel fırsatlar ve kampanyalar!', eventType: 'PROMOTION' as const, endDate: nextMonth },
+    { title: 'Special Discount Campaign', description: 'Limited-time special discounts! Don’t miss out!', eventType: 'PROMOTION' as const, endDate: nextWeek },
+    { title: 'New Member Rewards', description: 'Exclusive gifts and perks for new members!', eventType: 'PROMOTION' as const, endDate: nextTwoWeeks },
+    { title: 'End-of-Season Deals', description: 'End-of-season offers and special campaigns!', eventType: 'PROMOTION' as const, endDate: nextMonth },
   ]
 
   const events = await Promise.all(
@@ -4398,7 +4445,8 @@ async function main() {
           id: generateUlid(),
           title: template.title,
           description: template.description,
-          imageUrl: 'http://localhost:9000/tipbox-media/products/phones/phone1.png', // Event görseli
+          // Frontend bu IP üzerinden MinIO'dan görsel çekecek
+          imageUrl: `${SEED_MEDIA_HOST}/tipbox-media/products/phones/phone1.png`, // Event görseli
           startDate: today,
           endDate: template.endDate,
           status: 'PUBLISHED',
@@ -4418,10 +4466,125 @@ async function main() {
   nextThreeMonths.setMonth(today.getMonth() + 3)
 
   const upcomingEventTemplates = [
-    { title: 'Yaz Sezonu Ürün Anketi', description: 'Yaz sezonu için en iyi ürünleri seçiyoruz!', eventType: 'SURVEY' as const, startDate: nextMonthPlus, endDate: nextThreeMonths },
-    { title: 'Yeni Teknoloji Lansmanı', description: 'Yeni teknoloji ürünlerini keşfet, ödüller kazan!', eventType: 'POLL' as const, startDate: nextMonthPlus, endDate: nextThreeMonths },
-    { title: 'Yaz Fotoğraf Yarışması', description: 'Yaz temalı ürün fotoğraflarını paylaş!', eventType: 'CONTEST' as const, startDate: nextMonthPlus, endDate: nextThreeMonths },
-    { title: 'Yaz Görevleri', description: 'Yaz görevlerini tamamla, özel rozetler kazan!', eventType: 'CHALLENGE' as const, startDate: nextMonthPlus, endDate: nextThreeMonths },
+    // SURVEY events (future)
+    {
+      title: 'Summer Season Product Survey',
+      description: 'Help us choose the best products for the summer season!',
+      eventType: 'SURVEY' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+    {
+      title: 'Home Appliances Satisfaction Survey',
+      description: 'Rate your experience with your home appliances and share your feedback.',
+      eventType: 'SURVEY' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+    {
+      title: 'Mobile & Gadgets Usage Survey',
+      description: 'Tell us how you use your phones, headphones, and wearables in daily life.',
+      eventType: 'SURVEY' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+    {
+      title: 'Gaming & Entertainment Survey',
+      description: 'Share which gaming and entertainment products you love the most.',
+      eventType: 'SURVEY' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+
+    // POLL events (future)
+    {
+      title: 'Next-Gen Smartphone Poll',
+      description: 'Vote for the smartphone brand you are most excited about this year.',
+      eventType: 'POLL' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+    {
+      title: 'Smart Home Upgrade Poll',
+      description: 'Which smart home upgrade would you buy first? Vote now.',
+      eventType: 'POLL' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+    {
+      title: 'Coffee Machine Preference Poll',
+      description: 'Automatic vs. manual coffee machines – cast your vote.',
+      eventType: 'POLL' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+    {
+      title: 'Best Value-for-Money Brand Poll',
+      description: 'Choose the brand that offers the best value for the price.',
+      eventType: 'POLL' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+
+    // CONTEST events (future)
+    {
+      title: 'Summer Product Photo Contest',
+      description: 'Share your best summer-themed product photos and win rewards.',
+      eventType: 'CONTEST' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+    {
+      title: 'Home Setup Showcase Contest',
+      description: 'Show your home office or gaming setup and compete for prizes.',
+      eventType: 'CONTEST' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+    {
+      title: 'Creative Review Contest',
+      description: 'Write the most creative and helpful product review to win.',
+      eventType: 'CONTEST' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+    {
+      title: 'Tech Collection Showcase Contest',
+      description: 'Share a photo of your tech collection and join the contest.',
+      eventType: 'CONTEST' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+
+    // CHALLENGE events (future)
+    {
+      title: 'Summer Missions Challenge',
+      description: 'Complete summer missions and unlock special badges.',
+      eventType: 'CHALLENGE' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+    {
+      title: '30-Day Review Challenge',
+      description: 'Share at least one detailed product review every day for 30 days.',
+      eventType: 'CHALLENGE' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+    {
+      title: 'Daily Tips Sharing Challenge',
+      description: 'Post useful product tips every day and help the community.',
+      eventType: 'CHALLENGE' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+    {
+      title: 'Weekly Comparison Challenge',
+      description: 'Publish one detailed product comparison every week.',
+      eventType: 'CHALLENGE' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
   ]
 
   const upcomingEvents = await Promise.all(
@@ -4446,41 +4609,57 @@ async function main() {
   // Create scenarios for events (first 3 events)
   console.log('🎯 Creating event scenarios...')
   const scenarios = await Promise.all([
-    // Event 1 - Yılbaşı scenarios
-    createdEvents[0] ? prisma.wishboxScenario.create({
-      data: {
-        eventId: createdEvents[0].id,
-        title: 'Yılın En İyi Telefonu',
-        description: 'Hangi telefon 2024\'ün şampiyonu olmalı?',
-        orderIndex: 1,
-      },
-    }).catch(() => null) : null,
-    createdEvents[0] ? prisma.wishboxScenario.create({
-      data: {
-        eventId: createdEvents[0].id,
-        title: 'Yılın En İyi Laptop\'u',
-        description: 'En iyi performansı hangi laptop verdi?',
-        orderIndex: 2,
-      },
-    }).catch(() => null) : null,
+    // Event 1 - New Year survey scenarios
+    createdEvents[0]
+      ? prisma.wishboxScenario
+          .create({
+            data: {
+              eventId: createdEvents[0].id,
+              title: 'Best Phone of the Year',
+              description: 'Which phone should be the champion of 2024?',
+              orderIndex: 1,
+            },
+          })
+          .catch(() => null)
+      : null,
+    createdEvents[0]
+      ? prisma.wishboxScenario
+          .create({
+            data: {
+              eventId: createdEvents[0].id,
+              title: 'Best Laptop of the Year',
+              description: 'Which laptop delivered the best performance for you?',
+              orderIndex: 2,
+            },
+          })
+          .catch(() => null)
+      : null,
     // Event 2 - Technology scenarios
-    createdEvents[1] ? prisma.wishboxScenario.create({
-      data: {
-        eventId: createdEvents[1].id,
-        title: 'En Beklenen Akıllı Saat',
-        description: '2024\'te hangi akıllı saati almayı düşünüyorsun?',
-        orderIndex: 1,
-      },
-    }).catch(() => null) : null,
+    createdEvents[1]
+      ? prisma.wishboxScenario
+          .create({
+            data: {
+              eventId: createdEvents[1].id,
+              title: 'Most Anticipated Smartwatch',
+              description: 'Which smartwatch are you planning to buy in 2024?',
+              orderIndex: 1,
+            },
+          })
+          .catch(() => null)
+      : null,
     // Event 3 - Coffee scenarios
-    createdEvents[2] ? prisma.wishboxScenario.create({
-      data: {
-        eventId: createdEvents[2].id,
-        title: 'Tam Otomatik vs Manuel',
-        description: 'Tam otomatik mı, manuel kahve makinesi mi?',
-        orderIndex: 1,
-      },
-    }).catch(() => null) : null,
+    createdEvents[2]
+      ? prisma.wishboxScenario
+          .create({
+            data: {
+              eventId: createdEvents[2].id,
+              title: 'Fully Automatic vs Manual',
+              description: 'Do you prefer a fully automatic or a manual coffee machine?',
+              orderIndex: 1,
+            },
+          })
+          .catch(() => null)
+      : null,
   ])
   const createdScenarios = scenarios.filter(Boolean)
   console.log(`✅ ${createdScenarios.length} scenario oluşturuldu`)
@@ -4958,14 +5137,15 @@ async function main() {
           // MinIO'ya yükle
           const uploadedUrl = await s3Service.uploadFile(objectKey, marketplaceImageBuffer, 'image/jpeg')
           
-          // Localhost URL'ine çevir (tarayıcıdan erişim için)
-          const localhostUrl = uploadedUrl.replace(/minio:9000/g, 'localhost:9000')
+          // Dış IP'ye çevir (tarayıcıdan erişim için)
+          // uploadedUrl normalde http://minio:9000/... formatında, host kısmını SEED_MEDIA_HOST ile değiştiriyoruz
+          const externalUrl = uploadedUrl.replace('http://minio:9000', SEED_MEDIA_HOST)
           
           // Brand'ı güncelle - imageUrl'e ekle (varsa koru, yoksa ekle)
           await prisma.brand.update({
             where: { id: brand.id },
             data: {
-              imageUrl: localhostUrl,
+              imageUrl: externalUrl,
             },
           })
           
@@ -6380,11 +6560,11 @@ async function main() {
       console.log(`  ✏️  Creating ${toCreate} additional FREE experiences for product "${product.name}"`)
 
       const experienceTemplates = [
-        ` ${product.name} ürününü günlük kullanımda detaylıca test ettim. Performansı ve dayanıklılığı açısından beni şaşırttı.`,
-        ` ${product.name} ile ilk haftam: Kurulumdan itibaren yaşadığım deneyimleri ve dikkat çeken artı/eksi yönleri paylaştım.`,
-        ` Uzun vadeli kullanım sonrası ${product.name} hakkında gerçek kullanıcı yorumu. Hangi senaryoda parlıyor, nerede zorlanıyor?`,
-        ` ${product.name} için fiyat/performans değerlendirmesi yaptım. Aynı segmentteki rakipleriyle kısa bir kıyaslama içeriyor.`,
-        ` ${product.name} ile birlikte gelen aksesuarlar ve günlük rutine etkileri üzerine gözlemlerimi yazdım.`,
+        ` I tested ${product.name} in detail during everyday use. Its performance and durability genuinely surprised me.`,
+        ` My first week with ${product.name}: I shared my setup experience and the most notable pros and cons.`,
+        ` A long-term ownership review of ${product.name}. In which scenarios does it shine, and where does it struggle?`,
+        ` I made a price/performance evaluation for ${product.name}, including a short comparison with competitors in the same segment.`,
+        ` I wrote down my observations on the accessories that come with ${product.name} and how they affect my daily routine.`,
       ]
 
       for (let i = 0; i < toCreate; i++) {

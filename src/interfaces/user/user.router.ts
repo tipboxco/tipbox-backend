@@ -1014,11 +1014,11 @@ router.post('/setup-profile', upload.fields([{ name: 'Avatar', maxCount: 1 }, { 
   };
 
   // Avatar yükleme
-  let avatarUrl: string | undefined;
+  let avatar: string | undefined;
   const avatarFile = req.files?.['Avatar']?.[0];
   if (avatarFile) {
     try {
-      avatarUrl = await uploadImageFile(avatarFile, 'profile-pictures', 'Avatar');
+      avatar = await uploadImageFile(avatarFile, 'profile-pictures', 'Avatar');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata';
       logger.error({
@@ -1066,7 +1066,7 @@ router.post('/setup-profile', upload.fields([{ name: 'Avatar', maxCount: 1 }, { 
     const user = await userService.setupProfile(userIdStr, {
       fullName: FullName,
       userName: UserName,
-      avatarUrl,
+      avatar,
       bannerUrl,
       selectedCategories: categoriesData.selectedCategories || [],
     });

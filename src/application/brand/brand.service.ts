@@ -3,6 +3,7 @@ import { FeedService } from '../feed/feed.service';
 import { FeedItem, FeedItemType, ContextData, FeedResponse } from '../../interfaces/feed/feed.dto';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
 import { ContextType } from '../../domain/content/context-type.enum';
+import { buildMediaUrl } from '../../infrastructure/config/media.config';
 import logger from '../../infrastructure/logger/logger';
 import { NotFoundError } from '../../infrastructure/errors/custom-errors';
 
@@ -494,9 +495,10 @@ export class BrandService {
       },
     });
 
+    const badgeImageUrl = buildMediaUrl('tipbox-media/brandbadge/badge1.png');
     const rewards: EventRewards = {
       title: reward ? `Badge Reward #${reward.rewardId}` : 'Participation Badge',
-      badgeImage: reward ? 'http://localhost:9000/tipbox-media/brandbadge/badge1.png' : 'http://localhost:9000/tipbox-media/brandbadge/badge1.png',
+      badgeImage: badgeImageUrl,
     };
 
     // Basit görev listesi
@@ -593,12 +595,13 @@ export class BrandService {
     };
 
     // Points history: son 10 wishboxReward kaydı
+    const defaultBadgeImage = buildMediaUrl('tipbox-media/badge/badge1.png');
     const pointsHistory: BrandHistoryPointsItem[] = wishboxRewards
       .slice(0, 10)
       .map((r) => ({
         id: r.id,
         title: 'Event Reward',
-        image: 'http://localhost:9000/tipbox-media/badge/badge1.png',
+        image: defaultBadgeImage,
         points: r.amount || 50,
         createdAt: r.awardedAt.toISOString(),
       }));
@@ -607,7 +610,7 @@ export class BrandService {
     const badgeList: BrandHistoryBadge[] = bridgeRewards.map((br) => ({
       id: br.badgeId,
       title: br.badge.name,
-      image: br.badge.imageUrl || 'http://localhost:9000/tipbox-media/badge/badge1.png',
+      image: br.badge.imageUrl || defaultBadgeImage,
     }));
 
     return {

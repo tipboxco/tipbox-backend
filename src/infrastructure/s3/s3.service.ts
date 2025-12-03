@@ -1,6 +1,7 @@
 import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, PutBucketPolicyCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { s3Config } from '../config/s3.config';
+import { getPublicMediaBaseUrl } from '../config/media.config';
 import logger from '../logger/logger';
 import fs from 'fs';
 
@@ -202,13 +203,9 @@ export class S3Service {
    * @returns Dosyanın erişilebilir URL'i
    */
   getFileUrl(fileName: string): string {
-    // Development ortamında veya container dışında çalışırken localhost kullan (tarayıcıdan erişim için)
-    let endpoint = this.effectiveEndpoint;
-    if (process.env.NODE_ENV === 'development' || !process.env.DOCKER_CONTAINER) {
-      endpoint = endpoint.replace(/minio:9000/g, 'localhost:9000');
-    }
-    
-    return `${endpoint}/${s3Config.bucketName}/${fileName}`;
+    // Tüm public URL'ler için tek base kullan
+    const publicBase = getPublicMediaBaseUrl();
+    return `${publicBase}/${s3Config.bucketName}/${fileName}`;
   }
 
   /**
