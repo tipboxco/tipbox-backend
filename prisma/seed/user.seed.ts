@@ -26,6 +26,40 @@ const TRUSTER_USER_IDS = [
 
 const DEFAULT_PASSWORD = 'password123'
 
+async function syncProfileTrustCounters(): Promise<void> {
+  console.log('🔁 Profil trust sayaçları senkronize ediliyor...')
+
+  await prisma.$executeRaw`
+    UPDATE "profiles"
+    SET "trust_count" = 0,
+        "truster_count" = 0
+  `
+
+  await prisma.$executeRaw`
+    UPDATE "profiles" AS p
+    SET "trust_count" = src.cnt
+    FROM (
+      SELECT "truster_id" AS user_id, COUNT(*) AS cnt
+      FROM "trust_relations"
+      GROUP BY "truster_id"
+    ) AS src
+    WHERE p."user_id" = src.user_id
+  `
+
+  await prisma.$executeRaw`
+    UPDATE "profiles" AS p
+    SET "truster_count" = src.cnt
+    FROM (
+      SELECT "trusted_user_id" AS user_id, COUNT(*) AS cnt
+      FROM "trust_relations"
+      GROUP BY "trusted_user_id"
+    ) AS src
+    WHERE p."user_id" = src.user_id
+  `
+
+  console.log('✅ Profil trust sayaçları güncellendi')
+}
+
 export async function seedUsersAndProfiles(): Promise<void> {
   console.log('👤 User seeding started...')
 
@@ -94,7 +128,6 @@ export async function seedUsersAndProfiles(): Promise<void> {
   console.log('✅ Avatar set')
 
   // Create or get TARGET_USER
-  const TARGET_USER_ID = '248cc91f-b551-4ecc-a885-db1163571330'
   let targetUser = await prisma.user.findUnique({ where: { id: TARGET_USER_ID } })
   if (!targetUser) {
     targetUser = (await prisma.user.findUnique({ where: { email: 'markettest@tipbox.co' } })) || null
@@ -182,6 +215,8 @@ export async function seedUsersAndProfiles(): Promise<void> {
     await prisma.trustRelation.create({ data: { trusterId: trusterUser.id, trustedUserId: userIdToUse } }).catch(() => {})
   }
   console.log('✅ Truster users and relations created')
+
+  await syncProfileTrustCounters()
 
   // User titles
   const titles = [

@@ -669,6 +669,19 @@ export function handleSupportRequestSearch(panelState, side, els) {
 }
 
 // Render support requests list
+function buildSupportAvatarHtml({ url, fallbackText, baseClass, displayName }) {
+  const safeName = escapeHtml(displayName || 'User');
+  if (url) {
+    const safeUrl = escapeHtml(url);
+    return `
+      <div class="${baseClass} has-image">
+        <img src="${safeUrl}" alt="${safeName}" />
+      </div>
+    `;
+  }
+  return `<div class="${baseClass}">${fallbackText}</div>`;
+}
+
 export function renderSupportRequests(panelState, side, els) {
   const supportRequestsList = side === 'left' ? els.supportRequestsListLeft : els.supportRequestsListRight;
 
@@ -734,6 +747,12 @@ export function renderSupportRequests(panelState, side, els) {
       
       // Avatar için ilk harfleri al
       const avatarText = (request.userName || '?').slice(0, 2).toUpperCase();
+      const avatarHtml = buildSupportAvatarHtml({
+        url: request.userAvatar,
+        fallbackText: avatarText,
+        baseClass: `support-request-avatar ${statusClass}`,
+        displayName: request.userName,
+      });
       
       // Kullanıcı adı ve başlık
       const userName = escapeHtml(request.userName || 'Unknown');
@@ -748,7 +767,7 @@ export function renderSupportRequests(panelState, side, els) {
       
       return `
         <div class="support-request-card ${statusClass} ${clickableClass}" data-request-id="${request.id}">
-          <div class="support-request-avatar ${statusClass}">${avatarText}</div>
+          ${avatarHtml}
           <div class="support-request-content">
             <div class="support-request-header">
               <div class="support-request-user-info">

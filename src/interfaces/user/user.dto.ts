@@ -139,67 +139,32 @@
  *               type: array
  *               items:
  *                 $ref: '#/components/schemas/WalletResponse'
- *     BadgeSelection:
- *       type: object
- *       properties:
- *         id:
- *           type: string
- *           description: Badge ID
- *         name:
- *           type: string
- *         value:
- *           type: string
- *     UserProfileDetailsResponse:
- *       type: object
- *       properties:
- *         id: { type: string }
- *         name: { type: string }
- *         avatar: { type: string, nullable: true }
- *         banner: { type: string, nullable: true }
- *         cosmetic:
- *           type: string
- *           nullable: true
- *         cosmeticDetail:
- *           type: object
- *           nullable: true
- *           properties:
- *             id: { type: string }
- *             title: { type: string }
- *             image: { type: string, nullable: true }
- *         biography: { type: string, nullable: true }
- *         titles:
- *           type: array
- *           items: { type: string }
- *         stats:
- *           type: object
- *           properties:
- *             posts: { type: integer }
- *             trust: { type: integer }
- *             truster: { type: integer }
- *         badges:
- *           type: array
- *           items:
- *             $ref: '#/components/schemas/BadgeSelection'
  *     UpdateUserProfileRequest:
  *       type: object
  *       properties:
- *         avatar:
+ *         name:
  *           type: string
- *           description: Avatar URL
+ *           description: Profilde gösterilecek isim
+ *         biography:
+ *           type: string
+ *           description: Kullanıcı biyografisi (max 500 karakter)
  *         banner:
  *           type: string
  *           nullable: true
+ *           description: Banner görsel URL'si
+ *         avatar:
+ *           type: string
+ *           nullable: true
+ *           description: Avatar görsel URL'si (MinIO/S3)
  *         cosmetic:
  *           type: string
  *           nullable: true
- *         name:
- *           type: string
- *         biography:
- *           type: string
+ *           description: Aktif kozmetik badge/çerçeve ID'si
  *         badge:
  *           type: array
  *           items:
- *             $ref: '#/components/schemas/BadgeSelection'
+ *             type: string
+ *           description: Aktif olarak seçilen badge ID listesi
  */
 export interface CreateUserRequest {
   email: string;
@@ -259,30 +224,11 @@ export interface UserFullResponse extends UserResponse {
   wallets: any[]; // Import from wallet.dto when needed
 } 
 
-export interface BadgeSelection {
-  id: string;
-  name?: string;
-  value?: string;
-}
-
-export interface UserProfileDetailsResponse {
-  id: string;
-  name: string;
-  avatar: string | null;
-  banner: string | null;
-  cosmetic: string | null;
-  cosmeticDetail: { id: string; title: string; image: string | null } | null;
-  biography: string | null;
-  titles: string[];
-  stats: { posts: number; trust: number; truster: number };
-  badges: BadgeSelection[];
-}
-
 export interface UpdateUserProfileRequest {
-  avatar?: string;
-  banner?: string | null;
-  cosmetic?: string | null;
   name?: string;
   biography?: string;
-  badge?: BadgeSelection[];
-}
+  banner?: string | null;
+  avatar?: string | null;
+  cosmetic?: string | null;
+  badge?: string[];
+} 

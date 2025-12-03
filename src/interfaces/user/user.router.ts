@@ -1,6 +1,10 @@
 import { Router, Request, Response } from 'express';
 import multer, { FileFilterCallback } from 'multer';
-import { UserService } from '../../application/user/user.service';
+import {
+  PROFILE_FEED_CARD_TYPES,
+  ProfileFeedCardType,
+  UserService,
+} from '../../application/user/user.service';
 import { CreateUserRequest, UpdateUserProfileRequest, UserResponse } from './user.dto';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { S3Service } from '../../infrastructure/s3/s3.service';
@@ -11,6 +15,31 @@ import logger from '../../infrastructure/logger/logger';
 const router = Router();
 const userService = new UserService();
 const s3Service = new S3Service();
+
+const parseProfileFeedTypes = (value: unknown): ProfileFeedCardType[] | undefined => {
+  if (!value) {
+    return undefined;
+  }
+
+  const rawValues = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.split(',')
+      : [];
+
+  const normalized = rawValues
+    .map((item) => item.trim())
+    .filter(
+      (item): item is ProfileFeedCardType =>
+        (PROFILE_FEED_CARD_TYPES as readonly string[]).includes(item)
+    );
+
+  if (!normalized.length) {
+    return undefined;
+  }
+
+  return Array.from(new Set(normalized));
+};
 
 /**
  * @openapi
@@ -27,7 +56,45 @@ const s3Service = new S3Service();
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/UserProfileDetailsResponse'
+ *               type: object
+ *               properties:
+ *                 id: { type: string }
+ *                 name: { type: string }
+ *                 avatarUrl: { type: string, nullable: true }
+ *                 bannerUrl: { type: string, nullable: true }
+ *                 biography: { type: string, nullable: true }
+ *                 titles:
+ *                   type: array
+ *                   items: { type: string }
+ *                 stats:
+ *                   type: object
+ *                   properties:
+ *                     posts: { type: integer }
+ *                     trust: { type: integer }
+ *                     truster: { type: integer }
+ *                 badges:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id: { type: string }
+ *                       title: { type: string }
+ *                       image: { type: string, nullable: true }
+ *                 cosmetics:
+ *                   type: object
+ *                   properties:
+ *                     activeBadge:
+ *                       type: object
+ *                       properties:
+ *                         id: { type: string }
+ *                         title: { type: string }
+ *                         image: { type: string, nullable: true }
+ *                     activeBanner:
+ *                       type: object
+ *                       properties:
+ *                         id: { type: string }
+ *                         image: { type: string, nullable: true }
+ *                 isTrusted: { type: boolean }
  *       401:
  *         description: Unauthorized
  */
@@ -82,9 +149,9 @@ router.put('/me/profile', asyncHandler(async (req: Request<{}, {}, UpdateUserPro
     name: body.name,
     biography: body.biography,
     banner: typeof body.banner !== 'undefined' ? body.banner : undefined,
-    avatar: body.avatar,
+    avatar: body.avatar ?? undefined,
     cosmeticId: typeof body.cosmetic !== 'undefined' ? body.cosmetic : undefined,
-    badges: body.badge,
+    badges: body.badge?.map(badge => ({ id: badge })) ?? undefined,
   });
 
   const profile = await userService.getSelfUserProfile(String(userId));
@@ -416,29 +483,6 @@ router.post('/:id/unmute', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /users/{id}/collections/achievements:
- *   get:
- *     summary: Achievement badge koleksiyonu
- *     tags: [Users]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *       - in: query
- *         name: q
- *         schema: { type: string }
- *         description: İsim veya kullanıcı adına göre arama (case-insensitive)
- */
-router.get('/:id/collections/achievements', asyncHandler(async (req: Request, res: Response) => {
-  const id = String(req.params.id);
-  const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
-  const list = await userService.listAchievementBadges(id, search);
-  return res.json(list);
-}));
-
-/**
- * @openapi
  * /users/{id}/collections/bridges:
  *   get:
  *     summary: Bridge badge koleksiyonu
@@ -452,11 +496,70 @@ router.get('/:id/collections/achievements', asyncHandler(async (req: Request, re
  *         name: q
  *         schema: { type: string }
  *         description: İsim veya kullanıcı adına göre arama (case-insensitive)
+ *     responses:
+ *       200:
+ *         description: Kullanıcının bridge koleksiyon rozetleri
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                     example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+ *                   image:
+ *                     type: string
+ *                     nullable: true
+ *                     example: "http://localhost:9000/tipbox-media/badges/480f5de9-b691-4d70-a6a8-2789226f4e07/bridge-ambassador.png"
+ *                   title:
+ *                     type: string
+ *                     example: "Bridge Ambassador"
+ *                   rarity:
+ *                     type: string
+ *                     enum: [Usual, Rare, Epic, Legendary]
+ *                     example: "Rare"
+ *                   isClaimed:
+ *                     type: boolean
+ *                     example: true
+ *                   nftAddress:
+ *                     type: string
+ *                     nullable: true
+ *                     example: null
+ *                   totalEarned:
+ *                     type: integer
+ *                     example: 3
+ *                   earnedDate:
+ *                     type: string
+ *                     format: date-time
+ *                     nullable: true
+ *                     example: "2024-02-10T10:30:00.000Z"
+ *                   tasks:
+ *                     type: array
+ *                     items:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: string
+ *                           example: "goal-123"
+ *                         title:
+ *                           type: string
+ *                           example: "10 Yorum Yap"
+ *                         type:
+ *                           type: string
+ *                           enum: [Comment, Like, Share]
+ *                           example: "Comment"
  */
 router.get('/:id/collections/bridges', asyncHandler(async (req: Request, res: Response) => {
   const id = String(req.params.id);
+  if (!/^[0-9a-fA-F-]{36}$/.test(id)) {
+    return res.status(400).json({ message: 'Invalid user id format' });
+  }
   const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
-  const list = await userService.listBridgeBadges(id, search);
+  const q = typeof req.query.q === 'string' ? req.query.q.trim() : undefined;
+  const keyword = q || search || undefined;
+  const list = await userService.listBridgeBadges(id, keyword);
   return res.json(list);
 }));
 
@@ -911,11 +1014,11 @@ router.post('/setup-profile', upload.fields([{ name: 'Avatar', maxCount: 1 }, { 
   };
 
   // Avatar yükleme
-  let avatarUrl: string | undefined;
+  let avatar: string | undefined;
   const avatarFile = req.files?.['Avatar']?.[0];
   if (avatarFile) {
     try {
-      avatarUrl = await uploadImageFile(avatarFile, 'profile-pictures', 'Avatar');
+      avatar = await uploadImageFile(avatarFile, 'profile-pictures', 'Avatar');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata';
       logger.error({
@@ -963,7 +1066,7 @@ router.post('/setup-profile', upload.fields([{ name: 'Avatar', maxCount: 1 }, { 
     const user = await userService.setupProfile(userIdStr, {
       fullName: FullName,
       userName: UserName,
-      avatarUrl,
+      avatar,
       bannerUrl,
       selectedCategories: categoriesData.selectedCategories || [],
     });
@@ -1425,7 +1528,7 @@ router.delete('/:id/mute/:targetUserId', asyncHandler(async (req: Request, res: 
  *                     example: "Builder Badge"
  *                   rarity:
  *                     type: string
- *                     enum: [Usual, Rare]
+ *                     enum: [Usual, Rare, Epic, Legendary]
  *                     example: "Rare"
  *                   isClaimed:
  *                     type: boolean
@@ -1455,38 +1558,63 @@ router.delete('/:id/mute/:targetUserId', asyncHandler(async (req: Request, res: 
  *                           example: "10 Yorum Yap"
  *                         type:
  *                           type: string
- *                           enum: [Yorum Yap, Beğeni, Paylaşma]
- *                           example: "Yorum Yap"
+ *                           enum: [Comment, Like, Share]
+ *                           example: "Comment"
  */
 router.get('/:id/collections/achievements', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const q = (req.query.q as string) || undefined;
-  const badges = await userService.listAchievementBadges(id, q);
-  res.json(badges.map(b => ({
-    ...b,
-    earnDate: b.earnDate ?? null,
-  })));
+  if (!/^[0-9a-fA-F-]{36}$/.test(id)) {
+    return res.status(400).json({ message: 'Invalid user id format' });
+  }
+  const querySearch = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
+  const queryQ = typeof req.query.q === 'string' ? req.query.q.trim() : undefined;
+  const badges = await userService.listAchievementBadges(id, queryQ || querySearch || undefined);
+  res.json(badges);
 }));
 
 /**
  * @openapi
- * /users/{id}/posts:
+ * /users/{id}/feed:
  *   get:
- *     summary: Kullanıcının paylaştığı post'ları listele
+ *     summary: Kullanıcının paylaştığı feed gönderilerini listele
  *     tags: [Users]
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema: { type: string }
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *         description: Döndürülecek maksimum card sayısı (varsayılan tümü)
+ *       - in: query
+ *         name: types
+ *         required: false
+ *         schema:
+ *           type: string
+ *           example: "post,benchmark,tipsAndTricks"
+ *         description: Virgülle ayrılmış CardType listesi (örn. post,benchmark)
  *     responses:
  *       200:
- *         description: Post listesi
+ *         description: Card listesi (timestamp'e göre sıralı)
  */
-router.get('/:id/posts', asyncHandler(async (req: Request, res: Response) => {
+router.get('/:id/feed', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const posts = await userService.getUserPosts(id);
-  res.json(posts);
+  const rawLimit = Array.isArray(req.query.limit) ? req.query.limit[0] : req.query.limit;
+  const parsedLimit =
+    typeof rawLimit === 'string'
+      ? Number.parseInt(rawLimit, 10)
+      : typeof rawLimit === 'number'
+        ? rawLimit
+        : undefined;
+  const limit = Number.isFinite(parsedLimit) && parsedLimit! > 0 ? Math.min(parsedLimit!, 100) : undefined;
+  const types = parseProfileFeedTypes(req.query.types);
+  const feed = await userService.getUserProfileFeed(id, { limit, types });
+  res.json(feed);
 }));
 
 /**
@@ -1554,9 +1682,9 @@ router.get('/:id/tips', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /users/{id}/replies:
+ * /users/{id}/questions:
  *   get:
- *     summary: Kullanıcının yaptığı reply'leri listele
+ *     summary: Kullanıcının soru cevaplarını (reply) listele
  *     tags: [Users]
  *     parameters:
  *       - in: path
@@ -1565,9 +1693,9 @@ router.get('/:id/tips', asyncHandler(async (req: Request, res: Response) => {
  *         schema: { type: string }
  *     responses:
  *       200:
- *         description: Reply listesi
+ *         description: Question reply listesi
  */
-router.get('/:id/replies', asyncHandler(async (req: Request, res: Response) => {
+router.get('/:id/questions', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const replies = await userService.getUserReplies(id);
   res.json(replies);

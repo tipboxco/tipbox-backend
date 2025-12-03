@@ -1,6 +1,9 @@
 import { createClient, RedisClientType } from 'redis';
 import logger from '../logger/logger';
 
+// CACHE_ENABLED === 'false' ise cache tamamen devre dışı
+const isCacheDisabled = process.env.CACHE_ENABLED === 'false';
+
 export class CacheService {
   private static instance: CacheService;
   private client: RedisClientType | null = null;
@@ -19,6 +22,11 @@ export class CacheService {
    * Redis client bağlantısını kurar
    */
   public async connect(): Promise<void> {
+    if (isCacheDisabled) {
+      logger.info('Cache disabled by CACHE_ENABLED=false, skipping Redis connection');
+      return;
+    }
+
     if (this.isConnected && this.client) {
       return;
     }
@@ -57,6 +65,10 @@ export class CacheService {
    * @returns Parsed data veya null
    */
   public async get<T>(key: string): Promise<T | null> {
+    if (isCacheDisabled) {
+      return null;
+    }
+
     if (!this.client || !this.isConnected) {
       logger.warn('Cache client not connected, skipping cache get');
       return null;
@@ -81,6 +93,10 @@ export class CacheService {
    * @param ttlInSeconds - Time to live (saniye), varsayılan 3600 (1 saat)
    */
   public async set(key: string, value: any, ttlInSeconds: number = 3600): Promise<void> {
+    if (isCacheDisabled) {
+      return;
+    }
+
     if (!this.client || !this.isConnected) {
       logger.warn('Cache client not connected, skipping cache set');
       return;
@@ -100,6 +116,10 @@ export class CacheService {
    * @param key - Silinecek cache anahtarı
    */
   public async del(key: string): Promise<void> {
+    if (isCacheDisabled) {
+      return;
+    }
+
     if (!this.client || !this.isConnected) {
       logger.warn('Cache client not connected, skipping cache delete');
       return;
@@ -118,6 +138,10 @@ export class CacheService {
    * @param pattern - Silinecek anahtarların pattern'i (örn: "user:*")
    */
   public async delPattern(pattern: string): Promise<void> {
+    if (isCacheDisabled) {
+      return;
+    }
+
     if (!this.client || !this.isConnected) {
       logger.warn('Cache client not connected, skipping cache pattern delete');
       return;
@@ -138,6 +162,10 @@ export class CacheService {
    * Cache bağlantısını kapatır
    */
   public async disconnect(): Promise<void> {
+    if (isCacheDisabled) {
+      return;
+    }
+
     if (this.client && this.isConnected) {
       await this.client.disconnect();
       this.isConnected = false;
@@ -149,6 +177,10 @@ export class CacheService {
    * Cache bağlantı durumunu kontrol eder
    */
   public isCacheConnected(): boolean {
+    if (isCacheDisabled) {
+      return false;
+    }
+
     return this.isConnected && this.client !== null;
   }
 }

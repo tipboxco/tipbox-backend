@@ -1,7 +1,11 @@
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, Prisma } from '@prisma/client'
+import { randomUUID } from 'crypto'
 import * as bcrypt from 'bcryptjs'
+import { readFileSync, existsSync } from 'fs'
+import path from 'path'
 import { DEFAULT_PROFILE_BANNER_URL } from '../src/domain/user/profile.constants'
 import { getSeedMediaUrl, SeedMediaKey } from './seed/helpers/media.helper'
+import { S3Service } from '../src/infrastructure/s3/s3.service'
 
 const prisma = new PrismaClient()
 
@@ -33,6 +37,53 @@ const DEFAULT_BANNER_URL = DEFAULT_PROFILE_BANNER_URL || getSeedMediaUrl('user.b
 const PRIMARY_AVATAR_URL = getSeedMediaUrl('user.avatar.primary')
 const MARKET_AVATAR_URL = getSeedMediaUrl('user.avatar.market')
 const INVENTORY_MEDIA_URL = getSeedMediaUrl('inventory.dyson-media', 'https://cdn.tipbox.co/inventory/dyson-1.jpg')
+const TRUST_USER_AVATAR_KEYS: SeedMediaKey[] = [
+  'user.avatar.trust1',
+  'user.avatar.trust2',
+  'user.avatar.trust3',
+  'user.avatar.trust4',
+  'user.avatar.trust5',
+]
+const TRUSTER_USER_AVATAR_KEYS: SeedMediaKey[] = [
+  'user.avatar.truster1',
+  'user.avatar.truster2',
+  'user.avatar.truster3',
+]
+const TRUST_USER_TITLE_OPTIONS = [
+  'Smart Home Mentor',
+  'Product Coach',
+  'Experience Designer',
+  'Gadget Reviewer',
+  'Community Advisor',
+]
+const TRUSTER_USER_TITLE_OPTIONS = [
+  'Growth Strategist',
+  'AI Explorer',
+  'Platform Researcher',
+]
+const COMMUNITY_COACH_USER_ID = '66666666-6666-4666-a666-666666666666'
+const COMMUNITY_COACH_EMAIL = 'coach@tipbox.co'
+const COMMUNITY_COACH_AVATAR_URL = getSeedMediaUrl('user.avatar.truster3')
+const TARGET_USER_TITLE = 'Marketplace Strategist'
+
+const MARKETPLACE_NFT_IMAGE_KEYS: SeedMediaKey[] = [
+  'badge.wish-marker',
+  'badge.premium-shoper',
+  'badge.hardware-expert',
+  'badge.early-adapter',
+  'marketplace.rainbow-border',
+]
+
+let marketplaceImageCursor = 0
+
+// Seed görselleri için dış erişim host'u (frontend'in bağlandığı IP)
+// Tüm seed URL'leri buradan üretilecek ki IP değişimi tek yerden yönetilebilsin.
+const SEED_MEDIA_HOST = process.env.SEED_MEDIA_HOST || 'http://192.168.1.164:9000'
+const nextMarketplaceImage = (): string => {
+  const key = MARKETPLACE_NFT_IMAGE_KEYS[marketplaceImageCursor % MARKETPLACE_NFT_IMAGE_KEYS.length]
+  marketplaceImageCursor += 1
+  return getSeedMediaUrl(key)
+}
 
 // Simple ULID generator for seed (avoids import issues)
 function generateUlid(): string {
@@ -40,6 +91,989 @@ function generateUlid(): string {
   const timestamp = Date.now().toString(36).toUpperCase().padStart(10, '0')
   const randomPart = Math.random().toString(36).substring(2, 18).toUpperCase().padStart(16, '0')
   return (timestamp + randomPart).substring(0, 26)
+}
+
+function randomBetween(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min
+}
+
+function daysAgo(days: number): Date {
+  const date = new Date()
+  date.setDate(date.getDate() - days)
+  return date
+}
+
+async function ensureProductImages(userIdToUse: string): Promise<void> {
+  // Tüm product'ları al
+  const allProducts = await prisma.product.findMany({
+    where: {
+      imageUrl: { not: null },
+    },
+    take: 100, // İlk 100 product
+  })
+
+  let addedCount = 0
+  for (const product of allProducts) {
+    // Product için inventory var mı kontrol et
+    let inventory = await prisma.inventory.findFirst({
+      where: {
+        userId: userIdToUse,
+        productId: product.id,
+      },
+    })
+
+    // Eğer inventory yoksa oluştur
+    if (!inventory) {
+      inventory = await prisma.inventory.create({
+        data: {
+          userId: userIdToUse,
+          productId: product.id,
+          hasOwned: true,
+          experienceSummary: `Real‑life ownership experience with ${product.name}`,
+        },
+      })
+    }
+
+    // Inventory media var mı kontrol et
+    const existingMedia = await prisma.inventoryMedia.findFirst({
+      where: {
+        inventoryId: inventory.id,
+        type: 'IMAGE',
+      },
+    })
+
+    // Eğer media yoksa ve product'ın imageUrl'i varsa ekle
+    if (!existingMedia && product.imageUrl) {
+      await prisma.inventoryMedia.create({
+        data: {
+          inventoryId: inventory.id,
+          mediaUrl: product.imageUrl,
+          type: 'IMAGE',
+        },
+      }).catch(() => {})
+      addedCount++
+    }
+  }
+
+  if (addedCount > 0) {
+    console.log(`✅ ${addedCount} product için inventory media eklendi`)
+  }
+}
+
+async function ensureBookmarkFor(userId: string, postId: string): Promise<boolean> {
+  const existingFavorite = await prisma.contentFavorite.findFirst({
+    where: { userId, postId },
+  })
+
+  if (existingFavorite) {
+    return false
+  }
+
+  await prisma.contentFavorite.create({
+    data: {
+      userId,
+      postId,
+    },
+  }).catch(() => {})
+
+  await prisma.contentPost.update({
+    where: { id: postId },
+    data: { favoritesCount: { increment: 1 } },
+  }).catch(() => {})
+
+  return true
+}
+
+async function seedBrandProducts(userIdToUse: string): Promise<void> {
+  console.log('🏷️ [seedBrandProducts] Fonksiyon başlatılıyor...')
+  
+  // Kategorileri bul
+  const techCategory = await prisma.mainCategory.findFirst({ where: { name: 'Teknoloji' } })
+  const evYasamCategory = await prisma.mainCategory.findFirst({ where: { name: 'Ev & Yaşam' } })
+  
+  if (!techCategory || !evYasamCategory) {
+    console.warn('⚠️ Kategoriler bulunamadı, brand products seed atlanıyor')
+    return
+  }
+  
+  console.log('✅ Kategoriler bulundu')
+
+  // Sub kategorileri bul veya oluştur
+  let techSubCategory = await prisma.subCategory.findFirst({ where: { mainCategoryId: techCategory.id } })
+  if (!techSubCategory) {
+    techSubCategory = await prisma.subCategory.create({
+      data: {
+        name: 'Akıllı Telefonlar',
+        description: 'iPhone, Android, Samsung, Xiaomi vs.',
+        mainCategoryId: techCategory.id,
+        imageUrl: getSeedMediaUrl('catalog.phones'),
+      },
+    })
+  }
+
+  let evYasamSubCategory = await prisma.subCategory.findFirst({ where: { mainCategoryId: evYasamCategory.id } })
+  if (!evYasamSubCategory) {
+    evYasamSubCategory = await prisma.subCategory.create({
+      data: {
+        name: 'Temizlik Ürünleri',
+        description: 'Süpürge, temizlik robotu vb.',
+        mainCategoryId: evYasamCategory.id,
+        imageUrl: getSeedMediaUrl('catalog.home-appliances'),
+      },
+    })
+  }
+
+  // Brand'ları bul (tüm brand'ları al)
+  const brands = await prisma.brand.findMany()
+
+  if (brands.length === 0) {
+    console.warn('⚠️ Brand\'lar bulunamadı, brand products seed atlanıyor')
+    return
+  }
+  
+  console.log(`📦 ${brands.length} brand bulundu. İşlenecek brand'lar:`)
+  brands.forEach((brand, index) => {
+    const configCount = getProductConfigsForBrand(brand.name).length
+    const configStatus = configCount > 0 ? `✅ ${configCount} config` : '❌ Config yok'
+    console.log(`  ${index + 1}. ${brand.name} - ${configStatus}`)
+  })
+
+  // Her brand için product'lar ve post'lar oluştur
+  for (const brand of brands) {
+    console.log(`📦 Brand için product'lar oluşturuluyor: ${brand.name}`)
+
+    // Brand'a göre kategori seç
+    const isTechBrand = ['TechVision', 'FitnessTech'].includes(brand.name)
+    const mainCategory = isTechBrand ? techCategory : evYasamCategory
+    const subCategory = isTechBrand ? techSubCategory : evYasamSubCategory
+
+    // Product group oluştur veya bul
+    let productGroup = await prisma.productGroup.findFirst({
+      where: {
+        subCategoryId: subCategory.id,
+        name: { contains: brand.name },
+      },
+    })
+
+    if (!productGroup) {
+      productGroup = await prisma.productGroup.create({
+        data: {
+          name: `${brand.name} Ürünleri`,
+          description: `${brand.name} markasına ait ürünler`,
+          subCategoryId: subCategory.id,
+          imageUrl: getSeedMediaUrl('product.laptop.macbook'),
+        },
+      })
+    }
+
+    // Brand'a özel product'lar oluştur
+    const productConfigs = getProductConfigsForBrand(brand.name)
+    
+    // Debug: Product config kontrolü
+    if (productConfigs.length === 0) {
+      console.log(`⚠️ ${brand.name} için product config bulunamadı, bu brand için görsel yükleme atlanıyor`)
+    } else {
+      console.log(`✅ ${brand.name} için ${productConfigs.length} product config bulundu`)
+    }
+    
+    for (const productConfig of productConfigs) {
+      // Product'ı oluştur veya bul
+      let product = await prisma.product.findFirst({
+        where: {
+          brand: brand.name,
+          name: productConfig.name,
+        },
+      })
+
+      if (!product) {
+        product = await prisma.product.create({
+          data: {
+            name: productConfig.name,
+            brand: brand.name,
+            description: productConfig.description,
+            groupId: productGroup.id,
+            imageUrl: getSeedMediaUrl(productConfig.imageKey as any),
+          },
+        })
+      }
+
+      // Inventory oluştur (experiences için gerekli)
+      let inventory = await prisma.inventory.findFirst({
+        where: {
+          userId: userIdToUse,
+          productId: product.id,
+        },
+      })
+
+      if (!inventory) {
+        inventory = await prisma.inventory.create({
+          data: {
+            userId: userIdToUse,
+            productId: product.id,
+            hasOwned: true,
+            experienceSummary: `Real‑life ownership experience with ${product.name}`,
+          },
+        })
+      }
+
+      // Inventory media kontrolü - eğer yoksa ekle
+      const existingMedia = await prisma.inventoryMedia.findFirst({
+        where: {
+          inventoryId: inventory.id,
+          type: 'IMAGE',
+        },
+      })
+
+      if (!existingMedia) {
+        // Product imageUrl'i kullan veya seed media'dan al
+        const mediaUrl = product.imageUrl || getSeedMediaUrl(productConfig.imageKey as any)
+        if (mediaUrl) {
+          await prisma.inventoryMedia.create({
+            data: {
+              inventoryId: inventory.id,
+              mediaUrl: mediaUrl,
+              type: 'IMAGE',
+            },
+          }).catch(() => {})
+        }
+      }
+
+      // EXPERIENCES için FREE type post'lar oluştur
+      const existingExperiencePosts = await prisma.contentPost.findMany({
+        where: {
+          productId: product.id,
+          type: 'FREE',
+        },
+      })
+
+      // Her product için en az 5-6 experience post oluştur
+      const experienceTemplates = [
+        {
+          title: `${product.name} – First Days of Use`,
+          body:
+            `${product.name} has been in my hands for only a few days, but it already feels like part of my routine. ` +
+            `The setup was straightforward and I did not have to dig through manuals to start using it. ` +
+            `In the first week I focused on learning how ${productConfig.experienceText.toLowerCase()} actually behaves in real life. ` +
+            `So far it feels more natural and reliable than most similar products I tried before.`,
+        },
+        {
+          title: `${product.name} – Daily Usage Experience`,
+          body:
+            `I use ${product.name} almost every day and it has settled into a very clear role in my home. ` +
+            `It saves me a few minutes each time I reach for it, which adds up over a busy week. ` +
+            `Little touches like ${productConfig.experienceText.toLowerCase()} make it feel designed for real people instead of spec sheets. ` +
+            `If it disappeared tomorrow, I would immediately notice the extra friction in my daily routine.`,
+        },
+        {
+          title: `${product.name} – In‑Depth Review`,
+          body:
+            `After spending several weeks with ${product.name}, I started to notice the smaller design decisions. ` +
+            `The hardware feels solid, the controls are predictable and there are no hidden surprises in normal use. ` +
+            `When I push it harder, ${productConfig.experienceText.toLowerCase()} still stays consistent and responsive. ` +
+            `Overall it feels like a product that was tested by people who actually live with it every day.`,
+        },
+        {
+          title: `${product.name} – Long‑Term Ownership`,
+          body:
+            `I have owned ${product.name} for a few months now and it still performs as well as the first week. ` +
+            `Battery, materials and moving parts have not shown any obvious wear so far. ` +
+            `Even after repeated use, ${productConfig.experienceText.toLowerCase()} remains stable and does not require constant tweaking. ` +
+            `It is the kind of device you forget about until you need it, which is exactly what I want from a dependable tool.`,
+        },
+        {
+          title: `${product.name} – How It Changes My Day`,
+          body:
+            `${product.name} genuinely changed the way I plan small tasks during the day. ` +
+            `Instead of postponing things, I handle them immediately because the device is quick to start and easy to put away. ` +
+            `The fact that ${productConfig.experienceText.toLowerCase()} works reliably means I do not have to double‑check its results. ` +
+            `Over time that reduction in mental effort is just as valuable as the time it saves.`,
+        },
+        {
+          title: `${product.name} – Professional Perspective`,
+          body:
+            `Looking at ${product.name} from a more professional angle, it balances performance and usability very well. ` +
+            `In tests with different workloads it behaved predictably and did not slow me down. ` +
+            `Features like ${productConfig.experienceText.toLowerCase()} translate into concrete productivity gains rather than marketing buzzwords. ` +
+            `For someone who relies on their tools to get consistent results, this makes the product easy to recommend.`,
+        },
+      ]
+
+      if (existingExperiencePosts.length < 5) {
+        const postsToCreate = 6 - existingExperiencePosts.length
+        for (let i = 0; i < postsToCreate; i++) {
+          const template = experienceTemplates[i % experienceTemplates.length]
+          const experiencePostId = generateUlid()
+          
+          await prisma.contentPost.create({
+            data: {
+              id: experiencePostId,
+              userId: userIdToUse,
+              type: 'FREE',
+              title: template.title,
+              body: template.body,
+              productId: product.id,
+              mainCategoryId: mainCategory.id,
+              subCategoryId: subCategory.id,
+              inventoryRequired: true,
+              isBoosted: i === 0,
+            },
+          })
+
+          // Post tag'leri ekle
+          await prisma.contentPostTag.createMany({
+            data: [
+              { postId: experiencePostId, tag: brand.name },
+              { postId: experiencePostId, tag: product.name },
+              { postId: experiencePostId, tag: 'Deneyim' },
+              { postId: experiencePostId, tag: 'Kullanıcı Deneyimi' },
+            ],
+            skipDuplicates: true,
+          })
+
+          // Like ve favorite ekle (rastgele sayıda)
+          if (i % 2 === 0) {
+            await prisma.contentLike.create({
+              data: { userId: userIdToUse, postId: experiencePostId },
+            }).catch(() => {})
+          }
+          
+          if (i % 3 === 0) {
+            await prisma.contentFavorite.create({
+              data: { userId: userIdToUse, postId: experiencePostId },
+            }).catch(() => {})
+          }
+        }
+        console.log(`✅ ${postsToCreate} experience post oluşturuldu: ${product.name}`)
+      }
+
+      // NEWS için farklı tip post'lar oluştur
+      const existingNewsPosts = await prisma.contentPost.findMany({
+        where: {
+          productId: product.id,
+          type: {
+            in: ['TIPS', 'QUESTION', 'COMPARE', 'UPDATE', 'EXPERIENCE'],
+          },
+        },
+      })
+
+      // event.jpg görselini MinIO'ya yükle (10 adet news post için)
+      console.log(`🖼️ [${brand.name} - ${product.name}] Görsel yükleme başlatılıyor...`)
+      const eventImagePath = path.join(__dirname, '../tests/assets/WhatsNews/event.jpg')
+      let eventImageUrls: string[] = []
+      
+      // Önce MinIO bağlantısını ve dosya varlığını kontrol et
+      const fileExists = existsSync(eventImagePath)
+      console.log(`  📁 Dosya kontrolü: ${fileExists ? '✅ Mevcut' : '❌ Bulunamadı'} (${eventImagePath})`)
+      
+      if (!fileExists) {
+        console.warn(`  ⚠️ event.jpg dosyası bulunamadı: ${eventImagePath}`)
+      } else {
+        try {
+          console.log(`  🔗 MinIO bağlantısı test ediliyor...`)
+          // MinIO bağlantısını test et
+          const s3Service = new S3Service()
+          await s3Service.checkAndCreateBucket()
+          console.log(`  ✅ MinIO bağlantısı başarılı, görseller yükleniyor...`)
+          
+          console.log(`  📤 MinIO'ya görsel yükleniyor: ${brand.name} - ${product.name}`)
+          const eventImageBuffer = readFileSync(eventImagePath)
+          console.log(`  📦 Görsel boyutu: ${(eventImageBuffer.length / 1024 / 1024).toFixed(2)} MB`)
+          
+          // 10 adet farklı URL için görseli yükle (önce MinIO'ya)
+          for (let i = 0; i < 10; i++) {
+            const objectKey = `news/${brand.name.toLowerCase().replace(/\s+/g, '-')}/${product.id}/${Date.now()}-${i}-event.jpg`
+            try {
+              const uploadedUrl = await s3Service.uploadFile(objectKey, eventImageBuffer, 'image/jpeg')
+              // URL zaten localhost formatında dönüyor (S3Service içinde düzeltildi)
+              eventImageUrls.push(uploadedUrl)
+              
+              // Her 5 görselden sonra progress göster
+              if ((i + 1) % 5 === 0) {
+                console.log(`    📤 ${i + 1}/10 görsel yüklendi...`)
+              }
+            } catch (uploadError: any) {
+              const uploadErrorMsg = uploadError instanceof Error ? uploadError.message : String(uploadError)
+              console.error(`    ❌ Görsel ${i + 1} yükleme hatası: ${uploadErrorMsg}`)
+              // Tek bir görsel başarısız olsa bile devam et
+            }
+          }
+          
+          if (eventImageUrls.length > 0) {
+            console.log(`  ✅ ${eventImageUrls.length}/10 adet event.jpg görseli MinIO'ya yüklendi ve URL'ler hazır`)
+          } else {
+            console.error(`  ❌ Hiçbir görsel yüklenemedi!`)
+          }
+        } catch (error: any) {
+          const errorMsg = error instanceof Error ? error.message : String(error)
+          const errorStack = error instanceof Error ? error.stack : undefined
+          console.error(`  ❌ MinIO'ya görsel yükleme hatası: ${errorMsg}`)
+          if (errorStack) {
+            console.error(`  📋 Hata detayı: ${errorStack.substring(0, 200)}...`)
+          }
+          console.warn(`  ⚠️ Görseller yüklenemedi, görsel olmadan devam ediliyor...`)
+          // Görsel yüklenemezse boş array ile devam et
+        }
+      }
+      
+      console.log(`  🖼️ [${brand.name} - ${product.name}] Görsel yükleme tamamlandı. Toplam ${eventImageUrls.length} URL hazır.`)
+
+      // Her product için en az 10 news post oluştur (çeşitli tipler + event.jpg görselleri)
+      // NOT: Görseller yukarıda yüklendi, şimdi news post'lar oluşturulacak
+      console.log(`  📰 [${brand.name} - ${product.name}] News post kontrolü: ${existingNewsPosts.length}/10 mevcut`)
+      
+      if (existingNewsPosts.length < 10) {
+        // Mevcut post tiplerini kontrol et
+        const existingTypes = existingNewsPosts.map(p => p.type)
+        const newsToCreate = 10 - existingNewsPosts.length
+        let createdCount = 0
+        let eventImageIndex = 0
+
+        // UPDATE post'lar (haberler için uygun)
+        const updateTemplates = [
+          {
+            title: `${product.name} İçin Yeni Özellik Güncellemesi`,
+            body: `${product.name} ürünü için yeni özellik güncellemesi yayınlandı! Artık daha fazla fonksiyon mevcut. Kullanıcılar için daha iyi bir deneyim sunuyor.`,
+          },
+          {
+            title: `${brand.name} Yeni Kampanya Duyurusu`,
+            body: `${brand.name} markası yeni kampanya duyurusu yaptı! ${product.name} ürünü için sınırlı süre özel fırsatlar mevcut. Kaçırmayın!`,
+          },
+          {
+            title: `${product.name} Hakkında Yeni Bilgiler`,
+            body: `${product.name} ürünü hakkında yeni bilgiler paylaşıldı. Detaylar için takip etmeye devam edin. Ürünün özellikleri ve performansı hakkında güncel bilgiler.`,
+          },
+        ]
+
+        // UPDATE tipi post oluştur (2 adet)
+        if (!existingTypes.includes('UPDATE') && createdCount < newsToCreate) {
+          for (let i = 0; i < Math.min(2, newsToCreate - createdCount); i++) {
+            const template = updateTemplates[i % updateTemplates.length]
+            const updatePostId = generateUlid()
+            
+            await prisma.contentPost.create({
+              data: {
+                id: updatePostId,
+                userId: userIdToUse,
+                type: 'UPDATE',
+                title: template.title,
+                body: template.body,
+                productId: product.id,
+                mainCategoryId: mainCategory.id,
+                subCategoryId: subCategory.id,
+                inventoryRequired: true,
+                isBoosted: i === 0,
+              },
+            }).catch(() => {})
+
+            await prisma.contentPostTag.createMany({
+              data: [
+                { postId: updatePostId, tag: brand.name },
+                { postId: updatePostId, tag: product.name },
+                { postId: updatePostId, tag: 'Haber' },
+                { postId: updatePostId, tag: 'Güncelleme' },
+              ],
+              skipDuplicates: true,
+            })
+
+            // event.jpg görselini inventory media olarak ekle
+            if (inventory && eventImageUrls.length > 0 && eventImageIndex < eventImageUrls.length) {
+              await prisma.inventoryMedia.create({
+                data: {
+                  inventoryId: inventory.id,
+                  mediaUrl: eventImageUrls[eventImageIndex],
+                  type: 'IMAGE',
+                },
+              }).catch(() => {})
+              eventImageIndex++
+            }
+            createdCount++
+          }
+        }
+
+        // EXPERIENCE tipi post oluştur
+        if (!existingTypes.includes('EXPERIENCE') && createdCount < newsToCreate) {
+          const experiencePostId = generateUlid()
+          await prisma.contentPost.create({
+            data: {
+              id: experiencePostId,
+              userId: userIdToUse,
+              type: 'EXPERIENCE',
+              title: `${product.name} - Detaylı Deneyim Paylaşımı`,
+              body: `${product.name} ürünü ile ilgili detaylı bir deneyim paylaşımı. Uzun vadeli kullanım sonrası gözlemlerim ve önerilerim. ${productConfig.experienceText}`,
+              productId: product.id,
+              mainCategoryId: mainCategory.id,
+              subCategoryId: subCategory.id,
+              inventoryRequired: true,
+              isBoosted: false,
+            },
+          }).catch(() => {})
+
+          await prisma.contentPostTag.createMany({
+            data: [
+              { postId: experiencePostId, tag: brand.name },
+              { postId: experiencePostId, tag: product.name },
+              { postId: experiencePostId, tag: 'Deneyim' },
+              { postId: experiencePostId, tag: 'Haber' },
+            ],
+            skipDuplicates: true,
+          })
+
+          // event.jpg görselini inventory media olarak ekle
+          if (inventory && eventImageUrls.length > 0 && eventImageIndex < eventImageUrls.length) {
+            await prisma.inventoryMedia.create({
+              data: {
+                inventoryId: inventory.id,
+                mediaUrl: eventImageUrls[eventImageIndex],
+                type: 'IMAGE',
+              },
+            }).catch(() => {})
+            eventImageIndex++
+          }
+          createdCount++
+        }
+
+        // TIPS post
+        if (!existingTypes.includes('TIPS') && createdCount < newsToCreate) {
+          const tipsPostId = generateUlid()
+          await prisma.contentPost.create({
+            data: {
+              id: tipsPostId,
+              userId: userIdToUse,
+              type: 'TIPS',
+              title: `${product.name} Kullanım İpuçları`,
+              body: `${product.name} için faydalı kullanım ipuçları ve öneriler. Bu ürünü en iyi şekilde kullanmak için bu ipuçlarını takip edin.`,
+              productId: product.id,
+              mainCategoryId: mainCategory.id,
+              subCategoryId: subCategory.id,
+              inventoryRequired: true,
+              isBoosted: false,
+            },
+          }).catch(() => {})
+
+          await prisma.postTip.create({
+            data: { postId: tipsPostId, tipCategory: 'USAGE', isVerified: true },
+          }).catch(() => {})
+
+          await prisma.contentPostTag.createMany({
+            data: [
+              { postId: tipsPostId, tag: brand.name },
+              { postId: tipsPostId, tag: 'İpucu' },
+              { postId: tipsPostId, tag: 'Haber' },
+            ],
+            skipDuplicates: true,
+          })
+
+          // event.jpg görselini inventory media olarak ekle
+          if (inventory && eventImageUrls.length > 0 && eventImageIndex < eventImageUrls.length) {
+            await prisma.inventoryMedia.create({
+              data: {
+                inventoryId: inventory.id,
+                mediaUrl: eventImageUrls[eventImageIndex],
+                type: 'IMAGE',
+              },
+            }).catch(() => {})
+            eventImageIndex++
+          }
+          createdCount++
+        }
+
+        // QUESTION post
+        if (!existingTypes.includes('QUESTION') && createdCount < newsToCreate) {
+          const questionPostId = generateUlid()
+          await prisma.contentPost.create({
+            data: {
+              id: questionPostId,
+              userId: userIdToUse,
+              type: 'QUESTION',
+              title: `${product.name} Hakkında Soru`,
+              body: `${product.name} hakkında merak ettiğim bir şey var. Bu ürünü kullananlar deneyimlerini paylaşabilir mi?`,
+              productId: product.id,
+              mainCategoryId: mainCategory.id,
+              subCategoryId: subCategory.id,
+              inventoryRequired: false,
+              isBoosted: false,
+            },
+          }).catch(() => {})
+
+          await prisma.postQuestion.create({
+            data: {
+              postId: questionPostId,
+              expectedAnswerFormat: 'SHORT',
+              relatedProductId: product.id,
+            },
+          }).catch(() => {})
+
+          await prisma.contentPostTag.createMany({
+            data: [
+              { postId: questionPostId, tag: brand.name },
+              { postId: questionPostId, tag: 'Soru' },
+              { postId: questionPostId, tag: 'Haber' },
+            ],
+            skipDuplicates: true,
+          })
+
+          // event.jpg görselini inventory media olarak ekle
+          if (inventory && eventImageUrls.length > 0 && eventImageIndex < eventImageUrls.length) {
+            await prisma.inventoryMedia.create({
+              data: {
+                inventoryId: inventory.id,
+                mediaUrl: eventImageUrls[eventImageIndex],
+                type: 'IMAGE',
+              },
+            }).catch(() => {})
+            eventImageIndex++
+          }
+          createdCount++
+        }
+
+        // COMPARE post (eğer başka bir product varsa)
+        if (!existingTypes.includes('COMPARE') && createdCount < newsToCreate) {
+          const otherProduct = await prisma.product.findFirst({
+            where: {
+              brand: brand.name,
+              id: { not: product.id },
+            },
+          })
+
+          if (otherProduct) {
+            const comparePostId = generateUlid()
+            await prisma.contentPost.create({
+              data: {
+                id: comparePostId,
+                userId: userIdToUse,
+                type: 'COMPARE',
+                title: `${product.name} vs ${otherProduct.name} Karşılaştırması`,
+                body: `İki ürünü karşılaştırdım ve sonuçlar şöyle... ${product.name} ve ${otherProduct.name} arasındaki farkları detaylı bir şekilde inceledim.`,
+                productId: product.id,
+                mainCategoryId: mainCategory.id,
+                subCategoryId: subCategory.id,
+                inventoryRequired: false,
+                isBoosted: true,
+              },
+            }).catch(() => {})
+
+            const comparison = await prisma.postComparison.create({
+              data: {
+                postId: comparePostId,
+                product1Id: product.id,
+                product2Id: otherProduct.id,
+                comparisonSummary: `${product.name} ve ${otherProduct.name} karşılaştırması`,
+              },
+            }).catch(() => null)
+
+            if (comparison) {
+              const fiyatMetric = await prisma.comparisonMetric.findFirst({ where: { name: 'Fiyat' } })
+              const kaliteMetric = await prisma.comparisonMetric.findFirst({ where: { name: 'Kalite' } })
+              
+              if (fiyatMetric) {
+                await prisma.postComparisonScore.create({
+                  data: {
+                    comparisonId: comparison.id,
+                    metricId: fiyatMetric.id,
+                    scoreProduct1: 8,
+                    scoreProduct2: 7,
+                    comment: 'Fiyat karşılaştırması',
+                  },
+                }).catch(() => {})
+              }
+
+              if (kaliteMetric) {
+                await prisma.postComparisonScore.create({
+                  data: {
+                    comparisonId: comparison.id,
+                    metricId: kaliteMetric.id,
+                    scoreProduct1: 9,
+                    scoreProduct2: 8,
+                    comment: 'Kalite karşılaştırması',
+                  },
+                }).catch(() => {})
+              }
+            }
+
+            await prisma.contentPostTag.createMany({
+              data: [
+                { postId: comparePostId, tag: brand.name },
+                { postId: comparePostId, tag: 'Karşılaştırma' },
+                { postId: comparePostId, tag: 'Haber' },
+              ],
+              skipDuplicates: true,
+            })
+
+            // event.jpg görselini inventory media olarak ekle
+            if (inventory && eventImageUrls.length > 0 && eventImageIndex < eventImageUrls.length) {
+              await prisma.inventoryMedia.create({
+                data: {
+                  inventoryId: inventory.id,
+                  mediaUrl: eventImageUrls[eventImageIndex],
+                  type: 'IMAGE',
+                },
+              }).catch(() => {})
+              eventImageIndex++
+            }
+            createdCount++
+          }
+        }
+
+        // Kalan sayı için ek UPDATE post'lar (10 adet toplam için)
+        while (createdCount < newsToCreate) {
+          const template = updateTemplates[createdCount % updateTemplates.length]
+          const updatePostId = generateUlid()
+          
+          await prisma.contentPost.create({
+            data: {
+              id: updatePostId,
+              userId: userIdToUse,
+              type: 'UPDATE',
+              title: template.title,
+              body: template.body,
+              productId: product.id,
+              mainCategoryId: mainCategory.id,
+              subCategoryId: subCategory.id,
+              inventoryRequired: true,
+              isBoosted: false,
+            },
+          }).catch(() => {})
+
+          await prisma.contentPostTag.createMany({
+            data: [
+              { postId: updatePostId, tag: brand.name },
+              { postId: updatePostId, tag: product.name },
+              { postId: updatePostId, tag: 'Haber' },
+              { postId: updatePostId, tag: 'Güncelleme' },
+            ],
+            skipDuplicates: true,
+          })
+
+          // event.jpg görselini inventory media olarak ekle
+          if (inventory && eventImageUrls.length > 0 && eventImageIndex < eventImageUrls.length) {
+            await prisma.inventoryMedia.create({
+              data: {
+                inventoryId: inventory.id,
+                mediaUrl: eventImageUrls[eventImageIndex],
+                type: 'IMAGE',
+              },
+            }).catch(() => {})
+            eventImageIndex++
+          }
+          createdCount++
+        }
+
+        if (createdCount > 0) {
+          console.log(`✅ ${createdCount} news post oluşturuldu: ${product.name}`)
+        }
+      }
+    }
+
+    // Bu brand için toplam product sayısını kontrol et, minimum 5 olmasını sağla
+    const minProductsPerBrand = 5
+    const currentProductCount = await prisma.product.count({
+      where: { brand: brand.name },
+    })
+
+    if (currentProductCount < minProductsPerBrand) {
+      const productsToCreate = minProductsPerBrand - currentProductCount
+      console.log(
+        `ℹ️ ${brand.name} için ek ürün oluşturuluyor: mevcut=${currentProductCount}, hedef=${minProductsPerBrand}`
+      )
+
+      for (let i = 0; i < productsToCreate; i++) {
+        const genericProductName = `${brand.name} Ürün ${currentProductCount + i + 1}`
+
+        // Product oluştur
+        const genericProduct = await prisma.product.create({
+          data: {
+            name: genericProductName,
+            brand: brand.name,
+            description: `${brand.name} için otomatik oluşturulan seed ürün`,
+            groupId: productGroup.id,
+            imageUrl: brand.imageUrl || getSeedMediaUrl('product.laptop.macbook'),
+          },
+        })
+
+        // Inventory oluştur (experiences ve news akışları için)
+        let genericInventory = await prisma.inventory.findFirst({
+          where: {
+            userId: userIdToUse,
+            productId: genericProduct.id,
+          },
+        })
+
+        if (!genericInventory) {
+          genericInventory = await prisma.inventory.create({
+            data: {
+              userId: userIdToUse,
+              productId: genericProduct.id,
+              hasOwned: true,
+              experienceSummary: `${genericProduct.name} hakkında otomatik oluşturulan deneyim`,
+            },
+          })
+        }
+
+        // Inventory media ekle (brand image veya default görsel)
+        const genericMediaUrl = genericProduct.imageUrl || brand.imageUrl || getSeedMediaUrl('product.laptop.macbook')
+        if (genericMediaUrl) {
+          await prisma.inventoryMedia
+            .create({
+              data: {
+                inventoryId: genericInventory.id,
+                mediaUrl: genericMediaUrl,
+                type: 'IMAGE',
+              },
+            })
+            .catch(() => {})
+        }
+      }
+    }
+  }
+}
+
+function getProductConfigsForBrand(brandName: string): Array<{
+  name: string
+  description: string
+  imageKey: string
+  experienceText: string
+}> {
+  const configs: Record<string, Array<{
+    name: string
+    description: string
+    imageKey: string
+    experienceText: string
+  }>> = {
+    'TechVision': [
+      {
+        name: 'TechVision Smart Watch Pro',
+        description: 'Gelişmiş özelliklere sahip akıllı saat',
+        imageKey: 'product.laptop.macbook',
+        experienceText: 'Günlük kullanımda çok pratik, sağlık takibi özellikleri harika.',
+      },
+      {
+        name: 'TechVision Wireless Earbuds X1',
+        description: 'Yüksek kaliteli kablosuz kulaklık',
+        imageKey: 'product.laptop.macbook',
+        experienceText: 'Ses kalitesi mükemmel, pil ömrü de çok iyi.',
+      },
+    ],
+    'SmartHome Pro': [
+      {
+        name: 'SmartHome Pro Smart Light System',
+        description: 'Akıllı ev aydınlatma sistemi',
+        imageKey: 'product.vacuum.dyson',
+        experienceText: 'Ev otomasyonu için mükemmel bir çözüm, uygulama kullanımı çok kolay.',
+      },
+      {
+        name: 'SmartHome Pro Thermostat',
+        description: 'Akıllı termostat sistemi',
+        imageKey: 'product.vacuum.dyson',
+        experienceText: 'Enerji tasarrufu sağlıyor ve kullanımı çok basit.',
+      },
+    ],
+    'CoffeeDelight': [
+      {
+        name: 'CoffeeDelight Espresso Machine',
+        description: 'Profesyonel espresso makinesi',
+        imageKey: 'product.vacuum.dyson',
+        experienceText: 'Kahve kalitesi harika, barista kalitesinde espresso yapabiliyorum.',
+      },
+      {
+        name: 'CoffeeDelight Grinder Pro',
+        description: 'Profesyonel kahve öğütücü',
+        imageKey: 'product.vacuum.dyson',
+        experienceText: 'Öğütme ayarları çok hassas, tutarlı sonuçlar alıyorum.',
+      },
+    ],
+    'FitnessTech': [
+      {
+        name: 'FitnessTech Heart Rate Monitor',
+        description: 'Gelişmiş kalp atışı monitörü',
+        imageKey: 'product.laptop.macbook',
+        experienceText: 'Antrenman sırasında çok doğru veriler veriyor, dayanıklılığı da iyi.',
+      },
+      {
+        name: 'FitnessTech Dumbbells Set',
+        description: 'Akıllı ağırlık seti',
+        imageKey: 'product.laptop.macbook',
+        experienceText: 'Evde antrenman için mükemmel, uygulama entegrasyonu harika.',
+      },
+    ],
+    'StyleHub': [
+      {
+        name: 'StyleHub Designer Lamp',
+        description: 'Modern tasarım masa lambası',
+        imageKey: 'product.vacuum.dyson',
+        experienceText: 'Tasarımı çok şık, ev dekorasyonuna mükemmel uyuyor.',
+      },
+      {
+        name: 'StyleHub Modern Chair',
+        description: 'Ergonomik ofis koltuğu',
+        imageKey: 'product.vacuum.dyson',
+        experienceText: 'Uzun süre otururken çok rahat, sırt desteği mükemmel.',
+      },
+    ],
+    'AutoParts Pro': [
+      {
+        name: 'AutoParts Pro Engine Oil',
+        description: 'Yüksek kaliteli motor yağı - motor performansını artırıyor, uzun ömürlü kullanım sağlıyor',
+        imageKey: 'product.vacuum.dyson',
+        experienceText: 'Motor performansını artırıyor, uzun ömürlü kullanım sağlıyor.',
+      },
+      {
+        name: 'AutoParts Pro Air Filter',
+        description: 'Hava filtresi - motor hava kalitesini iyileştiriyor, filtreleme performansı mükemmel',
+        imageKey: 'product.vacuum.dyson',
+        experienceText: 'Motor hava kalitesini iyileştiriyor, filtreleme performansı mükemmel.',
+      },
+      {
+        name: 'AutoParts Pro Brake Pads',
+        description: 'Fren balata seti - fren performansı çok iyi, güvenli sürüş sağlıyor',
+        imageKey: 'product.vacuum.dyson',
+        experienceText: 'Fren performansı çok iyi, güvenli sürüş sağlıyor.',
+      },
+      {
+        name: 'AutoParts Pro Car Battery',
+        description: 'Araba aküsü - güvenilir ve uzun ömürlü, araç için mükemmel bir akü',
+        imageKey: 'product.vacuum.dyson',
+        experienceText: 'Güvenilir ve uzun ömürlü, araç için mükemmel bir akü.',
+      },
+      {
+        name: 'AutoParts Pro Spark Plugs',
+        description: 'Buji seti - motorun daha verimli çalışmasını sağlıyor, yakıt tasarrufu sağlıyor',
+        imageKey: 'product.vacuum.dyson',
+        experienceText: 'Motorun daha verimli çalışmasını sağlıyor, yakıt tasarrufu sağlıyor.',
+      },
+      {
+        name: 'AutoParts Pro Wiper Blades',
+        description: 'Silecek lastiği - yağmur ve kar koşullarında mükemmel görüş sağlıyor',
+        imageKey: 'product.vacuum.dyson',
+        experienceText: 'Yağmur ve kar koşullarında mükemmel görüş sağlıyor, silecek performansı çok iyi.',
+      },
+      {
+        name: 'AutoParts Pro Tire Pressure Gauge',
+        description: 'Lastik basınç ölçer - doğru lastik basıncı ile güvenli sürüş',
+        imageKey: 'product.vacuum.dyson',
+        experienceText: 'Doğru lastik basıncı ile güvenli sürüş sağlıyor, kullanımı çok kolay.',
+      },
+      {
+        name: 'AutoParts Pro Jump Starter',
+        description: 'Araba çalıştırıcı - acil durumlarda araç için hayat kurtarıcı',
+        imageKey: 'product.vacuum.dyson',
+        experienceText: 'Acil durumlarda araç için hayat kurtarıcı, güçlü ve güvenilir.',
+      },
+      {
+        name: 'AutoParts Pro Car Cover',
+        description: 'Araba örtüsü - aracınızı güneş, yağmur ve tozdan korur',
+        imageKey: 'product.vacuum.dyson',
+        experienceText: 'Aracınızı güneş, yağmur ve tozdan korur, dayanıklı malzeme kullanılmış.',
+      },
+      {
+        name: 'AutoParts Pro Floor Mats',
+        description: 'Araba paspası - araç içini temiz tutar, dayanıklı ve kolay temizlenir',
+        imageKey: 'product.vacuum.dyson',
+        experienceText: 'Araç içini temiz tutar, dayanıklı ve kolay temizlenir, mükemmel fit.',
+      },
+    ],
+  }
+
+  return configs[brandName] || []
 }
 
 async function main() {
@@ -87,6 +1121,11 @@ async function main() {
     { name: 'Spor & Outdoor', description: 'Spor ekipmanları, outdoor aktiviteler, fitness', imageKey: 'catalog.drone' },
     { name: 'Hobi & Eğlence', description: 'Kitap, oyun, müzik, sanat malzemeleri', imageKey: 'catalog.games' },
     { name: 'Otomotiv', description: 'Araç aksesuarları, bakım ürünleri, parçalar', imageKey: 'catalog.otomotiv' },
+    { name: 'Technology', description: 'Consumer electronics, gadgets and digital services', imageKey: 'catalog.computers-tablets' },
+    { name: 'Fashion', description: 'Lifestyle, apparel and accessory brands', imageKey: 'catalog.games' },
+    { name: 'Health & Fitness', description: 'Health monitoring, wellness and fitness devices', imageKey: 'catalog.smart-home-devices' },
+    { name: 'Kitchen', description: 'Kitchen appliances and coffee/brewing equipment', imageKey: 'catalog.home-appliances' },
+    { name: 'Home & Living', description: 'Home comfort, living and decoration products', imageKey: 'catalog.kucukev' },
   ];
 
   // Mevcut kategorileri bul veya oluştur (tekrar önleme)
@@ -159,7 +1198,18 @@ async function main() {
   const eventCategory = badgeCategories.find(c => c.name === 'Event')!
   const communityCategory = badgeCategories.find(c => c.name === 'Community')!
 
-  const badgeConfigs = [
+  type BadgeSeedConfig = {
+    name: string;
+    description: string;
+    type: 'ACHIEVEMENT' | 'EVENT';
+    rarity: 'COMMON' | 'RARE' | 'EPIC';
+    boostMultiplier: number;
+    rewardMultiplier: number;
+    categoryId: string;
+    imageKey?: SeedMediaKey;
+  };
+
+  const badgeConfigs: BadgeSeedConfig[] = [
     {
       name: 'Welcome',
       description: 'Tipbox\'a hoş geldin! İlk kayıt rozetin.',
@@ -168,7 +1218,7 @@ async function main() {
       boostMultiplier: 1.0,
       rewardMultiplier: 1.0,
       categoryId: achievementCategory.id,
-      imageUrl: getSeedMediaUrl('badge.welcome'),
+      imageKey: 'badge.welcome',
     },
     {
       name: 'First Post',
@@ -178,7 +1228,7 @@ async function main() {
       boostMultiplier: 1.1,
       rewardMultiplier: 1.1,
       categoryId: achievementCategory.id,
-      imageUrl: getSeedMediaUrl('badge.first-post'),
+      imageKey: 'badge.first-post',
     },
     {
       name: 'Tip Master',
@@ -188,7 +1238,7 @@ async function main() {
       boostMultiplier: 1.3,
       rewardMultiplier: 1.3,
       categoryId: achievementCategory.id,
-      imageUrl: getSeedMediaUrl('badge.tip-master'),
+      imageKey: 'badge.tip-master',
     },
     {
       name: 'Community Hero',
@@ -198,42 +1248,89 @@ async function main() {
       boostMultiplier: 1.5,
       rewardMultiplier: 1.5,
       categoryId: communityCategory.id,
-      imageUrl: null,
+      imageKey: 'badge.community-hero',
     },
     {
       name: 'Early Bird',
-      description: 'Tipbox\'un ilk kullanıcılarından birisin!',
+      description: "You are one of the very first users of Tipbox!",
       type: 'EVENT',
       rarity: 'RARE',
       boostMultiplier: 1.2,
       rewardMultiplier: 1.4,
       categoryId: eventCategory.id,
-      imageUrl: getSeedMediaUrl('badge.early-bird'),
+      imageKey: 'badge.early-bird',
     },
     {
       name: 'Beta Tester',
-      description: 'Beta sürecinde bize yardım ettin. Teşekkürler!',
+      description: 'You helped us throughout the beta period. Thank you!',
       type: 'EVENT',
       rarity: 'EPIC',
       boostMultiplier: 1.4,
       rewardMultiplier: 1.6,
       categoryId: eventCategory.id,
-      imageUrl: null,
+      imageKey: 'badge.beta-tester',
+    },
+    {
+      name: 'Benchmark Sage',
+      description: 'Benchmark paylaşımların topluluk için referans noktası oldu.',
+      type: 'ACHIEVEMENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.35,
+      rewardMultiplier: 1.35,
+      categoryId: achievementCategory.id,
+      imageKey: 'badge.benchmark-sage',
+    },
+    {
+      name: 'Experience Curator',
+      description: 'Birden fazla kategoride derinlemesine 15+ deneyim paylaştın.',
+      type: 'ACHIEVEMENT',
+      rarity: 'EPIC',
+      boostMultiplier: 1.5,
+      rewardMultiplier: 1.6,
+      categoryId: achievementCategory.id,
+      imageKey: 'badge.experience-curator',
+    },
+    {
+      name: 'Bridge Ambassador',
+      description: 'Bridge topluluk etkinliklerinde marka elçisi seçildin.',
+      type: 'EVENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.25,
+      rewardMultiplier: 1.35,
+      categoryId: eventCategory.id,
+      imageKey: 'badge.bridge-ambassador',
+    },
+    {
+      name: 'Brand Visionary',
+      description: 'En yaratıcı bridge kampanyasını yöneterek vitrine çıktın.',
+      type: 'EVENT',
+      rarity: 'EPIC',
+      boostMultiplier: 1.55,
+      rewardMultiplier: 1.65,
+      categoryId: eventCategory.id,
+      imageKey: 'badge.brand-visionary',
     },
   ];
 
   const badges = await Promise.all(
-    badgeConfigs.map(async (config) => {
+    badgeConfigs.map(async ({ imageKey, ...config }) => {
+      const imageUrl = imageKey ? getSeedMediaUrl(imageKey) : null;
       const existing = await prisma.badge.findFirst({
         where: { name: config.name }
       }).catch(() => null);
 
       if (existing) {
-        // Mevcut badge'i güncelle (özellikle imageUrl için)
+        // Mevcut badge'i senkronize et
         return prisma.badge.update({
           where: { id: existing.id },
           data: {
-            imageUrl: config.imageUrl ?? existing.imageUrl,
+            description: config.description,
+            type: config.type as any,
+            rarity: config.rarity as any,
+            boostMultiplier: config.boostMultiplier,
+            rewardMultiplier: config.rewardMultiplier,
+            categoryId: config.categoryId,
+            imageUrl: imageUrl ?? existing.imageUrl,
           }
         });
       } else {
@@ -241,6 +1338,7 @@ async function main() {
         return prisma.badge.create({
           data: {
             ...config,
+            imageUrl,
             type: config.type as any,
             rarity: config.rarity as any,
           }
@@ -249,6 +1347,15 @@ async function main() {
     })
   );
   console.log(`✅ ${badges.length} varsayılan badge oluşturuldu/güncellendi`)
+
+  const benchmarkSageBadge = badges.find(b => b.name === 'Benchmark Sage')
+  const experienceCuratorBadge = badges.find(b => b.name === 'Experience Curator')
+  const bridgeAmbassadorBadge = badges.find(b => b.name === 'Bridge Ambassador')
+  const brandVisionaryBadge = badges.find(b => b.name === 'Brand Visionary')
+
+  if (!benchmarkSageBadge || !experienceCuratorBadge || !bridgeAmbassadorBadge || !brandVisionaryBadge) {
+    throw new Error('Beklenen varsayılan badge tanımları oluşturulamadı')
+  }
 
   // 5. Comparison Metrics
   console.log('📊 Creating comparison metrics...')
@@ -459,7 +1566,7 @@ async function main() {
   const achievementChain = await prisma.achievementChain.create({
     data: {
       name: 'Content Creator',
-      description: 'İçerik oluşturma başarıları',
+      description: 'Milestones for content creation',
       category: 'Content',
     }
   })
@@ -468,8 +1575,8 @@ async function main() {
     prisma.achievementGoal.create({
       data: {
         chainId: achievementChain.id,
-        title: '10 Yorum Yap',
-        requirement: '10 adet yorum yap',
+        title: 'Post 10 Comments',
+        requirement: 'Write 10 comments',
         rewardBadgeId: badges.find(b => b.name === 'Community Hero')?.id,
         pointsRequired: 10,
         difficulty: 'EASY',
@@ -478,8 +1585,8 @@ async function main() {
     prisma.achievementGoal.create({
       data: {
         chainId: achievementChain.id,
-        title: '50 Beğeni Topla',
-        requirement: 'Paylaştığın içeriklere 50 beğeni al',
+        title: 'Collect 50 Likes',
+        requirement: 'Get 50 likes on the content you share',
         rewardBadgeId: badges.find(b => b.name === 'Tip Master')?.id,
         pointsRequired: 50,
         difficulty: 'MEDIUM',
@@ -488,8 +1595,8 @@ async function main() {
     prisma.achievementGoal.create({
       data: {
         chainId: achievementChain.id,
-        title: '20 Paylaşma Yap',
-        requirement: '20 içerik paylaş',
+        title: 'Share 20 Posts',
+        requirement: 'Share 20 pieces of content',
         rewardBadgeId: badges.find(b => b.name === 'First Post')?.id,
         pointsRequired: 20,
         difficulty: 'MEDIUM',
@@ -497,8 +1604,82 @@ async function main() {
     }),
   ])
 
+  const advancedAchievementChain = await prisma.achievementChain.create({
+    data: {
+      name: 'Collection Journey',
+      description: 'A series that rewards benchmark and experience sharing',
+      category: 'Engagement',
+    }
+  })
+
+  const advancedAchievementGoals = await Promise.all([
+    prisma.achievementGoal.create({
+      data: {
+        chainId: advancedAchievementChain.id,
+        title: 'Publish 3 Benchmark Series',
+        requirement: 'Share 3 detailed benchmark comparisons',
+        rewardBadgeId: benchmarkSageBadge.id,
+        pointsRequired: 3,
+        difficulty: 'MEDIUM',
+      }
+    }),
+    prisma.achievementGoal.create({
+      data: {
+        chainId: advancedAchievementChain.id,
+        title: 'Complete 15 Experience Posts',
+        requirement: 'Write long-form experiences across 15 different card types',
+        rewardBadgeId: experienceCuratorBadge.id,
+        pointsRequired: 15,
+        difficulty: 'HARD',
+      }
+    }),
+  ])
+  const priceMetric = metrics.find((metric) => metric.name === 'Fiyat')
+  const qualityMetric = metrics.find((metric) => metric.name === 'Kalite')
+  const usabilityMetric = metrics.find((metric) => metric.name === 'Kullanım Kolaylığı')
+  const durabilityMetric = metrics.find((metric) => metric.name === 'Dayanıklılık')
+  const designMetric = metrics.find((metric) => metric.name === 'Tasarım')
+  if (!priceMetric || !qualityMetric || !usabilityMetric || !durabilityMetric || !designMetric) {
+    throw new Error('Comparison metrics eksik; seed devam edemiyor.')
+  }
+
   // Link achievement goals to badges (already done above)
   console.log('✅ Achievement goals created')
+
+  const advancedUserAchievementSeeds = [
+    {
+      goalId: advancedAchievementGoals[0].id,
+      progress: 1,
+      completed: false,
+    },
+    {
+      goalId: advancedAchievementGoals[1].id,
+      progress: 0,
+      completed: false,
+    },
+  ]
+
+  for (const seed of advancedUserAchievementSeeds) {
+    await prisma.userAchievement.upsert({
+      where: {
+        userId_goalId: {
+          userId: userIdToUse,
+          goalId: seed.goalId,
+        },
+      },
+      update: {
+        progress: seed.progress,
+        completed: seed.completed,
+      },
+      create: {
+        userId: userIdToUse,
+        goalId: seed.goalId,
+        progress: seed.progress,
+        completed: seed.completed,
+      },
+    })
+  }
+  console.log('✅ Advanced user achievements initialized')
 
   // User Titles
   const titles = [
@@ -546,6 +1727,8 @@ async function main() {
     { badgeId: firstPostBadge.id, claimed: true, claimedAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000) },
     { badgeId: tipMasterBadge.id, claimed: true, claimedAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
     { badgeId: earlyBirdBadge.id, claimed: true, claimedAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) },
+    { badgeId: benchmarkSageBadge.id, claimed: false, claimedAt: null },
+    { badgeId: experienceCuratorBadge.id, claimed: false, claimedAt: null },
   ]
 
   for (const badgeData of userBadgesData) {
@@ -620,6 +1803,27 @@ async function main() {
       }
     })
 
+    const trustAvatarKey = TRUST_USER_AVATAR_KEYS[i % TRUST_USER_AVATAR_KEYS.length]
+    const trustAvatarUrl = getSeedMediaUrl(trustAvatarKey)
+    await prisma.userAvatar.deleteMany({ where: { userId: trustUser.id } })
+    await prisma.userAvatar.create({
+      data: {
+        userId: trustUser.id,
+        imageUrl: trustAvatarUrl,
+        isActive: true,
+      },
+    })
+
+    const trustUserTitle = TRUST_USER_TITLE_OPTIONS[i % TRUST_USER_TITLE_OPTIONS.length]
+    await prisma.userTitle.deleteMany({ where: { userId: trustUser.id } })
+    await prisma.userTitle.create({
+      data: {
+        userId: trustUser.id,
+        title: trustUserTitle,
+        earnedAt: new Date(Date.now() - (i + 1) * 5 * 24 * 60 * 60 * 1000),
+      },
+    }).catch(() => {})
+
     await prisma.trustRelation.create({
       data: {
         trusterId: userIdToUse,
@@ -674,6 +1878,27 @@ async function main() {
       }
     })
 
+    const trusterAvatarKey = TRUSTER_USER_AVATAR_KEYS[i % TRUSTER_USER_AVATAR_KEYS.length]
+    const trusterAvatarUrl = getSeedMediaUrl(trusterAvatarKey)
+    await prisma.userAvatar.deleteMany({ where: { userId: trusterUser.id } })
+    await prisma.userAvatar.create({
+      data: {
+        userId: trusterUser.id,
+        imageUrl: trusterAvatarUrl,
+        isActive: true,
+      },
+    })
+
+    const trusterUserTitle = TRUSTER_USER_TITLE_OPTIONS[i % TRUSTER_USER_TITLE_OPTIONS.length]
+    await prisma.userTitle.deleteMany({ where: { userId: trusterUser.id } })
+    await prisma.userTitle.create({
+      data: {
+        userId: trusterUser.id,
+        title: trusterUserTitle,
+        earnedAt: new Date(Date.now() - (i + 1) * 4 * 24 * 60 * 60 * 1000),
+      },
+    }).catch(() => {})
+
     await prisma.trustRelation.create({
       data: {
         trusterId: trusterUser.id,
@@ -682,6 +1907,55 @@ async function main() {
     }).catch(() => {})
   }
   console.log('✅ Trust relations created')
+
+  // Community coach user for DM seeds
+  let communityCoach = await prisma.user.findUnique({ where: { id: COMMUNITY_COACH_USER_ID } })
+  if (!communityCoach) {
+    communityCoach = await prisma.user.create({
+      data: {
+        id: COMMUNITY_COACH_USER_ID,
+        email: COMMUNITY_COACH_EMAIL,
+        passwordHash,
+        emailVerified: true,
+        status: 'ACTIVE',
+      },
+    })
+  }
+
+  await prisma.profile.upsert({
+    where: { userId: COMMUNITY_COACH_USER_ID },
+    update: {
+      displayName: 'Community Coach',
+      userName: 'communitycoach',
+      bannerUrl: DEFAULT_BANNER_URL,
+      bio: 'Coach providing one-to-one support for Tipbox users',
+    },
+    create: {
+      userId: COMMUNITY_COACH_USER_ID,
+      displayName: 'Community Coach',
+      userName: 'communitycoach',
+      bannerUrl: DEFAULT_BANNER_URL,
+      bio: 'Coach providing one-to-one support for Tipbox users',
+    },
+  })
+
+  await prisma.userAvatar.deleteMany({ where: { userId: COMMUNITY_COACH_USER_ID } })
+  await prisma.userAvatar.create({
+    data: {
+      userId: COMMUNITY_COACH_USER_ID,
+      imageUrl: COMMUNITY_COACH_AVATAR_URL,
+      isActive: true,
+    },
+  })
+
+  await prisma.userTitle.deleteMany({ where: { userId: COMMUNITY_COACH_USER_ID } })
+  await prisma.userTitle.create({
+    data: {
+      userId: COMMUNITY_COACH_USER_ID,
+      title: 'Support Mentor',
+      earnedAt: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000),
+    },
+  }).catch(() => {})
 
   // Products & Product Groups
   // Ev & Yaşam kategorisi için sub category bul
@@ -855,6 +2129,10 @@ async function main() {
   }
   console.log(`✅ ${brandPhoneProducts.length} brand-specific phone products created (20 per brand)`);
 
+  const samsungPhone = brandPhoneProducts.find((product) => product.brand === 'Samsung') || brandPhoneProducts[0];
+  const applePhone = brandPhoneProducts.find((product) => product.brand === 'Apple') || brandPhoneProducts[1] || samsungPhone;
+  const redmiPhone = brandPhoneProducts.find((product) => product.brand === 'Redmi') || brandPhoneProducts[2] || samsungPhone;
+
   // Eski iPhone product'ı oluştur (geriye dönük uyumluluk için)
   const product3 = await prisma.product.create({
     data: {
@@ -874,23 +2152,32 @@ async function main() {
       userId: userIdToUse,
       productId: product1.id,
       hasOwned: true,
-      experienceSummary: 'Mükemmel bir ürün, günlük kullanımda çok etkili',
-    }
+      experienceSummary:
+        'A solid daily driver that makes routine cleaning feel lighter and more structured in my apartment.',
+    },
   })
 
   await prisma.productExperience.create({
     data: {
       inventoryId: inventory1.id,
       title: 'Price and Shopping Experience',
-      experienceText: 'Dyson V15s Detect Submarine\'i $949\'a aldım. Premium fiyat diğer kablosuz süpürgelere göre ama kalitesi buna değer. Alışveriş deneyimi çok profesyonel.',
-    }
+      experienceText:
+        "I paid around $949 for the Dyson V15s Detect Submarine, which clearly sits in the premium segment compared to most cordless vacuums. " +
+        'The upfront price felt high at checkout, but the build quality, accessories and suction performance justify most of that gap over time. ' +
+        'The in‑store buying experience was smooth as well, with staff who actually understood the product and helped me choose the right bundle. ' +
+        'Overall it felt like a considered investment rather than a random impulse purchase.',
+    },
   })
 
   await prisma.productExperience.create({
     data: {
       inventoryId: inventory1.id,
       title: 'Product and Usage Experience',
-      experienceText: 'Günlük kullanımda Dyson V15s Submarine ev temizliğimi tamamen değiştirdi. Islak temizlik başlığı mutfak ve banyo zeminleri için mükemmel çalışıyor, döküntüleri hemen topluyor.',
+      experienceText:
+        'Using the Dyson V15s Submarine every day has completely changed how I approach cleaning at home. ' +
+        'The wet cleaning head is especially useful in the kitchen and bathroom where sticky spills or dried stains used to require separate tools. ' +
+        'Now I can move from hard floors to rugs without constantly thinking about settings or swapping devices. ' +
+        'It feels like a single tool that replaces a mop, a classic vacuum and a quick spot cleaner in one routine.',
     }
   })
 
@@ -915,73 +2202,714 @@ async function main() {
   }
   console.log('✅ Inventory & Product Experiences created')
 
+  // Ek ürünler için inventory & görseller (context bazlı post görselleri)
+  const heroInventoryConfigs = [
+    {
+      productId: product2.id,
+      hasOwned: true,
+      summary:
+        'I keep the Dyson V12 Slim as my travel vacuum; its light body makes quick hotel or small‑flat cleaning sessions much easier.',
+      mediaKeys: ['product.vacuum.dyson'],
+    },
+    {
+      productId: product3.id,
+      hasOwned: true,
+      summary:
+        'The iPhone 15 Pro is my daily driver and the main phone I use for camera and video workflow tests.',
+      mediaKeys: ['product.phone.phone2'],
+    },
+    {
+      productId: samsungPhone?.id || product2.id,
+      hasOwned: true,
+      summary:
+        'My Samsung phone takes over office tasks when I dock it into Dex with a keyboard, mouse and an external monitor.',
+      mediaKeys: ['product.phone.phone1'],
+    },
+    {
+      productId: applePhone?.id || product3.id,
+      hasOwned: true,
+      summary:
+        'Inside the Apple ecosystem this device is my main camera for LOG recording and day‑to‑day content production.',
+      mediaKeys: ['product.phone.phone2'],
+    },
+    {
+      productId: redmiPhone?.id || product2.id,
+      hasOwned: false,
+      summary:
+        'This Redmi phone is my budget device for testing MIUI betas and experimental settings without risking my main phone.',
+      mediaKeys: ['product.phone.phone3'],
+    },
+  ];
+
+  for (const config of heroInventoryConfigs) {
+    let inventory = await prisma.inventory.findUnique({
+      where: {
+        userId_productId: {
+          userId: userIdToUse,
+          productId: config.productId,
+        },
+      },
+    });
+
+    if (!inventory) {
+      inventory = await prisma.inventory.create({
+        data: {
+          userId: userIdToUse,
+          productId: config.productId,
+          hasOwned: config.hasOwned,
+          experienceSummary: config.summary,
+        },
+      });
+    } else {
+      inventory = await prisma.inventory.update({
+        where: { id: inventory.id },
+        data: {
+          hasOwned: config.hasOwned,
+          experienceSummary: config.summary,
+        },
+      });
+    }
+
+    await prisma.inventoryMedia.deleteMany({ where: { inventoryId: inventory.id } });
+    const mediaData = config.mediaKeys
+      .map((key) => {
+        const mediaUrl = getSeedMediaUrl(key as SeedMediaKey);
+        if (!mediaUrl) {
+          return null;
+        }
+        return {
+          inventoryId: inventory.id,
+          mediaUrl,
+          type: 'IMAGE' as const,
+        };
+      })
+      .filter((item): item is { inventoryId: string; mediaUrl: string; type: 'IMAGE' } => !!item);
+
+    if (mediaData.length) {
+      await prisma.inventoryMedia.createMany({ data: mediaData });
+    }
+  }
+  console.log('✅ Additional inventory media created for hero products');
+
   // Content Posts
-  // FREE Post (Feed)
-  const freePostId = generateUlid()
-  await prisma.contentPost.create({
-    data: {
-      id: freePostId,
+  console.log('🧹 Resetting FREE posts for balanced context coverage...');
+  await prisma.contentPost.deleteMany({
+    where: {
       userId: userIdToUse,
       type: 'FREE',
-      title: 'Dyson V15s Daily Experience',
-      body: 'Using the Dyson V15s Submarine daily has completely changed how I clean my home. The wet cleaning head works brilliantly for kitchen and bathroom floors, picking up spills and dirt effortlessly.',
+    },
+  });
+
+  const akilliTelefonlarSubCategory = techSubCategories.find((cat) => cat.name === 'Akıllı Telefonlar');
+  const laptoplarSubCategory = techSubCategories.find((cat) => cat.name === 'Laptoplar');
+  const kulakliklarSubCategory = techSubCategories.find((cat) => cat.name === 'Kulaklıklar');
+  const samsungGroup = phoneProductGroups.find((group) => group.name === 'Samsung Serisi');
+  const iphoneGroup = phoneProductGroups.find((group) => group.name === 'iPhone Serisi');
+  const redmiGroup = phoneProductGroups.find((group) => group.name === 'Redmi Serisi');
+
+  if (!akilliTelefonlarSubCategory || !laptoplarSubCategory || !kulakliklarSubCategory) {
+    throw new Error('Teknoloji alt kategorileri bulunamadı (Akıllı Telefonlar, Laptoplar, Kulaklıklar)');
+  }
+
+  if (!samsungGroup || !iphoneGroup || !redmiGroup) {
+    throw new Error('Telefon product group verileri eksik (Samsung/iPhone/Redmi)');
+  }
+
+  type ContextPostSeed = {
+    title: string;
+    body: string;
+    mainCategoryId: string;
+    subCategoryId?: string | null;
+    productGroupId?: string | null;
+    productId?: string | null;
+    inventoryRequired?: boolean;
+    isBoosted?: boolean;
+    tags?: string[];
+  };
+
+  const productContextPosts: ContextPostSeed[] = [
+    {
+      title: 'My Deep Cleaning Routine with Dyson V15s',
+      body:
+        'The Submarine head lifts dried stains from the kitchen floor in a single pass, which used to take multiple tools. ' +
+        'With the Dyson V15s I can move from carpets to hard floors without changing settings or worrying about modes. ' +
+        'It turned weekend deep cleaning into a single, predictable routine instead of a long list of separate chores. ' +
+        'I now schedule one focused session and the rest of the week only needs light touch‑ups.',
+      mainCategoryId: evYasamCategory.id,
+      subCategoryId: evYasamSubCategory.id,
+      productGroupId: productGroup.id,
+      productId: product1.id,
+      inventoryRequired: true,
+      isBoosted: false,
+      tags: ['Dyson', 'Submarine', 'WetCleaning'],
+    },
+    {
+      title: 'Adding Dyson V12 Slim to My Travel Kit',
+      body:
+        'The V12 Slim lets me keep small apartments and short‑term stays under control without dragging a full‑size vacuum around. ' +
+        'It fits easily into a corner of the car trunk or travel bag and is quick to set up after long trips. ' +
+        'In narrow corridors and around furniture the lighter body is noticeable, especially compared to bulkier cordless models. ' +
+        'For short getaways it feels like the right compromise between power, size and convenience.',
+      mainCategoryId: evYasamCategory.id,
+      subCategoryId: evYasamSubCategory.id,
+      productGroupId: productGroup.id,
+      productId: product2.id,
+      inventoryRequired: true,
+      isBoosted: true,
+      tags: ['Dyson', 'Slim', 'Travel'],
+    },
+    {
+      title: 'My Daily Notes on the iPhone 15 Pro Camera',
+      body:
+        'Shooting LOG video and using the tetraprism lens at 5x zoom has made my weekend vlog footage look much cleaner. ' +
+        'USB‑C with an external SSD means I can offload long clips without waiting on old‑school transfer speeds. ' +
+        'I now treat the phone like a compact cinema tool rather than just a casual camera. ' +
+        'Most of my travel content goes straight from the phone into the edit without needing an extra dedicated camera body.',
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      productGroupId: iphoneGroup.id,
+      productId: product3.id,
+      inventoryRequired: true,
+      isBoosted: false,
+      tags: ['iPhone', 'Camera', 'USB-C'],
+    },
+  ];
+
+  const productGroupContextPosts: ContextPostSeed[] = [
+    {
+      title: 'Different Use Cases Across the Dyson Vacuum Series',
+      body:
+        'The Dyson series covers pet hair, shiny hardwood floors and quick kitchen cleanups with different heads on the same body. ' +
+        'In our home I split the attachments by role: one stays docked for daily crumbs, another for deep weekend carpet runs. ' +
+        'It is easier to explain “which head for which task” to the family than to keep multiple machines plugged in. ' +
+        'Over time this setup has reduced clutter in the storage closet while keeping cleaning surprisingly flexible.',
+      mainCategoryId: evYasamCategory.id,
+      subCategoryId: evYasamSubCategory.id,
+      productGroupId: productGroup.id,
+      productId: null,
+      inventoryRequired: false,
+      isBoosted: true,
+      tags: ['Dyson', 'ProductGroup', 'Attachments'],
+    },
+    {
+      title: 'Current One UI Experience Across the Samsung Series',
+      body:
+        'On Samsung phones in the same product group I use Good Lock modules to turn a desk setup into a mini workstation. ' +
+        'Multi‑window layouts, custom gestures and a shared theme carry nicely from one device to the next. ' +
+        'Even mid‑range models feel more consistent once you mirror the same One UI profile across them. ' +
+        'For people who switch phones often inside the ecosystem this makes each upgrade feel familiar on day one.',
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      productGroupId: samsungGroup.id,
+      productId: null,
+      inventoryRequired: false,
+      isBoosted: false,
+      tags: ['Samsung', 'OneUI', 'GoodLock'],
+    },
+    {
+      title: 'Using the Redmi Series as a Budget Ecosystem',
+      body:
+        'We use Redmi phones as a budget friendly ecosystem that can be shared across family members. ' +
+        'Automation rules, shared battery‑saving profiles and Mi Home scenes make it easy to tune each phone without micro‑managing settings. ' +
+        'Older relatives still get a simple, reliable setup while power users can keep their advanced tweaks. ' +
+        'For the price range it creates a surprisingly coherent multi‑device experience.',
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      productGroupId: redmiGroup.id,
+      productId: null,
+      inventoryRequired: false,
+      isBoosted: false,
+      tags: ['Redmi', 'Automation', 'Budget'],
+    },
+  ];
+
+  const subCategoryContextPosts: ContextPostSeed[] = [
+    {
+      title: 'eSIM and Dual‑SIM Scenarios on Smartphones',
+      body:
+        'In the smartphones subcategory I walk through how I juggle eSIM profiles and physical SIM combinations on different trips. ' +
+        'There is a short list of carrier setups that work especially well for frequent travelers who jump between countries. ' +
+        'I also explain which phones handle profile switching smoothly and which ones still feel clunky. ' +
+        'If you rely on dual numbers for work and personal life this guide can save a lot of trial and error.',
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      inventoryRequired: false,
+      isBoosted: false,
+      tags: ['Akıllı Telefonlar', 'eSIM', 'Roaming'],
+    },
+    {
+      title: 'Balancing Portability and Performance on Laptops',
+      body:
+        'In the laptops subcategory I compare 14‑inch and larger machines by looking at thermal design, battery life and USB4 accessory support. ' +
+        'The post explains when it actually makes sense to carry a heavier device just for extra GPU power. ' +
+        'There are also a few concrete travel setups showing how a single USB4 cable can replace a whole dock. ' +
+        'If you commute with your laptop every day this trade‑off matters more than raw benchmark scores.',
+      mainCategoryId: techCategory.id,
+      subCategoryId: laptoplarSubCategory.id,
+      inventoryRequired: false,
+      isBoosted: true,
+      tags: ['Laptoplar', 'USB4', 'Thermals'],
+    },
+    {
+      title: 'ANC Comparison Guide for the Headphones Subcategory',
+      body:
+        'In the headphones subcategory I measured active noise cancelling performance in the office, on planes and at home. ' +
+        'The guide summarizes which models handle low‑frequency rumble, mid‑range chatter and high‑frequency hiss the best. ' +
+        'Simple charts make it easy to see where each pair shines without reading pages of lab data. ' +
+        'It is written for people who want focus in real environments rather than perfect silence in a test booth.',
+      mainCategoryId: techCategory.id,
+      subCategoryId: kulakliklarSubCategory.id,
+      inventoryRequired: false,
+      isBoosted: false,
+      tags: ['Kulaklıklar', 'ANC', 'Focus'],
+    },
+  ];
+
+  const templateReplacer = (template: string, replacements: Record<string, string>): string => {
+    return Object.entries(replacements).reduce((acc, [key, value]) => {
+      const regex = new RegExp(`\\{${key}\\}`, 'g');
+      return acc.replace(regex, value);
+    }, template);
+  };
+
+  const phoneNarrativeTemplates = [
+    {
+      title: '{product} ile gece fotoğraf turu #{index}',
+      body: '{brand} ekosistemindeki {product} modeliyle İstanbul sokaklarında düşük ışık testleri yaptım. RAW çekimlerde gürültü kontrolü ve tripod kullanmadan elde edilen kareler beklentimin üstünde oldu.',
+      tag: 'NightMode',
+    },
+    {
+      title: '{brand} {product} pil dayanımı raporu #{index}',
+      body: '{product} modelini 120 Hz ekran, Wi-Fi hotspot ve kamera kayıt kombosu ile 12 saatlik mobil ofis olarak kullandım. Gün sonu kalan yüzde değerleri ve şarj etme frekanslarımı tabloya döktüm.',
+      tag: 'Battery',
+    },
+    {
+      title: '{product} ile oyun performansı #{index}',
+      body: '{product}, Genshin Impact ve Asphalt 9 testlerimde sıcaklık kontrolünü iyi yaptı. Dokunmatik gecikme ölçümlerini ve kare sabitliğini paylaşarak hangi aksesuarları kullandığımı anlattım.',
+      tag: 'Gaming',
+    },
+    {
+      title: '{product} kamera logbook #{index}',
+      body: '{brand} cihazında LOG video + LUT kombinasyonu ile sosyal medya içerikleri üretiyorum. {product} ile hangi LUT’ların doğal ten tonu verdiğini ve post prod sürecimi aktarıyorum.',
+      tag: 'Creator',
+    },
+  ];
+
+  const dynamicPhoneProductSeeds: ContextPostSeed[] = brandPhoneProducts.slice(0, 36).map((product: any, index) => {
+    const narrative = phoneNarrativeTemplates[index % phoneNarrativeTemplates.length];
+    const replacements = {
+      product: product.name,
+      brand: product.brand || 'Tipbox',
+      index: (index + 1).toString(),
+    };
+
+    return {
+      title: templateReplacer(narrative.title, replacements),
+      body: templateReplacer(narrative.body, replacements),
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      productGroupId: product.groupId || null,
+      productId: product.id,
+      inventoryRequired: index % 3 === 0,
+      isBoosted: index % 5 === 0,
+      tags: [product.brand || 'Mobile', narrative.tag, 'Feed'],
+    };
+  });
+
+  const groupStoryTemplates = [
+    {
+      title: '{group} community weekly highlights #{index}',
+      body: 'I compared the weekly usage patterns of 40 users who follow {group}. Software update habits and accessory choices are summarized in a single table.',
+      tag: 'Community',
+    },
+    {
+      title: '{group} ecosystem guide #{index}',
+      body: 'I prepared a starter setup for people who are new to the {group} ecosystem. It answers which accessory to buy first and in which scenarios a second device makes more sense.',
+      tag: 'Setup',
+    },
+  ];
+
+  const phoneGroupsForStories = [productGroup, ...phoneProductGroups];
+  const dynamicProductGroupSeeds: ContextPostSeed[] = phoneGroupsForStories
+    .flatMap((group, index) => {
+      const template = groupStoryTemplates[index % groupStoryTemplates.length];
+      const replacements = {
+        group: group.name,
+        index: (index + 1).toString(),
+      };
+      const isHomeCategory = group.subCategoryId === evYasamSubCategory.id;
+      return {
+        title: templateReplacer(template.title, replacements),
+        body: templateReplacer(template.body, replacements),
+        mainCategoryId: isHomeCategory ? evYasamCategory.id : techCategory.id,
+        subCategoryId: group.subCategoryId,
+        productGroupId: group.id,
+        inventoryRequired: false,
+        isBoosted: index % 4 === 0,
+        tags: [group.name, template.tag, 'Series'],
+      };
+    })
+    .slice(0, 12);
+
+  const subCategoryStoryTemplates = [
+    {
+      subCategory: akilliTelefonlarSubCategory,
+      mainCategoryId: techCategory.id,
+      title: 'Akıllı Telefonlar kategorisinde trendler #{index}',
+      body: 'Yeni çıkan aksesuarlar, pil performansı ve kamera karşılaştırmalarını tek listede topladım. #{index}. haftada özellikle ekran kalibrasyonu gündemdeydi.',
+      tag: 'Trends',
+    },
+    {
+      subCategory: laptoplarSubCategory,
+      mainCategoryId: techCategory.id,
+      title: 'Laptop kategorisinde taşınabilirlik notları #{index}',
+      body: '14 inç üstü modellerde 65W GaN adaptörleriyle yaptığım seyahat testlerini paylaştım. #{index}. rota için ağırlık/ısı dengesi kritikti.',
+      tag: 'Mobility',
+    },
+    {
+      subCategory: kulakliklarSubCategory,
+      mainCategoryId: techCategory.id,
+      title: 'Kulaklık kategorisinde ANC laboratuvarı #{index}',
+      body: 'ANC seviyelerini uçak, metro ve açık ofis ortamlarında ölçtüm. #{index}. testte özellikle orta frekans sızıntıları öne çıktı.',
+      tag: 'Audio',
+    },
+    {
+      subCategory: evYasamSubCategory,
+      mainCategoryId: evYasamCategory.id,
+      title: 'Ev & Yaşam kategorisinde bakım rutini #{index}',
+      body: 'Kombine temizlik gündeminde robot + manuel süpürge kullanımını anlattım. #{index}. güncellemede deterjan dozajı önerilerini ekledim.',
+      tag: 'HomeCare',
+    },
+  ];
+
+  const subCategoryExpansionSeeds: ContextPostSeed[] = subCategoryStoryTemplates.flatMap((scenario) => {
+    return Array.from({ length: 3 }).map((_, idx) => ({
+      title: templateReplacer(scenario.title, { index: (idx + 1).toString() }),
+      body: templateReplacer(scenario.body, { index: (idx + 1).toString() }),
+      mainCategoryId: scenario.mainCategoryId,
+      subCategoryId: scenario.subCategory?.id || null,
+      productGroupId: null,
+      productId: null,
+      inventoryRequired: false,
+      isBoosted: idx === 0,
+      tags: [scenario.tag, 'Category', scenario.subCategory?.name || 'Context'],
+    }));
+  });
+
+  const contextAwarePosts: ContextPostSeed[] = [
+    ...productContextPosts,
+    ...productGroupContextPosts,
+    ...subCategoryContextPosts,
+    ...dynamicPhoneProductSeeds,
+    ...dynamicProductGroupSeeds,
+    ...subCategoryExpansionSeeds,
+  ];
+
+  for (const postSeed of contextAwarePosts) {
+    const postId = generateUlid();
+    await prisma.contentPost.create({
+      data: {
+        id: postId,
+        userId: userIdToUse,
+        type: 'FREE',
+        title: postSeed.title,
+        body: postSeed.body,
+        mainCategoryId: postSeed.mainCategoryId,
+        subCategoryId: postSeed.subCategoryId ?? null,
+        productGroupId: postSeed.productGroupId ?? null,
+        productId: postSeed.productId ?? null,
+        inventoryRequired: postSeed.inventoryRequired ?? false,
+        isBoosted: postSeed.isBoosted ?? false,
+      },
+    });
+
+    if (postSeed.tags && postSeed.tags.length) {
+      await prisma.contentPostTag.createMany({
+        data: postSeed.tags.map((tag) => ({
+          postId,
+          tag,
+        })),
+        skipDuplicates: true,
+      });
+    }
+  }
+
+  console.log(`✅ ${contextAwarePosts.length} FREE posts created across PRODUCT, PRODUCT_GROUP, and SUB_CATEGORIES contexts`)
+
+  // QUESTION Posts (asked by trust users, answered by test user)
+  console.log('❓ Creating question posts for reply seeds...');
+  type QuestionTemplate = {
+    title: string;
+    body: string;
+    mainCategoryId: string;
+    subCategoryId: string;
+    productGroupId?: string | null;
+    productId?: string | null;
+    answerFormat: 'SHORT' | 'LONG';
+  };
+
+  const baseQuestionTemplates: QuestionTemplate[] = [
+    {
+      title: 'Dyson Submarine mop başlığı gerekli mi? #{index}',
+      body: 'V15 sürümünde ıslak başlık #{index}. kullanımda tüyleri topluyor mu? mutfak ve banyo için önerilerin nedir?',
+      mainCategoryId: evYasamCategory.id,
+      subCategoryId: evYasamSubCategory.id,
+      productGroupId: productGroup.id,
+      productId: product1.id,
+      answerFormat: 'LONG',
+    },
+    {
+      title: 'iPhone 15 Pro USB-C senaryoları #{index}',
+      body: 'ProRes kayıt + harici SSD ile #{index}. sahnede ısı yönetimi ve aksesuar önerilerin neler?',
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      productGroupId: iphoneGroup.id,
+      productId: applePhone?.id || product3.id,
+      answerFormat: 'LONG',
+    },
+    {
+      title: 'Samsung Dex üretkenlik sorusu #{index}',
+      body: 'Dex modunda çift ekran ve klavye kombinasyonlarında hangi aksesuarları önerirsin? #{index}. güncellemede stabilite nasıl?',
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      productGroupId: samsungGroup.id,
+      productId: samsungPhone?.id || product2.id,
+      answerFormat: 'SHORT',
+    },
+    {
+      title: 'Redmi batarya kalibrasyonu #{index}',
+      body: 'Budget cihazlarda MIUI arka plan ayarlarını nasıl optimize ediyorsun? #{index}. testte ekran süren kaç saat oldu?',
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      productGroupId: redmiGroup.id,
+      productId: redmiPhone?.id || product2.id,
+      answerFormat: 'SHORT',
+    },
+    {
+      title: 'Kulaklık ANC kıyas sorusu #{index}',
+      body: 'ANC seviyelerini uçakta ölçerken hangi filtreleri kullanıyorsun? #{index}. uçuş için önerin nedir?',
+      mainCategoryId: techCategory.id,
+      subCategoryId: kulakliklarSubCategory.id,
+      productGroupId: null,
+      productId: null,
+      answerFormat: 'LONG',
+    },
+  ];
+
+  const questionSeeds = Array.from({ length: 20 }).map((_, idx) => {
+    const template = baseQuestionTemplates[idx % baseQuestionTemplates.length];
+    return {
+      askerId: TRUST_USER_IDS[idx % TRUST_USER_IDS.length],
+      title: templateReplacer(template.title, { index: (idx + 1).toString() }),
+      body: templateReplacer(template.body, { index: (idx + 1).toString() }),
+      mainCategoryId: template.mainCategoryId,
+      subCategoryId: template.subCategoryId,
+      productGroupId: template.productGroupId ?? null,
+      productId: template.productId ?? null,
+      answerFormat: template.answerFormat,
+    };
+  });
+
+  const questionPosts: Array<{ id: string }> = [];
+  for (const [index, seed] of questionSeeds.entries()) {
+    try {
+      const questionPost = await prisma.contentPost.create({
+        data: {
+          id: generateUlid(),
+          userId: seed.askerId,
+          type: 'QUESTION',
+          title: seed.title,
+          body: seed.body,
+          mainCategoryId: seed.mainCategoryId,
+          subCategoryId: seed.subCategoryId,
+          productGroupId: seed.productGroupId,
+          productId: seed.productId,
+          inventoryRequired: false,
+          isBoosted: index % 4 === 0,
+        },
+      });
+
+      await prisma.postQuestion.create({
+        data: {
+          postId: questionPost.id,
+          expectedAnswerFormat: seed.answerFormat,
+          relatedProductId: seed.productId,
+        },
+      });
+
+      questionPosts.push({ id: questionPost.id });
+    } catch (error) {
+      console.warn('⚠️ Question post oluşturulamadı, devam ediliyor:', {
+        index,
+        title: seed.title,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  console.log(`✅ ${questionPosts.length} question posts created for reply seeds (toplam seed: ${questionSeeds.length})`);
+
+  console.log('💬 Creating question replies for test user...');
+  const questionReplySeeds = [
+    {
+      postIndex: 0,
+      comment:
+        'Submarine başlığı özellikle mutfak zeminindeki kurumuş lekelerde fark yaratıyor. Temizlik sonrası hazneyi hemen boşaltırsan bakım kolay.',
+    },
+    {
+      postIndex: 1,
+      comment:
+        'USB-C ile Angelbird SSD kullanıyorum; ProRes 4K60 kayıtları hiç kesilmedi. Kablo olarak Thunderbolt 4 sertifikalı olanları tercih et.',
+    },
+  ];
+
+  for (const replySeed of questionReplySeeds) {
+    const targetPost = questionPosts[replySeed.postIndex];
+    if (!targetPost) continue;
+
+    await prisma.contentComment.create({
+      data: {
+        id: generateUlid(),
+        postId: targetPost.id,
+        userId: userIdToUse,
+        comment: replySeed.comment,
+        isAnswer: true,
+      },
+    });
+
+    await prisma.contentPost.update({
+      where: { id: targetPost.id },
+      data: { commentsCount: { increment: 1 } },
+    }).catch(() => {});
+  }
+  console.log('✅ Question replies for test user created');
+
+  type TipSeed = {
+    title: string;
+    body: string;
+    productId: string | null;
+    mainCategoryId: string;
+    subCategoryId: string;
+    productGroupId?: string | null;
+    inventoryRequired?: boolean;
+    isBoosted?: boolean;
+    tags: string[];
+    tipCategory: 'USAGE' | 'PURCHASE' | 'CARE' | 'OTHER';
+  };
+
+  const baseTipTemplates: TipSeed[] = [
+    {
+      title: 'Dyson bakım rutini #{index}',
+      body: "Submarine modülünü #{index}. haftada nasıl temizlediğimi ve filtreleri hangi sırayla kuruttuğumu paylaşıyorum.",
       productId: product1.id,
       mainCategoryId: evYasamCategory.id,
       subCategoryId: evYasamSubCategory.id,
       inventoryRequired: true,
       isBoosted: false,
-    }
-  })
-
-  // Add tags for feed post
-  await prisma.contentPostTag.createMany({
-    data: [
-      { postId: freePostId, tag: 'Dyson' },
-      { postId: freePostId, tag: 'Vacuum Cleaner' },
-      { postId: freePostId, tag: 'Home Cleaning' },
-    ],
-    skipDuplicates: true,
-  })
-
-  // TIPS Post (Tips&Tricks)
-  const tipsPostId = generateUlid()
-  await prisma.contentPost.create({
-    data: {
-      id: tipsPostId,
-      userId: userIdToUse,
-      type: 'TIPS',
-      title: 'Dyson Maintenance Tips',
-      body: 'Dyson V15s\'i uzun süre kullanmak için düzenli olarak filtreleri temizlemek ve şarj ederken tamamen boşaltmamak önemli. Ayrıca fırçaları ayda bir kez yıkamak performansı artırır.',
-      productId: product1.id,
-      mainCategoryId: evYasamCategory.id,
-      subCategoryId: evYasamSubCategory.id,
-      inventoryRequired: true,
-      isBoosted: false,
-    }
-  })
-
-  await prisma.postTip.create({
-    data: {
-      postId: tipsPostId,
+      tags: ['Maintenance', 'Care Tips'],
       tipCategory: 'CARE',
-      isVerified: true,
-    }
-  })
+    },
+    {
+      title: 'Samsung pil optimizasyonu #{index}',
+      body: `Good Lock + Routines ile ${samsungPhone?.name || 'Samsung'} cihazında ekran yenilemesini profil bazlı ayarlıyorum. #{index} numaralı profil akşamları otomatik devreye giriyor.`,
+      productId: samsungPhone?.id || product2.id,
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      inventoryRequired: true,
+      isBoosted: false,
+      tags: ['Battery Care', 'Samsung'],
+      tipCategory: 'USAGE',
+    },
+    {
+      title: 'iPhone lens bakımı #{index}',
+      body: `${applePhone?.name || 'iPhone'} çekimlerinden sonra mag-safe tripodları nasıl temizlediğimi ve hangi lens pen kombinasyonunu seçtiğimi anlattım.`,
+      productId: applePhone?.id || product3.id,
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      inventoryRequired: false,
+      isBoosted: true,
+      tags: ['Camera', 'Cleaning'],
+      tipCategory: 'CARE',
+    },
+    {
+      title: 'Redmi aksesuar sepeti #{index}',
+      body: `${redmiPhone?.name || 'Redmi'} için GaN adaptörleri kıyaslayıp ısı ölçümlerini paylaştım. #{index}. testte USB-C hub performansı öne çıktı.`,
+      productId: redmiPhone?.id || product2.id,
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      inventoryRequired: false,
+      isBoosted: false,
+      tags: ['Budget', 'Accessories'],
+      tipCategory: 'PURCHASE',
+    },
+    {
+      title: 'Laptop USB4 istasyonu #{index}',
+      body: 'Laptop kategorisinde seyahat ederken kullandığım USB4 hub ve kablo kombinasyonlarını listeledim. #{index}. rota için hız ölçümlerini ekledim.',
+      productId: null,
+      mainCategoryId: techCategory.id,
+      subCategoryId: laptoplarSubCategory.id,
+      inventoryRequired: false,
+      isBoosted: true,
+      tags: ['Productivity', 'Laptop'],
+      tipCategory: 'USAGE',
+    },
+  ];
 
-  await prisma.postTag.create({
-    data: {
-      postId: tipsPostId,
-      tag: 'Maintenance',
-    }
-  })
+  const expandedTipSeeds: TipSeed[] = Array.from({ length: 20 }).map((_, idx) => {
+    const template = baseTipTemplates[idx % baseTipTemplates.length];
+    const replacements = { index: (idx + 1).toString() };
+    return {
+      title: templateReplacer(template.title, replacements),
+      body: templateReplacer(template.body, replacements),
+      productId: template.productId ?? null,
+      mainCategoryId: template.mainCategoryId,
+      subCategoryId: template.subCategoryId,
+      productGroupId: template.productGroupId ?? null,
+      inventoryRequired: template.inventoryRequired ?? false,
+      isBoosted: template.isBoosted ?? idx % 6 === 0,
+      tags: template.tags,
+      tipCategory: template.tipCategory,
+    };
+  });
 
-  await prisma.contentPostTag.createMany({
-    data: [
-      { postId: tipsPostId, tag: 'Maintenance' },
-      { postId: tipsPostId, tag: 'Care Tips' },
-    ],
-    skipDuplicates: true,
-  })
+  for (const tipSeed of expandedTipSeeds) {
+    const tipPostId = generateUlid();
+    await prisma.contentPost.create({
+      data: {
+        id: tipPostId,
+        userId: userIdToUse,
+        type: 'TIPS',
+        title: tipSeed.title,
+        body: tipSeed.body,
+        productId: tipSeed.productId,
+        mainCategoryId: tipSeed.mainCategoryId,
+        subCategoryId: tipSeed.subCategoryId,
+        inventoryRequired: tipSeed.inventoryRequired ?? false,
+        isBoosted: tipSeed.isBoosted ?? false,
+      },
+    });
+
+    await prisma.postTip.create({
+      data: {
+        postId: tipPostId,
+        tipCategory: tipSeed.tipCategory,
+        isVerified: true,
+      },
+    });
+
+    if (tipSeed.tags.length) {
+      await prisma.postTag.create({
+        data: {
+          postId: tipPostId,
+          tag: tipSeed.tags[0],
+        },
+      }).catch(() => {});
+
+      await prisma.contentPostTag.createMany({
+        data: tipSeed.tags.map((tag) => ({ postId: tipPostId, tag })),
+        skipDuplicates: true,
+      });
+    }
+  }
 
   // COMPARE Post (Benchmark)
   const comparePostId = generateUlid()
@@ -1010,13 +2938,10 @@ async function main() {
   })
 
   // Comparison Scores
-  const fiyatMetric = metrics.find(m => m.name === 'Fiyat')!
-  const kaliteMetric = metrics.find(m => m.name === 'Kalite')!
-
   await prisma.postComparisonScore.create({
     data: {
       comparisonId: comparison.id,
-      metricId: fiyatMetric.id,
+      metricId: priceMetric.id,
       scoreProduct1: 7,
       scoreProduct2: 8,
       comment: 'V12 daha uygun fiyatlı',
@@ -1026,32 +2951,275 @@ async function main() {
   await prisma.postComparisonScore.create({
     data: {
       comparisonId: comparison.id,
-      metricId: kaliteMetric.id,
+      metricId: qualityMetric.id,
       scoreProduct1: 9,
       scoreProduct2: 8,
       comment: 'V15s kalite açısından daha üstün',
     }
   })
 
-  // More FREE posts for feed
-  for (let i = 0; i < 5; i++) {
-    const postId = generateUlid()
+  type BenchmarkSeed = {
+    title: string;
+    body: string;
+    product1Id: string;
+    product2Id: string;
+    summary: string;
+    mainCategoryId: string;
+    subCategoryId: string;
+    isBoosted?: boolean;
+    metricScores: Array<{
+      metricId: string;
+      scoreProduct1: number;
+      scoreProduct2: number;
+      comment?: string;
+    }>;
+  };
+
+  const baseBenchmarkTemplates: BenchmarkSeed[] = [
+    {
+      title: 'Samsung vs iPhone Pil Dayanımı Karşılaştırması #{index}',
+      body: 'İki cihazı da 120 Hz ekran, hotspot ve kamera kaydı ile aynı rotada kullandım. Pil yüzdeleri ve şarj alışkanlıklarını #{index}. rota için tabloya döktüm.',
+      product1Id: samsungPhone?.id || product2.id,
+      product2Id: applePhone?.id || product3.id,
+      summary: 'Galaxy daha yüksek pil kapasitesiyle günü çıkardı fakat iPhone daha stabil sıcaklık sundu (#{index}).',
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      metricScores: [
+        {
+          metricId: priceMetric.id,
+          scoreProduct1: 7,
+          scoreProduct2: 6,
+          comment: 'Galaxy fiyat avantajı sağlıyor',
+        },
+        {
+          metricId: usabilityMetric.id,
+          scoreProduct1: 8,
+          scoreProduct2: 9,
+          comment: 'iPhone daha kararlı yazılım sunuyor',
+        },
+      ],
+    },
+    {
+      title: 'Redmi vs Samsung Ekran Parlaklığı Testi #{index}',
+      body: 'Güneş altında HDR içerik tüketirken ölçtüğüm nit değerlerini ve uzun kullanım sonucunda oluşan ısınmayı anlattım (#{index}).',
+      product1Id: redmiPhone?.id || product2.id,
+      product2Id: samsungPhone?.id || product2.id,
+      summary: 'Samsung daha yüksek tepe parlaklığına sahip fakat Redmi enerji tüketiminde daha verimli kaldı.',
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      metricScores: [
+        {
+          metricId: qualityMetric.id,
+          scoreProduct1: 8,
+          scoreProduct2: 9,
+          comment: 'Ekran kalitesi Samsung tarafında daha rafine',
+        },
+        {
+          metricId: designMetric.id,
+          scoreProduct1: 7,
+          scoreProduct2: 8,
+        },
+      ],
+    },
+    {
+      title: 'Dyson V15s vs Samsung Jet Temizlik Karşılaştırması #{index}',
+      body: 'Ev & yaşam rutinimde iki cihazı da mutfak + salon kombinasyonunda karşılaştırdım. Islak başlıktaki kolaylık vs hafif gövde tercihi öne çıktı (#{index}).',
+      product1Id: product1.id,
+      product2Id: product2.id,
+      summary: 'V15s güçte önde, Jet ise manevra kabiliyetiyle fark yaratıyor.',
+      mainCategoryId: evYasamCategory.id,
+      subCategoryId: evYasamSubCategory.id,
+      isBoosted: true,
+      metricScores: [
+        {
+          metricId: durabilityMetric.id,
+          scoreProduct1: 9,
+          scoreProduct2: 7,
+        },
+        {
+          metricId: usabilityMetric.id,
+          scoreProduct1: 8,
+          scoreProduct2: 9,
+        },
+      ],
+    },
+    {
+      title: 'iPhone 15 Pro vs Redmi Kamera Seçimi #{index}',
+      body: 'LOG video çekimleri ve sosyal medya hazır filtreleri için iki cihazı da aynı sahnede kullandım. Lens değişim hızını ve aksesuar uyumunu anlattım (#{index}).',
+      product1Id: applePhone?.id || product3.id,
+      product2Id: redmiPhone?.id || product2.id,
+      summary: 'iPhone video tarafında üstünken Redmi sosyal içerik üreticileri için hızlı filtre seçenekleri sunuyor.',
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      metricScores: [
+        {
+          metricId: qualityMetric.id,
+          scoreProduct1: 9,
+          scoreProduct2: 7,
+        },
+        {
+          metricId: priceMetric.id,
+          scoreProduct1: 5,
+          scoreProduct2: 9,
+        },
+      ],
+    },
+  ];
+
+  const benchmarkSeeds: BenchmarkSeed[] = Array.from({ length: 20 }).map((_, idx) => {
+    const template = baseBenchmarkTemplates[idx % baseBenchmarkTemplates.length];
+    const replacements = { index: (idx + 1).toString() };
+    return {
+      title: templateReplacer(template.title, replacements),
+      body: templateReplacer(template.body, replacements),
+      product1Id: template.product1Id,
+      product2Id: template.product2Id,
+      summary: templateReplacer(template.summary, replacements),
+      mainCategoryId: template.mainCategoryId,
+      subCategoryId: template.subCategoryId,
+      isBoosted: template.isBoosted ?? idx % 5 === 0,
+      metricScores: template.metricScores,
+    };
+  });
+
+  for (const benchmarkSeed of benchmarkSeeds) {
+    const compareId = generateUlid();
+    await prisma.contentPost.create({
+      data: {
+        id: compareId,
+        userId: userIdToUse,
+        type: 'COMPARE',
+        title: benchmarkSeed.title,
+        body: benchmarkSeed.body,
+        mainCategoryId: benchmarkSeed.mainCategoryId,
+        subCategoryId: benchmarkSeed.subCategoryId,
+        productId: benchmarkSeed.product1Id,
+        inventoryRequired: false,
+        isBoosted: benchmarkSeed.isBoosted ?? false,
+      },
+    });
+
+    const comparisonEntry = await prisma.postComparison.create({
+      data: {
+        postId: compareId,
+        product1Id: benchmarkSeed.product1Id,
+        product2Id: benchmarkSeed.product2Id,
+        comparisonSummary: benchmarkSeed.summary,
+      },
+    });
+
+    for (const score of benchmarkSeed.metricScores) {
+      await prisma.postComparisonScore.create({
+        data: {
+          comparisonId: comparisonEntry.id,
+          metricId: score.metricId,
+          scoreProduct1: score.scoreProduct1,
+          scoreProduct2: score.scoreProduct2,
+          comment: score.comment,
+        },
+      });
+    }
+  }
+
+  console.log(`✅ ${benchmarkSeeds.length} benchmark posts created`)
+
+  console.log('📝 Creating experience posts for FeedItemType.POST...');
+  type ExperienceSeed = {
+    title: string;
+    body: string;
+    mainCategoryId: string;
+    subCategoryId: string;
+    productId: string;
+    tags: string[];
+    isBoosted?: boolean;
+    inventoryRequired?: boolean;
+  };
+
+  const baseExperienceTemplates: ExperienceSeed[] = [
+    {
+      title: 'Dyson günlük rutin #{index}',
+      body: 'Islak + kuru mod arasında geçişte #{index}. gün uyguladığım temizlik sırasını ve bakım notlarını listeledim.',
+      mainCategoryId: evYasamCategory.id,
+      subCategoryId: evYasamSubCategory.id,
+      productId: product1.id,
+      tags: ['Dyson', 'Rutin'],
+      inventoryRequired: true,
+    },
+    {
+      title: 'Samsung Dex çalışma masası #{index}',
+      body: 'Dex modunda iki monitör + bluetooth klavye kombinasyonuyla nasıl remote ofis kurduğumu anlattım.',
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      productId: samsungPhone?.id || product2.id,
+      tags: ['Productivity', 'Samsung'],
+    },
+    {
+      title: 'iPhone Pro video workflow #{index}',
+      body: 'LOG video çekip SSD aktarırken DaVinci kurgu pipeline’ımı paylaştım. #{index}. proje için LUT notları ekledim.',
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      productId: applePhone?.id || product3.id,
+      tags: ['Creator', 'Video'],
+      isBoosted: true,
+    },
+    {
+      title: 'Redmi MIUI test günlüğü #{index}',
+      body: 'MIUI beta sürümlerini yüklerken aldığım hataları ve pil gözlemlerini aktardım.',
+      mainCategoryId: techCategory.id,
+      subCategoryId: akilliTelefonlarSubCategory.id,
+      productId: redmiPhone?.id || product2.id,
+      tags: ['MIUI', 'Beta'],
+    },
+    {
+      title: 'Laptop seyahat çantası #{index}',
+      body: 'USB4 dock, GaN adaptör ve kablosuz mouse kombinasyonunu #{index}. şehirde nasıl düzenlediğimi anlattım.',
+      mainCategoryId: techCategory.id,
+      subCategoryId: laptoplarSubCategory.id,
+      productId: product3.id,
+      tags: ['Laptop', 'Travel'],
+    },
+  ];
+
+  const experienceSeeds: ExperienceSeed[] = Array.from({ length: 20 }).map((_, idx) => {
+    const template = baseExperienceTemplates[idx % baseExperienceTemplates.length];
+    return {
+      ...template,
+      title: templateReplacer(template.title, { index: (idx + 1).toString() }),
+      body: templateReplacer(template.body, { index: (idx + 1).toString() }),
+      isBoosted: template.isBoosted ?? idx % 4 === 0,
+    };
+  });
+
+  for (const seed of experienceSeeds) {
+    const postId = generateUlid();
     await prisma.contentPost.create({
       data: {
         id: postId,
         userId: userIdToUse,
-        type: 'FREE',
-        title: `Tech Review Post ${i + 1}`,
-        body: `This is a sample review post ${i + 1}. Sharing my experience with various tech products and how they fit into my daily life.`,
-        productId: i % 2 === 0 ? product1.id : product3.id,
-        mainCategoryId: i % 2 === 0 ? evYasamCategory.id : techCategory.id,
-        subCategoryId: i % 2 === 0 ? evYasamSubCategory.id : techSubCategories[0].id,
-        inventoryRequired: i % 2 === 0,
-        isBoosted: i === 0,
-      }
-    })
+        type: 'EXPERIENCE',
+        title: seed.title,
+        body: seed.body,
+        mainCategoryId: seed.mainCategoryId,
+        subCategoryId: seed.subCategoryId,
+        productId: seed.productId,
+        inventoryRequired: seed.inventoryRequired ?? false,
+        isBoosted: seed.isBoosted ?? false,
+      },
+    });
+
+    if (seed.tags.length) {
+      await prisma.contentPostTag.createMany({
+        data: seed.tags.map((tag) => ({
+          postId,
+          tag,
+        })),
+        skipDuplicates: true,
+      });
+    }
   }
-  console.log('✅ Content posts created (Feed, Tips, Benchmarks)')
+  console.log(`✅ ${experienceSeeds.length} experience posts created`)
+
+  console.log('✅ Content posts created (Free context mix, Tips, Benchmarks, Experience)')
 
   // Content Comments (Replies için)
   const comments = await prisma.contentPost.findMany({
@@ -1110,6 +3278,86 @@ async function main() {
     }
   }
 
+  console.log('🔖 Ensuring bookmark coverage across card/context combinations...')
+  type BookmarkCoverageConfig = {
+    label: string
+    where: Prisma.ContentPostWhereInput
+  }
+
+  const bookmarkCoverageConfigs: BookmarkCoverageConfig[] = [
+    {
+      label: 'FREE::product',
+      where: { userId: userIdToUse, type: 'FREE', NOT: { productId: null } },
+    },
+    {
+      label: 'FREE::productGroup',
+      where: {
+        userId: userIdToUse,
+        type: 'FREE',
+        productId: null,
+        NOT: { productGroupId: null },
+      },
+    },
+    {
+      label: 'FREE::subCategory',
+      where: {
+        userId: userIdToUse,
+        type: 'FREE',
+        productId: null,
+        productGroupId: null,
+        NOT: { subCategoryId: null },
+      },
+    },
+    {
+      label: 'COMPARE::product',
+      where: { userId: userIdToUse, type: 'COMPARE' },
+    },
+    {
+      label: 'TIPS::product',
+      where: { userId: userIdToUse, type: 'TIPS', NOT: { productId: null } },
+    },
+    {
+      label: 'TIPS::subCategory',
+      where: {
+        userId: userIdToUse,
+        type: 'TIPS',
+        productId: null,
+        NOT: { subCategoryId: null },
+      },
+    },
+    {
+      label: 'QUESTION::product',
+      where: { type: 'QUESTION', NOT: { productId: null } },
+    },
+    {
+      label: 'QUESTION::subCategory',
+      where: {
+        type: 'QUESTION',
+        productId: null,
+        NOT: { subCategoryId: null },
+      },
+    },
+  ]
+
+  let bookmarkCoverageCreated = 0
+  for (const config of bookmarkCoverageConfigs) {
+    const targetPost = await prisma.contentPost.findFirst({
+      where: config.where,
+      orderBy: { createdAt: 'desc' },
+    })
+
+    if (!targetPost) {
+      console.warn(`⚠️  Bookmark coverage skipped for ${config.label} (no matching post)`)
+      continue
+    }
+
+    const created = await ensureBookmarkFor(userIdToUse, targetPost.id)
+    if (created) {
+      bookmarkCoverageCreated += 1
+    }
+  }
+  console.log(`✅ Bookmark coverage ensured (${bookmarkCoverageCreated} new favorites)`)
+
   // Content Post Views
   for (const post of allPosts.slice(0, 2)) {
     await prisma.contentPostView.create({
@@ -1127,13 +3375,135 @@ async function main() {
   }
   console.log('✅ Content interactions (likes, favorites, views) created')
 
+  // Enrich stats for all posts with realistic numbers
+  const statTemplates = [
+    { likes: 84, comments: 18, shares: 7, bookmarks: 26 },
+    { likes: 52, comments: 11, shares: 4, bookmarks: 14 },
+    { likes: 67, comments: 9, shares: 3, bookmarks: 10 },
+    { likes: 33, comments: 6, shares: 2, bookmarks: 6 },
+    { likes: 105, comments: 22, shares: 8, bookmarks: 32 },
+  ]
+
+  for (let idx = 0; idx < allPosts.length; idx++) {
+    const post = allPosts[idx]
+    const template = statTemplates[idx % statTemplates.length]
+    const variance = 0.7 + Math.random() * 0.9
+    const likes = Math.max(6, Math.round(template.likes * variance))
+    const comments = Math.max(2, Math.round(template.comments * (0.6 + Math.random() * 0.8)))
+    const shares = Math.max(1, Math.round(template.shares * (0.5 + Math.random())))
+    const bookmarks = Math.max(1, Math.round(template.bookmarks * (0.5 + Math.random())))
+    const views = Math.max(likes * randomBetween(6, 15) + randomBetween(30, 140), likes + comments + shares + bookmarks)
+
+    await prisma.contentPost.update({
+      where: { id: post.id },
+      data: {
+        likesCount: likes,
+        commentsCount: comments,
+        sharesCount: shares,
+        favoritesCount: bookmarks,
+        viewsCount: views,
+      },
+    }).catch(() => {})
+  }
+  console.log('✅ Content stats enriched (likes/comments/shares/bookmarks)')
+
+  // Ensure non-primary user posts (e.g. trust users' questions) also have non-zero stats
+  const postsNeedingStats = await prisma.contentPost.findMany({
+    where: { sharesCount: 0 },
+  })
+
+  if (postsNeedingStats.length) {
+    console.log(`ℹ️  Found ${postsNeedingStats.length} posts with zero share stats, enriching...`)
+    for (let idx = 0; idx < postsNeedingStats.length; idx++) {
+      const post = postsNeedingStats[idx]
+      const template = statTemplates[(idx + allPosts.length) % statTemplates.length]
+      const variance = 0.65 + Math.random() * 0.85
+      const likes = Math.max(4, Math.round(template.likes * variance))
+      const comments = Math.max(1, Math.round(template.comments * (0.5 + Math.random() * 0.7)))
+      const shares = Math.max(1, Math.round(template.shares * (0.5 + Math.random())))
+      const bookmarks = Math.max(1, Math.round(template.bookmarks * (0.4 + Math.random())))
+      const views = Math.max(likes * randomBetween(5, 12) + randomBetween(20, 100), likes + comments + shares + bookmarks)
+
+      await prisma.contentPost.update({
+        where: { id: post.id },
+        data: {
+          likesCount: likes,
+          commentsCount: comments,
+          sharesCount: shares,
+          favoritesCount: bookmarks,
+          viewsCount: views,
+        },
+      }).catch(() => {})
+    }
+    console.log('✅ Additional stats enriched for non-primary user posts')
+  }
+
+  // Zamana göre sıralanan feed'in tek tip bloklar halinde gelmemesi için
+  // tüm post'ların createdAt değerlerini rastgele geçmiş zamanlara dağıtıyoruz.
+  console.log('🕒 Randomizing content post timestamps for mixed feed ordering...')
+  const postsForTimeline = await prisma.contentPost.findMany({
+    orderBy: { createdAt: 'asc' },
+  })
+
+  if (postsForTimeline.length > 0) {
+    const maxMinutes = Math.max(60, postsForTimeline.length * 3)
+    for (const post of postsForTimeline) {
+      const minutes = randomBetween(0, maxMinutes)
+      const createdAt = new Date(Date.now() - minutes * 60 * 1000)
+      await prisma.contentPost.update({
+        where: { id: post.id },
+        data: {
+          createdAt,
+          updatedAt: createdAt,
+        },
+      }).catch(() => {})
+    }
+  }
+  console.log('✅ Content post timestamps randomized')
+
+  // 23. Test kullanıcısının (omer@tipbox.co) tüm gönderileri için 10-40 arası rastgele stats ver
+  console.log('📊 Enriching stats for primary test user posts (10-40 range)...')
+  const primaryUserPosts = await prisma.contentPost.findMany({
+    where: { userId: TEST_USER_ID },
+  })
+
+  if (primaryUserPosts.length > 0) {
+    for (const post of primaryUserPosts) {
+      const likes = randomBetween(10, 40)
+      const comments = randomBetween(10, 40)
+      const shares = randomBetween(10, 40)
+      const bookmarks = randomBetween(10, 40)
+      const views = Math.max(
+        likes * randomBetween(8, 20) + randomBetween(50, 200),
+        likes + comments + shares + bookmarks,
+      )
+
+      await prisma.contentPost
+        .update({
+          where: { id: post.id },
+          data: {
+            likesCount: likes,
+            commentsCount: comments,
+            sharesCount: shares,
+            favoritesCount: bookmarks,
+            viewsCount: views,
+          },
+        })
+        .catch(() => {})
+    }
+    console.log(`✅ ${primaryUserPosts.length} primary user posts enriched with 10-40 stats`)
+  } else {
+    console.log('ℹ️  No primary test user posts found for stats enrichment')
+  }
+
   // Feed Entries - Kullanıcıların feed'inde görünecek post'lar
   console.log('📰 Creating feed entries...')
   
   // Tüm post'ları al
   const allPostsForFeed = await prisma.contentPost.findMany({
     where: {},
-    take: 20, // İlk 20 post'u feed'e ekle
+    orderBy: { createdAt: 'desc' },
+    take: 80, // Daha geniş feed testi için 80 post ekle
   })
 
   // Her post için test kullanıcısının feed'ine ekle
@@ -1201,6 +3571,35 @@ async function main() {
 
   console.log(`✅ Feed entries created for ${allUsers.length} users`)
 
+  // Profil istatistiklerini (post/trust/truster) senkronize et
+  console.log('📈 Syncing profile stats for test user...')
+  const [postCount, trustCount, trusterCount] = await Promise.all([
+    prisma.contentPost.count({ where: { userId: userIdToUse } }),
+    prisma.trustRelation.count({ where: { trusterId: userIdToUse } }),
+    prisma.trustRelation.count({ where: { trustedUserId: userIdToUse } }),
+  ])
+
+  await prisma.profile.upsert({
+    where: { userId: userIdToUse },
+    update: {
+      postsCount: postCount,
+      trustCount,
+      trusterCount,
+    },
+    create: {
+      userId: userIdToUse,
+      displayName: 'Ömer Faruk',
+      userName: 'omerfaruk',
+      bannerUrl: DEFAULT_BANNER_URL,
+      bio: 'Passionate about exploring the latest gadgets and digital lifestyles. Sharing honest reviews and real-life experiences with tech products.',
+      country: 'Turkey',
+      postsCount: postCount,
+      trustCount,
+      trusterCount,
+    },
+  })
+  console.log('✅ Profile stats synced')
+
   // NFTs and Marketplace Listings
   console.log('🎨 Creating comprehensive NFTs and Marketplace listings...')
   
@@ -1239,17 +3638,27 @@ async function main() {
       }
     })
     
-    // Avatar oluştur
-    await prisma.userAvatar.create({
-      data: {
-        userId: TARGET_USER_ID,
-        imageUrl: MARKET_AVATAR_URL,
-        isActive: true,
-      }
-    }).catch(() => {})
   } else {
     console.log(`✅ Target user already exists: ${TARGET_USER_ID}`)
   }
+  
+  await prisma.userAvatar.deleteMany({ where: { userId: TARGET_USER_ID } })
+  await prisma.userAvatar.create({
+    data: {
+      userId: TARGET_USER_ID,
+      imageUrl: MARKET_AVATAR_URL,
+      isActive: true,
+    }
+  })
+
+  await prisma.userTitle.deleteMany({ where: { userId: TARGET_USER_ID } })
+  await prisma.userTitle.create({
+    data: {
+      userId: TARGET_USER_ID,
+      title: TARGET_USER_TITLE,
+      earnedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+    },
+  }).catch(() => {})
   
   // NFT örnekleri oluştur
   // const nftTypes = ['BADGE', 'COSMETIC', 'LOOTBOX'] as const
@@ -1262,7 +3671,7 @@ async function main() {
       data: {
         name: 'Tipbox Pioneer Badge',
         description: 'Platformun ilk günlerinden beri burada olanlar için özel efsanevi badge. Sadece 100 adet basılmıştır.',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/pioneer-badge.png',
+        imageUrl: nextMarketplaceImage(),
         type: 'BADGE',
         rarity: 'EPIC',
         isTransferable: true,
@@ -1273,7 +3682,7 @@ async function main() {
       data: {
         name: 'Diamond Profile Frame',
         description: 'Elmas işlemeli, parlayan profil çerçevesi. Profilinize lüks bir görünüm katar.',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/diamond-frame.png',
+        imageUrl: nextMarketplaceImage(),
         type: 'COSMETIC',
         rarity: 'EPIC',
         isTransferable: true,
@@ -1284,7 +3693,7 @@ async function main() {
       data: {
         name: 'Top Contributor Badge',
         description: 'En değerli içerik üreticilerine verilen nadir badge. Topluluğa katkılarınızdan dolayı teşekkürler!',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/contributor-badge.png',
+        imageUrl: nextMarketplaceImage(),
         type: 'BADGE',
         rarity: 'RARE',
         isTransferable: true,
@@ -1295,7 +3704,7 @@ async function main() {
       data: {
         name: 'Neon Pulse Avatar Border',
         description: 'Neon ışıklı, nabız gibi atan avatar çerçevesi. Dikkat çekici ve modern bir görünüm.',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/neon-pulse-border.png',
+        imageUrl: nextMarketplaceImage(),
         type: 'COSMETIC',
         rarity: 'RARE',
         isTransferable: true,
@@ -1307,8 +3716,8 @@ async function main() {
     prisma.nFT.create({
       data: {
         name: 'Gold Star Badge',
-        description: 'Altın yıldız şeklinde parlayan badge. Başarılı kullanıcılara özel.',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/gold-star-badge.png',
+        description: 'A glowing gold star badge, reserved for standout users.',
+        imageUrl: nextMarketplaceImage(),
         type: 'BADGE',
         rarity: 'RARE',
         isTransferable: true,
@@ -1318,8 +3727,8 @@ async function main() {
     prisma.nFT.create({
       data: {
         name: 'Platinum Crown Frame',
-        description: 'Platin taç şeklinde profil çerçevesi. Kraliyet ailesi üyesi gibi görünün!',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/platinum-crown.png',
+        description: 'A platinum crown-shaped profile frame. Look like a member of royalty!',
+        imageUrl: nextMarketplaceImage(),
         type: 'COSMETIC',
         rarity: 'EPIC',
         isTransferable: true,
@@ -1329,8 +3738,8 @@ async function main() {
     prisma.nFT.create({
       data: {
         name: 'Rainbow Holographic Badge',
-        description: 'Gökkuşağı renklerinde, hologram efektli badge. Işığa göre renk değiştirir.',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/rainbow-holographic.png',
+        description: 'A rainbow-colored holographic badge with a hologram effect that changes color with the light.',
+        imageUrl: nextMarketplaceImage(),
         type: 'BADGE',
         rarity: 'EPIC',
         isTransferable: true,
@@ -1340,8 +3749,8 @@ async function main() {
     prisma.nFT.create({
       data: {
         name: 'Cyber Neon Glow Effect',
-        description: 'Siberpunk temalı neon ışıltı efekti. Avatarınızın etrafında mavi-pembe neon hale.',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/cyber-neon-glow.png',
+        description: 'A cyberpunk-themed neon glow effect with a blue-pink halo around your avatar.',
+        imageUrl: nextMarketplaceImage(),
         type: 'COSMETIC',
         rarity: 'RARE',
         isTransferable: true,
@@ -1352,7 +3761,7 @@ async function main() {
       data: {
         name: 'Mystery Treasure Box',
         description: 'İçinde rastgele nadir ödül bulunan gizemli hazine kutusu. Açınca ne çıkacak?',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/treasure-box.png',
+        imageUrl: nextMarketplaceImage(),
         type: 'LOOTBOX',
         rarity: 'EPIC',
         isTransferable: true,
@@ -1363,7 +3772,7 @@ async function main() {
       data: {
         name: 'Silver Achievement Badge',
         description: 'Gümüş başarı rozeti. Önemli milestone\'ları temsil eder.',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/silver-achievement.png',
+        imageUrl: nextMarketplaceImage(),
         type: 'BADGE',
         rarity: 'COMMON',
         isTransferable: true,
@@ -1376,8 +3785,8 @@ async function main() {
     prisma.nFT.create({
       data: {
         name: 'Premium Tipbox Badge',
-        description: 'Tipbox platformunda aktif olan kullanıcılara özel nadir badge',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/premium-badge.png',
+        description: 'A rare badge for highly active users on the Tipbox platform',
+        imageUrl: getSeedMediaUrl('badge.premium-shoper' as any),
         type: 'BADGE',
         rarity: 'EPIC',
         isTransferable: true,
@@ -1387,8 +3796,8 @@ async function main() {
     prisma.nFT.create({
       data: {
         name: 'Early Adopter Badge',
-        description: 'Platformun ilk kullanıcılarına özel badge',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/early-adopter.png',
+        description: 'A badge reserved for the very first users of the platform',
+        imageUrl: getSeedMediaUrl('badge.early-adapter' as any),
         type: 'BADGE',
         rarity: 'RARE',
         isTransferable: true,
@@ -1399,7 +3808,7 @@ async function main() {
       data: {
         name: 'Golden Frame',
         description: 'Profil çerçevesi için özel altın renkli cosmetic item',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/golden-frame.png',
+        imageUrl: getSeedMediaUrl('badge.hardware-expert' as any),
         type: 'COSMETIC',
         rarity: 'EPIC',
         isTransferable: true,
@@ -1412,7 +3821,7 @@ async function main() {
       data: {
         name: 'Silver Badge',
         description: 'Gümüş renkli özel badge',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/silver-badge.png',
+        imageUrl: getSeedMediaUrl('badge.wish-marker' as any),
         type: 'BADGE',
         rarity: 'COMMON',
         isTransferable: true,
@@ -1423,7 +3832,7 @@ async function main() {
       data: {
         name: 'Rainbow Avatar Border',
         description: 'Profil avatarı için renkli çerçeve',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/rainbow-border.png',
+        imageUrl: getSeedMediaUrl('marketplace.rainbow-border' as any),
         type: 'COSMETIC',
         rarity: 'RARE',
         isTransferable: true,
@@ -1434,7 +3843,7 @@ async function main() {
       data: {
         name: 'Mystery Lootbox',
         description: 'İçinde rastgele ödül bulunan gizemli kutu',
-        imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/mystery-lootbox.png',
+        imageUrl: getSeedMediaUrl('badge.premium-shoper' as any),
         type: 'LOOTBOX',
         rarity: 'EPIC',
         isTransferable: true,
@@ -1449,7 +3858,7 @@ async function main() {
         data: {
           name: 'Community Helper Badge',
           description: 'Toplulukta yardımseverlik gösterenlere özel badge',
-          imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/helper-badge.png',
+          imageUrl: nextMarketplaceImage(),
           type: 'BADGE',
           rarity: 'RARE',
           isTransferable: true,
@@ -1460,7 +3869,7 @@ async function main() {
         data: {
           name: 'Blue Neon Frame',
           description: 'Mavi neon efektli profil çerçevesi',
-          imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/blue-neon-frame.png',
+          imageUrl: nextMarketplaceImage(),
           type: 'COSMETIC',
           rarity: 'COMMON',
           isTransferable: true,
@@ -1472,7 +3881,7 @@ async function main() {
         data: {
           name: 'Top Reviewer Badge',
           description: 'En çok değerlendirme yapan kullanıcılara özel badge',
-          imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/reviewer-badge.png',
+          imageUrl: nextMarketplaceImage(),
           type: 'BADGE',
           rarity: 'EPIC',
           isTransferable: true,
@@ -1483,7 +3892,7 @@ async function main() {
         data: {
           name: 'Purple Glow Effect',
           description: 'Profil için mor ışıltı efekti',
-          imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/purple-glow.png',
+          imageUrl: nextMarketplaceImage(),
           type: 'COSMETIC',
           rarity: 'RARE',
           isTransferable: true,
@@ -1494,7 +3903,7 @@ async function main() {
         data: {
           name: 'Legendary Lootbox',
           description: 'Efsanevi ödüller içeren özel kutu',
-          imageUrl: 'https://tipbox-assets.s3.amazonaws.com/nfts/legendary-lootbox.png',
+          imageUrl: nextMarketplaceImage(),
           type: 'LOOTBOX',
           rarity: 'EPIC',
           isTransferable: true,
@@ -1590,8 +3999,8 @@ async function main() {
       prisma.nFT.create({
         data: {
           name: `User${userIdx + 1} Collector Badge`,
-          description: `${userIdx + 1}. kullanıcının özel koleksiyoner badge'i`,
-          imageUrl: `https://tipbox-assets.s3.amazonaws.com/nfts/collector-${userIdx + 1}.png`,
+          description: `Special collector badge for user #${userIdx + 1}`,
+          imageUrl: nextMarketplaceImage(),
           type: 'BADGE',
           rarity: userIdx === 0 ? 'EPIC' : userIdx === 1 ? 'RARE' : 'COMMON',
           isTransferable: true,
@@ -1601,8 +4010,8 @@ async function main() {
       prisma.nFT.create({
         data: {
           name: `Vintage Frame ${userIdx + 1}`,
-          description: `Klasik ve şık görünümlü profil çerçevesi #${userIdx + 1}`,
-          imageUrl: `https://tipbox-assets.s3.amazonaws.com/nfts/vintage-frame-${userIdx + 1}.png`,
+          description: `Classic and elegant profile frame #${userIdx + 1}`,
+          imageUrl: nextMarketplaceImage(),
           type: 'COSMETIC',
           rarity: userIdx === 0 ? 'RARE' : 'COMMON',
           isTransferable: true,
@@ -1612,8 +4021,8 @@ async function main() {
       prisma.nFT.create({
         data: {
           name: `Lucky Box #${userIdx + 1}`,
-          description: `Şanslı numara ${userIdx + 1}! İçinde ne var?`,
-          imageUrl: `https://tipbox-assets.s3.amazonaws.com/nfts/lucky-box-${userIdx + 1}.png`,
+          description: `Lucky number ${userIdx + 1}! What's inside?`,
+          imageUrl: nextMarketplaceImage(),
           type: 'LOOTBOX',
           rarity: 'RARE',
           isTransferable: true,
@@ -1729,6 +4138,177 @@ async function main() {
   }
   console.log('✅ NFT attributes created')
 
+  // ===== SELL NFT ENDPOINT'LERİ İÇİN EK TRANSACTION'LAR =====
+  // Viewer count, total owner ve earn date testleri için ek transaction'lar ekle
+  console.log('🔄 Creating additional NFT transactions for Sell NFT endpoints...')
+  
+  // TARGET_USER_ID'ye ait ilk 4 NFT'yi al (satışta olmayan koleksiyon NFT'leri)
+  const targetUserNFTs = allNFTs.filter((nft: any) => nft && nft.currentOwnerId === TARGET_USER_ID).slice(0, 4)
+  
+  if (targetUserNFTs.length === 0) {
+    console.warn('⚠️ Target user için NFT bulunamadı, ek transaction\'lar atlanıyor')
+  } else {
+    console.log(`✅ ${targetUserNFTs.length} target user NFT'si bulundu, ek transaction'lar ekleniyor...`)
+  }
+  
+  // Her NFT için farklı senaryolar oluştur
+  for (let i = 0; i < Math.min(4, targetUserNFTs.length); i++) {
+    const nft = targetUserNFTs[i]
+    if (!nft || !nft.id) continue
+    
+    // İlk NFT: Çok sayıda transaction (yüksek viewer count)
+    if (i === 0) {
+      // 5-10 arası ek transaction ekle (viewer count için)
+      const extraTransactions = 5 + Math.floor(Math.random() * 6)
+      for (let j = 0; j < extraTransactions; j++) {
+        await prisma.nFTTransaction.create({
+          data: {
+            nftId: nft.id,
+            fromUserId: null,
+            toUserId: TARGET_USER_ID, // Aynı kullanıcı (mint-like views)
+            transactionType: 'MINT',
+            price: null,
+            createdAt: daysAgo(30 - j * 3), // Farklı tarihlerde
+          }
+        }).catch(() => {})
+      }
+    }
+    
+    // İkinci NFT: Transfer transaction'ları (totalOwner > 1 için)
+    if (i === 1 && otherUsers.length > 0) {
+      // İlk transfer: TARGET_USER'dan diğer kullanıcıya
+      await prisma.nFTTransaction.create({
+        data: {
+          nftId: nft.id,
+          fromUserId: TARGET_USER_ID,
+          toUserId: otherUsers[0]?.id || userIdToUse,
+          transactionType: 'TRANSFER',
+          price: null,
+          createdAt: daysAgo(20),
+        }
+      }).catch(() => {})
+      
+      // İkinci transfer: Diğer kullanıcıdan tekrar TARGET_USER'a
+      await prisma.nFTTransaction.create({
+        data: {
+          nftId: nft.id,
+          fromUserId: otherUsers[0]?.id || userIdToUse,
+          toUserId: TARGET_USER_ID,
+          transactionType: 'TRANSFER',
+          price: null,
+          createdAt: daysAgo(10),
+        }
+      }).catch(() => {})
+      
+      // Üçüncü transfer: Tekrar diğer bir kullanıcıya
+      if (otherUsers.length > 1) {
+        await prisma.nFTTransaction.create({
+          data: {
+            nftId: nft.id,
+            fromUserId: TARGET_USER_ID,
+            toUserId: otherUsers[1]?.id || userIdToUse,
+            transactionType: 'TRANSFER',
+            price: null,
+            createdAt: daysAgo(5),
+          }
+        }).catch(() => {})
+      }
+      
+      // Son transfer: Geri TARGET_USER'a
+      await prisma.nFTTransaction.create({
+        data: {
+          nftId: nft.id,
+          fromUserId: otherUsers[0]?.id || otherUsers[1]?.id || userIdToUse,
+          toUserId: TARGET_USER_ID,
+          transactionType: 'TRANSFER',
+          price: null,
+          createdAt: daysAgo(2),
+        }
+      }).catch(() => {})
+    }
+    
+    // Üçüncü NFT: Purchase transaction'ları (fiyatlı işlemler)
+    if (i === 2 && otherUsers.length > 0) {
+      await prisma.nFTTransaction.create({
+        data: {
+          nftId: nft.id,
+          fromUserId: otherUsers[0]?.id || userIdToUse,
+          toUserId: TARGET_USER_ID,
+          transactionType: 'PURCHASE',
+          price: 100.0 + Math.random() * 200,
+          createdAt: daysAgo(15),
+        }
+      }).catch(() => {})
+      
+      // İkinci purchase
+      await prisma.nFTTransaction.create({
+        data: {
+          nftId: nft.id,
+          fromUserId: TARGET_USER_ID,
+          toUserId: otherUsers[0]?.id || userIdToUse,
+          transactionType: 'PURCHASE',
+          price: 150.0 + Math.random() * 200,
+          createdAt: daysAgo(8),
+        }
+      }).catch(() => {})
+      
+      // Üçüncü purchase (tekrar TARGET_USER'a)
+      await prisma.nFTTransaction.create({
+        data: {
+          nftId: nft.id,
+          fromUserId: otherUsers[0]?.id || userIdToUse,
+          toUserId: TARGET_USER_ID,
+          transactionType: 'PURCHASE',
+          price: 200.0 + Math.random() * 200,
+          createdAt: daysAgo(3),
+        }
+      }).catch(() => {})
+    }
+    
+    // Dördüncü NFT: Eski tarihli transaction (earnDate testi için)
+    if (i === 3) {
+      // Orijinal mint transaction'ını daha eski bir tarihe güncelle
+      const firstTransaction = await prisma.nFTTransaction.findFirst({
+        where: { nftId: nft.id },
+        orderBy: { createdAt: 'asc' },
+      })
+      
+      if (firstTransaction) {
+        await prisma.nFTTransaction.update({
+          where: { id: firstTransaction.id },
+          data: {
+            createdAt: daysAgo(180), // 6 ay önce
+          }
+        }).catch(() => {})
+      }
+      
+      // Birkaç eski transaction daha ekle
+      await prisma.nFTTransaction.create({
+        data: {
+          nftId: nft.id,
+          fromUserId: null,
+          toUserId: TARGET_USER_ID,
+          transactionType: 'MINT',
+          price: null,
+          createdAt: daysAgo(120),
+        }
+      }).catch(() => {})
+      
+      await prisma.nFTTransaction.create({
+        data: {
+          nftId: nft.id,
+          fromUserId: null,
+          toUserId: TARGET_USER_ID,
+          transactionType: 'MINT',
+          price: null,
+          createdAt: daysAgo(90),
+        }
+      }).catch(() => {})
+    }
+  }
+  
+  console.log('✅ Additional NFT transactions created for Sell NFT endpoints')
+
   // ===== EXPLORE SECTION - Marketplace Banners, Trending Posts, Events =====
   console.log('🔍 Creating explore data...')
 
@@ -1739,7 +4319,7 @@ async function main() {
       data: {
         title: 'Yeni Sezon NFT Koleksiyonu',
         description: 'Sınırlı sayıda özel avatar ve badge NFT\'leri şimdi satışta!',
-        imageUrl: 'https://images.unsplash.com/photo-1634193295627-1cdddf751ebf?w=800',
+        imageUrl: getSeedMediaUrl('explore.event.primary'),
         linkUrl: '/marketplace/listings?type=BADGE',
         isActive: true,
         displayOrder: 1,
@@ -1749,7 +4329,7 @@ async function main() {
       data: {
         title: 'Epic Rarity İndirimi',
         description: '%30 indirimli EPIC rarity NFT\'lere göz at',
-        imageUrl: 'https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=800',
+        imageUrl: getSeedMediaUrl('explore.event.primary'),
         linkUrl: '/marketplace/listings?rarity=EPIC',
         isActive: true,
         displayOrder: 2,
@@ -1759,7 +4339,7 @@ async function main() {
       data: {
         title: 'Yeni Markalar Platformda',
         description: 'Ünlü markalar TipBox\'a katıldı! Hemen keşfet.',
-        imageUrl: 'https://images.unsplash.com/photo-1556742400-b5a9d4555f7c?w=800',
+        imageUrl: getSeedMediaUrl('explore.event.primary'),
         linkUrl: '/explore/brands/new',
         isActive: true,
         displayOrder: 3,
@@ -1768,19 +4348,52 @@ async function main() {
   ])
   console.log(`✅ ${banners.length} marketplace banner oluşturuldu`)
 
-  // 2. Trending Posts - Add some posts to trending
+  // 2. Trending Posts - Add diverse posts by type to trending
   console.log('📈 Creating trending posts...')
-  const allContentPosts = await prisma.contentPost.findMany({ take: 10 })
-  const postsForTrending = allContentPosts.slice(0, 8) // Top 8 posts will be trending
+  // Get posts by type to ensure diversity
+  const freePosts = await prisma.contentPost.findMany({
+    where: { type: 'FREE' },
+    take: 8,
+    orderBy: { createdAt: 'desc' },
+  })
+  const tipsPosts = await prisma.contentPost.findMany({
+    where: { type: 'TIPS' },
+    take: 6,
+    orderBy: { createdAt: 'desc' },
+  })
+  const comparePosts = await prisma.contentPost.findMany({
+    where: { type: 'COMPARE' },
+    take: 6,
+    orderBy: { createdAt: 'desc' },
+  })
+  const questionPostsForTrending = await prisma.contentPost.findMany({
+    where: { type: 'QUESTION' },
+    take: 5,
+    orderBy: { createdAt: 'desc' },
+  })
+  const experiencePosts = await prisma.contentPost.findMany({
+    where: { type: 'EXPERIENCE' },
+    take: 5,
+    orderBy: { createdAt: 'desc' },
+  })
+
+  const allPostsForTrending = [
+    ...freePosts,
+    ...tipsPosts,
+    ...comparePosts,
+    ...questionPostsForTrending,
+    ...experiencePosts,
+  ].slice(0, 30) // Top 30 posts will be trending
+
   const trendingPosts: any[] = []
-  for (const post of postsForTrending) {
-    const index = postsForTrending.indexOf(post)
+  for (let i = 0; i < allPostsForTrending.length; i++) {
+    const post = allPostsForTrending[i]
     try {
       const trendingPost = await prisma.trendingPost.create({
         data: {
           id: generateUlid(),
           postId: post.id,
-          score: 100 - index * 10, // Descending scores
+          score: 100 - i * 3, // Descending scores
           trendPeriod: 'DAILY',
           calculatedAt: new Date(),
         },
@@ -1788,100 +4401,275 @@ async function main() {
       trendingPosts.push(trendingPost)
     } catch (error) {
       // Skip if already exists (unique constraint)
-      console.log(`⚠️  Trending post for ${post.id} already exists, skipping...`)
     }
   }
-  console.log(`✅ ${trendingPosts.length} trending post oluşturuldu`)
+  console.log(`✅ ${trendingPosts.length} trending post oluşturuldu (çeşitli type'larda)`)
 
-  // 3. Wishbox Events (What's News)
+  // 3. Wishbox Events (What's News) - Diverse event types
   console.log('🎪 Creating wishbox events...')
   const today = new Date()
   const nextWeek = new Date()
   nextWeek.setDate(today.getDate() + 7)
   const nextMonth = new Date()
   nextMonth.setMonth(today.getMonth() + 1)
+  const nextTwoWeeks = new Date()
+  nextTwoWeeks.setDate(today.getDate() + 14)
 
-  const events = await Promise.all([
-    prisma.wishboxEvent.create({
-      data: {
-        id: generateUlid(),
-        title: 'Yılbaşı Mega Ödül Anketi',
-        description: 'Yılın en iyi ürünlerini belirle, büyük ödüller kazan! 1000 TIPS havuzu seni bekliyor.',
-        startDate: today,
-        endDate: nextMonth,
-        status: 'PUBLISHED',
-      },
-    }),
-    prisma.wishboxEvent.create({
-      data: {
-        id: generateUlid(),
-        title: 'Teknoloji Trendleri 2024',
-        description: '2024\'ün en çok beklenen teknoloji ürünlerini seçiyoruz. Senin tercihin ne?',
-        startDate: today,
-        endDate: nextWeek,
-        status: 'PUBLISHED',
-      },
-    }),
-    prisma.wishboxEvent.create({
-      data: {
-        id: generateUlid(),
-        title: 'Kahve Tutkunlarının Anketi',
-        description: 'En iyi kahve makinesi hangisi? Kahve severlerin tercihleri bu etkinlikte belirleniyor.',
-        startDate: today,
-        endDate: nextWeek,
-        status: 'PUBLISHED',
-      },
-    }),
-  ])
-  console.log(`✅ ${events.length} wishbox event oluşturuldu`)
+  const eventTemplates = [
+    // SURVEY events
+    { title: 'Yılbaşı Mega Ödül Anketi', description: 'Yılın en iyi ürünlerini belirle, büyük ödüller kazan! 1000 TIPS havuzu seni bekliyor.', eventType: 'SURVEY' as const, endDate: nextMonth },
+    { title: 'Kullanıcı Memnuniyet Anketi', description: 'Platform deneyimini değerlendir, görüşlerini paylaş!', eventType: 'SURVEY' as const, endDate: nextTwoWeeks },
+    { title: 'Ürün Tercih Anketi', description: 'Hangi ürünleri tercih ediyorsun? Tercihlerini paylaş!', eventType: 'SURVEY' as const, endDate: nextWeek },
+    // POLL events
+    { title: 'Teknoloji Trendleri 2024', description: '2024\'ün en çok beklenen teknoloji ürünlerini seçiyoruz. Senin tercihin ne?', eventType: 'POLL' as const, endDate: nextWeek },
+    { title: 'En İyi Marka Oylaması', description: 'Hangi markayı tercih ediyorsun? Oyunu kullan!', eventType: 'POLL' as const, endDate: nextTwoWeeks },
+    { title: 'Yılın Ürünü Oylaması', description: '2024\'ün en iyi ürününü belirle!', eventType: 'POLL' as const, endDate: nextMonth },
+    // CONTEST events
+    { title: 'Coffee Lovers Survey', description: 'Which coffee machine is the best? Coffee lovers cast their votes in this event.', eventType: 'CONTEST' as const, endDate: nextWeek },
+    { title: 'Photo Contest', description: 'Share your best product photos and win rewards!', eventType: 'CONTEST' as const, endDate: nextTwoWeeks },
+    { title: 'Content Challenge', description: 'Create the most creative content and win big prizes!', eventType: 'CONTEST' as const, endDate: nextMonth },
+    // CHALLENGE events
+    { title: '30-Day Product Experience', description: 'Share your product experience for 30 days and earn a badge!', eventType: 'CHALLENGE' as const, endDate: nextMonth },
+    { title: 'Community Challenge', description: 'Compete with other users and climb the leaderboard!', eventType: 'CHALLENGE' as const, endDate: nextTwoWeeks },
+    { title: 'Monthly Missions', description: 'Complete monthly missions and unlock special rewards!', eventType: 'CHALLENGE' as const, endDate: nextMonth },
+    // PROMOTION events
+    { title: 'Special Discount Campaign', description: 'Limited-time special discounts! Don’t miss out!', eventType: 'PROMOTION' as const, endDate: nextWeek },
+    { title: 'New Member Rewards', description: 'Exclusive gifts and perks for new members!', eventType: 'PROMOTION' as const, endDate: nextTwoWeeks },
+    { title: 'End-of-Season Deals', description: 'End-of-season offers and special campaigns!', eventType: 'PROMOTION' as const, endDate: nextMonth },
+  ]
 
-  // Create scenarios for events
+  const events = await Promise.all(
+    eventTemplates.map((template) =>
+      prisma.wishboxEvent.create({
+        data: {
+          id: generateUlid(),
+          title: template.title,
+          description: template.description,
+          // Frontend bu IP üzerinden MinIO'dan görsel çekecek
+          imageUrl: `${SEED_MEDIA_HOST}/tipbox-media/products/phones/phone1.png`, // Event görseli
+          startDate: today,
+          endDate: template.endDate,
+          status: 'PUBLISHED',
+          eventType: template.eventType,
+        } as any,
+      }).catch(() => null)
+    )
+  )
+  const createdEvents = events.filter(Boolean) as any[]
+  console.log(`✅ ${createdEvents.length} wishbox event oluşturuldu (tüm eventType'larda çeşitli)`)
+
+  // Create upcoming events (future events)
+  console.log('🔮 Creating upcoming events...')
+  const nextMonthPlus = new Date()
+  nextMonthPlus.setMonth(today.getMonth() + 2)
+  const nextThreeMonths = new Date()
+  nextThreeMonths.setMonth(today.getMonth() + 3)
+
+  const upcomingEventTemplates = [
+    // SURVEY events (future)
+    {
+      title: 'Summer Season Product Survey',
+      description: 'Help us choose the best products for the summer season!',
+      eventType: 'SURVEY' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+    {
+      title: 'Home Appliances Satisfaction Survey',
+      description: 'Rate your experience with your home appliances and share your feedback.',
+      eventType: 'SURVEY' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+    {
+      title: 'Mobile & Gadgets Usage Survey',
+      description: 'Tell us how you use your phones, headphones, and wearables in daily life.',
+      eventType: 'SURVEY' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+    {
+      title: 'Gaming & Entertainment Survey',
+      description: 'Share which gaming and entertainment products you love the most.',
+      eventType: 'SURVEY' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+
+    // POLL events (future)
+    {
+      title: 'Next-Gen Smartphone Poll',
+      description: 'Vote for the smartphone brand you are most excited about this year.',
+      eventType: 'POLL' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+    {
+      title: 'Smart Home Upgrade Poll',
+      description: 'Which smart home upgrade would you buy first? Vote now.',
+      eventType: 'POLL' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+    {
+      title: 'Coffee Machine Preference Poll',
+      description: 'Automatic vs. manual coffee machines – cast your vote.',
+      eventType: 'POLL' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+    {
+      title: 'Best Value-for-Money Brand Poll',
+      description: 'Choose the brand that offers the best value for the price.',
+      eventType: 'POLL' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+
+    // CONTEST events (future)
+    {
+      title: 'Summer Product Photo Contest',
+      description: 'Share your best summer-themed product photos and win rewards.',
+      eventType: 'CONTEST' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+    {
+      title: 'Home Setup Showcase Contest',
+      description: 'Show your home office or gaming setup and compete for prizes.',
+      eventType: 'CONTEST' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+    {
+      title: 'Creative Review Contest',
+      description: 'Write the most creative and helpful product review to win.',
+      eventType: 'CONTEST' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+    {
+      title: 'Tech Collection Showcase Contest',
+      description: 'Share a photo of your tech collection and join the contest.',
+      eventType: 'CONTEST' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+
+    // CHALLENGE events (future)
+    {
+      title: 'Summer Missions Challenge',
+      description: 'Complete summer missions and unlock special badges.',
+      eventType: 'CHALLENGE' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+    {
+      title: '30-Day Review Challenge',
+      description: 'Share at least one detailed product review every day for 30 days.',
+      eventType: 'CHALLENGE' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+    {
+      title: 'Daily Tips Sharing Challenge',
+      description: 'Post useful product tips every day and help the community.',
+      eventType: 'CHALLENGE' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+    {
+      title: 'Weekly Comparison Challenge',
+      description: 'Publish one detailed product comparison every week.',
+      eventType: 'CHALLENGE' as const,
+      startDate: nextMonthPlus,
+      endDate: nextThreeMonths,
+    },
+  ]
+
+  const upcomingEvents = await Promise.all(
+    upcomingEventTemplates.map((template) =>
+      prisma.wishboxEvent.create({
+        data: {
+          id: generateUlid(),
+          title: template.title,
+          description: template.description,
+          imageUrl: getSeedMediaUrl('explore.event.primary'),
+          startDate: template.startDate,
+          endDate: template.endDate,
+          status: 'PUBLISHED',
+          eventType: template.eventType,
+        } as any,
+      }).catch(() => null)
+    )
+  )
+  const createdUpcomingEvents = upcomingEvents.filter(Boolean) as any[]
+  console.log(`✅ ${createdUpcomingEvents.length} yaklaşan event oluşturuldu`)
+
+  // Create scenarios for events (first 3 events)
   console.log('🎯 Creating event scenarios...')
   const scenarios = await Promise.all([
-    // Event 1 - Yılbaşı scenarios
-    prisma.wishboxScenario.create({
-      data: {
-        eventId: events[0].id,
-        title: 'Yılın En İyi Telefonu',
-        description: 'Hangi telefon 2024\'ün şampiyonu olmalı?',
-        orderIndex: 1,
-      },
-    }),
-    prisma.wishboxScenario.create({
-      data: {
-        eventId: events[0].id,
-        title: 'Yılın En İyi Laptop\'u',
-        description: 'En iyi performansı hangi laptop verdi?',
-        orderIndex: 2,
-      },
-    }),
+    // Event 1 - New Year survey scenarios
+    createdEvents[0]
+      ? prisma.wishboxScenario
+          .create({
+            data: {
+              eventId: createdEvents[0].id,
+              title: 'Best Phone of the Year',
+              description: 'Which phone should be the champion of 2024?',
+              orderIndex: 1,
+            },
+          })
+          .catch(() => null)
+      : null,
+    createdEvents[0]
+      ? prisma.wishboxScenario
+          .create({
+            data: {
+              eventId: createdEvents[0].id,
+              title: 'Best Laptop of the Year',
+              description: 'Which laptop delivered the best performance for you?',
+              orderIndex: 2,
+            },
+          })
+          .catch(() => null)
+      : null,
     // Event 2 - Technology scenarios
-    prisma.wishboxScenario.create({
-      data: {
-        eventId: events[1].id,
-        title: 'En Beklenen Akıllı Saat',
-        description: '2024\'te hangi akıllı saati almayı düşünüyorsun?',
-        orderIndex: 1,
-      },
-    }),
+    createdEvents[1]
+      ? prisma.wishboxScenario
+          .create({
+            data: {
+              eventId: createdEvents[1].id,
+              title: 'Most Anticipated Smartwatch',
+              description: 'Which smartwatch are you planning to buy in 2024?',
+              orderIndex: 1,
+            },
+          })
+          .catch(() => null)
+      : null,
     // Event 3 - Coffee scenarios
-    prisma.wishboxScenario.create({
-      data: {
-        eventId: events[2].id,
-        title: 'Tam Otomatik vs Manuel',
-        description: 'Tam otomatik mı, manuel kahve makinesi mi?',
-        orderIndex: 1,
-      },
-    }),
+    createdEvents[2]
+      ? prisma.wishboxScenario
+          .create({
+            data: {
+              eventId: createdEvents[2].id,
+              title: 'Fully Automatic vs Manual',
+              description: 'Do you prefer a fully automatic or a manual coffee machine?',
+              orderIndex: 1,
+            },
+          })
+          .catch(() => null)
+      : null,
   ])
-  console.log(`✅ ${scenarios.length} scenario oluşturuldu`)
+  const createdScenarios = scenarios.filter(Boolean)
+  console.log(`✅ ${createdScenarios.length} scenario oluşturuldu`)
 
   // Add event statistics for some users
   console.log('📊 Creating event statistics...')
   const allUserIds = [userIdToUse, TARGET_USER_ID, ...TRUST_USER_IDS.slice(0, 3)]
   const eventStats = await Promise.all(
-    events.flatMap((event) =>
-      allUserIds.map((userId, index) =>
+    createdEvents.flatMap((event) =>
+      event ? allUserIds.map((userId) =>
         prisma.wishboxStats.create({
           data: {
             userId,
@@ -1891,55 +4679,1410 @@ async function main() {
             helpfulVotesReceived: Math.floor(Math.random() * 20),
           },
         })
-      )
+      ) : []
     )
   )
   console.log(`✅ ${eventStats.length} event stat oluşturuldu`)
 
-  // 4. Create some brands (if not exist)
+  // Add badge rewards to events
+  console.log('🏅 Creating event badge rewards...')
+  const allEvents = [...createdEvents, ...createdUpcomingEvents].filter(Boolean)
+  const eventBadges = await prisma.badge.findMany({
+    where: { type: 'EVENT' },
+    take: 10,
+  })
+
+  // Get achievement goals that have badge rewards (to map rewardId)
+  const eventAchievementGoals = await prisma.achievementGoal.findMany({
+    where: { rewardBadgeId: { not: null } },
+    include: { rewardBadge: true },
+    take: 20,
+  })
+
+  if (eventBadges.length > 0 && allEvents.length > 0 && eventAchievementGoals.length > 0) {
+    let rewardCount = 0
+    for (const event of allEvents.slice(0, 5)) {
+      // Her event'e 2-3 badge reward ekle
+      const goalsToAdd = eventAchievementGoals.slice(0, Math.min(3, eventAchievementGoals.length))
+      for (const goal of goalsToAdd) {
+        if (!goal.rewardBadgeId) continue
+        try {
+          // Her event için farklı kullanıcılara reward ver
+          const randomUser = allUserIds[Math.floor(Math.random() * allUserIds.length)]
+          // rewardId için achievement goal'un id'sini kullan (Int olarak)
+          const rewardIdInt = parseInt(goal.id.replace(/-/g, '').substring(0, 8), 16) % 2147483647
+          await prisma.wishboxReward.create({
+            data: {
+              userId: randomUser,
+              eventId: event.id,
+              rewardType: 'BADGE',
+              rewardId: rewardIdInt,
+              amount: null,
+            },
+          })
+          rewardCount++
+        } catch (error) {
+          // Duplicate veya başka bir hata - devam et
+        }
+      }
+    }
+    console.log(`✅ ${rewardCount} event badge reward oluşturuldu`)
+  }
+
+  // 4. Yeni product'lar ve inventory media'ları ekle (explore/products/new için)
+  console.log('📦 Creating new products with inventory media for explore...')
+  const exploreTechCategory = await prisma.mainCategory.findFirst({ where: { name: 'Teknoloji' } })
+  const exploreEvYasamCategory = await prisma.mainCategory.findFirst({ where: { name: 'Ev & Yaşam' } })
+  
+  if (exploreTechCategory && exploreEvYasamCategory) {
+    const exploreTechSubCategory = await prisma.subCategory.findFirst({ where: { mainCategoryId: exploreTechCategory.id } })
+    const exploreEvYasamSubCategory = await prisma.subCategory.findFirst({ where: { mainCategoryId: exploreEvYasamCategory.id } })
+
+    if (exploreTechSubCategory && exploreEvYasamSubCategory) {
+      let exploreTechGroup = await prisma.productGroup.findFirst({ where: { subCategoryId: exploreTechSubCategory.id } })
+      if (!exploreTechGroup) {
+        exploreTechGroup = await prisma.productGroup.create({
+          data: {
+            name: 'Explore Tech Products',
+            description: 'Explore için teknoloji ürünleri',
+            subCategoryId: exploreTechSubCategory.id,
+            imageUrl: getSeedMediaUrl('product.laptop.macbook'),
+          },
+        })
+      }
+      
+      let exploreHomeGroup = await prisma.productGroup.findFirst({ where: { subCategoryId: exploreEvYasamSubCategory.id } })
+      if (!exploreHomeGroup) {
+        exploreHomeGroup = await prisma.productGroup.create({
+          data: {
+            name: 'Explore Home Products',
+            description: 'Explore için ev ürünleri',
+            subCategoryId: exploreEvYasamSubCategory.id,
+            imageUrl: getSeedMediaUrl('product.vacuum.dyson'),
+          },
+        })
+      }
+      
+      const exploreProductGroups = [exploreTechGroup, exploreHomeGroup]
+
+      
+      const exploreProducts = [
+        { name: 'FitnessTech Heart Rate Monitor', brand: 'FitnessTech', group: exploreProductGroups[0]!, mediaKey: 'product.explore.1' },
+        { name: 'FitnessTech Dumbbells', brand: 'FitnessTech', group: exploreProductGroups[0]!, mediaKey: 'product.explore.2' },
+        { name: 'FitnessTech Yoga Mat', brand: 'FitnessTech', group: exploreProductGroups[0]!, mediaKey: 'product.explore.3' },
+        { name: 'SmartHome Pro Smart Light', brand: 'SmartHome Pro', group: exploreProductGroups[1]!, mediaKey: 'product.explore.4' },
+        { name: 'SmartHome Pro Thermostat', brand: 'SmartHome Pro', group: exploreProductGroups[1]!, mediaKey: 'product.explore.5' },
+        { name: 'TechVision Smart Watch', brand: 'TechVision', group: exploreProductGroups[0]!, mediaKey: 'product.explore.6' },
+        { name: 'TechVision Wireless Earbuds', brand: 'TechVision', group: exploreProductGroups[0]!, mediaKey: 'product.explore.7' },
+        { name: 'CoffeeDelight Espresso Machine', brand: 'CoffeeDelight', group: exploreProductGroups[1]!, mediaKey: 'product.explore.8' },
+        { name: 'StyleHub Designer Lamp', brand: 'StyleHub', group: exploreProductGroups[1]!, mediaKey: 'product.explore.9' },
+        { name: 'StyleHub Modern Chair', brand: 'StyleHub', group: exploreProductGroups[1]!, mediaKey: 'product.explore.10' },
+      ]
+
+      if (userIdToUse) {
+        for (const productData of exploreProducts) {
+          try {
+            const product = await prisma.product.create({
+              data: {
+                name: productData.name,
+                brand: productData.brand,
+                description: `Yeni eklenen ${productData.name} ürünü`,
+                groupId: productData.group.id,
+                imageUrl: getSeedMediaUrl(productData.mediaKey as any),
+              },
+            })
+
+            // Inventory oluştur
+            const inventory = await prisma.inventory.create({
+              data: {
+                userId: userIdToUse,
+                productId: product.id,
+                hasOwned: true,
+                experienceSummary: `${productData.name} hakkında deneyim paylaşımı`,
+              },
+            })
+
+            // Inventory media ekle
+            const mediaUrl = getSeedMediaUrl(productData.mediaKey as any)
+            if (mediaUrl) {
+              await prisma.inventoryMedia.create({
+                data: {
+                  inventoryId: inventory.id,
+                  mediaUrl,
+                  type: 'IMAGE',
+                },
+              })
+            }
+          } catch (error) {
+            // Product zaten varsa veya hata oluşursa devam et
+            console.warn(`Product oluşturulamadı: ${productData.name}`, error)
+          }
+        }
+        console.log(`✅ Explore için ${exploreProducts.length} product ve inventory media oluşturuldu`)
+      }
+    }
+  }
+
+  // 5. Create brand categories
+  console.log('🏷️  Creating brand categories...')
+  const brandCategoryConfigs = [
+    { name: 'Technology', imageKey: 'brand.category.technology' },
+    { name: 'Home & Living', imageKey: 'brand.category.home-living' },
+    { name: 'Kitchen', imageKey: 'brand.category.kitchen' },
+    { name: 'Health & Fitness', imageKey: 'brand.category.health-fitness' },
+    { name: 'Fashion', imageKey: 'brand.category.fashion' },
+    { name: 'Electronics', imageKey: 'brand.category.electronics' },
+    { name: 'Sustainability', imageKey: 'brand.category.sustainability' },
+    { name: 'Gaming', imageKey: 'brand.category.gaming' },
+    { name: 'Beauty', imageKey: 'brand.category.beauty' },
+    { name: 'Outdoor', imageKey: 'brand.category.outdoor' },
+    { name: 'Pets', imageKey: 'brand.category.pets' },
+    { name: 'Travel', imageKey: 'brand.category.travel' },
+    { name: 'Baby', imageKey: 'brand.category.baby' },
+    { name: 'Automotive', imageKey: 'brand.category.automotive' },
+  ];
+
+  const brandCategories = await Promise.all(
+    brandCategoryConfigs.map(async (config) => {
+      const existing = await prisma.brandCategory.findUnique({
+        where: { name: config.name }
+      }).catch(() => null);
+
+      if (existing) {
+        return prisma.brandCategory.update({
+          where: { id: existing.id },
+          data: {
+            imageUrl: getSeedMediaUrl(config.imageKey as any),
+          }
+        });
+      } else {
+        return prisma.brandCategory.create({
+          data: {
+            name: config.name,
+            imageUrl: getSeedMediaUrl(config.imageKey as any),
+          }
+        });
+      }
+    })
+  );
+  console.log(`✅ ${brandCategories.length} brand category oluşturuldu/güncellendi`);
+
+  // 5. Create diverse brands with imageUrl
   console.log('🏢 Creating brands...')
   const brandsData = [
     {
       name: 'TechVision',
       description: 'Yenilikçi teknoloji ürünleri ve çözümleri sunan global marka',
-      logoUrl: 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=200',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.computers-tablets'),
       category: 'Technology',
     },
     {
       name: 'SmartHome Pro',
       description: 'Akıllı ev sistemleri ve IoT cihazları konusunda uzman',
-      logoUrl: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=200',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.home-appliances'),
       category: 'Home & Living',
     },
     {
       name: 'CoffeeDelight',
       description: 'Premium kahve makineleri ve barista ekipmanları',
-      logoUrl: 'https://images.unsplash.com/photo-1511920170033-f8396924c348?w=200',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.home-appliances'),
       category: 'Kitchen',
     },
     {
       name: 'FitnessTech',
       description: 'Akıllı spor ekipmanları ve sağlık takip cihazları',
-      logoUrl: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=200',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.cameras'),
       category: 'Health & Fitness',
     },
     {
       name: 'StyleHub',
       description: 'Modern ve şık yaşam ürünleri markası',
-      logoUrl: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=200',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.phones'),
       category: 'Fashion',
+    },
+    {
+      name: 'AudioMax',
+      description: 'Premium ses sistemleri ve kulaklıklar',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.headphones'),
+      category: 'Electronics',
+    },
+    {
+      name: 'EcoLife',
+      description: 'Sürdürülebilir ve çevre dostu ürünler',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.air-conditioner'),
+      category: 'Sustainability',
+    },
+    {
+      name: 'GameZone',
+      description: 'Oyun konsolları ve aksesuarları',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.games'),
+      category: 'Gaming',
+    },
+    {
+      name: 'BeautyCare',
+      description: 'Kişisel bakım ve güzellik ürünleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.phones'),
+      category: 'Beauty',
+    },
+    {
+      name: 'OutdoorGear',
+      description: 'Açık hava ve kamp ekipmanları',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.drone'),
+      category: 'Outdoor',
+    },
+    {
+      name: 'PetCare Plus',
+      description: 'Evcil hayvan bakım ürünleri ve aksesuarları',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.cameras'),
+      category: 'Pets',
+    },
+    {
+      name: 'KitchenMaster',
+      description: 'Profesyonel mutfak ekipmanları ve aletleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.home-appliances'),
+      category: 'Kitchen',
+    },
+    {
+      name: 'TravelEssentials',
+      description: 'Seyahat ve gezi ekipmanları',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.phones'),
+      category: 'Travel',
+    },
+    {
+      name: 'BabyCare',
+      description: 'Bebek bakım ürünleri ve oyuncakları',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.cameras'),
+      category: 'Baby',
+    },
+    {
+      name: 'AutoParts Pro',
+      description: 'Otomotiv yedek parça ve aksesuarları',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.otomotiv'),
+      category: 'Automotive',
+    },
+    // Additional brands for better distribution
+    {
+      name: 'TechNova',
+      description: 'Yeni nesil teknoloji çözümleri ve akıllı cihazlar',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.computers-tablets'),
+      category: 'Technology',
+    },
+    {
+      name: 'SoundWave',
+      description: 'Profesyonel ses ekipmanları ve müzik aletleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.headphones'),
+      category: 'Electronics',
+    },
+    {
+      name: 'FashionForward',
+      description: 'Trend moda ve aksesuar koleksiyonları',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.phones'),
+      category: 'Fashion',
+    },
+    {
+      name: 'PlayStation Pro',
+      description: 'Gaming konsolları ve oyun aksesuarları',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.games'),
+      category: 'Gaming',
+    },
+    {
+      name: 'GlowBeauty',
+      description: 'Premium kozmetik ve cilt bakım ürünleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.phones'),
+      category: 'Beauty',
+    },
+    {
+      name: 'AdventureGear',
+      description: 'Doğa sporları ve macera ekipmanları',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.drone'),
+      category: 'Outdoor',
+    },
+    {
+      name: 'PetParadise',
+      description: 'Evcil hayvan oyuncakları ve bakım ürünleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.cameras'),
+      category: 'Pets',
+    },
+    {
+      name: 'GreenLife',
+      description: 'Organik ve sürdürülebilir yaşam ürünleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.air-conditioner'),
+      category: 'Sustainability',
+    },
+    {
+      name: 'Wanderlust',
+      description: 'Seyahat çantaları ve gezi aksesuarları',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.phones'),
+      category: 'Travel',
+    },
+    {
+      name: 'CarMax',
+      description: 'Otomotiv bakım ürünleri ve aksesuarları',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.otomotiv'),
+      category: 'Automotive',
+    },
+    {
+      name: 'BabyBloom',
+      description: 'Bebek giyim ve bakım ürünleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.cameras'),
+      category: 'Baby',
+    },
+    {
+      name: 'FitLife',
+      description: 'Spor giyim ve fitness ekipmanları',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.cameras'),
+      category: 'Health & Fitness',
+    },
+    {
+      name: 'HomeStyle',
+      description: 'Ev dekorasyon ve mobilya ürünleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.home-appliances'),
+      category: 'Home & Living',
+    },
+    {
+      name: 'ChefPro',
+      description: 'Profesyonel aşçı ekipmanları ve mutfak aletleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.home-appliances'),
+      category: 'Kitchen',
     },
   ]
 
   const brands = await Promise.all(
-    brandsData.map((brandData) =>
-      prisma.brand.create({
-        data: brandData,
-      }).catch(() => null)
-    )
+    brandsData.map(async (brandData) => {
+      const category = brandCategories.find(c => c.name === brandData.category);
+      // Mevcut brand'ı bul veya oluştur
+      const existing = await prisma.brand.findFirst({
+        where: { name: brandData.name }
+      }).catch(() => null);
+
+      if (existing) {
+        return prisma.brand.update({
+          where: { id: existing.id },
+          data: {
+            description: brandData.description,
+            logoUrl: brandData.logoUrl,
+            imageUrl: brandData.imageUrl, // Her zaman localhost URL'si kullan
+            categoryId: category?.id,
+          },
+        });
+      } else {
+        return prisma.brand.create({
+          data: {
+            ...brandData,
+            categoryId: category?.id,
+          },
+        }).catch(() => null);
+      }
+    })
   )
   const createdBrands = brands.filter(Boolean)
-  console.log(`✅ ${createdBrands.length} brand oluşturuldu`)
+  console.log(`✅ ${createdBrands.length} brand oluşturuldu (imageUrl ile)`)
+
+  // ===== MARKETPLACE.JPG GÖRSELLERİNİ TÜM BRAND'LARA EKLE =====
+  console.log('🖼️ Brand catalog için marketplace.jpg görselleri yükleniyor...')
+  const marketplaceImagePath = path.join(__dirname, '../tests/assets/marketplace/marketplace.jpg')
+  
+  // Dosya varlık kontrolü
+  if (existsSync(marketplaceImagePath)) {
+    try {
+      console.log('  📁 marketplace.jpg dosyası bulundu, MinIO\'ya yükleniyor...')
+      const s3Service = new S3Service()
+      await s3Service.checkAndCreateBucket()
+      
+      const marketplaceImageBuffer = readFileSync(marketplaceImagePath)
+      console.log(`  📦 Görsel boyutu: ${(marketplaceImageBuffer.length / 1024 / 1024).toFixed(2)} MB`)
+      
+      // Tüm brand'ları al
+      const allBrands = await prisma.brand.findMany()
+      console.log(`  📋 ${allBrands.length} brand için görsel yükleme başlatılıyor...`)
+      
+      let successCount = 0
+      let failCount = 0
+      
+      // Her brand için marketplace.jpg'yi yükle
+      for (const brand of allBrands) {
+        try {
+          // Her brand için unique bir object key oluştur
+          const objectKey = `brands/catalog/${brand.id}/marketplace.jpg`
+          
+          // MinIO'ya yükle
+          const uploadedUrl = await s3Service.uploadFile(objectKey, marketplaceImageBuffer, 'image/jpeg')
+          
+          // Dış IP'ye çevir (tarayıcıdan erişim için)
+          // uploadedUrl normalde http://minio:9000/... formatında, host kısmını SEED_MEDIA_HOST ile değiştiriyoruz
+          const externalUrl = uploadedUrl.replace('http://minio:9000', SEED_MEDIA_HOST)
+          
+          // Brand'ı güncelle - imageUrl'e ekle (varsa koru, yoksa ekle)
+          await prisma.brand.update({
+            where: { id: brand.id },
+            data: {
+              imageUrl: externalUrl,
+            },
+          })
+          
+          successCount++
+          
+          // Her 10 brand'ta bir progress göster
+          if (successCount % 10 === 0) {
+            console.log(`    ✅ ${successCount}/${allBrands.length} brand için görsel yüklendi...`)
+          }
+        } catch (brandError: any) {
+          const errorMsg = brandError instanceof Error ? brandError.message : String(brandError)
+          console.error(`    ❌ ${brand.name} için görsel yüklenemedi: ${errorMsg}`)
+          failCount++
+        }
+      }
+      
+      console.log(`  ✅ ${successCount} brand için marketplace.jpg görseli başarıyla yüklendi ve DB'ye kaydedildi`)
+      if (failCount > 0) {
+        console.warn(`  ⚠️ ${failCount} brand için görsel yüklenemedi`)
+      }
+    } catch (error: any) {
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      console.error(`  ❌ Marketplace görsel yükleme hatası: ${errorMsg}`)
+      console.warn('  ⚠️ Görseller yüklenemedi, brand\'lar görsel olmadan devam ediyor...')
+    }
+  } else {
+    console.warn(`  ⚠️ marketplace.jpg dosyası bulunamadı: ${marketplaceImagePath}`)
+  }
+
+  console.log('🏅 Creating bridge rewards for profile collections...')
+  const bridgeBrandNames = ['TechVision', 'SmartHome Pro', 'CoffeeDelight']
+  const bridgeBrandRecords = await prisma.brand.findMany({
+    where: { name: { in: bridgeBrandNames } }
+  })
+  const bridgeBrandMap = new Map(bridgeBrandRecords.map((brand) => [brand.name, brand]))
+
+  const bridgeRewardSeeds = [
+    { userId: userIdToUse, badgeId: bridgeAmbassadorBadge.id, brandName: 'TechVision', daysAgoValue: 45 },
+    { userId: userIdToUse, badgeId: brandVisionaryBadge.id, brandName: 'SmartHome Pro', daysAgoValue: 12 },
+    { userId: TARGET_USER_ID, badgeId: bridgeAmbassadorBadge.id, brandName: 'SmartHome Pro', daysAgoValue: 30 },
+    { userId: TRUST_USER_IDS[0], badgeId: bridgeAmbassadorBadge.id, brandName: 'CoffeeDelight', daysAgoValue: 20 },
+    { userId: TRUST_USER_IDS[1], badgeId: brandVisionaryBadge.id, brandName: 'TechVision', daysAgoValue: 8 },
+  ]
+
+  let createdBridgeRewards = 0
+  for (const seed of bridgeRewardSeeds) {
+    const brand = bridgeBrandMap.get(seed.brandName)
+    if (!brand) continue
+
+    const existingReward = await prisma.bridgeReward.findFirst({
+      where: {
+        userId: seed.userId,
+        badgeId: seed.badgeId,
+        brandId: brand.id,
+      }
+    }).catch(() => null)
+
+    if (existingReward) continue
+
+    await prisma.bridgeReward.create({
+      data: {
+        userId: seed.userId,
+        brandId: brand.id,
+        badgeId: seed.badgeId,
+        awardedAt: daysAgo(seed.daysAgoValue),
+      }
+    })
+    createdBridgeRewards++
+  }
+  console.log(`✅ ${createdBridgeRewards} bridge rewards created`)
+
+  // Create BridgePosts for brands
+  console.log('📝 Creating bridge posts for brands...')
+  const bridgePostTemplates = [
+    { content: 'Yeni ürün serimiz çok yakında! 🚀 Teknoloji tutkunları için özel tasarımlar hazırlıyoruz.' },
+    { content: 'Kullanıcı geri bildirimleriniz sayesinde ürünlerimizi sürekli geliştiriyoruz. Teşekkürler! 💙' },
+    { content: 'Bu ayın öne çıkan ürünü: Premium kalite, uygun fiyat. Kaçırmayın! ⭐' },
+    { content: 'Sürdürülebilirlik odaklı yeni koleksiyonumuz yakında sizlerle. Doğaya saygı, geleceğe yatırım 🌱' },
+    { content: 'Topluluk anketimiz devam ediyor! Görüşlerinizi paylaşın, ürün geliştirme sürecine katılın 📊' },
+    { content: 'Yeni özellikler ve iyileştirmeler için çalışıyoruz. Yakında büyük bir sürpriz var! 🎁' },
+    { content: 'Kullanıcı deneyimlerinizi okumak bizi çok mutlu ediyor. Paylaşımlarınız için teşekkürler! 🙏' },
+    { content: 'Özel kampanyalar ve indirimler için bizi takip etmeye devam edin. Fırsatları kaçırmayın! 🎯' },
+    { content: '2024 yılında sizlerle birlikte büyük adımlar attık. 2025\'te daha da iyisini yapacağız! 🎉' },
+    { content: 'Ürün geliştirme ekibimiz sürekli çalışıyor. Yakında çok özel bir duyuru yapacağız! 🔥' },
+    { content: 'Müşteri memnuniyeti bizim önceliğimiz. Her geri bildiriminiz bizim için çok değerli! 💎' },
+    { content: 'Yeni nesil teknoloji ile tanışmaya hazır mısınız? Çok yakında! 🚀' },
+    { content: 'Sizlerin desteği ile büyüyoruz. Topluluk olarak birlikte daha güçlüyüz! 💪' },
+    { content: 'Kalite ve güvenilirlik bizim önceliğimiz. Her ürünümüzü özenle tasarlıyoruz! ✨' },
+    { content: 'Yeni özellikler ve güncellemeler için bizi takip etmeye devam edin! 📱' },
+  ]
+
+  let bridgePostsCount = 0
+  const allUserIdsForBridgePosts = [userIdToUse, ...TRUST_USER_IDS.slice(0, 5), ...TRUSTER_USER_IDS.slice(0, 3)]
+  
+  for (const brand of createdBrands.slice(0, 10)) {
+    if (!brand) continue
+    
+    // Her brand için en az 10-15 arası BridgePost oluştur (posts[] dolu gelsin)
+    const existingPosts = await prisma.bridgePost.count({
+      where: { brandId: brand.id },
+    })
+    
+    // Eğer yeterli post yoksa ekle
+    const targetPostCount = 15
+    const postsToCreate = Math.max(0, targetPostCount - existingPosts)
+    
+    if (postsToCreate > 0) {
+      const selectedTemplates = bridgePostTemplates
+        .sort(() => Math.random() - 0.5)
+        .slice(0, postsToCreate)
+      
+      for (let i = 0; i < selectedTemplates.length; i++) {
+        const template = selectedTemplates[i]
+        const randomUser = allUserIdsForBridgePosts[Math.floor(Math.random() * allUserIdsForBridgePosts.length)]
+        const daysAgoValue = Math.floor(Math.random() * 30) + 1
+        
+        try {
+          // ULID oluştur (26 karakter)
+          const ulid = generateUlid()
+          
+          await prisma.bridgePost.create({
+            data: {
+              id: ulid,
+              brandId: brand.id,
+              userId: randomUser,
+              content: template.content,
+              createdAt: daysAgo(daysAgoValue),
+            }
+          })
+          bridgePostsCount++
+        } catch (error) {
+          // Duplicate veya başka bir hata - devam et
+          console.warn(`BridgePost oluşturulamadı: ${error}`)
+        }
+      }
+    }
+  }
+  console.log(`✅ ${bridgePostsCount} bridge post oluşturuldu`)
+
+  // AutoParts Pro için özel bridge posts ekle
+  console.log('📝 Creating bridge posts for AutoParts Pro...')
+  const autopartsBrandForPosts = await prisma.brand.findFirst({
+    where: { name: 'AutoParts Pro' },
+  })
+  
+  if (autopartsBrandForPosts) {
+    const autopartsPostTemplates = [
+      { content: 'Yeni otomotiv yedek parça koleksiyonumuz çıktı! Motor performansını artıran premium ürünler 🚗✨' },
+      { content: 'Araç bakımı için kaliteli ve uygun fiyatlı çözümler. Güvenli sürüş için doğru parçaları seçin! 🔧' },
+      { content: 'Kış sezonu yaklaşıyor! Araçlarınızı kışa hazırlayın. Silecek lastikleri, antifriz ve diğer kış ekipmanları stokta! ❄️' },
+      { content: 'Müşterilerimizden gelen olumlu geri bildirimler bizi çok mutlu ediyor. Kalite ve güvenilirlik önceliğimiz! 💪' },
+    ]
+    
+    const existingAutopartsPosts = await prisma.bridgePost.count({
+      where: { brandId: autopartsBrandForPosts.id },
+    })
+    
+    // Eğer 4'ten az post varsa ekle
+    const postsToCreate = Math.max(0, 4 - existingAutopartsPosts)
+    
+    if (postsToCreate > 0) {
+      const selectedTemplates = autopartsPostTemplates.slice(0, postsToCreate)
+      
+      for (let i = 0; i < selectedTemplates.length; i++) {
+        const template = selectedTemplates[i]
+        const randomUser = allUserIdsForBridgePosts[Math.floor(Math.random() * allUserIdsForBridgePosts.length)]
+        const daysAgoValue = Math.floor(Math.random() * 30) + 1
+        
+        try {
+          const ulid = generateUlid()
+          await prisma.bridgePost.create({
+            data: {
+              id: ulid,
+              brandId: autopartsBrandForPosts.id,
+              userId: randomUser,
+              content: template.content,
+              createdAt: daysAgo(daysAgoValue),
+            }
+          })
+          bridgePostsCount++
+        } catch (error) {
+          console.warn(`AutoParts Pro BridgePost oluşturulamadı: ${error}`)
+        }
+      }
+      console.log(`✅ AutoParts Pro için ${postsToCreate} bridge post eklendi`)
+    } else {
+      console.log(`✅ AutoParts Pro için zaten yeterli bridge post var (${existingAutopartsPosts} adet)`)
+    }
+  }
+
+  // Create products for seed brands - Her brand için en az 10 adet product
+  console.log('📦 Creating products for seed brands...')
+  
+  // Product görselleri için mapping (tests/assets/product klasöründen)
+  const productImageKeys: SeedMediaKey[] = [
+    'product.generic.1',
+    'product.generic.2',
+    'product.generic.3',
+    'product.generic.4',
+    'product.generic.5',
+    'product.generic.6',
+    'product.generic.7',
+    'product.generic.8',
+    'product.generic.9',
+    'product.generic.10',
+    'product.generic.11',
+    'product.phone.phone1',
+    'product.phone.phone2',
+    'product.phone.phone3',
+    'product.phone.phone4',
+    'product.phone.phone5',
+    'product.phone.phone6',
+    'product.laptop.macbook',
+    'product.headphone.primary',
+    'product.headphone.secondary',
+    'product.vacuum.dyson',
+    'product.phone.samsung',
+  ]
+
+  // Her brand için product template'leri
+  const brandProductTemplates: Record<string, Array<{ name: string; description: string }>> = {
+    'TechVision': [
+      { name: 'TechVision Pro Laptop', description: 'Yüksek performanslı iş ve oyun laptopu' },
+      { name: 'TechVision SmartWatch', description: 'Akıllı saat ve sağlık takip cihazı' },
+      { name: 'TechVision Wireless Earbuds', description: 'Premium ses kalitesi kulaklık' },
+      { name: 'TechVision Tablet Pro', description: 'Çok amaçlı tablet cihazı' },
+      { name: 'TechVision Gaming Mouse', description: 'Profesyonel oyun faresi' },
+      { name: 'TechVision Mechanical Keyboard', description: 'RGB aydınlatmalı mekanik klavye' },
+      { name: 'TechVision 4K Monitor', description: '27 inç 4K profesyonel monitör' },
+      { name: 'TechVision Webcam Pro', description: '4K web kamerası' },
+      { name: 'TechVision USB-C Hub', description: 'Çok portlu USB-C hub' },
+      { name: 'TechVision Power Bank', description: '20000mAh hızlı şarj power bank' },
+    ],
+    'SmartHome Pro': [
+      { name: 'SmartHome Hub', description: 'Merkezi akıllı ev kontrol sistemi' },
+      { name: 'SmartHome Security Camera', description: '4K güvenlik kamerası' },
+      { name: 'SmartHome Thermostat', description: 'Akıllı termostat ve iklim kontrolü' },
+      { name: 'SmartHome Door Lock', description: 'Akıllı kilit sistemi' },
+      { name: 'SmartHome Light Bulb', description: 'RGB akıllı ampul seti' },
+      { name: 'SmartHome Motion Sensor', description: 'Hareket algılama sensörü' },
+      { name: 'SmartHome Doorbell', description: 'Video kapı zili' },
+      { name: 'SmartHome Smoke Detector', description: 'Akıllı duman dedektörü' },
+      { name: 'SmartHome Water Leak Sensor', description: 'Su kaçağı algılama sensörü' },
+      { name: 'SmartHome Window Sensor', description: 'Pencere açılma/kapanma sensörü' },
+    ],
+    'CoffeeDelight': [
+      { name: 'CoffeeDelight Espresso Machine', description: 'Profesyonel espresso makinesi' },
+      { name: 'CoffeeDelight Grinder', description: 'Kahve öğütücü makine' },
+      { name: 'CoffeeDelight French Press', description: 'Fransız pres kahve makinesi' },
+      { name: 'CoffeeDelight Cold Brew', description: 'Soğuk demleme seti' },
+      { name: 'CoffeeDelight Milk Frother', description: 'Süt köpürtücü' },
+      { name: 'CoffeeDelight Pour Over Set', description: 'Pour over kahve seti' },
+      { name: 'CoffeeDelight AeroPress', description: 'AeroPress kahve makinesi' },
+      { name: 'CoffeeDelight Coffee Scale', description: 'Dijital kahve tartısı' },
+      { name: 'CoffeeDelight Tamper', description: 'Profesyonel espresso tamper' },
+      { name: 'CoffeeDelight Coffee Beans', description: 'Premium kahve çekirdekleri' },
+    ],
+    'FitnessTech': [
+      { name: 'FitnessTech Smart Scale', description: 'Akıllı tartı ve vücut analizi' },
+      { name: 'FitnessTech Resistance Bands', description: 'Direnç bantları seti' },
+      { name: 'FitnessTech Yoga Mat', description: 'Premium yoga matı' },
+      { name: 'FitnessTech Dumbbells', description: 'Ayarlanabilir dambıl seti' },
+      { name: 'FitnessTech Heart Rate Monitor', description: 'Kalp atış hızı monitörü' },
+      { name: 'FitnessTech Jump Rope', description: 'Akıllı atlama ipi' },
+      { name: 'FitnessTech Foam Roller', description: 'Masaj köpük silindiri' },
+      { name: 'FitnessTech Kettlebell', description: 'Ayarlanabilir kettlebell' },
+      { name: 'FitnessTech Pull Up Bar', description: 'Kapıya monte çekme barı' },
+      { name: 'FitnessTech Ab Wheel', description: 'Karın kası egzersiz tekerleği' },
+    ],
+    'StyleHub': [
+      { name: 'StyleHub Classic T-Shirt', description: 'Premium pamuklu klasik tişört' },
+      { name: 'StyleHub Denim Jacket', description: 'Klasik denim ceket' },
+      { name: 'StyleHub Sneakers', description: 'Rahat günlük spor ayakkabı' },
+      { name: 'StyleHub Leather Bag', description: 'Deri çanta' },
+      { name: 'StyleHub Sunglasses', description: 'UV korumalı güneş gözlüğü' },
+      { name: 'StyleHub Watch', description: 'Klasik saat' },
+      { name: 'StyleHub Belt', description: 'Deri kemer' },
+      { name: 'StyleHub Wallet', description: 'Deri cüzdan' },
+      { name: 'StyleHub Scarf', description: 'Yün atkı' },
+      { name: 'StyleHub Hat', description: 'Şapka' },
+    ],
+    'AudioMax': [
+      { name: 'AudioMax Studio Headphones', description: 'Profesyonel stüdyo kulaklığı' },
+      { name: 'AudioMax Wireless Speaker', description: 'Bluetooth kablosuz hoparlör' },
+      { name: 'AudioMax Soundbar', description: 'TV için ses çubuğu' },
+      { name: 'AudioMax Earbuds Pro', description: 'Aktif gürültü önleme kulaklık' },
+      { name: 'AudioMax Microphone', description: 'USB mikrofon' },
+      { name: 'AudioMax DAC', description: 'Dijital-analog dönüştürücü' },
+      { name: 'AudioMax Amplifier', description: 'Güç amplifikatörü' },
+      { name: 'AudioMax Turntable', description: 'Plak çalar' },
+      { name: 'AudioMax CD Player', description: 'CD çalar' },
+      { name: 'AudioMax Audio Cable', description: 'Premium ses kablosu' },
+    ],
+    'EcoLife': [
+      { name: 'EcoLife Reusable Water Bottle', description: 'Paslanmaz çelik su şişesi' },
+      { name: 'EcoLife Bamboo Toothbrush', description: 'Bambu diş fırçası' },
+      { name: 'EcoLife Reusable Shopping Bag', description: 'Yeniden kullanılabilir alışveriş çantası' },
+      { name: 'EcoLife Solar Charger', description: 'Güneş enerjili şarj cihazı' },
+      { name: 'EcoLife Compost Bin', description: 'Kompost kutusu' },
+      { name: 'EcoLife LED Bulbs', description: 'Enerji tasarruflu LED ampul seti' },
+      { name: 'EcoLife Reusable Straws', description: 'Paslanmaz çelik pipet seti' },
+      { name: 'EcoLife Beeswax Wraps', description: 'Balmumu sargı bezi' },
+      { name: 'EcoLife Laundry Detergent', description: 'Doğal çamaşır deterjanı' },
+      { name: 'EcoLife Plant Pot', description: 'Bambu bitki saksısı' },
+    ],
+    'GameZone': [
+      { name: 'GameZone Pro Controller', description: 'Profesyonel oyun kumandası' },
+      { name: 'GameZone Gaming Chair', description: 'Ergonomik oyun koltuğu' },
+      { name: 'GameZone RGB Keyboard', description: 'RGB aydınlatmalı oyun klavyesi' },
+      { name: 'GameZone Gaming Mouse', description: 'Yüksek DPI oyun faresi' },
+      { name: 'GameZone Headset', description: '7.1 surround ses kulaklık' },
+      { name: 'GameZone Mouse Pad', description: 'Büyük oyun mouse pad\'i' },
+      { name: 'GameZone Monitor Stand', description: 'Monitör standı' },
+      { name: 'GameZone Cable Management', description: 'Kablo yönetim seti' },
+      { name: 'GameZone LED Strip', description: 'RGB LED şerit' },
+      { name: 'GameZone Webcam', description: '1080p oyun web kamerası' },
+    ],
+    'BeautyCare': [
+      { name: 'BeautyCare Face Serum', description: 'Cilt bakım serumu' },
+      { name: 'BeautyCare Moisturizer', description: 'Nemlendirici krem' },
+      { name: 'BeautyCare Cleanser', description: 'Yüz temizleme jeli' },
+      { name: 'BeautyCare Sunscreen', description: 'SPF 50 güneş kremi' },
+      { name: 'BeautyCare Face Mask', description: 'Yüz maskesi seti' },
+      { name: 'BeautyCare Eye Cream', description: 'Göz çevresi kremi' },
+      { name: 'BeautyCare Toner', description: 'Cilt toneri' },
+      { name: 'BeautyCare Exfoliator', description: 'Peeling ürünü' },
+      { name: 'BeautyCare Lip Balm', description: 'Dudak nemlendirici' },
+      { name: 'BeautyCare Makeup Remover', description: 'Makyaj temizleme ürünü' },
+    ],
+    'OutdoorGear': [
+      { name: 'OutdoorGear Backpack', description: 'Dayanıklı sırt çantası' },
+      { name: 'OutdoorGear Tent', description: '2 kişilik kamp çadırı' },
+      { name: 'OutdoorGear Sleeping Bag', description: 'Isı yalıtımlı uyku tulumu' },
+      { name: 'OutdoorGear Hiking Boots', description: 'Yürüyüş botu' },
+      { name: 'OutdoorGear Water Filter', description: 'Su filtreleme cihazı' },
+      { name: 'OutdoorGear Headlamp', description: 'LED kafa lambası' },
+      { name: 'OutdoorGear Multi-Tool', description: 'Çok amaçlı alet' },
+      { name: 'OutdoorGear Compass', description: 'Pusula' },
+      { name: 'OutdoorGear Fire Starter', description: 'Ateş başlatıcı' },
+      { name: 'OutdoorGear First Aid Kit', description: 'İlk yardım çantası' },
+    ],
+    'PetCare Plus': [
+      { name: 'PetCare Plus Dog Food', description: 'Premium köpek maması' },
+      { name: 'PetCare Plus Cat Litter', description: 'Kedi kumu' },
+      { name: 'PetCare Plus Leash', description: 'Köpek tasması' },
+      { name: 'PetCare Plus Pet Bed', description: 'Evcil hayvan yatağı' },
+      { name: 'PetCare Plus Food Bowl', description: 'Yemek kabı seti' },
+      { name: 'PetCare Plus Toy Set', description: 'Oyuncak seti' },
+      { name: 'PetCare Plus Grooming Brush', description: 'Tımar fırçası' },
+      { name: 'PetCare Plus Carrier', description: 'Taşıma çantası' },
+      { name: 'PetCare Plus Treats', description: 'Ödül maması' },
+      { name: 'PetCare Plus Water Fountain', description: 'Su çeşmesi' },
+    ],
+    'KitchenMaster': [
+      { name: 'KitchenMaster Chef Knife', description: 'Profesyonel şef bıçağı' },
+      { name: 'KitchenMaster Cutting Board', description: 'Kesme tahtası' },
+      { name: 'KitchenMaster Mixer', description: 'Stand mikser' },
+      { name: 'KitchenMaster Blender', description: 'Yüksek hızlı blender' },
+      { name: 'KitchenMaster Food Processor', description: 'Mutfak robotu' },
+      { name: 'KitchenMaster Pressure Cooker', description: 'Düdüklü tencere' },
+      { name: 'KitchenMaster Cast Iron Pan', description: 'Döküm tava' },
+      { name: 'KitchenMaster Measuring Cups', description: 'Ölçü kabı seti' },
+      { name: 'KitchenMaster Spice Rack', description: 'Baharat rafı' },
+      { name: 'KitchenMaster Kitchen Scale', description: 'Mutfak tartısı' },
+    ],
+    'TravelEssentials': [
+      { name: 'TravelEssentials Suitcase', description: 'Tekerlekli bavul' },
+      { name: 'TravelEssentials Packing Cubes', description: 'Paketleme küpleri' },
+      { name: 'TravelEssentials Travel Pillow', description: 'Seyahat yastığı' },
+      { name: 'TravelEssentials Eye Mask', description: 'Göz maskesi' },
+      { name: 'TravelEssentials Adapter', description: 'Evrensel adaptör' },
+      { name: 'TravelEssentials Luggage Tag', description: 'Bavul etiketi' },
+      { name: 'TravelEssentials Toiletry Bag', description: 'Tuvalet çantası' },
+      { name: 'TravelEssentials Passport Holder', description: 'Pasaport kılıfı' },
+      { name: 'TravelEssentials Money Belt', description: 'Para kemeri' },
+      { name: 'TravelEssentials Travel Lock', description: 'Seyahat kilidi' },
+    ],
+    'BabyCare': [
+      { name: 'BabyCare Diapers', description: 'Bebek bezi' },
+      { name: 'BabyCare Baby Bottle', description: 'Biberon seti' },
+      { name: 'BabyCare Stroller', description: 'Bebek arabası' },
+      { name: 'BabyCare Car Seat', description: 'Araba koltuğu' },
+      { name: 'BabyCare High Chair', description: 'Yüksek sandalye' },
+      { name: 'BabyCare Baby Monitor', description: 'Bebek monitörü' },
+      { name: 'BabyCare Play Mat', description: 'Oyun matı' },
+      { name: 'BabyCare Teething Toy', description: 'Diş kaşıyıcı oyuncak' },
+      { name: 'BabyCare Baby Carrier', description: 'Bebek taşıyıcı' },
+      { name: 'BabyCare Baby Bath', description: 'Bebek banyo küveti' },
+    ],
+    'AutoParts Pro': [
+      { name: 'AutoParts Pro Engine Oil', description: 'Yüksek kaliteli motor yağı - motor performansını artırıyor, uzun ömürlü kullanım sağlıyor' },
+      { name: 'AutoParts Pro Air Filter', description: 'Hava filtresi - motor hava kalitesini iyileştiriyor, filtreleme performansı mükemmel' },
+      { name: 'AutoParts Pro Brake Pads', description: 'Fren balata seti - fren performansı çok iyi, güvenli sürüş sağlıyor' },
+      { name: 'AutoParts Pro Car Battery', description: 'Araba aküsü - güvenilir ve uzun ömürlü, araç için mükemmel bir akü' },
+      { name: 'AutoParts Pro Spark Plugs', description: 'Buji seti - motorun daha verimli çalışmasını sağlıyor, yakıt tasarrufu sağlıyor' },
+      { name: 'AutoParts Pro Wiper Blades', description: 'Silecek lastiği - yağmur ve kar koşullarında mükemmel görüş sağlıyor' },
+      { name: 'AutoParts Pro Tire Pressure Gauge', description: 'Lastik basınç ölçer - doğru lastik basıncı ile güvenli sürüş' },
+      { name: 'AutoParts Pro Jump Starter', description: 'Araba çalıştırıcı - acil durumlarda araç için hayat kurtarıcı' },
+      { name: 'AutoParts Pro Car Cover', description: 'Araba örtüsü - aracınızı güneş, yağmur ve tozdan korur' },
+      { name: 'AutoParts Pro Floor Mats', description: 'Araba paspası - araç içini temiz tutar, dayanıklı ve kolay temizlenir' },
+    ],
+    'TechNova': [
+      { name: 'TechNova Smartphone Pro', description: 'Yeni nesil akıllı telefon' },
+      { name: 'TechNova Tablet Ultra', description: 'Ultra ince tablet' },
+      { name: 'TechNova Smart TV', description: '4K akıllı TV' },
+      { name: 'TechNova Smart Speaker', description: 'Sesli asistan hoparlör' },
+      { name: 'TechNova Smart Display', description: 'Akıllı ekran' },
+      { name: 'TechNova Smart Doorbell', description: 'Video kapı zili' },
+      { name: 'TechNova Smart Lock', description: 'Akıllı kilit' },
+      { name: 'TechNova Smart Thermostat', description: 'Akıllı termostat' },
+      { name: 'TechNova Smart Light Switch', description: 'Akıllı ışık anahtarı' },
+      { name: 'TechNova Smart Plug', description: 'Akıllı priz' },
+    ],
+    'SoundWave': [
+      { name: 'SoundWave Studio Monitor', description: 'Stüdyo monitör hoparlör' },
+      { name: 'SoundWave DJ Controller', description: 'DJ kontrol cihazı' },
+      { name: 'SoundWave Audio Interface', description: 'Ses arayüzü' },
+      { name: 'SoundWave MIDI Keyboard', description: 'MIDI klavye' },
+      { name: 'SoundWave Drum Machine', description: 'Drum makinesi' },
+      { name: 'SoundWave Synthesizer', description: 'Synthesizer' },
+      { name: 'SoundWave Mixer', description: 'Mikser' },
+      { name: 'SoundWave Microphone Stand', description: 'Mikrofon standı' },
+      { name: 'SoundWave Pop Filter', description: 'Pop filtresi' },
+      { name: 'SoundWave Audio Cable', description: 'Ses kablosu seti' },
+    ],
+    'FashionForward': [
+      { name: 'FashionForward Denim Jeans', description: 'Klasik denim pantolon' },
+      { name: 'FashionForward Blazer', description: 'Blazer ceket' },
+      { name: 'FashionForward Dress', description: 'Elbise' },
+      { name: 'FashionForward Heels', description: 'Topuklu ayakkabı' },
+      { name: 'FashionForward Handbag', description: 'El çantası' },
+      { name: 'FashionForward Jewelry Set', description: 'Takı seti' },
+      { name: 'FashionForward Scarf', description: 'İpek eşarp' },
+      { name: 'FashionForward Gloves', description: 'Eldiven' },
+      { name: 'FashionForward Belt', description: 'Kemer' },
+      { name: 'FashionForward Sunglasses', description: 'Güneş gözlüğü' },
+    ],
+    'PlayStation Pro': [
+      { name: 'PlayStation Pro Console', description: 'Gaming konsolu' },
+      { name: 'PlayStation Pro Controller', description: 'Oyun kumandası' },
+      { name: 'PlayStation Pro VR Headset', description: 'VR başlığı' },
+      { name: 'PlayStation Pro Camera', description: 'Oyun kamerası' },
+      { name: 'PlayStation Pro Headset', description: 'Oyun kulaklığı' },
+      { name: 'PlayStation Pro Charging Station', description: 'Şarj istasyonu' },
+      { name: 'PlayStation Pro Game Storage', description: 'Oyun depolama' },
+      { name: 'PlayStation Pro Media Remote', description: 'Medya kumandası' },
+      { name: 'PlayStation Pro Racing Wheel', description: 'Yarış direksiyonu' },
+      { name: 'PlayStation Pro Fight Stick', description: 'Dövüş çubuğu' },
+    ],
+    'GlowBeauty': [
+      { name: 'GlowBeauty Face Cleanser', description: 'Yüz temizleyici' },
+      { name: 'GlowBeauty Toner', description: 'Cilt toneri' },
+      { name: 'GlowBeauty Serum', description: 'Cilt serumu' },
+      { name: 'GlowBeauty Moisturizer', description: 'Nemlendirici' },
+      { name: 'GlowBeauty Sunscreen', description: 'Güneş kremi' },
+      { name: 'GlowBeauty Face Mask', description: 'Yüz maskesi' },
+      { name: 'GlowBeauty Eye Cream', description: 'Göz kremi' },
+      { name: 'GlowBeauty Lip Balm', description: 'Dudak nemlendirici' },
+      { name: 'GlowBeauty Makeup Remover', description: 'Makyaj temizleyici' },
+      { name: 'GlowBeauty Exfoliator', description: 'Peeling' },
+    ],
+    'HomeStyle': [
+      { name: 'HomeStyle Sofa', description: 'Kanepe' },
+      { name: 'HomeStyle Coffee Table', description: 'Kahve masası' },
+      { name: 'HomeStyle Dining Table', description: 'Yemek masası' },
+      { name: 'HomeStyle Bed Frame', description: 'Yatak çerçevesi' },
+      { name: 'HomeStyle Wardrobe', description: 'Gardırop' },
+      { name: 'HomeStyle Bookshelf', description: 'Kitaplık' },
+      { name: 'HomeStyle Lamp', description: 'Lamba' },
+      { name: 'HomeStyle Curtains', description: 'Perde seti' },
+      { name: 'HomeStyle Rug', description: 'Halı' },
+      { name: 'HomeStyle Pillows', description: 'Yastık seti' },
+    ],
+  }
+
+  let seedBrandProductsCount = 0
+  // Filter out null values explicitly
+  const validBrands = createdBrands.filter(b => b !== null && b !== undefined)
+  console.log(`📦 Processing ${validBrands.length} brands for product creation...`)
+  
+  // Brand'lar için ProductGroup'lar oluştur
+  console.log('📦 Creating product groups for brands...')
+  const brandProductGroupsMap = new Map<string, string>() // brandId -> productGroupId
+  
+  for (const brand of validBrands) {
+    if (!brand || !brand.categoryId) continue
+    
+    try {
+      // Brand'ın category'sini bul (BrandCategory)
+      const brandCategory = brand.categoryId 
+        ? await prisma.brandCategory.findUnique({
+            where: { id: brand.categoryId }
+          })
+        : null
+      
+      if (!brandCategory) {
+        console.warn(`⚠️ BrandCategory bulunamadı brand: ${brand.name} (categoryId: ${brand.categoryId})`)
+        // Category yoksa, genel bir SubCategory kullan (Teknoloji kategorisinden)
+        const techCategory = mainCategories.find(c => c.name === 'Teknoloji')
+        if (techCategory) {
+          const techSubCategory = await prisma.subCategory.findFirst({
+            where: { mainCategoryId: techCategory.id }
+          })
+          if (techSubCategory) {
+            let productGroup = await prisma.productGroup.findFirst({
+              where: {
+                name: `${brand.name} Ürün Grubu`,
+                subCategoryId: techSubCategory.id
+              }
+            })
+            
+            if (!productGroup) {
+              productGroup = await prisma.productGroup.create({
+                data: {
+                  name: `${brand.name} Ürün Grubu`,
+                  description: `${brand.name} marka ürünleri`,
+                  subCategoryId: techSubCategory.id,
+                  imageUrl: brand.imageUrl,
+                }
+              })
+            }
+            
+            brandProductGroupsMap.set(brand.id, productGroup.id)
+            continue
+          }
+        }
+        continue
+      }
+      
+      // BrandCategory'ye göre bir MainCategory bul (BrandCategory ile Category arasında direkt ilişki yok)
+      // Bu durumda, genel bir SubCategory kullan (Teknoloji kategorisinden)
+      const techCategory = mainCategories.find(c => c.name === 'Teknoloji')
+      let subCategory: Awaited<ReturnType<typeof prisma.subCategory.findFirst>> | null = null
+      
+      if (techCategory) {
+        subCategory = await prisma.subCategory.findFirst({
+          where: { mainCategoryId: techCategory.id }
+        })
+        
+        if (!subCategory) {
+          // SubCategory yoksa oluştur
+          subCategory = await prisma.subCategory.create({
+            data: {
+              name: `${brandCategory.name} Ürünleri`,
+              description: `${brandCategory.name} kategorisi ürünleri`,
+              mainCategoryId: techCategory.id,
+              imageUrl: brandCategory.imageUrl,
+            }
+          })
+        }
+      }
+      
+      if (!subCategory) {
+        console.warn(`⚠️ SubCategory oluşturulamadı brand: ${brand.name}`)
+        continue
+      }
+      
+      // Brand için ProductGroup bul veya oluştur
+      let productGroup = await prisma.productGroup.findFirst({
+        where: {
+          name: `${brand.name} Ürün Grubu`,
+          subCategoryId: subCategory.id
+        }
+      })
+      
+      if (!productGroup) {
+        productGroup = await prisma.productGroup.create({
+          data: {
+            name: `${brand.name} Ürün Grubu`,
+            description: `${brand.name} marka ürünleri`,
+            subCategoryId: subCategory.id,
+            imageUrl: brand.imageUrl,
+          }
+        })
+      }
+      
+      brandProductGroupsMap.set(brand.id, productGroup.id)
+    } catch (error) {
+      console.warn(`⚠️ ProductGroup oluşturulamadı brand: ${brand.name} - ${error}`)
+    }
+  }
+  console.log(`✅ ${brandProductGroupsMap.size} product group oluşturuldu brand'lar için`)
+  
+  // Product'ları oluştur ve ProductGroup'lara bağla
+  for (const brand of validBrands) {
+    if (!brand) continue
+    
+    const templates = brandProductTemplates[brand.name] || []
+    // Eğer brand için template yoksa, genel product'lar oluştur
+    const productsToCreate = templates.length > 0 
+      ? templates 
+      : Array.from({ length: 10 }, (_, i) => ({
+          name: `${brand.name} Product ${i + 1}`,
+          description: `${brand.name} ürün açıklaması ${i + 1}`
+        }))
+
+    const productGroupId = brandProductGroupsMap.get(brand.id) || null
+
+    for (let i = 0; i < productsToCreate.length; i++) {
+      const productData = productsToCreate[i]
+      const imageKey = productImageKeys[i % productImageKeys.length]
+      
+      try {
+        await prisma.product.create({
+          data: {
+            name: productData.name,
+            brand: brand.name, // Product.brand field'ına brand name'i yaz
+            description: productData.description,
+            imageUrl: getSeedMediaUrl(imageKey),
+            groupId: productGroupId, // ProductGroup'a bağla
+          }
+        })
+        seedBrandProductsCount++
+      } catch (error) {
+        console.warn(`Product oluşturulamadı (${brand.name} - ${productData.name}): ${error}`)
+      }
+    }
+  }
+  console.log(`✅ ${seedBrandProductsCount} product oluşturuldu tüm brand'lar için`)
+
+  // Add products for specific brand ID: a8fc294b-1f6d-4f22-827b-86e75a1a7095 (AudioMax)
+  console.log('📦 Adding products for specific brand ID: a8fc294b-1f6d-4f22-827b-86e75a1a7095...')
+  const specificBrandId = 'a8fc294b-1f6d-4f22-827b-86e75a1a7095'
+  const specificBrand = await prisma.brand.findUnique({
+    where: { id: specificBrandId },
+    include: { brandCategory: true }
+  })
+  
+  if (specificBrand) {
+    // Brand için ProductGroup bul veya oluştur
+    let specificProductGroup = brandProductGroupsMap.get(specificBrandId)
+    
+    if (!specificProductGroup) {
+      // Brand'ın category'sine göre SubCategory bul
+      // Electronics category için Kulaklıklar subcategory'sini kullan
+      const techCategory = mainCategories.find(c => c.name === 'Teknoloji' || c.name === 'Technology')
+      let subCategory: Awaited<ReturnType<typeof prisma.subCategory.findFirst>> | null = null
+      
+      if (techCategory) {
+        // Kulaklıklar subcategory'sini bul (AudioMax için uygun)
+        subCategory = await prisma.subCategory.findFirst({
+          where: { 
+            mainCategoryId: techCategory.id,
+            name: { contains: 'Kulaklık', mode: 'insensitive' }
+          }
+        })
+        
+        // Eğer Kulaklıklar yoksa, herhangi bir subcategory kullan
+        if (!subCategory) {
+          subCategory = await prisma.subCategory.findFirst({
+            where: { mainCategoryId: techCategory.id }
+          })
+        }
+        
+        // Hala yoksa oluştur
+        if (!subCategory) {
+          subCategory = await prisma.subCategory.create({
+            data: {
+              name: 'Kulaklıklar',
+              description: 'Kulaklık ve ses ekipmanları',
+              mainCategoryId: techCategory.id,
+              imageUrl: getSeedMediaUrl('catalog.headphones'),
+            }
+          })
+        }
+      }
+      
+      if (subCategory) {
+        // ProductGroup oluştur
+        const newProductGroup = await prisma.productGroup.create({
+          data: {
+            name: `${specificBrand.name} Ürün Grubu`,
+            description: `${specificBrand.name} marka ürünleri`,
+            subCategoryId: subCategory.id,
+            imageUrl: specificBrand.imageUrl,
+          }
+        })
+        
+        specificProductGroup = newProductGroup.id
+        brandProductGroupsMap.set(specificBrandId, specificProductGroup)
+      }
+    }
+    
+    // AudioMax için özel product template'lerini kullan
+    const audioMaxTemplates = brandProductTemplates[specificBrand.name] || []
+    const specificProductTemplates = audioMaxTemplates.length > 0 
+      ? audioMaxTemplates 
+      : [
+          { name: 'AudioMax Studio Headphones', description: 'Profesyonel stüdyo kulaklığı' },
+          { name: 'AudioMax Wireless Speaker', description: 'Bluetooth kablosuz hoparlör' },
+          { name: 'AudioMax Soundbar', description: 'TV için ses çubuğu' },
+          { name: 'AudioMax Earbuds Pro', description: 'Aktif gürültü önleme kulaklık' },
+          { name: 'AudioMax Microphone', description: 'USB mikrofon' },
+          { name: 'AudioMax DAC', description: 'Dijital-analog dönüştürücü' },
+          { name: 'AudioMax Amplifier', description: 'Güç amplifikatörü' },
+          { name: 'AudioMax Turntable', description: 'Plak çalar' },
+          { name: 'AudioMax CD Player', description: 'CD çalar' },
+          { name: 'AudioMax Audio Cable', description: 'Premium ses kablosu' },
+        ]
+    
+    const specificProductImageKeys: SeedMediaKey[] = [
+      'product.headphone.primary',
+      'product.headphone.secondary',
+      'product.headphone.primary',
+      'product.headphone.secondary',
+      'product.headphone.primary',
+      'product.headphone.secondary',
+      'product.headphone.primary',
+      'product.headphone.secondary',
+      'product.headphone.primary',
+      'product.headphone.secondary',
+    ]
+    
+    for (let i = 0; i < specificProductTemplates.length; i++) {
+      const productData = specificProductTemplates[i]
+      const imageKey = specificProductImageKeys[i % specificProductImageKeys.length]
+      
+      try {
+        await prisma.product.create({
+          data: {
+            name: productData.name,
+            brand: specificBrand.name,
+            description: productData.description,
+            imageUrl: getSeedMediaUrl(imageKey),
+            groupId: specificProductGroup || null, // ProductGroup'a bağla
+          }
+        })
+        seedBrandProductsCount++
+      } catch (error) {
+        console.warn(`Product oluşturulamadı (${specificBrand.name} - ${productData.name}): ${error}`)
+      }
+    }
+    console.log(`✅ ${specificProductTemplates.length} product eklendi brand ID: ${specificBrandId} (${specificBrand.name})`)
+  } else {
+    console.warn(`⚠️ Brand bulunamadı ID: ${specificBrandId}`)
+  }
+
+  // Add products for AutoParts Pro - ID bazlı ve foreign key uyumlu
+  console.log('📦 Adding products for AutoParts Pro (ID bazlı)...')
+  const autopartsBrand = await prisma.brand.findFirst({
+    where: { name: 'AutoParts Pro' },
+    include: { brandCategory: true }
+  })
+  
+  if (autopartsBrand) {
+    // AutoParts Pro için ProductGroup bul veya oluştur
+    let autopartsProductGroup = brandProductGroupsMap.get(autopartsBrand.id)
+    
+    if (!autopartsProductGroup) {
+      // Otomotiv kategorisi için SubCategory bul veya oluştur
+      // Önce "Otomotiv" main category'sini bul
+      const automotiveMainCategory = mainCategories.find(c => c.name === 'Otomotiv')
+      let subCategory: Awaited<ReturnType<typeof prisma.subCategory.findFirst>> | null = null
+      
+      if (automotiveMainCategory) {
+        // Otomotiv subcategory'sini bul
+        subCategory = await prisma.subCategory.findFirst({
+          where: { 
+            mainCategoryId: automotiveMainCategory.id,
+            name: { contains: 'Otomotiv', mode: 'insensitive' }
+          }
+        })
+        
+        // Eğer yoksa oluştur
+        if (!subCategory) {
+          subCategory = await prisma.subCategory.create({
+            data: {
+              name: 'Otomotiv Ürünleri',
+              description: 'Otomotiv yedek parça ve aksesuarları',
+              mainCategoryId: automotiveMainCategory.id,
+              imageUrl: getSeedMediaUrl('catalog.otomotiv'),
+            }
+          })
+        }
+      } else {
+        // Otomotiv kategori yoksa, Ev & Yaşam kategorisini kullan
+        const evYasamCategory = mainCategories.find(c => c.name === 'Ev & Yaşam')
+        if (evYasamCategory) {
+          subCategory = await prisma.subCategory.findFirst({
+            where: { mainCategoryId: evYasamCategory.id }
+          })
+          
+          if (!subCategory) {
+            subCategory = await prisma.subCategory.create({
+              data: {
+                name: 'Temizlik Ürünleri',
+                description: 'Süpürge, temizlik robotu vb.',
+                mainCategoryId: evYasamCategory.id,
+                imageUrl: getSeedMediaUrl('catalog.home-appliances'),
+              }
+            })
+          }
+        }
+      }
+      
+      if (subCategory) {
+        // ProductGroup bul veya oluştur
+        let productGroup = await prisma.productGroup.findFirst({
+          where: {
+            subCategoryId: subCategory.id,
+            name: { contains: 'AutoParts Pro', mode: 'insensitive' }
+          }
+        })
+        
+        if (!productGroup) {
+          productGroup = await prisma.productGroup.create({
+            data: {
+              name: 'AutoParts Pro Ürünleri',
+              description: 'AutoParts Pro markasına ait otomotiv ürünleri',
+              subCategoryId: subCategory.id,
+              imageUrl: autopartsBrand.imageUrl || getSeedMediaUrl('catalog.otomotiv'),
+            }
+          })
+        }
+        
+        autopartsProductGroup = productGroup.id
+        brandProductGroupsMap.set(autopartsBrand.id, autopartsProductGroup)
+      }
+    }
+    
+    // AutoParts Pro için product template'lerini al
+    const autopartsTemplates = brandProductTemplates['AutoParts Pro'] || []
+    
+    if (autopartsTemplates.length > 0 && autopartsProductGroup) {
+      let autopartsProductCount = 0
+      
+      for (let i = 0; i < autopartsTemplates.length; i++) {
+        const productData = autopartsTemplates[i]
+        const imageKey = productImageKeys[i % productImageKeys.length]
+        
+        // Product'ın zaten var olup olmadığını kontrol et
+        const existingProduct = await prisma.product.findFirst({
+          where: {
+            brand: 'AutoParts Pro',
+            name: productData.name
+          }
+        })
+        
+        if (!existingProduct) {
+          try {
+            await prisma.product.create({
+              data: {
+                name: productData.name,
+                brand: autopartsBrand.name,
+                description: productData.description,
+                imageUrl: getSeedMediaUrl(imageKey),
+                groupId: autopartsProductGroup, // Foreign key ile ProductGroup'a bağla
+              }
+            })
+            autopartsProductCount++
+            seedBrandProductsCount++
+          } catch (error) {
+            console.warn(`Product oluşturulamadı (AutoParts Pro - ${productData.name}): ${error}`)
+          }
+        }
+      }
+      
+      console.log(`✅ ${autopartsProductCount} product eklendi AutoParts Pro (Brand ID: ${autopartsBrand.id}, Group ID: ${autopartsProductGroup})`)
+    } else {
+      console.warn(`⚠️ AutoParts Pro için product template'leri bulunamadı veya ProductGroup oluşturulamadı`)
+    }
+  } else {
+    console.warn(`⚠️ AutoParts Pro brand bulunamadı`)
+  }
+
+  // Create experience and news posts for seed brand products
+  console.log('📰 Creating experience and news posts for seed brand products...')
+  const allBrandNames = createdBrands.filter((b): b is NonNullable<typeof b> => b !== null && b !== undefined).map(b => b.name)
+  const seedBrandProductsData = await prisma.product.findMany({
+    where: {
+      brand: { in: allBrandNames }
+    },
+    take: 20
+  })
+
+  let experienceNewsPostsCount = 0
+  const experienceTemplates = [
+    'Since I started using this product my daily routine has become much more predictable and relaxed. It quietly takes care of repetitive tasks that used to eat up chunks of my evening. Over a few weeks the small time savings add up to a noticeable difference in how much energy I have left after work. It feels less like a gadget and more like part of the way my home runs.',
+    'From the very first day I could tell this device was built better than many alternatives in the same price range. Buttons, hinges and the overall finish feel reassuring instead of flimsy. Even when I push it a bit harder it continues to behave in a stable, consistent way. It has comfortably exceeded my expectations for both quality and ease of use.',
+    'Looking at the product after several months of use, I am still pleasantly surprised by its long‑term performance. There are no worrying noises, big drops in battery life or obvious signs of wear yet. It simply does the same job today that it did in the first week. For a tool I reach for so often, that kind of reliability is exactly what I want.',
+    'I spent some time testing the product more systematically to understand where it really shines. In everyday scenarios it delivers the same strengths I saw in early reviews, without hidden trade‑offs. The few compromises it makes are reasonable given the price and category. Overall it feels like a well‑balanced choice for most people rather than a niche, specialist device.',
+    'From a user‑experience point of view this is one of those products that “just works” once you set it up. The interface is simple enough that I do not have to re‑learn it every time I come back to it. When something goes wrong, the behavior is predictable and easy to recover from. That calm, dependable feeling is ultimately what keeps it in my daily setup.',
+  ]
+  const newsTemplates = [
+    'A new feature update has been rolled out with several small but meaningful improvements. Navigation feels a bit smoother and a couple of long‑standing edge cases have finally been fixed. Power users will appreciate the extra settings, while casual users simply notice that things break less often. It is the kind of update that rewards people who keep their devices current.',
+    'The brand has launched a limited‑time campaign with special pricing and curated bundles. It is clearly designed for users who have been waiting for the right moment to upgrade. Quantities and the campaign window are both finite, so early decisions matter more than usual. If this product has been on your wish list, now is a very good time to take another look.',
+    'New details about the product line have been shared, along with a clearer roadmap for the next few months. Several community‑requested improvements have been confirmed for upcoming releases. While timelines may still shift, it is reassuring to see an active commitment to iteration. Staying informed about these changes helps you decide when it makes sense to upgrade.',
+    'Early information about an upcoming model has started circulating within the community. The focus seems to be on better endurance, smarter software and a more refined physical design. Nothing is official until launch day, but the direction looks promising for power users. If you enjoy testing new hardware, this is definitely a release worth tracking.',
+    'A batch of refinements based on real‑world feedback has just been announced for the current generation. Many of the changes are small on their own, but together they make the product feel more polished and mature. Bugs that slipped through early versions have been addressed without adding extra complexity. It is a good sign that the brand is listening closely to everyday users.',
+  ]
+
+  for (const product of seedBrandProductsData.slice(0, 10)) {
+    // Her product için 2 experience post (FREE type)
+    for (let i = 0; i < 2; i++) {
+      try {
+        const postId = generateUlid()
+        await prisma.contentPost.create({
+          data: {
+            id: postId,
+            userId: userIdToUse,
+            type: 'FREE',
+            title: `${product.name} Deneyim Paylaşımı ${i + 1}`,
+            body: experienceTemplates[i % experienceTemplates.length],
+            productId: product.id,
+            inventoryRequired: false,
+            isBoosted: false,
+            createdAt: daysAgo(Math.floor(Math.random() * 30) + 1),
+          }
+        })
+        experienceNewsPostsCount++
+      } catch (error) {
+        console.warn(`Experience post oluşturulamadı: ${error}`)
+      }
+    }
+
+    // Her product için 1 news post (UPDATE type)
+    try {
+      const postId = generateUlid()
+      await prisma.contentPost.create({
+        data: {
+          id: postId,
+          userId: userIdToUse,
+          type: 'UPDATE',
+          title: `${product.name} Haberleri`,
+          body: newsTemplates[Math.floor(Math.random() * newsTemplates.length)],
+          productId: product.id,
+          inventoryRequired: false,
+          isBoosted: false,
+          createdAt: daysAgo(Math.floor(Math.random() * 30) + 1),
+        }
+      })
+      experienceNewsPostsCount++
+    } catch (error) {
+      console.warn(`News post oluşturulamadı: ${error}`)
+    }
+  }
+  console.log(`✅ ${experienceNewsPostsCount} experience ve news post oluşturuldu seed brand product'lar için`)
 
   // 5. Create Expert Requests and Answers
   console.log('💡 Creating expert requests...')
@@ -2021,61 +6164,94 @@ async function main() {
     }>;
   };
 
-  const NORMAL_DM_THREAD_SEEDS: ThreadSeed[] = [
+  const DM_PARTNER_IDS = [
+    TARGET_USER_ID,
+    ...TRUST_USER_IDS,
+    ...TRUSTER_USER_IDS,
+    COMMUNITY_COACH_USER_ID,
+  ];
+
+  const dmConversationTemplates = [
     {
-      userOneId: TEST_USER_ID,
-      userTwoId: TARGET_USER_ID,
-      unreadCountUserOne: 1,
-      unreadCountUserTwo: 0,
-      isSupportThread: false,
-      messages: [
-        {
-          senderId: TEST_USER_ID,
-          message: 'Selam! Yeni ürün incelemesini gördün mü?',
-          minutesAgo: 30,
-          isRead: true,
-          context: 'DM',
-        },
-        {
-          senderId: TARGET_USER_ID,
-          message: 'Evet, mükemmel olmuş. Birkaç önerim olacak 👌',
-          minutesAgo: 10,
-          isRead: false,
-          context: 'DM',
-        },
-      ],
+      partnerOpening: 'Selam! Yeni Dyson karşılaştırmanı okudum.',
+      testReply: 'Çok sevindim, sorularını gönderebilirsin.',
+      partnerFollow: 'Boost modu bataryayı çok tüketiyor mu?',
+      testFollow: 'Yoğun kullanımda evet, eco modda daha dengeli.',
     },
     {
-      userOneId: TRUST_USER_IDS[0],
-      userTwoId: TEST_USER_ID,
-      unreadCountUserOne: 0,
-      unreadCountUserTwo: 2,
-      isSupportThread: false,
-      messages: [
-        {
-          senderId: TRUST_USER_IDS[0],
-          message: 'Merhaba! Mini destek görüşmesi için uygun musun?',
-          minutesAgo: 45,
-          isRead: false,
-          context: 'DM',
-        },
-        {
-          senderId: TRUST_USER_IDS[0],
-          message: 'Bu arada geçen hafta gönderdiğim TIPS için teşekkür ederim.',
-          minutesAgo: 40,
-          isRead: false,
-          context: 'DM',
-        },
-        {
-          senderId: TEST_USER_ID,
-          message: 'Ben de teşekkür ederim, çok yardımcı oldun 🙏',
-          minutesAgo: 5,
-          isRead: true,
-          context: 'DM',
-        },
-      ],
+      partnerOpening: 'Marketplace’deki yeni badge’i inceledim.',
+      testReply: 'Feedback gönderirsen geliştirme listesine eklerim.',
+      partnerFollow: 'Elbette, screenshot ile yollarım.',
+      testFollow: 'Harika, bekliyorum.',
+    },
+    {
+      partnerOpening: 'Smartwatch rehberini paylaştığın için teşekkürler!',
+      testReply: 'Rica ederim, hangi modeli düşünüyorsun?',
+      partnerFollow: 'Galaxy Watch 7 ile Pixel Watch arasında kaldım.',
+      testFollow: 'Android kullanıyorsan Galaxy öneririm.',
+    },
+    {
+      partnerOpening: 'Yeni kulaklık benchmark’ı efsane olmuş.',
+      testReply: 'Ses profillerini karşılaştırmak epey sürdü.',
+      partnerFollow: 'Noise-cancel testleri için metodun neydi?',
+      testFollow: 'Standart 70db fan + metro kaydı kullanıyorum.',
+    },
+    {
+      partnerOpening: 'Subcategory feed’deki yeni formatı beğendim.',
+      testReply: 'UI ekibi çok emek verdi, paylaştığın için sağ ol.',
+      partnerFollow: 'Belki dark mode varyantı da eklenebilir.',
+      testFollow: 'Çalışıyoruz, roadmap’te var.',
     },
   ];
+
+  const NORMAL_DM_THREAD_SEEDS: ThreadSeed[] = DM_PARTNER_IDS.slice(0, 10).map((partnerId, index) => {
+    const template = dmConversationTemplates[index % dmConversationTemplates.length];
+    const baseMinutes = 35 + index * 6;
+    const unreadForTestUser = index < 5;
+    const messages = [
+      {
+        senderId: partnerId,
+        message: template.partnerOpening,
+        minutesAgo: baseMinutes + 15,
+        isRead: true,
+        context: 'DM' as const,
+      },
+      {
+        senderId: TEST_USER_ID,
+        message: template.testReply,
+        minutesAgo: baseMinutes + 8,
+        isRead: true,
+        context: 'DM' as const,
+      },
+    ];
+
+    if (unreadForTestUser) {
+      messages.push({
+        senderId: partnerId,
+        message: template.partnerFollow,
+        minutesAgo: baseMinutes,
+        isRead: false,
+        context: 'DM' as const,
+      });
+    } else {
+      messages.push({
+        senderId: TEST_USER_ID,
+        message: template.testFollow,
+        minutesAgo: baseMinutes,
+        isRead: true,
+        context: 'DM' as const,
+      });
+    }
+
+    return {
+      userOneId: TEST_USER_ID,
+      userTwoId: partnerId,
+      unreadCountUserOne: unreadForTestUser ? 2 : 0,
+      unreadCountUserTwo: unreadForTestUser ? 0 : 1,
+      isSupportThread: false,
+      messages,
+    };
+  });
 
   function minutesAgoToDate(minutesAgo: number): Date {
     return new Date(Date.now() - minutesAgo * 60 * 1000);
@@ -2142,63 +6318,73 @@ async function main() {
     fromUserId: string;
     toUserId: string;
     description: string;
-    status: 'PENDING' | 'ACCEPTED' | 'DECLINED';
+    status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'CANCELED' | 'AWAITING_COMPLETION' | 'COMPLETED' | 'REPORTED';
     type: 'GENERAL' | 'TECHNICAL' | 'PRODUCT';
     amount: number;
     minutesAgo: number;
     threadId: null;
   };
 
-  const SUPPORT_REQUEST_SEEDS: SupportRequestSeed[] = [
-    // Pending request - threadId yok
-    {
-      id: '00000000-0000-4000-8000-000000000101',
-      fromUserId: TARGET_USER_ID,
-      toUserId: TEST_USER_ID,
-      description: 'Beta paneldeki yeni metrikler için rehberlik rica ediyorum.',
-      status: 'PENDING',
-      type: 'GENERAL',
-      amount: 50,
-      minutesAgo: 60,
-      threadId: null,
-    },
-    // Accepted request - threadId var, support thread oluşturulacak
-    {
-      id: '00000000-0000-4000-8000-000000000102',
-      fromUserId: TEST_USER_ID,
-      toUserId: TARGET_USER_ID,
-      description: 'Smartwatch kurulumu için yardıma ihtiyacım var. Hangi modeli kullanıyorsunuz?',
-      status: 'ACCEPTED',
-      type: 'TECHNICAL',
-      amount: 100,
-      minutesAgo: 120,
-      threadId: null,
-    },
-    // Declined request - threadId yok
-    {
-      id: '00000000-0000-4000-8000-000000000103',
-      fromUserId: TRUST_USER_IDS[0],
-      toUserId: TEST_USER_ID,
-      description: 'Ürün önerisi için destek istiyorum.',
-      status: 'DECLINED',
-      type: 'PRODUCT',
-      amount: 75,
-      minutesAgo: 180,
-      threadId: null,
-    },
-    // Another accepted request - farklı kullanıcılar arasında
-    {
-      id: '00000000-0000-4000-8000-000000000104',
-      fromUserId: TRUST_USER_IDS[1],
-      toUserId: TEST_USER_ID,
-      description: 'Yazılım geliştirme konusunda danışmanlık almak istiyorum.',
-      status: 'ACCEPTED',
-      type: 'GENERAL',
-      amount: 150,
-      minutesAgo: 90,
-      threadId: null,
-    },
+  const supportStatusCycle: SupportRequestSeed['status'][] = [
+    'PENDING',
+    'ACCEPTED',
+    'AWAITING_COMPLETION',
+    'COMPLETED',
+    'CANCELED',
+    'ACCEPTED',
+    'PENDING',
+    'AWAITING_COMPLETION',
+    'DECLINED',
+    'COMPLETED',
   ];
+
+  const supportSecondaryStatusCycle: SupportRequestSeed['status'][] = [
+    'ACCEPTED',
+    'CANCELED',
+    'AWAITING_COMPLETION',
+    'COMPLETED',
+    'REPORTED',
+    'ACCEPTED',
+    'PENDING',
+    'COMPLETED',
+    'AWAITING_COMPLETION',
+    'CANCELED',
+  ];
+
+  const supportTypeCycle: SupportRequestSeed['type'][] = ['GENERAL', 'TECHNICAL', 'PRODUCT'];
+
+  const SUPPORT_REQUEST_SEEDS: SupportRequestSeed[] = [];
+
+  DM_PARTNER_IDS.slice(0, 10).forEach((partnerId, index) => {
+    const primaryStatus = supportStatusCycle[index % supportStatusCycle.length];
+    const secondaryStatus = supportSecondaryStatusCycle[index % supportSecondaryStatusCycle.length];
+    const primaryType = supportTypeCycle[index % supportTypeCycle.length];
+    const secondaryType = supportTypeCycle[(index + 1) % supportTypeCycle.length];
+
+    SUPPORT_REQUEST_SEEDS.push({
+      id: randomUUID(),
+      fromUserId: partnerId,
+      toUserId: TEST_USER_ID,
+      description: `(${index + 1}A) ${primaryType} desteği için hızlı görüşme talebi.`,
+      status: primaryStatus,
+      type: primaryType,
+      amount: 40 + index * 5,
+      minutesAgo: 70 + index * 9,
+      threadId: null,
+    });
+
+    SUPPORT_REQUEST_SEEDS.push({
+      id: randomUUID(),
+      fromUserId: TEST_USER_ID,
+      toUserId: partnerId,
+      description: `(${index + 1}B) Son seans sonrası geri bildirimin var mı?`,
+      status: secondaryStatus,
+      type: secondaryType,
+      amount: 55 + index * 6,
+      minutesAgo: 45 + index * 7,
+      threadId: null,
+    });
+  });
 
   let supportRequestsCount = 0;
   let supportThreadsCount = 0;
@@ -2211,7 +6397,8 @@ async function main() {
     let threadId: string | null = null;
     
     // If status is ACCEPTED, create a support thread
-    if (supportRequest.status === 'ACCEPTED') {
+    const shouldCreateSupportThread = ['ACCEPTED', 'AWAITING_COMPLETION', 'COMPLETED'].includes(supportRequest.status);
+    if (shouldCreateSupportThread) {
       const supportThread = await prisma.dMThread.create({
         data: {
           userOneId: supportRequest.fromUserId,
@@ -2280,10 +6467,146 @@ async function main() {
 
   console.log(`✅ ${supportRequestsCount} support requests, ${supportThreadsCount} support threads, and ${supportMessagesCount} support messages created`)
 
+  console.log('💸 Creating tips token transfers...')
+  await prisma.tipsTokenTransfer.deleteMany({
+    where: {
+      OR: [
+        { fromUserId: TEST_USER_ID },
+        { toUserId: TEST_USER_ID },
+      ],
+    },
+  })
+
+  const tipsTransferSeeds = DM_PARTNER_IDS.slice(0, 6).map((partnerId, index) => ({
+    fromUserId: partnerId,
+    toUserId: TEST_USER_ID,
+    amount: 25 + index * 8,
+    reason: `Teşekkürler, ${index + 1}. destek için`,
+    minutesAgo: 30 + index * 4,
+  }))
+
+  for (const tipsSeed of tipsTransferSeeds) {
+    const createdAt = minutesAgoToDate(tipsSeed.minutesAgo)
+    await prisma.tipsTokenTransfer.create({
+      data: {
+        fromUserId: tipsSeed.fromUserId,
+        toUserId: tipsSeed.toUserId,
+        amount: tipsSeed.amount,
+        reason: tipsSeed.reason,
+        createdAt,
+        updatedAt: createdAt,
+      } as any,
+    })
+  }
+  console.log(`✅ ${tipsTransferSeeds.length} tips transfers created`)
+
   await prisma.profile.updateMany({
     where: { bannerUrl: null },
     data: { bannerUrl: DEFAULT_BANNER_URL },
   });
+
+  // Brand Products & Experiences & News Seed
+  console.log('🏷️ Creating brand products, experiences & news...')
+  await seedBrandProducts(userIdToUse)
+  console.log('✅ Brand products seeding completed')
+
+  // Tüm product'lar için inventory media ekle (explore/products/new için)
+  console.log('🖼️ Adding inventory media for all products...')
+  await ensureProductImages(userIdToUse)
+  console.log('✅ Product images ensured')
+
+  // ===== BRAND EXPERIENCES BOOST (SPECIFIC BRAND) =====
+  // Belirli bir brand için (ID: 8386190d-39ad-4f55-b994-84a753eacacf) tüm product'larda
+  // /brands/{brandId}/products/{productId}/experiences endpoint'ine en az 10 FREE deneyim post'u üret
+  console.log('📝 Ensuring at least 10 FREE experience posts for specific brand products...')
+  const TARGET_BRAND_ID_FOR_EXPERIENCES = '8386190d-39ad-4f55-b994-84a753eacacf'
+
+  const targetBrand = await prisma.brand.findUnique({
+    where: { id: TARGET_BRAND_ID_FOR_EXPERIENCES },
+  })
+
+  if (!targetBrand) {
+    console.warn(`⚠️ Brand not found for experiences boost (id: ${TARGET_BRAND_ID_FOR_EXPERIENCES})`)
+  } else {
+    const targetBrandName = targetBrand.name
+    console.log(`✅ Experiences boost for brand: ${targetBrandName} (${targetBrand.id})`)
+
+    // Bu brand'e ait tüm product'ları bul (Product.brand alanı isim tutuyor)
+    const brandProducts = await prisma.product.findMany({
+      where: { brand: targetBrandName },
+      orderBy: { createdAt: 'asc' },
+    })
+
+    console.log(`  📦 Found ${brandProducts.length} products for brand ${targetBrandName}`)
+
+    for (const product of brandProducts) {
+      // Mevcut FREE deneyim post sayısını kontrol et
+      const existingExperiences = await prisma.contentPost.findMany({
+        where: {
+          productId: product.id,
+          type: 'FREE',
+        },
+      })
+
+      const existingCount = existingExperiences.length
+      const minRequired = 10
+
+      if (existingCount >= minRequired) {
+        console.log(`  ✅ Product "${product.name}" already has ${existingCount} FREE experiences (>= ${minRequired})`)
+        continue
+      }
+
+      const toCreate = minRequired - existingCount
+      console.log(`  ✏️  Creating ${toCreate} additional FREE experiences for product "${product.name}"`)
+
+      const experienceTemplates = [
+        ` I tested ${product.name} in detail during everyday use. Its performance and durability genuinely surprised me.`,
+        ` My first week with ${product.name}: I shared my setup experience and the most notable pros and cons.`,
+        ` A long-term ownership review of ${product.name}. In which scenarios does it shine, and where does it struggle?`,
+        ` I made a price/performance evaluation for ${product.name}, including a short comparison with competitors in the same segment.`,
+        ` I wrote down my observations on the accessories that come with ${product.name} and how they affect my daily routine.`,
+      ]
+
+      for (let i = 0; i < toCreate; i++) {
+        const experiencePostId = generateUlid()
+        const templateBody = experienceTemplates[i % experienceTemplates.length]
+        const title = `${product.name} ile Deneyim Notları #${existingCount + i + 1}`
+
+        await prisma.contentPost.create({
+          data: {
+            id: experiencePostId,
+            userId: userIdToUse,
+            type: 'FREE',
+            title,
+            body: `${templateBody} (Brand: ${targetBrandName})`,
+            productId: product.id,
+            inventoryRequired: false,
+            isBoosted: (existingCount + i) % 3 === 0,
+            createdAt: daysAgo(randomBetween(3, 45)),
+          },
+        })
+
+        // Basit istatistikler ekle (0'dan büyük değerler)
+        const likes = randomBetween(3, 40)
+        const comments = randomBetween(1, 12)
+        const shares = randomBetween(0, 8)
+        const bookmarks = randomBetween(1, 15)
+
+        await prisma.contentPost.update({
+          where: { id: experiencePostId },
+          data: {
+            likesCount: likes,
+            commentsCount: comments,
+            sharesCount: shares,
+            favoritesCount: bookmarks,
+            viewsCount: likes * randomBetween(5, 12) + randomBetween(20, 100),
+          },
+        }).catch(() => {})
+      }
+
+      console.log(`  ✅ Ensured ${minRequired} FREE experiences for product "${product.name}"`)
+    }
+  }
 
   console.log('✨ Seed process completed successfully!')
   
@@ -2300,7 +6623,7 @@ async function main() {
   summaryLines.push(`• ${marketplaceListings.length} Marketplace Listings`)
   summaryLines.push(`• ${banners.length} Marketplace Banners`)
   summaryLines.push(`• ${trendingPosts.length} Trending Posts`)
-  summaryLines.push(`• ${events.length} Wishbox Events`)
+  summaryLines.push(`• ${createdEvents.length} Wishbox Events`)
   summaryLines.push(`• ${scenarios.length} Event Scenarios`)
   summaryLines.push(`• ${eventStats.length} Event Statistics`)
   summaryLines.push(`• ${createdBrands.length} Brands`)
@@ -2308,6 +6631,7 @@ async function main() {
   summaryLines.push(`• ${expertAnswers.length} Expert Answers`)
   summaryLines.push(`• ${dmThreadsCount} DM Threads, ${dmMessagesCount} DM Messages`)
   summaryLines.push(`• ${supportRequestsCount} Support Requests, ${supportThreadsCount} Support Threads, ${supportMessagesCount} Support Messages`)
+  summaryLines.push(`• ${tipsTransferSeeds.length} Tips Transfers`)
   summaryLines.push(`• Target User (Market Test) - ID: ${TARGET_USER_ID}`)
   summaryLines.push(`  - Owned NFTs: 4 (not listed)`)
   summaryLines.push(`  - Listed NFTs: 6 (on marketplace)`)
@@ -2366,6 +6690,10 @@ async function main() {
   summaryLines.push('• Update Price: PUT /marketplace/listings/:listingId/price')
   summaryLines.push('  Body: { "amount": 150.0 }')
   summaryLines.push('• Cancel Listing: DELETE /marketplace/listings/:listingId')
+  summaryLines.push('• Sell NFT Info: GET /marketplace/sell/:nftId (with auth token)')
+  summaryLines.push('  Returns: viewer, rarity, price, suggestedPrice, gasFee, earningsAfterSales')
+  summaryLines.push('• Sell NFT Detail: GET /marketplace/sell/:nftId/detail (with auth token)')
+  summaryLines.push('  Returns: Detailed sell info including earnDate, totalOwner, ownerUser')
   summaryLines.push('')
   summaryLines.push('🔍 Explore Endpoints:')
   summaryLines.push('• Hottest/Trending: GET /explore/hottest (with auth token)')
@@ -2373,6 +6701,13 @@ async function main() {
   summaryLines.push('• What\'s News (Events): GET /explore/events')
   summaryLines.push('• New Brands: GET /explore/brands/new')
   summaryLines.push('• New Products: GET /explore/products/new')
+  summaryLines.push('')
+  summaryLines.push('🎉 Events Endpoints:')
+  summaryLines.push('• Active Events: GET /events/active?limit=20&cursor=...')
+  summaryLines.push('• Upcoming Events: GET /events/upcoming?limit=20&cursor=...')
+  summaryLines.push('• Event Detail: GET /events/:eventId')
+  summaryLines.push('• Event Posts: GET /events/:eventId/posts?limit=20&cursor=...')
+  summaryLines.push('• Event Badges: GET /events/:eventId/badges?limit=20&cursor=...')
   summaryLines.push('')
   summaryLines.push('💡 Expert Endpoints:')
   summaryLines.push('• Create Request: POST /expert/request')

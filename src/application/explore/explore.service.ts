@@ -11,6 +11,8 @@ import {
 } from '../../interfaces/explore/explore.dto';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
 import { FeedItemType } from '../../domain/feed/feed-item-type.enum';
+import { ContextType } from '../../domain/content/context-type.enum';
+import { ContextData } from '../../interfaces/feed/feed.dto';
 
 export class ExploreService {
   private readonly prisma: PrismaClient;
@@ -127,7 +129,7 @@ export class ExploreService {
       statsMap.set(post.id, {
         likes: (post as any).likesCount || 0,
         comments: (post as any).commentsCount || 0,
-        shares: 0,
+        shares: (post as any).sharesCount || 0,
         bookmarks: (post as any).favoritesCount || 0,
       });
     });
@@ -173,6 +175,7 @@ export class ExploreService {
           user: userBase,
           stats,
           createdAt: post.createdAt.toISOString(),
+          contextType: this.mapContextType(post),
         };
 
         const postKey = `${post.userId}-${post.productId || ''}`;
@@ -317,7 +320,8 @@ export class ExploreService {
 
         return {
           eventId: event.id,
-          image: null, // TODO: Add event image URL if available
+          eventType: event.eventType || 'SURVEY',
+          image: (event as any).imageUrl || null,
           title: event.title,
           description: event.description || '',
           startDate: event.startDate.toISOString(),
@@ -477,7 +481,7 @@ export class ExploreService {
     const response = {
       items: resultProducts.map((product) => ({
         productId: product.id,
-        images: productImageMap.get(product.id) || null,
+        images: productImageMap.get(product.id) || product.imageUrl || null,
         title: product.name,
       })),
       pagination: {
@@ -510,7 +514,7 @@ export class ExploreService {
       id: userId,
       name: profile?.displayName || 'Anonymous',
       title: title?.title || '',
-      avatarUrl: avatar?.imageUrl || '',
+      avatar: avatar?.imageUrl || '',
     };
   }
 
@@ -520,16 +524,58 @@ export class ExploreService {
       id: String(product.id),
       name: product.name,
       subName: product.brand || product.group?.name || '',
+      image: product.imageUrl || null,
+    };
+  }
+
+  private mapContextType(post: any): ContextType {
+    if (post?.productId) {
+      return 'product' as ContextType;
+    }
+    if (post?.productGroupId) {
+      return 'product_group' as ContextType;
+    }
+    return 'sub_category' as ContextType;
+  }
+
+  private buildContextData(post: any): ContextData {
+    const contextType = this.mapContextType(post);
+
+    if (contextType === ContextType.PRODUCT && post.product) {
+      const product = post.product;
+      const group = product.group;
+      const subCategory = group?.subCategory;
+
+      return {
+        id: String(product.id),
+        name: product.name,
+        subName: group?.name || subCategory?.name || '',
+        image: product.imageUrl || null,
+      };
+    }
+
+    if (contextType === ContextType.PRODUCT_GROUP) {
+      return {
+        id: String(post.productGroupId),
+        name: '',
+        subName: '',
+        image: null,
+      };
+    }
+
+    return {
+      id: String(post.subCategoryId),
+      name: '',
+      subName: '',
       image: null,
     };
   }
 
   private mapToPostItem(post: any, basePost: any, type: any, images: string[] = []) {
-    const product = this.getProductBase(post.product);
     const postData = {
       ...basePost,
       type,
-      product: product || null,
+      contextData: this.buildContextData(post),
       content: post.body,
       images,
     };
@@ -568,6 +614,7 @@ export class ExploreService {
     const benchmarkData = {
       ...basePost,
       type: FeedItemType.BENCHMARK,
+      contextData: this.buildContextData(post),
       products,
       content: comparison.comparisonSummary || post.body,
     };
@@ -579,13 +626,12 @@ export class ExploreService {
   }
 
   private mapToTipsAndTricksItem(post: any, basePost: any, images: string[] = []) {
-    const product = this.getProductBase(post.product);
     const tag = post.tags?.[0]?.tag || post.contentPostTags?.[0]?.tag || '';
 
     const tipsData = {
       ...basePost,
       type: FeedItemType.TIPS_AND_TRICKS,
-      product: product || null,
+      contextData: this.buildContextData(post),
       content: post.body,
       tag,
       images,

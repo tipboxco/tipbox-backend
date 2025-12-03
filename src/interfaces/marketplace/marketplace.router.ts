@@ -400,5 +400,131 @@ router.delete('/listings/:listingId', authMiddleware, asyncHandler(async (req: R
   res.json({ message: 'Listing başarıyla iptal edildi' });
 }));
 
+/**
+ * @openapi
+ * /marketplace/sell/{nftId}:
+ *   get:
+ *     summary: NFT satış bilgilerini getirir
+ *     description: Kullanıcının sahip olduğu NFT için satış bilgilerini (fiyat, gas fee, earnings vb.) getirir
+ *     tags: [Marketplace]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: nftId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: NFT ID'si
+ *     responses:
+ *       200:
+ *         description: Başarılı - NFT satış bilgileri
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                 viewer:
+ *                   type: number
+ *                 rarity:
+ *                   type: string
+ *                   enum: [usual, rare, epic, legendary]
+ *                 price:
+ *                   type: number
+ *                 suggestedPrice:
+ *                   type: number
+ *                 gasFee:
+ *                   type: number
+ *                 earningsAfterSales:
+ *                   type: number
+ *       400:
+ *         description: Geçersiz istek (NFT bulunamadı, zaten satışta, vb.)
+ *       401:
+ *         description: Yetkisiz erişim
+ *       404:
+ *         description: NFT bulunamadı
+ *       500:
+ *         description: Sunucu hatası
+ */
+router.get('/sell/:nftId', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).user?.sub || (req as any).user?.userId || (req as any).user?.id;
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const nftId = req.params.nftId;
+  const sellInfo = await marketplaceService.getSellNFTInfo(userId, nftId);
+  res.json(sellInfo);
+}));
+
+/**
+ * @openapi
+ * /marketplace/sell/{nftId}/detail:
+ *   get:
+ *     summary: NFT satış detayını getirir
+ *     description: Kullanıcının sahip olduğu NFT için detaylı satış bilgilerini (owner, earn date, total owner vb.) getirir
+ *     tags: [Marketplace]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: nftId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: NFT ID'si
+ *     responses:
+ *       200:
+ *         description: Başarılı - NFT satış detayı
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                 viewer:
+ *                   type: number
+ *                 rarity:
+ *                   type: string
+ *                   enum: [usual, rare, epic, legendary]
+ *                 price:
+ *                   type: number
+ *                 suggestedPrice:
+ *                   type: number
+ *                 earnDate:
+ *                   type: string
+ *                   format: date-time
+ *                 totalOwner:
+ *                   type: number
+ *                 ownerUser:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     name:
+ *                       type: string
+ *       400:
+ *         description: Geçersiz istek
+ *       401:
+ *         description: Yetkisiz erişim
+ *       404:
+ *         description: NFT bulunamadı
+ *       500:
+ *         description: Sunucu hatası
+ */
+router.get('/sell/:nftId/detail', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).user?.sub || (req as any).user?.userId || (req as any).user?.id;
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const nftId = req.params.nftId;
+  const sellDetail = await marketplaceService.getSellNFTDetail(userId, nftId);
+  res.json(sellDetail);
+}));
+
 export default router;
 

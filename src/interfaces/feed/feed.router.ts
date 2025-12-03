@@ -95,13 +95,16 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   }
 
   const cursor = req.query.cursor as string | undefined;
-  const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+  const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
 
-  if (limit < 1 || limit > 50) {
-    return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+  if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 200)) {
+    return res.status(400).json({ message: 'Limit must be between 1 and 200' });
   }
 
-  const feed = await feedService.getUserFeed(String(userId), { cursor, limit });
+  const feed = await feedService.getUserFeed(String(userId), {
+    cursor,
+    ...(typeof limitParam === 'number' ? { limit: limitParam } : {}),
+  });
   res.json(feed);
 }));
 
@@ -244,7 +247,10 @@ router.get('/filtered', asyncHandler(async (req: Request, res: Response) => {
     }
   }
 
-  const feed = await feedService.getFilteredFeed(String(userId), filters, { cursor, limit });
+  const feed = await feedService.getFilteredFeed(String(userId), filters, {
+    cursor,
+    ...(typeof limitParam === 'number' ? { limit: limitParam } : {}),
+  });
   res.json(feed);
 }));
 

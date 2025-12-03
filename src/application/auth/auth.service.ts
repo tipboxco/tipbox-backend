@@ -182,12 +182,14 @@ export class AuthService implements IAuthService {
 
   // Ekstra: JWT üretimi
   generateToken(user: User): string {
-    return signJwt({ id: user.id, email: user.email }, '1h');
+    // Access token süresi: 7 gün
+    return signJwt({ id: user.id, email: user.email }, '7d');
   }
 
   // Refresh token üretimi (daha uzun süreli - 7 gün)
   generateRefreshToken(user: User): string {
-    return signJwt({ id: user.id, email: user.email, type: 'refresh' }, '7d');
+    // Refresh token süresi: 14 gün
+    return signJwt({ id: user.id, email: user.email, type: 'refresh' }, '14d');
   }
 
   /**

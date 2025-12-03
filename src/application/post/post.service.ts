@@ -109,15 +109,12 @@ export class PostService {
    * Image URL'lerini post body'sine ekler
    */
   private appendImagesToBody(body: string, images?: string[]): string {
-    if (!images || images.length === 0) {
-      return body;
-    }
-
-    const imageMarkdown = images
-      .map((url) => `![Image](${url})`)
-      .join('\n\n');
-
-    return `${body}\n\n${imageMarkdown}`;
+    // NOTE:
+    // Artık görselleri sadece ayrı `images` alanında tutuyoruz.
+    // Content (body) kullanıcı açıklamasını temsil edecek ve
+    // feed card'larında sade, okunabilir metin olarak kullanılacak.
+    // Bu nedenle image URL'lerini markdown olarak body'ye eklemiyoruz.
+    return body;
   }
 
   /**
@@ -680,6 +677,38 @@ export class PostService {
       };
     } catch (error) {
       logger.error('Failed to get experience options', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Gönderi sil
+   * - Sadece gönderi sahibi silebilir
+   * - İlişkili kayıtlar FK ile otomatik temizlenir (post_tips, post_questions, post_comparisons vb.)
+   */
+  async deletePost(userId: string, postId: string): Promise<boolean> {
+    try {
+      const post = await this.postRepo.findById(postId);
+
+      if (!post) {
+        return false; // Router 404 dönecek
+      }
+
+      if (!post.belongsToUser(userId)) {
+        throw new Error('Forbidden: user does not own this post');
+      }
+
+      const deleted = await this.postRepo.delete(postId);
+
+      if (deleted) {
+        logger.info(`Post deleted: ${postId} by user ${userId}`);
+      } else {
+        logger.warn(`Post delete returned false for id: ${postId}`);
+      }
+
+      return deleted;
+    } catch (error) {
+      logger.error(`Failed to delete post ${postId} by user ${userId}`, error);
       throw error;
     }
   }

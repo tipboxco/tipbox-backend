@@ -20,9 +20,11 @@ import brandRouter from './brand/brand.router';
 import searchRouter from './search/search.router';
 import dashboardRouter from './dashboard/dashboard.router';
 import postRouter from './post/post.router';
+import eventRouter from './event/event.router';
 import { getMetricsService } from '../infrastructure/metrics/metrics.service';
 import { metricsMiddleware } from '../infrastructure/metrics/metrics.middleware';
 import config from '../infrastructure/config';
+import path from 'path';
 
 const PORT = process.env.PORT || 3000;
 const nodeEnv = config.nodeEnv;
@@ -129,6 +131,10 @@ const swaggerOptions = {
             user: { $ref: '#/components/schemas/BaseUser' },
             stats: { $ref: '#/components/schemas/BaseStats' },
             createdAt: { type: 'string', format: 'date-time' },
+            contextType: {
+              type: 'string',
+              enum: ['product_group', 'product', 'sub_category'],
+            },
             product: {
               oneOf: [
                 { $ref: '#/components/schemas/PostProduct' },
@@ -153,6 +159,10 @@ const swaggerOptions = {
             user: { $ref: '#/components/schemas/BaseUser' },
             stats: { $ref: '#/components/schemas/BaseStats' },
             createdAt: { type: 'string', format: 'date-time' },
+            contextType: {
+              type: 'string',
+              enum: ['product_group', 'product', 'sub_category'],
+            },
             products: {
               type: 'array',
               items: { $ref: '#/components/schemas/BenchmarkProduct' },
@@ -171,6 +181,10 @@ const swaggerOptions = {
             user: { $ref: '#/components/schemas/BaseUser' },
             stats: { $ref: '#/components/schemas/BaseStats' },
             createdAt: { type: 'string', format: 'date-time' },
+            contextType: {
+              type: 'string',
+              enum: ['product_group', 'product', 'sub_category'],
+            },
             product: {
               oneOf: [
                 { $ref: '#/components/schemas/PostProduct' },
@@ -409,6 +423,10 @@ app.use(requestLogger);
 // Prometheus metrics middleware
 app.use(metricsMiddleware);
 
+// Socket Messaging UI statik servis (Docker konteynerleri ayağa kalktığında kullanılacak)
+const socketMessagingUiPath = path.resolve(process.cwd(), 'DmMessagingUI');
+app.use('/Socket', express.static(socketMessagingUiPath));
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({
@@ -520,6 +538,7 @@ app.use('/catalog', catalogRouter);
 app.use('/brands', brandRouter);
 app.use('/search', searchRouter);
 app.use('/posts', postRouter);
+app.use('/events', eventRouter);
 
 // Dashboard endpoint - en sona eklenmeli ki diğer route'lar çalışabilsin
 // Dashboard hem root'ta hem de /dashboard'da çalışabilir

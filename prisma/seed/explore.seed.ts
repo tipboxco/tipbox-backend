@@ -1,4 +1,8 @@
 import { prisma, generateUlid, TEST_USER_ID, TARGET_USER_ID, TRUST_USER_IDS } from './types';
+import { getSeedMediaUrl } from './helpers/media.helper';
+
+// Wishbox istatistikleri için kullanılacak maksimum kullanıcı sayısı (default: 5)
+const MAX_WISHBOX_STATS_USERS = Number.parseInt(process.env.SEED_WISHBOX_USER_LIMIT || '5', 10);
 
 export async function seedExplore(): Promise<void> {
   console.log('🔍 [seed] explore (full)');
@@ -8,7 +12,7 @@ export async function seedExplore(): Promise<void> {
       data: {
         title: 'Yeni Sezon NFT Koleksiyonu',
         description: "Sınırlı sayıda özel avatar ve badge NFT'leri şimdi satışta!",
-        imageUrl: 'https://images.unsplash.com/photo-1634193295627-1cdddf751ebf?w=800',
+        imageUrl: getSeedMediaUrl('explore.event.primary'),
         linkUrl: '/marketplace/listings?type=BADGE',
         isActive: true,
         displayOrder: 1,
@@ -18,7 +22,7 @@ export async function seedExplore(): Promise<void> {
       data: {
         title: 'Epic Rarity İndirimi',
         description: "%30 indirimli EPIC rarity NFT'lere göz at",
-        imageUrl: 'https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=800',
+        imageUrl: getSeedMediaUrl('explore.event.primary'),
         linkUrl: '/marketplace/listings?rarity=EPIC',
         isActive: true,
         displayOrder: 2,
@@ -28,7 +32,7 @@ export async function seedExplore(): Promise<void> {
       data: {
         title: 'Yeni Markalar Platformda',
         description: "Ünlü markalar TipBox'a katıldı! Hemen keşfet.",
-        imageUrl: 'https://images.unsplash.com/photo-1556742400-b5a9d4555f7c?w=800',
+        imageUrl: getSeedMediaUrl('explore.event.primary'),
         linkUrl: '/explore/brands/new',
         isActive: true,
         displayOrder: 3,
@@ -36,18 +40,21 @@ export async function seedExplore(): Promise<void> {
     }),
   ]).catch(() => {});
 
-  // Brands (subset matching original names)
+  // Brands (subset matching original names) - logoUrl seed media üzerinden
   await Promise.all(
     [
-      { name: 'TechVision', description: 'Yenilikçi teknoloji ürünleri ve çözümleri sunan global marka', category: 'Technology' },
-      { name: 'SmartHome Pro', description: 'Akıllı ev sistemleri ve IoT cihazları konusunda uzman', category: 'Home & Living' },
-      { name: 'CoffeeDelight', description: 'Premium kahve makineleri ve barista ekipmanları', category: 'Kitchen' },
-      { name: 'FitnessTech', description: 'Akıllı spor ekipmanları ve sağlık takip cihazları', category: 'Health & Fitness' },
-      { name: 'StyleHub', description: 'Modern ve şık yaşam ürünleri markası', category: 'Fashion' },
+      { name: 'TechVision', description: 'Yenilikçi teknoloji ürünleri ve çözümleri sunan global marka', category: 'Technology', logoKey: 'explore.event.primary' },
+      { name: 'SmartHome Pro', description: 'Akıllı ev sistemleri ve IoT cihazları konusunda uzman', category: 'Home & Living', logoKey: 'explore.event.primary' },
+      { name: 'CoffeeDelight', description: 'Premium kahve makineleri ve barista ekipmanları', category: 'Kitchen', logoKey: 'explore.event.primary' },
+      { name: 'FitnessTech', description: 'Akıllı spor ekipmanları ve sağlık takip cihazları', category: 'Health & Fitness', logoKey: 'explore.event.primary' },
+      { name: 'StyleHub', description: 'Modern ve şık yaşam ürünleri markası', category: 'Fashion', logoKey: 'explore.event.primary' },
+      { name: 'AutoParts Pro', description: 'Otomotiv yedek parça ve aksesuarları', category: 'Automotive', logoKey: 'explore.event.primary' },
     ].map((b) =>
-      prisma.brand.create({
-        data: { ...b, logoUrl: 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=200' },
-      }).catch(() => null)
+      prisma.brand
+        .create({
+          data: { name: b.name, description: b.description, category: b.category, logoUrl: getSeedMediaUrl(b.logoKey as any) },
+        })
+        .catch(() => null)
     )
   );
 
@@ -64,6 +71,7 @@ export async function seedExplore(): Promise<void> {
         startDate: today,
         endDate: nextMonth,
         status: 'PUBLISHED',
+        eventType: 'SURVEY',
       },
     }),
     prisma.wishboxEvent.create({
@@ -75,6 +83,7 @@ export async function seedExplore(): Promise<void> {
         startDate: today,
         endDate: nextWeek,
         status: 'PUBLISHED',
+        eventType: 'POLL',
       },
     }),
     prisma.wishboxEvent.create({
@@ -86,6 +95,7 @@ export async function seedExplore(): Promise<void> {
         startDate: today,
         endDate: nextWeek,
         status: 'PUBLISHED',
+        eventType: 'CONTEST',
       },
     }),
   ]).catch(() => [] as any);
@@ -112,9 +122,11 @@ export async function seedExplore(): Promise<void> {
       ...TRUST_USER_IDS,
     ].filter(Boolean) as string[];
 
+    const limitedUserIds = allUserIds.slice(0, MAX_WISHBOX_STATS_USERS);
+
     await Promise.all(
-      events.flatMap((event) =>
-        allUserIds.map((userId) =>
+      events.flatMap((event: any) =>
+        limitedUserIds.map((userId) =>
           prisma.wishboxStats.create({
             data: {
               userId,
@@ -128,6 +140,101 @@ export async function seedExplore(): Promise<void> {
       )
     );
   }
+
+  // Yeni product'lar ve inventory media'ları ekle (explore/products/new için)
+  console.log('📦 Creating new products with inventory media for explore...');
+  const techCategory = await prisma.mainCategory.findFirst({ where: { name: 'Teknoloji' } });
+  const evYasamCategory = await prisma.mainCategory.findFirst({ where: { name: 'Ev & Yaşam' } });
+  
+  if (techCategory && evYasamCategory) {
+    const techSubCategory = await prisma.subCategory.findFirst({ where: { mainCategoryId: techCategory.id } });
+    const evYasamSubCategory = await prisma.subCategory.findFirst({ where: { mainCategoryId: evYasamCategory.id } });
+
+    if (techSubCategory && evYasamSubCategory) {
+      let techGroup = await prisma.productGroup.findFirst({ where: { subCategoryId: techSubCategory.id } });
+      if (!techGroup) {
+        techGroup = await prisma.productGroup.create({
+          data: {
+            name: 'Explore Tech Products',
+            description: 'Explore için teknoloji ürünleri',
+            subCategoryId: techSubCategory.id,
+            imageUrl: getSeedMediaUrl('product.laptop.macbook'),
+          },
+        });
+      }
+      
+      let homeGroup = await prisma.productGroup.findFirst({ where: { subCategoryId: evYasamSubCategory.id } });
+      if (!homeGroup) {
+        homeGroup = await prisma.productGroup.create({
+          data: {
+            name: 'Explore Home Products',
+            description: 'Explore için ev ürünleri',
+            subCategoryId: evYasamSubCategory.id,
+            imageUrl: getSeedMediaUrl('product.vacuum.dyson'),
+          },
+        });
+      }
+      
+      const productGroups = [techGroup, homeGroup];
+
+      const exploreProducts = [
+        { name: 'FitnessTech Heart Rate Monitor', brand: 'FitnessTech', group: productGroups[0]!, mediaKey: 'product.explore.1' },
+        { name: 'FitnessTech Dumbbells', brand: 'FitnessTech', group: productGroups[0]!, mediaKey: 'product.explore.2' },
+        { name: 'FitnessTech Yoga Mat', brand: 'FitnessTech', group: productGroups[0]!, mediaKey: 'product.explore.3' },
+        { name: 'SmartHome Pro Smart Light', brand: 'SmartHome Pro', group: productGroups[1]!, mediaKey: 'product.explore.4' },
+        { name: 'SmartHome Pro Thermostat', brand: 'SmartHome Pro', group: productGroups[1]!, mediaKey: 'product.explore.5' },
+        { name: 'TechVision Smart Watch', brand: 'TechVision', group: productGroups[0]!, mediaKey: 'product.explore.6' },
+        { name: 'TechVision Wireless Earbuds', brand: 'TechVision', group: productGroups[0]!, mediaKey: 'product.explore.7' },
+        { name: 'CoffeeDelight Espresso Machine', brand: 'CoffeeDelight', group: productGroups[1]!, mediaKey: 'product.explore.8' },
+        { name: 'StyleHub Designer Lamp', brand: 'StyleHub', group: productGroups[1]!, mediaKey: 'product.explore.9' },
+        { name: 'StyleHub Modern Chair', brand: 'StyleHub', group: productGroups[1]!, mediaKey: 'product.explore.10' },
+      ];
+
+      const userIdToUse = (await prisma.user.findUnique({ where: { id: TEST_USER_ID } }))?.id || (await prisma.user.findFirst())?.id;
+      
+      if (userIdToUse) {
+        for (const productData of exploreProducts) {
+          try {
+            const product = await prisma.product.create({
+              data: {
+                name: productData.name,
+                brand: productData.brand,
+                description: `Yeni eklenen ${productData.name} ürünü`,
+                groupId: productData.group.id,
+                imageUrl: getSeedMediaUrl(productData.mediaKey as any),
+              },
+            });
+
+            // Inventory oluştur
+            const inventory = await prisma.inventory.create({
+              data: {
+                userId: userIdToUse,
+                productId: product.id,
+                hasOwned: true,
+                experienceSummary: `${productData.name} hakkında deneyim paylaşımı`,
+              },
+            });
+
+            // Inventory media ekle
+            const mediaUrl = getSeedMediaUrl(productData.mediaKey as any);
+            if (mediaUrl) {
+              await prisma.inventoryMedia.create({
+                data: {
+                  inventoryId: inventory.id,
+                  mediaUrl,
+                  type: 'IMAGE',
+                },
+              });
+            }
+          } catch (error) {
+            // Product zaten varsa veya hata oluşursa devam et
+            console.warn(`Product oluşturulamadı: ${productData.name}`, error);
+          }
+        }
+      }
+    }
+  }
+
   console.log('🎉 Explore seeding completed');
 }
 
