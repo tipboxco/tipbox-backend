@@ -1066,7 +1066,7 @@ router.post('/setup-profile', upload.fields([{ name: 'Avatar', maxCount: 1 }, { 
     const user = await userService.setupProfile(userIdStr, {
       fullName: FullName,
       userName: UserName,
-      avatar,
+      avatar: avatar,
       bannerUrl,
       selectedCategories: categoriesData.selectedCategories || [],
     });
@@ -1570,6 +1570,71 @@ router.get('/:id/collections/achievements', asyncHandler(async (req: Request, re
   const queryQ = typeof req.query.q === 'string' ? req.query.q.trim() : undefined;
   const badges = await userService.listAchievementBadges(id, queryQ || querySearch || undefined);
   res.json(badges);
+}));
+
+/**
+ * @openapi
+ * /users/{id}/achievements:
+ *   get:
+ *     summary: Achievement sekmesindeki badge listesini getir
+ *     description: Kullanıcının achievement badge'lerini progress ve status bilgisiyle birlikte döner. Infinity scroll destekler.
+ *     tags: [Users]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: cursor
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Son alınan badge'in id'si (infinite scroll için)
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *         description: Sayfa başına döndürülecek maksimum badge sayısı
+ *       - in: query
+ *         name: status
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [not-started, in_progress, completed]
+ *         description: İlerleme durumuna göre filtreleme
+ *     responses:
+ *       200:
+ *         description: Achievement badge listesi
+ *       400:
+ *         description: Geçersiz kullanıcı id formatı
+ */
+router.get('/:id/achievements', asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  if (!/^[0-9a-fA-F-]{36}$/.test(id)) {
+    return res.status(400).json({ message: 'Invalid user id format' });
+  }
+
+  const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined;
+  const rawLimit = Array.isArray(req.query.limit) ? req.query.limit[0] : req.query.limit;
+  const parsedLimit =
+    typeof rawLimit === 'string'
+      ? Number.parseInt(rawLimit, 10)
+      : typeof rawLimit === 'number'
+        ? rawLimit
+        : undefined;
+  const limit = Number.isFinite(parsedLimit) && parsedLimit! > 0 ? Math.min(parsedLimit!, 50) : undefined;
+
+  const rawStatus = typeof req.query.status === 'string' ? req.query.status : undefined;
+  const status =
+    rawStatus === 'not-started' || rawStatus === 'in_progress' || rawStatus === 'completed'
+      ? rawStatus
+      : undefined;
+
+  const result = await userService.getAchievementBadges(id, { cursor, limit, status });
+  res.json(result);
 }));
 
 /**

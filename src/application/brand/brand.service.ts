@@ -33,6 +33,12 @@ export interface BrandCatalogResponse {
   posts: FeedItem[];
 }
 
+export interface BrandFeedResponse {
+  brandId: string;
+  name: string;
+  posts: FeedItem[];
+}
+
 export interface BrandProductGroup {
   productGroupId: string;
   productGroupName: string;
@@ -425,6 +431,96 @@ export class BrandService {
       };
     } catch (error) {
       logger.error(`Failed to get brand catalog for ${brandId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Brand feed (sadece brand'e ait bridge post'lardan oluşan feed)
+   */
+  async getBrandFeed(brandId: string): Promise<BrandFeedResponse> {
+    try {
+      const brand = await this.prisma.brand.findUnique({
+        where: { id: brandId },
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          imageUrl: true,
+        },
+      });
+
+      if (!brand) {
+        throw new NotFoundError('Brand not found');
+      }
+
+      const bridgePosts = await this.prisma.bridgePost.findMany({
+        where: { brandId },
+        include: {
+          user: {
+            include: {
+              profile: true,
+              titles: {
+                orderBy: { earnedAt: 'desc' },
+                take: 1,
+              },
+              avatars: {
+                where: { isActive: true },
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      });
+
+      const posts: FeedItem[] = bridgePosts.map((post) => {
+        const userBase = {
+          id: post.user.id,
+          name: post.user.profile?.displayName || post.user.email || 'Anonymous',
+          title: post.user.titles?.[0]?.title || '',
+          avatar: post.user.avatars?.[0]?.imageUrl || '',
+        };
+
+        const contextData: ContextData = {
+          id: brand.id,
+          name: brand.name,
+          subName: brand.description || '',
+          image: brand.imageUrl || null,
+        };
+
+        const randomStat = () => Math.floor(Math.random() * (40 - 10 + 1)) + 10;
+
+        return {
+          type: FeedItemType.FEED,
+          data: {
+            id: post.id,
+            type: FeedItemType.FEED,
+            user: userBase,
+            stats: {
+              likes: randomStat(),
+              comments: randomStat(),
+              shares: randomStat(),
+              bookmarks: randomStat(),
+            },
+            createdAt: post.createdAt.toISOString(),
+            contextType: ContextType.SUB_CATEGORY,
+            contextData,
+            content: post.content,
+            images: contextData.image ? [contextData.image] : [],
+          },
+        };
+      });
+
+      return {
+        brandId: brand.id,
+        name: brand.name,
+        posts,
+      };
+    } catch (error) {
+      logger.error(`Failed to get brand feed for ${brandId}:`, error);
       throw error;
     }
   }

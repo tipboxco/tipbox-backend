@@ -17,9 +17,9 @@ export interface EventCard {
   description: string | null;
   startDate: string; // ISO 8601 DateTime
   endDate: string; // ISO 8601 DateTime
-  interaction: number; // Total interactions (participants, comments, etc.)
+  interaction?: number; // Total interactions (participants, comments, etc.)
   eventType: EventType;
-  participants: EventParticipant[];
+  participants?: EventParticipant[];
 }
 
 // Active Events Response
@@ -43,6 +43,7 @@ export interface UpComingEvents {
 }
 
 // Event Detail
+export type EventStatus = 'active' | 'upcoming';
 export interface RewardBadge {
   id: string;
   image: string | null;
@@ -59,6 +60,7 @@ export interface EventDetail {
   interaction: number;
   eventType: EventType;
   isJoined: boolean;
+  status: EventStatus;
   rewards: RewardBadge[];
 }
 
@@ -79,6 +81,7 @@ export interface Badge {
   id: string;
   title: string;
   description: string | null;
+  image: string | null; // Badge görseli
   current: number; // Current progress
   total: number; // Total required
 }
@@ -91,4 +94,31 @@ export interface Badges {
     limit: number;
   };
 }
+
+// Limited Time Event DTO'ları
+export interface LimitedTimeEventUser {
+  id: string;
+  avatar: string | null;
+  rank: number;
+  score: number;
+}
+
+export interface LimitedTimeEventLeaderboardUser {
+  id: string;
+  avatar: string | null;
+  rank: number;
+}
+
+export interface LimitedTimeEventResponse {
+  id: string;
+  title: string;
+  description: string | null;
+  leaderboardUsers: LimitedTimeEventLeaderboardUser[];
+  userScore: LimitedTimeEventUser | null;
+  backgroundImage: string | null;
+  eventImage: string | null;
+  startDate: string;
+  endDate: string;
+}
+
 

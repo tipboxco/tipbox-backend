@@ -156,6 +156,60 @@ router.get(
 
 /**
  * @openapi
+ * /brands/{brandId}/feed:
+ *   get:
+ *     summary: Brand feed'ini getir
+ *     description: Seçili marka için bridge post'lardan oluşan feed listesini döner.
+ *     tags: [Brand]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: brandId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Brand ID'si
+ *     responses:
+ *       200:
+ *         description: Brand feed'i başarıyla getirildi.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 brandId:
+ *                   type: string
+ *                   format: uuid
+ *                 name:
+ *                   type: string
+ *                 posts:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       type:
+ *                         type: string
+ *                         enum: ['feed', 'benchmark', 'post', 'question', 'tipsAndTricks']
+ *                       data:
+ *                         type: object
+ *       401:
+ *         description: Kimlik doğrulaması başarısız.
+ *       404:
+ *         description: Brand bulunamadı.
+ */
+router.get(
+  '/:brandId/feed',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { brandId } = req.params;
+    const feed = await brandService.getBrandFeed(brandId);
+    res.json(feed);
+  }),
+);
+
+/**
+ * @openapi
  * /brands/{brandId}/products:
  *   get:
  *     summary: Markaya ait ürünleri listele

@@ -729,6 +729,110 @@ export class UserService {
     });
   }
 
+  /**
+   * Achievement sekmesi için badge listesi (infinite scroll + status filtresi)
+   */
+  async getAchievementBadges(
+    userId: string,
+    options?: {
+      cursor?: string;
+      limit?: number;
+      status?: 'not-started' | 'in_progress' | 'completed';
+    }
+  ): Promise<{
+    items: Array<{
+      id: string;
+      title: string;
+      image: string;
+      description: string;
+      current: number;
+      total: number;
+      status: 'not-started' | 'in_progress' | 'completed';
+    }>;
+    pagination: {
+      cursor?: string;
+      hasMore: boolean;
+      limit: number;
+    };
+  }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+
+    // Tüm ACHIEVEMENT tipindeki badgeleri kullanıcı progress'i ile birlikte çek
+    const badges = await this.prisma.badge.findMany({
+      where: {
+        type: 'ACHIEVEMENT',
+      },
+      include: {
+        achievementGoals: {
+          include: {
+            userAchievements: {
+              where: { userId },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    } as any);
+
+    const mapStatus = (current: number, total: number): 'not-started' | 'in_progress' | 'completed' => {
+      if (current <= 0) return 'not-started';
+      if (current >= total) return 'completed';
+      return 'in_progress';
+    };
+
+    const mapped = badges.map((badge: any) => {
+      const goals = badge.achievementGoals || [];
+      const total = goals.reduce(
+        (sum: number, g: any) => sum + (g.pointsRequired || 0),
+        0
+      );
+      const current = goals.reduce(
+        (sum: number, g: any) => sum + (g.userAchievements?.[0]?.progress || 0),
+        0
+      );
+
+      const status = mapStatus(current, total || 1);
+
+      return {
+        id: String(badge.id),
+        title: badge.name || '',
+        image: badge.imageUrl || BADGE_PLACEHOLDER_URL,
+        description: badge.description || '',
+        current,
+        total: total || 1,
+        status,
+      };
+    });
+
+    // Status filtresi uygula
+    const filtered = options?.status
+      ? mapped.filter((b) => b.status === options.status)
+      : mapped;
+
+    // Basit cursor: badge id'sine göre
+    let startIndex = 0;
+    if (options?.cursor) {
+      const idx = filtered.findIndex((b) => b.id === options.cursor);
+      if (idx >= 0) {
+        startIndex = idx + 1;
+      }
+    }
+
+    const sliced = filtered.slice(startIndex, startIndex + limit + 1);
+    const hasMore = sliced.length > limit;
+    const items = hasMore ? sliced.slice(0, limit) : sliced;
+    const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].id : undefined;
+
+    return {
+      items,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
+  }
+
   async listBridgeBadges(userId: string, query?: string): Promise<CollectionResponse[]> {
     const rewards = await this.prisma.bridgeReward.findMany({
       where: {
@@ -1932,7 +2036,7 @@ export class UserService {
     data: {
       fullName: string;
       userName: string;
-      avatarUrl?: string;
+      avatar?: string;
       bannerUrl?: string;
       selectedCategories?: Array<{
         categoryId: string;
@@ -1983,7 +2087,7 @@ export class UserService {
       }
 
       // Avatar varsa kaydet
-      if (data.avatarUrl) {
+      if (data.avatar) {
         // Önceki aktif avatar'ı pasif yap
         await tx.userAvatar.updateMany({
           where: { userId, isActive: true },
@@ -1994,7 +2098,7 @@ export class UserService {
         await tx.userAvatar.create({
           data: {
             userId,
-            imageUrl: data.avatarUrl,
+            imageUrl: data.avatar,
             isActive: true,
           },
         });

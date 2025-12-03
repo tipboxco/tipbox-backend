@@ -262,5 +262,29 @@
   },
   "product.generic.11": {
     "targetKey": "products/samsun.png"
+  },
+  "event.primary": {
+    "targetKey": "event/event.png"
+  },
+  "event.cardbg": {
+    "targetKey": "event/eventcardbg.png"
+  },
+  "badge.brandbadge1": {
+    "targetKey": "brandbadge/brandbadge1.png"
+  },
+  "badge.brandbadge2": {
+    "targetKey": "brandbadge/brandbadge2.png"
+  },
+  "badge.brandbadge3": {
+    "targetKey": "brandbadge/brandbadge3.png"
+  },
+  "badge.brandbadge4": {
+    "targetKey": "brandbadge/brandbadge4.png"
+  },
+  "badge.brandbadge5": {
+    "targetKey": "brandbadge/brandbadge5.png"
+  },
+  "badge.brandbadge6": {
+    "targetKey": "brandbadge/brandbadge6.png"
   }
 }

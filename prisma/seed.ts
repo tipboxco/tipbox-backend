@@ -1212,7 +1212,7 @@ async function main() {
   const badgeConfigs: BadgeSeedConfig[] = [
     {
       name: 'Welcome',
-      description: 'Tipbox\'a hoş geldin! İlk kayıt rozetin.',
+      description: 'Welcome to Tipbox! This is your very first achievement badge.',
       type: 'ACHIEVEMENT',
       rarity: 'COMMON',
       boostMultiplier: 1.0,
@@ -1222,7 +1222,7 @@ async function main() {
     },
     {
       name: 'First Post',
-      description: 'İlk gönderini paylaştın! İyi başlangıç.',
+      description: 'You have published your very first post on Tipbox.',
       type: 'ACHIEVEMENT',
       rarity: 'COMMON',
       boostMultiplier: 1.1,
@@ -1232,7 +1232,7 @@ async function main() {
     },
     {
       name: 'Tip Master',
-      description: '10 faydalı ipucu paylaştın. Sen bir uzman!',
+      description: 'You shared 10 helpful tips. You are becoming a real expert.',
       type: 'ACHIEVEMENT',
       rarity: 'RARE',
       boostMultiplier: 1.3,
@@ -1242,7 +1242,7 @@ async function main() {
     },
     {
       name: 'Community Hero',
-      description: '100 faydalı yorum yaptın. Topluluk kahramanı!',
+      description: 'You posted 100 helpful comments for the community.',
       type: 'ACHIEVEMENT',
       rarity: 'EPIC',
       boostMultiplier: 1.5,
@@ -1410,6 +1410,44 @@ async function main() {
     })
   ])
   console.log(`✅ ${metrics.length} karşılaştırma metriği oluşturuldu`)
+
+  // 5.b Boost Options
+  console.log('🚀 Creating boost options...')
+  const existingBoostOptions = await prisma.boostOption.findMany()
+  if (existingBoostOptions.length === 0) {
+    await Promise.all([
+      prisma.boostOption.create({
+        data: {
+          title: 'Standard Boost',
+          description: 'Standard visibility boost for your question posts.',
+          amount: 0,
+          isPopular: false,
+          isActive: true,
+        },
+      } as any),
+      prisma.boostOption.create({
+        data: {
+          title: 'Popular Boost',
+          description: 'Increases reach for questions that need quick answers.',
+          amount: 10,
+          isPopular: true,
+          isActive: true,
+        },
+      } as any),
+      prisma.boostOption.create({
+        data: {
+          title: 'Premium Boost',
+          description: 'Maximum visibility and priority in the feed.',
+          amount: 25,
+          isPopular: true,
+          isActive: true,
+        },
+      } as any),
+    ]).catch(() => {})
+    console.log('✅ 3 boost option oluşturuldu')
+  } else {
+    console.log(`ℹ️  ${existingBoostOptions.length} boost option zaten mevcut, yeniden oluşturulmadı`)
+  }
 
   // 6. Sub Categories for Technology
   console.log('📁 Creating sub categories for Technology...')
@@ -1645,6 +1683,117 @@ async function main() {
 
   // Link achievement goals to badges (already done above)
   console.log('✅ Achievement goals created')
+
+  // 5.c Additional achievement badges for all status states
+  console.log('🎯 Creating additional achievement badges for all status states...')
+  const brandBadgeKeys: SeedMediaKey[] = [
+    'badge.brandbadge1',
+    'badge.brandbadge2',
+    'badge.brandbadge3',
+    'badge.brandbadge4',
+    'badge.brandbadge5',
+    'badge.brandbadge6',
+  ] as any;
+
+  type AchievementStatus = 'not-started' | 'in_progress' | 'completed';
+
+  const extraAchievementConfigs: Array<{
+    title: string;
+    description: string;
+    status: AchievementStatus;
+    total: number;
+    current: number;
+    imageKey: SeedMediaKey;
+  }> = [];
+
+  const makeTitle = (base: string, index: number) => `${base} #${index + 1}`;
+
+  // 10 not-started
+  for (let i = 0; i < 10; i++) {
+    extraAchievementConfigs.push({
+      title: makeTitle('Explorer', i),
+      description: 'Discover new brands and products across the Tipbox community.',
+      status: 'not-started',
+      total: 10,
+      current: 0,
+      imageKey: brandBadgeKeys[i % brandBadgeKeys.length],
+    });
+  }
+
+  // 10 in_progress
+  for (let i = 0; i < 10; i++) {
+    extraAchievementConfigs.push({
+      title: makeTitle('Storyteller', i),
+      description: 'Share detailed stories and experiences about your products.',
+      status: 'in_progress',
+      total: 20,
+      current: 5 + i, // 5..14
+      imageKey: brandBadgeKeys[i % brandBadgeKeys.length],
+    });
+  }
+
+  // 10 completed
+  for (let i = 0; i < 10; i++) {
+    extraAchievementConfigs.push({
+      title: makeTitle('Trusted Voice', i),
+      description: 'Become a trusted voice by helping other users make decisions.',
+      status: 'completed',
+      total: 15,
+      current: 15 + i, // >= total
+      imageKey: brandBadgeKeys[i % brandBadgeKeys.length],
+    });
+  }
+
+  const extraBadges = await Promise.all(
+    extraAchievementConfigs.map(async (cfg) => {
+      const imageUrl = getSeedMediaUrl(cfg.imageKey);
+      const badge = await prisma.badge.create({
+        data: {
+          name: cfg.title,
+          description: cfg.description,
+          type: 'ACHIEVEMENT' as any,
+          rarity: 'COMMON' as any,
+          boostMultiplier: 1.0,
+          rewardMultiplier: 1.0,
+          categoryId: achievementCategory.id,
+          imageUrl,
+        },
+      });
+
+      const goal = await prisma.achievementGoal.create({
+        data: {
+          chainId: advancedAchievementChain.id,
+          title: cfg.title,
+          requirement: cfg.description,
+          rewardBadgeId: badge.id,
+          pointsRequired: cfg.total,
+          difficulty: 'EASY',
+        },
+      });
+
+      await prisma.userAchievement.upsert({
+        where: {
+          userId_goalId: {
+            userId: userIdToUse,
+            goalId: goal.id,
+          },
+        },
+        update: {
+          progress: cfg.current,
+          completed: cfg.current >= cfg.total,
+        },
+        create: {
+          userId: userIdToUse,
+          goalId: goal.id,
+          progress: cfg.current,
+          completed: cfg.current >= cfg.total,
+        },
+      });
+
+      return badge;
+    })
+  );
+  console.log(`✅ ${extraBadges.length} extra achievement badges created for all status states`)
 
   const advancedUserAchievementSeeds = [
     {
@@ -3461,20 +3610,18 @@ async function main() {
   }
   console.log('✅ Content post timestamps randomized')
 
-  // 23. Test kullanıcısının (omer@tipbox.co) tüm gönderileri için 10-40 arası rastgele stats ver
-  console.log('📊 Enriching stats for primary test user posts (10-40 range)...')
-  const primaryUserPosts = await prisma.contentPost.findMany({
-    where: { userId: TEST_USER_ID },
-  })
+  // 23. Tüm content post'lar için 10-40 arası rastgele stats ver (event feed / brand feed tutarlılığı için)
+  console.log('📊 Enriching stats for all content posts (10-40 range)...')
+  const allContentPostsForStats = await prisma.contentPost.findMany()
 
-  if (primaryUserPosts.length > 0) {
-    for (const post of primaryUserPosts) {
+  if (allContentPostsForStats.length > 0) {
+    for (const post of allContentPostsForStats) {
       const likes = randomBetween(10, 40)
       const comments = randomBetween(10, 40)
       const shares = randomBetween(10, 40)
       const bookmarks = randomBetween(10, 40)
       const views = Math.max(
-        likes * randomBetween(8, 20) + randomBetween(50, 200),
+        likes * randomBetween(2, 5),
         likes + comments + shares + bookmarks,
       )
 
@@ -3491,9 +3638,9 @@ async function main() {
         })
         .catch(() => {})
     }
-    console.log(`✅ ${primaryUserPosts.length} primary user posts enriched with 10-40 stats`)
+    console.log(`✅ ${allContentPostsForStats.length} content posts enriched with 10-40 stats`)
   } else {
-    console.log('ℹ️  No primary test user posts found for stats enrichment')
+    console.log('ℹ️  No content posts found for stats enrichment')
   }
 
   // Feed Entries - Kullanıcıların feed'inde görünecek post'lar
@@ -4440,19 +4587,20 @@ async function main() {
 
   const events = await Promise.all(
     eventTemplates.map((template) =>
-      prisma.wishboxEvent.create({
-        data: {
-          id: generateUlid(),
-          title: template.title,
-          description: template.description,
-          // Frontend bu IP üzerinden MinIO'dan görsel çekecek
-          imageUrl: `${SEED_MEDIA_HOST}/tipbox-media/products/phones/phone1.png`, // Event görseli
-          startDate: today,
-          endDate: template.endDate,
-          status: 'PUBLISHED',
-          eventType: template.eventType,
-        } as any,
-      }).catch(() => null)
+      prisma.wishboxEvent
+        .create({
+          data: {
+            id: generateUlid(),
+            title: template.title,
+            description: template.description,
+            imageUrl: getSeedMediaUrl('event.primary' as any),
+            startDate: today,
+            endDate: template.endDate,
+            status: 'PUBLISHED',
+            eventType: template.eventType,
+          } as any,
+        })
+        .catch(() => null)
     )
   )
   const createdEvents = events.filter(Boolean) as any[]
@@ -4589,18 +4737,20 @@ async function main() {
 
   const upcomingEvents = await Promise.all(
     upcomingEventTemplates.map((template) =>
-      prisma.wishboxEvent.create({
-        data: {
-          id: generateUlid(),
-          title: template.title,
-          description: template.description,
-          imageUrl: getSeedMediaUrl('explore.event.primary'),
-          startDate: template.startDate,
-          endDate: template.endDate,
-          status: 'PUBLISHED',
-          eventType: template.eventType,
-        } as any,
-      }).catch(() => null)
+      prisma.wishboxEvent
+        .create({
+          data: {
+            id: generateUlid(),
+            title: template.title,
+            description: template.description,
+            imageUrl: getSeedMediaUrl('event.cardbg' as any),
+            startDate: template.startDate,
+            endDate: template.endDate,
+            status: 'PUBLISHED',
+            eventType: template.eventType,
+          } as any,
+        })
+        .catch(() => null)
     )
   )
   const createdUpcomingEvents = upcomingEvents.filter(Boolean) as any[]
@@ -5134,13 +5284,13 @@ async function main() {
           // Her brand için unique bir object key oluştur
           const objectKey = `brands/catalog/${brand.id}/marketplace.jpg`
           
-          // MinIO'ya yükle
-          const uploadedUrl = await s3Service.uploadFile(objectKey, marketplaceImageBuffer, 'image/jpeg')
-          
-          // Dış IP'ye çevir (tarayıcıdan erişim için)
-          // uploadedUrl normalde http://minio:9000/... formatında, host kısmını SEED_MEDIA_HOST ile değiştiriyoruz
-          const externalUrl = uploadedUrl.replace('http://minio:9000', SEED_MEDIA_HOST)
-          
+          // MinIO'ya yükle (URL zaten getSeedMediaUrl / getPublicMediaBaseUrl ile normalize edilir)
+          const externalUrl = await s3Service.uploadFile(
+            objectKey,
+            marketplaceImageBuffer,
+            'image/jpeg'
+          )
+
           // Brand'ı güncelle - imageUrl'e ekle (varsa koru, yoksa ekle)
           await prisma.brand.update({
             where: { id: brand.id },

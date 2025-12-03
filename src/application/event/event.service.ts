@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { logger } from '../../infrastructure/logger/logger';
+import logger from '../../infrastructure/logger/logger';
 import {
   ActiveEvent,
   UpComingEvents,
@@ -11,17 +11,18 @@ import {
   Badges,
   Badge,
   EventType,
+  LimitedTimeEventResponse,
+  LimitedTimeEventLeaderboardUser,
+  LimitedTimeEventUser,
 } from '../../interfaces/event/event.dto';
 import { FeedItem, FeedItemType } from '../../interfaces/feed/feed.dto';
-import { FeedService } from '../feed/feed.service';
+import { buildMediaUrl } from '../../infrastructure/config/media.config';
 
 export class EventService {
   private prisma: PrismaClient;
-  private feedService: FeedService;
 
   constructor() {
     this.prisma = new PrismaClient();
-    this.feedService = new FeedService();
   }
 
   /**
@@ -56,11 +57,11 @@ export class EventService {
       const resultEvents = hasMore ? events.slice(0, limit) : events;
       const nextCursor = hasMore && resultEvents.length > 0 ? resultEvents[resultEvents.length - 1].id : undefined;
 
-      // Map events to EventCard
+      // Map events to EventCard (aktif event'ler için interaction ve participants da dolduralım)
       const eventCards: EventCard[] = await Promise.all(
         resultEvents.map(async (event) => {
           const interaction = await this.getEventInteraction(event.id);
-          const participants = await this.getEventParticipants(event.id, 2); // Get first 2 participants
+          const participants = await this.getEventParticipants(event.id, 2);
 
           return {
             eventId: event.id,
@@ -211,6 +212,13 @@ export class EventService {
         title: badge.name,
       }));
 
+      // Event status (active / upcoming)
+      const now = new Date();
+      let status: 'active' | 'upcoming' = 'active';
+      if (event.startDate > now) {
+        status = 'upcoming';
+      }
+
       return {
         eventId: event.id,
         banner: event.imageUrl,
@@ -221,6 +229,7 @@ export class EventService {
         interaction,
         eventType: this.mapEventType(event.eventType),
         isJoined,
+        status,
         rewards: rewardBadges,
       };
     } catch (error) {
@@ -363,14 +372,15 @@ export class EventService {
       const resultPosts = hasMore ? posts.slice(0, limit) : posts;
       const nextCursor = hasMore && resultPosts.length > 0 ? resultPosts[resultPosts.length - 1].id : undefined;
 
-      // Convert posts to FeedItem format (simplified - you might want to use FeedService logic)
+      // Convert posts to a loosely-typed FeedItem array compatible with the frontend FeedItem union
       const feedItems: FeedItem[] = resultPosts.map((post) => {
-        // This is a simplified mapping - you'd want to use the full FeedService mapping logic
+        const baseType = this.mapContentPostTypeToFeedItemType(post.type);
+
         return {
-          type: this.mapContentPostTypeToFeedItemType(post.type),
+          type: baseType as any,
           data: {
             id: post.id,
-            type: this.mapContentPostTypeToFeedItemType(post.type),
+            type: baseType as any,
             user: {
               id: post.user.id,
               name: post.user.profile?.displayName || post.user.email || 'Anonymous',
@@ -384,7 +394,7 @@ export class EventService {
               bookmarks: post.favoritesCount,
             },
             createdAt: post.createdAt.toISOString(),
-            contextType: 'PRODUCT' as any, // Simplified
+            contextType: 'PRODUCT',
             contextData: {
               id: post.productId || '',
               name: post.product?.name || '',
@@ -392,9 +402,9 @@ export class EventService {
               image: post.product?.imageUrl || null,
             },
             content: post.body,
-            images: [], // You'd want to fetch images from inventoryMedia or contentPostMedia if available
-          },
-        };
+            images: [] as any[],
+          } as any,
+        } as any;
       });
 
       return {
@@ -505,7 +515,8 @@ export class EventService {
               });
 
               if (userAchievement) {
-                current = userAchievement.pointsEarned || 0;
+                // Not: schema'da pointsEarned yok, progress alanını kullanıyoruz
+                current = (userAchievement as any).progress || 0;
               }
             }
           }
@@ -513,7 +524,8 @@ export class EventService {
           return {
             id: badge.id,
             title: badge.name,
-            description: badge.description,
+            description: badge.description || null,
+            image: badge.imageUrl || null,
             current,
             total,
           };
@@ -532,6 +544,109 @@ export class EventService {
       logger.error(`Failed to get event badges for ${eventId}:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Limited Time Event - leaderboard ve kullanıcı skoru ile tek bir aktif event döner
+   */
+  async getLimitedTimeEvent(userId: string): Promise<LimitedTimeEventResponse | null> {
+    const now = new Date();
+
+    // Aktif ve bitiş tarihi ileride olan ilk event'i limited event olarak kullanalım
+    const event = await this.prisma.wishboxEvent.findFirst({
+      where: {
+        status: 'PUBLISHED',
+        endDate: { gt: now },
+      },
+      orderBy: { endDate: 'asc' },
+    });
+
+    if (!event) {
+      return null;
+    }
+
+    // Leaderboard için en yüksek skora sahip kullanıcıları çek
+    const stats = await this.prisma.wishboxStats.findMany({
+      where: { eventId: event.id },
+      include: {
+        user: {
+          include: {
+            profile: true,
+            avatars: {
+              where: { isActive: true },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+          },
+        },
+      },
+      take: 50,
+    });
+
+    const scoreFor = (s: { totalParticipated: number; totalComments: number; helpfulVotesReceived: number }): number => {
+      return (
+        (s.totalParticipated || 0) +
+        (s.totalComments || 0) +
+        (s.helpfulVotesReceived || 0) * 2
+      );
+    };
+
+    const sortedByScore = [...stats].sort((a, b) => scoreFor(b as any) - scoreFor(a as any));
+
+    // Only return top 3 users for leaderboard
+    const topUsers = sortedByScore.slice(0, 3);
+
+    const leaderboardUsers: LimitedTimeEventLeaderboardUser[] = topUsers.map((s, index) => ({
+      id: s.userId,
+      avatar: s.user.avatars?.[0]?.imageUrl || null,
+      rank: index + 1,
+    }));
+
+    // Kullanıcının kendi skoru ve sırası
+    const userStat =
+      sortedByScore.find((s) => s.userId === userId) ||
+      (await this.prisma.wishboxStats.findUnique({
+        where: {
+          userId_eventId: {
+            userId,
+            eventId: event.id,
+          },
+        },
+      }));
+
+    let userScore: LimitedTimeEventUser | null = null;
+    if (userStat) {
+      const statAny = userStat as any;
+      const score = scoreFor(statAny);
+      const rankIndex = sortedByScore.findIndex((s) => s.userId === userStat.userId);
+      const rank = rankIndex >= 0 ? rankIndex + 1 : 0;
+
+      const avatarUrl =
+        statAny.user?.avatars?.[0]?.imageUrl ||
+        null;
+
+      userScore = {
+        id: userStat.userId,
+        avatar: avatarUrl,
+        rank,
+        score,
+      };
+    }
+
+    const backgroundImage = buildMediaUrl('tipbox-media/event/eventcardbg.png');
+    const eventImage = buildMediaUrl('tipbox-media/event/event.png');
+
+    return {
+      id: event.id,
+      title: event.title,
+      description: event.description || null,
+      leaderboardUsers,
+      userScore,
+      backgroundImage,
+      eventImage,
+      startDate: event.startDate.toISOString(),
+      endDate: event.endDate.toISOString(),
+    };
   }
 
   /**
