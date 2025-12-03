@@ -116,6 +116,12 @@ jobs:
               echo "⚠️  Backup failed or database not accessible, continuing..."
             }
             
+            # Backend container'ı stop et (diğer servisler çalışmaya devam edecek)
+            echo "🛑 Stopping backend container..."
+            docker compose -f "\$COMPOSE_FILE" stop backend || {
+              echo "⚠️  Backend container was not running, continuing..."
+            }
+            
             # Docker Compose ile build
             echo "🔨 Building Docker images..."
             docker compose -f "\$COMPOSE_FILE" build --no-cache backend
@@ -126,27 +132,30 @@ jobs:
               echo "⚠️  Prisma generate failed, but continuing..."
             }
             
-            # Container'ları restart et (yeni image'ları kullanmak için)
-            echo "🔄 Restarting containers..."
-            docker compose -f "\$COMPOSE_FILE" up -d --force-recreate
+            # Database'in çalıştığını verify et (zaten çalışıyor olmalı)
+            echo "⏳ Verifying database is ready..."
+            sleep 2
+            if ! docker compose -f "\$COMPOSE_FILE" exec -T postgres pg_isready -U tipbox_user > /dev/null 2>&1; then
+              echo "❌ Database is not ready. Starting database container..."
+              docker compose -f "\$COMPOSE_FILE" up -d postgres
+              sleep 5
+              for i in {1..10}; do
+                if docker compose -f "\$COMPOSE_FILE" exec -T postgres pg_isready -U tipbox_user > /dev/null 2>&1; then
+                  echo "✅ Database is ready!"
+                  break
+                fi
+                if [ \$i -eq 10 ]; then
+                  echo "❌ Database not ready after 10 attempts"
+                  exit 1
+                fi
+                echo "⏳ Waiting for database... (\$i/10)"
+                sleep 2
+              done
+            else
+              echo "✅ Database is already running!"
+            fi
             
-            # Database servisinin hazır olmasını bekle
-            echo "⏳ Waiting for database to be ready..."
-            sleep 5
-            for i in {1..20}; do
-              if docker compose -f "\$COMPOSE_FILE" exec -T postgres pg_isready -U tipbox_user > /dev/null 2>&1; then
-                echo "✅ Database is ready!"
-                break
-              fi
-              if [ \$i -eq 20 ]; then
-                echo "❌ Database not ready after 20 attempts"
-                exit 1
-              fi
-              echo "⏳ Waiting for database... (\$i/20)"
-              sleep 2
-            done
-            
-            # Migration'ları çalıştır
+            # Migration'ları çalıştır (backend container başlatılmadan önce)
             echo "📊 Running database migrations..."
             docker compose -f "\$COMPOSE_FILE" run --rm backend npx prisma migrate deploy || {
               echo "❌ Migration failed! Check the logs above."
@@ -154,6 +163,10 @@ jobs:
               docker compose -f "\$COMPOSE_FILE" logs backend | tail -50
               exit 1
             }
+            
+            # Backend container'ı yeni image ile başlat
+            echo "🚀 Starting backend container with new image..."
+            docker compose -f "\$COMPOSE_FILE" up -d backend
             
             # Health check
             echo "🏥 Checking backend health..."
