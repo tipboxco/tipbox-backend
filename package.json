@@ -60,6 +60,10 @@
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
   },
+  "engines": {
+    "node": ">=23.6.0",
+    "npm": ">=10.0.0"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tipboxco/tipbox-backend.git"
@@ -133,7 +137,7 @@
     "winston-daily-rotate-file": "^5.0.0"
   },
   "lint-staged": {
-    "*.{js,ts,tsx}": [
+    "*.{ts,tsx}": [
       "eslint --fix",
       "prettier --write"
     ]
