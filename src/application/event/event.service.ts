@@ -728,4 +728,3 @@ export class EventService {
     return mapping[postType] || FeedItemType.FEED;
   }
 }
-

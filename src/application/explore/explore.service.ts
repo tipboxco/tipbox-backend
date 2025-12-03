@@ -69,6 +69,21 @@ export class ExploreService {
                 group: true,
               },
             },
+            productGroup: {
+              include: {
+                subCategory: {
+                  include: {
+                    mainCategory: true,
+                  },
+                },
+              },
+            },
+            subCategory: {
+              include: {
+                mainCategory: true,
+              },
+            },
+            mainCategory: true,
             comparison: {
               include: {
                 product1: {
@@ -555,16 +570,47 @@ export class ExploreService {
     }
 
     if (contextType === ContextType.PRODUCT_GROUP) {
+      const group = post.productGroup;
+      if (group) {
+        const subCategory = group.subCategory;
+        return {
+          id: String(group.id),
+          name: group.name,
+          subName: subCategory?.name || '',
+          image: group.imageUrl || subCategory?.imageUrl || subCategory?.mainCategory?.imageUrl || null,
+        };
+      }
+
       return {
-        id: String(post.productGroupId),
+        id: post.productGroupId ? String(post.productGroupId) : 'unknown',
         name: '',
         subName: '',
         image: null,
       };
     }
 
+    // SUB_CATEGORY (fallback olarak mainCategory bilgisini de kullan)
+    if (post.subCategory) {
+      const subCategory = post.subCategory;
+      return {
+        id: String(subCategory.id),
+        name: subCategory.name,
+        subName: subCategory.mainCategory?.name || '',
+        image: subCategory.imageUrl || subCategory.mainCategory?.imageUrl || null,
+      };
+    }
+
+    if (post.mainCategory) {
+      return {
+        id: String(post.mainCategory.id),
+        name: post.mainCategory.name,
+        subName: '',
+        image: post.mainCategory.imageUrl || null,
+      };
+    }
+
     return {
-      id: String(post.subCategoryId),
+      id: post.subCategoryId ? String(post.subCategoryId) : 'unknown',
       name: '',
       subName: '',
       image: null,

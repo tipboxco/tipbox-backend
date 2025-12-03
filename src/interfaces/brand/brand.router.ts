@@ -128,16 +128,6 @@ router.get(
  *                   type: integer
  *                 isJoined:
  *                   type: boolean
- *                 posts:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       type:
- *                         type: string
- *                         enum: ['feed', 'benchmark', 'post', 'question', 'tipsAndTricks']
- *                       data:
- *                         type: object
  *       401:
  *         description: Kimlik doğrulaması başarısız.
  *       404:

@@ -30,7 +30,6 @@ export interface BrandCatalogResponse {
   bannerImage: string | null;
   followers: number;
   isJoined: boolean;
-  posts: FeedItem[];
 }
 
 export interface BrandFeedResponse {
@@ -354,72 +353,6 @@ export class BrandService {
         isJoined = !!follow;
       }
 
-      // Get brand posts (BridgePost)
-      const bridgePosts = await this.prisma.bridgePost.findMany({
-        where: { brandId },
-        include: {
-          user: {
-            include: {
-              profile: true,
-              titles: {
-                orderBy: { earnedAt: 'desc' },
-                take: 1,
-              },
-              avatars: {
-                where: { isActive: true },
-                orderBy: { createdAt: 'desc' },
-                take: 1,
-              },
-            },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 20,
-      });
-
-      // Map bridge posts to feed items
-      // BridgePost'ları ContentPost formatına dönüştürmemiz gerekiyor
-      const posts: FeedItem[] = bridgePosts.map((post) => {
-        const userBase = {
-          id: post.user.id,
-          name: post.user.profile?.displayName || post.user.email || 'Anonymous',
-          title: post.user.titles?.[0]?.title || '',
-          avatar: post.user.avatars?.[0]?.imageUrl || '',
-        };
-
-        // BridgePost için brand-based context oluştur
-        const contextData: ContextData = {
-          id: brand.id,
-          name: brand.name,
-          subName: brand.description || '',
-          image: brand.imageUrl || null,
-        };
-
-        // Stats değerlerini her respons'ta 10-40 arasında random üret
-        const randomStat = () => Math.floor(Math.random() * (40 - 10 + 1)) + 10;
-
-        return {
-          type: FeedItemType.FEED,
-          data: {
-            id: post.id,
-            type: FeedItemType.FEED,
-            user: userBase,
-            stats: {
-              likes: randomStat(),
-              comments: randomStat(),
-              shares: randomStat(),
-              bookmarks: randomStat(),
-            },
-            createdAt: post.createdAt.toISOString(),
-            contextType: ContextType.SUB_CATEGORY, // BridgePost için generic context type
-            contextData,
-            content: post.content,
-            // Brand catalog kartında görsel göstermek için brand görselini images[] içine ekle
-            images: contextData.image ? [contextData.image] : [],
-          },
-        };
-      });
-
       return {
         brandId: brand.id,
         name: brand.name,
@@ -427,7 +360,6 @@ export class BrandService {
         bannerImage: brand.imageUrl || null,
         followers: followersCount,
         isJoined,
-        posts,
       };
     } catch (error) {
       logger.error(`Failed to get brand catalog for ${brandId}:`, error);
@@ -635,13 +567,13 @@ export class BrandService {
    * Şimdilik brand catalog'daki feed kartlarını aynen döner.
    */
   async getBrandTrends(brandId: string, userId: string): Promise<FeedResponse> {
-    const catalog = await this.getBrandCatalog(brandId, userId);
-
+    // Brand trends artık ayrı brand feed endpoint'i üzerinden yönetiliyor.
+    // Geçici olarak boş bir feed dönüyoruz; gerçek trend verisi /brands/{id}/feed ile alınacak.
     return {
-      items: catalog.posts,
+      items: [],
       pagination: {
         hasMore: false,
-        limit: catalog.posts.length,
+        limit: 0,
       },
     };
   }

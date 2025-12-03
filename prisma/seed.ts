@@ -78,7 +78,9 @@ let marketplaceImageCursor = 0
 
 // Seed görselleri için dış erişim host'u (frontend'in bağlandığı IP)
 // Tüm seed URL'leri buradan üretilecek ki IP değişimi tek yerden yönetilebilsin.
-const SEED_MEDIA_HOST = process.env.SEED_MEDIA_HOST || 'http://192.168.1.164:9000'
+// NOTE: SEED_MEDIA_HOST was previously used as a static base URL; media URLs are now
+// fully managed via getSeedMediaUrl / getPublicMediaBaseUrl. The old constant is
+// intentionally removed to avoid unused-variable compile errors.
 const nextMarketplaceImage = (): string => {
   const key = MARKETPLACE_NFT_IMAGE_KEYS[marketplaceImageCursor % MARKETPLACE_NFT_IMAGE_KEYS.length]
   marketplaceImageCursor += 1
@@ -4554,6 +4556,33 @@ async function main() {
 
   // 3. Wishbox Events (What's News) - Diverse event types
   console.log('🎪 Creating wishbox events...')
+
+  // 3.a Ensure event images are uploaded to MinIO (event/event.png & event/eventcardbg.png)
+  try {
+    const s3Service = new S3Service()
+    await s3Service.checkAndCreateBucket()
+
+    const eventPrimaryPath = path.join(__dirname, '../tests/assets/event/event.png')
+    const eventBgPath = path.join(__dirname, '../tests/assets/event/eventcardbg.png')
+
+    if (existsSync(eventPrimaryPath)) {
+      const buf = readFileSync(eventPrimaryPath)
+      await s3Service.uploadFile('event/event.png', buf, 'image/png')
+      console.log('✅ event/event.png uploaded to MinIO')
+    } else {
+      console.warn(`⚠️  Event primary image not found at ${eventPrimaryPath}`)
+    }
+
+    if (existsSync(eventBgPath)) {
+      const buf = readFileSync(eventBgPath)
+      await s3Service.uploadFile('event/eventcardbg.png', buf, 'image/png')
+      console.log('✅ event/eventcardbg.png uploaded to MinIO')
+    } else {
+      console.warn(`⚠️  Event background image not found at ${eventBgPath}`)
+    }
+  } catch (err: any) {
+    console.warn('⚠️  Failed to upload event images to MinIO (event/event*.png). Continuing without them.', err?.message || String(err))
+  }
   const today = new Date()
   const nextWeek = new Date()
   nextWeek.setDate(today.getDate() + 7)
