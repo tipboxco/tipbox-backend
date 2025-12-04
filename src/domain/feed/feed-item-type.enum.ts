@@ -4,5 +4,6 @@ export enum FeedItemType {
   POST = 'post',
   QUESTION = 'question',
   TIPS_AND_TRICKS = 'tipsAndTricks',
+  EXPERIENCE = 'experience',
 }
 

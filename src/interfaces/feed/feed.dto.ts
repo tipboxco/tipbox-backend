@@ -73,14 +73,20 @@ export interface BenchmarkPost extends BasePost {
 }
 
 // Review / Experience Post Item Types
+export type ContentType = 'Price and Shopping Experience' | 'Product and Usage Experience';
+
 export interface ExperienceContent {
-  title: string;
+  title: ContentType;
   content: string;
   rating: number;
 }
 
+export interface ReviewProduct extends BaseProduct {
+  // future: aggregate review stats can be added here
+}
+
 export interface ExperiencePost extends BasePost {
-  contextData: ContextData;
+  product: ReviewProduct;
   content: ExperienceContent[];
   tags: string[];
   images?: any[];
@@ -106,7 +112,8 @@ export type FeedItem =
   | { type: FeedItemType.BENCHMARK; data: BenchmarkPost }
   | { type: FeedItemType.POST; data: Post }
   | { type: FeedItemType.QUESTION; data: Post }
-  | { type: FeedItemType.TIPS_AND_TRICKS; data: TipsAndTricksPost };
+  | { type: FeedItemType.TIPS_AND_TRICKS; data: TipsAndTricksPost }
+  | { type: FeedItemType.EXPERIENCE; data: ExperiencePost };
 
 // Feed Response
 export interface FeedResponse {
@@ -120,15 +127,23 @@ export interface FeedResponse {
 
 // Feed Filter Options
 export interface FeedFilterOptions {
-  types?: FeedItemType[];
-  categoryIds?: string[];
-  productIds?: string[];
-  userIds?: string[];
-  minLikes?: number;
-  minComments?: number;
-  dateRange?: {
-    from?: string;
-    to?: string;
-  };
+  /**
+   * User interests (e.g. category or topic IDs)
+   */
+  interests?: string[];
+  /**
+   * Tags to filter posts by
+   */
+  tags?: string[];
+  /**
+   * Single primary category filter
+   */
+  category?: string;
+  /**
+   * Sort strategy for filtered feed
+   * - recent: newest first
+   * - top: based on engagement (likes/views)
+   */
+  sort?: 'recent' | 'top';
 }
 

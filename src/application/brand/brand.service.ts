@@ -1,8 +1,6 @@
 import { PrismaClient } from '@prisma/client';
-import { FeedService } from '../feed/feed.service';
-import { FeedItem, FeedItemType, ContextData, FeedResponse } from '../../interfaces/feed/feed.dto';
+import { FeedItem, FeedItemType, FeedResponse, ContextData } from '../../interfaces/feed/feed.dto';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
-import { ContextType } from '../../domain/content/context-type.enum';
 import { buildMediaUrl } from '../../infrastructure/config/media.config';
 import logger from '../../infrastructure/logger/logger';
 import { NotFoundError } from '../../infrastructure/errors/custom-errors';
@@ -36,6 +34,11 @@ export interface BrandFeedResponse {
   brandId: string;
   name: string;
   posts: FeedItem[];
+  pagination: {
+    cursor?: string;
+    hasMore: boolean;
+    limit: number;
+  };
 }
 
 export interface BrandProductGroup {
@@ -158,7 +161,12 @@ export interface BrandHistory {
 }
 
 export interface SurveyList {
-  surveylist: SurveyCard[];
+  surveyList: SurveyCard[];
+  pagination: {
+    cursor?: string;
+    hasMore: boolean;
+    limit: number;
+  };
 }
 
 export interface BrandHistoryEvents {
@@ -166,11 +174,9 @@ export interface BrandHistoryEvents {
 }
 
 export class BrandService {
-  private readonly feedService: FeedService;
   private readonly prisma: PrismaClient;
 
   constructor() {
-    this.feedService = new FeedService();
     this.prisma = new PrismaClient();
   }
 
@@ -370,7 +376,10 @@ export class BrandService {
   /**
    * Brand feed (sadece brand'e ait bridge post'lardan oluşan feed)
    */
-  async getBrandFeed(brandId: string): Promise<BrandFeedResponse> {
+  async getBrandFeed(
+    brandId: string,
+    options?: { cursor?: string; limit?: number; userId?: string }
+  ): Promise<BrandFeedResponse> {
     try {
       const brand = await this.prisma.brand.findUnique({
         where: { id: brandId },
@@ -386,8 +395,36 @@ export class BrandService {
         throw new NotFoundError('Brand not found');
       }
 
-      const bridgePosts = await this.prisma.bridgePost.findMany({
-        where: { brandId },
+      const brandProducts = await this.prisma.product.findMany({
+        where: { brand: brand.name },
+        select: { id: true },
+      });
+      const productIds = brandProducts.map((product) => product.id);
+
+      const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+      const cursor = options?.cursor;
+
+      const contentPosts = await this.prisma.contentPost.findMany({
+        where: productIds.length
+          ? {
+              productId: { in: productIds },
+            }
+          : {
+              OR: [
+                {
+                  body: {
+                    contains: brand.name,
+                    mode: 'insensitive',
+                  },
+                },
+                {
+                  title: {
+                    contains: brand.name,
+                    mode: 'insensitive',
+                  },
+                },
+              ],
+            },
         include: {
           user: {
             include: {
@@ -403,53 +440,48 @@ export class BrandService {
               },
             },
           },
+          product: {
+            include: {
+              group: true,
+            },
+          },
+          comparison: {
+            include: {
+              product1: {
+                include: { group: true },
+              },
+              product2: {
+                include: { group: true },
+              },
+              scores: true,
+            },
+          },
+          tip: true,
+          tags: true,
+          contentPostTags: true,
         },
         orderBy: { createdAt: 'desc' },
-        take: 20,
+        take: limit + 1,
+        ...(cursor && {
+          cursor: { id: cursor },
+          skip: 1,
+        }),
       });
 
-      const posts: FeedItem[] = bridgePosts.map((post) => {
-        const userBase = {
-          id: post.user.id,
-          name: post.user.profile?.displayName || post.user.email || 'Anonymous',
-          title: post.user.titles?.[0]?.title || '',
-          avatar: post.user.avatars?.[0]?.imageUrl || '',
-        };
-
-        const contextData: ContextData = {
-          id: brand.id,
-          name: brand.name,
-          subName: brand.description || '',
-          image: brand.imageUrl || null,
-        };
-
-        const randomStat = () => Math.floor(Math.random() * (40 - 10 + 1)) + 10;
-
-        return {
-          type: FeedItemType.FEED,
-          data: {
-            id: post.id,
-            type: FeedItemType.FEED,
-            user: userBase,
-            stats: {
-              likes: randomStat(),
-              comments: randomStat(),
-              shares: randomStat(),
-              bookmarks: randomStat(),
-            },
-            createdAt: post.createdAt.toISOString(),
-            contextType: ContextType.SUB_CATEGORY,
-            contextData,
-            content: post.content,
-            images: contextData.image ? [contextData.image] : [],
-          },
-        };
-      });
+      const hasMore = contentPosts.length > limit;
+      const resultPosts = hasMore ? contentPosts.slice(0, limit) : contentPosts;
+      const nextCursor = hasMore && resultPosts.length > 0 ? resultPosts[resultPosts.length - 1].id : undefined;
+      const posts = await this.mapPostsToFeedItems(resultPosts, options?.userId);
 
       return {
         brandId: brand.id,
         name: brand.name,
         posts,
+        pagination: {
+          cursor: nextCursor,
+          hasMore,
+          limit,
+        },
       };
     } catch (error) {
       logger.error(`Failed to get brand feed for ${brandId}:`, error);
@@ -460,7 +492,7 @@ export class BrandService {
   /**
    * Brand Survey & Gamification - Eventler tab'ı
    */
-  async getBrandEvents(brandId: string, userId: string): Promise<BrandEventCard[]> {
+  async getBrandEvents(_brandId: string, userId: string): Promise<BrandEventCard[]> {
     // Event'leri global olarak kullanıyoruz, brandId sadece context bilgisi için
     const events = await this.prisma.wishboxEvent.findMany({
       where: {
@@ -493,7 +525,7 @@ export class BrandService {
   /**
    * Brand Survey & Gamification - Event detay endpoint'i
    */
-  async getBrandEventDetail(brandId: string, eventId: string, userId: string): Promise<BrandEventDetail> {
+  async getBrandEventDetail(_brandId: string, eventId: string, userId: string): Promise<BrandEventDetail> {
     const event = await this.prisma.wishboxEvent.findUnique({
       where: { id: eventId },
     });
@@ -566,7 +598,7 @@ export class BrandService {
    * Brand Survey & Gamification - Trendler tab'ı
    * Şimdilik brand catalog'daki feed kartlarını aynen döner.
    */
-  async getBrandTrends(brandId: string, userId: string): Promise<FeedResponse> {
+  async getBrandTrends(_brandId: string, _userId: string): Promise<FeedResponse> {
     // Brand trends artık ayrı brand feed endpoint'i üzerinden yönetiliyor.
     // Geçici olarak boş bir feed dönüyoruz; gerçek trend verisi /brands/{id}/feed ile alınacak.
     return {
@@ -653,9 +685,92 @@ export class BrandService {
     };
   }
 
-  async getBrandHistorySurveys(brandId: string, userId: string): Promise<SurveyList> {
-    const surveyEndpoint = await this.getBrandSurveys(brandId, userId);
-    return { surveylist: surveyEndpoint.surveyList };
+  async getBrandHistorySurveys(
+    brandId: string,
+    userId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<SurveyList> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
+
+    // İlgili brand'in varlığını doğrula (ileride brand'e özel filtreler eklenebilir)
+    const brand = await this.prisma.brand.findUnique({ where: { id: brandId } });
+    if (!brand) {
+      throw new NotFoundError(`Brand not found: ${brandId}`);
+    }
+
+    // Tüm PUBLISHED event'ler arasından sayfalı şekilde çek
+    const events = await this.prisma.wishboxEvent.findMany({
+      where: {
+        status: 'PUBLISHED',
+      },
+      orderBy: { startDate: 'asc' },
+      take: limit + 1,
+      ...(cursor && {
+        cursor: { id: cursor },
+        skip: 1,
+      }),
+    });
+
+    const hasMore = events.length > limit;
+    const resultEvents = hasMore ? events.slice(0, limit) : events;
+    const nextCursor = hasMore && resultEvents.length > 0 ? resultEvents[resultEvents.length - 1].id : undefined;
+
+    if (resultEvents.length === 0) {
+      return {
+        surveyList: [],
+        pagination: {
+          cursor: undefined,
+          hasMore: false,
+          limit,
+        },
+      };
+    }
+
+    // Kullanıcının event istatistiklerine göre status/progress hesapla
+    const stats = await this.prisma.wishboxStats.findMany({
+      where: {
+        userId,
+        eventId: { in: resultEvents.map((e) => e.id) },
+      },
+    });
+
+    const statsMap = new Map<string, (typeof stats)[number]>();
+    stats.forEach((s) => statsMap.set(s.eventId, s));
+
+    const surveyList: SurveyCard[] = resultEvents.map((event) => {
+      const eventStats = statsMap.get(event.id);
+      const totalParticipated = eventStats?.totalParticipated ?? 0;
+
+      let status: SurveyStatusType = 'start';
+      if (totalParticipated > 0 && totalParticipated < 3) {
+        status = 'continue';
+      } else if (totalParticipated >= 3) {
+        status = 'viewresults';
+      }
+
+      const progress = Math.min(100, totalParticipated * 25);
+
+      return {
+        id: event.id,
+        title: event.title,
+        description: event.description || '',
+        type: event.eventType || 'SURVEY',
+        duration: '5-10 dk',
+        points: 100 + (totalParticipated || 1) * 25,
+        status,
+        progress,
+      };
+    });
+
+    return {
+      surveyList,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
   }
 
   async getBrandHistoryPosts(brandId: string, userId: string): Promise<FeedResponse> {
@@ -750,7 +865,9 @@ export class BrandService {
   async getBrandProductExperiences(
     brandId: string,
     productId: string,
-    userId?: string
+    userId?: string,
+    page: number = 1,
+    limit: number = 12,
   ): Promise<FeedItem[]> {
     try {
       // Brand name'i al
@@ -773,11 +890,14 @@ export class BrandService {
         throw new NotFoundError('Product not found or does not belong to this brand');
       }
 
-      // Ürüne ait deneyim paylaşımlarını getir (FREE type posts)
+      const safePage = page > 0 ? page : 1;
+      const safeLimit = Math.min(Math.max(limit, 1), 50);
+
+      // Ürüne ait deneyim paylaşımlarını getir (EXPERIENCE type posts) - sayfalı
       const posts = await this.prisma.contentPost.findMany({
         where: {
           productId: productId,
-          type: ContentPostType.FREE,
+          type: ContentPostType.EXPERIENCE,
         },
         include: {
           user: {
@@ -804,7 +924,8 @@ export class BrandService {
           favorites: true,
         },
         orderBy: { createdAt: 'desc' },
-        take: 50,
+        skip: (safePage - 1) * safeLimit,
+        take: safeLimit,
       });
 
       // Feed items'a dönüştür
@@ -823,7 +944,9 @@ export class BrandService {
   async getBrandProductComparisons(
     brandId: string,
     productId: string,
-    userId?: string
+    userId?: string,
+    page: number = 1,
+    limit: number = 12,
   ): Promise<FeedItem[]> {
     try {
       // Brand name'i al
@@ -846,7 +969,10 @@ export class BrandService {
         throw new NotFoundError('Product not found or does not belong to this brand');
       }
 
-      // Ürüne ait karşılaştırma gönderilerini getir (COMPARE type posts)
+      const safePage = page > 0 ? page : 1;
+      const safeLimit = Math.min(Math.max(limit, 1), 50);
+
+      // Ürüne ait karşılaştırma gönderilerini getir (COMPARE type posts) - sayfalı
       const posts = await this.prisma.contentPost.findMany({
         where: {
           OR: [
@@ -900,7 +1026,8 @@ export class BrandService {
           favorites: true,
         },
         orderBy: { createdAt: 'desc' },
-        take: 50,
+        skip: (safePage - 1) * safeLimit,
+        take: safeLimit,
       });
 
       // Feed items'a dönüştür
@@ -919,7 +1046,9 @@ export class BrandService {
   async getBrandProductNews(
     brandId: string,
     productId: string,
-    userId?: string
+    userId?: string,
+    page: number = 1,
+    limit: number = 12,
   ): Promise<FeedItem[]> {
     try {
       // Brand name'i al
@@ -942,7 +1071,10 @@ export class BrandService {
         throw new NotFoundError('Product not found or does not belong to this brand');
       }
 
-      // Ürüne dair haberleri getir (şu an için tüm post tiplerini dahil ediyoruz)
+      const safePage = page > 0 ? page : 1;
+      const safeLimit = Math.min(Math.max(limit, 1), 50);
+
+      // Ürüne dair haberleri getir (şu an için tüm post tiplerini dahil ediyoruz) - sayfalı
       // Haberler için özel bir tip yok, feed tipinde olabilir
       const posts = await this.prisma.contentPost.findMany({
         where: {
@@ -974,7 +1106,8 @@ export class BrandService {
           favorites: true,
         },
         orderBy: { createdAt: 'desc' },
-        take: 50,
+        skip: (safePage - 1) * safeLimit,
+        take: safeLimit,
       });
 
       // Feed items'a dönüştür
@@ -1032,13 +1165,11 @@ export class BrandService {
         avatar: post.user.avatars?.[0]?.imageUrl || '',
       };
 
-      // Stats - 10-40 arası rastgele sayılar
-      const getRandomStat = () => Math.floor(Math.random() * 31) + 10; // 10-40 arası
       const stats = {
-        likes: getRandomStat(),
-        comments: getRandomStat(),
-        shares: getRandomStat(),
-        bookmarks: getRandomStat(),
+        likes: post.likesCount ?? 0,
+        comments: post.commentsCount ?? 0,
+        shares: post.sharesCount ?? 0,
+        bookmarks: post.favoritesCount ?? 0,
       };
 
       const basePost = {
@@ -1048,24 +1179,121 @@ export class BrandService {
         createdAt: post.createdAt.toISOString(),
       };
 
+      // Context bilgisi (FeedService ile uyumlu)
+      const contextType = this.mapContextTypeForBrand(post);
+      const contextData = this.buildBrandContextData(post, ownedProductIds);
+
+      const basePostWithContext = {
+        ...basePost,
+        contextType,
+        contextData,
+      };
+
       // Get images for this post
       const postKey = `${post.userId}-${post.productId || ''}`;
-      const images = inventoryMediaMap.get(postKey) || [];
+      let images = inventoryMediaMap.get(postKey) || [];
+      // Inventory'de media yoksa, ürün görselini fallback olarak kullan
+      if ((!images || images.length === 0) && post.product?.imageUrl) {
+        images = [post.product.imageUrl];
+      }
 
       // Map based on post type
       switch (post.type) {
         case ContentPostType.FREE:
-          return this.mapToPostItem(post, basePost, FeedItemType.FEED, images);
+          return this.mapToPostItem(post, basePostWithContext, FeedItemType.FEED, images);
+        case ContentPostType.EXPERIENCE:
+          return this.mapToPostItem(post, basePostWithContext, FeedItemType.EXPERIENCE, images);
         case ContentPostType.COMPARE:
-          return this.mapToBenchmarkItem(post, basePost, ownedProductIds, images);
+          return this.mapToBenchmarkItem(post, basePostWithContext, ownedProductIds, images);
         case ContentPostType.QUESTION:
-          return this.mapToPostItem(post, basePost, FeedItemType.QUESTION, images);
+          return this.mapToPostItem(post, basePostWithContext, FeedItemType.QUESTION, images);
         case ContentPostType.TIPS:
-          return this.mapToTipsAndTricksItem(post, basePost, images);
+          return this.mapToTipsAndTricksItem(post, basePostWithContext, images);
         default:
-          return this.mapToPostItem(post, basePost, FeedItemType.POST, images);
+          return this.mapToPostItem(post, basePostWithContext, FeedItemType.POST, images);
       }
     });
+  }
+
+  /**
+   * Brand feed için context type hesaplama (FeedService.mapContextType ile uyumlu)
+   */
+  private mapContextTypeForBrand(post: any): 'product' | 'product_group' | 'sub_category' {
+    if (post?.productId) {
+      return 'product';
+    }
+    if (post?.productGroupId) {
+      return 'product_group';
+    }
+    return 'sub_category';
+  }
+
+  /**
+   * Brand feed için contextData üretimi (FeedService.buildContextData'ye benzer)
+   */
+  private buildBrandContextData(post: any, ownedProductIds?: Set<string>): ContextData {
+    const contextType = this.mapContextTypeForBrand(post);
+
+    if (contextType === 'product' && post.product) {
+      const product = post.product;
+      const group = product.group;
+      const subCategory = (group as any)?.subCategory;
+
+      return {
+        id: String(product.id),
+        name: product.name,
+        subName: group?.name || subCategory?.name || '',
+        image: product.imageUrl || null,
+        isOwned: ownedProductIds ? ownedProductIds.has(String(product.id)) : undefined,
+      };
+    }
+
+    if (contextType === 'product_group') {
+      const group = post.productGroup;
+      if (group) {
+        const subCategory = (group as any).subCategory;
+        return {
+          id: String(group.id),
+          name: group.name,
+          subName: subCategory?.name || '',
+          image: group.imageUrl || subCategory?.imageUrl || subCategory?.mainCategory?.imageUrl || null,
+        };
+      }
+
+      return {
+        id: post.productGroupId ? String(post.productGroupId) : 'unknown',
+        name: '',
+        subName: '',
+        image: null,
+      };
+    }
+
+    // SUB_CATEGORY (fallback olarak mainCategory bilgisini de kullan)
+    if (post.subCategory) {
+      const subCategory = post.subCategory;
+      return {
+        id: String(subCategory.id),
+        name: subCategory.name,
+        subName: subCategory.mainCategory?.name || '',
+        image: subCategory.imageUrl || subCategory.mainCategory?.imageUrl || null,
+      };
+    }
+
+    if (post.mainCategory) {
+      return {
+        id: String(post.mainCategory.id),
+        name: post.mainCategory.name,
+        subName: '',
+        image: post.mainCategory.imageUrl || null,
+      };
+    }
+
+    return {
+      id: post.subCategoryId ? String(post.subCategoryId) : 'unknown',
+      name: '',
+      subName: '',
+      image: null,
+    };
   }
 
   private getProductBase(product: any): any | null {
@@ -1081,7 +1309,7 @@ export class BrandService {
   private mapToPostItem(
     post: any,
     basePost: any,
-    type: FeedItemType.FEED | FeedItemType.POST | FeedItemType.QUESTION,
+    type: FeedItemType.FEED | FeedItemType.POST | FeedItemType.QUESTION | FeedItemType.EXPERIENCE,
     images: string[] = []
   ): FeedItem {
     const product = this.getProductBase(post.product);
@@ -1145,7 +1373,6 @@ export class BrandService {
 
   private mapToTipsAndTricksItem(post: any, basePost: any, images: string[] = []): FeedItem {
     const product = this.getProductBase(post.product);
-    const tip = post.tip;
     const tag = post.tags?.[0]?.tag || post.contentPostTags?.[0]?.tag || '';
 
     return {

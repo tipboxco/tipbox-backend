@@ -3,22 +3,158 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs';
+import http from 'http';
+import net from 'net';
 
 const execAsync = promisify(exec);
 const router = Router();
 
+// Container'lar için fallback port kontrolü (docker ps çalışmazsa)
+const containerPortMap: Record<
+  string,
+  { host: string; port: number; type: 'http' | 'tcp'; path?: string }
+> = {
+  tipbox_backend: { host: 'localhost', port: 3000, type: 'http', path: '/health' },
+  tipbox_postgres: { host: 'postgres', port: 5432, type: 'tcp' },
+  tipbox_redis: { host: 'redis', port: 6379, type: 'tcp' },
+  tipbox_minio: { host: 'minio', port: 9000, type: 'http' },
+  tipbox_pgadmin: { host: 'pgadmin', port: 80, type: 'http' },
+  tipbox_prisma_studio: { host: 'prisma-studio', port: 5555, type: 'http' },
+};
+
+async function checkContainerByPort(containerName: string): Promise<boolean> {
+  const cfg = containerPortMap[containerName];
+  if (!cfg) return false;
+
+  if (cfg.type === 'http') {
+    return new Promise(resolve => {
+      const req = http.get(
+        {
+          host: cfg.host,
+          port: cfg.port,
+          path: cfg.path || '/',
+          timeout: 2000,
+        },
+        res => {
+          res.resume(); // body'yi okumadan kapat
+          resolve(typeof res.statusCode === 'number');
+        },
+      );
+
+      req.on('error', () => resolve(false));
+      req.on('timeout', () => {
+        req.destroy();
+        resolve(false);
+      });
+    });
+  }
+
+  // TCP port kontrolü (Postgres, Redis gibi)
+  return new Promise(resolve => {
+    const socket = new net.Socket();
+    const timer = setTimeout(() => {
+      socket.destroy();
+      resolve(false);
+    }, 2000);
+
+    socket.connect(cfg.port, cfg.host, () => {
+      clearTimeout(timer);
+      socket.end();
+      resolve(true);
+    });
+
+    socket.on('error', () => {
+      clearTimeout(timer);
+      resolve(false);
+    });
+  });
+}
+
 // Container port bilgileri
 const services = [
-  { name: 'Backend API', port: 3000, url: 'http://localhost:3000', description: 'Ana backend servisi', icon: 'fa-server' },
-  { name: 'Swagger Docs', port: 3000, url: 'http://localhost:3000/api-docs', description: 'API dokümantasyonu', path: '/api-docs', icon: 'fa-book' },
-  { name: 'Socket Messaging UI', port: 3000, url: 'http://localhost:3000/Socket', description: 'Socket.IO tabanlı Messaging demo arayüzü', path: '/Socket', icon: 'fa-comments' },
-  { name: 'Tipbox Docs', port: 3000, url: 'http://localhost:3000/docs/', description: 'Docusaurus dokümantasyonu', path: '/docs/', icon: 'fa-book-open' },
-  { name: 'Prisma Studio', port: 5555, url: 'http://localhost:5555', description: 'Database GUI', icon: 'fa-table' },
-  { name: 'pgAdmin', port: 5050, url: 'http://localhost:5050', description: 'PostgreSQL yönetim arayüzü', icon: 'fa-database' },
-  { name: 'MinIO Console', port: 9001, url: 'http://localhost:9001', description: 'MinIO object storage konsolu', icon: 'fa-cloud' },
-  { name: 'MinIO API', port: 9000, url: 'http://localhost:9000', description: 'MinIO API endpoint', icon: 'fa-cloud-upload-alt' },
-  { name: 'PostgreSQL', port: 5432, url: 'localhost:5432', description: 'PostgreSQL veritabanı', icon: 'fa-database' },
-  { name: 'Redis', port: 6379, url: 'localhost:6379', description: 'Redis cache servisi', icon: 'fa-bolt' },
+  {
+    name: 'Backend API',
+    port: 3000,
+    path: '/',
+    description: 'Ana backend servisi',
+    icon: 'fa-server',
+    containerName: 'tipbox_backend',
+    canControlContainer: true,
+  },
+  {
+    name: 'Swagger Docs',
+    port: 3000,
+    path: '/api-docs',
+    description: 'API dokümantasyonu',
+    path: '/api-docs',
+    icon: 'fa-book',
+    containerName: 'tipbox_backend',
+    canControlContainer: false,
+  },
+  {
+    name: 'Socket Messaging UI',
+    port: 3000,
+    path: '/Socket',
+    description: 'Socket.IO tabanlı Messaging demo arayüzü',
+    path: '/Socket',
+    icon: 'fa-comments',
+    containerName: 'tipbox_backend',
+    canControlContainer: false,
+  },
+  {
+    name: 'Prisma Studio',
+    port: 5555,
+    path: '',
+    description: 'Database GUI',
+    icon: 'fa-table',
+    containerName: 'tipbox_prisma_studio',
+    canControlContainer: true,
+  },
+  {
+    name: 'pgAdmin',
+    port: 5050,
+    path: '',
+    description: 'PostgreSQL yönetim arayüzü',
+    icon: 'fa-database',
+    containerName: 'tipbox_pgadmin',
+    canControlContainer: true,
+  },
+  {
+    name: 'MinIO Console',
+    port: 9001,
+    path: '',
+    description: 'MinIO object storage konsolu',
+    icon: 'fa-cloud',
+    containerName: 'tipbox_minio',
+    canControlContainer: true,
+  },
+  {
+    name: 'MinIO API',
+    port: 9000,
+    path: '',
+    description: 'MinIO API endpoint',
+    icon: 'fa-cloud-upload-alt',
+    containerName: 'tipbox_minio',
+    canControlContainer: true,
+  },
+  {
+    name: 'PostgreSQL',
+    port: 5432,
+    url: 'localhost:5432',
+    description: 'PostgreSQL veritabanı',
+    icon: 'fa-database',
+    containerName: 'tipbox_postgres',
+    canControlContainer: true,
+  },
+  {
+    name: 'Redis',
+    port: 6379,
+    url: 'localhost:6379',
+    description: 'Redis cache servisi',
+    icon: 'fa-bolt',
+    containerName: 'tipbox_redis',
+    canControlContainer: true,
+  },
 ];
 
 // Seed bilgileri
@@ -258,30 +394,30 @@ const dashboardScript = `
       }
     }
 
-    async function runSeed(command, index) {
-      console.log('runSeed called:', command, index);
+    async function runAllSeeds() {
+      console.log('runAllSeeds called');
       
-      const button = document.getElementById('btn-' + index);
-      const status = document.getElementById('status-' + index);
+      const button = document.getElementById('btn-seed-all');
+      const status = document.getElementById('status-seed-all');
       
       if (!button || !status) {
-        console.error('Button or status element not found');
+        console.error('Button or status element not found for runAllSeeds');
         alert('Buton veya status elementi bulunamadı');
         return;
       }
       
       button.disabled = true;
-      status.innerHTML = '<div class="status loading">Çalıştırılıyor...</div>';
+      status.innerHTML = '<div class="status loading">Tüm seedler yükleniyor...</div>';
       
       let response = null;
       try {
-        console.log('Fetching /seed with command:', command);
+        console.log('Fetching /seed with command: db:seed');
         response = await fetch('/seed', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ command: command })
+          body: JSON.stringify({ command: 'db:seed' })
         });
         
         console.log('Response status:', response.status);
@@ -290,10 +426,6 @@ const dashboardScript = `
         
         if (response.ok) {
           status.innerHTML = '<div class="status success">✓ ' + data.message + '</div>';
-          // Seed işlemi başarılı olduğunda sayfayı 2 saniye sonra yenile
-          setTimeout(function() {
-            window.location.reload();
-          }, 2000);
         } else {
           status.innerHTML = '<div class="status error">✗ ' + (data.error || 'Bilinmeyen hata') + '</div>';
         }
@@ -303,16 +435,14 @@ const dashboardScript = `
         alert('Hata: ' + error.message);
       } finally {
         button.disabled = false;
-        if (!response || !response.ok) {
-          setTimeout(function() {
-            status.innerHTML = '';
-          }, 5000);
-        }
+        setTimeout(function() {
+          status.innerHTML = '';
+        }, 5000);
       }
     }
     
     // Global scope'a fonksiyonları ekle (onclick için)
-    window.runSeed = runSeed;
+    window.runAllSeeds = runAllSeeds;
     window.confirmClearTestData = confirmClearTestData;
     window.confirmClearSeedData = confirmClearSeedData;
     window.executeConfirmedAction = executeConfirmedAction;
@@ -387,12 +517,126 @@ const dashboardScript = `
       }
     }
     
+    async function updateDockerStatusUI() {
+      try {
+        const response = await fetch('/docker/status');
+        if (!response.ok) {
+          return;
+        }
+        const data = await response.json();
+        const statuses = data.statuses || {};
+        
+        Object.keys(statuses).forEach(function(containerName) {
+          const isRunning = !!statuses[containerName];
+          const elements = document.querySelectorAll('[data-container="' + containerName + '"]');
+          
+          elements.forEach(function(el) {
+            const dot = el.querySelector('.status-dot');
+            const label = el.querySelector('.status-label');
+            if (!dot) return;
+            
+            dot.classList.remove('status-online', 'status-offline');
+            if (isRunning) {
+              dot.classList.add('status-online');
+              if (label) label.textContent = 'Online';
+            } else {
+              dot.classList.add('status-offline');
+              if (label) label.textContent = 'Offline';
+            }
+          });
+
+          // İlgili kartlardaki Start/Stop butonlarını status'e göre enable/disable et
+          const actionContainers = document.querySelectorAll(
+            '.container-actions [onclick*="' + containerName + '"]'
+          );
+          actionContainers.forEach(function(btn) {
+            const isStartButton = btn.classList.contains('start');
+            const isStopButton = btn.classList.contains('stop');
+
+            if (isRunning) {
+              // Container çalışıyorsa: Start disabled, Stop enabled
+              if (isStartButton) btn.disabled = true;
+              if (isStopButton) btn.disabled = false;
+            } else {
+              // Container çalışmıyorsa: Start enabled, Stop disabled
+              if (isStartButton) btn.disabled = false;
+              if (isStopButton) btn.disabled = true;
+            }
+          });
+        });
+      } catch (e) {
+        // Sessizce yut, dashboard çalışmaya devam etsin
+      }
+    }
+    
+    async function dockerContainerStop(containerName) {
+      if (!confirm(containerName + ' container\\'ını durdurmak istediğinize emin misiniz?')) {
+        return;
+      }
+      
+      try {
+        const buttons = document.querySelectorAll('.container-actions [onclick*="' + containerName + '"]');
+        buttons.forEach(function(btn) { btn.disabled = true; });
+        
+        const response = await fetch('/docker/container/stop', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ containerName: containerName })
+        });
+        const data = await response.json().catch(function() { return {}; });
+        
+        if (!response.ok) {
+          alert('Hata: ' + (data.error || 'Container durdurulamadı'));
+        }
+        
+        await updateDockerStatusUI();
+      } catch (e) {
+        alert('Hata: ' + (e && e.message ? e.message : e));
+      } finally {
+        const buttons = document.querySelectorAll('.container-actions [onclick*="' + containerName + '"]');
+        buttons.forEach(function(btn) { btn.disabled = false; });
+      }
+    }
+    
+    async function dockerContainerStart(containerName) {
+      try {
+        const buttons = document.querySelectorAll('.container-actions [onclick*="' + containerName + '"]');
+        buttons.forEach(function(btn) { btn.disabled = true; });
+        
+        const response = await fetch('/docker/container/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ containerName: containerName })
+        });
+        const data = await response.json().catch(function() { return {}; });
+        
+        if (!response.ok) {
+          alert('Hata: ' + (data.error || 'Container başlatılamadı'));
+        }
+        
+        await updateDockerStatusUI();
+      } catch (e) {
+        alert('Hata: ' + (e && e.message ? e.message : e));
+      } finally {
+        const buttons = document.querySelectorAll('.container-actions [onclick*="' + containerName + '"]');
+        buttons.forEach(function(btn) { btn.disabled = false; });
+      }
+    }
+    
     // DOM yüklendikten sonra veya hemen çalıştır
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', setupEventListeners);
+      document.addEventListener('DOMContentLoaded', function() {
+        setupEventListeners();
+        updateDockerStatusUI();
+        setInterval(updateDockerStatusUI, 15000);
+      });
     } else {
       // DOM zaten yüklenmiş, hemen çalıştır
-      setTimeout(setupEventListeners, 100);
+      setTimeout(function() {
+        setupEventListeners();
+        updateDockerStatusUI();
+        setInterval(updateDockerStatusUI, 15000);
+      }, 100);
     }
 
     function showLoading(text) {
@@ -751,11 +995,85 @@ router.get('/', (req: Request, res: Response) => {
       align-items: center;
       gap: 10px;
     }
+    .service-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      justify-content: space-between;
+    }
     .port-card .icon {
       font-size: 1.3rem;
       color: #D0F205;
       width: 24px;
       text-align: center;
+    }
+    .status-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.75rem;
+      color: #A3A3A3;
+      margin-left: auto;
+      white-space: nowrap;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #525252;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.4);
+      transition: background-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .status-dot.status-online {
+      background: #22c55e;
+      box-shadow: 0 0 8px rgba(34, 197, 94, 0.8);
+    }
+    .status-dot.status-offline {
+      background: #ef4444;
+      box-shadow: 0 0 6px rgba(239, 68, 68, 0.7);
+    }
+    .container-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .container-button {
+      border: 1px solid rgba(163, 163, 163, 0.3);
+      background: rgba(255, 255, 255, 0.02);
+      color: #e5e5e5;
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 0.75rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+    }
+    .container-button:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(163, 163, 163, 0.5);
+      transform: translateY(-1px);
+    }
+    .container-button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .container-button.stop {
+      border-color: rgba(220, 53, 69, 0.6);
+      color: #fecaca;
+    }
+    .container-button.stop:hover:not(:disabled) {
+      background: rgba(220, 53, 69, 0.18);
+    }
+    .container-button.start {
+      border-color: rgba(34, 197, 94, 0.6);
+      color: #bbf7d0;
+    }
+    .container-button.start:hover:not(:disabled) {
+      background: rgba(34, 197, 94, 0.18);
     }
     .port-card p {
       color: #A3A3A3;
@@ -1097,49 +1415,80 @@ router.get('/', (req: Request, res: Response) => {
     <div class="section">
       <h2 class="section-title">Portlar</h2>
       <div class="ports-grid">
-        ${services.map(service => `
-          <div class="port-card" onclick="window.open('${service.url}', '_blank')">
-            <h3>
-              <i class="fas ${service.icon} icon"></i>
-              ${service.name}
-            </h3>
+        ${services.map(service => {
+          const host = req.headers.host || 'localhost:3000';
+          const [hostName] = host.split(':');
+          const protocol = req.protocol || 'http';
+          const baseForBackend = `${protocol}://${host}`;
+          const baseForOthers = `${protocol}://${hostName}`;
+          const url = service.port === 3000
+            ? `${baseForBackend}${service.path || ''}`
+            : `${baseForOthers}:${service.port}${service.path || ''}`;
+          return `
+          <div class="port-card" onclick="window.open('${url}', '_blank')">
+            <div class="service-header">
+              <h3>
+                <i class="fas ${service.icon} icon"></i>
+                ${service.name}
+              </h3>
+              ${service.containerName ? `
+                <div class="status-indicator" data-container="${service.containerName}">
+                  <span class="status-dot"></span>
+                  <span class="status-label">Kontrol ediliyor...</span>
+                </div>
+              ` : ''}
+            </div>
             <p>${service.description}</p>
-            <div class="url">${service.url}</div>
+            <div class="url">${url}</div>
+            ${service.canControlContainer ? `
+              <div class="container-actions" onclick="event.stopPropagation()">
+                <button
+                  class="container-button stop"
+                  onclick="dockerContainerStop('${service.containerName}'); event.stopPropagation();"
+                  title="${service.containerName} container\\'ını durdur"
+                >
+                  <i class="fas fa-stop"></i>
+                  Stop
+                </button>
+                <button
+                  class="container-button start"
+                  onclick="dockerContainerStart('${service.containerName}'); event.stopPropagation();"
+                  title="${service.containerName} container\\'ını başlat"
+                >
+                  <i class="fas fa-play"></i>
+                  Start
+                </button>
+              </div>
+            ` : ''}
           </div>
-        `).join('')}
+          `;
+        }).join('')}
       </div>
     </div>
 
     <div class="section">
-      <h2 class="section-title">Database: Seed Verileri</h2>
+      <h2 class="section-title">Database: Seed Yönetimi</h2>
       <div class="seed-grid">
-        ${seedCommands.map((seed, index) => `
-          <div class="seed-card">
-            <h3>
-              <i class="fas ${seed.icon} icon"></i>
-              ${seed.name}
-            </h3>
-            <p>${seed.description}</p>
-            <button class="seed-button" onclick="runSeed('${seed.command}', ${index})" id="btn-${index}">
-              Seed Çalıştır
-            </button>
-            <div id="status-${index}"></div>
-          </div>
-        `).join('')}
-      </div>
-    </div>
+        <div class="seed-card">
+          <h3>
+            <i class="fas fa-database icon"></i>
+            Tüm Seedleri Oluştur
+          </h3>
+          <p><code>prisma/seed.ts</code> dosyasındaki tüm seed verilerini veritabanına yazar.</p>
+          <button class="seed-button" onclick="runAllSeeds()" id="btn-seed-all">
+            Seedleri Yükle
+          </button>
+          <div id="status-seed-all"></div>
+        </div>
 
-    <div class="section">
-      <h2 class="section-title">Database: Veri Temizleme</h2>
-      <div class="seed-grid">
         <div class="seed-card danger-card">
           <h3>
             <i class="fas fa-trash-alt icon"></i>
-            Seed Verilerini Kaldır
+            Tüm Seedleri Temizle
           </h3>
-          <p>Tüm seed verilerini veritabanından kaldırır</p>
+          <p>Veritabanındaki tüm seed verilerini temizler.</p>
           <button class="danger-button" id="btn-clear-seed">
-            Seed Verilerini Kaldır
+            Seedleri Temizle
           </button>
           <div id="status-clear-seed"></div>
         </div>
@@ -1499,6 +1848,73 @@ router.post('/docker/start', async (req: Request, res: Response) => {
   }
 });
 
+// Tekil container start/stop endpoint'leri
+router.post('/docker/container/stop', async (req: Request, res: Response) => {
+  try {
+    const { containerName } = req.body;
+    const allowedContainers = [
+      'tipbox_backend',
+      'tipbox_postgres',
+      'tipbox_redis',
+      'tipbox_minio',
+      'tipbox_pgadmin',
+      'tipbox_prisma_studio'
+    ];
+
+    if (!containerName || !allowedContainers.includes(containerName)) {
+      return res.status(400).json({ error: 'Geçersiz container adı' });
+    }
+
+    await execAsync(`docker stop ${containerName}`, {
+      maxBuffer: 1024 * 1024,
+      encoding: 'utf8'
+    });
+
+    res.json({
+      message: `${containerName} durduruldu`
+    });
+  } catch (error: any) {
+    console.error('Docker single container stop error:', error);
+    res.status(500).json({
+      error: error.message || 'Container durdurulurken hata oluştu',
+      details: error.stderr || error.stdout
+    });
+  }
+});
+
+router.post('/docker/container/start', async (req: Request, res: Response) => {
+  try {
+    const { containerName } = req.body;
+    const allowedContainers = [
+      'tipbox_backend',
+      'tipbox_postgres',
+      'tipbox_redis',
+      'tipbox_minio',
+      'tipbox_pgadmin',
+      'tipbox_prisma_studio'
+    ];
+
+    if (!containerName || !allowedContainers.includes(containerName)) {
+      return res.status(400).json({ error: 'Geçersiz container adı' });
+    }
+
+    await execAsync(`docker start ${containerName}`, {
+      maxBuffer: 1024 * 1024,
+      encoding: 'utf8'
+    });
+
+    res.json({
+      message: `${containerName} başlatıldı`
+    });
+  } catch (error: any) {
+    console.error('Docker single container start error:', error);
+    res.status(500).json({
+      error: error.message || 'Container başlatılırken hata oluştu',
+      details: error.stderr || error.stdout
+    });
+  }
+});
+
 router.get('/docker/status', async (req: Request, res: Response) => {
   try {
     const containerNames = [
@@ -1514,18 +1930,31 @@ router.get('/docker/status', async (req: Request, res: Response) => {
     let allRunning = true;
 
     for (const containerName of containerNames) {
+      let isRunning = false;
+
+      // 1) Önce docker CLI ile kontrol etmeyi dene (varsa)
       try {
         const result = await execAsync(`docker ps --filter "name=${containerName}" --format "{{.Names}}"`, {
           maxBuffer: 1024 * 1024,
           encoding: 'utf8'
         });
-        const isRunning = result.stdout.trim().length > 0;
-        statuses[containerName] = isRunning;
-        if (!isRunning) {
-          allRunning = false;
+        isRunning = result.stdout.trim().length > 0;
+      } catch (error: any) {
+        // docker yoksa veya erişilemiyorsa logla ama akışı bozma
+        console.warn(`docker ps kontrolü başarısız (${containerName}):`, error?.message || error);
+      }
+
+      // 2) CLI başarısızsa veya isim eşleşmiyorsa, port/health-check fallback kullan
+      if (!isRunning) {
+        try {
+          isRunning = await checkContainerByPort(containerName);
+        } catch {
+          isRunning = false;
         }
-      } catch {
-        statuses[containerName] = false;
+      }
+
+      statuses[containerName] = isRunning;
+      if (!isRunning) {
         allRunning = false;
       }
     }
@@ -1542,7 +1971,7 @@ router.get('/docker/status', async (req: Request, res: Response) => {
   }
 });
 
-// Seed çalıştırma endpoint'i
+// Seed çalıştırma endpoint'i (sadece izin verilen komutlar)
 router.post('/seed', async (req: Request, res: Response) => {
   const { command } = req.body;
 
@@ -1550,7 +1979,8 @@ router.post('/seed', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Command gerekli' });
   }
 
-  const validCommands = seedCommands.map(s => s.command);
+  // Sadece tanımlı script'lerin çalışmasına izin ver
+  const validCommands = ['db:seed'];
   if (!validCommands.includes(command)) {
     return res.status(400).json({ error: 'Geçersiz command' });
   }

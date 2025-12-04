@@ -3370,7 +3370,414 @@ async function main() {
   }
   console.log(`✅ ${experienceSeeds.length} experience posts created`)
 
+  const AUDIO_MAX_BRAND_ID = 'e5c57b8e-b4ac-4de8-a12a-4d1724f8099b';
+  const AUDIO_MAX_PRODUCT_ID = 'dac5d8e2-f0ff-471d-9350-1f9464f98f95';
+  console.log('🎧 Creating dedicated AudioMax experience posts for brand endpoints...');
+
+  const audioMaxBrand = await prisma.brand.findUnique({ where: { id: AUDIO_MAX_BRAND_ID } });
+  const audioMaxProduct = await prisma.product.findUnique({
+    where: { id: AUDIO_MAX_PRODUCT_ID },
+    include: {
+      group: {
+        include: {
+          subCategory: true,
+        },
+      },
+    },
+  });
+
+  const audioMaxSubCategoryId =
+    audioMaxProduct?.group?.subCategoryId ||
+    audioMaxProduct?.group?.subCategory?.id ||
+    kulakliklarSubCategory?.id ||
+    akilliTelefonlarSubCategory?.id ||
+    techSubCategories[0]?.id ||
+    null;
+
+  const audioMaxMainCategoryId =
+    audioMaxProduct?.group?.subCategory?.mainCategoryId ||
+    kulakliklarSubCategory?.mainCategoryId ||
+    akilliTelefonlarSubCategory?.mainCategoryId ||
+    techCategory.id;
+
+  if (!audioMaxBrand || !audioMaxProduct || !audioMaxSubCategoryId || !audioMaxMainCategoryId) {
+    console.warn('⚠️ AudioMax brand/product or categories missing, skipping dedicated experience posts');
+  } else {
+    type AudioMaxExperienceTemplate = {
+      title: string;
+      body: string;
+      tags: string[];
+      inventoryRequired?: boolean;
+      isBoosted?: boolean;
+    };
+
+    const audioMaxExperienceTemplates: AudioMaxExperienceTemplate[] = [
+      {
+        title: '#{brand} reference mix session #{index}',
+        body: 'Documented my full reference chain with #{product}, including pad swap notes and SPL meter readings.',
+        tags: ['AudioMax', 'Studio'],
+      },
+      {
+        title: 'Noise cancelling sprint #{index}',
+        body: 'Tried #{product} on a 45-minute subway ride and tracked how ANC handled low rumbles vs human voices.',
+        tags: ['NoiseCancelling', 'Commute'],
+      },
+      {
+        title: 'Game night tuning #{index}',
+        body: 'Configured EQ presets on #{product} for FPS footsteps and JRPG orchestral cues, sharing screenshots.',
+        tags: ['Gaming', 'EQ'],
+      },
+      {
+        title: 'Remote work comfort log #{index}',
+        body: 'After #{index} days of six-hour calls with #{product}, I summarized clamp force tweaks and ear pad cooling tricks.',
+        tags: ['RemoteWork', 'Comfort'],
+      },
+      {
+        title: 'Vinyl mastering check #{index}',
+        body: 'Ran my favorite vinyl masters through #{product} and compared analog warmth vs balanced output on each side.',
+        tags: ['Vinyl', 'Analog'],
+        isBoosted: true,
+      },
+    ];
+
+    const audioMaxExperiencePosts = Array.from({ length: 20 }).map((_, idx) => {
+      const template = audioMaxExperienceTemplates[idx % audioMaxExperienceTemplates.length];
+      const replacements = {
+        index: (idx + 1).toString(),
+        brand: audioMaxBrand.name,
+        product: audioMaxProduct.name,
+      };
+
+      return {
+        title: templateReplacer(template.title, replacements),
+        body: templateReplacer(template.body, replacements),
+        tags: template.tags,
+        inventoryRequired: template.inventoryRequired ?? true,
+        isBoosted: template.isBoosted ?? idx % 4 === 0,
+      };
+    });
+
+    for (const seed of audioMaxExperiencePosts) {
+      const postId = generateUlid();
+      await prisma.contentPost.create({
+        data: {
+          id: postId,
+          userId: userIdToUse,
+          type: 'EXPERIENCE',
+          title: seed.title,
+          body: seed.body,
+          mainCategoryId: audioMaxMainCategoryId,
+          subCategoryId: audioMaxSubCategoryId,
+          productId: AUDIO_MAX_PRODUCT_ID,
+          inventoryRequired: seed.inventoryRequired ?? true,
+          isBoosted: seed.isBoosted ?? false,
+        },
+      });
+
+      if (seed.tags.length) {
+        await prisma.contentPostTag.createMany({
+          data: seed.tags.map((tag) => ({
+            postId,
+            tag,
+          })),
+          skipDuplicates: true,
+        });
+      }
+    }
+
+    console.log(`✅ ${audioMaxExperiencePosts.length} dedicated AudioMax experience posts created`);
+  }
+
   console.log('✅ Content posts created (Free context mix, Tips, Benchmarks, Experience)')
+
+  console.log('🎯 Ensuring dedicated AudioMax product content for experiences / comparisons / news...');
+
+  const targetExperiencePostsPerProduct = 12;
+  const existingAudioMaxExperienceCount = await prisma.contentPost.count({
+    where: {
+      productId: AUDIO_MAX_PRODUCT_ID,
+      type: 'FREE',
+    },
+  });
+
+  if (existingAudioMaxExperienceCount < targetExperiencePostsPerProduct) {
+    const postsToCreate = targetExperiencePostsPerProduct - existingAudioMaxExperienceCount;
+    console.log(`📝 Creating ${postsToCreate} additional FREE experience posts for AudioMax product...`);
+
+    const experienceTemplates = [
+      'Sharing my daily mixing workflow on #{product} with focus on midrange clarity.',
+      'Tried #{product} for casual listening and critical sessions back-to-back, here are the differences.',
+      'Testing comfort on #{product} after a full workday of calls and playlists.',
+      'Walking through my EQ and gain-staging chain that works best with #{product}.',
+    ];
+
+    for (let i = 0; i < postsToCreate; i++) {
+      const template =
+        experienceTemplates[i % experienceTemplates.length];
+
+      const title = `AudioMax Experience #${existingAudioMaxExperienceCount + i + 1}`;
+      const body = templateReplacer(template, {
+        product: audioMaxProduct?.name || 'AudioMax Studio Headphones',
+      });
+
+      const postId = generateUlid();
+      await prisma.contentPost.create({
+        data: {
+          id: postId,
+          userId: userIdToUse,
+          type: 'EXPERIENCE',
+          title,
+          body,
+          productId: AUDIO_MAX_PRODUCT_ID,
+          inventoryRequired: true,
+          isBoosted: false,
+          createdAt: daysAgo(randomBetween(1, 20)),
+          likesCount: randomBetween(10, 40),
+          commentsCount: randomBetween(10, 40),
+          sharesCount: randomBetween(10, 40),
+          favoritesCount: randomBetween(10, 40),
+          viewsCount: randomBetween(80, 400),
+        },
+      });
+    }
+
+    console.log(`✅ AudioMax product now has at least ${targetExperiencePostsPerProduct} FREE experience posts`);
+  } else {
+    console.log('ℹ️ AudioMax product already has enough FREE experience posts');
+  }
+
+  const targetComparisonPostsPerProduct = 12;
+  const existingAudioMaxComparisonCount = await prisma.contentPost.count({
+    where: {
+      productId: AUDIO_MAX_PRODUCT_ID,
+      type: 'COMPARE',
+    },
+  });
+
+  const comparisonPartner = audioMaxBrand
+    ? await prisma.product.findFirst({
+        where: {
+          brand: audioMaxBrand.name,
+          id: { not: AUDIO_MAX_PRODUCT_ID },
+        },
+      })
+    : null;
+
+  if (comparisonPartner && existingAudioMaxComparisonCount < targetComparisonPostsPerProduct) {
+    const postsToCreate = targetComparisonPostsPerProduct - existingAudioMaxComparisonCount;
+    console.log(`⚖️  Creating ${postsToCreate} COMPARE posts for AudioMax product...`);
+
+    const comparisonTemplateBody =
+      'Side-by-side comparison between #{productPrimary} and #{productSecondary} focused on stage, detail and comfort.';
+
+    for (let i = 0; i < postsToCreate; i++) {
+      const postId = generateUlid();
+      const title = `AudioMax Comparison #${existingAudioMaxComparisonCount + i + 1}`;
+      const body = templateReplacer(comparisonTemplateBody, {
+        productPrimary: audioMaxProduct?.name || 'AudioMax Studio Headphones',
+        productSecondary: comparisonPartner.name,
+      });
+
+      await prisma.contentPost.create({
+        data: {
+          id: postId,
+          userId: userIdToUse,
+          type: 'COMPARE',
+          title,
+          body,
+          productId: AUDIO_MAX_PRODUCT_ID,
+          inventoryRequired: false,
+          isBoosted: false,
+          createdAt: daysAgo(randomBetween(1, 20)),
+          likesCount: randomBetween(10, 40),
+          commentsCount: randomBetween(10, 40),
+          sharesCount: randomBetween(10, 40),
+          favoritesCount: randomBetween(10, 40),
+          viewsCount: randomBetween(80, 400),
+        },
+      });
+
+      await prisma.postComparison
+        .create({
+          data: {
+            postId,
+            product1Id: AUDIO_MAX_PRODUCT_ID,
+            product2Id: comparisonPartner.id,
+            comparisonSummary:
+              'Practical benchmark between two AudioMax configurations for everyday listening and studio work.',
+          },
+        })
+        .catch(() => {});
+    }
+
+    console.log(`✅ AudioMax product now has at least ${targetComparisonPostsPerProduct} COMPARE posts`);
+  } else if (!comparisonPartner) {
+    console.log('⚠️ No partner product found for AudioMax comparisons, skipping COMPARE seeding');
+  } else {
+    console.log('ℹ️ AudioMax product already has enough COMPARE posts');
+  }
+
+  const targetNewsPostsPerProduct = 12;
+  const existingAudioMaxNewsCount = await prisma.contentPost.count({
+    where: {
+      productId: AUDIO_MAX_PRODUCT_ID,
+      type: 'UPDATE',
+    },
+  });
+
+  if (existingAudioMaxNewsCount < targetNewsPostsPerProduct) {
+    const postsToCreate = targetNewsPostsPerProduct - existingAudioMaxNewsCount;
+    console.log(`📰 Creating ${postsToCreate} UPDATE news posts for AudioMax product...`);
+
+    const newsTemplates = [
+      'New firmware for #{product} improves Bluetooth stability and latency for gaming.',
+      'Limited edition pads for #{product} are now available with improved comfort and isolation.',
+      'AudioMax pushed a tuning update for #{product}, focusing on more neutral upper mids.',
+      'A new preset pack for #{product} was released for popular streaming and DAW platforms.',
+    ];
+
+    for (let i = 0; i < postsToCreate; i++) {
+      const template = newsTemplates[i % newsTemplates.length];
+      const title = `AudioMax News #${existingAudioMaxNewsCount + i + 1}`;
+      const body = templateReplacer(template, {
+        product: audioMaxProduct?.name || 'AudioMax Studio Headphones',
+      });
+
+      const postId = generateUlid();
+      await prisma.contentPost.create({
+        data: {
+          id: postId,
+          userId: userIdToUse,
+          type: 'UPDATE',
+          title,
+          body,
+          productId: AUDIO_MAX_PRODUCT_ID,
+          inventoryRequired: false,
+          isBoosted: false,
+          createdAt: daysAgo(randomBetween(1, 20)),
+          likesCount: randomBetween(10, 40),
+          commentsCount: randomBetween(10, 40),
+          sharesCount: randomBetween(10, 40),
+          favoritesCount: randomBetween(10, 40),
+          viewsCount: randomBetween(80, 400),
+        },
+      });
+    }
+
+    console.log(`✅ AudioMax product now has at least ${targetNewsPostsPerProduct} UPDATE posts`);
+  } else {
+    console.log('ℹ️ AudioMax product already has enough UPDATE news posts');
+  }
+
+  // Extra diversity for AudioMax news feed: TIPS + QUESTION posts for the same product
+  console.log('🎨 Ensuring diverse news feed types for AudioMax product (TIPS + QUESTION)...');
+
+  const existingAudioMaxTipsCount = await prisma.contentPost.count({
+    where: {
+      productId: AUDIO_MAX_PRODUCT_ID,
+      type: 'TIPS',
+    },
+  });
+
+  const existingAudioMaxQuestionCount = await prisma.contentPost.count({
+    where: {
+      productId: AUDIO_MAX_PRODUCT_ID,
+      type: 'QUESTION',
+    },
+  });
+
+  const targetTipsPerProduct = 4;
+  const targetQuestionsPerProduct = 4;
+
+  if (existingAudioMaxTipsCount < targetTipsPerProduct) {
+    const postsToCreate = targetTipsPerProduct - existingAudioMaxTipsCount;
+    console.log(`💡 Creating ${postsToCreate} TIPS posts for AudioMax product...`);
+
+    const tipTemplates = [
+      'Best EQ curve I found for #{product} when listening at low volume late at night.',
+      'Simple burn-in routine for #{product} that made the bass feel tighter after a few days.',
+      'How to keep ear pads on #{product} clean without damaging the material.',
+      'Quick checklist before traveling with #{product}: case, cable, and spare tips.',
+    ];
+
+    for (let i = 0; i < postsToCreate; i++) {
+      const template = tipTemplates[i % tipTemplates.length];
+      const title = `AudioMax Tip #${existingAudioMaxTipsCount + i + 1}`;
+      const body = templateReplacer(template, {
+        product: audioMaxProduct?.name || 'AudioMax Studio Headphones',
+      });
+
+      const postId = generateUlid();
+      await prisma.contentPost.create({
+        data: {
+          id: postId,
+          userId: userIdToUse,
+          type: 'TIPS',
+          title,
+          body,
+          productId: AUDIO_MAX_PRODUCT_ID,
+          inventoryRequired: false,
+          isBoosted: false,
+          createdAt: daysAgo(randomBetween(1, 20)),
+          likesCount: randomBetween(10, 40),
+          commentsCount: randomBetween(10, 40),
+          sharesCount: randomBetween(10, 40),
+          favoritesCount: randomBetween(10, 40),
+          viewsCount: randomBetween(80, 400),
+        },
+      });
+    }
+  }
+
+  if (existingAudioMaxQuestionCount < targetQuestionsPerProduct) {
+    const postsToCreate = targetQuestionsPerProduct - existingAudioMaxQuestionCount;
+    console.log(`❓ Creating ${postsToCreate} QUESTION posts for AudioMax product...`);
+
+    const questionTemplates = [
+      'Which pad option for #{product} gives the best balance between comfort and isolation?',
+      'How much gain do you usually run on #{product} with your audio interface?',
+      'Any favorite genres that really shine on #{product} compared to other headphones?',
+      'Does #{product} pair better with warmer or more neutral DAC/amp chains?',
+    ];
+
+    for (let i = 0; i < postsToCreate; i++) {
+      const template = questionTemplates[i % questionTemplates.length];
+      const title = `AudioMax Question #${existingAudioMaxQuestionCount + i + 1}`;
+      const body = templateReplacer(template, {
+        product: audioMaxProduct?.name || 'AudioMax Studio Headphones',
+      });
+
+      const postId = generateUlid();
+      await prisma.contentPost.create({
+        data: {
+          id: postId,
+          userId: userIdToUse,
+          type: 'QUESTION',
+          title,
+          body,
+          productId: AUDIO_MAX_PRODUCT_ID,
+          inventoryRequired: false,
+          isBoosted: false,
+          createdAt: daysAgo(randomBetween(1, 20)),
+          likesCount: randomBetween(10, 40),
+          commentsCount: randomBetween(10, 40),
+          sharesCount: randomBetween(10, 40),
+          favoritesCount: randomBetween(10, 40),
+          viewsCount: randomBetween(80, 400),
+        },
+      });
+
+      await prisma.postQuestion
+        .create({
+          data: {
+            postId,
+            expectedAnswerFormat: 'SHORT',
+            relatedProductId: AUDIO_MAX_PRODUCT_ID,
+          },
+        })
+        .catch(() => {});
+    }
+  }
 
   // Content Comments (Replies için)
   const comments = await prisma.contentPost.findMany({
@@ -3870,7 +4277,8 @@ async function main() {
         type: 'BADGE',
         rarity: 'RARE',
         isTransferable: true,
-        currentOwnerId: null, // Satışta olduğu için owner yok
+        // Satış akışını test edebilmek için owner'ı kullanıcıda tutuyoruz
+        currentOwnerId: TARGET_USER_ID,
       } as any
     }),
     prisma.nFT.create({
@@ -3881,7 +4289,7 @@ async function main() {
         type: 'COSMETIC',
         rarity: 'EPIC',
         isTransferable: true,
-        currentOwnerId: null,
+        currentOwnerId: TARGET_USER_ID,
       } as any
     }),
     prisma.nFT.create({
@@ -3892,7 +4300,7 @@ async function main() {
         type: 'BADGE',
         rarity: 'EPIC',
         isTransferable: true,
-        currentOwnerId: null,
+        currentOwnerId: TARGET_USER_ID,
       } as any
     }),
     prisma.nFT.create({
@@ -3903,7 +4311,7 @@ async function main() {
         type: 'COSMETIC',
         rarity: 'RARE',
         isTransferable: true,
-        currentOwnerId: null,
+        currentOwnerId: TARGET_USER_ID,
       } as any
     }),
     prisma.nFT.create({
@@ -3914,7 +4322,7 @@ async function main() {
         type: 'LOOTBOX',
         rarity: 'EPIC',
         isTransferable: true,
-        currentOwnerId: null,
+        currentOwnerId: TARGET_USER_ID,
       } as any
     }),
     prisma.nFT.create({
@@ -3925,7 +4333,7 @@ async function main() {
         type: 'BADGE',
         rarity: 'COMMON',
         isTransferable: true,
-        currentOwnerId: null,
+        currentOwnerId: TARGET_USER_ID,
       } as any
     }),
     
@@ -4862,6 +5270,50 @@ async function main() {
     )
   )
   console.log(`✅ ${eventStats.length} event stat oluşturuldu`)
+
+  // 3.d Limited event için senaryolar ve katılımcılar (events/{id}/posts endpoint'i için)
+  console.log('🧩 Creating scenarios & choices for limited-time promotion event...')
+  const limitedEvent = createdEvents.find((e) => e && e.title === 'Special Discount Campaign')
+  if (limitedEvent) {
+    const limitedEventId = limitedEvent.id as string
+
+    // Hottest / limited event örneğinde kullanılan kullanıcılar:
+    const limitedEventUserIds = [
+      TRUST_USER_IDS[2], // 3333...
+      TARGET_USER_ID,    // 248c...
+      TRUST_USER_IDS[1], // 2222...
+      TEST_USER_ID,      // 480f...
+    ]
+
+    // Tek bir senaryo oluştur
+    const scenario = await prisma.wishboxScenario.create({
+      data: {
+        eventId: limitedEventId,
+        title: 'Special Discount Engagement',
+        description: 'Users participating in the Special Discount Campaign.',
+        orderIndex: 1,
+      },
+    })
+
+    // Her kullanıcı için 10 adet choice oluşturalım (toplam 40 satır)
+    const choicesData = limitedEventUserIds.flatMap((userId) =>
+      Array.from({ length: 10 }).map((_, idx) => ({
+        scenarioId: scenario.id,
+        userId,
+        choiceText: `Participation #${idx + 1} for user ${userId}`,
+        isSelected: true,
+      }))
+    )
+
+    await prisma.scenarioChoice.createMany({
+      data: choicesData,
+      skipDuplicates: true,
+    })
+
+    console.log(`✅ Limited event için ${choicesData.length} scenario choice oluşturuldu`)
+  } else {
+    console.log('⚠️ Special Discount Campaign eventi bulunamadı, limited event için ekstra scenario oluşturulmadı')
+  }
 
   // Add badge rewards to events
   console.log('🏅 Creating event badge rewards...')
@@ -6263,6 +6715,278 @@ async function main() {
   }
   console.log(`✅ ${experienceNewsPostsCount} experience ve news post oluşturuldu seed brand product'lar için`)
 
+  // Brand feed'de farklı tipleri gösterebilmek için AudioMax odaklı ekstra post'lar
+  console.log('📰 Creating AudioMax-specific brand feed posts...')
+  const audioMaxBrandForFeed = await prisma.brand.findFirst({ where: { name: 'AudioMax' } })
+  if (audioMaxBrandForFeed) {
+    const audioMaxProducts = await prisma.product.findMany({
+      where: { brand: audioMaxBrandForFeed.name },
+      include: {
+        group: {
+          include: {
+            subCategory: {
+              include: {
+                mainCategory: true,
+              },
+            },
+          },
+        },
+      },
+    })
+
+    if (audioMaxProducts.length > 0) {
+      // Brand feed kartlarında images[] alanını doldurmak için,
+      // TEST_USER_ID envanterine AudioMax ürün görsellerini ekleyelim.
+      console.log('🖼  Ensuring AudioMax inventory media for brand feed images...')
+      for (const product of audioMaxProducts) {
+        try {
+          const inventory = await prisma.inventory.upsert({
+            where: {
+              userId_productId: {
+                userId: TEST_USER_ID,
+                productId: product.id,
+              },
+            },
+            update: {},
+            create: {
+              userId: TEST_USER_ID,
+              productId: product.id,
+              hasOwned: true,
+            },
+          })
+
+          await prisma.inventoryMedia.createMany({
+            data: [
+              {
+                inventoryId: inventory.id,
+                mediaUrl: product.imageUrl || getSeedMediaUrl('product.headphone.primary'),
+                type: 'IMAGE',
+              },
+            ],
+            skipDuplicates: true,
+          })
+        } catch (error) {
+          console.warn(`⚠️ AudioMax inventory media oluşturulamadı (${product.id}): ${error}`)
+        }
+      }
+
+      type AudioMaxFeedTemplate = {
+        type: 'FREE' | 'TIPS' | 'QUESTION' | 'EXPERIENCE' | 'UPDATE' | 'COMPARE'
+        title: string
+        body: string
+        tag?: string
+        tipCategory?: 'USAGE' | 'PURCHASE' | 'CARE' | 'OTHER'
+        answerFormat?: 'SHORT' | 'LONG'
+        comparisonSummary?: string
+        comparisonMetrics?: Array<{ name: string; scoreProduct1: number; scoreProduct2: number }>
+      }
+
+      const brandFeedTitlePrefix = 'AudioMax Feed -'
+      const existingAudioMaxFeedPosts = await prisma.contentPost.count({
+        where: {
+          title: {
+            startsWith: brandFeedTitlePrefix,
+          },
+        },
+      })
+
+      const targetAudioMaxFeedPosts = 20
+      const postsNeeded = Math.max(0, targetAudioMaxFeedPosts - existingAudioMaxFeedPosts)
+
+      if (postsNeeded > 0) {
+        const feedTemplates: AudioMaxFeedTemplate[] = [
+          {
+            type: 'FREE',
+            title: 'Studio Headphones Deep Dive',
+            body: 'We spent a full week mixing and mastering tracks only with the AudioMax Studio Headphones. The tuning is flatter than most consumer cans, so it is easier to catch harsh mids early in the process.',
+            tag: 'Review',
+          },
+          {
+            type: 'EXPERIENCE',
+            title: 'Wireless Speaker Travel Notes',
+            body: 'AudioMax Wireless Speaker handled three different apartment setups without needing a manual reset. Multi-room sync stayed locked even when bandwidth was terrible.',
+            tag: 'Experience',
+          },
+          {
+            type: 'TIPS',
+            title: 'Earbuds Pro Fit Guide',
+            body: 'Try the medium tips first, then rotate each bud slightly forward once inserted. It creates a more stable seal and the adaptive EQ immediately sounds fuller.',
+            tag: 'Tips',
+            tipCategory: 'USAGE',
+          },
+          {
+            type: 'UPDATE',
+            title: 'Soundbar Firmware Rollout',
+            body: 'AudioMax pushed a firmware update that finally exposes granular dialog boost levels. If you watch a lot of documentaries, set it to +2 and enjoy cleaner narration.',
+            tag: 'Update',
+          },
+          {
+            type: 'QUESTION',
+            title: 'Best DAC Pairing?',
+            body: 'Which AudioMax DAC preset works better for jazz vinyl transfers? Looking for feedback from people who digitize their collections often.',
+            tag: 'Question',
+            answerFormat: 'SHORT',
+          },
+          {
+            type: 'COMPARE',
+            title: 'Speaker vs Soundbar Showdown',
+            body: 'We put the Wireless Speaker next to the flagship Soundbar to see which one handles wide living rooms better.',
+            tag: 'Benchmark',
+            comparisonSummary: 'The Soundbar still wins on channel separation, but the Wireless Speaker is surprisingly full when positioned near a back wall.',
+            comparisonMetrics: [
+              { name: 'Fiyat', scoreProduct1: 7, scoreProduct2: 6 },
+              { name: 'Kalite', scoreProduct1: 9, scoreProduct2: 8 },
+              { name: 'Özellikler', scoreProduct1: 8, scoreProduct2: 9 },
+            ],
+          },
+          {
+            type: 'FREE',
+            title: 'Microphone Workflow Notes',
+            body: 'AudioMax Microphone pairs really well with the default compressor settings inside Logic. Minimal de-essing was required even on bright voices.',
+            tag: 'Workflow',
+          },
+          {
+            type: 'EXPERIENCE',
+            title: 'Turntable Daily Driver',
+            body: 'Using the AudioMax Turntable for a month reminded me how quiet a well-isolated motor can be. It barely transfers any vibration to the cabinet.',
+            tag: 'Vinyl',
+          },
+        ]
+
+        const comparisonMetrics = await prisma.comparisonMetric.findMany()
+        const metricMap = new Map(comparisonMetrics.map((metric) => [metric.name, metric.id]))
+
+        let createdAudioMaxFeedPosts = 0
+        for (let i = 0; i < postsNeeded; i++) {
+          const template = feedTemplates[i % feedTemplates.length]
+          const product = audioMaxProducts[i % audioMaxProducts.length]
+          if (!product) continue
+
+          const subCategoryId =
+            (product.group && 'subCategoryId' in product.group && (product.group as any).subCategoryId) ||
+            product.group?.subCategory?.id ||
+            null
+          const mainCategoryId =
+            product.group?.subCategory?.mainCategoryId ||
+            product.group?.subCategory?.mainCategory?.id ||
+            mainCategories[0]?.id ||
+            null
+
+          const postId = generateUlid()
+          const postUserId = TRUST_USER_IDS[(i + createdAudioMaxFeedPosts) % TRUST_USER_IDS.length] || TEST_USER_ID
+
+          try {
+            await prisma.contentPost.create({
+              data: {
+                id: postId,
+                userId: postUserId,
+                type: template.type,
+                title: `${brandFeedTitlePrefix} ${template.title} #${existingAudioMaxFeedPosts + i + 1}`,
+                body: template.body,
+                productId: product.id,
+                productGroupId: product.groupId || null,
+                subCategoryId,
+                mainCategoryId,
+                inventoryRequired: true,
+                isBoosted: (existingAudioMaxFeedPosts + i) % 5 === 0,
+                createdAt: daysAgo(randomBetween(1, 20)),
+              },
+            })
+
+            const tagValues = [audioMaxBrandForFeed.name, product.name]
+            if (template.tag) {
+              tagValues.push(template.tag)
+            }
+            await prisma.contentPostTag.createMany({
+              data: tagValues.map((tag) => ({
+                postId,
+                tag,
+              })),
+              skipDuplicates: true,
+            })
+
+            if (template.type === 'TIPS') {
+              await prisma.postTip.create({
+                data: {
+                  postId,
+                  tipCategory: template.tipCategory || 'USAGE',
+                  isVerified: true,
+                },
+              })
+            }
+
+            if (template.type === 'QUESTION') {
+              await prisma.postQuestion.create({
+                data: {
+                  postId,
+                  expectedAnswerFormat: template.answerFormat || 'SHORT',
+                  relatedProductId: product.id,
+                },
+              })
+            }
+
+            if (template.type === 'COMPARE') {
+              if (audioMaxProducts.length < 2) {
+                console.warn('⚠️ Compare template skipped — insufficient AudioMax products')
+              } else {
+                const secondaryProduct = audioMaxProducts[(i + 1) % audioMaxProducts.length] || product
+                const comparison = await prisma.postComparison.create({
+                  data: {
+                    postId,
+                    product1Id: product.id,
+                    product2Id: secondaryProduct.id,
+                    comparisonSummary:
+                      template.comparisonSummary ||
+                      'Detailed look at how two AudioMax configurations behave in real living rooms.',
+                  },
+                })
+
+                const scorePayload =
+                  template.comparisonMetrics ||
+                  [
+                    { name: 'Fiyat', scoreProduct1: 7, scoreProduct2: 6 },
+                    { name: 'Kalite', scoreProduct1: 9, scoreProduct2: 8 },
+                  ]
+
+                const scoreRows = scorePayload
+                  .map((metric) => {
+                    const metricId = metricMap.get(metric.name)
+                    if (!metricId) return null
+                    return {
+                      comparisonId: comparison.id,
+                      metricId,
+                      scoreProduct1: metric.scoreProduct1,
+                      scoreProduct2: metric.scoreProduct2,
+                    }
+                  })
+                  .filter(Boolean) as Array<Prisma.PostComparisonScoreCreateManyInput>
+
+                if (scoreRows.length > 0) {
+                  await prisma.postComparisonScore.createMany({
+                    data: scoreRows,
+                    skipDuplicates: true,
+                  })
+                }
+              }
+            }
+
+            createdAudioMaxFeedPosts++
+          } catch (error) {
+            console.warn(`AudioMax brand feed post'u oluşturulamadı: ${error}`)
+          }
+        }
+
+        console.log(`✅ ${createdAudioMaxFeedPosts} AudioMax brand feed post'u hazırlandı`)
+      } else {
+        console.log('✅ AudioMax brand feed already has 20+ posts')
+      }
+    } else {
+      console.warn('⚠️ AudioMax markası için product bulunamadı, brand feed post eklenemedi')
+    }
+  } else {
+    console.warn('⚠️ AudioMax brand kaydı bulunamadı')
+  }
+
   // 5. Create Expert Requests and Answers
   console.log('💡 Creating expert requests...')
   const expertRequests = await Promise.all([
@@ -6845,7 +7569,7 @@ async function main() {
   summaryLines.push('')
   summaryLines.push('🔗 Test Endpoints:')
   summaryLines.push('• Feed: GET /feed (with auth token)')
-  summaryLines.push('• Filtered Feed: GET /feed/filtered?types=feed,benchmark,post,question,tipsAndTricks')
+  summaryLines.push('• Filtered Feed: GET /feed/filtered?interests=<categoryId>&tags=Review&sort=recent')
   summaryLines.push(`• Profile Card: GET /users/${userIdToUse}/profile-card`)
   summaryLines.push(`• Batch Endpoint: GET /users/${userIdToUse}/profile?tabs=feed,reviews,benchmarks,tips,replies,ladder`)
   summaryLines.push(`• Trust List: GET /users/${userIdToUse}/trusts`)

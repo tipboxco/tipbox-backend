@@ -161,6 +161,20 @@ router.get(
  *           type: string
  *           format: uuid
  *         description: Brand ID'si
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *         description: Sayfa başına dönecek kayıt sayısı (varsayılan 20)
+ *       - in: query
+ *         name: cursor
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Bir sonraki sayfa için kullanılacak cursor (önceki sayfanın son post ID'si)
  *     responses:
  *       200:
  *         description: Brand feed'i başarıyla getirildi.
@@ -181,9 +195,19 @@ router.get(
  *                     properties:
  *                       type:
  *                         type: string
- *                         enum: ['feed', 'benchmark', 'post', 'question', 'tipsAndTricks']
+ *                         enum: ['feed', 'benchmark', 'post', 'question', 'tipsAndTricks', 'experience']
  *                       data:
  *                         type: object
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       nullable: true
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
  *       401:
  *         description: Kimlik doğrulaması başarısız.
  *       404:
@@ -193,7 +217,17 @@ router.get(
   '/:brandId/feed',
   asyncHandler(async (req: Request, res: Response) => {
     const { brandId } = req.params;
-    const feed = await brandService.getBrandFeed(brandId);
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
+    const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
+    const limit = limitParam && !Number.isNaN(limitParam) ? limitParam : undefined;
+
+    const feed = await brandService.getBrandFeed(brandId, {
+      cursor,
+      limit,
+      userId,
+    });
     res.json(feed);
   }),
 );
@@ -457,9 +491,60 @@ router.get(
  *         schema:
  *           type: string
  *           format: uuid
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *         description: Sayfa başına dönecek survey kartı sayısı (varsayılan 20)
+ *       - in: query
+ *         name: cursor
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Bir sonraki sayfa için cursor (önceki sayfanın son event ID'si)
  *     responses:
  *       200:
  *         description: Marka geçmişi anketleri başarıyla getirildi.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 surveyList:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       title:
+ *                         type: string
+ *                       description:
+ *                         type: string
+ *                       type:
+ *                         type: string
+ *                       duration:
+ *                         type: string
+ *                       points:
+ *                         type: integer
+ *                       status:
+ *                         type: string
+ *                         enum: [start, continue, viewresults]
+ *                       progress:
+ *                         type: integer
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       nullable: true
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
  *       401:
  *         description: Kimlik doğrulaması başarısız.
  */
@@ -469,7 +554,14 @@ router.get(
     const { brandId } = req.params;
     const userPayload = (req as any).user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-    const result = await brandService.getBrandHistorySurveys(brandId, userId);
+    const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
+    const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
+    const limit = limitParam && !Number.isNaN(limitParam) ? limitParam : undefined;
+
+    const result = await brandService.getBrandHistorySurveys(brandId, userId, {
+      cursor,
+      limit,
+    });
     res.json(result);
   }),
 );
@@ -564,6 +656,21 @@ router.get(
  *           type: string
  *           format: uuid
  *         description: Product ID'si
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Sayfa numarası (1 tabanlı)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 12
+ *         description: Sayfa başına gönderi sayısı
  *     responses:
  *       200:
  *         description: Deneyim paylaşımları başarıyla listelendi.
@@ -576,7 +683,7 @@ router.get(
  *                 properties:
  *                   type:
  *                     type: string
- *                     enum: ['feed', 'benchmark', 'post', 'question', 'tipsAndTricks']
+ *                     enum: ['feed', 'benchmark', 'post', 'question', 'tipsAndTricks', 'experience']
  *                   data:
  *                     type: object
  *       401:
@@ -590,7 +697,9 @@ router.get(
     const { brandId, productId } = req.params;
     const userPayload = (req as any).user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-    const experiences = await brandService.getBrandProductExperiences(brandId, productId, userId);
+    const page = req.query.page ? Number(req.query.page) : 1;
+    const limit = req.query.limit ? Number(req.query.limit) : 12;
+    const experiences = await brandService.getBrandProductExperiences(brandId, productId, userId, page, limit);
     res.json(experiences);
   }),
 );
@@ -619,6 +728,21 @@ router.get(
  *           type: string
  *           format: uuid
  *         description: Product ID'si
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Sayfa numarası (1 tabanlı)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 12
+ *         description: Sayfa başına gönderi sayısı
  *     responses:
  *       200:
  *         description: Karşılaştırma gönderileri başarıyla listelendi.
@@ -645,7 +769,9 @@ router.get(
     const { brandId, productId } = req.params;
     const userPayload = (req as any).user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-    const comparisons = await brandService.getBrandProductComparisons(brandId, productId, userId);
+    const page = req.query.page ? Number(req.query.page) : 1;
+    const limit = req.query.limit ? Number(req.query.limit) : 12;
+    const comparisons = await brandService.getBrandProductComparisons(brandId, productId, userId, page, limit);
     res.json(comparisons);
   }),
 );
@@ -674,6 +800,21 @@ router.get(
  *           type: string
  *           format: uuid
  *         description: Product ID'si
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Sayfa numarası (1 tabanlı)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 12
+ *         description: Sayfa başına gönderi sayısı
  *     responses:
  *       200:
  *         description: Haberler başarıyla listelendi.
@@ -700,7 +841,9 @@ router.get(
     const { brandId, productId } = req.params;
     const userPayload = (req as any).user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-    const news = await brandService.getBrandProductNews(brandId, productId, userId);
+    const page = req.query.page ? Number(req.query.page) : 1;
+    const limit = req.query.limit ? Number(req.query.limit) : 12;
+    const news = await brandService.getBrandProductNews(brandId, productId, userId, page, limit);
     res.json(news);
   }),
 );

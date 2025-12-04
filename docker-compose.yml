@@ -83,6 +83,8 @@ services:
       - .:/app
       - /app/node_modules
       - ./tipboxbackend-3e2c3d3c0b31.json:/app/tipboxbackend-3e2c3d3c0b31.json:ro
+      # Docker daemon'a erişim için host docker.sock'u container'a bağla
+      - /var/run/docker.sock:/var/run/docker.sock
     working_dir: /app
     command: npm run dev
     networks:

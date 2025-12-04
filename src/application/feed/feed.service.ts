@@ -246,36 +246,25 @@ export class FeedService {
     filters: FeedFilterOptions,
     options?: { cursor?: string; limit?: number }
   ): Promise<FeedResponse> {
-    const limit =
-      options?.limit ??
-      (filters.types && filters.types.length > 0 ? filters.types.length * 20 : 20);
+    const limit = options?.limit ?? 20;
 
     // Build filter query
     const postWhere: any = {};
 
-    if (filters.types && filters.types.length > 0) {
-      const contentPostTypes = filters.types.map((type) => {
-        switch (type) {
-          case FeedItemType.FEED:
-          case FeedItemType.POST:
-            return ContentPostType.FREE;
-          case FeedItemType.BENCHMARK:
-            return ContentPostType.COMPARE;
-          case FeedItemType.QUESTION:
-            return ContentPostType.QUESTION;
-          case FeedItemType.TIPS_AND_TRICKS:
-            return ContentPostType.TIPS;
-          default:
-            return null;
-        }
-      }).filter(Boolean);
-      postWhere.type = { in: contentPostTypes };
+    // Merge category + interests into a single category filter
+    const mergedCategoryIds = new Set<string>();
+    if (filters.category) {
+      mergedCategoryIds.add(filters.category);
+    }
+    if (filters.interests && filters.interests.length > 0) {
+      filters.interests.forEach((id) => mergedCategoryIds.add(id));
     }
 
-    if (filters.categoryIds && filters.categoryIds.length > 0) {
+    if (mergedCategoryIds.size > 0) {
+      const categoryArray = Array.from(mergedCategoryIds);
       postWhere.OR = [
-        { mainCategoryId: { in: filters.categoryIds } },
-        { subCategoryId: { in: filters.categoryIds } },
+        { mainCategoryId: { in: categoryArray } },
+        { subCategoryId: { in: categoryArray } },
       ];
     }
 
@@ -285,6 +274,16 @@ export class FeedService {
 
     if (filters.userIds && filters.userIds.length > 0) {
       postWhere.userId = { in: filters.userIds };
+    }
+
+    // Tag-based filtering (contentPostTags or tags relations)
+    if (filters.tags && filters.tags.length > 0) {
+      (postWhere.AND ||= []).push({
+        OR: [
+          { contentPostTags: { some: { tag: { in: filters.tags } } } },
+          { tags: { some: { tag: { in: filters.tags } } } },
+        ],
+      });
     }
 
     if (filters.dateRange) {
@@ -300,6 +299,18 @@ export class FeedService {
     // Note: minLikes and minComments filtering will be done after fetching stats
 
     // Fetch feeds with post filters
+    const orderBy =
+      filters.sort === 'top'
+        ? [
+            { post: { likesCount: 'desc' as const } },
+            { post: { viewsCount: 'desc' as const } },
+            { createdAt: 'desc' as const },
+          ]
+        : [
+            { post: { isBoosted: 'desc' as const } },
+            { createdAt: 'desc' as const },
+          ];
+
     const feeds = await this.prisma.feed.findMany({
       where: {
         userId,
@@ -368,10 +379,7 @@ export class FeedService {
           },
         },
       },
-      orderBy: [
-        { post: { isBoosted: 'desc' } },
-        { createdAt: 'desc' },
-      ],
+      orderBy,
       take: limit + 1,
       ...(options?.cursor && {
         cursor: { id: options.cursor },

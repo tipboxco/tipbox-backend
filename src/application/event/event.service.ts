@@ -432,41 +432,20 @@ export class EventService {
     try {
       const limit = options?.limit || 20;
 
-      // Get event rewards with BADGE type
+      // Event'in varlığını doğrula
       const event = await this.prisma.wishboxEvent.findUnique({
         where: { id: eventId },
-        include: {
-          rewards: {
-            where: { rewardType: 'BADGE' },
-          },
-        },
       });
 
       if (!event) {
         throw new Error('Event not found');
       }
 
-      // Get unique badge IDs from rewards
-      const badgeIds = new Set<string>();
-      event.rewards.forEach((reward) => {
-        if (reward.rewardId) {
-          badgeIds.add(reward.rewardId.toString());
-        }
-      });
-
-      if (badgeIds.size === 0) {
-        return {
-          items: [],
-          pagination: {
-            hasMore: false,
-            limit,
-          },
-        };
-      }
-
-      // Fetch badges
+      // Şimdilik event rozetlerini, global EVENT tipindeki rozetlerden besliyoruz.
+      // WishboxReward.rewardId ile Badge.id birebir eşleşmediği için burada direkt
+      // EVENT tipindeki rozetleri listeliyoruz.
       const badges = await this.prisma.badge.findMany({
-        where: { id: { in: Array.from(badgeIds) } },
+        where: { type: 'EVENT' as any },
         take: limit + 1,
         ...(options?.cursor && {
           cursor: { id: options.cursor },

@@ -82,7 +82,7 @@ const swaggerOptions = {
             id: { type: 'string' },
             name: { type: 'string' },
             title: { type: 'string' },
-            avatarUrl: { type: 'string', format: 'uri' },
+            avatar: { type: 'string', format: 'uri' },
           },
         },
         BaseStats: {
@@ -126,7 +126,7 @@ const swaggerOptions = {
             id: { type: 'string' },
             type: {
               type: 'string',
-              enum: ['feed', 'benchmark', 'post', 'question', 'tipsAndTricks'],
+              enum: ['feed', 'benchmark', 'post', 'question', 'tipsAndTricks', 'experience'],
             },
             user: { $ref: '#/components/schemas/BaseUser' },
             stats: { $ref: '#/components/schemas/BaseStats' },
@@ -154,7 +154,7 @@ const swaggerOptions = {
             id: { type: 'string' },
             type: {
               type: 'string',
-              enum: ['feed', 'benchmark', 'post', 'question', 'tipsAndTricks'],
+              enum: ['feed', 'benchmark', 'post', 'question', 'tipsAndTricks', 'experience'],
             },
             user: { $ref: '#/components/schemas/BaseUser' },
             stats: { $ref: '#/components/schemas/BaseStats' },
@@ -176,7 +176,7 @@ const swaggerOptions = {
             id: { type: 'string' },
             type: {
               type: 'string',
-              enum: ['feed', 'benchmark', 'post', 'question', 'tipsAndTricks'],
+              enum: ['feed', 'benchmark', 'post', 'question', 'tipsAndTricks', 'experience'],
             },
             user: { $ref: '#/components/schemas/BaseUser' },
             stats: { $ref: '#/components/schemas/BaseStats' },

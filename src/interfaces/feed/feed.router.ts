@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { FeedService } from '../../application/feed/feed.service';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
-import { FeedFilterOptions, FeedItemType } from './feed.dto';
+import { FeedFilterOptions } from './feed.dto';
 
 const router = Router();
 const feedService = new FeedService();
@@ -119,56 +119,32 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  *       - bearerAuth: []
  *     parameters:
  *       - in: query
- *         name: types
+ *         name: interests
  *         schema:
  *           type: array
  *           items:
  *             type: string
- *             enum: [feed, benchmark, post, question, tipsAndTricks]
- *         description: İstenen feed tipleri
+ *         description: Kullanıcının ilgi alanlarını temsil eden kategori / konu ID'leri
  *       - in: query
- *         name: categoryIds
+ *         name: tags
  *         schema:
  *           type: array
  *           items:
  *             type: string
- *         description: Kategori ID'leri
+ *             enum: [Review, Benchmark, Tips, Question, Experience, Update]
+ *         description: İçerik etiketleri (ör. Review, Benchmark, Tips)
  *       - in: query
- *         name: productIds
- *         schema:
- *           type: array
- *           items:
- *             type: string
- *         description: Ürün ID'leri
- *       - in: query
- *         name: userIds
- *         schema:
- *           type: array
- *           items:
- *             type: string
- *         description: Kullanıcı ID'leri
- *       - in: query
- *         name: minLikes
- *         schema:
- *           type: integer
- *         description: Minimum beğeni sayısı
- *       - in: query
- *         name: minComments
- *         schema:
- *           type: integer
- *         description: Minimum yorum sayısı
- *       - in: query
- *         name: dateFrom
+ *         name: category
  *         schema:
  *           type: string
- *           format: date-time
- *         description: Başlangıç tarihi
+ *         description: Birincil kategori ID'si
  *       - in: query
- *         name: dateTo
+ *         name: sort
  *         schema:
  *           type: string
- *           format: date-time
- *         description: Bitiş tarihi
+ *           enum: [recent, top]
+ *           default: recent
+ *         description: Sıralama tipi (recent = en yeni, top = etkileşime göre)
  *       - in: query
  *         name: cursor
  *         schema:
@@ -195,61 +171,42 @@ router.get('/filtered', asyncHandler(async (req: Request, res: Response) => {
   }
 
   const cursor = req.query.cursor as string | undefined;
-  const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+  const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+  const limit = typeof limitParam === 'number' ? limitParam : 20;
 
   if (limit < 1 || limit > 50) {
     return res.status(400).json({ message: 'Limit must be between 1 and 50' });
   }
 
-  // Parse filters
+  // Parse filters based on new UX: Interests - Tags - Category - Sort
   const filters: FeedFilterOptions = {};
 
-  if (req.query.types) {
-    const types = Array.isArray(req.query.types) 
-      ? req.query.types as string[] 
-      : [req.query.types as string];
-    filters.types = types as FeedItemType[];
+  if (req.query.interests) {
+    filters.interests = Array.isArray(req.query.interests)
+      ? (req.query.interests as string[])
+      : [req.query.interests as string];
   }
 
-  if (req.query.categoryIds) {
-    filters.categoryIds = Array.isArray(req.query.categoryIds)
-      ? req.query.categoryIds as string[]
-      : [req.query.categoryIds as string];
+  if (req.query.tags) {
+    filters.tags = Array.isArray(req.query.tags)
+      ? (req.query.tags as string[])
+      : [req.query.tags as string];
   }
 
-  if (req.query.productIds) {
-    filters.productIds = Array.isArray(req.query.productIds)
-      ? req.query.productIds as string[]
-      : [req.query.productIds as string];
+  if (req.query.category) {
+    filters.category = req.query.category as string;
   }
 
-  if (req.query.userIds) {
-    filters.userIds = Array.isArray(req.query.userIds)
-      ? req.query.userIds as string[]
-      : [req.query.userIds as string];
-  }
-
-  if (req.query.minLikes) {
-    filters.minLikes = parseInt(req.query.minLikes as string, 10);
-  }
-
-  if (req.query.minComments) {
-    filters.minComments = parseInt(req.query.minComments as string, 10);
-  }
-
-  if (req.query.dateFrom || req.query.dateTo) {
-    filters.dateRange = {};
-    if (req.query.dateFrom) {
-      filters.dateRange.from = req.query.dateFrom as string;
-    }
-    if (req.query.dateTo) {
-      filters.dateRange.to = req.query.dateTo as string;
+  if (req.query.sort) {
+    const sort = String(req.query.sort);
+    if (sort === 'recent' || sort === 'top') {
+      filters.sort = sort;
     }
   }
 
   const feed = await feedService.getFilteredFeed(String(userId), filters, {
     cursor,
-    ...(typeof limitParam === 'number' ? { limit: limitParam } : {}),
+    limit,
   });
   res.json(feed);
 }));

@@ -3,6 +3,7 @@ import { NFTMarketListingPrismaRepository } from '../../infrastructure/repositor
 import { ProfilePrismaRepository } from '../../infrastructure/repositories/profile-prisma.repository';
 import { UserAvatarPrismaRepository } from '../../infrastructure/repositories/user-avatar-prisma.repository';
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
+import { NotFoundError, ValidationError } from '../../infrastructure/errors/custom-errors';
 import { NFTRarity } from '../../domain/crypto/nft-rarity.enum';
 import {
   MarketplaceNFTResponse,
@@ -304,6 +305,11 @@ export class MarketplaceService {
 
   /**
    * NFT satış bilgilerini getirir (SellNFT)
+   *
+   * İş kuralları:
+   * - NFT yoksa: 404 NotFoundError
+   * - NFT mevcut ama kullanıcıya ait değilse: 400 ValidationError
+   * - Diğer hatalar: 500 (global error handler)
    */
   async getSellNFTInfo(userId: string, nftId: string): Promise<SellNFT> {
     try {
@@ -312,12 +318,12 @@ export class MarketplaceService {
       // NFT'yi bul
       const nft = await this.nftRepo.findById(nftId);
       if (!nft) {
-        throw new Error('NFT bulunamadı');
+        throw new NotFoundError('NFT bulunamadı');
       }
 
       // NFT'nin kullanıcıya ait olduğunu kontrol et
       if (!nft.belongsToUser(userId)) {
-        throw new Error('Bu NFT size ait değil');
+        throw new ValidationError('Bu NFT size ait değil');
       }
 
       // Aktif listing var mı kontrol et

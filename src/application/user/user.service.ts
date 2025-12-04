@@ -15,6 +15,7 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import logger from '../../infrastructure/logger/logger';
 import { DEFAULT_PROFILE_BANNER_URL } from '../../domain/user/profile.constants';
+import { ExperienceContent } from '../../interfaces/feed/feed.dto';
 
 type CosmeticSummary = {
   id: string;
@@ -73,11 +74,6 @@ type UserProfileDetails = {
 const EXPERIENCE_SECTION_TITLES = {
   PRICE: 'Price and Shopping Experience',
   USAGE: 'Product and Usage Experience',
-} as const;
-
-const EXPERIENCE_SECTION_CODES = {
-  PRICE: 0,
-  USAGE: 1,
 } as const;
 
 const BADGE_PLACEHOLDER_URL =
@@ -1173,10 +1169,10 @@ export class UserService {
   private buildExperienceSections(
     experiences: Array<{ title: string; experienceText: string }>,
     summary?: string | null,
-  ): Array<{ type: number; title: string; content: string; rating: number }> {
+  ): ExperienceContent[] {
     const sections: {
-      price: { type: number; title: string; content: string; rating: number } | null;
-      usage: { type: number; title: string; content: string; rating: number } | null;
+      price: ExperienceContent | null;
+      usage: ExperienceContent | null;
     } = {
       price: null,
       usage: null,
@@ -1186,7 +1182,6 @@ export class UserService {
       const normalizedTitle = (exp.title || '').toLowerCase();
       if (!sections.price && normalizedTitle.includes('price')) {
         sections.price = {
-          type: EXPERIENCE_SECTION_CODES.PRICE,
           title: EXPERIENCE_SECTION_TITLES.PRICE,
           content: exp.experienceText,
           rating: this.calculateExperienceRating(exp.experienceText + '-price'),
@@ -1199,7 +1194,6 @@ export class UserService {
         (normalizedTitle.includes('product') || normalizedTitle.includes('usage'))
       ) {
         sections.usage = {
-          type: EXPERIENCE_SECTION_CODES.USAGE,
           title: EXPERIENCE_SECTION_TITLES.USAGE,
           content: exp.experienceText,
           rating: this.calculateExperienceRating(exp.experienceText + '-usage'),
@@ -1212,7 +1206,6 @@ export class UserService {
 
     if (!sections.price) {
       sections.price = {
-        type: EXPERIENCE_SECTION_CODES.PRICE,
         title: EXPERIENCE_SECTION_TITLES.PRICE,
         content: fallbackText,
         rating: this.calculateExperienceRating(fallbackText + '-price'),
@@ -1220,15 +1213,17 @@ export class UserService {
     }
 
     if (!sections.usage) {
+      const usageText = experiences[1]?.experienceText || fallbackText;
       sections.usage = {
-        type: EXPERIENCE_SECTION_CODES.USAGE,
         title: EXPERIENCE_SECTION_TITLES.USAGE,
-        content: experiences[1]?.experienceText || fallbackText,
-        rating: this.calculateExperienceRating((experiences[1]?.experienceText || fallbackText) + '-usage'),
+        content: usageText,
+        rating: this.calculateExperienceRating(usageText + '-usage'),
       };
     }
 
-    return [sections.price, sections.usage];
+    return [sections.price, sections.usage].filter(
+      (section): section is ExperienceContent => section !== null,
+    );
   }
 
   async getUserBenchmarks(userId: string): Promise<any[]> {
@@ -1601,7 +1596,7 @@ export class UserService {
             id: uid,
             name: profile?.displayName || 'Anonymous',
             title: title?.title || '',
-            avatarUrl: avatar?.imageUrl ?? '',
+            avatar: avatar?.imageUrl ?? '',
           },
         };
       })
@@ -1627,7 +1622,7 @@ export class UserService {
         id: postUserId,
         name: 'Anonymous',
         title: '',
-        avatarUrl: '',
+        avatar: '',
       };
 
       const stats = await this.getPostStats(String(post.id));
