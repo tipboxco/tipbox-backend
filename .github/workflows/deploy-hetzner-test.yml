@@ -87,7 +87,7 @@ jobs:
             # Branch değişkenini al
             DEPLOY_BRANCH="$DEPLOY_BRANCH"
             PROJECT_DIR="/opt/tipbox-backend"
-            COMPOSE_FILE="docker-compose.test.yml"
+            COMPOSE_FILE="docker-compose.yml"
             
             # Proje dizinine git
             cd "\$PROJECT_DIR" || {
@@ -102,24 +102,24 @@ jobs:
             git pull origin "\$DEPLOY_BRANCH"
             
             # Environment dosyasının varlığını kontrol et
-            if [ ! -f .env.test ]; then
-              echo "❌ .env.test file not found! Please create it first."
+            if [ ! -f .env ]; then
+              echo "❌ .env file not found! Please create it first."
               exit 1
             fi
             
-            # Database backup (test için opsiyonel ama önerilir)
+            # Database backup (opsiyonel ama önerilir)
             echo "💾 Creating database backup..."
             BACKUP_DIR="\${PROJECT_DIR}/backups"
             mkdir -p "\$BACKUP_DIR"
-            BACKUP_FILE="\${BACKUP_DIR}/backup-test-\$(date +%Y%m%d-%H%M%S).sql"
-            docker compose -f "\$COMPOSE_FILE" exec -T postgres pg_dump -U tipbox_user tipbox_test > "\$BACKUP_FILE" 2>/dev/null || {
+            BACKUP_FILE="\${BACKUP_DIR}/backup-\$(date +%Y%m%d-%H%M%S).sql"
+            docker compose -f "\$COMPOSE_FILE" exec -T postgres pg_dump -U postgres tipbox_dev > "\$BACKUP_FILE" 2>/dev/null || {
               echo "⚠️  Backup failed or database not accessible, continuing..."
             }
             
-            # Backend container'ı stop et (diğer servisler çalışmaya devam edecek)
-            echo "🛑 Stopping backend container..."
-            docker compose -f "\$COMPOSE_FILE" stop backend || {
-              echo "⚠️  Backend container was not running, continuing..."
+            # Tüm servisleri durdur (migration ve seed için)
+            echo "🛑 Stopping all containers..."
+            docker compose -f "\$COMPOSE_FILE" stop || {
+              echo "⚠️  Some containers were not running, continuing..."
             }
             
             # Docker Compose ile build
@@ -132,28 +132,26 @@ jobs:
               echo "⚠️  Prisma generate failed, but continuing..."
             }
             
-            # Database'in çalıştığını verify et (zaten çalışıyor olmalı)
-            echo "⏳ Verifying database is ready..."
-            sleep 2
-            if ! docker compose -f "\$COMPOSE_FILE" exec -T postgres pg_isready -U tipbox_user > /dev/null 2>&1; then
-              echo "❌ Database is not ready. Starting database container..."
-              docker compose -f "\$COMPOSE_FILE" up -d postgres
-              sleep 5
-              for i in {1..10}; do
-                if docker compose -f "\$COMPOSE_FILE" exec -T postgres pg_isready -U tipbox_user > /dev/null 2>&1; then
-                  echo "✅ Database is ready!"
-                  break
-                fi
-                if [ \$i -eq 10 ]; then
-                  echo "❌ Database not ready after 10 attempts"
-                  exit 1
-                fi
-                echo "⏳ Waiting for database... (\$i/10)"
-                sleep 2
-              done
-            else
-              echo "✅ Database is already running!"
-            fi
+            # Tüm servisleri başlat (database, redis, minio)
+            echo "🚀 Starting infrastructure services..."
+            docker compose -f "\$COMPOSE_FILE" up -d postgres redis minio
+            
+            # Database'in hazır olmasını bekle
+            echo "⏳ Waiting for database to be ready..."
+            sleep 5
+            for i in {1..20}; do
+              if docker compose -f "\$COMPOSE_FILE" exec -T postgres pg_isready -U postgres > /dev/null 2>&1; then
+                echo "✅ Database is ready!"
+                break
+              fi
+              if [ \$i -eq 20 ]; then
+                echo "❌ Database not ready after 20 attempts"
+                docker compose -f "\$COMPOSE_FILE" logs postgres
+                exit 1
+              fi
+              echo "⏳ Waiting for database... (\$i/20)"
+              sleep 2
+            done
             
             # Migration'ları çalıştır (backend container başlatılmadan önce)
             echo "📊 Running database migrations..."
@@ -164,9 +162,15 @@ jobs:
               exit 1
             }
             
-            # Backend container'ı yeni image ile başlat
-            echo "🚀 Starting backend container with new image..."
-            docker compose -f "\$COMPOSE_FILE" up -d backend
+            # Seed data'ları ekle (eğer yoksa)
+            echo "🌱 Running database seeds..."
+            docker compose -f "\$COMPOSE_FILE" run --rm backend npm run db:seed:all || {
+              echo "⚠️  Seed failed or data already exists, continuing..."
+            }
+            
+            # Tüm servisleri başlat (backend, nginx, prisma-studio)
+            echo "🚀 Starting all services..."
+            docker compose -f "\$COMPOSE_FILE" up -d
             
             # Health check
             echo "🏥 Checking backend health..."
