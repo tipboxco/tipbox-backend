@@ -108,12 +108,12 @@ export interface RepliesPost extends BasePost {
 
 // Feed Item Union Type
 export type FeedItem =
-  | { type: FeedItemType.FEED; data: Post }
   | { type: FeedItemType.BENCHMARK; data: BenchmarkPost }
   | { type: FeedItemType.POST; data: Post }
   | { type: FeedItemType.QUESTION; data: Post }
   | { type: FeedItemType.TIPS_AND_TRICKS; data: TipsAndTricksPost }
-  | { type: FeedItemType.EXPERIENCE; data: ExperiencePost };
+  | { type: FeedItemType.EXPERIENCE; data: ExperiencePost }
+  | { type: FeedItemType.UPDATE; data: ExperiencePost };
 
 // Feed Response
 export interface FeedResponse {
@@ -145,5 +145,32 @@ export interface FeedFilterOptions {
    * - top: based on engagement (likes/views)
    */
   sort?: 'recent' | 'top';
+  /**
+   * Filter by product IDs
+   */
+  productIds?: string[];
+  /**
+   * Filter by user IDs
+   */
+  userIds?: string[];
+  /**
+   * Filter by date range
+   */
+  dateRange?: {
+    from?: string;
+    to?: string;
+  };
+  /**
+   * Minimum number of likes required
+   */
+  minLikes?: number;
+  /**
+   * Minimum number of comments required
+   */
+  minComments?: number;
+  /**
+   * Filter by feed item types
+   */
+  types?: FeedItemType[];
 }
 

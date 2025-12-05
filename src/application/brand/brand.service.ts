@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { FeedItem, FeedItemType, FeedResponse, ContextData } from '../../interfaces/feed/feed.dto';
+import { FeedItem, FeedItemType, FeedResponse, ContextData, ExperiencePost, ExperienceContent, ReviewProduct } from '../../interfaces/feed/feed.dto';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
 import { buildMediaUrl } from '../../infrastructure/config/media.config';
 import logger from '../../infrastructure/logger/logger';
@@ -45,6 +45,35 @@ export interface BrandProductGroup {
   productGroupId: string;
   productGroupName: string;
   products: BrandProduct[];
+  pagination: {
+    cursor?: string;
+    hasMore: boolean;
+    limit: number;
+  };
+}
+
+export interface BrandProductGroupInfo {
+  productGroupId: string;
+  productGroupName: string;
+}
+
+export interface BrandProductsResponse {
+  items: BrandProduct[];
+  pagination: {
+    cursor?: string;
+    hasMore: boolean;
+    limit: number;
+  };
+}
+
+export interface BrandProductsBatchResponse {
+  groups: BrandProductGroupInfo[];
+  products: BrandProductGroup[];
+  pagination: {
+    cursor?: string;
+    hasMore: boolean;
+    limit: number;
+  };
 }
 
 export interface BrandProduct {
@@ -85,6 +114,15 @@ export interface SurveyEndPoint {
   surveyList: SurveyCard[];
 }
 
+export interface SurveyListResponse {
+  surveyList: SurveyCard[];
+  pagination: {
+    cursor?: string;
+    hasMore: boolean;
+    limit: number;
+  };
+}
+
 export type BrandEventType = 'default' | 'product';
 
 export interface BrandEventCard {
@@ -103,7 +141,6 @@ export interface EventTasks {
   title: string;
   progress: number;
   total: number;
-  icon: string; // Feather icon name
 }
 
 export interface EventStatistics {
@@ -156,8 +193,21 @@ export interface BrandHistory {
   image: string;
   totalPoints: number;
   stats: BrandHistoryStats;
-  pointsHistory: BrandHistoryPointsItem[];
   badgeList: BrandHistoryBadge[];
+  pagination: {
+    cursor?: string;
+    hasMore: boolean;
+    limit: number;
+  };
+}
+
+export interface BrandHistoryPointsResponse {
+  items: BrandHistoryPointsItem[];
+  pagination: {
+    cursor?: string;
+    hasMore: boolean;
+    limit: number;
+  };
 }
 
 export interface SurveyList {
@@ -171,6 +221,24 @@ export interface SurveyList {
 
 export interface BrandHistoryEvents {
   events: BrandEventCard[];
+}
+
+export interface BrandEventsResponse {
+  items: BrandEventCard[];
+  pagination: {
+    cursor?: string;
+    hasMore: boolean;
+    limit: number;
+  };
+}
+
+export interface BrandHistoryEventsResponse {
+  items: BrandEventCard[];
+  pagination: {
+    cursor?: string;
+    hasMore: boolean;
+    limit: number;
+  };
 }
 
 export class BrandService {
@@ -249,48 +317,58 @@ export class BrandService {
 
   /**
    * Brand Survey & Gamification - Anketler tab'ı
+   * Brand bilgileri store'dan alınacak, sadece surveyList + pagination dönecek
    */
-  async getBrandSurveys(brandId: string, userId: string): Promise<SurveyEndPoint> {
-    // Brand ve category bilgisini al
+  async getBrandSurveys(
+    brandId: string,
+    userId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<SurveyListResponse> {
+    // Brand kontrolü (store'dan alınacak ama response'da dönmeyeceğiz)
     const brand = await this.prisma.brand.findUnique({
       where: { id: brandId },
-      include: {
-        brandCategory: true,
-      },
     });
 
     if (!brand) {
       throw new NotFoundError(`Brand not found: ${brandId}`);
     }
 
-    const brandInfo: BrandInfo = {
-      id: brand.id,
-      name: brand.name,
-      category: brand.brandCategory?.name || 'General',
-      logo: brand.logoUrl,
-    };
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
 
     // Şimdilik tüm aktif WishboxEvent'leri survey listesi olarak kullanıyoruz
+    const whereClause: any = {
+      status: 'PUBLISHED',
+    };
+
+    if (cursor) {
+      whereClause.id = {
+        gt: cursor,
+      };
+    }
+
     const events = await this.prisma.wishboxEvent.findMany({
-      where: {
-        status: 'PUBLISHED',
-      },
+      where: whereClause,
       orderBy: { startDate: 'asc' },
-      take: 20,
+      take: limit + 1, // Bir fazla al ki hasMore'u kontrol edebilelim
     });
+
+    const hasMore = events.length > limit;
+    const resultEvents = hasMore ? events.slice(0, limit) : events;
+    const nextCursor = hasMore && resultEvents.length > 0 ? resultEvents[resultEvents.length - 1].id : undefined;
 
     // Kullanıcının event istatistiklerine göre status/progress hesapla
     const stats = await this.prisma.wishboxStats.findMany({
       where: {
         userId,
-        eventId: { in: events.map((e) => e.id) },
+        eventId: { in: resultEvents.map((e) => e.id) },
       },
     });
 
     const statsMap = new Map<string, (typeof stats)[number]>();
     stats.forEach((s) => statsMap.set(s.eventId, s));
 
-    const surveyList: SurveyCard[] = events.map((event) => {
+    const surveyList: SurveyCard[] = resultEvents.map((event) => {
       const eventStats = statsMap.get(event.id);
       const totalParticipated = eventStats?.totalParticipated ?? 0;
 
@@ -316,8 +394,12 @@ export class BrandService {
     });
 
     return {
-      brand: brandInfo,
       surveyList,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
     };
   }
 
@@ -490,27 +572,46 @@ export class BrandService {
   }
 
   /**
-   * Brand Survey & Gamification - Eventler tab'ı
+   * Brand Survey & Gamification - Eventler tab'ı (pagination ile)
    */
-  async getBrandEvents(_brandId: string, userId: string): Promise<BrandEventCard[]> {
+  async getBrandEvents(
+    _brandId: string,
+    userId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<BrandEventsResponse> {
     // Event'leri global olarak kullanıyoruz, brandId sadece context bilgisi için
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
+
+    const whereClause: any = {
+      status: 'PUBLISHED',
+    };
+
+    if (cursor) {
+      whereClause.id = {
+        gt: cursor,
+      };
+    }
+
     const events = await this.prisma.wishboxEvent.findMany({
-      where: {
-        status: 'PUBLISHED',
-      },
+      where: whereClause,
       orderBy: { startDate: 'asc' },
-      take: 20,
+      take: limit + 1, // Bir fazla al ki hasMore'u kontrol edebilelim
     });
+
+    const hasMore = events.length > limit;
+    const resultEvents = hasMore ? events.slice(0, limit) : events;
+    const nextCursor = hasMore && resultEvents.length > 0 ? resultEvents[resultEvents.length - 1].id : undefined;
 
     const stats = await this.prisma.wishboxStats.findMany({
       where: {
         userId,
-        eventId: { in: events.map((e) => e.id) },
+        eventId: { in: resultEvents.map((e) => e.id) },
       },
     });
     const statsSet = new Set(stats.map((s) => s.eventId));
 
-    return events.map<BrandEventCard>((event) => ({
+    const items = resultEvents.map<BrandEventCard>((event) => ({
       id: event.id,
       title: event.title,
       description: event.description || '',
@@ -520,6 +621,15 @@ export class BrandService {
       status: statsSet.has(event.id) ? 'joined' : 'join',
       image: event.imageUrl || '',
     }));
+
+    return {
+      items,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
   }
 
   /**
@@ -568,14 +678,12 @@ export class BrandService {
         title: 'Anketi tamamla',
         progress: joined ? maxParticipated : 0,
         total: maxParticipated,
-        icon: 'check-circle',
       },
       {
         id: `${eventId}-2`,
         title: 'En az 1 paylaşım yap',
         progress: joined ? 1 : 0,
         total: 1,
-        icon: 'share-2',
       },
     ];
 
@@ -596,23 +704,129 @@ export class BrandService {
 
   /**
    * Brand Survey & Gamification - Trendler tab'ı
-   * Şimdilik brand catalog'daki feed kartlarını aynen döner.
+   * Brand'e ait trend içerikleri (en popüler/trending post'lar) - pagination ile
    */
-  async getBrandTrends(_brandId: string, _userId: string): Promise<FeedResponse> {
-    // Brand trends artık ayrı brand feed endpoint'i üzerinden yönetiliyor.
-    // Geçici olarak boş bir feed dönüyoruz; gerçek trend verisi /brands/{id}/feed ile alınacak.
-    return {
-      items: [],
-      pagination: {
-        hasMore: false,
-        limit: 0,
-      },
-    };
+  async getBrandTrends(
+    brandId: string,
+    userId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<FeedResponse> {
+    try {
+      const brand = await this.prisma.brand.findUnique({
+        where: { id: brandId },
+      });
+
+      if (!brand) {
+        throw new NotFoundError(`Brand not found: ${brandId}`);
+      }
+
+      // Brand'e ait product'ları bul
+      const brandProducts = await this.prisma.product.findMany({
+        where: { brand: brand.name },
+        select: { id: true },
+      });
+      const productIds = brandProducts.map((product) => product.id);
+
+      if (productIds.length === 0) {
+        return {
+          items: [],
+          pagination: {
+            cursor: undefined,
+            hasMore: false,
+            limit: options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20,
+          },
+        };
+      }
+
+      const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+      const cursor = options?.cursor;
+
+      const whereClause: any = {
+        productId: { in: productIds },
+      };
+
+      if (cursor) {
+        whereClause.id = {
+          lt: cursor,
+        };
+      }
+
+      // Trend post'ları: en çok beğenilen ve yorumlanan post'lar
+      // Önce stats'leri alalım
+      const postsWithStats = await this.prisma.contentPost.findMany({
+        where: whereClause,
+        include: {
+          user: {
+            include: {
+              profile: true,
+              titles: {
+                orderBy: { earnedAt: 'desc' },
+                take: 1,
+              },
+              avatars: {
+                where: { isActive: true },
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+              },
+            },
+          },
+          product: {
+            include: {
+              group: true,
+            },
+          },
+          comparison: {
+            include: {
+              product1: {
+                include: { group: true },
+              },
+              product2: {
+                include: { group: true },
+              },
+              scores: true,
+            },
+          },
+          tip: true,
+          tags: true,
+          contentPostTags: true,
+        },
+        orderBy: [
+          { likesCount: 'desc' },
+          { commentsCount: 'desc' },
+          { viewsCount: 'desc' },
+          { createdAt: 'desc' },
+        ],
+        take: limit + 1, // Bir fazla al ki hasMore'u kontrol edebilelim
+      });
+
+      const hasMore = postsWithStats.length > limit;
+      const resultPosts = hasMore ? postsWithStats.slice(0, limit) : postsWithStats;
+      const nextCursor = hasMore && resultPosts.length > 0 ? resultPosts[resultPosts.length - 1].id : undefined;
+
+      const feedItems = await this.mapPostsToFeedItems(resultPosts, userId);
+
+      return {
+        items: feedItems,
+        pagination: {
+          cursor: nextCursor,
+          hasMore,
+          limit,
+        },
+      };
+    } catch (error) {
+      logger.error(`Failed to get brand trends for ${brandId}:`, error);
+      throw error;
+    }
   }
 
   // ===== Brand History =====
 
-  async getBrandHistory(brandId: string, userId: string): Promise<BrandHistory> {
+  async getBrandHistory(
+    brandId: string,
+    userId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<BrandHistory> {
+    // Brand bilgilerini store'dan (brand tablosundan) al
     const brand = await this.prisma.brand.findUnique({
       where: { id: brandId },
       include: { brandCategory: true },
@@ -622,56 +836,109 @@ export class BrandService {
       throw new NotFoundError(`Brand not found: ${brandId}`);
     }
 
-    // Toplam puan: o brand için bridgeReward + wishboxReward miktarlarının toplamı (yaklaşık)
-    const bridgeRewards = await this.prisma.bridgeReward.findMany({
-      where: { brandId },
-      include: { badge: true },
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
+
+    // Kullanıcının bu marka için kazandığı rozetler (pagination ile)
+    const whereClause: any = {
+      userId,
+      brandId,
+    };
+
+    if (cursor) {
+      whereClause.badgeId = {
+        lt: cursor,
+      };
+    }
+
+    // Önce tüm unique badge'leri al (distinct badgeId'ler)
+    const allRewards = await this.prisma.bridgeReward.findMany({
+      where: {
+        userId,
+        brandId,
+      },
+      include: {
+        badge: true,
+      },
+      orderBy: {
+        awardedAt: 'desc',
+      },
     });
 
-    const wishboxRewards = await this.prisma.wishboxReward.findMany({
-      where: { userId },
+    // Distinct badge'leri map'le
+    const uniqueBadgesMap = new Map<string, BrandHistoryBadge>();
+    const defaultBadgeImage = buildMediaUrl('tipbox-media/badge/badge1.png');
+    
+    for (const br of allRewards) {
+      if (!uniqueBadgesMap.has(br.badgeId)) {
+        uniqueBadgesMap.set(br.badgeId, {
+          id: br.badgeId,
+          title: br.badge.name,
+          image: br.badge.imageUrl || defaultBadgeImage,
+        });
+      }
+    }
+
+    // Badge'leri array'e çevir ve cursor'a göre filtrele
+    let allBadges = Array.from(uniqueBadgesMap.values());
+    
+    // Cursor varsa, cursor'dan önceki badge'leri al
+    if (cursor) {
+      const cursorIndex = allBadges.findIndex(b => b.id === cursor);
+      if (cursorIndex !== -1) {
+        allBadges = allBadges.slice(cursorIndex + 1);
+      }
+    }
+
+    // Pagination uygula
+    const hasMore = allBadges.length > limit;
+    const paginatedBadges = hasMore ? allBadges.slice(0, limit) : allBadges;
+    const nextCursor = hasMore && paginatedBadges.length > 0 
+      ? paginatedBadges[paginatedBadges.length - 1].id 
+      : undefined;
+
+    const badgeList: BrandHistoryBadge[] = paginatedBadges;
+
+    // Toplam puan: kullanıcının bu marka için kazandığı bridgeReward sayısı * 50
+    // (Her bridgeReward yaklaşık 50 puan değerinde)
+    const totalPoints = allRewards.length * 50;
+
+    // Stats: kullanıcıya özel istatistikler
+    // Surveys: kullanıcının bu marka için katıldığı survey sayısı
+    const userSurveys = await this.prisma.brandSurveyAnswer.findMany({
+      where: {
+        userId,
+        question: {
+          survey: {
+            brandId,
+          },
+        },
+      },
+      distinct: ['questionId'],
     });
 
-    const totalPoints =
-      bridgeRewards.length * 50 +
-      wishboxRewards.reduce((sum, r) => sum + (r.amount || 0), 0);
-
-    // Stats: surveys & events WishboxStats'tan, shares ise bridgePost sayısından
-    const wishboxStats = await this.prisma.wishboxStats.findMany();
-    const surveysCount = wishboxStats.length;
-
-    const bridgePostsCount = await this.prisma.bridgePost.count({
-      where: { brandId },
+    // Shares: kullanıcının bu marka için yaptığı bridgePost sayısı
+    const userBridgePostsCount = await this.prisma.bridgePost.count({
+      where: {
+        userId,
+        brandId,
+      },
     });
 
-    const eventsCount = await this.prisma.wishboxEvent.count({
-      where: { status: 'PUBLISHED' },
+    // Events: kullanıcının bu marka için katıldığı event sayısı
+    // (WishboxEvent'te brandId yok, bu yüzden genel event sayısını alıyoruz)
+    const userEvents = await this.prisma.wishboxStats.findMany({
+      where: {
+        userId,
+      },
+      distinct: ['eventId'],
     });
 
     const stats: BrandHistoryStats = {
-      surveys: surveysCount,
-      shares: bridgePostsCount,
-      events: eventsCount,
+      surveys: userSurveys.length,
+      shares: userBridgePostsCount,
+      events: userEvents.length,
     };
-
-    // Points history: son 10 wishboxReward kaydı
-    const defaultBadgeImage = buildMediaUrl('tipbox-media/badge/badge1.png');
-    const pointsHistory: BrandHistoryPointsItem[] = wishboxRewards
-      .slice(0, 10)
-      .map((r) => ({
-        id: r.id,
-        title: 'Event Reward',
-        image: defaultBadgeImage,
-        points: r.amount || 50,
-        createdAt: r.awardedAt.toISOString(),
-      }));
-
-    // Badge list: bridgeRewards üzerinden
-    const badgeList: BrandHistoryBadge[] = bridgeRewards.map((br) => ({
-      id: br.badgeId,
-      title: br.badge.name,
-      image: br.badge.imageUrl || defaultBadgeImage,
-    }));
 
     return {
       id: brand.id,
@@ -680,8 +947,67 @@ export class BrandService {
       image: brand.imageUrl || '',
       totalPoints,
       stats,
-      pointsHistory,
       badgeList,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
+  }
+
+  async getBrandHistoryPoints(
+    brandId: string,
+    userId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<BrandHistoryPointsResponse> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
+
+    // Kullanıcının bu marka için kazandığı bridgeReward'ları al
+    const whereClause: any = {
+      userId,
+      brandId,
+    };
+
+    if (cursor) {
+      whereClause.id = {
+        lt: cursor,
+      };
+    }
+
+    const rewards = await this.prisma.bridgeReward.findMany({
+      where: whereClause,
+      include: {
+        badge: true,
+      },
+      orderBy: {
+        awardedAt: 'desc',
+      },
+      take: limit + 1, // Bir fazla al ki hasMore'u kontrol edebilelim
+    });
+
+    const hasMore = rewards.length > limit;
+    const resultRewards = hasMore ? rewards.slice(0, limit) : rewards;
+
+    const defaultBadgeImage = buildMediaUrl('tipbox-media/badge/badge1.png');
+    const items: BrandHistoryPointsItem[] = resultRewards.map((r) => ({
+      id: r.id,
+      title: r.badge.name,
+      image: r.badge.imageUrl || defaultBadgeImage,
+      points: 50, // Her bridgeReward 50 puan
+      createdAt: r.awardedAt.toISOString(),
+    }));
+
+    const nextCursor = hasMore && resultRewards.length > 0 ? resultRewards[resultRewards.length - 1].id : undefined;
+
+    return {
+      items,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
     };
   }
 
@@ -773,19 +1099,254 @@ export class BrandService {
     };
   }
 
-  async getBrandHistoryPosts(brandId: string, userId: string): Promise<FeedResponse> {
-    return this.getBrandTrends(brandId, userId);
+  async getBrandHistoryPosts(
+    brandId: string,
+    userId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<FeedResponse> {
+    return this.getBrandTrends(brandId, userId, options);
   }
 
-  async getBrandHistoryEvents(brandId: string, userId: string): Promise<BrandHistoryEvents> {
-    const events = await this.getBrandEvents(brandId, userId);
-    return { events };
+  async getBrandHistoryEvents(
+    brandId: string,
+    userId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<BrandHistoryEventsResponse> {
+    const result = await this.getBrandEvents(brandId, userId, options);
+    return {
+      items: result.items,
+      pagination: result.pagination,
+    };
   }
 
   /**
-   * Markaya ait ürünleri listele (product groups'a göre gruplu)
+   * Markaya ait product group'ları listele (sadece group bilgileri)
    */
-  async getBrandProducts(brandId: string): Promise<BrandProductGroup[]> {
+  async getBrandProductGroups(
+    brandId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{
+    items: BrandProductGroupInfo[];
+    pagination: {
+      cursor?: string;
+      hasMore: boolean;
+      limit: number;
+    };
+  }> {
+    try {
+      const brand = await this.prisma.brand.findUnique({
+        where: { id: brandId },
+        select: { name: true },
+      });
+
+      if (!brand) {
+        throw new NotFoundError('Brand not found');
+      }
+
+      const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+      const cursor = options?.cursor;
+
+      // Brand name'e göre product group'ları bul (distinct)
+      const products = await this.prisma.product.findMany({
+        where: {
+          brand: brand.name,
+          ...(cursor && {
+            groupId: {
+              gt: cursor,
+            },
+          }),
+        },
+        include: {
+          group: true,
+        },
+        orderBy: {
+          groupId: 'asc',
+        },
+        take: limit + 1,
+      });
+
+      // Distinct group'ları al
+      const groupsMap = new Map<string, BrandProductGroupInfo>();
+      for (const product of products) {
+        const groupId = product.groupId || 'ungrouped';
+        if (!groupsMap.has(groupId)) {
+          groupsMap.set(groupId, {
+            productGroupId: groupId,
+            productGroupName: product.group?.name || 'Ungrouped',
+          });
+        }
+      }
+
+      const groupsArray = Array.from(groupsMap.values());
+      const hasMore = products.length > limit;
+      const resultGroups = hasMore ? groupsArray.slice(0, limit) : groupsArray;
+      const nextCursor = hasMore && resultGroups.length > 0 ? resultGroups[resultGroups.length - 1].productGroupId : undefined;
+
+      return {
+        items: resultGroups,
+        pagination: {
+          cursor: nextCursor,
+          hasMore,
+          limit,
+        },
+      };
+    } catch (error) {
+      logger.error(`Failed to get brand product groups for ${brandId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Belirli bir product group için products listesi (pagination ile)
+   */
+  async getBrandProductsByGroup(
+    brandId: string,
+    productGroupId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<BrandProductsResponse> {
+    try {
+      const brand = await this.prisma.brand.findUnique({
+        where: { id: brandId },
+        select: { name: true },
+      });
+
+      if (!brand) {
+        throw new NotFoundError('Brand not found');
+      }
+
+      const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+      const cursor = options?.cursor;
+
+      const whereClause: any = {
+        brand: brand.name,
+        groupId: productGroupId === 'ungrouped' ? null : productGroupId,
+      };
+
+      if (cursor) {
+        whereClause.id = {
+          gt: cursor,
+        };
+      }
+
+      const products = await this.prisma.product.findMany({
+        where: whereClause,
+        include: {
+          contentPosts: {
+            select: {
+              id: true,
+              likesCount: true,
+              sharesCount: true,
+              favoritesCount: true,
+            },
+          },
+        },
+        orderBy: {
+          id: 'asc',
+        },
+        take: limit + 1,
+      });
+
+      const hasMore = products.length > limit;
+      const resultProducts = hasMore ? products.slice(0, limit) : products;
+      const nextCursor = hasMore && resultProducts.length > 0 ? resultProducts[resultProducts.length - 1].id : undefined;
+
+      const getRandomStat = () => Math.floor(Math.random() * 31) + 10; // 10-40 arası
+
+      const items: BrandProduct[] = resultProducts.map((product) => ({
+        productId: product.id,
+        name: product.name,
+        image: product.imageUrl,
+        stats: {
+          reviews: getRandomStat(),
+          likes: getRandomStat(),
+          share: getRandomStat(),
+        },
+      }));
+
+      return {
+        items,
+        pagination: {
+          cursor: nextCursor,
+          hasMore,
+          limit,
+        },
+      };
+    } catch (error) {
+      logger.error(`Failed to get brand products by group for ${brandId}/${productGroupId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Batch endpoint: Product groups ve products'ı tek istekte döner
+   */
+  async getBrandProductsBatch(
+    brandId: string,
+    options?: { 
+      groupCursor?: string; 
+      groupLimit?: number;
+      productGroupIds?: string[];
+      productCursors?: Record<string, string>;
+      productLimit?: number;
+    }
+  ): Promise<BrandProductsBatchResponse> {
+    try {
+      // 1. Product groups'ları al
+      const groupsResult = await this.getBrandProductGroups(brandId, {
+        cursor: options?.groupCursor,
+        limit: options?.groupLimit,
+      });
+
+      // 2. Her group için products'ları paralel olarak al
+      const productGroupIds = options?.productGroupIds || groupsResult.items.map(g => g.productGroupId);
+      const productPromises = productGroupIds.map(groupId =>
+        this.getBrandProductsByGroup(brandId, groupId, {
+          cursor: options?.productCursors?.[groupId],
+          limit: options?.productLimit,
+        })
+      );
+
+      const productsResults = await Promise.all(productPromises);
+
+      // 3. Sonuçları birleştir
+      const products: BrandProductGroup[] = groupsResult.items.map((group, index) => ({
+        productGroupId: group.productGroupId,
+        productGroupName: group.productGroupName,
+        products: productsResults[index]?.items || [],
+        pagination: productsResults[index]?.pagination || {
+          cursor: undefined,
+          hasMore: false,
+          limit: options?.productLimit || 20,
+        },
+      }));
+
+      return {
+        groups: groupsResult.items,
+        products,
+        pagination: groupsResult.pagination,
+      };
+    } catch (error) {
+      logger.error(`Failed to get brand products batch for ${brandId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Markaya ait ürünleri listele (infinity scroll için pagination ile)
+   * Her product group içindeki products array'i için de pagination uygulanır
+   * @deprecated Use getBrandProductsBatch instead
+   */
+  async getBrandProducts(
+    brandId: string,
+    options?: { cursor?: string; limit?: number; productLimit?: number }
+  ): Promise<{
+    items: BrandProductGroup[];
+    pagination: {
+      cursor?: string;
+      hasMore: boolean;
+      limit: number;
+    };
+  }> {
     try {
       // Brand'a ait ürünleri bul (Product.brand field'ından)
       // Önce brand name'i al
@@ -798,11 +1359,24 @@ export class BrandService {
         throw new NotFoundError('Brand not found');
       }
 
-      // Brand name'e göre ürünleri bul
+      const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+      const productLimit = options?.productLimit && options.productLimit > 0 ? Math.min(options.productLimit, 50) : 20;
+      const cursor = options?.cursor;
+
+      // Brand name'e göre ürünleri bul (pagination ile)
+      const whereClause: any = {
+        brand: brand.name,
+      };
+
+      if (cursor) {
+        // Cursor-based pagination için productId kullan
+        whereClause.id = {
+          gt: cursor,
+        };
+      }
+
       const products = await this.prisma.product.findMany({
-        where: {
-          brand: brand.name,
-        },
+        where: whereClause,
         include: {
           group: true,
           contentPosts: {
@@ -814,12 +1388,20 @@ export class BrandService {
             },
           },
         },
+        orderBy: {
+          id: 'asc',
+        },
+        take: limit + 1, // Bir fazla al ki hasMore'u kontrol edebilelim
       });
+
+      const hasMore = products.length > limit;
+      const resultProducts = hasMore ? products.slice(0, limit) : products;
+      const nextCursor = hasMore && resultProducts.length > 0 ? resultProducts[resultProducts.length - 1].id : undefined;
 
       // Product groups'a göre grupla
       const groupsMap = new Map<string, { name: string; products: BrandProduct[] }>();
 
-      for (const product of products) {
+      for (const product of resultProducts) {
         const groupId = product.groupId || 'ungrouped';
         const groupName = product.group?.name || 'Ungrouped';
 
@@ -845,14 +1427,35 @@ export class BrandService {
         });
       }
 
-      // Map'i array'e dönüştür
-      const result: BrandProductGroup[] = Array.from(groupsMap.entries()).map(([groupId, groupData]) => ({
-        productGroupId: groupId,
-        productGroupName: groupData.name,
-        products: groupData.products,
-      }));
+      // Map'i array'e dönüştür ve her group içindeki products için pagination ekle
+      const items: BrandProductGroup[] = Array.from(groupsMap.entries()).map(([groupId, groupData]) => {
+        const groupProducts = groupData.products;
+        const groupHasMore = groupProducts.length > productLimit;
+        const paginatedProducts = groupHasMore ? groupProducts.slice(0, productLimit) : groupProducts;
+        const groupNextCursor = groupHasMore && paginatedProducts.length > 0 
+          ? paginatedProducts[paginatedProducts.length - 1].productId 
+          : undefined;
 
-      return result;
+        return {
+          productGroupId: groupId,
+          productGroupName: groupData.name,
+          products: paginatedProducts,
+          pagination: {
+            cursor: groupNextCursor,
+            hasMore: groupHasMore,
+            limit: productLimit,
+          },
+        };
+      });
+
+      return {
+        items,
+        pagination: {
+          cursor: nextCursor,
+          hasMore,
+          limit,
+        },
+      };
     } catch (error) {
       logger.error(`Failed to get brand products for ${brandId}:`, error);
       throw error;
@@ -860,15 +1463,14 @@ export class BrandService {
   }
 
   /**
-   * Marka ürününe ait deneyim paylaşımlarını listele
+   * Marka ürününe ait deneyim paylaşımlarını listele (cursor-based pagination)
    */
   async getBrandProductExperiences(
     brandId: string,
     productId: string,
     userId?: string,
-    page: number = 1,
-    limit: number = 12,
-  ): Promise<FeedItem[]> {
+    options?: { cursor?: string; limit?: number }
+  ): Promise<FeedResponse> {
     try {
       // Brand name'i al
       const brand = await this.prisma.brand.findUnique({
@@ -890,15 +1492,23 @@ export class BrandService {
         throw new NotFoundError('Product not found or does not belong to this brand');
       }
 
-      const safePage = page > 0 ? page : 1;
-      const safeLimit = Math.min(Math.max(limit, 1), 50);
+      const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+      const cursor = options?.cursor;
 
-      // Ürüne ait deneyim paylaşımlarını getir (EXPERIENCE type posts) - sayfalı
+      const whereClause: any = {
+        productId: productId,
+        type: ContentPostType.EXPERIENCE,
+      };
+
+      if (cursor) {
+        whereClause.id = {
+          lt: cursor,
+        };
+      }
+
+      // Ürüne ait deneyim paylaşımlarını getir (EXPERIENCE type posts) - cursor-based pagination
       const posts = await this.prisma.contentPost.findMany({
-        where: {
-          productId: productId,
-          type: ContentPostType.EXPERIENCE,
-        },
+        where: whereClause,
         include: {
           user: {
             include: {
@@ -924,14 +1534,24 @@ export class BrandService {
           favorites: true,
         },
         orderBy: { createdAt: 'desc' },
-        skip: (safePage - 1) * safeLimit,
-        take: safeLimit,
+        take: limit + 1, // Bir fazla al ki hasMore'u kontrol edebilelim
       });
 
-      // Feed items'a dönüştür
-      const feedItems = await this.mapPostsToFeedItems(posts, userId);
+      const hasMore = posts.length > limit;
+      const resultPosts = hasMore ? posts.slice(0, limit) : posts;
+      const nextCursor = hasMore && resultPosts.length > 0 ? resultPosts[resultPosts.length - 1].id : undefined;
 
-      return feedItems;
+      // Feed items'a dönüştür
+      const feedItems = await this.mapPostsToFeedItems(resultPosts, userId);
+
+      return {
+        items: feedItems,
+        pagination: {
+          cursor: nextCursor,
+          hasMore,
+          limit,
+        },
+      };
     } catch (error) {
       logger.error(`Failed to get brand product experiences for ${brandId}/${productId}:`, error);
       throw error;
@@ -1200,9 +1820,11 @@ export class BrandService {
       // Map based on post type
       switch (post.type) {
         case ContentPostType.FREE:
-          return this.mapToPostItem(post, basePostWithContext, FeedItemType.FEED, images);
+          return this.mapToPostItem(post, basePostWithContext, FeedItemType.POST, images);
         case ContentPostType.EXPERIENCE:
-          return this.mapToPostItem(post, basePostWithContext, FeedItemType.EXPERIENCE, images);
+          return this.mapToExperienceItem(post, basePostWithContext, FeedItemType.EXPERIENCE, images, ownedProductIds);
+        case ContentPostType.UPDATE:
+          return this.mapToExperienceItem(post, basePostWithContext, FeedItemType.UPDATE, images, ownedProductIds);
         case ContentPostType.COMPARE:
           return this.mapToBenchmarkItem(post, basePostWithContext, ownedProductIds, images);
         case ContentPostType.QUESTION:
@@ -1309,7 +1931,7 @@ export class BrandService {
   private mapToPostItem(
     post: any,
     basePost: any,
-    type: FeedItemType.FEED | FeedItemType.POST | FeedItemType.QUESTION | FeedItemType.EXPERIENCE,
+    type: FeedItemType.POST | FeedItemType.QUESTION,
     images: string[] = []
   ): FeedItem {
     const product = this.getProductBase(post.product);
@@ -1323,6 +1945,207 @@ export class BrandService {
         images,
       },
     };
+  }
+
+  private mapToExperienceItem(
+    post: any,
+    basePost: any,
+    type: FeedItemType.EXPERIENCE | FeedItemType.UPDATE,
+    images: string[] = [],
+    ownedProductIds?: Set<string>
+  ): FeedItem {
+    const productBase = this.getProductBase(post.product);
+    const product: ReviewProduct = productBase
+      ? {
+          ...productBase,
+          isOwned: ownedProductIds?.has(productBase.id) || false,
+        }
+      : {
+          id: post.productId || '',
+          name: post.product?.name || '',
+          subName: post.productGroup?.name || '',
+          image: post.product?.imageUrl || null,
+          isOwned: false,
+        };
+
+    // Parse experience content from body
+    const experienceContent: ExperienceContent[] = this.parseExperienceContent(post.body);
+
+    // Get tags
+    const tags = post.tags?.map((t: any) => t.tag) || post.contentPostTags?.map((t: any) => t.tag) || [];
+
+    const experienceData: ExperiencePost = {
+      ...basePost,
+      type,
+      product,
+      content: experienceContent,
+      tags,
+      images,
+    };
+
+    return {
+      type,
+      data: experienceData,
+    };
+  }
+
+  private parseExperienceContent(body: string): ExperienceContent[] {
+    const content: ExperienceContent[] = [];
+    
+    if (!body) {
+      return [
+        {
+          title: 'Product and Usage Experience',
+          content: '',
+          rating: 0,
+        },
+      ];
+    }
+
+    // First, try to parse body as JSON (in case it contains structured content array)
+    try {
+      const parsed = JSON.parse(body);
+      
+      // Handle case where parsed is an object with content array
+      let contentArray: any[] | undefined = undefined;
+      if (parsed && Array.isArray(parsed.content)) {
+        contentArray = parsed.content;
+      } else if (Array.isArray(parsed)) {
+        // Handle case where body is directly a JSON array
+        contentArray = parsed;
+      }
+      
+      if (contentArray && contentArray.length > 0) {
+        const transformedContent: ExperienceContent[] = [];
+        let hasPrice = false;
+        let hasUsage = false;
+        
+        for (const item of contentArray) {
+          if (item.title === 'Experience') {
+            // Split "Experience" into two items
+            // Generate random rating between 30-70 for both items
+            const randomRatingPrice = Math.floor(Math.random() * (70 - 30 + 1)) + 30;
+            const randomRatingUsage = Math.floor(Math.random() * (70 - 30 + 1)) + 30;
+            
+            transformedContent.push({
+              title: 'Price and Shopping Experience',
+              content: item.content || '',
+              rating: randomRatingPrice,
+            });
+            
+            transformedContent.push({
+              title: 'Product and Usage Experience',
+              content: item.content || '',
+              rating: randomRatingUsage,
+            });
+            hasPrice = true;
+            hasUsage = true;
+          } else if (item.title === 'Price and Shopping Experience') {
+            transformedContent.push({
+              title: item.title,
+              content: item.content || '',
+              rating: item.rating && item.rating > 0 ? item.rating : Math.floor(Math.random() * (70 - 30 + 1)) + 30,
+            });
+            hasPrice = true;
+          } else if (item.title === 'Product and Usage Experience') {
+            transformedContent.push({
+              title: item.title,
+              content: item.content || '',
+              rating: item.rating && item.rating > 0 ? item.rating : Math.floor(Math.random() * (70 - 30 + 1)) + 30,
+            });
+            hasUsage = true;
+          }
+        }
+        
+        // If only one type exists, add the missing one
+        if (hasPrice && !hasUsage) {
+          const randomRatingUsage = Math.floor(Math.random() * (70 - 30 + 1)) + 30;
+          transformedContent.push({
+            title: 'Product and Usage Experience',
+            content: transformedContent[0]?.content || '',
+            rating: randomRatingUsage,
+          });
+        } else if (hasUsage && !hasPrice) {
+          const randomRatingPrice = Math.floor(Math.random() * (70 - 30 + 1)) + 30;
+          transformedContent.unshift({
+            title: 'Price and Shopping Experience',
+            content: transformedContent[0]?.content || '',
+            rating: randomRatingPrice,
+          });
+        }
+        
+        if (transformedContent.length > 0) {
+          return transformedContent;
+        }
+      }
+    } catch (e) {
+      // Not JSON, continue with text parsing
+    }
+
+    // Try to extract experience sections from body
+    const priceMatch = body.match(/\[price_and_shopping[^\]]*\](.*?)(?:\[|Rating:|$)/is);
+    const usageMatch = body.match(/\[product_and_usage[^\]]*\](.*?)(?:\[|Rating:|$)/is);
+    const ratingMatch = body.match(/Rating:\s*(\d+)/i);
+    const extractedRating = ratingMatch ? parseInt(ratingMatch[1]) : null;
+
+    // Generate random ratings if not provided
+    const generateRating = () => extractedRating && extractedRating > 0 ? extractedRating : Math.floor(Math.random() * (70 - 30 + 1)) + 30;
+
+    if (priceMatch) {
+      content.push({
+        title: 'Price and Shopping Experience',
+        content: priceMatch[1].trim(),
+        rating: generateRating(),
+      });
+    }
+
+    if (usageMatch) {
+      content.push({
+        title: 'Product and Usage Experience',
+        content: usageMatch[1].trim(),
+        rating: generateRating(),
+      });
+    }
+
+    // If only one type found, add the missing one
+    if (content.length === 1) {
+      const existingContent = content[0].content;
+      if (priceMatch && !usageMatch) {
+        // Only price found, add usage
+        content.push({
+          title: 'Product and Usage Experience',
+          content: existingContent,
+          rating: generateRating(),
+        });
+      } else if (usageMatch && !priceMatch) {
+        // Only usage found, add price
+        content.unshift({
+          title: 'Price and Shopping Experience',
+          content: existingContent,
+          rating: generateRating(),
+        });
+      }
+    }
+
+    // If no structured content found, create both defaults
+    if (content.length === 0) {
+      const randomRatingPrice = Math.floor(Math.random() * (70 - 30 + 1)) + 30;
+      const randomRatingUsage = Math.floor(Math.random() * (70 - 30 + 1)) + 30;
+      
+      content.push({
+        title: 'Price and Shopping Experience',
+        content: body,
+        rating: randomRatingPrice,
+      });
+      
+      content.push({
+        title: 'Product and Usage Experience',
+        content: body,
+        rating: randomRatingUsage,
+      });
+    }
+
+    return content;
   }
 
   private mapToBenchmarkItem(

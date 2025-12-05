@@ -100,7 +100,7 @@ const inferTaskType = (title?: string, requirement?: string): TaskType => {
   return match?.type ?? 'Comment';
 };
 
-export const PROFILE_FEED_CARD_TYPES = ['post', 'feed', 'benchmark', 'tipsAndTricks', 'question'] as const;
+export const PROFILE_FEED_CARD_TYPES = ['post', 'feed', 'benchmark', 'tipsAndTricks', 'question', 'experience', 'update'] as const;
 export type ProfileFeedCardType = (typeof PROFILE_FEED_CARD_TYPES)[number];
 
 export class UserService {
@@ -1714,10 +1714,10 @@ export class UserService {
         }
 
         default: {
-          // Unknown type -> "feed" olarak döndür
+          // Unknown type -> "post" olarak döndür
           results.push({
             id: String(post.id),
-            type: 'feed' as const,
+            type: 'post' as const,
             user: userBase,
             stats,
             createdAt: post.createdAt.toISOString(),
@@ -1856,6 +1856,10 @@ export class UserService {
           return this.getUserTips(userId);
         case 'question':
           return this.getUserReplies(userId);
+        case 'experience':
+          return this.getUserReviews(userId);
+        case 'update':
+          return this.getUserReviews(userId);
         case 'post':
         default:
           return this.getUserPosts(userId);

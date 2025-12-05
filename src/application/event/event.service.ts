@@ -696,14 +696,14 @@ export class EventService {
    */
   private mapContentPostTypeToFeedItemType(postType: string): FeedItemType {
     const mapping: Record<string, FeedItemType> = {
-      FREE: FeedItemType.FEED,
+      FREE: FeedItemType.POST,
       TIPS: FeedItemType.TIPS_AND_TRICKS,
       COMPARE: FeedItemType.BENCHMARK,
       QUESTION: FeedItemType.QUESTION,
-      EXPERIENCE: FeedItemType.FEED,
-      UPDATE: FeedItemType.POST,
+      EXPERIENCE: FeedItemType.EXPERIENCE,
+      UPDATE: FeedItemType.UPDATE,
     };
 
-    return mapping[postType] || FeedItemType.FEED;
+    return mapping[postType] || FeedItemType.POST;
   }
 }

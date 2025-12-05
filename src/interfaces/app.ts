@@ -126,7 +126,7 @@ const swaggerOptions = {
             id: { type: 'string' },
             type: {
               type: 'string',
-              enum: ['feed', 'benchmark', 'post', 'question', 'tipsAndTricks', 'experience'],
+              enum: ['benchmark', 'post', 'question', 'tipsAndTricks', 'experience', 'update'],
             },
             user: { $ref: '#/components/schemas/BaseUser' },
             stats: { $ref: '#/components/schemas/BaseStats' },
@@ -154,7 +154,7 @@ const swaggerOptions = {
             id: { type: 'string' },
             type: {
               type: 'string',
-              enum: ['feed', 'benchmark', 'post', 'question', 'tipsAndTricks', 'experience'],
+              enum: ['benchmark', 'post', 'question', 'tipsAndTricks', 'experience', 'update'],
             },
             user: { $ref: '#/components/schemas/BaseUser' },
             stats: { $ref: '#/components/schemas/BaseStats' },
@@ -176,7 +176,7 @@ const swaggerOptions = {
             id: { type: 'string' },
             type: {
               type: 'string',
-              enum: ['feed', 'benchmark', 'post', 'question', 'tipsAndTricks', 'experience'],
+              enum: ['benchmark', 'post', 'question', 'tipsAndTricks', 'experience', 'update'],
             },
             user: { $ref: '#/components/schemas/BaseUser' },
             stats: { $ref: '#/components/schemas/BaseStats' },
@@ -199,6 +199,58 @@ const swaggerOptions = {
             },
           },
         },
+        ReviewProduct: {
+          allOf: [
+            { $ref: '#/components/schemas/BaseProduct' },
+            {
+              type: 'object',
+              properties: {
+                isOwned: { type: 'boolean' },
+              },
+            },
+          ],
+        },
+        ExperienceContent: {
+          type: 'object',
+          properties: {
+            title: {
+              type: 'string',
+              enum: ['Price and Shopping Experience', 'Product and Usage Experience'],
+            },
+            content: { type: 'string' },
+            rating: { type: 'number' },
+          },
+        },
+        ExperiencePost: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            type: {
+              type: 'string',
+              enum: ['experience', 'update'],
+            },
+            user: { $ref: '#/components/schemas/BaseUser' },
+            stats: { $ref: '#/components/schemas/BaseStats' },
+            createdAt: { type: 'string', format: 'date-time' },
+            contextType: {
+              type: 'string',
+              enum: ['product_group', 'product', 'sub_category'],
+            },
+            product: { $ref: '#/components/schemas/ReviewProduct' },
+            content: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/ExperienceContent' },
+            },
+            tags: {
+              type: 'array',
+              items: { type: 'string' },
+            },
+            images: {
+              type: 'array',
+              items: { type: 'object' },
+            },
+          },
+        },
         FeedResponse: {
           type: 'object',
           properties: {
@@ -206,13 +258,6 @@ const swaggerOptions = {
               type: 'array',
               items: {
                 oneOf: [
-                  {
-                    type: 'object',
-                    properties: {
-                      type: { type: 'string', enum: ['feed'] },
-                      data: { $ref: '#/components/schemas/Post' },
-                    },
-                  },
                   {
                     type: 'object',
                     properties: {
@@ -239,6 +284,20 @@ const swaggerOptions = {
                     properties: {
                       type: { type: 'string', enum: ['tipsAndTricks'] },
                       data: { $ref: '#/components/schemas/TipsAndTricksPost' },
+                    },
+                  },
+                  {
+                    type: 'object',
+                    properties: {
+                      type: { type: 'string', enum: ['experience'] },
+                      data: { $ref: '#/components/schemas/ExperiencePost' },
+                    },
+                  },
+                  {
+                    type: 'object',
+                    properties: {
+                      type: { type: 'string', enum: ['update'] },
+                      data: { $ref: '#/components/schemas/ExperiencePost' },
                     },
                   },
                 ],

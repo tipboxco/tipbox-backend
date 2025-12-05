@@ -12,7 +12,7 @@ import {
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
 import { FeedItemType } from '../../domain/feed/feed-item-type.enum';
 import { ContextType } from '../../domain/content/context-type.enum';
-import { ContextData } from '../../interfaces/feed/feed.dto';
+import { ContextData, ExperiencePost, ExperienceContent, ReviewProduct } from '../../interfaces/feed/feed.dto';
 
 export class ExploreService {
   private readonly prisma: PrismaClient;
@@ -198,13 +198,17 @@ export class ExploreService {
 
         switch (post.type) {
           case ContentPostType.FREE:
-            return this.mapToPostItem(post, basePost, FeedItemType.FEED, images);
+            return this.mapToPostItem(post, basePost, FeedItemType.POST, images);
           case ContentPostType.COMPARE:
             return this.mapToBenchmarkItem(post, basePost, ownedProductIds, images);
           case ContentPostType.QUESTION:
             return this.mapToPostItem(post, basePost, FeedItemType.QUESTION, images);
           case ContentPostType.TIPS:
             return this.mapToTipsAndTricksItem(post, basePost, images);
+          case ContentPostType.EXPERIENCE:
+            return this.mapToExperienceItem(post, basePost, FeedItemType.EXPERIENCE, images, ownedProductIds);
+          case ContentPostType.UPDATE:
+            return this.mapToExperienceItem(post, basePost, FeedItemType.UPDATE, images, ownedProductIds);
           default:
             return this.mapToPostItem(post, basePost, FeedItemType.POST, images);
         }
@@ -687,6 +691,207 @@ export class ExploreService {
       type: FeedItemType.TIPS_AND_TRICKS,
       data: tipsData,
     };
+  }
+
+  private mapToExperienceItem(
+    post: any,
+    basePost: any,
+    type: FeedItemType.EXPERIENCE | FeedItemType.UPDATE,
+    images: string[] = [],
+    ownedProductIds?: Set<string>
+  ) {
+    const productBase = this.getProductBase(post.product);
+    const product: ReviewProduct = productBase
+      ? {
+          ...productBase,
+          isOwned: ownedProductIds?.has(productBase.id) || false,
+        }
+      : {
+          id: post.productId || '',
+          name: post.product?.name || '',
+          subName: post.productGroup?.name || '',
+          image: post.product?.imageUrl || null,
+          isOwned: false,
+        };
+
+    // Parse experience content from body
+    const experienceContent: ExperienceContent[] = this.parseExperienceContent(post.body);
+
+    // Get tags
+    const tags = post.tags?.map((t: any) => t.tag) || post.contentPostTags?.map((t: any) => t.tag) || [];
+
+    const experienceData: ExperiencePost = {
+      ...basePost,
+      type,
+      product,
+      content: experienceContent,
+      tags,
+      images,
+    };
+
+    return {
+      type,
+      data: experienceData,
+    };
+  }
+
+  private parseExperienceContent(body: string): ExperienceContent[] {
+    const content: ExperienceContent[] = [];
+    
+    if (!body) {
+      return [
+        {
+          title: 'Product and Usage Experience',
+          content: '',
+          rating: 0,
+        },
+      ];
+    }
+
+    // First, try to parse body as JSON (in case it contains structured content array)
+    try {
+      const parsed = JSON.parse(body);
+      
+      // Handle case where parsed is an object with content array
+      let contentArray: any[] | undefined = undefined;
+      if (parsed && Array.isArray(parsed.content)) {
+        contentArray = parsed.content;
+      } else if (Array.isArray(parsed)) {
+        // Handle case where body is directly a JSON array
+        contentArray = parsed;
+      }
+      
+      if (contentArray && contentArray.length > 0) {
+        const transformedContent: ExperienceContent[] = [];
+        let hasPrice = false;
+        let hasUsage = false;
+        
+        for (const item of contentArray) {
+          if (item.title === 'Experience') {
+            // Split "Experience" into two items
+            // Generate random rating between 30-70 for both items
+            const randomRatingPrice = Math.floor(Math.random() * (70 - 30 + 1)) + 30;
+            const randomRatingUsage = Math.floor(Math.random() * (70 - 30 + 1)) + 30;
+            
+            transformedContent.push({
+              title: 'Price and Shopping Experience',
+              content: item.content || '',
+              rating: randomRatingPrice,
+            });
+            
+            transformedContent.push({
+              title: 'Product and Usage Experience',
+              content: item.content || '',
+              rating: randomRatingUsage,
+            });
+            hasPrice = true;
+            hasUsage = true;
+          } else if (item.title === 'Price and Shopping Experience') {
+            transformedContent.push({
+              title: item.title,
+              content: item.content || '',
+              rating: item.rating && item.rating > 0 ? item.rating : Math.floor(Math.random() * (70 - 30 + 1)) + 30,
+            });
+            hasPrice = true;
+          } else if (item.title === 'Product and Usage Experience') {
+            transformedContent.push({
+              title: item.title,
+              content: item.content || '',
+              rating: item.rating && item.rating > 0 ? item.rating : Math.floor(Math.random() * (70 - 30 + 1)) + 30,
+            });
+            hasUsage = true;
+          }
+        }
+        
+        // If only one type exists, add the missing one
+        if (hasPrice && !hasUsage) {
+          const randomRatingUsage = Math.floor(Math.random() * (70 - 30 + 1)) + 30;
+          transformedContent.push({
+            title: 'Product and Usage Experience',
+            content: transformedContent[0]?.content || '',
+            rating: randomRatingUsage,
+          });
+        } else if (hasUsage && !hasPrice) {
+          const randomRatingPrice = Math.floor(Math.random() * (70 - 30 + 1)) + 30;
+          transformedContent.unshift({
+            title: 'Price and Shopping Experience',
+            content: transformedContent[0]?.content || '',
+            rating: randomRatingPrice,
+          });
+        }
+        
+        if (transformedContent.length > 0) {
+          return transformedContent;
+        }
+      }
+    } catch (e) {
+      // Not JSON, continue with text parsing
+    }
+
+    // Try to extract experience sections from body
+    const priceMatch = body.match(/\[price_and_shopping[^\]]*\](.*?)(?:\[|Rating:|$)/is);
+    const usageMatch = body.match(/\[product_and_usage[^\]]*\](.*?)(?:\[|Rating:|$)/is);
+    const ratingMatch = body.match(/Rating:\s*(\d+)/i);
+    const extractedRating = ratingMatch ? parseInt(ratingMatch[1]) : null;
+
+    // Generate random ratings if not provided
+    const generateRating = () => extractedRating && extractedRating > 0 ? extractedRating : Math.floor(Math.random() * (70 - 30 + 1)) + 30;
+
+    if (priceMatch) {
+      content.push({
+        title: 'Price and Shopping Experience',
+        content: priceMatch[1].trim(),
+        rating: generateRating(),
+      });
+    }
+
+    if (usageMatch) {
+      content.push({
+        title: 'Product and Usage Experience',
+        content: usageMatch[1].trim(),
+        rating: generateRating(),
+      });
+    }
+
+    // If only one type found, add the missing one
+    if (content.length === 1) {
+      const existingContent = content[0].content;
+      if (priceMatch && !usageMatch) {
+        // Only price found, add usage
+        content.push({
+          title: 'Product and Usage Experience',
+          content: existingContent,
+          rating: generateRating(),
+        });
+      } else if (usageMatch && !priceMatch) {
+        // Only usage found, add price
+        content.unshift({
+          title: 'Price and Shopping Experience',
+          content: existingContent,
+          rating: generateRating(),
+        });
+      }
+    }
+
+    // If no structured content found, create both defaults
+    if (content.length === 0) {
+      const randomRatingPrice = Math.floor(Math.random() * (70 - 30 + 1)) + 30;
+      const randomRatingUsage = Math.floor(Math.random() * (70 - 30 + 1)) + 30;
+      
+      content.push({
+        title: 'Price and Shopping Experience',
+        content: body,
+        rating: randomRatingPrice,
+      });
+      
+      content.push({
+        title: 'Product and Usage Experience',
+        content: body,
+        rating: randomRatingUsage,
+      });
+    }
+
+    return content;
   }
 }
 
