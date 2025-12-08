@@ -416,7 +416,7 @@ router.get(
  * /brands/{brandId}/products:
  *   get:
  *     summary: Markaya ait ürünleri batch endpoint ile listele
- *     description: Product groups ve products'ı tek istekte döner. İki ayrı endpoint'i birleştirir.
+ *     description: Product groups metadata ve products'ı tek istekte döner. Groups lookup için Record, products flat array, tek pagination.
  *     tags: [Brand]
  *     security:
  *       - bearerAuth: []
@@ -429,35 +429,27 @@ router.get(
  *           format: uuid
  *         description: Brand ID'si
  *       - in: query
- *         name: groupCursor
- *         required: false
- *         schema:
- *           type: string
- *         description: Product groups için cursor
- *       - in: query
- *         name: groupLimit
- *         required: false
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 50
- *         description: Sayfa başına dönecek group sayısı (varsayılan 20)
- *       - in: query
  *         name: productGroupIds
  *         required: false
  *         schema:
  *           type: array
  *           items:
  *             type: string
- *         description: Products'ları getirilecek product group ID'leri (virgülle ayrılmış)
+ *         description: Products'ları getirilecek product group ID'leri (virgülle ayrılmış). Belirtilmezse tüm groups'ların products'ları gelir.
  *       - in: query
- *         name: productLimit
+ *         name: cursor
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Products pagination için cursor (önceki sayfanın son product ID'si)
+ *       - in: query
+ *         name: limit
  *         required: false
  *         schema:
  *           type: integer
  *           minimum: 1
  *           maximum: 50
- *         description: Her product group için dönecek product sayısı (varsayılan 20)
+ *         description: Sayfa başına dönecek product sayısı (varsayılan 20)
  *     responses:
  *       200:
  *         description: Brand ürünleri batch olarak başarıyla listelendi.
@@ -467,8 +459,8 @@ router.get(
  *               type: object
  *               properties:
  *                 groups:
- *                   type: array
- *                   items:
+ *                   type: object
+ *                   additionalProperties:
  *                     type: object
  *                     properties:
  *                       productGroupId:
@@ -476,48 +468,33 @@ router.get(
  *                         format: uuid
  *                       productGroupName:
  *                         type: string
- *                 products:
+ *                   description: Product groups metadata (lookup için Record)
+ *                 items:
  *                   type: array
  *                   items:
  *                     type: object
  *                     properties:
+ *                       productId:
+ *                         type: string
+ *                         format: uuid
  *                       productGroupId:
  *                         type: string
  *                         format: uuid
- *                       productGroupName:
+ *                       name:
  *                         type: string
- *                       products:
- *                         type: array
- *                         items:
- *                           type: object
- *                           properties:
- *                             productId:
- *                               type: string
- *                               format: uuid
- *                             name:
- *                               type: string
- *                             image:
- *                               type: string
- *                               nullable: true
- *                             stats:
- *                               type: object
- *                               properties:
- *                                 reviews:
- *                                   type: integer
- *                                 likes:
- *                                   type: integer
- *                                 share:
- *                                   type: integer
- *                       pagination:
+ *                       image:
+ *                         type: string
+ *                         nullable: true
+ *                       stats:
  *                         type: object
  *                         properties:
- *                           cursor:
- *                             type: string
- *                             nullable: true
- *                           hasMore:
- *                             type: boolean
- *                           limit:
+ *                           reviews:
  *                             type: integer
+ *                           likes:
+ *                             type: integer
+ *                           share:
+ *                             type: integer
+ *                   description: Products flat array (pagination'lı)
  *                 pagination:
  *                   type: object
  *                   properties:
@@ -537,11 +514,9 @@ router.get(
   '/:brandId/products',
   asyncHandler(async (req: Request, res: Response) => {
     const { brandId } = req.params;
-    const groupCursor = req.query.groupCursor ? String(req.query.groupCursor) : undefined;
-    const groupLimitParam = req.query.groupLimit ? Number(req.query.groupLimit) : undefined;
-    const groupLimit = groupLimitParam && !Number.isNaN(groupLimitParam) ? Math.min(groupLimitParam, 50) : 20;
-    const productLimitParam = req.query.productLimit ? Number(req.query.productLimit) : undefined;
-    const productLimit = productLimitParam && !Number.isNaN(productLimitParam) ? Math.min(productLimitParam, 50) : 20;
+    const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
+    const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
+    const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
     
     // productGroupIds query parametresini parse et (virgülle ayrılmış veya array)
     let productGroupIds: string[] | undefined = undefined;
@@ -553,26 +528,10 @@ router.get(
       }
     }
 
-    // productCursors query parametresini parse et (JSON string veya object)
-    let productCursors: Record<string, string> | undefined = undefined;
-    if (req.query.productCursors) {
-      try {
-        if (typeof req.query.productCursors === 'string') {
-          productCursors = JSON.parse(req.query.productCursors);
-        } else if (typeof req.query.productCursors === 'object') {
-          productCursors = req.query.productCursors as Record<string, string>;
-        }
-      } catch (e) {
-        // Invalid JSON, ignore
-      }
-    }
-
     const result = await brandService.getBrandProductsBatch(brandId, {
-      groupCursor,
-      groupLimit,
       productGroupIds,
-      productCursors,
-      productLimit,
+      cursor,
+      limit,
     });
     res.json(result);
   }),
@@ -1469,11 +1428,31 @@ router.get(
  *               items:
  *                 type: object
  *                 properties:
- *                   type:
+ *                   id:
  *                     type: string
- *                     enum: ['benchmark', 'post', 'question', 'tipsAndTricks', 'experience', 'update']
- *                   data:
+ *                   title:
+ *                     type: string
+ *                   description:
+ *                     type: string
+ *                   source:
+ *                     type: string
+ *                   date:
+ *                     type: string
+ *                     format: date-time
+ *                   image:
+ *                     type: string
+ *                     format: uri
+ *                   url:
+ *                     type: string
+ *                     format: uri
+ *                     nullable: true
+ *                   stats:
  *                     type: object
+ *                     properties:
+ *                       likes: { type: integer }
+ *                       comments: { type: integer }
+ *                       share: { type: integer }
+ *                       bookmarks: { type: integer }
  *       401:
  *         description: Kimlik doğrulaması başarısız.
  *       404:

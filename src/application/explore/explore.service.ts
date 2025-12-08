@@ -663,7 +663,6 @@ export class ExploreService {
 
     const benchmarkData = {
       ...basePost,
-      type: FeedItemType.BENCHMARK,
       contextData: this.buildContextData(post),
       products,
       content: comparison.comparisonSummary || post.body,
@@ -680,7 +679,6 @@ export class ExploreService {
 
     const tipsData = {
       ...basePost,
-      type: FeedItemType.TIPS_AND_TRICKS,
       contextData: this.buildContextData(post),
       content: post.body,
       tag,
@@ -722,7 +720,6 @@ export class ExploreService {
 
     const experienceData: ExperiencePost = {
       ...basePost,
-      type,
       product,
       content: experienceContent,
       tags,

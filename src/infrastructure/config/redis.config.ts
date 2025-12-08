@@ -28,12 +28,36 @@ class RedisConfigManager {
     const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
     
     try {
-      // Publisher client
-      const pubClient = createClient({ url: redisUrl });
+      // Publisher client with socket timeout
+      const pubClient = createClient({ 
+        url: redisUrl,
+        socket: {
+          connectTimeout: 10000, // 10 seconds
+          reconnectStrategy: (retries) => {
+            if (retries > 10) {
+              logger.error('Redis reconnection failed after 10 retries');
+              return new Error('Redis reconnection limit exceeded');
+            }
+            return Math.min(retries * 100, 3000);
+          },
+        },
+      });
       await pubClient.connect();
       
-      // Subscriber client
-      const subClient = createClient({ url: redisUrl });
+      // Subscriber client with socket timeout
+      const subClient = createClient({ 
+        url: redisUrl,
+        socket: {
+          connectTimeout: 10000, // 10 seconds
+          reconnectStrategy: (retries) => {
+            if (retries > 10) {
+              logger.error('Redis reconnection failed after 10 retries');
+              return new Error('Redis reconnection limit exceeded');
+            }
+            return Math.min(retries * 100, 3000);
+          },
+        },
+      });
       await subClient.connect();
 
       // Error handling

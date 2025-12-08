@@ -18,10 +18,8 @@ import {
   RarityType,
 } from '../../interfaces/marketplace/marketplace.dto';
 import { NFTMarketListingStatus } from '../../domain/crypto/nft-market-listing-status.enum';
-import { NFTType } from '../../domain/crypto/nft-type.enum';
-import { NFTRarity } from '../../domain/crypto/nft-rarity.enum';
+
 import logger from '../../infrastructure/logger/logger';
-import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 
 export class MarketplaceService {
   private readonly nftRepo: NFTPrismaRepository;
@@ -438,12 +436,6 @@ export class MarketplaceService {
         nftId,
         error: error instanceof Error ? error.message : String(error),
       });
-      throw error;
-    }
-  }
-}
-
-
       throw error;
     }
   }

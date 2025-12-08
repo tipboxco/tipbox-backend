@@ -319,7 +319,7 @@ router.delete('/:id/trusts/:targetUserId', asyncHandler(async (req: Request, res
 
 /**
  * @openapi
- * /users/{id}/trust:
+ * /users/trust:
  *   post:
  *     summary: Trust ekle
  *     tags: [Users]
@@ -333,23 +333,32 @@ router.delete('/:id/trusts/:targetUserId', asyncHandler(async (req: Request, res
  *             type: object
  *             required: [ targetUserId ]
  *             properties:
- *               targetUserId: { type: string }
+ *               targetUserId:
+ *                 type: string
+ *                 description: Trust edilecek kullanıcı ID'si
+ *                 example: "248cc91f-b551-4ecc-a885-db1163571330"
  *     responses:
  *       201:
- *         description: Eklendi
+ *         description: Trust işlemi başarıyla gerçekleştirildi ve trust/truster sayıları güncellendi
+ *       400:
+ *         description: Geçersiz parametreler
  *       401:
  *         description: Unauthorized
  */
-router.post('/:id/trust', asyncHandler(async (req: Request, res: Response) => {
+router.post('/trust', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = (req as any).user;
   const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
-  const id = String(req.params.id);
-  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
+  
   const { targetUserId } = req.body || {};
-  if (!targetUserId || typeof targetUserId !== 'string') return res.status(400).json({ message: 'targetUserId is required' });
+  const id = String(authUserId);
+
+  if (!targetUserId || typeof targetUserId !== 'string') {
+    return res.status(400).json({ message: 'targetUserId is required and must be a string' });
+  }
+  
   await userService.addTrust(id, targetUserId);
-  return res.status(201).end();
+  return res.status(201).json({ message: 'Trust added successfully' });
 }));
 
 /**
@@ -496,60 +505,78 @@ router.post('/:id/unmute', asyncHandler(async (req: Request, res: Response) => {
  *         name: q
  *         schema: { type: string }
  *         description: İsim veya kullanıcı adına göre arama (case-insensitive)
+ *       - in: query
+ *         name: cursor
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor (son item'ın id'si)
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 20
+ *         description: Sayfa başına item sayısı
  *     responses:
  *       200:
  *         description: Kullanıcının bridge koleksiyon rozetleri
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   id:
- *                     type: string
- *                     example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
- *                   image:
- *                     type: string
- *                     nullable: true
- *                     example: "http://localhost:9000/tipbox-media/badges/480f5de9-b691-4d70-a6a8-2789226f4e07/bridge-ambassador.png"
- *                   title:
- *                     type: string
- *                     example: "Bridge Ambassador"
- *                   rarity:
- *                     type: string
- *                     enum: [Usual, Rare, Epic, Legendary]
- *                     example: "Rare"
- *                   isClaimed:
- *                     type: boolean
- *                     example: true
- *                   nftAddress:
- *                     type: string
- *                     nullable: true
- *                     example: null
- *                   totalEarned:
- *                     type: integer
- *                     example: 3
- *                   earnedDate:
- *                     type: string
- *                     format: date-time
- *                     nullable: true
- *                     example: "2024-02-10T10:30:00.000Z"
- *                   tasks:
- *                     type: array
- *                     items:
- *                       type: object
- *                       properties:
- *                         id:
- *                           type: string
- *                           example: "goal-123"
- *                         title:
- *                           type: string
- *                           example: "10 Yorum Yap"
- *                         type:
- *                           type: string
- *                           enum: [Comment, Like, Share]
- *                           example: "Comment"
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+ *                       image:
+ *                         type: string
+ *                         nullable: true
+ *                         example: "http://localhost:9000/tipbox-media/badges/480f5de9-b691-4d70-a6a8-2789226f4e07/bridge-ambassador.png"
+ *                       title:
+ *                         type: string
+ *                         example: "Bridge Ambassador"
+ *                       rarity:
+ *                         type: string
+ *                         enum: [Usual, Rare, Epic, Legendary]
+ *                         example: "Rare"
+ *                       isClaimed:
+ *                         type: boolean
+ *                         example: true
+ *                       nftAddress:
+ *                         type: string
+ *                         nullable: true
+ *                         example: null
+ *                       totalEarned:
+ *                         type: integer
+ *                         example: 3
+ *                       earnedDate:
+ *                         type: string
+ *                         format: date-time
+ *                         nullable: true
+ *                         example: "2024-02-10T10:30:00.000Z"
+ *                       tasks:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: string
+ *                               example: "goal-123"
+ *                             title:
+ *                               type: string
+ *                               example: "10 Yorum Yap"
+ *                             type:
+ *                               type: string
+ *                               enum: [Comment, Like, Share]
+ *                               example: "Comment"
  */
 router.get('/:id/collections/bridges', asyncHandler(async (req: Request, res: Response) => {
   const id = String(req.params.id);
@@ -559,7 +586,10 @@ router.get('/:id/collections/bridges', asyncHandler(async (req: Request, res: Re
   const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : undefined;
   const keyword = q || search || undefined;
-  const list = await userService.listBridgeBadges(id, keyword);
+  const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
+  const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
+  const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
+  const list = await userService.listBridgeBadges(id, keyword, { cursor, limit });
   return res.json(list);
 }));
 
@@ -1506,60 +1536,88 @@ router.delete('/:id/mute/:targetUserId', asyncHandler(async (req: Request, res: 
  *         name: q
  *         schema: { type: string }
  *         description: Badge adı veya açıklamasına göre arama (case-insensitive)
+ *       - in: query
+ *         name: cursor
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor (son item'ın id'si)
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 20
+ *         description: Sayfa başına item sayısı
  *     responses:
  *       200:
  *         description: Achievement Badge listesi
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   id:
- *                     type: string
- *                     example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
- *                   image:
- *                     type: string
- *                     nullable: true
- *                     example: "https://cdn.tipbox.co/badges/builder.png"
- *                   title:
- *                     type: string
- *                     example: "Builder Badge"
- *                   rarity:
- *                     type: string
- *                     enum: [Usual, Rare, Epic, Legendary]
- *                     example: "Rare"
- *                   isClaimed:
- *                     type: boolean
- *                     example: true
- *                   nftAddress:
- *                     type: string
- *                     nullable: true
- *                     example: null
- *                   totalEarned:
- *                     type: integer
- *                     example: 1
- *                   earnedDate:
- *                     type: string
- *                     format: date-time
- *                     nullable: true
- *                     example: "2024-01-15T10:30:00.000Z"
- *                   tasks:
- *                     type: array
- *                     items:
- *                       type: object
- *                       properties:
- *                         id:
- *                           type: string
- *                           example: "goal-123"
- *                         title:
- *                           type: string
- *                           example: "10 Yorum Yap"
- *                         type:
- *                           type: string
- *                           enum: [Comment, Like, Share]
- *                           example: "Comment"
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+ *                       image:
+ *                         type: string
+ *                         nullable: true
+ *                         example: "https://cdn.tipbox.co/badges/builder.png"
+ *                       title:
+ *                         type: string
+ *                         example: "Builder Badge"
+ *                       rarity:
+ *                         type: string
+ *                         enum: [Usual, Rare, Epic, Legendary]
+ *                         example: "Rare"
+ *                       isClaimed:
+ *                         type: boolean
+ *                         example: true
+ *                       nftAddress:
+ *                         type: string
+ *                         nullable: true
+ *                         example: null
+ *                       totalEarned:
+ *                         type: integer
+ *                         example: 1
+ *                       earnedDate:
+ *                         type: string
+ *                         format: date-time
+ *                         nullable: true
+ *                         example: "2024-01-15T10:30:00.000Z"
+ *                       tasks:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: string
+ *                               example: "goal-123"
+ *                             title:
+ *                               type: string
+ *                               example: "10 Yorum Yap"
+ *                             type:
+ *                               type: string
+ *                               enum: [Comment, Like, Share]
+ *                               example: "Comment"
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       nullable: true
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
  */
 router.get('/:id/collections/achievements', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
@@ -1568,73 +1626,11 @@ router.get('/:id/collections/achievements', asyncHandler(async (req: Request, re
   }
   const querySearch = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
   const queryQ = typeof req.query.q === 'string' ? req.query.q.trim() : undefined;
-  const badges = await userService.listAchievementBadges(id, queryQ || querySearch || undefined);
+  const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
+  const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
+  const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
+  const badges = await userService.listAchievementBadges(id, queryQ || querySearch || undefined, { cursor, limit });
   res.json(badges);
-}));
-
-/**
- * @openapi
- * /users/{id}/achievements:
- *   get:
- *     summary: Achievement sekmesindeki badge listesini getir
- *     description: Kullanıcının achievement badge'lerini progress ve status bilgisiyle birlikte döner. Infinity scroll destekler.
- *     tags: [Users]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *       - in: query
- *         name: cursor
- *         required: false
- *         schema:
- *           type: string
- *         description: Son alınan badge'in id'si (infinite scroll için)
- *       - in: query
- *         name: limit
- *         required: false
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 50
- *         description: Sayfa başına döndürülecek maksimum badge sayısı
- *       - in: query
- *         name: status
- *         required: false
- *         schema:
- *           type: string
- *           enum: [not-started, in_progress, completed]
- *         description: İlerleme durumuna göre filtreleme
- *     responses:
- *       200:
- *         description: Achievement badge listesi
- *       400:
- *         description: Geçersiz kullanıcı id formatı
- */
-router.get('/:id/achievements', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
-  if (!/^[0-9a-fA-F-]{36}$/.test(id)) {
-    return res.status(400).json({ message: 'Invalid user id format' });
-  }
-
-  const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined;
-  const rawLimit = Array.isArray(req.query.limit) ? req.query.limit[0] : req.query.limit;
-  const parsedLimit =
-    typeof rawLimit === 'string'
-      ? Number.parseInt(rawLimit, 10)
-      : typeof rawLimit === 'number'
-        ? rawLimit
-        : undefined;
-  const limit = Number.isFinite(parsedLimit) && parsedLimit! > 0 ? Math.min(parsedLimit!, 50) : undefined;
-
-  const rawStatus = typeof req.query.status === 'string' ? req.query.status : undefined;
-  const status =
-    rawStatus === 'not-started' || rawStatus === 'in_progress' || rawStatus === 'completed'
-      ? rawStatus
-      : undefined;
-
-  const result = await userService.getAchievementBadges(id, { cursor, limit, status });
-  res.json(result);
 }));
 
 /**
@@ -1693,13 +1689,50 @@ router.get('/:id/feed', asyncHandler(async (req: Request, res: Response) => {
  *         name: id
  *         required: true
  *         schema: { type: string }
+ *       - in: query
+ *         name: cursor
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor (son item'ın id'si)
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 20
+ *         description: Sayfa başına item sayısı
  *     responses:
  *       200:
  *         description: Review listesi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       nullable: true
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
  */
 router.get('/:id/reviews', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const reviews = await userService.getUserReviews(id);
+  const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
+  const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
+  const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
+  const reviews = await userService.getUserReviews(id, { cursor, limit });
   res.json(reviews);
 }));
 
@@ -1714,13 +1747,50 @@ router.get('/:id/reviews', asyncHandler(async (req: Request, res: Response) => {
  *         name: id
  *         required: true
  *         schema: { type: string }
+ *       - in: query
+ *         name: cursor
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor (son item'ın id'si)
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 20
+ *         description: Sayfa başına item sayısı
  *     responses:
  *       200:
  *         description: Benchmark listesi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       nullable: true
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
  */
 router.get('/:id/benchmarks', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const benchmarks = await userService.getUserBenchmarks(id);
+  const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
+  const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
+  const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
+  const benchmarks = await userService.getUserBenchmarks(id, { cursor, limit });
   res.json(benchmarks);
 }));
 
@@ -1735,13 +1805,50 @@ router.get('/:id/benchmarks', asyncHandler(async (req: Request, res: Response) =
  *         name: id
  *         required: true
  *         schema: { type: string }
+ *       - in: query
+ *         name: cursor
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor (son item'ın id'si)
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 20
+ *         description: Sayfa başına item sayısı
  *     responses:
  *       200:
  *         description: Tips&Tricks listesi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       nullable: true
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
  */
 router.get('/:id/tips', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const tips = await userService.getUserTips(id);
+  const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
+  const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
+  const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
+  const tips = await userService.getUserTips(id, { cursor, limit });
   res.json(tips);
 }));
 
@@ -1756,13 +1863,50 @@ router.get('/:id/tips', asyncHandler(async (req: Request, res: Response) => {
  *         name: id
  *         required: true
  *         schema: { type: string }
+ *       - in: query
+ *         name: cursor
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor (son item'ın id'si)
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 20
+ *         description: Sayfa başına item sayısı
  *     responses:
  *       200:
  *         description: Question reply listesi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       nullable: true
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
  */
 router.get('/:id/questions', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const replies = await userService.getUserReplies(id);
+  const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
+  const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
+  const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
+  const replies = await userService.getUserReplies(id, { cursor, limit });
   res.json(replies);
 }));
 
@@ -1777,13 +1921,50 @@ router.get('/:id/questions', asyncHandler(async (req: Request, res: Response) =>
  *         name: id
  *         required: true
  *         schema: { type: string }
+ *       - in: query
+ *         name: cursor
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor (son item'ın id'si)
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 20
+ *         description: Sayfa başına item sayısı
  *     responses:
  *       200:
  *         description: Ladder badge listesi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       nullable: true
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
  */
 router.get('/:id/ladder/badges', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const badges = await userService.getUserLadderBadges(id);
+  const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
+  const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
+  const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
+  const badges = await userService.getUserLadderBadges(id, { cursor, limit });
   res.json(badges);
 }));
 
@@ -1811,14 +1992,32 @@ router.get('/:id/ladder/badges', asyncHandler(async (req: Request, res: Response
  *         schema: { type: string }
  *         description: Kullanıcı ID (UUID)
  *         example: "248cc91f-b551-4ecc-a885-db1163571330"
+ *       - in: query
+ *         name: cursor
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor (son item'ın id'si)
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 20
+ *         description: Sayfa başına item sayısı
  *     responses:
  *       200:
  *         description: Bookmark edilmiş gönderiler listesi
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
  *                 oneOf:
  *                   - type: object
  *                     properties:
@@ -1948,10 +2147,23 @@ router.get('/:id/ladder/badges', asyncHandler(async (req: Request, res: Response
  *                     isOwned: false
  *                     choice: false
  *                 content: "Her iki modeli de test ettim. V15s daha güçlü..."
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       nullable: true
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
  */
 router.get('/:id/bookmarks', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const bookmarks = await userService.getUserBookmarks(id);
+  const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
+  const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
+  const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
+  const bookmarks = await userService.getUserBookmarks(id, { cursor, limit });
   res.json(bookmarks);
 }));
 

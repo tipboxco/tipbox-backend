@@ -38,7 +38,7 @@ export interface BaseStats {
 
 export interface BasePost {
   id: string;
-  type: FeedItemType;
+  type?: FeedItemType; // Optional - type is only at FeedItem root level, not in data object
   user: BaseUser;
   stats: BaseStats;
   createdAt: string;
@@ -68,7 +68,6 @@ export interface BenchmarkProduct extends BaseProduct {
 
 export interface BenchmarkPost extends BasePost {
   contextData: ContextData;
-  products: BenchmarkProduct[];
   content: string;
 }
 
@@ -86,7 +85,6 @@ export interface ReviewProduct extends BaseProduct {
 }
 
 export interface ExperiencePost extends BasePost {
-  product: ReviewProduct;
   content: ExperienceContent[];
   tags: string[];
   images?: any[];

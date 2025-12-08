@@ -1359,6 +1359,163 @@ async function main() {
     throw new Error('Beklenen varsayılan badge tanımları oluşturulamadı')
   }
 
+  // Create bridge achievement chain for bridge badges
+  let bridgeAchievementChain = await prisma.achievementChain.findFirst({
+    where: { name: 'Bridge Engagement' }
+  });
+  
+  if (!bridgeAchievementChain) {
+    bridgeAchievementChain = await prisma.achievementChain.create({
+      data: {
+        name: 'Bridge Engagement',
+        description: 'A series that rewards bridge community participation',
+        category: 'Bridge',
+      }
+    });
+  }
+
+  if (!bridgeAchievementChain) {
+    throw new Error('Bridge achievement chain could not be created');
+  }
+
+  // Create achievement goals for Bridge Ambassador badge
+  const bridgeAmbassadorGoals = await Promise.all([
+    prisma.achievementGoal.create({
+      data: {
+        chainId: bridgeAchievementChain.id,
+        title: 'Join 3 Bridge Events',
+        requirement: 'Participate in 3 bridge community events',
+        rewardBadgeId: bridgeAmbassadorBadge.id,
+        pointsRequired: 3,
+        difficulty: 'MEDIUM',
+      }
+    }).catch(async () => {
+      return prisma.achievementGoal.findFirst({
+        where: { 
+          chainId: bridgeAchievementChain.id,
+          title: 'Join 3 Bridge Events'
+        }
+      });
+    }),
+    prisma.achievementGoal.create({
+      data: {
+        chainId: bridgeAchievementChain.id,
+        title: 'Share 5 Bridge Posts',
+        requirement: 'Share 5 posts in bridge community',
+        rewardBadgeId: bridgeAmbassadorBadge.id,
+        pointsRequired: 5,
+        difficulty: 'EASY',
+      }
+    }).catch(async () => {
+      return prisma.achievementGoal.findFirst({
+        where: { 
+          chainId: bridgeAchievementChain.id,
+          title: 'Share 5 Bridge Posts'
+        }
+      });
+    }),
+    prisma.achievementGoal.create({
+      data: {
+        chainId: bridgeAchievementChain.id,
+        title: 'Complete Bridge Survey',
+        requirement: 'Complete a bridge community survey',
+        rewardBadgeId: bridgeAmbassadorBadge.id,
+        pointsRequired: 1,
+        difficulty: 'EASY',
+      }
+    }).catch(async () => {
+      return prisma.achievementGoal.findFirst({
+        where: { 
+          chainId: bridgeAchievementChain.id,
+          title: 'Complete Bridge Survey'
+        }
+      });
+    }),
+  ])
+
+  // Link achievement goals to Bridge Ambassador badge
+  const validBridgeAmbassadorGoals = bridgeAmbassadorGoals.filter((g): g is NonNullable<typeof g> => g !== null);
+  if (validBridgeAmbassadorGoals.length > 0) {
+    await prisma.badge.update({
+      where: { id: bridgeAmbassadorBadge.id },
+      data: {
+        achievementGoals: {
+          connect: validBridgeAmbassadorGoals.map(g => ({ id: g.id }))
+        }
+      }
+    }).catch(() => {}) // Ignore if relation doesn't exist
+  }
+
+  // Create achievement goals for Brand Visionary badge
+  const brandVisionaryGoals = await Promise.all([
+    prisma.achievementGoal.create({
+      data: {
+        chainId: bridgeAchievementChain.id,
+        title: 'Create Brand Campaign',
+        requirement: 'Create and manage a successful brand campaign',
+        rewardBadgeId: brandVisionaryBadge.id,
+        pointsRequired: 1,
+        difficulty: 'HARD',
+      }
+    }).catch(async () => {
+      return prisma.achievementGoal.findFirst({
+        where: { 
+          chainId: bridgeAchievementChain.id,
+          title: 'Create Brand Campaign'
+        }
+      });
+    }),
+    prisma.achievementGoal.create({
+      data: {
+        chainId: bridgeAchievementChain.id,
+        title: 'Get 100 Campaign Engagements',
+        requirement: 'Get 100 total engagements on your bridge campaigns',
+        rewardBadgeId: brandVisionaryBadge.id,
+        pointsRequired: 100,
+        difficulty: 'HARD',
+      }
+    }).catch(async () => {
+      return prisma.achievementGoal.findFirst({
+        where: { 
+          chainId: bridgeAchievementChain.id,
+          title: 'Get 100 Campaign Engagements'
+        }
+      });
+    }),
+    prisma.achievementGoal.create({
+      data: {
+        chainId: bridgeAchievementChain.id,
+        title: 'Lead 5 Bridge Discussions',
+        requirement: 'Start and lead 5 bridge community discussions',
+        rewardBadgeId: brandVisionaryBadge.id,
+        pointsRequired: 5,
+        difficulty: 'MEDIUM',
+      }
+    }).catch(async () => {
+      return prisma.achievementGoal.findFirst({
+        where: { 
+          chainId: bridgeAchievementChain.id,
+          title: 'Lead 5 Bridge Discussions'
+        }
+      });
+    }),
+  ])
+
+  // Link achievement goals to Brand Visionary badge
+  const validBrandVisionaryGoals = brandVisionaryGoals.filter((g): g is NonNullable<typeof g> => g !== null);
+  if (validBrandVisionaryGoals.length > 0) {
+    await prisma.badge.update({
+      where: { id: brandVisionaryBadge.id },
+      data: {
+        achievementGoals: {
+          connect: validBrandVisionaryGoals.map(g => ({ id: g.id }))
+        }
+      }
+    }).catch(() => {}) // Ignore if relation doesn't exist
+  }
+
+  console.log('✅ Bridge badge achievement goals created')
+
   // 5. Comparison Metrics
   console.log('📊 Creating comparison metrics...')
   const metrics = await Promise.all([
@@ -1611,7 +1768,26 @@ async function main() {
     }
   })
 
+  const welcomeBadgeForGoals = badges.find(b => b.name === 'Welcome')!;
+
   const achievementGoals = await Promise.all([
+    prisma.achievementGoal.create({
+      data: {
+        chainId: achievementChain.id,
+        title: 'Complete Your Profile',
+        requirement: 'Complete your user profile setup',
+        rewardBadgeId: welcomeBadgeForGoals.id,
+        pointsRequired: 1,
+        difficulty: 'EASY',
+      }
+    }).catch(async () => {
+      return prisma.achievementGoal.findFirst({
+        where: { 
+          chainId: achievementChain.id,
+          title: 'Complete Your Profile'
+        }
+      });
+    }),
     prisma.achievementGoal.create({
       data: {
         chainId: achievementChain.id,
@@ -1621,6 +1797,13 @@ async function main() {
         pointsRequired: 10,
         difficulty: 'EASY',
       }
+    }).catch(async () => {
+      return prisma.achievementGoal.findFirst({
+        where: { 
+          chainId: achievementChain.id,
+          title: 'Post 10 Comments'
+        }
+      });
     }),
     prisma.achievementGoal.create({
       data: {
@@ -1631,6 +1814,13 @@ async function main() {
         pointsRequired: 50,
         difficulty: 'MEDIUM',
       }
+    }).catch(async () => {
+      return prisma.achievementGoal.findFirst({
+        where: { 
+          chainId: achievementChain.id,
+          title: 'Collect 50 Likes'
+        }
+      });
     }),
     prisma.achievementGoal.create({
       data: {
@@ -1641,8 +1831,33 @@ async function main() {
         pointsRequired: 20,
         difficulty: 'MEDIUM',
       }
+    }).catch(async () => {
+      return prisma.achievementGoal.findFirst({
+        where: { 
+          chainId: achievementChain.id,
+          title: 'Share 20 Posts'
+        }
+      });
     }),
   ])
+
+  // Link achievement goals to Welcome badge
+  const welcomeGoals = achievementGoals.filter(
+    (g): g is NonNullable<typeof g> => !!g && g.rewardBadgeId === welcomeBadgeForGoals.id
+  );
+
+  if (welcomeGoals.length > 0) {
+    await prisma.badge
+      .update({
+        where: { id: welcomeBadgeForGoals.id },
+        data: {
+          achievementGoals: {
+            connect: welcomeGoals.map((g) => ({ id: g.id })),
+          },
+        },
+      })
+      .catch(() => {}); // Ignore if relation doesn't exist
+  }
 
   const advancedAchievementChain = await prisma.achievementChain.create({
     data: {
@@ -1864,14 +2079,59 @@ async function main() {
   const earlyBirdBadge = badges.find(b => b.name === 'Early Bird')!
   
   // Link achievement goals to badges
-  await prisma.badge.update({
-    where: { id: tipMasterBadge.id },
-    data: {
-      achievementGoals: {
-        connect: achievementGoals.map(g => ({ id: g.id }))
+  // Connect goals where the badge is the reward
+  const validAchievementGoals = achievementGoals.filter((g): g is NonNullable<typeof g> => g !== null);
+  const welcomeGoal = validAchievementGoals.find(g => g.rewardBadgeId === welcomeBadgeForGoals.id);
+  const communityHeroBadgeId = badges.find(b => b.name === 'Community Hero')?.id;
+  const tipMasterBadgeId = badges.find(b => b.name === 'Tip Master')?.id;
+  const firstPostBadgeId = badges.find(b => b.name === 'First Post')?.id;
+  const communityHeroGoal = communityHeroBadgeId ? validAchievementGoals.find(g => g.rewardBadgeId === communityHeroBadgeId) : null;
+  const tipMasterGoal = tipMasterBadgeId ? validAchievementGoals.find(g => g.rewardBadgeId === tipMasterBadgeId) : null;
+  const firstPostGoal = firstPostBadgeId ? validAchievementGoals.find(g => g.rewardBadgeId === firstPostBadgeId) : null;
+
+  if (welcomeGoal) {
+    await prisma.badge.update({
+      where: { id: welcomeBadgeForGoals.id },
+      data: {
+        achievementGoals: {
+          connect: { id: welcomeGoal.id }
+        }
       }
-    }
-  }).catch(() => {}) // Ignore if no relation
+    }).catch(() => {}) // Ignore if no relation
+  }
+
+  if (tipMasterGoal) {
+    await prisma.badge.update({
+      where: { id: tipMasterBadge.id },
+      data: {
+        achievementGoals: {
+          connect: { id: tipMasterGoal.id }
+        }
+      }
+    }).catch(() => {}) // Ignore if no relation
+  }
+
+  if (communityHeroGoal && communityHeroBadgeId) {
+    await prisma.badge.update({
+      where: { id: communityHeroBadgeId },
+      data: {
+        achievementGoals: {
+          connect: { id: communityHeroGoal.id }
+        }
+      }
+    }).catch(() => {}) // Ignore if no relation
+  }
+
+  if (firstPostGoal && firstPostBadgeId) {
+    await prisma.badge.update({
+      where: { id: firstPostBadgeId },
+      data: {
+        achievementGoals: {
+          connect: { id: firstPostGoal.id }
+        }
+      }
+    }).catch(() => {}) // Ignore if no relation
+  }
 
   const userBadgesData = [
     { badgeId: welcomeBadge.id, claimed: true, claimedAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) },
@@ -5134,6 +5394,99 @@ async function main() {
   const createdEvents = events.filter(Boolean) as any[]
   console.log(`✅ ${createdEvents.length} wishbox event oluşturuldu (tüm eventType'larda çeşitli)`)
 
+  // Brand-specific events (8 per brand, English, unique per brand)
+  const brandEventTemplates = [
+    { title: 'Launch Spotlight', description: 'Vote on this brand’s most anticipated launch of the season.', eventType: 'POLL' as const },
+    { title: 'Customer Voice Pulse', description: 'Share the one improvement you want to see first.', eventType: 'SURVEY' as const },
+    { title: 'Feature Priority Vote', description: 'Help us rank the next set of features to build.', eventType: 'POLL' as const },
+    { title: 'Usage Deep Dive', description: 'Tell us how you actually use these products day-to-day.', eventType: 'SURVEY' as const },
+    { title: 'Bug Bash Challenge', description: 'Report issues and help us harden the experience.', eventType: 'CHALLENGE' as const },
+    { title: 'Beta Feedback Sprint', description: 'Try the latest beta and leave actionable feedback.', eventType: 'CONTEST' as const },
+    { title: 'Community AMA Week', description: 'Ask anything to the product team and vote on answers.', eventType: 'CONTEST' as const },
+    { title: 'Roadmap Checkpoint', description: 'Sanity-check the roadmap and validate our priorities.', eventType: 'SURVEY' as const },
+  ]
+
+  console.log('🎯 Creating brand-specific events (8 per brand)...')
+  const brandsForEvents = await prisma.brand.findMany()
+  if (brandsForEvents.length === 0) {
+    console.warn('⚠️ Brand not found, skipping brand-specific event seeding')
+  }
+  const brandSpecificEvents = await Promise.all(
+    brandsForEvents.flatMap((brand) =>
+      brandEventTemplates.map((template, templateIndex) => {
+        const startDate = new Date(today)
+        startDate.setDate(today.getDate() + templateIndex)
+        const endDate = new Date(startDate)
+        endDate.setDate(startDate.getDate() + 7 + templateIndex)
+
+        return prisma.wishboxEvent
+          .create({
+            data: {
+              id: generateUlid(),
+              title: template.title,
+              description: template.description,
+              imageUrl: getSeedMediaUrl('event.primary' as any),
+              startDate,
+              endDate,
+              status: 'PUBLISHED',
+              eventType: template.eventType,
+              brandId: brand.id,
+            } as any,
+          })
+          .catch(() => null)
+      })
+    )
+  )
+  const createdBrandEvents = brandSpecificEvents.filter(Boolean) as any[]
+  console.log(`✅ ${createdBrandEvents.length} brand-specific wishbox event oluşturuldu (${brandEventTemplates.length} per brand)`)
+
+  // Brand bazlı geçmiş/survey event'leri (history & surveys endpoint'leri için)
+  console.log('🗂️  Creating brand history/survey events with user stats...')
+  const surveyUsers = await prisma.user.findMany({ select: { id: true }, take: 20 })
+  const historySurveyEvents = await Promise.all(
+    brandsForEvents.map((brand, idx) => {
+      const startDate = new Date(today)
+      startDate.setDate(today.getDate() - (idx + 3))
+      const endDate = new Date(startDate)
+      endDate.setDate(startDate.getDate() + 2)
+      return prisma.wishboxEvent
+        .create({
+          data: {
+            id: generateUlid(),
+            title: `${brand.name || 'Brand'} Satisfaction Survey`,
+            description: `Share your experience with ${brand.name || 'this brand'} for the history list.`,
+            imageUrl: getSeedMediaUrl('event.primary' as any),
+            startDate,
+            endDate,
+            status: 'PUBLISHED',
+            eventType: 'SURVEY',
+            brandId: brand.id,
+          } as any,
+        })
+        .catch(() => null)
+    })
+  )
+  const createdHistorySurveyEvents = historySurveyEvents.filter(Boolean) as any[]
+
+  // Kullanıcı bazlı basit istatistikler ekle (foreign key tutarlılığı için)
+  const historyStats = await Promise.all(
+    createdHistorySurveyEvents.flatMap((event: any, eventIdx) =>
+      surveyUsers.slice(0, 5).map((user, userIdx) =>
+        prisma.wishboxStats.create({
+          data: {
+            id: generateUlid(),
+            eventId: event.id,
+            userId: user.id,
+            votes: 1 + ((eventIdx + userIdx) % 3),
+            impressions: 10 + eventIdx * 5 + userIdx,
+            responses: 1 + (userIdx % 2),
+          } as any,
+        }).catch(() => null)
+      )
+    )
+  )
+  console.log(`✅ ${createdHistorySurveyEvents.length} brand history/survey event eklendi, ${historyStats.filter(Boolean).length} stats oluşturuldu`)
+
   // Create upcoming events (future events)
   console.log('🔮 Creating upcoming events...')
   const nextMonthPlus = new Date()
@@ -6106,6 +6459,130 @@ async function main() {
     console.warn(`⚠️ AudioMax brand not found (ID: ${AUDIO_MAX_BRAND_ID_FOR_HISTORY}), skipping history badge rewards`)
   }
 
+  // Brand 9d4ede32-1e02-4165-b094-6db1dd614de8 için özel badge rewards (history endpoint için 4 badge)
+  console.log('🏅 Creating brand badge rewards for history endpoint (9d4ede32-1e02-4165-b094-6db1dd614de8)...')
+  const BRAND_ID_FOR_HISTORY = '9d4ede32-1e02-4165-b094-6db1dd614de8'
+  
+  const brandForHistory = await prisma.brand.findUnique({
+    where: { id: BRAND_ID_FOR_HISTORY },
+    select: { id: true, name: true },
+  })
+  
+  if (brandForHistory) {
+    // Bridge badge'leri bul (eğer yoksa genel badge'lerden al)
+    let availableBadges = await prisma.badge.findMany({
+      where: {
+        OR: [
+          { name: { contains: 'Bridge', mode: 'insensitive' } },
+          { name: { contains: 'Brand', mode: 'insensitive' } },
+          { name: { contains: 'Ambassador', mode: 'insensitive' } },
+          { name: { contains: 'Visionary', mode: 'insensitive' } },
+        ],
+      },
+      take: 10,
+    })
+    
+    // Eğer bridge badge yoksa, genel badge'lerden al
+    if (availableBadges.length === 0) {
+      availableBadges = await prisma.badge.findMany({
+        take: 10,
+      })
+    }
+    
+    if (availableBadges.length === 0) {
+      console.warn('⚠️ No badges found for brand history rewards')
+    } else {
+      // Test kullanıcısı için bu brand'den tam 4 badge reward oluştur
+      const targetBadgeCount = 4
+      const badgesToUse = availableBadges.slice(0, Math.min(targetBadgeCount, availableBadges.length))
+      
+      let brandRewardsCreated = 0
+      for (let i = 0; i < badgesToUse.length; i++) {
+        const badge = badgesToUse[i]
+        
+        // Mevcut reward'u kontrol et
+        const existingReward = await prisma.bridgeReward.findFirst({
+          where: {
+            userId: userIdToUse,
+            badgeId: badge.id,
+            brandId: BRAND_ID_FOR_HISTORY,
+          },
+        }).catch(() => null)
+        
+        if (existingReward) {
+          console.log(`  ℹ️  Badge reward already exists: ${badge.name}`)
+          continue
+        }
+        
+        try {
+          await prisma.bridgeReward.create({
+            data: {
+              userId: userIdToUse,
+              brandId: BRAND_ID_FOR_HISTORY,
+              badgeId: badge.id,
+              awardedAt: daysAgo(randomBetween(1, 90)), // Son 90 gün içinde rastgele tarih
+            },
+          })
+          brandRewardsCreated++
+          console.log(`  ✅ Created badge reward: ${badge.name} for brand ${brandForHistory.name}`)
+        } catch (error) {
+          console.warn(`  ⚠️  Failed to create badge reward for ${badge.name}: ${error}`)
+        }
+      }
+      
+      // Eğer 4'ten az badge reward oluşturulduysa, mevcut badge'lerden tekrar kullanarak tamamla
+      const currentRewardCount = await prisma.bridgeReward.count({
+        where: {
+          userId: userIdToUse,
+          brandId: BRAND_ID_FOR_HISTORY,
+        },
+      })
+      
+      if (currentRewardCount < targetBadgeCount && availableBadges.length > 0) {
+        const needed = targetBadgeCount - currentRewardCount
+        const additionalBadges = availableBadges.slice(badgesToUse.length, badgesToUse.length + needed)
+        
+        for (const badge of additionalBadges) {
+          const existingReward = await prisma.bridgeReward.findFirst({
+            where: {
+              userId: userIdToUse,
+              badgeId: badge.id,
+              brandId: BRAND_ID_FOR_HISTORY,
+            },
+          }).catch(() => null)
+          
+          if (!existingReward) {
+            try {
+              await prisma.bridgeReward.create({
+                data: {
+                  userId: userIdToUse,
+                  brandId: BRAND_ID_FOR_HISTORY,
+                  badgeId: badge.id,
+                  awardedAt: daysAgo(randomBetween(1, 90)),
+                },
+              })
+              brandRewardsCreated++
+              console.log(`  ✅ Created additional badge reward: ${badge.name} for brand ${brandForHistory.name}`)
+            } catch (error) {
+              console.warn(`  ⚠️  Failed to create additional badge reward: ${error}`)
+            }
+          }
+        }
+      }
+      
+      const finalRewardCount = await prisma.bridgeReward.count({
+        where: {
+          userId: userIdToUse,
+          brandId: BRAND_ID_FOR_HISTORY,
+        },
+      })
+      
+      console.log(`✅ Brand ${brandForHistory.name} history badge rewards: ${finalRewardCount} badge(s) for user ${userIdToUse}`)
+    }
+  } else {
+    console.warn(`⚠️ Brand not found (ID: ${BRAND_ID_FOR_HISTORY}), skipping history badge rewards`)
+  }
+
   // Create BridgePosts for brands
   console.log('📝 Creating bridge posts for brands...')
   const bridgePostTemplates = [
@@ -6172,6 +6649,92 @@ async function main() {
       }
     }
   }
+
+  // Generic helper to ensure badge list is populated for brand history
+  const ensureBrandHistoryBadgeList = async ({
+    brandId,
+    brandName,
+    userIds,
+    badgeCount = 8,
+  }: {
+    brandId?: string
+    brandName?: string
+    userIds: string[]
+    badgeCount?: number
+  }): Promise<number> => {
+    const brand = brandId
+      ? await prisma.brand.findUnique({ where: { id: brandId } })
+      : brandName
+      ? await prisma.brand.findFirst({ where: { name: brandName } })
+      : null
+
+    if (!brand) {
+      console.warn(`⚠️ Brand not found for history seeding: ${brandId ?? brandName}`)
+      return 0
+    }
+
+    const badgePool = await prisma.badge.findMany({
+      orderBy: { createdAt: 'asc' },
+      take: Math.max(badgeCount, 12),
+    })
+
+    if (badgePool.length === 0) {
+      console.warn('⚠️ No badges available for history seeding')
+      return 0
+    }
+
+    let createdCount = 0
+    for (const userId of userIds) {
+      const badgesToUse = badgePool.slice(0, Math.min(badgeCount, badgePool.length))
+      for (const badge of badgesToUse) {
+        const existingReward = await prisma.bridgeReward.findFirst({
+          where: {
+            userId,
+            brandId: brand.id,
+            badgeId: badge.id,
+          },
+        }).catch(() => null)
+
+        if (existingReward) continue
+
+        await prisma.bridgeReward
+          .create({
+            data: {
+              userId,
+              brandId: brand.id,
+              badgeId: badge.id,
+              awardedAt: daysAgo(randomBetween(5, 120)),
+            },
+          })
+          .catch(() => {})
+        createdCount++
+      }
+    }
+
+    console.log(`✅ ${createdCount} badge rewards created for brand history: ${brand.name}`)
+    return createdCount
+  }
+
+  // Ensure SoundWave brand history (given brandId) returns 8 badges
+  await ensureBrandHistoryBadgeList({
+    brandId: '5d7abaf1-4939-4a55-85c1-94ec3159ea4e',
+    brandName: 'SoundWave',
+    userIds: [userIdToUse],
+    badgeCount: 8,
+  })
+
+  // Provide badge history seeds for a couple of other brands
+  await ensureBrandHistoryBadgeList({
+    brandName: 'TechNova',
+    userIds: [userIdToUse, TARGET_USER_ID],
+    badgeCount: 6,
+  })
+
+  await ensureBrandHistoryBadgeList({
+    brandName: 'FashionForward',
+    userIds: [userIdToUse],
+    badgeCount: 5,
+  })
   console.log(`✅ ${bridgePostsCount} bridge post oluşturuldu`)
 
   // AutoParts Pro için özel bridge posts ekle
@@ -6952,6 +7515,22 @@ async function main() {
       } catch (error) {
         console.warn(`Product oluşturulamadı (${specificBrand.name} - ${productData.name}): ${error}`)
       }
+    }
+
+    // AudioMax Audio Cable ürünlerinde imageUrl boşsa doldur
+    const audioCableImage = getSeedMediaUrl('product.headphone.secondary')
+    const updatedAudioCables = await prisma.product.updateMany({
+      where: {
+        brand: specificBrand.name,
+        name: 'AudioMax Audio Cable',
+        OR: [{ imageUrl: null }, { imageUrl: '' }],
+      },
+      data: {
+        imageUrl: audioCableImage,
+      },
+    })
+    if (updatedAudioCables.count > 0) {
+      console.log(`✅ ${updatedAudioCables.count} AudioMax Audio Cable ürününün görseli güncellendi`)
     }
     console.log(`✅ ${specificProductTemplates.length} product eklendi brand ID: ${specificBrandId} (${specificBrand.name})`)
   } else {
@@ -8454,6 +9033,59 @@ async function main() {
           console.log(`        ✅ Created ${toCreate} UPDATE news posts for "${product.name}"`)
         } else {
           console.log(`        ✅ Product already has ${existingNews} UPDATE news posts (>= ${targetNews})`)
+        }
+
+        // EXTRA: News feed formatı için en az 9 güncel haber (image + stats ile)
+        const extraNewsTarget = 9
+        if (existingNews < extraNewsTarget) {
+          const extrasToCreate = extraNewsTarget - existingNews
+          console.log(`        📰 Adding ${extrasToCreate} neutral news posts for feed format...`)
+          const neutralTemplates = [
+            `${product.name} receives a stability patch focusing on battery and connectivity.`,
+            `${brand.name} confirms a minor feature rollout for ${product.name} users this week.`,
+            `Early adopters of ${product.name} report smoother performance after the latest update.`,
+            `${product.name} gets quality-of-life tweaks, improving everyday usability.`,
+          ]
+          for (let i = 0; i < extrasToCreate; i++) {
+            const newsPostId = generateUlid()
+            const templateBody = neutralTemplates[i % neutralTemplates.length]
+            const title = `${product.name} News Update #${existingNews + i + 1}`
+            await prisma.contentPost.create({
+              data: {
+                id: newsPostId,
+                userId: userIdToUse,
+                productId: product.id,
+                type: 'UPDATE',
+                title,
+                body: templateBody,
+                productGroupId: product.groupId || undefined,
+                mainCategoryId,
+                subCategoryId,
+                inventoryRequired: false,
+                isBoosted: false,
+                likesCount: 5 + i,
+                commentsCount: 2 + i,
+                sharesCount: 1 + (i % 3),
+                favoritesCount: 3 + i,
+                viewsCount: 80 + i * 5,
+                createdAt: daysAgo(randomBetween(1, 20)),
+                updatedAt: new Date(),
+              },
+            }).catch((error) => {
+              console.warn(`⚠️ Failed to create neutral news post for ${product.name}: ${error}`)
+            })
+
+            await prisma.contentPostTag.createMany({
+              data: [
+                { postId: newsPostId, tag: brand.name },
+                { postId: newsPostId, tag: product.name },
+                { postId: newsPostId, tag: 'News' },
+              ],
+              skipDuplicates: true,
+            }).catch(() => {})
+          }
+        } else {
+          console.log(`        ℹ️ Product already has ${existingNews} news posts (>= ${extraNewsTarget})`)
         }
       }
       

@@ -691,7 +691,6 @@ export class FeedService {
     const contextData = this.buildContextData(post, ownedProductIds);
     const postData: Post = {
       ...basePost,
-      type,
       contextData,
       content: post.body,
       images,
@@ -741,7 +740,6 @@ export class FeedService {
 
     const benchmarkData: BenchmarkPost = {
       ...basePost,
-      type: FeedItemType.BENCHMARK,
       contextData: this.buildContextData(post, ownedProductIds),
       products,
       content: comparison.comparisonSummary || post.body,
@@ -763,7 +761,6 @@ export class FeedService {
 
     const tipsData: TipsAndTricksPost = {
       ...basePost,
-      type: FeedItemType.TIPS_AND_TRICKS,
       contextData: this.buildContextData(post, ownedProductIds),
       content: post.body,
       tag,
@@ -812,7 +809,6 @@ export class FeedService {
 
     const experienceData: ExperiencePost = {
       ...basePost,
-      type,
       product,
       content: experienceContent,
       tags,

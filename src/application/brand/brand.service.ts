@@ -67,8 +67,8 @@ export interface BrandProductsResponse {
 }
 
 export interface BrandProductsBatchResponse {
-  groups: BrandProductGroupInfo[];
-  products: BrandProductGroup[];
+  groups: Record<string, BrandProductGroupInfo>;
+  items: BrandProduct[];
   pagination: {
     cursor?: string;
     hasMore: boolean;
@@ -78,6 +78,7 @@ export interface BrandProductsBatchResponse {
 
 export interface BrandProduct {
   productId: string;
+  productGroupId: string;
   name: string;
   image: string | null;
   stats: {
@@ -339,6 +340,7 @@ export class BrandService {
     // Şimdilik tüm aktif WishboxEvent'leri survey listesi olarak kullanıyoruz
     const whereClause: any = {
       status: 'PUBLISHED',
+      brandId,
     };
 
     if (cursor) {
@@ -348,7 +350,7 @@ export class BrandService {
     }
 
     const events = await this.prisma.wishboxEvent.findMany({
-      where: whereClause,
+      where: whereClause as any,
       orderBy: { startDate: 'asc' },
       take: limit + 1, // Bir fazla al ki hasMore'u kontrol edebilelim
     });
@@ -385,7 +387,7 @@ export class BrandService {
         id: event.id,
         title: event.title,
         description: event.description || '',
-        type: event.eventType || 'SURVEY',
+        type: (event.eventType || 'SURVEY').toLowerCase(),
         duration: '5-10 dk',
         points: 100 + (totalParticipated || 1) * 25,
         status,
@@ -550,10 +552,37 @@ export class BrandService {
         }),
       });
 
+      // Experience post'ları için inventory verilerini toplu olarak çek
+      const experiencePostIds = contentPosts
+        .filter((p) => p.type === ContentPostType.EXPERIENCE || p.type === ContentPostType.UPDATE)
+        .map((p) => p.id);
+      
+      const inventoriesMap = new Map<string, any>();
+      if (experiencePostIds.length > 0 && options?.userId) {
+        const inventories = await this.prisma.inventory.findMany({
+          where: {
+            userId: options.userId,
+            productId: { in: productIds },
+          },
+          include: {
+            productExperiences: true,
+            media: {
+              where: { type: 'IMAGE' },
+            },
+          },
+        });
+
+        // Post ID'ye göre inventory'leri map'le (productId ve userId'ye göre)
+        inventories.forEach((inv) => {
+          const key = `${inv.userId}-${inv.productId}`;
+          inventoriesMap.set(key, inv);
+        });
+      }
+
       const hasMore = contentPosts.length > limit;
       const resultPosts = hasMore ? contentPosts.slice(0, limit) : contentPosts;
       const nextCursor = hasMore && resultPosts.length > 0 ? resultPosts[resultPosts.length - 1].id : undefined;
-      const posts = await this.mapPostsToFeedItems(resultPosts, options?.userId);
+      const posts = await this.mapPostsToFeedItems(resultPosts, options?.userId, inventoriesMap);
 
       return {
         brandId: brand.id,
@@ -575,16 +604,16 @@ export class BrandService {
    * Brand Survey & Gamification - Eventler tab'ı (pagination ile)
    */
   async getBrandEvents(
-    _brandId: string,
+    brandId: string,
     userId: string,
     options?: { cursor?: string; limit?: number }
   ): Promise<BrandEventsResponse> {
-    // Event'leri global olarak kullanıyoruz, brandId sadece context bilgisi için
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
     const cursor = options?.cursor;
 
     const whereClause: any = {
       status: 'PUBLISHED',
+      brandId,
     };
 
     if (cursor) {
@@ -594,7 +623,7 @@ export class BrandService {
     }
 
     const events = await this.prisma.wishboxEvent.findMany({
-      where: whereClause,
+      where: whereClause as any,
       orderBy: { startDate: 'asc' },
       take: limit + 1, // Bir fazla al ki hasMore'u kontrol edebilelim
     });
@@ -635,12 +664,12 @@ export class BrandService {
   /**
    * Brand Survey & Gamification - Event detay endpoint'i
    */
-  async getBrandEventDetail(_brandId: string, eventId: string, userId: string): Promise<BrandEventDetail> {
-    const event = await this.prisma.wishboxEvent.findUnique({
+  async getBrandEventDetail(brandId: string, eventId: string, userId: string): Promise<BrandEventDetail> {
+    const event = (await this.prisma.wishboxEvent.findUnique({
       where: { id: eventId },
-    });
+    })) as any;
 
-    if (!event) {
+    if (!event || (event.brandId && event.brandId !== brandId)) {
       throw new NotFoundError(`Event not found: ${eventId}`);
     }
 
@@ -1029,7 +1058,8 @@ export class BrandService {
     const events = await this.prisma.wishboxEvent.findMany({
       where: {
         status: 'PUBLISHED',
-      },
+        brandId,
+      } as any,
       orderBy: { startDate: 'asc' },
       take: limit + 1,
       ...(cursor && {
@@ -1254,6 +1284,7 @@ export class BrandService {
 
       const items: BrandProduct[] = resultProducts.map((product) => ({
         productId: product.id,
+        productGroupId: productGroupId === 'ungrouped' ? 'ungrouped' : productGroupId,
         name: product.name,
         image: product.imageUrl,
         stats: {
@@ -1279,51 +1310,117 @@ export class BrandService {
 
   /**
    * Batch endpoint: Product groups ve products'ı tek istekte döner
+   * Yeni yapı: groups metadata olarak Record, items flat array, tek pagination
    */
   async getBrandProductsBatch(
     brandId: string,
     options?: { 
-      groupCursor?: string; 
-      groupLimit?: number;
       productGroupIds?: string[];
-      productCursors?: Record<string, string>;
-      productLimit?: number;
+      cursor?: string;
+      limit?: number;
     }
   ): Promise<BrandProductsBatchResponse> {
     try {
-      // 1. Product groups'ları al
-      const groupsResult = await this.getBrandProductGroups(brandId, {
-        cursor: options?.groupCursor,
-        limit: options?.groupLimit,
+      // 1. Brand name'i al
+      const brand = await this.prisma.brand.findUnique({
+        where: { id: brandId },
+        select: { name: true },
       });
 
-      // 2. Her group için products'ları paralel olarak al
-      const productGroupIds = options?.productGroupIds || groupsResult.items.map(g => g.productGroupId);
-      const productPromises = productGroupIds.map(groupId =>
-        this.getBrandProductsByGroup(brandId, groupId, {
-          cursor: options?.productCursors?.[groupId],
-          limit: options?.productLimit,
-        })
-      );
+      if (!brand) {
+        throw new NotFoundError('Brand not found');
+      }
 
-      const productsResults = await Promise.all(productPromises);
+      // 2. Tüm product groups'ları al (metadata için, pagination yok)
+      const allGroupsResult = await this.getBrandProductGroups(brandId, {
+        limit: 1000, // Tüm groups'ları al
+      });
 
-      // 3. Sonuçları birleştir
-      const products: BrandProductGroup[] = groupsResult.items.map((group, index) => ({
-        productGroupId: group.productGroupId,
-        productGroupName: group.productGroupName,
-        products: productsResults[index]?.items || [],
-        pagination: productsResults[index]?.pagination || {
-          cursor: undefined,
-          hasMore: false,
-          limit: options?.productLimit || 20,
+      // Groups'ları Record olarak oluştur
+      const groupsRecord: Record<string, BrandProductGroupInfo> = {};
+      allGroupsResult.items.forEach(group => {
+        groupsRecord[group.productGroupId] = {
+          productGroupId: group.productGroupId,
+          productGroupName: group.productGroupName,
+        };
+      });
+
+      // 3. Products'ları al (tek pagination ile)
+      const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+      const cursor = options?.cursor;
+
+      const whereClause: any = {
+        brand: brand.name,
+      };
+
+      // Belirli group'lar filtrelenmişse
+      if (options?.productGroupIds && options.productGroupIds.length > 0) {
+        const groupIds = options.productGroupIds.map(id => id === 'ungrouped' ? null : id);
+        whereClause.groupId = groupIds.length === 1 ? groupIds[0] : { in: groupIds };
+      }
+
+      if (cursor) {
+        whereClause.id = { gt: cursor };
+      }
+
+      const products = await this.prisma.product.findMany({
+        where: whereClause,
+        include: {
+          group: true,
+          contentPosts: {
+            select: {
+              id: true,
+              likesCount: true,
+              sharesCount: true,
+              favoritesCount: true,
+            },
+          },
         },
-      }));
+        orderBy: {
+          id: 'asc',
+        },
+        take: limit + 1,
+      });
+
+      const hasMore = products.length > limit;
+      const resultProducts = hasMore ? products.slice(0, limit) : products;
+      const nextCursor = hasMore && resultProducts.length > 0 ? resultProducts[resultProducts.length - 1].id : undefined;
+
+      // 4. Products'ları BrandProduct formatına dönüştür
+      const getRandomStat = () => Math.floor(Math.random() * 31) + 10; // 10-40 arası
+
+      const items: BrandProduct[] = resultProducts.map((product) => {
+        const groupId = product.groupId || 'ungrouped';
+        
+        // Eğer ungrouped product varsa ve metadata'da yoksa ekle
+        if (groupId === 'ungrouped' && !groupsRecord['ungrouped']) {
+          groupsRecord['ungrouped'] = {
+            productGroupId: 'ungrouped',
+            productGroupName: 'Ungrouped',
+          };
+        }
+        
+        return {
+          productId: product.id,
+          productGroupId: groupId,
+          name: product.name,
+          image: product.imageUrl,
+          stats: {
+            reviews: getRandomStat(),
+            likes: getRandomStat(),
+            share: getRandomStat(),
+          },
+        };
+      });
 
       return {
-        groups: groupsResult.items,
-        products,
-        pagination: groupsResult.pagination,
+        groups: groupsRecord,
+        items,
+        pagination: {
+          cursor: nextCursor,
+          hasMore,
+          limit,
+        },
       };
     } catch (error) {
       logger.error(`Failed to get brand products batch for ${brandId}:`, error);
@@ -1417,6 +1514,7 @@ export class BrandService {
 
         groupsMap.get(groupId)!.products.push({
           productId: product.id,
+          productGroupId: groupId,
           name: product.name,
           image: product.imageUrl,
           stats: {
@@ -1669,7 +1767,23 @@ export class BrandService {
     userId?: string,
     page: number = 1,
     limit: number = 12,
-  ): Promise<FeedItem[]> {
+  ): Promise<
+    Array<{
+      id: string;
+      title: string;
+      description: string;
+      source: string;
+      date: string;
+      image: string;
+      url?: string;
+      stats: {
+        likes: number;
+        comments: number;
+        share: number;
+        bookmarks: number;
+      };
+    }>
+  > {
     try {
       // Brand name'i al
       const brand = await this.prisma.brand.findUnique({
@@ -1730,10 +1844,42 @@ export class BrandService {
         take: safeLimit,
       });
 
-      // Feed items'a dönüştür
-      const feedItems = await this.mapPostsToFeedItems(posts, userId);
+      // Haber response formatına dönüştür
+      const newsItems = posts.map((post) => {
+        const likes = (post as any).likesCount ?? post.likes?.length ?? 0;
+        const comments = (post as any).commentsCount ?? post.comments?.length ?? 0;
+        // shares relation is not selected on the typed result; rely on sharesCount if present
+        const shares = (post as any).sharesCount ?? 0;
+        const bookmarks = (post as any).favoritesCount ?? post.favorites?.length ?? 0;
 
-      return feedItems;
+        const title = (post as any).title || (post as any).body?.slice(0, 80) || 'News';
+        const description = (post as any).body || '';
+        const source = brand.name || 'tipbox';
+        const image =
+          (post as any).imageUrl ||
+          post.product?.imageUrl ||
+          post.product?.group?.imageUrl ||
+          (post as any).thumbnailUrl ||
+          '';
+
+        return {
+          id: post.id,
+          title,
+          description,
+          source,
+          date: post.createdAt.toISOString(),
+          image,
+          url: (post as any).externalUrl || undefined,
+          stats: {
+            likes,
+            comments,
+            share: shares,
+            bookmarks,
+          },
+        };
+      });
+
+      return newsItems;
     } catch (error) {
       logger.error(`Failed to get brand product news for ${brandId}/${productId}:`, error);
       throw error;
@@ -1743,7 +1889,7 @@ export class BrandService {
   /**
    * Posts'ları FeedItem'lara dönüştür
    */
-  private async mapPostsToFeedItems(posts: any[], userId?: string): Promise<FeedItem[]> {
+  private async mapPostsToFeedItems(posts: any[], userId?: string, inventoriesMap?: Map<string, any>): Promise<FeedItem[]> {
     // User inventories for benchmark isOwned check
     const inventories = userId
       ? await this.prisma.inventory.findMany({
@@ -1822,9 +1968,9 @@ export class BrandService {
         case ContentPostType.FREE:
           return this.mapToPostItem(post, basePostWithContext, FeedItemType.POST, images);
         case ContentPostType.EXPERIENCE:
-          return this.mapToExperienceItem(post, basePostWithContext, FeedItemType.EXPERIENCE, images, ownedProductIds);
+          return this.mapToExperienceItem(post, basePostWithContext, FeedItemType.EXPERIENCE, images, ownedProductIds, inventoriesMap);
         case ContentPostType.UPDATE:
-          return this.mapToExperienceItem(post, basePostWithContext, FeedItemType.UPDATE, images, ownedProductIds);
+          return this.mapToExperienceItem(post, basePostWithContext, FeedItemType.UPDATE, images, ownedProductIds, inventoriesMap);
         case ContentPostType.COMPARE:
           return this.mapToBenchmarkItem(post, basePostWithContext, ownedProductIds, images);
         case ContentPostType.QUESTION:
@@ -1934,13 +2080,10 @@ export class BrandService {
     type: FeedItemType.POST | FeedItemType.QUESTION,
     images: string[] = []
   ): FeedItem {
-    const product = this.getProductBase(post.product);
     return {
       type,
       data: {
         ...basePost,
-        type,
-        product: product,
         content: post.body,
         images,
       },
@@ -1952,32 +2095,39 @@ export class BrandService {
     basePost: any,
     type: FeedItemType.EXPERIENCE | FeedItemType.UPDATE,
     images: string[] = [],
-    ownedProductIds?: Set<string>
+    ownedProductIds?: Set<string>,
+    inventoriesMap?: Map<string, any>
   ): FeedItem {
-    const productBase = this.getProductBase(post.product);
-    const product: ReviewProduct = productBase
-      ? {
-          ...productBase,
-          isOwned: ownedProductIds?.has(productBase.id) || false,
+    // Önce inventory'den gelen experience verilerini kontrol et
+    let experienceContent: ExperienceContent[] = [];
+    if (inventoriesMap && post.userId && post.productId) {
+      const inventoryKey = `${post.userId}-${post.productId}`;
+      const inventory = inventoriesMap.get(inventoryKey);
+      
+      if (inventory && inventory.productExperiences && inventory.productExperiences.length > 0) {
+        // Inventory'den gelen experience verilerini kullan
+        experienceContent = this.buildExperienceSectionsFromInventory(
+          inventory.productExperiences,
+          inventory.experienceSummary
+        );
+        
+        // Inventory'den gelen görselleri de kullan
+        if (inventory.media && inventory.media.length > 0) {
+          images = inventory.media.map((m: any) => m.mediaUrl);
         }
-      : {
-          id: post.productId || '',
-          name: post.product?.name || '',
-          subName: post.productGroup?.name || '',
-          image: post.product?.imageUrl || null,
-          isOwned: false,
-        };
-
-    // Parse experience content from body
-    const experienceContent: ExperienceContent[] = this.parseExperienceContent(post.body);
+      }
+    }
+    
+    // Eğer inventory'den veri gelmediyse, body'den parse et
+    if (experienceContent.length === 0) {
+      experienceContent = this.parseExperienceContent(post.body);
+    }
 
     // Get tags
     const tags = post.tags?.map((t: any) => t.tag) || post.contentPostTags?.map((t: any) => t.tag) || [];
 
     const experienceData: ExperiencePost = {
       ...basePost,
-      type,
-      product,
       content: experienceContent,
       tags,
       images,
@@ -2148,6 +2298,84 @@ export class BrandService {
     return content;
   }
 
+  /**
+   * Inventory'den gelen experience verilerini ExperienceContent[] formatına dönüştür
+   */
+  private buildExperienceSectionsFromInventory(
+    experiences: Array<{ title: string; experienceText: string }>,
+    summary?: string | null
+  ): ExperienceContent[] {
+    const sections: {
+      price: ExperienceContent | null;
+      usage: ExperienceContent | null;
+    } = {
+      price: null,
+      usage: null,
+    };
+
+    for (const exp of experiences) {
+      const normalizedTitle = (exp.title || '').toLowerCase();
+      if (!sections.price && normalizedTitle.includes('price')) {
+        sections.price = {
+          title: 'Price and Shopping Experience',
+          content: exp.experienceText,
+          rating: this.calculateExperienceRating(exp.experienceText + '-price'),
+        };
+        continue;
+      }
+
+      if (
+        !sections.usage &&
+        (normalizedTitle.includes('product') || normalizedTitle.includes('usage'))
+      ) {
+        sections.usage = {
+          title: 'Product and Usage Experience',
+          content: exp.experienceText,
+          rating: this.calculateExperienceRating(exp.experienceText + '-usage'),
+        };
+      }
+    }
+
+    const fallbackText =
+      summary || experiences[0]?.experienceText || 'Experience details not provided.';
+
+    if (!sections.price) {
+      sections.price = {
+        title: 'Price and Shopping Experience',
+        content: fallbackText,
+        rating: this.calculateExperienceRating(fallbackText + '-price'),
+      };
+    }
+
+    if (!sections.usage) {
+      const usageText = experiences[1]?.experienceText || fallbackText;
+      sections.usage = {
+        title: 'Product and Usage Experience',
+        content: usageText,
+        rating: this.calculateExperienceRating(usageText + '-usage'),
+      };
+    }
+
+    return [sections.price, sections.usage].filter(
+      (section): section is ExperienceContent => section !== null,
+    );
+  }
+
+  /**
+   * Experience text'inden rating hesapla (basit hash-based)
+   */
+  private calculateExperienceRating(text: string): number {
+    if (!text) return 50;
+    // Basit bir hash fonksiyonu ile 30-70 arası rating üret
+    let hash = 0;
+    for (let i = 0; i < text.length; i++) {
+      const char = text.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash % 41) + 30; // 30-70 arası
+  }
+
   private mapToBenchmarkItem(
     post: any,
     basePost: any,
@@ -2159,36 +2387,10 @@ export class BrandService {
       return this.mapToPostItem(post, basePost, FeedItemType.POST, images);
     }
 
-    const product1 = this.getProductBase(comparison.product1);
-    const product2 = this.getProductBase(comparison.product2);
-    const choiceProductId = this.selectComparisonWinner(comparison);
-
-    const products: any[] = [];
-    if (product1) {
-      products.push({
-        ...product1,
-        isOwned: ownedProductIds.has(product1.id),
-        choice: choiceProductId
-          ? choiceProductId === String(comparison.product1Id)
-          : true,
-      });
-    }
-    if (product2) {
-      products.push({
-        ...product2,
-        isOwned: ownedProductIds.has(product2.id),
-        choice: choiceProductId
-          ? choiceProductId === String(comparison.product2Id)
-          : false,
-      });
-    }
-
     return {
       type: FeedItemType.BENCHMARK,
       data: {
         ...basePost,
-        type: FeedItemType.BENCHMARK,
-        products,
         content: comparison.comparisonSummary || post.body,
       },
     };
@@ -2202,7 +2404,6 @@ export class BrandService {
       type: FeedItemType.TIPS_AND_TRICKS,
       data: {
         ...basePost,
-        type: FeedItemType.TIPS_AND_TRICKS,
         product: product,
         content: post.body,
         tag,

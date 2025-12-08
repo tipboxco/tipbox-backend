@@ -34,7 +34,19 @@ export class CacheService {
     try {
       const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
       
-      this.client = createClient({ url: redisUrl });
+      this.client = createClient({ 
+        url: redisUrl,
+        socket: {
+          connectTimeout: 10000, // 10 seconds
+          reconnectStrategy: (retries) => {
+            if (retries > 10) {
+              logger.error('Redis cache reconnection failed after 10 retries');
+              return new Error('Redis reconnection limit exceeded');
+            }
+            return Math.min(retries * 100, 3000);
+          },
+        },
+      });
       
       this.client.on('error', (err) => {
         logger.error('Redis Cache Client Error:', err);

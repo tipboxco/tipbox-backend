@@ -435,9 +435,9 @@ const dashboardScript = `
         alert('Hata: ' + error.message);
       } finally {
         button.disabled = false;
-        setTimeout(function() {
-          status.innerHTML = '';
-        }, 5000);
+          setTimeout(function() {
+            status.innerHTML = '';
+          }, 5000);
       }
     }
     
@@ -1427,10 +1427,10 @@ router.get('/', (req: Request, res: Response) => {
           return `
           <div class="port-card" onclick="window.open('${url}', '_blank')">
             <div class="service-header">
-              <h3>
-                <i class="fas ${service.icon} icon"></i>
-                ${service.name}
-              </h3>
+            <h3>
+              <i class="fas ${service.icon} icon"></i>
+              ${service.name}
+            </h3>
               ${service.containerName ? `
                 <div class="status-indicator" data-container="${service.containerName}">
                   <span class="status-dot"></span>
@@ -1458,7 +1458,7 @@ router.get('/', (req: Request, res: Response) => {
                   <i class="fas fa-play"></i>
                   Start
                 </button>
-              </div>
+          </div>
             ` : ''}
           </div>
           `;
@@ -1469,17 +1469,17 @@ router.get('/', (req: Request, res: Response) => {
     <div class="section">
       <h2 class="section-title">Database: Seed Yönetimi</h2>
       <div class="seed-grid">
-        <div class="seed-card">
-          <h3>
+          <div class="seed-card">
+            <h3>
             <i class="fas fa-database icon"></i>
             Tüm Seedleri Oluştur
-          </h3>
+            </h3>
           <p><code>prisma/seed.ts</code> dosyasındaki tüm seed verilerini veritabanına yazar.</p>
           <button class="seed-button" onclick="runAllSeeds()" id="btn-seed-all">
             Seedleri Yükle
-          </button>
+            </button>
           <div id="status-seed-all"></div>
-        </div>
+    </div>
 
         <div class="seed-card danger-card">
           <h3>
@@ -1953,8 +1953,8 @@ router.get('/docker/status', async (req: Request, res: Response) => {
         }
       }
 
-      statuses[containerName] = isRunning;
-      if (!isRunning) {
+        statuses[containerName] = isRunning;
+        if (!isRunning) {
         allRunning = false;
       }
     }

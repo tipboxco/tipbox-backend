@@ -531,7 +531,9 @@ export class UserService {
     });
 
     if (existing) {
-      return; // Already exists, no need to update counts
+      // Even if exists, recalculate counts to ensure accuracy
+      await this.recalculateTrustCounts(userId, targetUserId);
+      return;
     }
 
     // idempotent create
@@ -541,25 +543,59 @@ export class UserService {
       create: { trusterId: userId, trustedUserId: targetUserId },
     });
 
-    // Increment truster's trustCount
-    await this.prisma.profile.updateMany({
-      where: { userId },
-      data: {
-        trustCount: {
-          increment: 1
-        }
-      } as any
-    });
+    // Recalculate trust/truster counts for both users to ensure accuracy
+    await this.recalculateTrustCounts(userId, targetUserId);
+  }
 
-    // Increment trusted user's trusterCount
-    await this.prisma.profile.updateMany({
-      where: { userId: targetUserId },
-      data: {
-        trusterCount: {
-          increment: 1
-        }
-      } as any
-    });
+  /**
+   * Recalculate trust and truster counts for users after trust operations
+   * Updates both trustCount (how many users this user trusts) and trusterCount (how many users trust this user)
+   */
+  private async recalculateTrustCounts(trusterId: string, trustedUserId: string): Promise<void> {
+    // Calculate all counts in parallel for both users
+    const [
+      trusterTrustCount,      // How many users trusterId trusts
+      trusterTrusterCount,    // How many users trust trusterId
+      trustedTrustCount,      // How many users trustedUserId trusts
+      trustedTrusterCount     // How many users trust trustedUserId
+    ] = await Promise.all([
+      // truster's trustCount: count where trusterId is the truster
+      this.prisma.trustRelation.count({
+        where: { trusterId }
+      }),
+      // truster's trusterCount: count where trusterId is the trusted user
+      this.prisma.trustRelation.count({
+        where: { trustedUserId: trusterId }
+      }),
+      // trusted user's trustCount: count where trustedUserId is the truster
+      this.prisma.trustRelation.count({
+        where: { trusterId: trustedUserId }
+      }),
+      // trusted user's trusterCount: count where trustedUserId is the trusted user
+      this.prisma.trustRelation.count({
+        where: { trustedUserId }
+      })
+    ]);
+
+    // Update both users' profiles with recalculated counts
+    await Promise.all([
+      // Update truster's profile
+      this.prisma.profile.updateMany({
+        where: { userId: trusterId },
+        data: {
+          trustCount: trusterTrustCount,
+          trusterCount: trusterTrusterCount
+        } as any
+      }),
+      // Update trusted user's profile
+      this.prisma.profile.updateMany({
+        where: { userId: trustedUserId },
+        data: {
+          trustCount: trustedTrustCount,
+          trusterCount: trustedTrusterCount
+        } as any
+      })
+    ]);
   }
 
   async listTrusters(userId: string, query?: string): Promise<Array<{
@@ -666,7 +702,14 @@ export class UserService {
     }
   }
 
-  async listAchievementBadges(userId: string, query?: string): Promise<CollectionResponse[]> {
+  async listAchievementBadges(
+    userId: string,
+    query?: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{ items: CollectionResponse[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
+
     const where: any = {
       userId,
       badge: {
@@ -679,6 +722,10 @@ export class UserService {
         } : {}),
       },
     };
+
+    if (cursor) {
+      where.badgeId = { lt: cursor };
+    }
 
     const userBadges = await this.prisma.userBadge.findMany({
       where,
@@ -700,9 +747,13 @@ export class UserService {
         },
       },
       orderBy: { claimedAt: 'desc' },
+      take: limit + 1,
     });
 
-    return userBadges.map((ub) => {
+    const hasMore = userBadges.length > limit;
+    const paginatedBadges = hasMore ? userBadges.slice(0, limit) : userBadges;
+
+    const items = paginatedBadges.map((ub) => {
       const badge = (ub as any).badge;
       const goals = (badge?.achievementGoals || []) as any[];
       const tasks: CollectionTask[] = goals.map((goal) => ({
@@ -723,6 +774,17 @@ export class UserService {
         tasks,
       } as CollectionResponse;
     });
+
+    const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].id : undefined;
+
+    return {
+      items,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
   }
 
   /**
@@ -829,40 +891,86 @@ export class UserService {
     };
   }
 
-  async listBridgeBadges(userId: string, query?: string): Promise<CollectionResponse[]> {
+  async listBridgeBadges(
+    userId: string,
+    query?: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{ items: CollectionResponse[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
+
+    const whereClause: any = {
+      userId,
+      badge: query
+        ? {
+            OR: [
+              { name: { contains: query, mode: 'insensitive' } },
+              { description: { contains: query, mode: 'insensitive' } },
+            ] as any,
+          }
+        : undefined,
+    };
+
+    if (cursor) {
+      whereClause.badgeId = { lt: cursor };
+    }
+
     const rewards = await this.prisma.bridgeReward.findMany({
-      where: {
-        userId,
-        badge: query
-          ? {
-              OR: [
-                { name: { contains: query, mode: 'insensitive' } },
-                { description: { contains: query, mode: 'insensitive' } },
-              ] as any,
-            }
-          : undefined,
-      } as any,
+      where: whereClause,
       include: {
         badge: {
           include: {
             _count: { select: { bridgeRewards: true } },
+            achievementGoals: {
+              include: {
+                chain: true,
+                userAchievements: {
+                  where: { userId },
+                },
+              },
+            },
           },
         },
       },
       orderBy: { awardedAt: 'desc' },
+      take: limit + 1,
     } as any);
 
-    return rewards.map((rw: any) => ({
-      id: String(rw.badge?.id || ''),
-      title: rw.badge?.name || '',
-      rarity: COLLECTION_RARITY_MAP[rw.badge?.rarity || 'COMMON'] || 'Usual',
-      image: rw.badge?.imageUrl ?? BADGE_PLACEHOLDER_URL,
-      isClaimed: true,
-      nftAddress: rw.nftAddress ?? null,
-      earnedDate: rw.awardedAt ? rw.awardedAt.toISOString() : null,
-      totalEarned: rw.badge?._count?.bridgeRewards ?? 0,
-      tasks: [],
-    }));
+    const hasMore = rewards.length > limit;
+    const paginatedRewards = hasMore ? rewards.slice(0, limit) : rewards;
+
+    const items = paginatedRewards.map((rw: any) => {
+      const badge = rw.badge;
+      const goals = (badge?.achievementGoals || []) as any[];
+      const tasks: CollectionTask[] = goals.map((goal) => ({
+        id: String(goal.id),
+        title: goal.title,
+        type: inferTaskType(goal.title, goal.requirement),
+      }));
+
+      return {
+        id: String(badge?.id || ''),
+        title: badge?.name || '',
+        rarity: COLLECTION_RARITY_MAP[badge?.rarity || 'COMMON'] || 'Usual',
+        image: badge?.imageUrl ?? BADGE_PLACEHOLDER_URL,
+        isClaimed: true,
+        nftAddress: rw.nftAddress ?? null,
+        earnedDate: rw.awardedAt ? rw.awardedAt.toISOString() : null,
+        totalEarned: badge?._count?.bridgeRewards ?? 0,
+        tasks,
+      };
+    });
+
+    const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].id : undefined;
+
+    return {
+      items,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
   }
 
   async claimAchievementBadge(userId: string, badgeId: string): Promise<{ success: boolean }> {
@@ -1106,9 +1214,20 @@ export class UserService {
     return results;
   }
 
-  async getUserReviews(userId: string): Promise<any[]> {
+  async getUserReviews(
+    userId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
+
+    const whereClause: any = { userId };
+    if (cursor) {
+      whereClause.id = { lt: cursor };
+    }
+
     const inventories = await this.prisma.inventory.findMany({
-      where: { userId } as any,
+      where: whereClause,
       include: {
         product: {
           include: {
@@ -1127,6 +1246,7 @@ export class UserService {
         media: true,
       } as any,
       orderBy: { createdAt: 'desc' },
+      take: limit + 1,
     });
 
     const userBase = await this.getUserBase(userId);
@@ -1163,7 +1283,18 @@ export class UserService {
         });
       }
 
-    return results;
+    const hasMore = results.length > limit;
+    const paginatedResults = hasMore ? results.slice(0, limit) : results;
+    const nextCursor = hasMore && paginatedResults.length > 0 ? paginatedResults[paginatedResults.length - 1].id : undefined;
+
+    return {
+      items: paginatedResults,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
   }
 
   private buildExperienceSections(
@@ -1226,9 +1357,20 @@ export class UserService {
     );
   }
 
-  async getUserBenchmarks(userId: string): Promise<any[]> {
+  async getUserBenchmarks(
+    userId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
+
+    const whereClause: any = { userId, type: 'COMPARE' };
+    if (cursor) {
+      whereClause.id = { lt: cursor };
+    }
+
     const posts = await this.prisma.contentPost.findMany({
-      where: { userId, type: 'COMPARE' } as any,
+      where: whereClause,
       include: {
         comparison: {
           include: {
@@ -1239,6 +1381,7 @@ export class UserService {
         },
       } as any,
       orderBy: { createdAt: 'desc' },
+      take: limit + 1,
     });
 
     const userBase = await this.getUserBase(userId);
@@ -1248,41 +1391,53 @@ export class UserService {
     });
     const ownedSet = new Set(inventories.map((i) => String(i.productId)));
 
+    const filteredPosts = posts.filter((p) => (p as any).comparison);
+    const hasMore = filteredPosts.length > limit;
+    const paginatedPosts = hasMore ? filteredPosts.slice(0, limit) : filteredPosts;
+
     const results = await Promise.all(
-      posts
-        .filter((p) => (p as any).comparison)
-        .map(async (post) => {
-          const comp = (post as any).comparison!;
-          const stats = await this.getPostStats(String(post.id));
-          const choiceProductId = this.selectComparisonWinner(comp);
-          return {
-            id: String(post.id),
-            type: 'benchmark' as const,
-            user: userBase,
-            stats,
-            createdAt: post.createdAt.toISOString(),
-            contextType: this.mapContextType(post),
-            products: [
-              {
-                ...(await this.getProductBase(String(comp.product1Id)))!,
-                isOwned: ownedSet.has(String(comp.product1Id)),
-                choice: choiceProductId
-                  ? choiceProductId === String(comp.product1Id)
-                  : true,
-              },
-              {
-                ...(await this.getProductBase(String(comp.product2Id)))!,
-                isOwned: ownedSet.has(String(comp.product2Id)),
-                choice: choiceProductId
-                  ? choiceProductId === String(comp.product2Id)
-                  : false,
-              },
-            ],
-            content: post.body,
-          };
-        })
+      paginatedPosts.map(async (post) => {
+        const comp = (post as any).comparison!;
+        const stats = await this.getPostStats(String(post.id));
+        const choiceProductId = this.selectComparisonWinner(comp);
+        return {
+          id: String(post.id),
+          type: 'benchmark' as const,
+          user: userBase,
+          stats,
+          createdAt: post.createdAt.toISOString(),
+          contextType: this.mapContextType(post),
+          products: [
+            {
+              ...(await this.getProductBase(String(comp.product1Id)))!,
+              isOwned: ownedSet.has(String(comp.product1Id)),
+              choice: choiceProductId
+                ? choiceProductId === String(comp.product1Id)
+                : true,
+            },
+            {
+              ...(await this.getProductBase(String(comp.product2Id)))!,
+              isOwned: ownedSet.has(String(comp.product2Id)),
+              choice: choiceProductId
+                ? choiceProductId === String(comp.product2Id)
+                : false,
+            },
+          ],
+          content: post.body,
+        };
+      })
     );
-    return results;
+
+    const nextCursor = hasMore && results.length > 0 ? results[results.length - 1].id : undefined;
+
+    return {
+      items: results,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
   }
 
   private selectComparisonWinner(
@@ -1313,9 +1468,20 @@ export class UserService {
       : String(comparison.product2Id);
   }
 
-  async getUserTips(userId: string): Promise<any[]> {
+  async getUserTips(
+    userId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
+
+    const whereClause: any = { userId, type: 'TIPS' };
+    if (cursor) {
+      whereClause.id = { lt: cursor };
+    }
+
     const posts = await this.prisma.contentPost.findMany({
-      where: { userId, type: 'TIPS' } as any,
+      where: whereClause,
       include: {
         tip: true,
         product: {
@@ -1348,6 +1514,7 @@ export class UserService {
         mainCategory: true,
       } as any,
       orderBy: { createdAt: 'desc' },
+      take: limit + 1,
     });
 
     const userBase = await this.getUserBase(userId);
@@ -1377,17 +1544,40 @@ export class UserService {
         };
       })
     );
-    return results;
+
+    const hasMore = results.length > limit;
+    const paginatedResults = hasMore ? results.slice(0, limit) : results;
+    const nextCursor = hasMore && paginatedResults.length > 0 ? paginatedResults[paginatedResults.length - 1].id : undefined;
+
+    return {
+      items: paginatedResults,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
   }
 
-  async getUserReplies(userId: string): Promise<any[]> {
+  async getUserReplies(
+    userId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
+
+    const whereClause: any = {
+      userId,
+      post: {
+        type: 'QUESTION',
+      },
+    };
+    if (cursor) {
+      whereClause.id = { lt: cursor };
+    }
+
     const comments = await this.prisma.contentComment.findMany({
-      where: {
-        userId,
-        post: {
-          type: 'QUESTION',
-        },
-      } as any,
+      where: whereClause,
       include: {
         post: {
           include: {
@@ -1423,6 +1613,7 @@ export class UserService {
         },
       } as any,
       orderBy: { createdAt: 'desc' },
+      take: limit + 1,
     });
 
     const userBase = await this.getUserBase(userId);
@@ -1452,13 +1643,36 @@ export class UserService {
         };
       })
     );
-    return results;
+
+    const hasMore = results.length > limit;
+    const paginatedResults = hasMore ? results.slice(0, limit) : results;
+    const nextCursor = hasMore && paginatedResults.length > 0 ? paginatedResults[paginatedResults.length - 1].id : undefined;
+
+    return {
+      items: paginatedResults,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
   }
 
-  async getUserLadderBadges(userId: string): Promise<any[]> {
+  async getUserLadderBadges(
+    userId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
+
+    const whereClause: any = { userId };
+    if (cursor) {
+      whereClause.badgeId = { lt: cursor };
+    }
+
     const [userBadges, totalUsers] = await Promise.all([
       this.prisma.userBadge.findMany({
-        where: { userId } as any,
+        where: whereClause,
         include: {
           badge: {
             include: {
@@ -1477,6 +1691,7 @@ export class UserService {
           { displayOrder: 'asc' },
           { claimedAt: 'asc' },
         ],
+        take: limit + 1,
       }),
       this.prisma.user.count(),
     ]);
@@ -1504,7 +1719,10 @@ export class UserService {
       EPIC: 'Rare',
     };
 
-    return userBadges.map((ub) => {
+    const hasMore = userBadges.length > limit;
+    const paginatedBadges = hasMore ? userBadges.slice(0, limit) : userBadges;
+
+    const items = paginatedBadges.map((ub) => {
       const badge = ub.badge as any;
       const tasks = this.buildBadgeTasks(badge);
       const currentProgress = tasks.reduce(
@@ -1533,12 +1751,34 @@ export class UserService {
         tasks,
       };
     });
+
+    const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].id : undefined;
+
+    return {
+      items,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
   }
 
-  async getUserBookmarks(userId: string): Promise<any[]> {
+  async getUserBookmarks(
+    userId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
+
+    const whereClause: any = { userId };
+    if (cursor) {
+      whereClause.id = { lt: cursor };
+    }
+
     // Bookmarks = Kullanıcının favorite ettiği post'lar (tüm tiplerde)
     const favorites = await this.prisma.contentFavorite.findMany({
-      where: { userId } as any,
+      where: whereClause,
       include: {
         post: {
           include: {
@@ -1577,6 +1817,7 @@ export class UserService {
         },
       } as any,
       orderBy: { createdAt: 'desc' },
+      take: limit + 1,
     });
 
     // Post'lardaki unique userId'leri topla
@@ -1611,9 +1852,12 @@ export class UserService {
     });
     const ownedSet = new Set(inventories.map((i) => String(i.productId)));
 
+    const hasMoreFavorites = favorites.length > limit;
+    const paginatedFavorites = hasMoreFavorites ? favorites.slice(0, limit) : favorites;
+
     const results: any[] = [];
 
-    for (const fav of favorites) {
+    for (const fav of paginatedFavorites) {
       const post = (fav as any).post;
       if (!post) continue;
 
@@ -1728,9 +1972,20 @@ export class UserService {
           });
         }
       }
-    }
+      }
 
-    return results;
+    const hasMoreResults = results.length > limit;
+    const paginatedResults = hasMoreResults ? results.slice(0, limit) : results;
+    const nextCursor = hasMoreResults && paginatedResults.length > 0 ? paginatedResults[paginatedResults.length - 1].id : undefined;
+
+    return {
+      items: paginatedResults,
+      pagination: {
+        cursor: nextCursor,
+        hasMore: hasMoreResults,
+        limit,
+      },
+    };
   }
 
   private buildBadgeTasks(
@@ -1849,17 +2104,17 @@ export class UserService {
     const fetchers = requestedTypes.map((cardType) => {
       switch (cardType) {
         case 'feed':
-          return this.getUserReviews(userId);
+          return this.getUserReviews(userId, { limit: 100 });
         case 'benchmark':
-          return this.getUserBenchmarks(userId);
+          return this.getUserBenchmarks(userId, { limit: 100 });
         case 'tipsAndTricks':
-          return this.getUserTips(userId);
+          return this.getUserTips(userId, { limit: 100 });
         case 'question':
-          return this.getUserReplies(userId);
+          return this.getUserReplies(userId, { limit: 100 });
         case 'experience':
-          return this.getUserReviews(userId);
+          return this.getUserReviews(userId, { limit: 100 });
         case 'update':
-          return this.getUserReviews(userId);
+          return this.getUserReviews(userId, { limit: 100 });
         case 'post':
         default:
           return this.getUserPosts(userId);
@@ -1867,7 +2122,10 @@ export class UserService {
     });
 
     const chunks = await Promise.all(fetchers);
-    const merged = chunks.flat();
+    const merged = chunks.flatMap((chunk: any) => {
+      // Eğer pagination döndürüyorsa items'ı al, değilse direkt kullan
+      return chunk?.items || chunk || [];
+    });
     const resolveTimestamp = (item: any): number => {
       const value = item?.createdAt;
       return value ? new Date(value).getTime() : 0;
@@ -1934,24 +2192,24 @@ export class UserService {
       promises.push(this.getUserProfileCard(userId));
     }
 
-    const tabPromises: Promise<any[]>[] = [];
+    const tabPromises: Promise<any[] | { items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }>[] = [];
     if (includeTabs.includes('feed')) {
       tabPromises.push(this.getUserProfileFeed(userId, { limit }));
     }
     if (includeTabs.includes('reviews')) {
-      tabPromises.push(this.getUserReviews(userId));
+      tabPromises.push(this.getUserReviews(userId, { limit }));
     }
     if (includeTabs.includes('benchmarks')) {
-      tabPromises.push(this.getUserBenchmarks(userId));
+      tabPromises.push(this.getUserBenchmarks(userId, { limit }));
     }
     if (includeTabs.includes('tips')) {
-      tabPromises.push(this.getUserTips(userId));
+      tabPromises.push(this.getUserTips(userId, { limit }));
     }
     if (includeTabs.includes('replies')) {
-      tabPromises.push(this.getUserReplies(userId));
+      tabPromises.push(this.getUserReplies(userId, { limit }));
     }
     if (includeTabs.includes('ladder')) {
-      tabPromises.push(this.getUserLadderBadges(userId));
+      tabPromises.push(this.getUserLadderBadges(userId, { limit }));
     }
 
     promises.push(...tabPromises);
@@ -1963,22 +2221,22 @@ export class UserService {
       profileCard: includeProfileCard ? results[0] : null,
       tabs: {
         feed: includeTabs.includes('feed')
-          ? (results[tabIndex++] || []).slice(0, limit)
+          ? ((results[tabIndex]?.items || results[tabIndex] || []) as any[]).slice(0, limit)
           : undefined,
         reviews: includeTabs.includes('reviews')
-          ? (results[tabIndex++] || []).slice(0, limit)
+          ? ((results[tabIndex++]?.items || results[tabIndex - 1] || []) as any[]).slice(0, limit)
           : undefined,
         benchmarks: includeTabs.includes('benchmarks')
-          ? (results[tabIndex++] || []).slice(0, limit)
+          ? ((results[tabIndex++]?.items || results[tabIndex - 1] || []) as any[]).slice(0, limit)
           : undefined,
         tips: includeTabs.includes('tips')
-          ? (results[tabIndex++] || []).slice(0, limit)
+          ? ((results[tabIndex++]?.items || results[tabIndex - 1] || []) as any[]).slice(0, limit)
           : undefined,
         replies: includeTabs.includes('replies')
-          ? (results[tabIndex++] || []).slice(0, limit)
+          ? ((results[tabIndex++]?.items || results[tabIndex - 1] || []) as any[]).slice(0, limit)
           : undefined,
         ladder: includeTabs.includes('ladder')
-          ? (results[tabIndex++] || []).slice(0, limit)
+          ? ((results[tabIndex++]?.items || results[tabIndex - 1] || []) as any[]).slice(0, limit)
           : undefined,
       },
       meta: {
