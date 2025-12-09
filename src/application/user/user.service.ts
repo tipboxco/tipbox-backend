@@ -1214,6 +1214,134 @@ export class UserService {
     return results;
   }
 
+  async getUserUpdates(
+    userId: string,
+    options?: { limit?: number }
+  ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 100;
+
+    const posts = await this.prisma.contentPost.findMany({
+      where: { userId, type: 'UPDATE' } as any,
+      include: {
+        product: {
+          include: {
+            group: {
+              include: {
+                subCategory: {
+                  include: {
+                    mainCategory: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        productGroup: {
+          include: {
+            subCategory: {
+              include: {
+                mainCategory: true,
+              },
+            },
+          },
+        },
+        subCategory: {
+          include: {
+            mainCategory: true,
+          },
+        },
+        mainCategory: true,
+        likes: true,
+        comments: true,
+        favorites: true,
+      } as any,
+      orderBy: { createdAt: 'desc' },
+      take: limit + 1,
+    });
+
+    const userBase = await this.getUserBase(userId);
+
+    // Batch fetch images from InventoryMedia for posts with products
+    const postProductIds = posts.map((p) => p.productId).filter(Boolean) as string[];
+    const inventoryMediaMap = new Map<string, string[]>();
+    const ownedProductIds = new Set<string>();
+
+    if (postProductIds.length > 0) {
+      const inventoriesWithMedia = await this.prisma.inventory.findMany({
+        where: {
+          userId,
+          productId: { in: postProductIds },
+        },
+        include: {
+          media: {
+            where: { type: 'IMAGE' },
+            orderBy: { createdAt: 'asc' },
+          },
+        },
+      });
+
+      for (const inventory of inventoriesWithMedia) {
+        ownedProductIds.add(String(inventory.productId));
+        const imageUrls = inventory.media.map((m) => m.mediaUrl);
+        if (imageUrls.length > 0) {
+          inventoryMediaMap.set(inventory.productId, imageUrls);
+        }
+      }
+    }
+
+    const results = await Promise.all(
+      posts.map(async (post) => {
+        const stats = await this.getPostStats(post.id);
+        const contextType = this.mapContextType(post);
+        const contextData = this.buildContextDataFromPost(post, ownedProductIds);
+        const images = post.productId ? (inventoryMediaMap.get(post.productId) || []) : [];
+        const productBase = contextData
+          ? {
+              id: contextData.id,
+              name: contextData.name,
+              subName: contextData.subName || '',
+              image: contextData.image,
+              isOwned: contextData.isOwned,
+            }
+          : null;
+
+        const relatedPost = {
+          id: String(post.id),
+          product: productBase,
+          content: this.buildUpdateContentFromBody(post.body),
+          tags: await this.collectProductTags(String(post.productId || '')),
+          images,
+        };
+
+        return {
+          id: String(post.id),
+          type: 'update' as const,
+          user: userBase,
+          stats,
+          createdAt: post.createdAt.toISOString(),
+          contextType,
+          contextData,
+          relatedPost,
+          content: post.body,
+          images,
+        };
+      })
+    );
+
+    const hasMore = results.length > limit;
+    const paginatedResults = hasMore ? results.slice(0, limit) : results;
+    const nextCursor = hasMore && paginatedResults.length > 0 ? paginatedResults[paginatedResults.length - 1].id : undefined;
+
+    return {
+      items: paginatedResults,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
+  }
+
   async getUserReviews(
     userId: string,
     options?: { cursor?: string; limit?: number }
@@ -1355,6 +1483,17 @@ export class UserService {
     return [sections.price, sections.usage].filter(
       (section): section is ExperienceContent => section !== null,
     );
+  }
+
+  private buildUpdateContentFromBody(body: string | null | undefined): ExperienceContent[] {
+    const contentText = body || '';
+    return [
+      {
+        title: EXPERIENCE_SECTION_TITLES.USAGE,
+        content: contentText,
+        rating: 0,
+      },
+    ];
   }
 
   async getUserBenchmarks(
@@ -2114,7 +2253,7 @@ export class UserService {
         case 'experience':
           return this.getUserReviews(userId, { limit: 100 });
         case 'update':
-          return this.getUserReviews(userId, { limit: 100 });
+          return this.getUserUpdates(userId, { limit: 100 });
         case 'post':
         default:
           return this.getUserPosts(userId);

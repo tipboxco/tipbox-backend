@@ -1164,6 +1164,47 @@ async function main() {
 
   console.log(`✅ ${mainCategories.length} ana kategori oluşturuldu/güncellendi`)
 
+  // 2.a Duplicate Teknoloji kategorisini temizle ve her kategoriye min 10 subcategory ekle
+  {
+    const tech = await prisma.mainCategory.findFirst({ where: { name: 'Technology' } });
+    const trTech = await prisma.mainCategory.findFirst({ where: { name: 'Teknoloji' } });
+    if (tech && trTech && tech.id !== trTech.id) {
+      await prisma.mainCategory.delete({ where: { id: trTech.id } }).catch(() => undefined);
+      console.log('🧹 Duplicate "Teknoloji" kategorisi silindi (Technology mevcut olduğu için).');
+    }
+
+    const categoriesForSubs = await prisma.mainCategory.findMany({
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+
+    for (const cat of categoriesForSubs) {
+      const existing = await prisma.subCategory.findMany({
+        where: { mainCategoryId: cat.id },
+        select: { id: true },
+      });
+      const need = Math.max(0, 10 - existing.length);
+      if (need === 0) {
+        console.log(`ℹ️ ${cat.name} kategorisinde zaten ${existing.length} subcategory var, atlanıyor.`);
+        continue;
+      }
+
+      const baseIndex = existing.length;
+      const creates = Array.from({ length: need }).map((_, idx) =>
+        prisma.subCategory.create({
+          data: {
+            name: `${cat.name} Sub ${baseIndex + idx + 1}`,
+            description: null,
+            imageUrl: null,
+            mainCategoryId: cat.id,
+          },
+        })
+      );
+      await Promise.all(creates);
+      console.log(`✅ ${cat.name} kategorisine ${need} yeni subcategory eklendi (toplam ${baseIndex + need}).`);
+    }
+  }
+
   // 3. Badge Categories
   console.log('🏆 Creating badge categories...')
   const badgeCategories = await Promise.all([
@@ -6148,6 +6189,315 @@ async function main() {
       logoUrl: getSeedMediaUrl('explore.event.primary'),
       imageUrl: getSeedMediaUrl('catalog.home-appliances'),
       category: 'Kitchen',
+    },
+    // --- Additional brands to ensure 5 per category ---
+    // Technology (need 3 more)
+    {
+      name: 'FutureTech',
+      description: 'Geleceğin akıllı cihazları ve inovatif çözümler',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.computers-tablets'),
+      category: 'Technology',
+    },
+    {
+      name: 'NanoWorks',
+      description: 'Kompakt ve verimli teknoloji ürünleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.computers-tablets'),
+      category: 'Technology',
+    },
+    {
+      name: 'SmartCore',
+      description: 'Akıllı ekosistem ve bağlantılı cihazlar',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.computers-tablets'),
+      category: 'Technology',
+    },
+    // Home & Living (need 3 more)
+    {
+      name: 'CozyNest',
+      description: 'Rahat ve şık ev yaşam ürünleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.home-appliances'),
+      category: 'Home & Living',
+    },
+    {
+      name: 'LivingPlus',
+      description: 'Akıllı ev konfor çözümleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.home-appliances'),
+      category: 'Home & Living',
+    },
+    {
+      name: 'CasaPrime',
+      description: 'Dekorasyon ve fonksiyonel ev aksesuarları',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.home-appliances'),
+      category: 'Home & Living',
+    },
+    // Kitchen (need 2 more)
+    {
+      name: 'CookMasters',
+      description: 'Mutfak şefleri için premium ekipmanlar',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.home-appliances'),
+      category: 'Kitchen',
+    },
+    {
+      name: 'KitchenCraft',
+      description: 'Yaratıcı mutfak gereçleri ve aletleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.home-appliances'),
+      category: 'Kitchen',
+    },
+    {
+      name: 'GourmetHub',
+      description: 'Gurmelere özel pişirme çözümleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.home-appliances'),
+      category: 'Kitchen',
+    },
+    // Health & Fitness (need 3 more)
+    {
+      name: 'WellnessPro',
+      description: 'Sağlık ve wellness teknoloji ürünleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.cameras'),
+      category: 'Health & Fitness',
+    },
+    {
+      name: 'FitTrack',
+      description: 'Akıllı takip cihazları ve fitness ekipmanları',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.cameras'),
+      category: 'Health & Fitness',
+    },
+    {
+      name: 'HealthGear',
+      description: 'Evde spor ve sağlık destek ürünleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.cameras'),
+      category: 'Health & Fitness',
+    },
+    // Fashion (need 3 more)
+    {
+      name: 'UrbanStyle',
+      description: 'Şehirli ve modern stil koleksiyonları',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.phones'),
+      category: 'Fashion',
+    },
+    {
+      name: 'ChicLane',
+      description: 'Zarif ve trend moda ürünleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.phones'),
+      category: 'Fashion',
+    },
+    {
+      name: 'TrendLine',
+      description: 'Sezonun öne çıkan aksesuar ve giyim ürünleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.phones'),
+      category: 'Fashion',
+    },
+    // Electronics (need 3 more)
+    {
+      name: 'VoltEdge',
+      description: 'Yüksek performanslı elektronik cihazlar',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.headphones'),
+      category: 'Electronics',
+    },
+    {
+      name: 'PulseAudio',
+      description: 'Profesyonel ses ve müzik ekipmanları',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.headphones'),
+      category: 'Electronics',
+    },
+    {
+      name: 'CircuitHub',
+      description: 'Akıllı elektronik komponent ve aksesuarları',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.computers-tablets'),
+      category: 'Electronics',
+    },
+    // Sustainability (need 3 more)
+    {
+      name: 'EcoWave',
+      description: 'Enerji verimli ve çevre dostu ürünler',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.air-conditioner'),
+      category: 'Sustainability',
+    },
+    {
+      name: 'GreenNest',
+      description: 'Geri dönüştürülebilir ve sürdürülebilir çözümler',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.air-conditioner'),
+      category: 'Sustainability',
+    },
+    {
+      name: 'PureEarth',
+      description: 'Doğa dostu yaşam ürünleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.air-conditioner'),
+      category: 'Sustainability',
+    },
+    // Gaming (need 3 more)
+    {
+      name: 'ProGamer',
+      description: 'E-spor ekipmanları ve performans aksesuarları',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.games'),
+      category: 'Gaming',
+    },
+    {
+      name: 'ArcadeHub',
+      description: 'Retro ve arcade oyun çözümleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.games'),
+      category: 'Gaming',
+    },
+    {
+      name: 'NextLevel',
+      description: 'Gaming donanımı ve çevre birimleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.games'),
+      category: 'Gaming',
+    },
+    // Beauty (need 3 more)
+    {
+      name: 'LuxeGlow',
+      description: 'Lüks cilt bakım ve güzellik ürünleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.phones'),
+      category: 'Beauty',
+    },
+    {
+      name: 'PureBeauty',
+      description: 'Doğal içerikli kozmetik ürünleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.phones'),
+      category: 'Beauty',
+    },
+    {
+      name: 'SkinEssence',
+      description: 'Dermatolojik olarak test edilmiş bakım ürünleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.phones'),
+      category: 'Beauty',
+    },
+    // Outdoor (need 3 more)
+    {
+      name: 'TrailBlaze',
+      description: 'Doğa yürüyüşü ve kamp ekipmanları',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.drone'),
+      category: 'Outdoor',
+    },
+    {
+      name: 'CampPro',
+      description: 'Profesyonel kampçılık çözümleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.drone'),
+      category: 'Outdoor',
+    },
+    {
+      name: 'HikeMate',
+      description: 'Trekking ve tırmanış ekipmanları',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.drone'),
+      category: 'Outdoor',
+    },
+    // Pets (need 3 more)
+    {
+      name: 'PawPlanet',
+      description: 'Evcil hayvan yaşam ürünleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.cameras'),
+      category: 'Pets',
+    },
+    {
+      name: 'PetJoy',
+      description: 'Pet oyuncak ve bakım ürünleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.cameras'),
+      category: 'Pets',
+    },
+    {
+      name: 'FurryCare',
+      description: 'Evcil dostlar için sağlık ve bakım çözümleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.cameras'),
+      category: 'Pets',
+    },
+    // Travel (need 3 more)
+    {
+      name: 'GlobeTrot',
+      description: 'Seyahat aksesuarları ve bavullar',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.phones'),
+      category: 'Travel',
+    },
+    {
+      name: 'TripMate',
+      description: 'Konforlu seyahat çözümleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.phones'),
+      category: 'Travel',
+    },
+    {
+      name: 'VoyagePro',
+      description: 'Dayanıklı seyahat ekipmanları',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.phones'),
+      category: 'Travel',
+    },
+    // Baby (need 3 more)
+    {
+      name: 'TinySteps',
+      description: 'Bebek giyim ve bakım çözümleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.cameras'),
+      category: 'Baby',
+    },
+    {
+      name: 'BabyNest',
+      description: 'Konforlu bebek uyku ve bakım ürünleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.cameras'),
+      category: 'Baby',
+    },
+    {
+      name: 'LittleJoy',
+      description: 'Bebek oyuncakları ve gelişim ürünleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.cameras'),
+      category: 'Baby',
+    },
+    // Automotive (need 3 more)
+    {
+      name: 'DriveMax',
+      description: 'Otomotiv performans ve bakım ürünleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.otomotiv'),
+      category: 'Automotive',
+    },
+    {
+      name: 'AutoGear',
+      description: 'Araç içi aksesuar ve teknolojiler',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.otomotiv'),
+      category: 'Automotive',
+    },
+    {
+      name: 'MotoPro',
+      description: 'Araç bakım ve güvenlik çözümleri',
+      logoUrl: getSeedMediaUrl('explore.event.primary'),
+      imageUrl: getSeedMediaUrl('catalog.otomotiv'),
+      category: 'Automotive',
     },
   ]
 

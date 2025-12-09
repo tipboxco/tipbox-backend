@@ -718,6 +718,28 @@ export class ExploreService {
     // Get tags
     const tags = post.tags?.map((t: any) => t.tag) || post.contentPostTags?.map((t: any) => t.tag) || [];
 
+    if (type === FeedItemType.UPDATE) {
+      const relatedPost = {
+        id: post.id,
+        product,
+        content: experienceContent,
+        tags,
+        images,
+      };
+
+      const updateData = {
+        ...basePost,
+        relatedPost,
+        content: post.body,
+        images,
+      };
+
+      return {
+        type,
+        data: updateData,
+      };
+    }
+
     const experienceData: ExperiencePost = {
       ...basePost,
       product,

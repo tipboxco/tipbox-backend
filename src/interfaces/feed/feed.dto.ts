@@ -90,6 +90,21 @@ export interface ExperiencePost extends BasePost {
   images?: any[];
 }
 
+// Update Post Item Types
+export interface RelatedPostData {
+  id: string;
+  product: BaseProduct | null;
+  content: ExperienceContent[];
+  tags: string[];
+  images: string[];
+}
+
+export interface UpdatePost extends BasePost {
+  relatedPost: RelatedPostData;
+  content: string;
+  images?: any[];
+}
+
 export interface TipsAndTricksPost extends BasePost {
   contextData: ContextData;
   content: string;
@@ -111,7 +126,7 @@ export type FeedItem =
   | { type: FeedItemType.QUESTION; data: Post }
   | { type: FeedItemType.TIPS_AND_TRICKS; data: TipsAndTricksPost }
   | { type: FeedItemType.EXPERIENCE; data: ExperiencePost }
-  | { type: FeedItemType.UPDATE; data: ExperiencePost };
+  | { type: FeedItemType.UPDATE; data: UpdatePost };
 
 // Feed Response
 export interface FeedResponse {
