@@ -148,7 +148,11 @@ export class FeedService {
       });
     });
 
-    const orderedPosts = this.sortPostsByCreatedAt(posts);
+    // Order posts according to feed pagination order (avoid resort that breaks cursor)
+    const postMap = new Map(posts.map((p) => [p.id, p]));
+    const orderedPosts = feeds
+      .map((feed) => postMap.get(feed.postId))
+      .filter((p): p is typeof posts[number] => Boolean(p));
 
     // Get user inventories for benchmark isOwned check
     const inventories = await this.prisma.inventory.findMany({

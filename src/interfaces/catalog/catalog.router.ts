@@ -27,9 +27,6 @@ router.use(authMiddleware);
  *               items:
  *                 type: object
  *                 properties:
- *                   categoryId:
- *                     type: string
- *                     format: uuid
  *                   name:
  *                     type: string
  *                   image:

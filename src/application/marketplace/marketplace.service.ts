@@ -228,6 +228,8 @@ export class MarketplaceService {
 
       const profile = await this.profileRepo.findByUserId(userId);
       const username = profile?.userName || 'Unknown';
+      const avatar = await this.avatarRepo.findActiveByUserId(userId);
+      const userAvatar = avatar?.imageUrl;
 
       return {
         id: updatedListing.id,
@@ -236,6 +238,7 @@ export class MarketplaceService {
         username,
         price: updatedListing.price.toString(),
         image: nft.imageUrl,
+        userAvatar: userAvatar || undefined,
         rarity: nft.getRarityDisplayName(),
         type: nft.getTypeDisplayName(),
         listedAt: updatedListing.listedAt.toISOString(),
@@ -313,8 +316,20 @@ export class MarketplaceService {
     try {
       const prisma = getPrisma();
 
-      // NFT'yi bul
-      const nft = await this.nftRepo.findById(nftId);
+      // NFT'yi bul; bulunamazsa listing ID olarak çözümle
+      let nft = await this.nftRepo.findById(nftId);
+      let listing = await this.listingRepo.findActiveByNftId(nftId);
+
+      if (!nft && !listing) {
+        const listingById = await this.listingRepo.findById(nftId);
+        if (listingById) {
+          listing = listingById;
+          nft = await this.nftRepo.findById(listingById.nftId);
+        }
+      } else if (listing && !nft) {
+        nft = await this.nftRepo.findById(listing.nftId);
+      }
+
       if (!nft) {
         throw new NotFoundError('NFT bulunamadı');
       }
@@ -325,7 +340,7 @@ export class MarketplaceService {
       }
 
       // Aktif listing var mı kontrol et
-      const activeListing = await this.listingRepo.findActiveByNftId(nftId);
+      const activeListing = listing || (await this.listingRepo.findActiveByNftId(nft.id));
 
       // Viewer sayısı: Transaction sayısı (NFT'yi gören/transfer eden kişi sayısı)
       const viewerCount = await prisma.nFTTransaction.count({
@@ -368,23 +383,40 @@ export class MarketplaceService {
   /**
    * NFT satış detayını getirir (SellNFTDetail)
    */
-  async getSellNFTDetail(userId: string, nftId: string): Promise<SellNFTDetail> {
+  async getSellNFTDetail(userId: string, nftOrListingId: string): Promise<SellNFTDetail> {
+    let nftIdForLog = nftOrListingId;
     try {
       const prisma = getPrisma();
 
-      // NFT'yi bul
-      const nft = await this.nftRepo.findById(nftId);
+      // NFT'yi bul; bulunamazsa listing üzerinden çözümle
+      let nft = await this.nftRepo.findById(nftOrListingId);
+      let listing = await this.listingRepo.findActiveByNftId(nftOrListingId);
+
+      if (!nft && !listing) {
+        const listingById = await this.listingRepo.findById(nftOrListingId);
+        if (listingById) {
+          listing = listingById;
+          nft = await this.nftRepo.findById(listingById.nftId);
+        }
+      } else if (listing && !nft) {
+        nft = await this.nftRepo.findById(listing.nftId);
+      }
+
       if (!nft) {
         throw new Error('NFT bulunamadı');
       }
+      const nftId = nft.id;
+      nftIdForLog = nftId;
 
       // NFT'nin kullanıcıya ait olduğunu kontrol et
-      if (!nft.belongsToUser(userId)) {
-        throw new Error('Bu NFT size ait değil');
-      }
+      const isOwner = nft.belongsToUser(userId);
 
       // Aktif listing'i bul (eğer varsa)
-      const activeListing = await this.listingRepo.findActiveByNftId(nftId);
+      const activeListing = listing || (await this.listingRepo.findActiveByNftId(nftId));
+      // Eğer sahibi değilse ve aktif listing yoksa detay verilmez
+      if (!isOwner && !activeListing) {
+        throw new Error('NFT bulunamadı');
+      }
 
       // Viewer sayısı: Transaction sayısı
       const viewerCount = await prisma.nFTTransaction.count({
@@ -412,8 +444,13 @@ export class MarketplaceService {
       });
       const earnDate = firstTransaction?.createdAt.toISOString() || nft.createdAt.toISOString();
 
-      // Owner user bilgisi
-      const ownerProfile = await this.profileRepo.findByUserId(userId);
+      // Owner user bilgisi: NFT modeli ownerId taşımıyor olabilir; listing varsa sellerId, yoksa parametre
+      const ownerId =
+        (nft as any).userId ||
+        (nft as any).ownerId ||
+        activeListing?.listedByUserId ||
+        userId;
+      const ownerProfile = await this.profileRepo.findByUserId(ownerId);
       const ownerName = ownerProfile?.displayName || ownerProfile?.userName || 'Unknown';
 
       return {
@@ -425,7 +462,7 @@ export class MarketplaceService {
         earnDate,
         totalOwner,
         ownerUser: {
-          id: userId,
+          id: ownerId,
           name: ownerName,
         },
       };
@@ -433,7 +470,7 @@ export class MarketplaceService {
       logger.error({
         message: 'Error getting sell NFT detail',
         userId,
-        nftId,
+        nftId: nftIdForLog,
         error: error instanceof Error ? error.message : String(error),
       });
       throw error;

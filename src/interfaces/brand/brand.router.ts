@@ -234,7 +234,7 @@ router.get(
 
 /**
  * @openapi
- * /brands/{brandId}/products/groups:
+ * /brands/{brandId}/groups:
  *   get:
  *     summary: Markaya ait product group'ları listele
  *     description: Markaya ait product group'ların listelendiği endpoint (sadece group bilgileri).
@@ -256,7 +256,7 @@ router.get(
  *           type: integer
  *           minimum: 1
  *           maximum: 50
- *         description: Sayfa başına dönecek group sayısı (varsayılan 20)
+ *         description: Sayfa başına dönecek group sayısı (varsayılan 10)
  *       - in: query
  *         name: cursor
  *         required: false
@@ -297,7 +297,7 @@ router.get(
  *         description: Brand bulunamadı.
  */
 router.get(
-  '/:brandId/products/groups',
+  '/:brandId/groups',
   asyncHandler(async (req: Request, res: Response) => {
     const { brandId } = req.params;
     const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
@@ -314,7 +314,7 @@ router.get(
 
 /**
  * @openapi
- * /brands/{brandId}/products/groups/{productGroupId}:
+ * /brands/groups/{productGroupId}/products:
  *   get:
  *     summary: Belirli bir product group için products listesi
  *     description: Belirli bir product group içindeki products'ların pagination ile listelendiği endpoint.
@@ -322,13 +322,6 @@ router.get(
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - in: path
- *         name: brandId
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *         description: Brand ID'si
  *       - in: path
  *         name: productGroupId
  *         required: true
@@ -396,140 +389,14 @@ router.get(
  *         description: Brand veya product group bulunamadı.
  */
 router.get(
-  '/:brandId/products/groups/:productGroupId',
+  '/groups/:productGroupId/products',
   asyncHandler(async (req: Request, res: Response) => {
-    const { brandId, productGroupId } = req.params;
+    const { productGroupId } = req.params;
     const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
     const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
     const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
 
-    const result = await brandService.getBrandProductsByGroup(brandId, productGroupId, {
-      cursor,
-      limit,
-    });
-    res.json(result);
-  }),
-);
-
-/**
- * @openapi
- * /brands/{brandId}/products:
- *   get:
- *     summary: Markaya ait ürünleri batch endpoint ile listele
- *     description: Product groups metadata ve products'ı tek istekte döner. Groups lookup için Record, products flat array, tek pagination.
- *     tags: [Brand]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: brandId
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *         description: Brand ID'si
- *       - in: query
- *         name: productGroupIds
- *         required: false
- *         schema:
- *           type: array
- *           items:
- *             type: string
- *         description: Products'ları getirilecek product group ID'leri (virgülle ayrılmış). Belirtilmezse tüm groups'ların products'ları gelir.
- *       - in: query
- *         name: cursor
- *         required: false
- *         schema:
- *           type: string
- *         description: Products pagination için cursor (önceki sayfanın son product ID'si)
- *       - in: query
- *         name: limit
- *         required: false
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 50
- *         description: Sayfa başına dönecek product sayısı (varsayılan 20)
- *     responses:
- *       200:
- *         description: Brand ürünleri batch olarak başarıyla listelendi.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 groups:
- *                   type: object
- *                   additionalProperties:
- *                     type: object
- *                     properties:
- *                       productGroupId:
- *                         type: string
- *                         format: uuid
- *                       productGroupName:
- *                         type: string
- *                   description: Product groups metadata (lookup için Record)
- *                 items:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       productId:
- *                         type: string
- *                         format: uuid
- *                       productGroupId:
- *                         type: string
- *                         format: uuid
- *                       name:
- *                         type: string
- *                       image:
- *                         type: string
- *                         nullable: true
- *                       stats:
- *                         type: object
- *                         properties:
- *                           reviews:
- *                             type: integer
- *                           likes:
- *                             type: integer
- *                           share:
- *                             type: integer
- *                   description: Products flat array (pagination'lı)
- *                 pagination:
- *                   type: object
- *                   properties:
- *                     cursor:
- *                       type: string
- *                       nullable: true
- *                     hasMore:
- *                       type: boolean
- *                     limit:
- *                       type: integer
- *       401:
- *         description: Kimlik doğrulaması başarısız.
- *       404:
- *         description: Brand bulunamadı.
- */
-router.get(
-  '/:brandId/products',
-  asyncHandler(async (req: Request, res: Response) => {
-    const { brandId } = req.params;
-    const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
-    const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
-    const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
-    
-    // productGroupIds query parametresini parse et (virgülle ayrılmış veya array)
-    let productGroupIds: string[] | undefined = undefined;
-    if (req.query.productGroupIds) {
-      if (Array.isArray(req.query.productGroupIds)) {
-        productGroupIds = req.query.productGroupIds.map(String);
-      } else {
-        productGroupIds = String(req.query.productGroupIds).split(',').map(s => s.trim());
-      }
-    }
-
-    const result = await brandService.getBrandProductsBatch(brandId, {
-      productGroupIds,
+    const result = await brandService.getProductsByGroupId(productGroupId, {
       cursor,
       limit,
     });
@@ -725,7 +592,7 @@ router.get(
 
 /**
  * @openapi
- * /brands/{brandId}/events/{eventId}:
+ * /brands/events/{eventId}:
  *   get:
  *     summary: Brand Survey & Gamification - Event detayı
  *     description: Seçili marka için belirli bir event'in detaylarını döner.
@@ -733,12 +600,6 @@ router.get(
  *     security:
  *       - bearerAuth: []
  *     parameters:
- *       - in: path
- *         name: brandId
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
  *       - in: path
  *         name: eventId
  *         required: true
@@ -754,12 +615,12 @@ router.get(
  *         description: Event bulunamadı.
  */
 router.get(
-  '/:brandId/events/:eventId',
+  '/events/:eventId',
   asyncHandler(async (req: Request, res: Response) => {
-    const { brandId, eventId } = req.params;
+    const { eventId } = req.params;
     const userPayload = (req as any).user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-    const result = await brandService.getBrandEventDetail(brandId, eventId, userId);
+    const result = await brandService.getBrandEventDetail(eventId, userId);
     res.json(result);
   }),
 );
@@ -787,7 +648,7 @@ router.get(
  *           type: integer
  *           minimum: 1
  *           maximum: 50
- *         description: Sayfa başına dönecek kayıt sayısı (varsayılan 20)
+ *         description: Sayfa başına dönecek kayıt sayısı (varsayılan 5)
  *       - in: query
  *         name: cursor
  *         required: false

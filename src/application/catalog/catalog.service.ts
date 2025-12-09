@@ -71,7 +71,6 @@ export class CatalogService {
           id: true,
           name: true,
           imageUrl: true,
-          mainCategoryId: true,
         },
         orderBy: {
           name: 'asc',
@@ -82,7 +81,6 @@ export class CatalogService {
         subCategoryId: subCategory.id,
         name: subCategory.name,
         image: subCategory.imageUrl,
-        categoryId: subCategory.mainCategoryId,
       }));
     } catch (error) {
       logger.error(`Failed to get sub-categories for category ${categoryId}:`, error);

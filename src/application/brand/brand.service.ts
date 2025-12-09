@@ -485,7 +485,7 @@ export class BrandService {
       });
       const productIds = brandProducts.map((product) => product.id);
 
-      const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+      const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 10;
       const cursor = options?.cursor;
 
       const contentPosts = await this.prisma.contentPost.findMany({
@@ -664,12 +664,12 @@ export class BrandService {
   /**
    * Brand Survey & Gamification - Event detay endpoint'i
    */
-  async getBrandEventDetail(brandId: string, eventId: string, userId: string): Promise<BrandEventDetail> {
+  async getBrandEventDetail(eventId: string, userId: string): Promise<BrandEventDetail> {
     const event = (await this.prisma.wishboxEvent.findUnique({
       where: { id: eventId },
     })) as any;
 
-    if (!event || (event.brandId && event.brandId !== brandId)) {
+    if (!event) {
       throw new NotFoundError(`Event not found: ${eventId}`);
     }
 
@@ -767,7 +767,7 @@ export class BrandService {
         };
       }
 
-      const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+      const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 5;
       const cursor = options?.cursor;
 
       const whereClause: any = {
@@ -824,8 +824,13 @@ export class BrandService {
           { commentsCount: 'desc' },
           { viewsCount: 'desc' },
           { createdAt: 'desc' },
+          { id: 'desc' }, // deterministik sıralama için id ekleyelim
         ],
         take: limit + 1, // Bir fazla al ki hasMore'u kontrol edebilelim
+        ...(options?.cursor && {
+          cursor: { id: options.cursor },
+          skip: 1,
+        }),
       });
 
       const hasMore = postsWithStats.length > limit;
@@ -1309,123 +1314,68 @@ export class BrandService {
   }
 
   /**
-   * Batch endpoint: Product groups ve products'ı tek istekte döner
-   * Yeni yapı: groups metadata olarak Record, items flat array, tek pagination
+   * Belirli bir product group ID'si için products listesi (brandId olmadan)
    */
-  async getBrandProductsBatch(
-    brandId: string,
-    options?: { 
-      productGroupIds?: string[];
-      cursor?: string;
-      limit?: number;
-    }
-  ): Promise<BrandProductsBatchResponse> {
-    try {
-      // 1. Brand name'i al
-      const brand = await this.prisma.brand.findUnique({
-        where: { id: brandId },
-        select: { name: true },
-      });
+  async getProductsByGroupId(
+    productGroupId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<BrandProductsResponse> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 5;
+    const cursor = options?.cursor;
 
-      if (!brand) {
-        throw new NotFoundError('Brand not found');
-      }
+    const whereClause: any = {
+      groupId: productGroupId === 'ungrouped' ? null : productGroupId,
+    };
 
-      // 2. Tüm product groups'ları al (metadata için, pagination yok)
-      const allGroupsResult = await this.getBrandProductGroups(brandId, {
-        limit: 1000, // Tüm groups'ları al
-      });
-
-      // Groups'ları Record olarak oluştur
-      const groupsRecord: Record<string, BrandProductGroupInfo> = {};
-      allGroupsResult.items.forEach(group => {
-        groupsRecord[group.productGroupId] = {
-          productGroupId: group.productGroupId,
-          productGroupName: group.productGroupName,
-        };
-      });
-
-      // 3. Products'ları al (tek pagination ile)
-      const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
-      const cursor = options?.cursor;
-
-      const whereClause: any = {
-        brand: brand.name,
+    if (cursor) {
+      whereClause.id = {
+        gt: cursor,
       };
+    }
 
-      // Belirli group'lar filtrelenmişse
-      if (options?.productGroupIds && options.productGroupIds.length > 0) {
-        const groupIds = options.productGroupIds.map(id => id === 'ungrouped' ? null : id);
-        whereClause.groupId = groupIds.length === 1 ? groupIds[0] : { in: groupIds };
-      }
-
-      if (cursor) {
-        whereClause.id = { gt: cursor };
-      }
-
-      const products = await this.prisma.product.findMany({
-        where: whereClause,
-        include: {
-          group: true,
-          contentPosts: {
-            select: {
-              id: true,
-              likesCount: true,
-              sharesCount: true,
-              favoritesCount: true,
-            },
+    const products = await this.prisma.product.findMany({
+      where: whereClause,
+      include: {
+        contentPosts: {
+          select: {
+            id: true,
+            likesCount: true,
+            sharesCount: true,
+            favoritesCount: true,
           },
         },
-        orderBy: {
-          id: 'asc',
-        },
-        take: limit + 1,
-      });
+      },
+      orderBy: {
+        id: 'asc',
+      },
+      take: limit + 1,
+    });
 
-      const hasMore = products.length > limit;
-      const resultProducts = hasMore ? products.slice(0, limit) : products;
-      const nextCursor = hasMore && resultProducts.length > 0 ? resultProducts[resultProducts.length - 1].id : undefined;
+    const hasMore = products.length > limit;
+    const resultProducts = hasMore ? products.slice(0, limit) : products;
+    const nextCursor = hasMore && resultProducts.length > 0 ? resultProducts[resultProducts.length - 1].id : undefined;
 
-      // 4. Products'ları BrandProduct formatına dönüştür
-      const getRandomStat = () => Math.floor(Math.random() * 31) + 10; // 10-40 arası
+    const getRandomStat = () => Math.floor(Math.random() * 31) + 10; // 10-40 arası
 
-      const items: BrandProduct[] = resultProducts.map((product) => {
-        const groupId = product.groupId || 'ungrouped';
-        
-        // Eğer ungrouped product varsa ve metadata'da yoksa ekle
-        if (groupId === 'ungrouped' && !groupsRecord['ungrouped']) {
-          groupsRecord['ungrouped'] = {
-            productGroupId: 'ungrouped',
-            productGroupName: 'Ungrouped',
-          };
-        }
-        
-        return {
-          productId: product.id,
-          productGroupId: groupId,
-          name: product.name,
-          image: product.imageUrl,
-          stats: {
-            reviews: getRandomStat(),
-            likes: getRandomStat(),
-            share: getRandomStat(),
-          },
-        };
-      });
+    const items: BrandProduct[] = resultProducts.map((product) => ({
+      productId: product.id,
+      name: product.name,
+      image: product.imageUrl,
+      stats: {
+        reviews: getRandomStat(),
+        likes: getRandomStat(),
+        share: getRandomStat(),
+      },
+    }));
 
-      return {
-        groups: groupsRecord,
-        items,
-        pagination: {
-          cursor: nextCursor,
-          hasMore,
-          limit,
-        },
-      };
-    } catch (error) {
-      logger.error(`Failed to get brand products batch for ${brandId}:`, error);
-      throw error;
-    }
+    return {
+      items,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
   }
 
   /**
