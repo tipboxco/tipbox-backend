@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { FeedItem, FeedItemType, FeedResponse, ContextData, ExperiencePost, ExperienceContent, ReviewProduct } from '../../interfaces/feed/feed.dto';
+import { FeedItem, FeedItemType, FeedResponse, ContextData, ExperiencePost, ExperienceContent } from '../../interfaces/feed/feed.dto';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
 import { buildMediaUrl } from '../../infrastructure/config/media.config';
 import logger from '../../infrastructure/logger/logger';
@@ -45,11 +45,6 @@ export interface BrandProductGroup {
   productGroupId: string;
   productGroupName: string;
   products: BrandProduct[];
-  pagination: {
-    cursor?: string;
-    hasMore: boolean;
-    limit: number;
-  };
 }
 
 export interface BrandProductGroupInfo {
@@ -78,7 +73,6 @@ export interface BrandProductsBatchResponse {
 
 export interface BrandProduct {
   productId: string;
-  productGroupId: string;
   name: string;
   image: string | null;
   stats: {
@@ -1159,9 +1153,9 @@ export class BrandService {
    */
   async getBrandProductGroups(
     brandId: string,
-    options?: { cursor?: string; limit?: number }
+    options?: { cursor?: string; limit?: number; productLimit?: number }
   ): Promise<{
-    items: BrandProductGroupInfo[];
+    items: BrandProductGroup[];
     pagination: {
       cursor?: string;
       hasMore: boolean;
@@ -1179,46 +1173,74 @@ export class BrandService {
       }
 
       const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+      const productLimit =
+        options?.productLimit && options.productLimit > 0 ? Math.min(options.productLimit, 50) : 5;
       const cursor = options?.cursor;
 
-      // Brand name'e göre product group'ları bul (distinct)
-      const products = await this.prisma.product.findMany({
+      const groups = await this.prisma.productGroup.findMany({
         where: {
-          brand: brand.name,
+          products: {
+            some: { brand: brand.name },
+          },
           ...(cursor && {
-            groupId: {
+            id: {
               gt: cursor,
             },
           }),
         },
-        include: {
-          group: true,
-        },
         orderBy: {
-          groupId: 'asc',
+          id: 'asc',
         },
         take: limit + 1,
+        include: {
+          products: {
+            where: { brand: brand.name },
+            orderBy: { id: 'asc' },
+            take: productLimit + 1,
+            include: {
+              contentPosts: {
+                select: {
+                  id: true,
+                  likesCount: true,
+                  sharesCount: true,
+                  favoritesCount: true,
+                },
+              },
+            },
+          },
+        },
       });
 
-      // Distinct group'ları al
-      const groupsMap = new Map<string, BrandProductGroupInfo>();
-      for (const product of products) {
-        const groupId = product.groupId || 'ungrouped';
-        if (!groupsMap.has(groupId)) {
-          groupsMap.set(groupId, {
-            productGroupId: groupId,
-            productGroupName: product.group?.name || 'Ungrouped',
-          });
-        }
+      const hasMore = groups.length > limit;
+      const resultGroups = hasMore ? groups.slice(0, limit) : groups;
+      const nextCursor = hasMore && resultGroups.length > 0 ? resultGroups[resultGroups.length - 1].id : undefined;
+
+      const items: BrandProductGroup[] = [];
+
+      for (const group of resultGroups) {
+        const groupProducts = group.products || [];
+        const hasMoreProducts = groupProducts.length > productLimit;
+        const limitedProducts = hasMoreProducts ? groupProducts.slice(0, productLimit) : groupProducts;
+
+        const products = limitedProducts.map<BrandProduct>((product) => {
+          const stats = this.calculateProductStats(product.contentPosts || []);
+          return {
+            productId: product.id,
+            name: product.name,
+            image: product.imageUrl,
+            stats,
+          };
+        });
+
+        items.push({
+          productGroupId: group.id,
+          productGroupName: group.name,
+          products,
+        });
       }
 
-      const groupsArray = Array.from(groupsMap.values());
-      const hasMore = products.length > limit;
-      const resultGroups = hasMore ? groupsArray.slice(0, limit) : groupsArray;
-      const nextCursor = hasMore && resultGroups.length > 0 ? resultGroups[resultGroups.length - 1].productGroupId : undefined;
-
       return {
-        items: resultGroups,
+        items,
         pagination: {
           cursor: nextCursor,
           hasMore,
@@ -1284,20 +1306,16 @@ export class BrandService {
       const hasMore = products.length > limit;
       const resultProducts = hasMore ? products.slice(0, limit) : products;
       const nextCursor = hasMore && resultProducts.length > 0 ? resultProducts[resultProducts.length - 1].id : undefined;
+    const items: BrandProduct[] = resultProducts.map((product) => {
+      const stats = this.calculateProductStats(product.contentPosts || []);
 
-      const getRandomStat = () => Math.floor(Math.random() * 31) + 10; // 10-40 arası
-
-      const items: BrandProduct[] = resultProducts.map((product) => ({
+      return {
         productId: product.id,
-        productGroupId: productGroupId === 'ungrouped' ? 'ungrouped' : productGroupId,
         name: product.name,
         image: product.imageUrl,
-        stats: {
-          reviews: getRandomStat(),
-          likes: getRandomStat(),
-          share: getRandomStat(),
-        },
-      }));
+        stats,
+      };
+    });
 
       return {
         items,
@@ -1354,19 +1372,16 @@ export class BrandService {
     const hasMore = products.length > limit;
     const resultProducts = hasMore ? products.slice(0, limit) : products;
     const nextCursor = hasMore && resultProducts.length > 0 ? resultProducts[resultProducts.length - 1].id : undefined;
+    const items: BrandProduct[] = resultProducts.map((product) => {
+      const stats = this.calculateProductStats(product.contentPosts || []);
 
-    const getRandomStat = () => Math.floor(Math.random() * 31) + 10; // 10-40 arası
-
-    const items: BrandProduct[] = resultProducts.map((product) => ({
-      productId: product.id,
-      name: product.name,
-      image: product.imageUrl,
-      stats: {
-        reviews: getRandomStat(),
-        likes: getRandomStat(),
-        share: getRandomStat(),
-      },
-    }));
+      return {
+        productId: product.id,
+        name: product.name,
+        image: product.imageUrl,
+        stats,
+      };
+    });
 
     return {
       items,
@@ -1456,22 +1471,15 @@ export class BrandService {
           groupsMap.set(groupId, { name: groupName, products: [] });
         }
 
-        // Stats hesapla - 10-40 arası rastgele sayılar
-        const getRandomStat = () => Math.floor(Math.random() * 31) + 10; // 10-40 arası
-        const reviews = getRandomStat();
-        const likes = getRandomStat();
-        const shares = getRandomStat();
+        const groupData = groupsMap.get(groupId)!;
 
-        groupsMap.get(groupId)!.products.push({
+        const stats = this.calculateProductStats(product.contentPosts || []);
+
+        groupData.products.push({
           productId: product.id,
-          productGroupId: groupId,
           name: product.name,
           image: product.imageUrl,
-          stats: {
-            reviews,
-            likes,
-            share: shares,
-          },
+          stats,
         });
       }
 
@@ -1480,19 +1488,11 @@ export class BrandService {
         const groupProducts = groupData.products;
         const groupHasMore = groupProducts.length > productLimit;
         const paginatedProducts = groupHasMore ? groupProducts.slice(0, productLimit) : groupProducts;
-        const groupNextCursor = groupHasMore && paginatedProducts.length > 0 
-          ? paginatedProducts[paginatedProducts.length - 1].productId 
-          : undefined;
 
         return {
           productGroupId: groupId,
           productGroupName: groupData.name,
           products: paginatedProducts,
-          pagination: {
-            cursor: groupNextCursor,
-            hasMore: groupHasMore,
-            limit: productLimit,
-          },
         };
       });
 
@@ -1714,7 +1714,7 @@ export class BrandService {
   async getBrandProductNews(
     brandId: string,
     productId: string,
-    userId?: string,
+    _userId?: string,
     page: number = 1,
     limit: number = 12,
   ): Promise<
@@ -2024,6 +2024,15 @@ export class BrandService {
     };
   }
 
+  private calculateProductStats(
+    contentPosts: Array<{ likesCount?: number | null; sharesCount?: number | null; favoritesCount?: number | null }>
+  ): { reviews: number; likes: number; share: number } {
+    const reviews = contentPosts.length;
+    const likes = contentPosts.reduce((sum, post) => sum + (post.likesCount ?? 0), 0);
+    const share = contentPosts.reduce((sum, post) => sum + (post.sharesCount ?? 0), 0);
+    return { reviews, likes, share };
+  }
+
   private mapToPostItem(
     post: any,
     basePost: any,
@@ -2045,7 +2054,7 @@ export class BrandService {
     basePost: any,
     type: FeedItemType.EXPERIENCE | FeedItemType.UPDATE,
     images: string[] = [],
-    ownedProductIds?: Set<string>,
+    _ownedProductIds?: Set<string>,
     inventoriesMap?: Map<string, any>
   ): FeedItem {
     // Önce inventory'den gelen experience verilerini kontrol et
@@ -2076,10 +2085,12 @@ export class BrandService {
     // Get tags
     const tags = post.tags?.map((t: any) => t.tag) || post.contentPostTags?.map((t: any) => t.tag) || [];
 
+    const productBase = this.getProductBase(post.product);
+
     if (type === FeedItemType.UPDATE) {
       const relatedPost = {
         id: post.id,
-        product,
+        product: productBase,
         content: experienceContent,
         tags,
         images,
@@ -2145,20 +2156,19 @@ export class BrandService {
         for (const item of contentArray) {
           if (item.title === 'Experience') {
             // Split "Experience" into two items
-            // Generate random rating between 30-70 for both items
-            const randomRatingPrice = Math.floor(Math.random() * (70 - 30 + 1)) + 30;
-            const randomRatingUsage = Math.floor(Math.random() * (70 - 30 + 1)) + 30;
+            const priceRating = this.calculateExperienceRating(String(item.content || '') + '-price');
+            const usageRating = this.calculateExperienceRating(String(item.content || '') + '-usage');
             
             transformedContent.push({
               title: 'Price and Shopping Experience',
               content: item.content || '',
-              rating: randomRatingPrice,
+              rating: priceRating,
             });
             
             transformedContent.push({
               title: 'Product and Usage Experience',
               content: item.content || '',
-              rating: randomRatingUsage,
+              rating: usageRating,
             });
             hasPrice = true;
             hasUsage = true;
@@ -2166,14 +2176,18 @@ export class BrandService {
             transformedContent.push({
               title: item.title,
               content: item.content || '',
-              rating: item.rating && item.rating > 0 ? item.rating : Math.floor(Math.random() * (70 - 30 + 1)) + 30,
+              rating: item.rating && item.rating > 0
+                ? item.rating
+                : this.calculateExperienceRating(String(item.content || '') + '-price'),
             });
             hasPrice = true;
           } else if (item.title === 'Product and Usage Experience') {
             transformedContent.push({
               title: item.title,
               content: item.content || '',
-              rating: item.rating && item.rating > 0 ? item.rating : Math.floor(Math.random() * (70 - 30 + 1)) + 30,
+              rating: item.rating && item.rating > 0
+                ? item.rating
+                : this.calculateExperienceRating(String(item.content || '') + '-usage'),
             });
             hasUsage = true;
           }
@@ -2181,18 +2195,18 @@ export class BrandService {
         
         // If only one type exists, add the missing one
         if (hasPrice && !hasUsage) {
-          const randomRatingUsage = Math.floor(Math.random() * (70 - 30 + 1)) + 30;
+          const usageRating = this.calculateExperienceRating(String(transformedContent[0]?.content || '') + '-usage');
           transformedContent.push({
             title: 'Product and Usage Experience',
             content: transformedContent[0]?.content || '',
-            rating: randomRatingUsage,
+            rating: usageRating,
           });
         } else if (hasUsage && !hasPrice) {
-          const randomRatingPrice = Math.floor(Math.random() * (70 - 30 + 1)) + 30;
+          const priceRating = this.calculateExperienceRating(String(transformedContent[0]?.content || '') + '-price');
           transformedContent.unshift({
             title: 'Price and Shopping Experience',
             content: transformedContent[0]?.content || '',
-            rating: randomRatingPrice,
+            rating: priceRating,
           });
         }
         
@@ -2211,7 +2225,10 @@ export class BrandService {
     const extractedRating = ratingMatch ? parseInt(ratingMatch[1]) : null;
 
     // Generate random ratings if not provided
-    const generateRating = () => extractedRating && extractedRating > 0 ? extractedRating : Math.floor(Math.random() * (70 - 30 + 1)) + 30;
+    const generateRating = () =>
+      extractedRating && extractedRating > 0
+        ? extractedRating
+        : this.calculateExperienceRating(body);
 
     if (priceMatch) {
       content.push({
@@ -2251,19 +2268,19 @@ export class BrandService {
 
     // If no structured content found, create both defaults
     if (content.length === 0) {
-      const randomRatingPrice = Math.floor(Math.random() * (70 - 30 + 1)) + 30;
-      const randomRatingUsage = Math.floor(Math.random() * (70 - 30 + 1)) + 30;
+      const priceRating = this.calculateExperienceRating(body + '-price');
+      const usageRating = this.calculateExperienceRating(body + '-usage');
       
       content.push({
         title: 'Price and Shopping Experience',
         content: body,
-        rating: randomRatingPrice,
+        rating: priceRating,
       });
       
       content.push({
         title: 'Product and Usage Experience',
         content: body,
-        rating: randomRatingUsage,
+        rating: usageRating,
       });
     }
 
@@ -2351,7 +2368,7 @@ export class BrandService {
   private mapToBenchmarkItem(
     post: any,
     basePost: any,
-    ownedProductIds: Set<string>,
+    _ownedProductIds: Set<string>,
     images: string[] = []
   ): FeedItem {
     const comparison = post.comparison;
@@ -2384,33 +2401,6 @@ export class BrandService {
     };
   }
 
-  private selectComparisonWinner(
-    comparison?: {
-      product1Id?: string | null;
-      product2Id?: string | null;
-      scores?: Array<{ scoreProduct1?: number | null; scoreProduct2?: number | null }>;
-    }
-  ): string | null {
-    if (!comparison || !comparison.scores || comparison.scores.length === 0) {
-      return null;
-    }
-
-    let product1Score = 0;
-    let product2Score = 0;
-
-    for (const score of comparison.scores) {
-      product1Score += score.scoreProduct1 ?? 0;
-      product2Score += score.scoreProduct2 ?? 0;
-    }
-
-    if (product1Score === product2Score) {
-      return comparison.product1Id ? String(comparison.product1Id) : null;
-    }
-
-    return product1Score > product2Score
-      ? (comparison.product1Id ? String(comparison.product1Id) : null)
-      : (comparison.product2Id ? String(comparison.product2Id) : null);
-  }
 }
 
 

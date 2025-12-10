@@ -5985,6 +5985,8 @@ async function main() {
 
   // 5. Create diverse brands with imageUrl
   console.log('🏢 Creating brands...')
+  const TARGET_AUDIO_BRAND_ID = '081d5660-a6d6-412a-b0ae-1557acaaa028'
+  const TARGET_AUDIO_BRAND_NAME = 'AudioMax'
   const brandsData = [
     {
       name: 'TechVision',
@@ -6022,6 +6024,7 @@ async function main() {
       category: 'Fashion',
     },
     {
+      id: TARGET_AUDIO_BRAND_ID,
       name: 'AudioMax',
       description: 'Premium ses sistemleri ve kulaklıklar',
       logoUrl: getSeedMediaUrl('explore.event.primary'),
@@ -6504,6 +6507,23 @@ async function main() {
   const brands = await Promise.all(
     brandsData.map(async (brandData) => {
       const category = brandCategories.find(c => c.name === brandData.category);
+      const baseData = {
+        name: brandData.name,
+        description: brandData.description,
+        logoUrl: brandData.logoUrl,
+        imageUrl: brandData.imageUrl, // Her zaman localhost URL'si kullan
+        category: brandData.category,
+        categoryId: category?.id,
+      }
+
+      if (brandData.id) {
+        return prisma.brand.upsert({
+          where: { id: brandData.id },
+          update: baseData,
+          create: { id: brandData.id, ...baseData },
+        }).catch(() => null)
+      }
+
       // Mevcut brand'ı bul veya oluştur
       const existing = await prisma.brand.findFirst({
         where: { name: brandData.name }
@@ -6512,19 +6532,11 @@ async function main() {
       if (existing) {
         return prisma.brand.update({
           where: { id: existing.id },
-          data: {
-            description: brandData.description,
-            logoUrl: brandData.logoUrl,
-            imageUrl: brandData.imageUrl, // Her zaman localhost URL'si kullan
-            categoryId: category?.id,
-          },
+          data: baseData,
         });
       } else {
         return prisma.brand.create({
-          data: {
-            ...brandData,
-            categoryId: category?.id,
-          },
+          data: baseData,
         }).catch(() => null);
       }
     })
@@ -7620,6 +7632,10 @@ async function main() {
   
   for (const brand of validBrands) {
     if (!brand || !brand.categoryId) continue
+    if (brand.id === TARGET_AUDIO_BRAND_ID) {
+      console.log('ℹ️ AudioMax için varsayılan product group oluşturma atlandı (özel set aşağıda).')
+      continue
+    }
     
     try {
       // Brand'ın category'sini bul (BrandCategory)
@@ -7720,6 +7736,10 @@ async function main() {
   // Product'ları oluştur ve ProductGroup'lara bağla
   for (const brand of validBrands) {
     if (!brand) continue
+    if (brand.id === TARGET_AUDIO_BRAND_ID) {
+      console.log('ℹ️ AudioMax için varsayılan product oluşturma atlandı (özel set aşağıda).')
+      continue
+    }
     
     const templates = brandProductTemplates[brand.name] || []
     // Eğer brand için template yoksa, genel product'lar oluştur
@@ -7753,6 +7773,224 @@ async function main() {
     }
   }
   console.log(`✅ ${seedBrandProductsCount} product oluşturuldu tüm brand'lar için`)
+
+  // AudioMax brand'i için özel grup ve ürün seti (10 grup, her biri 5 ürün)
+  console.log('🎯 AudioMax için özel product group ve ürün seti oluşturuluyor...')
+  const audioMaxBrandV2 = await prisma.brand.findUnique({ where: { id: TARGET_AUDIO_BRAND_ID } })
+
+  if (!audioMaxBrandV2) {
+    console.warn(`⚠️ AudioMax brand bulunamadı (ID: ${TARGET_AUDIO_BRAND_ID}), özel grup atlandı`)
+  } else {
+    const audioMaxGroupDefinitions: Array<{
+      name: string
+      mainCategoryName: string
+      subCategoryName: string
+      imageKey: SeedMediaKey
+      products: Array<{ name: string; description: string; imageKey: SeedMediaKey }>
+    }> = [
+      {
+        name: 'Klima & İklimlendirme',
+        mainCategoryName: 'Ev & Yaşam',
+        subCategoryName: 'Klima & İklimlendirme',
+        imageKey: 'catalog.air-conditioner',
+        products: [
+          { name: 'BreezeCool 9K', description: 'Sessiz inverter klima', imageKey: 'product.generic.11' },
+          { name: 'BreezeCool 12K', description: 'Geniş alan için inverter', imageKey: 'product.phone.samsung' },
+          { name: 'WindFree Pro', description: 'Akıllı hava yönlendirme', imageKey: 'product.generic.5' },
+          { name: 'Arctic Sense', description: 'Hızlı soğutan model', imageKey: 'product.generic.6' },
+          { name: 'PureAir Duo', description: 'Filtreli iklimlendirme', imageKey: 'product.generic.10' },
+        ],
+      },
+      {
+        name: 'Kamera & Lens',
+        mainCategoryName: 'Technology',
+        subCategoryName: 'Kamera & Lens',
+        imageKey: 'catalog.cameras',
+        products: [
+          { name: 'ShotPro Mirrorless', description: '4K aynasız kamera', imageKey: 'product.generic.3' },
+          { name: 'LensKit 50mm Prime', description: 'Portre için hızlı lens', imageKey: 'product.generic.4' },
+          { name: 'VlogCam Compact', description: 'Hafif vlog kamerası', imageKey: 'product.generic.2' },
+          { name: 'ProZoom Bridge', description: 'Uzun menzil zoom', imageKey: 'product.generic.5' },
+          { name: 'ActionCam Mini', description: 'Dayanıklı aksiyon kamera', imageKey: 'product.generic.1' },
+        ],
+      },
+      {
+        name: 'Bilgisayar & Tablet',
+        mainCategoryName: 'Technology',
+        subCategoryName: 'Bilgisayar & Tablet',
+        imageKey: 'catalog.computers-tablets',
+        products: [
+          { name: 'UltraBook Air', description: 'İnce ve hafif dizüstü', imageKey: 'product.laptop.macbook' },
+          { name: 'Creator Station', description: 'Yaratıcılar için performans', imageKey: 'product.generic.7' },
+          { name: 'Tablet Flex', description: 'Kalem destekli tablet', imageKey: 'product.generic.6' },
+          { name: 'CodePad Mini', description: 'Kompakt üretkenlik tableti', imageKey: 'product.generic.8' },
+          { name: 'Studio Dock', description: 'Dock destekli çalışma seti', imageKey: 'product.generic.9' },
+        ],
+      },
+      {
+        name: 'Drone & Aksiyon',
+        mainCategoryName: 'Technology',
+        subCategoryName: 'Drone & Aksiyon',
+        imageKey: 'catalog.drone',
+        products: [
+          { name: 'SkyScout Mini', description: 'Kompakt drone', imageKey: 'product.generic.2' },
+          { name: 'AirRide 4K', description: '4K çekim için stabilizasyon', imageKey: 'product.generic.3' },
+          { name: 'HoverCam Pro', description: 'Gelişmiş takip modu', imageKey: 'product.generic.4' },
+          { name: 'TrackFly GPS', description: 'GPS destekli uçuş', imageKey: 'product.generic.5' },
+          { name: 'CineWing Dual', description: 'Çift kamera desteği', imageKey: 'product.generic.1' },
+        ],
+      },
+      {
+        name: 'Oyun & Konsol',
+        mainCategoryName: 'Hobi & Eğlence',
+        subCategoryName: 'Oyun & Konsol',
+        imageKey: 'catalog.games',
+        products: [
+          { name: 'PlayWave Konsol', description: 'Yeni nesil oyun konsolu', imageKey: 'product.generic.10' },
+          { name: 'GamePad Elite', description: 'Hassas tetik ve titreşim', imageKey: 'product.generic.8' },
+          { name: 'VR Next', description: 'Sanal gerçeklik seti', imageKey: 'product.generic.9' },
+          { name: 'Arena Dock', description: 'Çok oyunculu istasyon', imageKey: 'product.generic.7' },
+          { name: 'Cloud Controller', description: 'Bulut oyun kolu', imageKey: 'product.generic.6' },
+        ],
+      },
+      {
+        name: 'Beyaz Eşya',
+        mainCategoryName: 'Home & Living',
+        subCategoryName: 'Beyaz Eşya',
+        imageKey: 'catalog.home-appliances',
+        products: [
+          { name: 'PureWash X', description: 'Hijyen modlu çamaşır makinesi', imageKey: 'product.generic.10' },
+          { name: 'DryCare Heat Pump', description: 'Isı pompalı kurutma', imageKey: 'product.generic.11' },
+          { name: 'FreshCool XL', description: 'Geniş hacimli buzdolabı', imageKey: 'product.generic.5' },
+          { name: 'SteamWard Care', description: 'Buharlı bakım programı', imageKey: 'product.generic.4' },
+          { name: 'EcoDish Pro', description: 'Az tüketimli bulaşık makinesi', imageKey: 'product.generic.3' },
+        ],
+      },
+      {
+        name: 'Küçük Ev Aletleri',
+        mainCategoryName: 'Home & Living',
+        subCategoryName: 'Küçük Ev Aletleri',
+        imageKey: 'catalog.kucukev',
+        products: [
+          { name: 'ChefMix Pro', description: 'Çok amaçlı mutfak robotu', imageKey: 'product.generic.8' },
+          { name: 'BrewMaster Duo', description: 'Filtre + Türk kahvesi makinesi', imageKey: 'product.generic.9' },
+          { name: 'SlicePrep Compact', description: 'Dilimleme ve rende seti', imageKey: 'product.generic.10' },
+          { name: 'QuickBlend Go', description: 'Taşınabilir blender', imageKey: 'product.generic.11' },
+          { name: 'SmartKettle One', description: 'Isı kontrollü kettle', imageKey: 'product.generic.2' },
+        ],
+      },
+      {
+        name: 'Telefon & Aksesuar',
+        mainCategoryName: 'Technology',
+        subCategoryName: 'Telefon & Aksesuar',
+        imageKey: 'catalog.phones',
+        products: [
+          { name: 'Pulse Phone X', description: 'AMOLED ekranlı akıllı telefon', imageKey: 'product.phone.phone1' },
+          { name: 'Pulse Phone S', description: 'Uzun pil ömürlü model', imageKey: 'product.phone.phone2' },
+          { name: 'Pulse Phone Mini', description: 'Kompakt tasarım', imageKey: 'product.phone.phone3' },
+          { name: 'Pulse Phone Max', description: 'Geniş ekranlı seri', imageKey: 'product.phone.phone4' },
+          { name: 'Pulse Earbuds', description: 'ANC destekli kulaklık', imageKey: 'product.headphone.primary' },
+        ],
+      },
+      {
+        name: 'TV & Görüntü',
+        mainCategoryName: 'Technology',
+        subCategoryName: 'TV & Görüntü',
+        imageKey: 'catalog.tv',
+        products: [
+          { name: 'VisionMax 55', description: '55 inç 4K QLED', imageKey: 'product.generic.7' },
+          { name: 'VisionMax 65', description: '65 inç geniş ekran', imageKey: 'product.generic.6' },
+          { name: 'VisionMax 75', description: '75 inç sinema deneyimi', imageKey: 'product.generic.10' },
+          { name: 'BeamBar Atmos', description: 'Dolby Atmos soundbar', imageKey: 'product.generic.8' },
+          { name: 'StreamBox Pro', description: 'Akış medya oynatıcı', imageKey: 'product.generic.9' },
+        ],
+      },
+      {
+        name: 'Akıllı Ev & Güvenlik',
+        mainCategoryName: 'Technology',
+        subCategoryName: 'Akıllı Ev & Güvenlik',
+        imageKey: 'catalog.smart-home-devices',
+        products: [
+          { name: 'SmartHub Core', description: 'Merkezi otomasyon beyni', imageKey: 'product.generic.2' },
+          { name: 'SmartCam 360', description: '360° güvenlik kamerası', imageKey: 'product.generic.3' },
+          { name: 'DoorGuard Secure', description: 'Akıllı kapı kilidi', imageKey: 'product.generic.4' },
+          { name: 'AirSense Mini', description: 'Hava kalitesi sensörü', imageKey: 'product.generic.5' },
+          { name: 'PowerPlug Energy', description: 'Enerji ölçer priz', imageKey: 'product.generic.1' },
+        ],
+      },
+    ]
+
+    const findMainCategory = (name: string) =>
+      mainCategories.find(c => c.name === name) || mainCategories[0]
+
+    let createdAudioGroups = 0
+    let createdAudioProducts = 0
+
+    for (const groupDef of audioMaxGroupDefinitions) {
+      const mainCategory = findMainCategory(groupDef.mainCategoryName)
+      if (!mainCategory) {
+        console.warn(`⚠️ Ana kategori bulunamadı: ${groupDef.mainCategoryName}, grup atlandı`)
+        continue
+      }
+
+      const subCategory =
+        (await prisma.subCategory.findFirst({
+          where: { name: groupDef.subCategoryName, mainCategoryId: mainCategory.id },
+        })) ||
+        (await prisma.subCategory.create({
+          data: {
+            name: groupDef.subCategoryName,
+            description: `${audioMaxBrandV2.name} ${groupDef.name} ürünleri`,
+            imageUrl: getSeedMediaUrl(groupDef.imageKey),
+            mainCategoryId: mainCategory.id,
+          },
+        }))
+
+      const groupName = `${audioMaxBrandV2.name} - ${groupDef.name}`
+      let productGroup = await prisma.productGroup.findFirst({
+        where: { name: groupName, subCategoryId: subCategory.id },
+      })
+
+      if (!productGroup) {
+        productGroup = await prisma.productGroup.create({
+          data: {
+            name: groupName,
+            description: `${audioMaxBrandV2.name} markasının ${groupDef.name} ürünleri`,
+            subCategoryId: subCategory.id,
+            imageUrl: getSeedMediaUrl(groupDef.imageKey),
+          },
+        })
+        createdAudioGroups++
+      }
+
+      for (const productDef of groupDef.products) {
+        const existingProduct = await prisma.product.findFirst({
+          where: {
+            name: productDef.name,
+            brand: audioMaxBrandV2.name,
+            groupId: productGroup.id,
+          },
+        })
+
+        if (existingProduct) continue
+
+        await prisma.product.create({
+          data: {
+            name: productDef.name,
+            brand: audioMaxBrandV2.name,
+            description: productDef.description,
+            imageUrl: getSeedMediaUrl(productDef.imageKey),
+            groupId: productGroup.id,
+          },
+        })
+        createdAudioProducts++
+      }
+    }
+
+    console.log(
+      `✅ AudioMax için ${audioMaxGroupDefinitions.length} grup kontrol edildi -> ${createdAudioGroups} yeni grup, ${createdAudioProducts} yeni ürün eklendi`,
+    )
+  }
 
   // Add products for specific brand ID: a8fc294b-1f6d-4f22-827b-86e75a1a7095 (AudioMax)
   console.log('📦 Adding products for specific brand ID: a8fc294b-1f6d-4f22-827b-86e75a1a7095...')

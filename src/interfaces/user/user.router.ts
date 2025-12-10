@@ -1653,6 +1653,12 @@ router.get('/:id/collections/achievements', asyncHandler(async (req: Request, re
  *           maximum: 100
  *         description: Döndürülecek maksimum card sayısı (varsayılan tümü)
  *       - in: query
+ *         name: cursor
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor (son item id)
+ *       - in: query
  *         name: types
  *         required: false
  *         schema:
@@ -1673,8 +1679,9 @@ router.get('/:id/feed', asyncHandler(async (req: Request, res: Response) => {
         ? rawLimit
         : undefined;
   const limit = Number.isFinite(parsedLimit) && parsedLimit! > 0 ? Math.min(parsedLimit!, 100) : undefined;
+  const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
   const types = parseProfileFeedTypes(req.query.types);
-  const feed = await userService.getUserProfileFeed(id, { limit, types });
+  const feed = await userService.getUserProfileFeed(id, { limit, types, cursor });
   res.json(feed);
 }));
 

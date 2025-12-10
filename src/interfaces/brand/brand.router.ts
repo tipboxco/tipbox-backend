@@ -39,7 +39,7 @@ router.use(authMiddleware);
  */
 router.get(
   '/categories',
-  asyncHandler(async (req: Request, res: Response) => {
+  asyncHandler(async (_req: Request, res: Response) => {
     const categories = await brandService.getAllBrandCategories();
     res.json(categories);
   }),
@@ -237,7 +237,7 @@ router.get(
  * /brands/{brandId}/groups:
  *   get:
  *     summary: Markaya ait product group'ları listele
- *     description: Markaya ait product group'ların listelendiği endpoint (sadece group bilgileri).
+ *     description: Markaya ait product group'ların listelendiği endpoint. Her group içinde max ürün ön izlemesi (productLimit) ve hem grup hem ürün pagination bilgisi döner.
  *     tags: [Brand]
  *     security:
  *       - bearerAuth: []
@@ -256,13 +256,21 @@ router.get(
  *           type: integer
  *           minimum: 1
  *           maximum: 50
- *         description: Sayfa başına dönecek group sayısı (varsayılan 10)
+ *         description: Sayfa başına dönecek group sayısı (varsayılan 20)
  *       - in: query
  *         name: cursor
  *         required: false
  *         schema:
  *           type: string
  *         description: Bir sonraki sayfa için cursor (önceki sayfanın son group ID'si)
+ *       - in: query
+ *         name: productLimit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *         description: Her group içinde dönecek ürün ön izlemesi adedi (varsayılan 5)
  *     responses:
  *       200:
  *         description: Product group'ları başarıyla listelendi.
@@ -281,6 +289,29 @@ router.get(
  *                         format: uuid
  *                       productGroupName:
  *                         type: string
+ *                       products:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             productId:
+ *                               type: string
+ *                             productGroupId:
+ *                               type: string
+ *                             name:
+ *                               type: string
+ *                             image:
+ *                               type: string
+ *                               nullable: true
+ *                             stats:
+ *                               type: object
+ *                               properties:
+ *                                 reviews:
+ *                                   type: integer
+ *                                 likes:
+ *                                   type: integer
+ *                                 share:
+ *                                   type: integer
  *                 pagination:
  *                   type: object
  *                   properties:
@@ -303,10 +334,14 @@ router.get(
     const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
     const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
     const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
+    const productLimitParam = req.query.productLimit ? Number(req.query.productLimit) : undefined;
+    const productLimit =
+      productLimitParam && !Number.isNaN(productLimitParam) ? Math.min(productLimitParam, 50) : undefined;
 
     const result = await brandService.getBrandProductGroups(brandId, {
       cursor,
       limit,
+      productLimit,
     });
     res.json(result);
   }),

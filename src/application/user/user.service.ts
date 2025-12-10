@@ -2,8 +2,6 @@ import { User } from '../../domain/user/user.entity';
 import { ContextType } from '../../domain/content/context-type.enum';
 import { UserPrismaRepository } from '../../infrastructure/repositories/user-prisma.repository';
 import { ProfilePrismaRepository } from '../../infrastructure/repositories/profile-prisma.repository';
-import { UserAvatarPrismaRepository } from '../../infrastructure/repositories/user-avatar-prisma.repository';
-import { UserFeedPreferencesPrismaRepository } from '../../infrastructure/repositories/user-feed-preferences-prisma.repository';
 import { UserSettingsPrismaRepository } from '../../infrastructure/repositories/user-settings-prisma.repository';
 import { UserDevicePrismaRepository } from '../../infrastructure/repositories/user-device-prisma.repository';
 import { UserPrivacySettingPrismaRepository } from '../../infrastructure/repositories/user-privacy-setting-prisma.repository';
@@ -107,8 +105,6 @@ export class UserService {
   private readonly s3Service: S3Service;
   private readonly cacheService: CacheService;
   private readonly profileRepo: ProfilePrismaRepository;
-  private readonly avatarRepo: UserAvatarPrismaRepository;
-  private readonly feedPreferencesRepo: UserFeedPreferencesPrismaRepository;
   private readonly settingsRepo: UserSettingsPrismaRepository;
   private readonly deviceRepo: UserDevicePrismaRepository;
   private readonly privacySettingRepo: UserPrivacySettingPrismaRepository;
@@ -118,8 +114,6 @@ export class UserService {
     this.s3Service = new S3Service();
     this.cacheService = CacheService.getInstance();
     this.profileRepo = new ProfilePrismaRepository();
-    this.avatarRepo = new UserAvatarPrismaRepository();
-    this.feedPreferencesRepo = new UserFeedPreferencesPrismaRepository();
     this.settingsRepo = new UserSettingsPrismaRepository();
     this.deviceRepo = new UserDevicePrismaRepository();
     this.privacySettingRepo = new UserPrivacySettingPrismaRepository();
@@ -708,7 +702,8 @@ export class UserService {
     options?: { cursor?: string; limit?: number }
   ): Promise<{ items: CollectionResponse[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
-    const cursor = options?.cursor;
+    const cursor =
+      options?.cursor && /^[0-9a-fA-F-]{36}$/.test(options.cursor) ? options.cursor : undefined;
 
     const where: any = {
       userId,
@@ -1347,15 +1342,12 @@ export class UserService {
     options?: { cursor?: string; limit?: number }
   ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
-    const cursor = options?.cursor;
+    const cursor =
+      options?.cursor && /^[0-9a-fA-F-]{36}$/.test(options.cursor) ? options.cursor : undefined;
 
-    const whereClause: any = { userId };
-    if (cursor) {
-      whereClause.id = { lt: cursor };
-    }
-
+    // Cursor dış ID = inventory.id (en son dönen item)
     const inventories = await this.prisma.inventory.findMany({
-      where: whereClause,
+      where: { userId },
       include: {
         product: {
           include: {
@@ -1373,8 +1365,12 @@ export class UserService {
         productExperiences: true,
         media: true,
       } as any,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
+      ...(cursor && {
+        cursor: { id: cursor },
+        skip: 1,
+      }),
     });
 
     const userBase = await this.getUserBase(userId);
@@ -1397,7 +1393,7 @@ export class UserService {
 
       const contextData = this.buildContextDataFromInventory(inv as any);
 
-        results.push({
+      results.push({
         id: String(inv.id),
         type: 'experience' as const,
           user: userBase,
@@ -1408,8 +1404,8 @@ export class UserService {
         content: experiences,
         tags,
         images,
-        });
-      }
+      });
+    }
 
     const hasMore = results.length > limit;
     const paginatedResults = hasMore ? results.slice(0, limit) : results;
@@ -1519,8 +1515,12 @@ export class UserService {
           },
         },
       } as any,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
+      ...(cursor && {
+        cursor: { id: cursor },
+        skip: 1,
+      }),
     });
 
     const userBase = await this.getUserBase(userId);
@@ -1703,20 +1703,15 @@ export class UserService {
     options?: { cursor?: string; limit?: number }
   ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
-    const cursor = options?.cursor;
-
-    const whereClause: any = {
-      userId,
-      post: {
-        type: 'QUESTION',
-      },
-    };
-    if (cursor) {
-      whereClause.id = { lt: cursor };
-    }
+    const cursor = options?.cursor || undefined;
 
     const comments = await this.prisma.contentComment.findMany({
-      where: whereClause,
+      where: {
+        userId,
+        post: {
+          type: 'QUESTION',
+        },
+      },
       include: {
         post: {
           include: {
@@ -1751,8 +1746,12 @@ export class UserService {
           },
         },
       } as any,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
+      ...(cursor && {
+        cursor: { id: cursor },
+        skip: 1,
+      }),
     });
 
     const userBase = await this.getUserBase(userId);
@@ -1802,16 +1801,12 @@ export class UserService {
     options?: { cursor?: string; limit?: number }
   ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
-    const cursor = options?.cursor;
-
-    const whereClause: any = { userId };
-    if (cursor) {
-      whereClause.badgeId = { lt: cursor };
-    }
+    const cursor =
+      options?.cursor && /^[0-9a-fA-F-]{36}$/.test(options.cursor) ? options.cursor : undefined;
 
     const [userBadges, totalUsers] = await Promise.all([
       this.prisma.userBadge.findMany({
-        where: whereClause,
+        where: { userId },
         include: {
           badge: {
             include: {
@@ -1829,8 +1824,13 @@ export class UserService {
           { claimed: 'desc' },
           { displayOrder: 'asc' },
           { claimedAt: 'asc' },
+          { id: 'asc' },
         ],
         take: limit + 1,
+        ...(cursor && {
+          cursor: { id: cursor },
+          skip: 1,
+        }),
       }),
       this.prisma.user.count(),
     ]);
@@ -1891,7 +1891,8 @@ export class UserService {
       };
     });
 
-    const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].id : undefined;
+    const nextCursor =
+      hasMore && paginatedBadges.length > 0 ? String(paginatedBadges[paginatedBadges.length - 1].id) : undefined;
 
     return {
       items,
@@ -1908,16 +1909,23 @@ export class UserService {
     options?: { cursor?: string; limit?: number }
   ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
-    const cursor = options?.cursor;
-
-    const whereClause: any = { userId };
-    if (cursor) {
-      whereClause.id = { lt: cursor };
+    // Cursor olarak öncelik: UUID favorite.id, değilse postId ile favorite id'yi çözmeye çalış
+    let favoriteCursorId: string | undefined;
+    if (options?.cursor) {
+      if (/^[0-9a-fA-F-]{36}$/.test(options.cursor)) {
+        favoriteCursorId = options.cursor;
+      } else {
+        const fav = await this.prisma.contentFavorite.findFirst({
+          where: { userId, postId: options.cursor },
+          select: { id: true },
+        });
+        favoriteCursorId = fav?.id;
+      }
     }
 
     // Bookmarks = Kullanıcının favorite ettiği post'lar (tüm tiplerde)
     const favorites = await this.prisma.contentFavorite.findMany({
-      where: whereClause,
+      where: { userId },
       include: {
         post: {
           include: {
@@ -1955,8 +1963,12 @@ export class UserService {
           },
         },
       } as any,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
+      ...(favoriteCursorId && {
+        cursor: { id: favoriteCursorId },
+        skip: 1,
+      }),
     });
 
     // Post'lardaki unique userId'leri topla
@@ -2113,9 +2125,13 @@ export class UserService {
       }
       }
 
-    const hasMoreResults = results.length > limit;
+    const hasMoreResults = favorites.length > limit;
     const paginatedResults = hasMoreResults ? results.slice(0, limit) : results;
-    const nextCursor = hasMoreResults && paginatedResults.length > 0 ? paginatedResults[paginatedResults.length - 1].id : undefined;
+    // Dış cursor olarak postId döndür (favorite.id yerine)
+    const nextCursor =
+      hasMoreFavorites && paginatedFavorites.length > 0
+        ? String(paginatedFavorites[paginatedFavorites.length - 1].postId)
+        : undefined;
 
     return {
       items: paginatedResults,
@@ -2232,28 +2248,33 @@ export class UserService {
     userId: string,
     options?: {
       limit?: number;
+      cursor?: string;
       types?: ProfileFeedCardType[];
     }
-  ): Promise<any[]> {
-    const limit = options?.limit && options.limit > 0 ? options.limit : undefined;
+  ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 20;
+    const cursor = options?.cursor;
     const requestedTypes = options?.types?.length
       ? Array.from(new Set(options.types))
       : PROFILE_FEED_CARD_TYPES;
 
+    // Her kaynak için limit+1 çekiyoruz ki hasMore hesaplanabilsin
+    const perSourceLimit = limit + 1;
+
     const fetchers = requestedTypes.map((cardType) => {
       switch (cardType) {
         case 'feed':
-          return this.getUserReviews(userId, { limit: 100 });
+          return this.getUserReviews(userId, { limit: perSourceLimit });
         case 'benchmark':
-          return this.getUserBenchmarks(userId, { limit: 100 });
+          return this.getUserBenchmarks(userId, { limit: perSourceLimit });
         case 'tipsAndTricks':
-          return this.getUserTips(userId, { limit: 100 });
+          return this.getUserTips(userId, { limit: perSourceLimit });
         case 'question':
-          return this.getUserReplies(userId, { limit: 100 });
+          return this.getUserReplies(userId, { limit: perSourceLimit });
         case 'experience':
-          return this.getUserReviews(userId, { limit: 100 });
+          return this.getUserReviews(userId, { limit: perSourceLimit });
         case 'update':
-          return this.getUserUpdates(userId, { limit: 100 });
+          return this.getUserUpdates(userId, { limit: perSourceLimit });
         case 'post':
         default:
           return this.getUserPosts(userId);
@@ -2261,21 +2282,44 @@ export class UserService {
     });
 
     const chunks = await Promise.all(fetchers);
-    const merged = chunks.flatMap((chunk: any) => {
-      // Eğer pagination döndürüyorsa items'ı al, değilse direkt kullan
-      return chunk?.items || chunk || [];
-    });
+    const merged = chunks.flatMap((chunk: any) => chunk?.items || chunk || []);
+
     const resolveTimestamp = (item: any): number => {
       const value = item?.createdAt;
       return value ? new Date(value).getTime() : 0;
     };
-    merged.sort((a, b) => resolveTimestamp(b) - resolveTimestamp(a));
 
-    if (limit) {
-      return merged.slice(0, limit);
+    const sortKey = (item: any) => ({
+      time: resolveTimestamp(item),
+      id: String(item?.id ?? ''),
+    });
+
+    merged.sort((a, b) => {
+      const ka = sortKey(a);
+      const kb = sortKey(b);
+      if (ka.time !== kb.time) return kb.time - ka.time; // desc
+      return kb.id.localeCompare(ka.id); // tie-break desc
+    });
+
+    let startIndex = 0;
+    if (cursor) {
+      const idx = merged.findIndex((item) => String(item?.id) === cursor);
+      startIndex = idx >= 0 ? idx + 1 : 0;
     }
 
-    return merged;
+    const slice = merged.slice(startIndex, startIndex + limit + 1);
+    const hasMore = slice.length > limit;
+    const paginated = hasMore ? slice.slice(0, limit) : slice;
+    const nextCursor = hasMore && paginated.length > 0 ? String(paginated[paginated.length - 1].id) : undefined;
+
+    return {
+      items: paginated,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
   }
 
   /**

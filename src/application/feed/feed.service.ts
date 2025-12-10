@@ -46,6 +46,14 @@ export class FeedService {
     const limit = options?.limit || 20;
     const cacheKey = `feed:${userId}:${options?.cursor || 'first'}:${limit}`;
 
+    // Cursor olarak item (post) ID bekleniyor. Repository ise feed.id ile paginate ediyor.
+    // Bu nedenle gelen cursor'ı feed.id'ye çeviriyoruz.
+    let feedCursor: string | undefined = undefined;
+    if (options?.cursor) {
+      const cursorFeed = await this.feedRepo.findByPostId(userId, options.cursor);
+      feedCursor = cursorFeed?.id;
+    }
+
     try {
       // Cache check
       const cached = await this.cacheService.get<FeedResponse>(cacheKey);
@@ -61,7 +69,7 @@ export class FeedService {
     // Fetch feeds from database
     const { feeds, nextCursor } = await this.feedRepo.findByUserId(userId, {
       limit,
-      cursor: options?.cursor,
+      cursor: feedCursor,
     });
 
     if (feeds.length === 0) {
@@ -233,7 +241,8 @@ export class FeedService {
     const response: FeedResponse = {
       items: feedItems,
       pagination: {
-        cursor: nextCursor,
+        // API'de cursor olarak son item'ın (post) ID'si döndürülür
+        cursor: feedItems.length > 0 ? feedItems[feedItems.length - 1].data.id : nextCursor,
         hasMore: !!nextCursor,
         limit,
       },
@@ -663,16 +672,6 @@ export class FeedService {
     }
 
     return this.sortFeedItemsByTimestamp([...prioritized, ...leftovers]);
-  }
-
-  private sortPostsByCreatedAt<T extends { createdAt?: Date | string }>(items: T[]): T[] {
-    const toTime = (value?: Date | string): number => {
-      if (!value) return 0;
-      if (value instanceof Date) return value.getTime();
-      const parsed = Date.parse(value);
-      return Number.isNaN(parsed) ? 0 : parsed;
-    };
-    return [...items].sort((a, b) => toTime(b.createdAt) - toTime(a.createdAt));
   }
 
   private sortFeedItemsByTimestamp(items: FeedItem[]): FeedItem[] {
