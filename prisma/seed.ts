@@ -1651,7 +1651,13 @@ async function main() {
 
   // 6. Sub Categories for Technology
   console.log('📁 Creating sub categories for Technology...')
-  const techCategory = mainCategories.find(c => c.name === 'Teknoloji')!
+  const techCategory = await prisma.mainCategory.findFirst({
+    where: { name: { in: ['Technology', 'Teknoloji'] } },
+  });
+  if (!techCategory) {
+    throw new Error('Teknoloji/Technology main category bulunamadı, seed durduruldu');
+  }
+  const TECH_MAIN_CATEGORY_ID = techCategory.id;
   
   // SubCategory konfigürasyonları
   const subCategoryConfigs = [
@@ -5986,7 +5992,6 @@ async function main() {
   // 5. Create diverse brands with imageUrl
   console.log('🏢 Creating brands...')
   const TARGET_AUDIO_BRAND_ID = '081d5660-a6d6-412a-b0ae-1557acaaa028'
-  const TARGET_AUDIO_BRAND_NAME = 'AudioMax'
   const brandsData = [
     {
       name: 'TechVision',
@@ -7648,7 +7653,7 @@ async function main() {
       if (!brandCategory) {
         console.warn(`⚠️ BrandCategory bulunamadı brand: ${brand.name} (categoryId: ${brand.categoryId})`)
         // Category yoksa, genel bir SubCategory kullan (Teknoloji kategorisinden)
-        const techCategory = mainCategories.find(c => c.name === 'Teknoloji')
+      const techCategory = mainCategories.find(c => c.id === TECH_MAIN_CATEGORY_ID)
         if (techCategory) {
           const techSubCategory = await prisma.subCategory.findFirst({
             where: { mainCategoryId: techCategory.id }
@@ -7681,7 +7686,7 @@ async function main() {
       
       // BrandCategory'ye göre bir MainCategory bul (BrandCategory ile Category arasında direkt ilişki yok)
       // Bu durumda, genel bir SubCategory kullan (Teknoloji kategorisinden)
-      const techCategory = mainCategories.find(c => c.name === 'Teknoloji')
+      const techCategory = mainCategories.find(c => c.id === TECH_MAIN_CATEGORY_ID)
       let subCategory: Awaited<ReturnType<typeof prisma.subCategory.findFirst>> | null = null
       
       if (techCategory) {
@@ -7990,6 +7995,224 @@ async function main() {
     console.log(
       `✅ AudioMax için ${audioMaxGroupDefinitions.length} grup kontrol edildi -> ${createdAudioGroups} yeni grup, ${createdAudioProducts} yeni ürün eklendi`,
     )
+
+    // Ekstra 4 grup (her biri 5 ürün) - sabit subCategory ID ile
+    const EXTRA_SUBCATEGORY_ID = '59a02135-07d7-404a-988e-386c0917017d'
+    let extraSubCategory = await prisma.subCategory.findUnique({ where: { id: EXTRA_SUBCATEGORY_ID } })
+    if (!extraSubCategory) {
+      extraSubCategory = await prisma.subCategory.create({
+        data: {
+          id: EXTRA_SUBCATEGORY_ID,
+          name: 'AudioMax Ekstra',
+          description: 'AudioMax ek ürün grupları',
+          mainCategoryId: TECH_MAIN_CATEGORY_ID,
+          imageUrl: getSeedMediaUrl('catalog.headphones'),
+        },
+      })
+    }
+    const extraGroups = [
+      {
+        name: 'Aksesuar Setleri',
+        imageKey: 'catalog.phones',
+        products: [
+          { name: 'AudioMax Case Pro', description: 'Koruyucu kılıf', imageKey: 'product.phone.phone3' },
+          { name: 'AudioMax Power Dock', description: 'Şarj standı', imageKey: 'product.phone.phone4' },
+          { name: 'AudioMax USB-C Cable', description: 'Hızlı şarj kablosu', imageKey: 'product.phone.phone5' },
+          { name: 'AudioMax Wall Charger', description: 'GaN adaptör', imageKey: 'product.phone.phone6' },
+          { name: 'AudioMax Desk Mat', description: 'Kaymaz masa matı', imageKey: 'product.generic.7' },
+        ],
+      },
+      {
+        name: 'Stüdyo Çevre Birimleri',
+        imageKey: 'catalog.computers-tablets',
+        products: [
+          { name: 'AudioMax Monitor Stand', description: 'Ergonomik stand', imageKey: 'product.generic.8' },
+          { name: 'AudioMax Desk Lamp', description: 'Ayarlanabilir ışık', imageKey: 'product.generic.9' },
+          { name: 'AudioMax USB Hub', description: '7 port USB hub', imageKey: 'product.generic.10' },
+          { name: 'AudioMax SD Reader', description: 'Çift yuvalı kart okuyucu', imageKey: 'product.generic.11' },
+          { name: 'AudioMax Mic Arm', description: 'Stüdyo mikrofon kolu', imageKey: 'product.headphone.primary' },
+        ],
+      },
+      {
+        name: 'Taşınabilir Ses',
+        imageKey: 'catalog.headphones',
+        products: [
+          { name: 'AudioMax Pocket DAC', description: 'Kompakt DAC', imageKey: 'product.headphone.secondary' },
+          { name: 'AudioMax Clip Amp', description: 'Taşınabilir amfi', imageKey: 'product.generic.2' },
+          { name: 'AudioMax Sport Buds', description: 'Suya dayanıklı kulaklık', imageKey: 'product.generic.3' },
+          { name: 'AudioMax Travel Case', description: 'Sert taşıma çantası', imageKey: 'product.generic.4' },
+          { name: 'AudioMax Cable Kit', description: 'Değiştirilebilir kablo seti', imageKey: 'product.generic.5' },
+        ],
+      },
+      {
+        name: 'Ev Eğlence',
+        imageKey: 'catalog.games',
+        products: [
+          { name: 'AudioMax Mini Soundbar', description: 'Kompakt soundbar', imageKey: 'product.generic.6' },
+          { name: 'AudioMax BT Receiver', description: 'Bluetooth alıcı', imageKey: 'product.generic.7' },
+          { name: 'AudioMax Media Box', description: 'Medya oynatıcı', imageKey: 'product.generic.8' },
+          { name: 'AudioMax Remote', description: 'Evrensel kumanda', imageKey: 'product.generic.9' },
+          { name: 'AudioMax LED Strip', description: 'Ambiyans ışık seti', imageKey: 'product.generic.10' },
+        ],
+      },
+    ]
+
+    for (const grp of extraGroups) {
+      let productGroup = await prisma.productGroup.findFirst({
+        where: { name: `${audioMaxBrandV2.name} - ${grp.name}`, subCategoryId: EXTRA_SUBCATEGORY_ID },
+      })
+
+      if (!productGroup) {
+        productGroup = await prisma.productGroup.create({
+          data: {
+            name: `${audioMaxBrandV2.name} - ${grp.name}`,
+            description: `${audioMaxBrandV2.name} ${grp.name}`,
+            subCategoryId: EXTRA_SUBCATEGORY_ID,
+            imageUrl: getSeedMediaUrl(grp.imageKey as SeedMediaKey),
+          },
+        })
+      }
+
+      for (const productDef of grp.products) {
+        const exists = await prisma.product.findFirst({
+          where: { name: productDef.name, brand: audioMaxBrandV2.name, groupId: productGroup.id },
+        })
+        if (exists) continue
+
+        await prisma.product.create({
+          data: {
+            name: productDef.name,
+            brand: audioMaxBrandV2.name,
+            description: productDef.description,
+            imageUrl: getSeedMediaUrl(productDef.imageKey as SeedMediaKey),
+            groupId: productGroup.id,
+          },
+        })
+      }
+    }
+
+    console.log('✅ AudioMax için ekstra 4 grup ve 20 ürün eklendi (sabit subCategory)')
+
+    // Ana AudioMax grup (a6273598-7e60-491b-8472-63b64d73c48f) için 20 ürün (ilk 5 mevcut önizleme ile aynı)
+    const mainAudioMaxGroupId = 'a6273598-7e60-491b-8472-63b64d73c48f'
+    const mainGroup = await prisma.productGroup.findUnique({ where: { id: mainAudioMaxGroupId } })
+    if (mainGroup) {
+      const previewProducts: Array<{ name: string; description: string; imageKey: SeedMediaKey }> = [
+        { name: 'AudioMax Amplifier', description: 'Güç amplifikatörü', imageKey: 'product.laptop.macbook' },
+        { name: 'AudioMax CD Player', description: 'CD çalar', imageKey: 'product.headphone.secondary' },
+        { name: 'AudioMax Turntable', description: 'Plak çalar', imageKey: 'product.headphone.primary' },
+        { name: 'AudioMax DAC', description: 'Dijital-analog dönüştürücü', imageKey: 'product.phone.phone6' },
+        { name: 'AudioMax Earbuds Pro', description: 'Aktif gürültü önleme kulaklık', imageKey: 'product.phone.phone4' },
+      ]
+
+      const extraProducts: Array<{ name: string; description: string; imageKey: SeedMediaKey }> = [
+        { name: 'AudioMax Studio Mic', description: 'Kondenser mikrofon', imageKey: 'product.generic.2' },
+        { name: 'AudioMax Wireless Speaker Mini', description: 'Kompakt BT hoparlör', imageKey: 'product.generic.3' },
+        { name: 'AudioMax Gaming Headset', description: '7.1 surround kulaklık', imageKey: 'product.generic.4' },
+        { name: 'AudioMax Soundbar Plus', description: 'Sinema deneyimi için', imageKey: 'product.generic.5' },
+        { name: 'AudioMax Earbuds Lite', description: 'Günlük kullanım için', imageKey: 'product.generic.6' },
+        { name: 'AudioMax Home Theater', description: '5.1 ev sineması', imageKey: 'product.generic.7' },
+        { name: 'AudioMax Portable Amp', description: 'Cep tipi kulaklık amfisi', imageKey: 'product.generic.8' },
+        { name: 'AudioMax HiFi Cable', description: 'Premium ses kablosu', imageKey: 'product.generic.9' },
+        { name: 'AudioMax DJ Mixer', description: '2 kanal DJ mikser', imageKey: 'product.generic.10' },
+        { name: 'AudioMax Studio Monitor', description: 'Referans monitör', imageKey: 'product.generic.11' },
+        { name: 'AudioMax Bluetooth Receiver', description: 'Kablosuz ses alıcı', imageKey: 'product.phone.phone5' },
+        { name: 'AudioMax Dock Station', description: 'Çoklu bağlantı yuvası', imageKey: 'product.phone.phone3' },
+        { name: 'AudioMax Travel Charger', description: '60W GaN adaptör', imageKey: 'product.phone.phone2' },
+        { name: 'AudioMax ANC Headphones', description: 'Over-ear ANC kulaklık', imageKey: 'product.headphone.primary' },
+        { name: 'AudioMax Reference Cable', description: 'Düşük gürültülü RCA', imageKey: 'product.headphone.secondary' },
+      ]
+
+      const ensureProducts = async (products: Array<{ name: string; description: string; imageKey: SeedMediaKey }>) => {
+        for (const productDef of products) {
+          const exists = await prisma.product.findFirst({
+            where: { name: productDef.name, brand: audioMaxBrandV2.name, groupId: mainAudioMaxGroupId },
+          })
+          if (exists) continue
+
+          await prisma.product.create({
+            data: {
+              name: productDef.name,
+              brand: audioMaxBrandV2.name,
+              description: productDef.description,
+              imageUrl: getSeedMediaUrl(productDef.imageKey as SeedMediaKey),
+              groupId: mainAudioMaxGroupId,
+            },
+          })
+        }
+      }
+
+      await ensureProducts(previewProducts)
+      await ensureProducts(extraProducts)
+      console.log('✅ AudioMax ana grup için toplam 20 ürün garanti edildi (ilk 5 önizleme ile aynı)')
+    } else {
+      console.warn(`⚠️ Ana AudioMax grup bulunamadı (ID: ${mainAudioMaxGroupId}), 20 ürün ekleme atlandı`)
+    }
+  }
+
+  // Belirli grup ID için ürün sayısını 12'ye çıkar
+  const TARGET_GROUP_ID = '05a7e434-a1e2-46f7-b92f-85da7a57d8f8'
+  console.log(`📦 Grup ID ${TARGET_GROUP_ID} için ürün sayısı 12'ye çıkarılıyor...`)
+  const targetGroup = await prisma.productGroup.findUnique({ 
+    where: { id: TARGET_GROUP_ID },
+    include: { products: true }
+  })
+  
+  if (targetGroup) {
+    const currentProductCount = targetGroup.products.length
+    const targetCount = 12
+    const productsToAdd = targetCount - currentProductCount
+    
+    if (productsToAdd > 0) {
+      // Grubun brand bilgisini bulmak için ilk üründen brand al veya AudioMax kullan
+      const firstProduct = targetGroup.products[0]
+      const brandName = firstProduct?.brand || 'AudioMax'
+      
+      // Ürün görsel key'leri
+      const productImageKeys: SeedMediaKey[] = [
+        'product.generic.1', 'product.generic.2', 'product.generic.3', 'product.generic.4',
+        'product.generic.5', 'product.generic.6', 'product.generic.7', 'product.generic.8',
+        'product.generic.9', 'product.generic.10', 'product.generic.11', 'product.headphone.primary',
+        'product.headphone.secondary', 'product.phone.phone1', 'product.phone.phone2',
+        'product.laptop.macbook'
+      ]
+      
+      // Mevcut ürün isimlerini kontrol etmek için
+      const existingProductNames = new Set(targetGroup.products.map(p => p.name))
+      
+      for (let i = 0; i < productsToAdd; i++) {
+        const productIndex = currentProductCount + i + 1
+        let productName = `${brandName} Ürün ${productIndex}`
+        
+        // Benzersiz isim garantisi
+        let counter = 1
+        while (existingProductNames.has(productName)) {
+          productName = `${brandName} Ürün ${productIndex} (${counter})`
+          counter++
+        }
+        existingProductNames.add(productName)
+        
+        const imageKey = productImageKeys[i % productImageKeys.length]
+        
+        await prisma.product.create({
+          data: {
+            name: productName,
+            brand: brandName,
+            description: `${targetGroup.name} için otomatik eklenen ürün ${productIndex}`,
+            imageUrl: getSeedMediaUrl(imageKey),
+            groupId: TARGET_GROUP_ID,
+          },
+        })
+      }
+      
+      console.log(`✅ Grup ${TARGET_GROUP_ID} için ${productsToAdd} yeni ürün eklendi (toplam: ${targetCount})`)
+    } else if (productsToAdd < 0) {
+      console.log(`ℹ️ Grup ${TARGET_GROUP_ID} zaten ${currentProductCount} ürüne sahip (hedef: ${targetCount})`)
+    } else {
+      console.log(`✅ Grup ${TARGET_GROUP_ID} zaten ${targetCount} ürüne sahip`)
+    }
+  } else {
+    console.warn(`⚠️ Grup bulunamadı (ID: ${TARGET_GROUP_ID}), ürün ekleme atlandı`)
   }
 
   // Add products for specific brand ID: a8fc294b-1f6d-4f22-827b-86e75a1a7095 (AudioMax)
@@ -8007,7 +8230,7 @@ async function main() {
     if (!specificProductGroup) {
       // Brand'ın category'sine göre SubCategory bul
       // Electronics category için Kulaklıklar subcategory'sini kullan
-      const techCategory = mainCategories.find(c => c.name === 'Teknoloji' || c.name === 'Technology')
+      const techCategory = mainCategories.find(c => c.id === TECH_MAIN_CATEGORY_ID)
       let subCategory: Awaited<ReturnType<typeof prisma.subCategory.findFirst>> | null = null
       
       if (techCategory) {
