@@ -421,13 +421,11 @@ async function seedBrandProducts(userIdToUse: string): Promise<void> {
             },
           })
 
-          // Post tag'leri ekle
+          // Post tag'leri ekle (max 2-3 tag)
           await prisma.contentPostTag.createMany({
             data: [
               { postId: experiencePostId, tag: brand.name },
-              { postId: experiencePostId, tag: product.name },
               { postId: experiencePostId, tag: 'Deneyim' },
-              { postId: experiencePostId, tag: 'Kullanıcı Deneyimi' },
             ],
             skipDuplicates: true,
           })
@@ -570,9 +568,7 @@ async function seedBrandProducts(userIdToUse: string): Promise<void> {
             await prisma.contentPostTag.createMany({
               data: [
                 { postId: updatePostId, tag: brand.name },
-                { postId: updatePostId, tag: product.name },
                 { postId: updatePostId, tag: 'Haber' },
-                { postId: updatePostId, tag: 'Güncelleme' },
               ],
               skipDuplicates: true,
             })
@@ -613,9 +609,7 @@ async function seedBrandProducts(userIdToUse: string): Promise<void> {
           await prisma.contentPostTag.createMany({
             data: [
               { postId: experiencePostId, tag: brand.name },
-              { postId: experiencePostId, tag: product.name },
               { postId: experiencePostId, tag: 'Deneyim' },
-              { postId: experiencePostId, tag: 'Haber' },
             ],
             skipDuplicates: true,
           })
@@ -660,7 +654,6 @@ async function seedBrandProducts(userIdToUse: string): Promise<void> {
             data: [
               { postId: tipsPostId, tag: brand.name },
               { postId: tipsPostId, tag: 'İpucu' },
-              { postId: tipsPostId, tag: 'Haber' },
             ],
             skipDuplicates: true,
           })
@@ -709,7 +702,6 @@ async function seedBrandProducts(userIdToUse: string): Promise<void> {
             data: [
               { postId: questionPostId, tag: brand.name },
               { postId: questionPostId, tag: 'Soru' },
-              { postId: questionPostId, tag: 'Haber' },
             ],
             skipDuplicates: true,
           })
@@ -796,7 +788,6 @@ async function seedBrandProducts(userIdToUse: string): Promise<void> {
               data: [
                 { postId: comparePostId, tag: brand.name },
                 { postId: comparePostId, tag: 'Karşılaştırma' },
-                { postId: comparePostId, tag: 'Haber' },
               ],
               skipDuplicates: true,
             })
@@ -839,9 +830,7 @@ async function seedBrandProducts(userIdToUse: string): Promise<void> {
           await prisma.contentPostTag.createMany({
             data: [
               { postId: updatePostId, tag: brand.name },
-              { postId: updatePostId, tag: product.name },
               { postId: updatePostId, tag: 'Haber' },
-              { postId: updatePostId, tag: 'Güncelleme' },
             ],
             skipDuplicates: true,
           })
@@ -2799,7 +2788,7 @@ async function main() {
       productId: product1.id,
       inventoryRequired: true,
       isBoosted: false,
-      tags: ['Dyson', 'Submarine', 'WetCleaning'],
+      tags: ['Dyson', 'WetCleaning'],
     },
     {
       title: 'Adding Dyson V12 Slim to My Travel Kit',
@@ -2814,7 +2803,7 @@ async function main() {
       productId: product2.id,
       inventoryRequired: true,
       isBoosted: true,
-      tags: ['Dyson', 'Slim', 'Travel'],
+      tags: ['Dyson', 'Travel'],
     },
     {
       title: 'My Daily Notes on the iPhone 15 Pro Camera',
@@ -2829,7 +2818,7 @@ async function main() {
       productId: product3.id,
       inventoryRequired: true,
       isBoosted: false,
-      tags: ['iPhone', 'Camera', 'USB-C'],
+      tags: ['iPhone', 'Camera'],
     },
   ];
 
@@ -2847,7 +2836,7 @@ async function main() {
       productId: null,
       inventoryRequired: false,
       isBoosted: true,
-      tags: ['Dyson', 'ProductGroup', 'Attachments'],
+      tags: ['Dyson', 'Attachments'],
     },
     {
       title: 'Current One UI Experience Across the Samsung Series',
@@ -2862,7 +2851,7 @@ async function main() {
       productId: null,
       inventoryRequired: false,
       isBoosted: false,
-      tags: ['Samsung', 'OneUI', 'GoodLock'],
+      tags: ['Samsung', 'OneUI'],
     },
     {
       title: 'Using the Redmi Series as a Budget Ecosystem',
@@ -2877,7 +2866,7 @@ async function main() {
       productId: null,
       inventoryRequired: false,
       isBoosted: false,
-      tags: ['Redmi', 'Automation', 'Budget'],
+      tags: ['Redmi', 'Budget'],
     },
   ];
 
@@ -2893,7 +2882,7 @@ async function main() {
       subCategoryId: akilliTelefonlarSubCategory.id,
       inventoryRequired: false,
       isBoosted: false,
-      tags: ['Akıllı Telefonlar', 'eSIM', 'Roaming'],
+      tags: ['Akıllı Telefonlar', 'eSIM'],
     },
     {
       title: 'Balancing Portability and Performance on Laptops',
@@ -2906,7 +2895,7 @@ async function main() {
       subCategoryId: laptoplarSubCategory.id,
       inventoryRequired: false,
       isBoosted: true,
-      tags: ['Laptoplar', 'USB4', 'Thermals'],
+      tags: ['Laptoplar', 'USB4'],
     },
     {
       title: 'ANC Comparison Guide for the Headphones Subcategory',
@@ -2919,7 +2908,7 @@ async function main() {
       subCategoryId: kulakliklarSubCategory.id,
       inventoryRequired: false,
       isBoosted: false,
-      tags: ['Kulaklıklar', 'ANC', 'Focus'],
+      tags: ['Kulaklıklar', 'ANC'],
     },
   ];
 
@@ -2970,7 +2959,7 @@ async function main() {
       productId: product.id,
       inventoryRequired: index % 3 === 0,
       isBoosted: index % 5 === 0,
-      tags: [product.brand || 'Mobile', narrative.tag, 'Feed'],
+      tags: [product.brand || 'Mobile', narrative.tag],
     };
   });
 
@@ -3004,7 +2993,7 @@ async function main() {
         productGroupId: group.id,
         inventoryRequired: false,
         isBoosted: index % 4 === 0,
-        tags: [group.name, template.tag, 'Series'],
+        tags: [group.name, template.tag],
       };
     })
     .slice(0, 12);
@@ -3050,7 +3039,7 @@ async function main() {
       productId: null,
       inventoryRequired: false,
       isBoosted: idx === 0,
-      tags: [scenario.tag, 'Category', scenario.subCategory?.name || 'Context'],
+      tags: [scenario.tag, scenario.subCategory?.name || 'Context'],
     }));
   });
 
@@ -8727,7 +8716,8 @@ async function main() {
               },
             })
 
-            const tagValues = [audioMaxBrandForFeed.name, product.name]
+            // Max 2-3 tag: brand + template tag (varsa)
+            const tagValues = [audioMaxBrandForFeed.name]
             if (template.tag) {
               tagValues.push(template.tag)
             }
@@ -8952,7 +8942,6 @@ async function main() {
         await prisma.contentPostTag.createMany({
           data: [
             { postId, tag: brand.name },
-            { postId, tag: product.name },
             { postId, tag: 'Trending' },
           ],
           skipDuplicates: true,
@@ -9690,11 +9679,10 @@ async function main() {
               },
             })
             
-            // Post tag'leri ekle
+            // Post tag'leri ekle (max 2-3 tag)
             await prisma.contentPostTag.createMany({
               data: [
                 { postId: experiencePostId, tag: brand.name },
-                { postId: experiencePostId, tag: product.name },
                 { postId: experiencePostId, tag: 'Deneyim' },
               ],
               skipDuplicates: true,
@@ -9768,8 +9756,6 @@ async function main() {
             await prisma.contentPostTag.createMany({
               data: [
                 { postId: comparePostId, tag: brand.name },
-                { postId: comparePostId, tag: product.name },
-                { postId: comparePostId, tag: partnerProduct.name },
                 { postId: comparePostId, tag: 'Karşılaştırma' },
               ],
               skipDuplicates: true,
@@ -9834,7 +9820,6 @@ async function main() {
             await prisma.contentPostTag.createMany({
               data: [
                 { postId: newsPostId, tag: brand.name },
-                { postId: newsPostId, tag: product.name },
                 { postId: newsPostId, tag: 'Haberler' },
               ],
               skipDuplicates: true,
@@ -9889,7 +9874,6 @@ async function main() {
             await prisma.contentPostTag.createMany({
               data: [
                 { postId: newsPostId, tag: brand.name },
-                { postId: newsPostId, tag: product.name },
                 { postId: newsPostId, tag: 'News' },
               ],
               skipDuplicates: true,
@@ -10001,7 +9985,6 @@ async function main() {
           await prisma.contentPostTag.createMany({
             data: [
               { postId: experiencePostId, tag: targetBrandForExp.name },
-              { postId: experiencePostId, tag: targetProductForExp.name },
               { postId: experiencePostId, tag: 'Deneyim' },
             ],
             skipDuplicates: true,
