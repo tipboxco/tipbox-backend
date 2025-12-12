@@ -37,8 +37,12 @@ export class MarketplaceService {
   /**
    * Satışta bulunan NFT'lerin listesini getirir
    */
-  async listActiveListings(query: ListMarketplaceNFTsQuery = {}): Promise<MarketplaceNFTResponse[]> {
+  async listActiveListings(query: ListMarketplaceNFTsQuery = {}): Promise<{
+    items: MarketplaceNFTResponse[];
+    pagination: { cursor?: string; hasMore: boolean; limit: number };
+  }> {
     try {
+      const limit = query.limit && query.limit > 0 ? Math.min(query.limit, 100) : 50;
       const filter = {
         status: NFTMarketListingStatus.ACTIVE,
         minPrice: query.minPrice,
@@ -47,21 +51,23 @@ export class MarketplaceService {
         nftType: query.type,
         nftRarity: query.rarity,
         orderBy: query.orderBy,
-        limit: query.limit || 50,
-        offset: query.offset || 0,
+        limit,
+        cursor: query.cursor,
       };
 
       const listings = await this.listingRepo.findActiveListings(filter);
+      const hasMore = listings.length > limit;
+      const paginated = hasMore ? listings.slice(0, limit) : listings;
 
       // NFT ID'lerini topla ve toplu sorgula
-      const nftIds = Array.from(new Set(listings.map(l => l.nftId)));
+      const nftIds = Array.from(new Set(paginated.map(l => l.nftId)));
       const nfts = await Promise.all(
         nftIds.map(id => this.nftRepo.findById(id))
       );
       const nftMap = new Map(nfts.filter(n => n).map(n => [n!.id, n!]));
 
       // User ID'lerini topla ve toplu sorgula
-      const userIds = Array.from(new Set(listings.map(l => l.listedByUserId)));
+      const userIds = Array.from(new Set(paginated.map(l => l.listedByUserId)));
       const [profiles, avatars] = await Promise.all([
         Promise.all(userIds.map(id => this.profileRepo.findByUserId(id))),
         Promise.all(userIds.map(id => this.avatarRepo.findActiveByUserId(id))),
@@ -76,7 +82,7 @@ export class MarketplaceService {
 
       const results: MarketplaceNFTResponse[] = [];
 
-      for (const listing of listings) {
+      for (const listing of paginated) {
         const nft = nftMap.get(listing.nftId);
         if (!nft) continue;
 
@@ -96,7 +102,16 @@ export class MarketplaceService {
         });
       }
 
-      return results;
+      const nextCursor = hasMore && results.length > 0 ? results[results.length - 1].id : undefined;
+
+      return {
+        items: results,
+        pagination: {
+          cursor: nextCursor,
+          hasMore,
+          limit,
+        },
+      };
     } catch (error) {
       logger.error({
         message: 'Error listing marketplace NFTs',
@@ -109,24 +124,37 @@ export class MarketplaceService {
   /**
    * Kullanıcının sahip olduğu NFT'lerin listesini getirir
    */
-  async listUserNFTs(userId: string, query: ListUserNFTsQuery = {}): Promise<UserNFTResponse[]> {
+  async listUserNFTs(userId: string, query: ListUserNFTsQuery = {}): Promise<{
+    items: UserNFTResponse[];
+    pagination: { cursor?: string; hasMore: boolean; limit: number };
+  }> {
     try {
-      const limit = query.limit || 50;
-      const offset = query.offset || 0;
-      const nfts = await this.nftRepo.findByOwnerId(userId, limit, offset);
+      const limit = query.limit && query.limit > 0 ? Math.min(query.limit, 100) : 50;
+      const nfts = await this.nftRepo.findByOwnerId(userId, limit, query.cursor);
+      const hasMore = nfts.length > limit;
+      const paginated = hasMore ? nfts.slice(0, limit) : nfts;
 
       // Kullanıcı profilini bir kez al
       const profile = await this.profileRepo.findByUserId(userId);
       const username = profile?.userName || 'Unknown';
 
-      const results: UserNFTResponse[] = nfts.map(nft => ({
+      const results: UserNFTResponse[] = paginated.map(nft => ({
         id: nft.id,
         title: nft.name,
         username,
         image: nft.imageUrl,
       }));
 
-      return results;
+      const nextCursor = hasMore && results.length > 0 ? results[results.length - 1].id : undefined;
+
+      return {
+        items: results,
+        pagination: {
+          cursor: nextCursor,
+          hasMore,
+          limit,
+        },
+      };
     } catch (error) {
       logger.error({
         message: 'Error listing user NFTs',

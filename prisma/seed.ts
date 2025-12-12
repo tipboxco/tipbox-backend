@@ -2113,6 +2113,7 @@ async function main() {
   const firstPostBadge = badges.find(b => b.name === 'First Post')!
   const tipMasterBadge = badges.find(b => b.name === 'Tip Master')!
   const earlyBirdBadge = badges.find(b => b.name === 'Early Bird')!
+  const communityHeroBadge = badges.find(b => b.name === 'Community Hero') || null
   
   // Link achievement goals to badges
   // Connect goals where the badge is the reward
@@ -2169,13 +2170,32 @@ async function main() {
     }).catch(() => {}) // Ignore if no relation
   }
 
-  const userBadgesData = [
+  const baseAchievementBadgeSeeds = [
     { badgeId: welcomeBadge.id, claimed: true, claimedAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) },
     { badgeId: firstPostBadge.id, claimed: true, claimedAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000) },
     { badgeId: tipMasterBadge.id, claimed: true, claimedAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
-    { badgeId: earlyBirdBadge.id, claimed: true, claimedAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) },
     { badgeId: benchmarkSageBadge.id, claimed: false, claimedAt: null },
     { badgeId: experienceCuratorBadge.id, claimed: false, claimedAt: null },
+  ]
+
+  // Toplam 15 ACHIEVEMENT rozetini garanti et (koleksiyon endpoint'i için)
+  const requiredAchievementCount = 15
+  const achievementsSoFar = baseAchievementBadgeSeeds.length + (communityHeroBadge ? 1 : 0)
+  const neededExtraAchievements = Math.max(0, requiredAchievementCount - achievementsSoFar)
+  const selectedExtraAchievementBadges = extraBadges.slice(0, neededExtraAchievements)
+
+  const extraAchievementBadgeSeeds = selectedExtraAchievementBadges.map((badge, index) => ({
+    badgeId: badge.id,
+    claimed: index < 4,
+    claimedAt: index < 4 ? new Date(Date.now() - (10 + index) * 24 * 60 * 60 * 1000) : null,
+  }))
+
+  const userBadgesData = [
+    ...baseAchievementBadgeSeeds,
+    ...(communityHeroBadge ? [{ badgeId: communityHeroBadge.id, claimed: false, claimedAt: null }] : []),
+    ...extraAchievementBadgeSeeds,
+    // Event badge'leri koleksiyon sayısını etkilemesin ama hesapta dursun
+    { badgeId: earlyBirdBadge.id, claimed: true, claimedAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000) },
   ]
 
   for (const badgeData of userBadgesData) {
@@ -6624,6 +6644,51 @@ async function main() {
     take: 5, // İlk 5 bridge badge
   })
 
+  // Tekrarlı bridge ödüllerini engellemek için kullanıcı-badge bazlı takip
+  const bridgeRewardKey = (userId: string, badgeId: string) => `${userId}:${badgeId}`
+  const existingBridgeRewardKeys = new Set<string>(
+    (
+      await prisma.bridgeReward.findMany({
+        select: { userId: true, badgeId: true },
+      })
+    ).map(rw => bridgeRewardKey(rw.userId, rw.badgeId))
+  )
+
+  const createBridgeRewardIfUnique = async ({
+    userId,
+    badgeId,
+    brandId,
+    awardedAt,
+  }: {
+    userId: string
+    badgeId: string
+    brandId: string
+    awardedAt: Date
+  }): Promise<boolean> => {
+    const key = bridgeRewardKey(userId, badgeId)
+    if (existingBridgeRewardKeys.has(key)) return false
+
+    const alreadyExists = await prisma.bridgeReward
+      .findFirst({
+        where: { userId, badgeId },
+      })
+      .catch(() => null)
+
+    if (alreadyExists) {
+      existingBridgeRewardKeys.add(key)
+      return false
+    }
+
+    await prisma.bridgeReward
+      .create({
+        data: { userId, badgeId, brandId, awardedAt },
+      })
+      .catch(() => {})
+
+    existingBridgeRewardKeys.add(key)
+    return true
+  }
+
   if (bridgeBadges.length === 0) {
     console.warn('⚠️ Bridge badge bulunamadı, bridge rewards oluşturulamadı')
   } else {
@@ -6668,25 +6733,13 @@ async function main() {
       const brand = bridgeBrandMap.get(seed.brandName)
       if (!brand) continue
 
-      const existingReward = await prisma.bridgeReward.findFirst({
-        where: {
-          userId: seed.userId,
-          badgeId: seed.badgeId,
-          brandId: brand.id,
-        },
-      }).catch(() => null)
-
-      if (existingReward) continue
-
-      await prisma.bridgeReward.create({
-        data: {
-          userId: seed.userId,
-          brandId: brand.id,
-          badgeId: seed.badgeId,
-          awardedAt: daysAgo(seed.daysAgoValue),
-        },
-      }).catch(() => {})
-      createdBridgeRewards++
+      const created = await createBridgeRewardIfUnique({
+        userId: seed.userId,
+        badgeId: seed.badgeId,
+        brandId: brand.id,
+        awardedAt: daysAgo(seed.daysAgoValue),
+      })
+      if (created) createdBridgeRewards++
     }
     console.log(`✅ ${createdBridgeRewards} bridge rewards created`)
   }
@@ -6732,33 +6785,17 @@ async function main() {
       for (let i = 0; i < badgesToUse.length; i++) {
         const badge = badgesToUse[i]
         
-        // Mevcut reward'u kontrol et
-        const existingReward = await prisma.bridgeReward.findFirst({
-          where: {
-            userId: userIdToUse,
-            badgeId: badge.id,
-            brandId: AUDIO_MAX_BRAND_ID_FOR_HISTORY,
-          },
-        }).catch(() => null)
-        
-        if (existingReward) {
-          console.log(`  ℹ️  Badge reward already exists: ${badge.name}`)
-          continue
-        }
-        
-        try {
-          await prisma.bridgeReward.create({
-            data: {
-              userId: userIdToUse,
-              brandId: AUDIO_MAX_BRAND_ID_FOR_HISTORY,
-              badgeId: badge.id,
-              awardedAt: daysAgo(randomBetween(1, 90)), // Son 90 gün içinde rastgele tarih
-            },
-          })
+        const created = await createBridgeRewardIfUnique({
+          userId: userIdToUse,
+          brandId: AUDIO_MAX_BRAND_ID_FOR_HISTORY,
+          badgeId: badge.id,
+          awardedAt: daysAgo(randomBetween(1, 90)), // Son 90 gün içinde rastgele tarih
+        })
+        if (created) {
           audioMaxRewardsCreated++
           console.log(`  ✅ Created badge reward: ${badge.name} for AudioMax brand`)
-        } catch (error) {
-          console.warn(`  ⚠️  Failed to create badge reward for ${badge.name}: ${error}`)
+        } else {
+          console.log(`  ℹ️  Badge reward already exists: ${badge.name}`)
         }
       }
       
@@ -6775,29 +6812,15 @@ async function main() {
         const additionalBadges = availableBadges.slice(badgesToUse.length, badgesToUse.length + needed)
         
         for (const badge of additionalBadges) {
-          const existingReward = await prisma.bridgeReward.findFirst({
-            where: {
-              userId: userIdToUse,
-              badgeId: badge.id,
-              brandId: AUDIO_MAX_BRAND_ID_FOR_HISTORY,
-            },
-          }).catch(() => null)
-          
-          if (!existingReward) {
-            try {
-              await prisma.bridgeReward.create({
-                data: {
-                  userId: userIdToUse,
-                  brandId: AUDIO_MAX_BRAND_ID_FOR_HISTORY,
-                  badgeId: badge.id,
-                  awardedAt: daysAgo(randomBetween(1, 90)),
-                },
-              })
-              audioMaxRewardsCreated++
-              console.log(`  ✅ Created additional badge reward: ${badge.name} for AudioMax brand`)
-            } catch (error) {
-              console.warn(`  ⚠️  Failed to create additional badge reward: ${error}`)
-            }
+          const created = await createBridgeRewardIfUnique({
+            userId: userIdToUse,
+            brandId: AUDIO_MAX_BRAND_ID_FOR_HISTORY,
+            badgeId: badge.id,
+            awardedAt: daysAgo(randomBetween(1, 90)),
+          })
+          if (created) {
+            audioMaxRewardsCreated++
+            console.log(`  ✅ Created additional badge reward: ${badge.name} for AudioMax brand`)
           }
         }
       }
@@ -6856,33 +6879,17 @@ async function main() {
       for (let i = 0; i < badgesToUse.length; i++) {
         const badge = badgesToUse[i]
         
-        // Mevcut reward'u kontrol et
-        const existingReward = await prisma.bridgeReward.findFirst({
-          where: {
-            userId: userIdToUse,
-            badgeId: badge.id,
-            brandId: BRAND_ID_FOR_HISTORY,
-          },
-        }).catch(() => null)
-        
-        if (existingReward) {
-          console.log(`  ℹ️  Badge reward already exists: ${badge.name}`)
-          continue
-        }
-        
-        try {
-          await prisma.bridgeReward.create({
-            data: {
-              userId: userIdToUse,
-              brandId: BRAND_ID_FOR_HISTORY,
-              badgeId: badge.id,
-              awardedAt: daysAgo(randomBetween(1, 90)), // Son 90 gün içinde rastgele tarih
-            },
-          })
+        const created = await createBridgeRewardIfUnique({
+          userId: userIdToUse,
+          brandId: BRAND_ID_FOR_HISTORY,
+          badgeId: badge.id,
+          awardedAt: daysAgo(randomBetween(1, 90)), // Son 90 gün içinde rastgele tarih
+        })
+        if (created) {
           brandRewardsCreated++
           console.log(`  ✅ Created badge reward: ${badge.name} for brand ${brandForHistory.name}`)
-        } catch (error) {
-          console.warn(`  ⚠️  Failed to create badge reward for ${badge.name}: ${error}`)
+        } else {
+          console.log(`  ℹ️  Badge reward already exists: ${badge.name}`)
         }
       }
       
@@ -6899,29 +6906,15 @@ async function main() {
         const additionalBadges = availableBadges.slice(badgesToUse.length, badgesToUse.length + needed)
         
         for (const badge of additionalBadges) {
-          const existingReward = await prisma.bridgeReward.findFirst({
-            where: {
-              userId: userIdToUse,
-              badgeId: badge.id,
-              brandId: BRAND_ID_FOR_HISTORY,
-            },
-          }).catch(() => null)
-          
-          if (!existingReward) {
-            try {
-              await prisma.bridgeReward.create({
-                data: {
-                  userId: userIdToUse,
-                  brandId: BRAND_ID_FOR_HISTORY,
-                  badgeId: badge.id,
-                  awardedAt: daysAgo(randomBetween(1, 90)),
-                },
-              })
-              brandRewardsCreated++
-              console.log(`  ✅ Created additional badge reward: ${badge.name} for brand ${brandForHistory.name}`)
-            } catch (error) {
-              console.warn(`  ⚠️  Failed to create additional badge reward: ${error}`)
-            }
+          const created = await createBridgeRewardIfUnique({
+            userId: userIdToUse,
+            brandId: BRAND_ID_FOR_HISTORY,
+            badgeId: badge.id,
+            awardedAt: daysAgo(randomBetween(1, 90)),
+          })
+          if (created) {
+            brandRewardsCreated++
+            console.log(`  ✅ Created additional badge reward: ${badge.name} for brand ${brandForHistory.name}`)
           }
         }
       }
@@ -7043,27 +7036,13 @@ async function main() {
     for (const userId of userIds) {
       const badgesToUse = badgePool.slice(0, Math.min(badgeCount, badgePool.length))
       for (const badge of badgesToUse) {
-        const existingReward = await prisma.bridgeReward.findFirst({
-          where: {
-            userId,
-            brandId: brand.id,
-            badgeId: badge.id,
-          },
-        }).catch(() => null)
-
-        if (existingReward) continue
-
-        await prisma.bridgeReward
-          .create({
-            data: {
-              userId,
-              brandId: brand.id,
-              badgeId: badge.id,
-              awardedAt: daysAgo(randomBetween(5, 120)),
-            },
-          })
-          .catch(() => {})
-        createdCount++
+        const created = await createBridgeRewardIfUnique({
+          userId,
+          brandId: brand.id,
+          badgeId: badge.id,
+          awardedAt: daysAgo(randomBetween(5, 120)),
+        })
+        if (created) createdCount++
       }
     }
 
