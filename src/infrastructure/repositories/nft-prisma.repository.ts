@@ -14,6 +14,8 @@ export interface FindNFTsFilter {
   cursor?: string;
 }
 
+const isUuid = (value?: string) => !!value && /^[0-9a-fA-F-]{36}$/.test(value)
+
 export class NFTPrismaRepository {
   private prisma = getPrisma();
 
@@ -30,7 +32,7 @@ export class NFTPrismaRepository {
     let paramIndex = params.length + 1;
 
     let cursorFilter = '';
-    if (cursor) {
+    if (cursor && isUuid(cursor)) {
       cursorFilter = `
         AND (created_at, id) < (
           SELECT created_at, id FROM nfts WHERE id = $${paramIndex}::uuid
@@ -127,7 +129,7 @@ export class NFTPrismaRepository {
       paramIndex++;
 
       let cursorFilter = '';
-      if (filter.cursor) {
+      if (filter.cursor && isUuid(filter.cursor)) {
         cursorFilter = ` AND (created_at, id) < (SELECT created_at, id FROM nfts WHERE id = $${paramIndex}::uuid)`;
         params.push(filter.cursor);
         paramIndex++;

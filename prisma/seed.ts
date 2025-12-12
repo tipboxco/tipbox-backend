@@ -5496,6 +5496,124 @@ async function main() {
   const createdBrandEvents = brandSpecificEvents.filter(Boolean) as any[]
   console.log(`✅ ${createdBrandEvents.length} brand-specific wishbox event oluşturuldu (${brandEventTemplates.length} per brand)`)
 
+  // Brand 081d5660-a6d6-412a-b0ae-1557acaaa028 için özel 12 event oluştur
+  const TARGET_BRAND_ID_FOR_EVENTS = '081d5660-a6d6-412a-b0ae-1557acaaa028'
+  const targetBrandForEvents = await prisma.brand.findUnique({
+    where: { id: TARGET_BRAND_ID_FOR_EVENTS },
+    select: { id: true, name: true },
+  })
+
+  if (targetBrandForEvents) {
+    const targetBrandEventTemplates = [
+      { title: 'Bridge Kickoff Summit', description: 'Join the kickoff and learn what is coming next.', eventType: 'POLL' as const, offsetDays: 0, durationDays: 7 },
+      { title: 'Feature Wishlist', description: 'Vote the next feature you want delivered first.', eventType: 'SURVEY' as const, offsetDays: 1, durationDays: 10 },
+      { title: 'Beta Access Contest', description: 'Enter to win early beta access slots.', eventType: 'CONTEST' as const, offsetDays: 2, durationDays: 5 },
+      { title: 'Usage Challenge', description: 'Complete daily tasks and climb the bridge leaderboard.', eventType: 'CHALLENGE' as const, offsetDays: 3, durationDays: 14 },
+      { title: 'Creator Spotlight Vote', description: 'Pick the best creator story for this brand.', eventType: 'POLL' as const, offsetDays: 4, durationDays: 6 },
+      { title: 'Support Satisfaction Pulse', description: 'Rate the latest support experience.', eventType: 'SURVEY' as const, offsetDays: 5, durationDays: 7 },
+      { title: 'Roadmap Checkpoint', description: 'Validate roadmap priorities for Q3.', eventType: 'SURVEY' as const, offsetDays: 6, durationDays: 9 },
+      { title: 'Bug Bash Sprint', description: 'Report bugs, earn credit and badges.', eventType: 'CHALLENGE' as const, offsetDays: 7, durationDays: 4 },
+      { title: 'Launch Hype Contest', description: 'Share hype content to win merch.', eventType: 'CONTEST' as const, offsetDays: 8, durationDays: 7 },
+      { title: 'Referral Boost', description: 'Invite friends and track conversions.', eventType: 'PROMOTION' as const, offsetDays: 9, durationDays: 10 },
+      { title: 'Seasonal Offers', description: 'Limited seasonal bundles for the community.', eventType: 'PROMOTION' as const, offsetDays: 10, durationDays: 12 },
+      { title: 'Community AMA', description: 'Ask anything to the product leads.', eventType: 'CONTEST' as const, offsetDays: 11, durationDays: 5 },
+    ]
+
+    let createdTargetBrandEvents = 0
+    for (const template of targetBrandEventTemplates) {
+      const exists = await prisma.wishboxEvent
+        .findFirst({
+          where: {
+            brandId: targetBrandForEvents.id,
+            title: template.title,
+          },
+        })
+        .catch(() => null)
+
+      if (exists) continue
+
+      const startDate = new Date(today)
+      startDate.setDate(today.getDate() + template.offsetDays)
+      const endDate = new Date(startDate)
+      endDate.setDate(startDate.getDate() + template.durationDays)
+
+      await prisma.wishboxEvent
+        .create({
+          data: {
+            id: generateUlid(),
+            title: template.title,
+            description: template.description,
+            imageUrl: getSeedMediaUrl('event.primary' as any),
+            startDate,
+            endDate,
+            status: 'PUBLISHED',
+            eventType: template.eventType,
+            brandId: targetBrandForEvents.id,
+          } as any,
+        })
+        .catch(() => null)
+
+      createdTargetBrandEvents++
+    }
+    console.log(`✅ ${createdTargetBrandEvents} wishbox event brand ${targetBrandForEvents.name ?? TARGET_BRAND_ID_FOR_EVENTS} için oluşturuldu (hedef: 12)`)
+
+    // Aynı brand için survey sekmesinin dolu gelmesi adına 12 SURVEY ağırlıklı event
+    const targetBrandSurveyTemplates = [
+      { title: 'UX Feedback Pulse', description: 'Share your experience with the latest UX changes.', offsetDays: 0, durationDays: 6 },
+      { title: 'Onboarding Survey', description: 'Help us improve the first-run experience.', offsetDays: 1, durationDays: 7 },
+      { title: 'Performance Check', description: 'Rate app performance on your daily workflow.', offsetDays: 2, durationDays: 5 },
+      { title: 'Content Relevance', description: 'Tell us if the recommendations match your interests.', offsetDays: 3, durationDays: 8 },
+      { title: 'Notification Tuning', description: 'Which alerts are useful? Help us tune notifications.', offsetDays: 4, durationDays: 6 },
+      { title: 'Support Quality', description: 'Evaluate your last support interaction.', offsetDays: 5, durationDays: 7 },
+      { title: 'Feature Priorities', description: 'Rank the backlog items for the next release.', offsetDays: 6, durationDays: 9 },
+      { title: 'Mobile vs Web', description: 'Which platform do you prefer and why?', offsetDays: 7, durationDays: 5 },
+      { title: 'Accessibility Review', description: 'Rate accessibility and propose quick wins.', offsetDays: 8, durationDays: 10 },
+      { title: 'Localization Survey', description: 'Are translations accurate? Report issues.', offsetDays: 9, durationDays: 6 },
+      { title: 'Security Confidence', description: 'How confident are you in account security?', offsetDays: 10, durationDays: 7 },
+      { title: 'Community Health', description: 'How welcoming is the community experience?', offsetDays: 11, durationDays: 8 },
+    ]
+
+    let createdTargetBrandSurveys = 0
+    for (const template of targetBrandSurveyTemplates) {
+      const exists = await prisma.wishboxEvent
+        .findFirst({
+          where: {
+            brandId: targetBrandForEvents.id,
+            title: template.title,
+          },
+        })
+        .catch(() => null)
+
+      if (exists) continue
+
+      const startDate = new Date(today)
+      startDate.setDate(today.getDate() + template.offsetDays)
+      const endDate = new Date(startDate)
+      endDate.setDate(startDate.getDate() + template.durationDays)
+
+      await prisma.wishboxEvent
+        .create({
+          data: {
+            id: generateUlid(),
+            title: template.title,
+            description: template.description,
+            imageUrl: getSeedMediaUrl('event.primary' as any),
+            startDate,
+            endDate,
+            status: 'PUBLISHED',
+            eventType: 'SURVEY',
+            brandId: targetBrandForEvents.id,
+          } as any,
+        })
+        .catch(() => null)
+
+      createdTargetBrandSurveys++
+    }
+    console.log(`✅ ${createdTargetBrandSurveys} SURVEY event brand ${targetBrandForEvents.name ?? TARGET_BRAND_ID_FOR_EVENTS} için oluşturuldu (hedef: 12)`)
+  } else {
+    console.warn(`⚠️ Brand not found (ID: ${TARGET_BRAND_ID_FOR_EVENTS}), skipping target brand event seeding`)
+  }
+
   // Brand bazlı geçmiş/survey event'leri (history & surveys endpoint'leri için)
   console.log('🗂️  Creating brand history/survey events with user stats...')
   const surveyUsers = await prisma.user.findMany({ select: { id: true }, take: 20 })
