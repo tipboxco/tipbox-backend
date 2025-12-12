@@ -331,10 +331,11 @@ export class BrandService {
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
     const cursor = options?.cursor;
 
-    // Şimdilik tüm aktif WishboxEvent'leri survey listesi olarak kullanıyoruz
+    // Sadece SURVEY tipindeki event'leri döndür
     const whereClause: any = {
       status: 'PUBLISHED',
       brandId,
+      eventType: 'SURVEY',
     };
 
     if (cursor) {

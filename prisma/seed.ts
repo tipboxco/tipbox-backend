@@ -114,47 +114,65 @@ async function ensureProductImages(userIdToUse: string): Promise<void> {
     take: 100, // İlk 100 product
   })
 
+  if (allProducts.length === 0) return
+
+  // Batch kontrol: Tüm mevcut inventory'leri tek sorguda al
+  const productIds = allProducts.map(p => p.id)
+  const existingInventories = await prisma.inventory.findMany({
+    where: {
+      userId: userIdToUse,
+      productId: { in: productIds },
+    },
+    select: { productId: true, id: true },
+  }).catch(() => [])
+  const inventoryMap = new Map(existingInventories.map(inv => [inv.productId, inv.id]))
+  const existingInventoryIds = new Set(existingInventories.map(inv => inv.id))
+
+  // Batch kontrol: Tüm mevcut inventory media'ları tek sorguda al
+  const existingMediaList = existingInventoryIds.size > 0
+    ? await prisma.inventoryMedia.findMany({
+        where: {
+          inventoryId: { in: Array.from(existingInventoryIds) },
+          type: 'IMAGE',
+        },
+        select: { inventoryId: true },
+      }).catch(() => [])
+    : []
+  const mediaInventorySet = new Set(existingMediaList.map(m => m.inventoryId))
+
   let addedCount = 0
   for (const product of allProducts) {
-    // Product için inventory var mı kontrol et
-    let inventory = await prisma.inventory.findFirst({
-      where: {
-        userId: userIdToUse,
-        productId: product.id,
-      },
-    })
-
+    // Hızlı Map kontrolü (DB sorgusu yok)
+    let inventoryId = inventoryMap.get(product.id)
+    
     // Eğer inventory yoksa oluştur
-    if (!inventory) {
-      inventory = await prisma.inventory.create({
+    if (!inventoryId) {
+      const newInventory = await prisma.inventory.create({
         data: {
           userId: userIdToUse,
           productId: product.id,
           hasOwned: true,
           experienceSummary: `Real‑life ownership experience with ${product.name}`,
         },
-      })
+      }).catch(() => null)
+      if (newInventory) {
+        inventoryId = newInventory.id
+        inventoryMap.set(product.id, inventoryId)
+      }
     }
 
-    // Inventory media var mı kontrol et
-    const existingMedia = await prisma.inventoryMedia.findFirst({
-      where: {
-        inventoryId: inventory.id,
+    // Hızlı Set kontrolü (DB sorgusu yok)
+    if (!inventoryId || mediaInventorySet.has(inventoryId) || !product.imageUrl) continue
+
+    await prisma.inventoryMedia.create({
+      data: {
+        inventoryId,
+        mediaUrl: product.imageUrl,
         type: 'IMAGE',
       },
-    })
-
-    // Eğer media yoksa ve product'ın imageUrl'i varsa ekle
-    if (!existingMedia && product.imageUrl) {
-      await prisma.inventoryMedia.create({
-        data: {
-          inventoryId: inventory.id,
-          mediaUrl: product.imageUrl,
-          type: 'IMAGE',
-        },
-      }).catch(() => {})
-      addedCount++
-    }
+    }).catch(() => {})
+    mediaInventorySet.add(inventoryId)
+    addedCount++
   }
 
   if (addedCount > 0) {
@@ -278,45 +296,67 @@ async function seedBrandProducts(userIdToUse: string): Promise<void> {
       console.log(`✅ ${brand.name} için ${productConfigs.length} product config bulundu`)
     }
     
-    for (const productConfig of productConfigs) {
-      // Product'ı oluştur veya bul
-      let product = await prisma.product.findFirst({
+    if (productConfigs.length > 0) {
+      // Batch kontrol: Tüm mevcut product'ları tek sorguda al
+      const productNames = productConfigs.map(pc => pc.name)
+      const existingProducts = await prisma.product.findMany({
         where: {
           brand: brand.name,
-          name: productConfig.name,
+          name: { in: productNames },
         },
-      })
+        select: { id: true, name: true },
+      }).catch(() => [])
+      const productMap = new Map(existingProducts.map(p => [p.name, p.id]))
+      
+      // Batch kontrol: Tüm mevcut inventory'leri tek sorguda al
+      const existingProductIds = Array.from(productMap.values())
+      const existingInventories = existingProductIds.length > 0
+        ? await prisma.inventory.findMany({
+            where: {
+              userId: userIdToUse,
+              productId: { in: existingProductIds },
+            },
+            select: { productId: true },
+          }).catch(() => [])
+        : []
+      const inventoryProductSet = new Set(existingInventories.map(inv => inv.productId))
+      
+      for (const productConfig of productConfigs) {
+        // Hızlı Map kontrolü (DB sorgusu yok)
+        let productId = productMap.get(productConfig.name)
 
-      if (!product) {
-        product = await prisma.product.create({
-          data: {
-            name: productConfig.name,
-            brand: brand.name,
-            description: productConfig.description,
-            groupId: productGroup.id,
-            imageUrl: getSeedMediaUrl(productConfig.imageKey as any),
-          },
-        })
-      }
+        if (!productId) {
+          const newProduct = await prisma.product.create({
+            data: {
+              name: productConfig.name,
+              brand: brand.name,
+              description: productConfig.description,
+              groupId: productGroup.id,
+              imageUrl: getSeedMediaUrl(productConfig.imageKey as any),
+            },
+          }).catch(() => null)
+          if (newProduct) {
+            productId = newProduct.id
+            productMap.set(productConfig.name, productId)
+          }
+        }
 
-      // Inventory oluştur (experiences için gerekli)
-      let inventory = await prisma.inventory.findFirst({
-        where: {
-          userId: userIdToUse,
-          productId: product.id,
-        },
-      })
+        // Hızlı Set kontrolü (DB sorgusu yok)
+        if (!productId || inventoryProductSet.has(productId)) continue
 
-      if (!inventory) {
-        inventory = await prisma.inventory.create({
+        const newInventory = await prisma.inventory.create({
           data: {
             userId: userIdToUse,
-            productId: product.id,
+            productId: productId,
             hasOwned: true,
-            experienceSummary: `Real‑life ownership experience with ${product.name}`,
+            experienceSummary: `Real‑life ownership experience with ${productConfig.name}`,
           },
-        })
+        }).catch(() => null)
+        if (newInventory) {
+          inventoryProductSet.add(productId)
+        }
       }
+    }
 
       // Inventory media kontrolü - eğer yoksa ekle
       const existingMedia = await prisma.inventoryMedia.findFirst({
@@ -2091,22 +2131,29 @@ async function main() {
     { title: 'Early Tech Adopter' },
   ]
   
+  // Batch kontrol: Tüm mevcut title'ları tek sorguda al
+  const existingTitles = await prisma.userTitle.findMany({
+    where: { userId: userIdToUse },
+    select: { title: true },
+  }).catch(() => [])
+  const existingTitleSet = new Set(existingTitles.map(t => t.title))
+
+  let createdTitles = 0
   for (const titleData of titles) {
-    const existing = await prisma.userTitle.findFirst({
-      where: { userId: userIdToUse, title: titleData.title }
-    })
+    // Hızlı Set kontrolü (DB sorgusu yok)
+    if (existingTitleSet.has(titleData.title)) continue
     
-    if (!existing) {
-      await prisma.userTitle.create({
-        data: {
-          userId: userIdToUse,
-          title: titleData.title,
-          earnedAt: new Date(),
-        }
-      })
-    }
+    await prisma.userTitle.create({
+      data: {
+        userId: userIdToUse,
+        title: titleData.title,
+        earnedAt: new Date(),
+      }
+    }).catch(() => {})
+    existingTitleSet.add(titleData.title)
+    createdTitles++
   }
-  console.log(`✅ ${titles.length} user titles created`)
+  console.log(`✅ ${createdTitles} user titles created (${titles.length - createdTitles} zaten mevcut)`)
 
   // User Badges (claimed badges for collections/ladder)
   const welcomeBadge = badges.find(b => b.name === 'Welcome')!
@@ -5519,18 +5566,17 @@ async function main() {
       { title: 'Community AMA', description: 'Ask anything to the product leads.', eventType: 'CONTEST' as const, offsetDays: 11, durationDays: 5 },
     ]
 
+    // Batch kontrol: Tüm mevcut event'leri tek sorguda al
+    const existingEvents = await prisma.wishboxEvent.findMany({
+      where: { brandId: targetBrandForEvents.id },
+      select: { title: true },
+    }).catch(() => [])
+    const existingTitles = new Set(existingEvents.map(e => e.title))
+
     let createdTargetBrandEvents = 0
     for (const template of targetBrandEventTemplates) {
-      const exists = await prisma.wishboxEvent
-        .findFirst({
-          where: {
-            brandId: targetBrandForEvents.id,
-            title: template.title,
-          },
-        })
-        .catch(() => null)
-
-      if (exists) continue
+      // Hızlı Set kontrolü (DB sorgusu yok)
+      if (existingTitles.has(template.title)) continue
 
       const startDate = new Date(today)
       startDate.setDate(today.getDate() + template.offsetDays)
@@ -5553,6 +5599,7 @@ async function main() {
         })
         .catch(() => null)
 
+      existingTitles.add(template.title) // Set'e ekle ki tekrar kontrol etmesin
       createdTargetBrandEvents++
     }
     console.log(`✅ ${createdTargetBrandEvents} wishbox event brand ${targetBrandForEvents.name ?? TARGET_BRAND_ID_FOR_EVENTS} için oluşturuldu (hedef: 12)`)
@@ -5573,18 +5620,11 @@ async function main() {
       { title: 'Community Health', description: 'How welcoming is the community experience?', offsetDays: 11, durationDays: 8 },
     ]
 
+    // Mevcut existingTitles Set'ini kullan (zaten yukarıda oluşturuldu)
     let createdTargetBrandSurveys = 0
     for (const template of targetBrandSurveyTemplates) {
-      const exists = await prisma.wishboxEvent
-        .findFirst({
-          where: {
-            brandId: targetBrandForEvents.id,
-            title: template.title,
-          },
-        })
-        .catch(() => null)
-
-      if (exists) continue
+      // Hızlı Set kontrolü (DB sorgusu yok)
+      if (existingTitles.has(template.title)) continue
 
       const startDate = new Date(today)
       startDate.setDate(today.getDate() + template.offsetDays)
@@ -5607,6 +5647,7 @@ async function main() {
         })
         .catch(() => null)
 
+      existingTitles.add(template.title) // Set'e ekle ki tekrar kontrol etmesin
       createdTargetBrandSurveys++
     }
     console.log(`✅ ${createdTargetBrandSurveys} SURVEY event brand ${targetBrandForEvents.name ?? TARGET_BRAND_ID_FOR_EVENTS} için oluşturuldu (hedef: 12)`)
@@ -7187,6 +7228,14 @@ async function main() {
     brandName: 'FashionForward',
     userIds: [userIdToUse],
     badgeCount: 5,
+  })
+
+  // AudioMax (Electronics) brand history için 12 badge garanti et
+  await ensureBrandHistoryBadgeList({
+    brandId: '081d5660-a6d6-412a-b0ae-1557acaaa028',
+    brandName: 'AudioMax',
+    userIds: [userIdToUse],
+    badgeCount: 12,
   })
   console.log(`✅ ${bridgePostsCount} bridge post oluşturuldu`)
 
