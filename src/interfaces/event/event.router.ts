@@ -1,10 +1,128 @@
 import { Router, Request, Response } from 'express';
 import { EventService } from '../../application/event/event.service';
+import { UserService } from '../../application/user/user.service';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { authMiddleware } from '../auth/auth.middleware';
 
 const router = Router();
 const eventService = new EventService();
+const userService = new UserService();
+
+/**
+ * @openapi
+ * /events/achievements:
+ *   get:
+ *     summary: Kullanıcının tüm achievement rozetlerini getir
+ *     description: Achievement sekmesindeki badge listesini status bilgisiyle (not-started, in_progress, completed) birlikte döner. Infinity scroll destekler.
+ *     tags: [Events]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: cursor
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Son alınan badge'in id'si (infinite scroll için)
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *         description: Sayfa başına döndürülecek maksimum badge sayısı
+ *       - in: query
+ *         name: status
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [not-started, in_progress, completed]
+ *         description: İlerleme durumuna göre filtreleme
+ *     responses:
+ *       200:
+ *         description: Achievement badge listesi
+ *       401:
+ *         description: Unauthorized
+ */
+router.get(
+  '/achievements',
+  authMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined;
+    const rawLimit = Array.isArray(req.query.limit) ? req.query.limit[0] : req.query.limit;
+    const parsedLimit =
+      typeof rawLimit === 'string'
+        ? Number.parseInt(rawLimit, 10)
+        : typeof rawLimit === 'number'
+          ? rawLimit
+          : undefined;
+    const limit =
+      Number.isFinite(parsedLimit) && parsedLimit! > 0 ? Math.min(parsedLimit!, 50) : undefined;
+
+    const rawStatus = typeof req.query.status === 'string' ? req.query.status : undefined;
+    const status =
+      rawStatus === 'not-started' || rawStatus === 'in_progress' || rawStatus === 'completed'
+        ? rawStatus
+        : undefined;
+
+    const result = await userService.getAchievementBadges(String(userId), {
+      cursor,
+      limit,
+      status,
+    });
+
+    res.json(result);
+  })
+);
+
+/**
+ * @openapi
+ * /events/limited:
+ *   get:
+ *     summary: Aktif limited time event bilgisini getir
+ *     description: Kullanıcı için aktif olan limited time event'i, leaderboard ve kullanıcı skoruyla birlikte döner.
+ *     tags: [Events]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Limited time event bilgisi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/LimitedTimeEventResponse'
+ *       204:
+ *         description: Aktif limited time event yok
+ *       401:
+ *         description: Unauthorized
+ */
+router.get(
+  '/limited',
+  authMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const event = await eventService.getLimitedTimeEvent(String(userId));
+    if (!event) {
+      return res.status(204).send();
+    }
+
+    res.json(event);
+  })
+);
 
 /**
  * @openapi

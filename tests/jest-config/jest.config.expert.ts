@@ -21,24 +21,10 @@ const config: Config = {
       },
     ],
   },
-  reporters: [
-    'default',
-    [
-      'jest-html-reporters',
-      {
-        publicPath: './tests/test-results',
-        filename: 'expert-report.html',
-        openReport: false,
-        inlineSource: true,
-        expand: true,
-        pageTitle: 'Tipbox API Expert Test Results',
-      },
-    ],
-    ['<rootDir>/scripts/custom-jest-reporter.js', {}],
-  ],
+  // HTML raporlayıcılar kaldırıldı, sadece default Jest reporter kullanılıyor
+  reporters: ['default'],
   testTimeout: 30000,
 };
 
 export default config;
-
 

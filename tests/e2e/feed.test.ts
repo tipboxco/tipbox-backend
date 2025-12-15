@@ -30,7 +30,7 @@ describe('Feed API', () => {
 
   it('GET /feed/filtered should return filtered feed', async () => {
     const res = await request(BASE_URL)
-      .get('/feed/filtered?minLikes=0&limit=10')
+      .get('/feed/filtered?limit=10&sort=recent')
       .set('Authorization', `Bearer ${authToken}`);
     expect([200, 204]).toContain(res.status);
     if (res.status === 200) {

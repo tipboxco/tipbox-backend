@@ -12,7 +12,7 @@ export interface FindListingsFilter {
   nftType?: string; // NFT type filtresi
   nftRarity?: string; // NFT rarity filtresi
   limit?: number;
-  offset?: number;
+  cursor?: string;
   orderBy?: 'price_asc' | 'price_desc' | 'listedAt_desc' | 'listedAt_asc';
 }
 
@@ -118,6 +118,24 @@ export class NFTMarketListingPrismaRepository {
       orderBy.listedAt = 'desc'; // Default
     }
 
+    const cursorListing = filter.cursor
+      ? await this.prisma.nFTMarketListing.findUnique({
+          where: { id: filter.cursor },
+          select: { listedAt: true, id: true },
+        }).catch(() => null)
+      : null;
+
+    if (cursorListing) {
+      // listedAt sıralaması için cursor'u uygula (tarih eşitse id'ye göre)
+      where.OR = [
+        { listedAt: { lt: cursorListing.listedAt } },
+        {
+          listedAt: cursorListing.listedAt,
+          id: { lt: cursorListing.id },
+        },
+      ];
+    }
+
     const listings = await this.prisma.nFTMarketListing.findMany({
       where,
       include: {
@@ -133,10 +151,10 @@ export class NFTMarketListingPrismaRepository {
         },
       },
       orderBy,
-      take: filter.limit || 100,
-      skip: filter.offset || 0,
+      take: (filter.limit || 100) + 1,
     });
 
+    // Cursor için +1 alıp trimle
     return listings.map((listing) => this.toDomain(listing));
   }
 

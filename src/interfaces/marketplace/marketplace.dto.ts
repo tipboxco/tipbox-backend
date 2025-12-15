@@ -21,13 +21,13 @@ export interface ListMarketplaceNFTsQuery {
   type?: 'BADGE' | 'COSMETIC' | 'LOOTBOX';
   rarity?: 'COMMON' | 'RARE' | 'EPIC';
   limit?: number;
-  offset?: number;
+  cursor?: string;
   orderBy?: 'price_asc' | 'price_desc' | 'listedAt_desc' | 'listedAt_asc';
 }
 
 export interface ListUserNFTsQuery {
   limit?: number;
-  offset?: number;
+  cursor?: string;
 }
 
 export interface CreateListingRequest {

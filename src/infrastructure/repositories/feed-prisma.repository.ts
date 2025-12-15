@@ -44,9 +44,11 @@ export class FeedPrismaRepository {
           },
         },
       },
+      // Deterministic sıralama için tie-breaker olarak id ekle
       orderBy: [
         { post: { isBoosted: 'desc' } },
         { createdAt: 'desc' },
+        { id: 'desc' },
       ],
       take: limit + 1,
       ...(options?.cursor && {
@@ -63,6 +65,13 @@ export class FeedPrismaRepository {
       feeds: resultFeeds.map((feed) => this.toDomain(feed)),
       nextCursor,
     };
+  }
+
+  async findByPostId(userId: string, postId: string): Promise<Feed | null> {
+    const feed = await this.prisma.feed.findFirst({
+      where: { userId, postId },
+    });
+    return feed ? this.toDomain(feed) : null;
   }
 
   async findByUserIdAndSource(userId: string, source: FeedSource): Promise<Feed[]> {

@@ -88,14 +88,10 @@ npm run test:marketplace
 
 ## 📁 Test Raporları ve Dosya Yönetimi
 
-### Test Raporları Klasörü
+### Test Raporları (Deprecated)
 
-**Klasör:** `test-results/`
-
-**Önemli Notlar:**
-- `test-results/` klasörü silinebilir - testler tekrar çalıştırıldığında otomatik olarak yeniden oluşturulur
-- Testler her çalıştırıldığında eski rapor dosyaları üzerine yazılır (güncel veriler kaydedilir)
-- Her HTML raporunda test tarihi sağ üstte görüntülenir
+Bu projede daha önce Jest HTML raporlayıcıları ve `test-results/` klasörü kullanılarak görsel raporlar üretiliyordu.  
+Bu yapı artık **kullanılmıyor** ve ilgili scriptler/projeden kaldırıldı.
 
 **Rapor Dosyaları:**
 - `detailed-test-report.html` - Tüm testler (Navigation bar ile)
@@ -287,52 +283,6 @@ const config: Config = {
       },
     ],
   },
-  reporters: [
-    'default',
-    [
-      'jest-html-reporters',
-      {
-        publicPath: './test-results',
-        filename: 'notifications-report.html',
-        openReport: false,
-        inlineSource: true,
-        expand: true,
-        pageTitle: 'Tipbox API Notifications Test Results',
-      },
-    ],
-    ['<rootDir>/scripts/custom-jest-reporter.js', {}],
-  ],
-  testTimeout: 30000,
-};
-
-export default config;
-```
-
-### Adım 5: Package.json'a Script Ekle
-
-```json
-{
-  "scripts": {
-    "test:notifications": "jest --config tests/jest-config/jest.config.notifications.ts && node scripts/open-test-report.js notifications-report.html"
-  }
-}
-```
-
-### Adım 6: Test Et
-
-```bash
-# İzole test
-npm run test:notifications
-
-# Tüm testler
-npm run test:all
-```
-
-**Otomatik Açılan URL:**
-- `http://localhost:8080/notifications-report.html`
-
----
-
 ## ✅ Checklist
 
 ### Yeni Endpoint Ekleme

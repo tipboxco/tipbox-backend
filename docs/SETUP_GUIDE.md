@@ -214,7 +214,7 @@ Seed işlemi sonrası test edebileceğiniz endpoint'ler:
 
 ### Feed
 - `GET /feed` - Kullanıcı feed'i (auth token gerekli)
-- `GET /feed/filtered?types=feed,benchmark,post,question,tipsAndTricks`
+- `GET /feed/filtered?interests=<categoryId>&tags=Review&sort=recent`
 
 ### User Profile
 - `GET /users/{userId}/profile-card`

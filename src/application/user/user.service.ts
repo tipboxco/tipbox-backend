@@ -2,8 +2,6 @@ import { User } from '../../domain/user/user.entity';
 import { ContextType } from '../../domain/content/context-type.enum';
 import { UserPrismaRepository } from '../../infrastructure/repositories/user-prisma.repository';
 import { ProfilePrismaRepository } from '../../infrastructure/repositories/profile-prisma.repository';
-import { UserAvatarPrismaRepository } from '../../infrastructure/repositories/user-avatar-prisma.repository';
-import { UserFeedPreferencesPrismaRepository } from '../../infrastructure/repositories/user-feed-preferences-prisma.repository';
 import { UserSettingsPrismaRepository } from '../../infrastructure/repositories/user-settings-prisma.repository';
 import { UserDevicePrismaRepository } from '../../infrastructure/repositories/user-device-prisma.repository';
 import { UserPrivacySettingPrismaRepository } from '../../infrastructure/repositories/user-privacy-setting-prisma.repository';
@@ -15,6 +13,7 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import logger from '../../infrastructure/logger/logger';
 import { DEFAULT_PROFILE_BANNER_URL } from '../../domain/user/profile.constants';
+import { ExperienceContent } from '../../interfaces/feed/feed.dto';
 
 type CosmeticSummary = {
   id: string;
@@ -75,11 +74,6 @@ const EXPERIENCE_SECTION_TITLES = {
   USAGE: 'Product and Usage Experience',
 } as const;
 
-const EXPERIENCE_SECTION_CODES = {
-  PRICE: 0,
-  USAGE: 1,
-} as const;
-
 const BADGE_PLACEHOLDER_URL =
   process.env.DEFAULT_BADGE_IMAGE_URL ||
   'https://cdn.tipbox.co/assets/badges/default.png';
@@ -104,15 +98,13 @@ const inferTaskType = (title?: string, requirement?: string): TaskType => {
   return match?.type ?? 'Comment';
 };
 
-export const PROFILE_FEED_CARD_TYPES = ['post', 'feed', 'benchmark', 'tipsAndTricks', 'question'] as const;
+export const PROFILE_FEED_CARD_TYPES = ['post', 'feed', 'benchmark', 'tipsAndTricks', 'question', 'experience', 'update'] as const;
 export type ProfileFeedCardType = (typeof PROFILE_FEED_CARD_TYPES)[number];
 
 export class UserService {
   private readonly s3Service: S3Service;
   private readonly cacheService: CacheService;
   private readonly profileRepo: ProfilePrismaRepository;
-  private readonly avatarRepo: UserAvatarPrismaRepository;
-  private readonly feedPreferencesRepo: UserFeedPreferencesPrismaRepository;
   private readonly settingsRepo: UserSettingsPrismaRepository;
   private readonly deviceRepo: UserDevicePrismaRepository;
   private readonly privacySettingRepo: UserPrivacySettingPrismaRepository;
@@ -122,8 +114,6 @@ export class UserService {
     this.s3Service = new S3Service();
     this.cacheService = CacheService.getInstance();
     this.profileRepo = new ProfilePrismaRepository();
-    this.avatarRepo = new UserAvatarPrismaRepository();
-    this.feedPreferencesRepo = new UserFeedPreferencesPrismaRepository();
     this.settingsRepo = new UserSettingsPrismaRepository();
     this.deviceRepo = new UserDevicePrismaRepository();
     this.privacySettingRepo = new UserPrivacySettingPrismaRepository();
@@ -535,7 +525,9 @@ export class UserService {
     });
 
     if (existing) {
-      return; // Already exists, no need to update counts
+      // Even if exists, recalculate counts to ensure accuracy
+      await this.recalculateTrustCounts(userId, targetUserId);
+      return;
     }
 
     // idempotent create
@@ -545,25 +537,59 @@ export class UserService {
       create: { trusterId: userId, trustedUserId: targetUserId },
     });
 
-    // Increment truster's trustCount
-    await this.prisma.profile.updateMany({
-      where: { userId },
-      data: {
-        trustCount: {
-          increment: 1
-        }
-      } as any
-    });
+    // Recalculate trust/truster counts for both users to ensure accuracy
+    await this.recalculateTrustCounts(userId, targetUserId);
+  }
 
-    // Increment trusted user's trusterCount
-    await this.prisma.profile.updateMany({
-      where: { userId: targetUserId },
-      data: {
-        trusterCount: {
-          increment: 1
-        }
-      } as any
-    });
+  /**
+   * Recalculate trust and truster counts for users after trust operations
+   * Updates both trustCount (how many users this user trusts) and trusterCount (how many users trust this user)
+   */
+  private async recalculateTrustCounts(trusterId: string, trustedUserId: string): Promise<void> {
+    // Calculate all counts in parallel for both users
+    const [
+      trusterTrustCount,      // How many users trusterId trusts
+      trusterTrusterCount,    // How many users trust trusterId
+      trustedTrustCount,      // How many users trustedUserId trusts
+      trustedTrusterCount     // How many users trust trustedUserId
+    ] = await Promise.all([
+      // truster's trustCount: count where trusterId is the truster
+      this.prisma.trustRelation.count({
+        where: { trusterId }
+      }),
+      // truster's trusterCount: count where trusterId is the trusted user
+      this.prisma.trustRelation.count({
+        where: { trustedUserId: trusterId }
+      }),
+      // trusted user's trustCount: count where trustedUserId is the truster
+      this.prisma.trustRelation.count({
+        where: { trusterId: trustedUserId }
+      }),
+      // trusted user's trusterCount: count where trustedUserId is the trusted user
+      this.prisma.trustRelation.count({
+        where: { trustedUserId }
+      })
+    ]);
+
+    // Update both users' profiles with recalculated counts
+    await Promise.all([
+      // Update truster's profile
+      this.prisma.profile.updateMany({
+        where: { userId: trusterId },
+        data: {
+          trustCount: trusterTrustCount,
+          trusterCount: trusterTrusterCount
+        } as any
+      }),
+      // Update trusted user's profile
+      this.prisma.profile.updateMany({
+        where: { userId: trustedUserId },
+        data: {
+          trustCount: trustedTrustCount,
+          trusterCount: trustedTrusterCount
+        } as any
+      })
+    ]);
   }
 
   async listTrusters(userId: string, query?: string): Promise<Array<{
@@ -670,7 +696,15 @@ export class UserService {
     }
   }
 
-  async listAchievementBadges(userId: string, query?: string): Promise<CollectionResponse[]> {
+  async listAchievementBadges(
+    userId: string,
+    query?: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{ items: CollectionResponse[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor =
+      options?.cursor && /^[0-9a-fA-F-]{36}$/.test(options.cursor) ? options.cursor : undefined;
+
     const where: any = {
       userId,
       badge: {
@@ -683,6 +717,10 @@ export class UserService {
         } : {}),
       },
     };
+
+    if (cursor) {
+      where.badgeId = { lt: cursor };
+    }
 
     const userBadges = await this.prisma.userBadge.findMany({
       where,
@@ -704,9 +742,13 @@ export class UserService {
         },
       },
       orderBy: { claimedAt: 'desc' },
+      take: limit + 1,
     });
 
-    return userBadges.map((ub) => {
+    const hasMore = userBadges.length > limit;
+    const paginatedBadges = hasMore ? userBadges.slice(0, limit) : userBadges;
+
+    const items = paginatedBadges.map((ub) => {
       const badge = (ub as any).badge;
       const goals = (badge?.achievementGoals || []) as any[];
       const tasks: CollectionTask[] = goals.map((goal) => ({
@@ -727,42 +769,203 @@ export class UserService {
         tasks,
       } as CollectionResponse;
     });
+
+    const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].id : undefined;
+
+    return {
+      items,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
   }
 
-  async listBridgeBadges(userId: string, query?: string): Promise<CollectionResponse[]> {
-    const rewards = await this.prisma.bridgeReward.findMany({
+  /**
+   * Achievement sekmesi için badge listesi (infinite scroll + status filtresi)
+   */
+  async getAchievementBadges(
+    userId: string,
+    options?: {
+      cursor?: string;
+      limit?: number;
+      status?: 'not-started' | 'in_progress' | 'completed';
+    }
+  ): Promise<{
+    items: Array<{
+      id: string;
+      title: string;
+      image: string;
+      description: string;
+      current: number;
+      total: number;
+      status: 'not-started' | 'in_progress' | 'completed';
+    }>;
+    pagination: {
+      cursor?: string;
+      hasMore: boolean;
+      limit: number;
+    };
+  }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+
+    // Tüm ACHIEVEMENT tipindeki badgeleri kullanıcı progress'i ile birlikte çek
+    const badges = await this.prisma.badge.findMany({
       where: {
-        userId,
-        badge: query
-          ? {
-              OR: [
-                { name: { contains: query, mode: 'insensitive' } },
-                { description: { contains: query, mode: 'insensitive' } },
-              ] as any,
-            }
-          : undefined,
-      } as any,
+        type: 'ACHIEVEMENT',
+      },
+      include: {
+        achievementGoals: {
+          include: {
+            userAchievements: {
+              where: { userId },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    } as any);
+
+    const mapStatus = (current: number, total: number): 'not-started' | 'in_progress' | 'completed' => {
+      if (current <= 0) return 'not-started';
+      if (current >= total) return 'completed';
+      return 'in_progress';
+    };
+
+    const mapped = badges.map((badge: any) => {
+      const goals = badge.achievementGoals || [];
+      const total = goals.reduce(
+        (sum: number, g: any) => sum + (g.pointsRequired || 0),
+        0
+      );
+      const current = goals.reduce(
+        (sum: number, g: any) => sum + (g.userAchievements?.[0]?.progress || 0),
+        0
+      );
+
+      const status = mapStatus(current, total || 1);
+
+      return {
+        id: String(badge.id),
+        title: badge.name || '',
+        image: badge.imageUrl || BADGE_PLACEHOLDER_URL,
+        description: badge.description || '',
+        current,
+        total: total || 1,
+        status,
+      };
+    });
+
+    // Status filtresi uygula
+    const filtered = options?.status
+      ? mapped.filter((b) => b.status === options.status)
+      : mapped;
+
+    // Basit cursor: badge id'sine göre
+    let startIndex = 0;
+    if (options?.cursor) {
+      const idx = filtered.findIndex((b) => b.id === options.cursor);
+      if (idx >= 0) {
+        startIndex = idx + 1;
+      }
+    }
+
+    const sliced = filtered.slice(startIndex, startIndex + limit + 1);
+    const hasMore = sliced.length > limit;
+    const items = hasMore ? sliced.slice(0, limit) : sliced;
+    const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].id : undefined;
+
+    return {
+      items,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
+  }
+
+  async listBridgeBadges(
+    userId: string,
+    query?: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{ items: CollectionResponse[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
+
+    const whereClause: any = {
+      userId,
+      badge: query
+        ? {
+            OR: [
+              { name: { contains: query, mode: 'insensitive' } },
+              { description: { contains: query, mode: 'insensitive' } },
+            ] as any,
+          }
+        : undefined,
+    };
+
+    if (cursor) {
+      whereClause.badgeId = { lt: cursor };
+    }
+
+    const rewards = await this.prisma.bridgeReward.findMany({
+      where: whereClause,
       include: {
         badge: {
           include: {
             _count: { select: { bridgeRewards: true } },
+            achievementGoals: {
+              include: {
+                chain: true,
+                userAchievements: {
+                  where: { userId },
+                },
+              },
+            },
           },
         },
       },
       orderBy: { awardedAt: 'desc' },
+      take: limit + 1,
     } as any);
 
-    return rewards.map((rw: any) => ({
-      id: String(rw.badge?.id || ''),
-      title: rw.badge?.name || '',
-      rarity: COLLECTION_RARITY_MAP[rw.badge?.rarity || 'COMMON'] || 'Usual',
-      image: rw.badge?.imageUrl ?? BADGE_PLACEHOLDER_URL,
-      isClaimed: true,
-      nftAddress: rw.nftAddress ?? null,
-      earnedDate: rw.awardedAt ? rw.awardedAt.toISOString() : null,
-      totalEarned: rw.badge?._count?.bridgeRewards ?? 0,
-      tasks: [],
-    }));
+    const hasMore = rewards.length > limit;
+    const paginatedRewards = hasMore ? rewards.slice(0, limit) : rewards;
+
+    const items = paginatedRewards.map((rw: any) => {
+      const badge = rw.badge;
+      const goals = (badge?.achievementGoals || []) as any[];
+      const tasks: CollectionTask[] = goals.map((goal) => ({
+        id: String(goal.id),
+        title: goal.title,
+        type: inferTaskType(goal.title, goal.requirement),
+      }));
+
+      return {
+        id: String(badge?.id || ''),
+        title: badge?.name || '',
+        rarity: COLLECTION_RARITY_MAP[badge?.rarity || 'COMMON'] || 'Usual',
+        image: badge?.imageUrl ?? BADGE_PLACEHOLDER_URL,
+        isClaimed: true,
+        nftAddress: rw.nftAddress ?? null,
+        earnedDate: rw.awardedAt ? rw.awardedAt.toISOString() : null,
+        totalEarned: badge?._count?.bridgeRewards ?? 0,
+        tasks,
+      };
+    });
+
+    const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].id : undefined;
+
+    return {
+      items,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
   }
 
   async claimAchievementBadge(userId: string, badgeId: string): Promise<{ success: boolean }> {
@@ -1006,9 +1209,145 @@ export class UserService {
     return results;
   }
 
-  async getUserReviews(userId: string): Promise<any[]> {
+  async getUserUpdates(
+    userId: string,
+    options?: { limit?: number }
+  ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 100;
+
+    const posts = await this.prisma.contentPost.findMany({
+      where: { userId, type: 'UPDATE' } as any,
+      include: {
+        product: {
+          include: {
+            group: {
+              include: {
+                subCategory: {
+                  include: {
+                    mainCategory: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        productGroup: {
+          include: {
+            subCategory: {
+              include: {
+                mainCategory: true,
+              },
+            },
+          },
+        },
+        subCategory: {
+          include: {
+            mainCategory: true,
+          },
+        },
+        mainCategory: true,
+        likes: true,
+        comments: true,
+        favorites: true,
+      } as any,
+      orderBy: { createdAt: 'desc' },
+      take: limit + 1,
+    });
+
+    const userBase = await this.getUserBase(userId);
+
+    // Batch fetch images from InventoryMedia for posts with products
+    const postProductIds = posts.map((p) => p.productId).filter(Boolean) as string[];
+    const inventoryMediaMap = new Map<string, string[]>();
+    const ownedProductIds = new Set<string>();
+
+    if (postProductIds.length > 0) {
+      const inventoriesWithMedia = await this.prisma.inventory.findMany({
+        where: {
+          userId,
+          productId: { in: postProductIds },
+        },
+        include: {
+          media: {
+            where: { type: 'IMAGE' },
+            orderBy: { createdAt: 'asc' },
+          },
+        },
+      });
+
+      for (const inventory of inventoriesWithMedia) {
+        ownedProductIds.add(String(inventory.productId));
+        const imageUrls = inventory.media.map((m) => m.mediaUrl);
+        if (imageUrls.length > 0) {
+          inventoryMediaMap.set(inventory.productId, imageUrls);
+        }
+      }
+    }
+
+    const results = await Promise.all(
+      posts.map(async (post) => {
+        const stats = await this.getPostStats(post.id);
+        const contextType = this.mapContextType(post);
+        const contextData = this.buildContextDataFromPost(post, ownedProductIds);
+        const images = post.productId ? (inventoryMediaMap.get(post.productId) || []) : [];
+        const productBase = contextData
+          ? {
+              id: contextData.id,
+              name: contextData.name,
+              subName: contextData.subName || '',
+              image: contextData.image,
+              isOwned: contextData.isOwned,
+            }
+          : null;
+
+        const relatedPost = {
+          id: String(post.id),
+          product: productBase,
+          content: this.buildUpdateContentFromBody(post.body),
+          tags: await this.collectProductTags(String(post.productId || '')),
+          images,
+        };
+
+        return {
+          id: String(post.id),
+          type: 'update' as const,
+          user: userBase,
+          stats,
+          createdAt: post.createdAt.toISOString(),
+          contextType,
+          contextData,
+          relatedPost,
+          content: post.body,
+          images,
+        };
+      })
+    );
+
+    const hasMore = results.length > limit;
+    const paginatedResults = hasMore ? results.slice(0, limit) : results;
+    const nextCursor = hasMore && paginatedResults.length > 0 ? paginatedResults[paginatedResults.length - 1].id : undefined;
+
+    return {
+      items: paginatedResults,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
+  }
+
+  async getUserReviews(
+    userId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor =
+      options?.cursor && /^[0-9a-fA-F-]{36}$/.test(options.cursor) ? options.cursor : undefined;
+
+    // Cursor dış ID = inventory.id (en son dönen item)
     const inventories = await this.prisma.inventory.findMany({
-      where: { userId } as any,
+      where: { userId },
       include: {
         product: {
           include: {
@@ -1026,7 +1365,12 @@ export class UserService {
         productExperiences: true,
         media: true,
       } as any,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      ...(cursor && {
+        cursor: { id: cursor },
+        skip: 1,
+      }),
     });
 
     const userBase = await this.getUserBase(userId);
@@ -1049,7 +1393,7 @@ export class UserService {
 
       const contextData = this.buildContextDataFromInventory(inv as any);
 
-        results.push({
+      results.push({
         id: String(inv.id),
         type: 'experience' as const,
           user: userBase,
@@ -1060,19 +1404,30 @@ export class UserService {
         content: experiences,
         tags,
         images,
-        });
-      }
+      });
+    }
 
-    return results;
+    const hasMore = results.length > limit;
+    const paginatedResults = hasMore ? results.slice(0, limit) : results;
+    const nextCursor = hasMore && paginatedResults.length > 0 ? paginatedResults[paginatedResults.length - 1].id : undefined;
+
+    return {
+      items: paginatedResults,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
   }
 
   private buildExperienceSections(
     experiences: Array<{ title: string; experienceText: string }>,
     summary?: string | null,
-  ): Array<{ type: number; title: string; content: string; rating: number }> {
+  ): ExperienceContent[] {
     const sections: {
-      price: { type: number; title: string; content: string; rating: number } | null;
-      usage: { type: number; title: string; content: string; rating: number } | null;
+      price: ExperienceContent | null;
+      usage: ExperienceContent | null;
     } = {
       price: null,
       usage: null,
@@ -1082,7 +1437,6 @@ export class UserService {
       const normalizedTitle = (exp.title || '').toLowerCase();
       if (!sections.price && normalizedTitle.includes('price')) {
         sections.price = {
-          type: EXPERIENCE_SECTION_CODES.PRICE,
           title: EXPERIENCE_SECTION_TITLES.PRICE,
           content: exp.experienceText,
           rating: this.calculateExperienceRating(exp.experienceText + '-price'),
@@ -1095,7 +1449,6 @@ export class UserService {
         (normalizedTitle.includes('product') || normalizedTitle.includes('usage'))
       ) {
         sections.usage = {
-          type: EXPERIENCE_SECTION_CODES.USAGE,
           title: EXPERIENCE_SECTION_TITLES.USAGE,
           content: exp.experienceText,
           rating: this.calculateExperienceRating(exp.experienceText + '-usage'),
@@ -1108,7 +1461,6 @@ export class UserService {
 
     if (!sections.price) {
       sections.price = {
-        type: EXPERIENCE_SECTION_CODES.PRICE,
         title: EXPERIENCE_SECTION_TITLES.PRICE,
         content: fallbackText,
         rating: this.calculateExperienceRating(fallbackText + '-price'),
@@ -1116,20 +1468,44 @@ export class UserService {
     }
 
     if (!sections.usage) {
+      const usageText = experiences[1]?.experienceText || fallbackText;
       sections.usage = {
-        type: EXPERIENCE_SECTION_CODES.USAGE,
         title: EXPERIENCE_SECTION_TITLES.USAGE,
-        content: experiences[1]?.experienceText || fallbackText,
-        rating: this.calculateExperienceRating((experiences[1]?.experienceText || fallbackText) + '-usage'),
+        content: usageText,
+        rating: this.calculateExperienceRating(usageText + '-usage'),
       };
     }
 
-    return [sections.price, sections.usage];
+    return [sections.price, sections.usage].filter(
+      (section): section is ExperienceContent => section !== null,
+    );
   }
 
-  async getUserBenchmarks(userId: string): Promise<any[]> {
+  private buildUpdateContentFromBody(body: string | null | undefined): ExperienceContent[] {
+    const contentText = body || '';
+    return [
+      {
+        title: EXPERIENCE_SECTION_TITLES.USAGE,
+        content: contentText,
+        rating: 0,
+      },
+    ];
+  }
+
+  async getUserBenchmarks(
+    userId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
+
+    const whereClause: any = { userId, type: 'COMPARE' };
+    if (cursor) {
+      whereClause.id = { lt: cursor };
+    }
+
     const posts = await this.prisma.contentPost.findMany({
-      where: { userId, type: 'COMPARE' } as any,
+      where: whereClause,
       include: {
         comparison: {
           include: {
@@ -1139,7 +1515,12 @@ export class UserService {
           },
         },
       } as any,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      ...(cursor && {
+        cursor: { id: cursor },
+        skip: 1,
+      }),
     });
 
     const userBase = await this.getUserBase(userId);
@@ -1149,41 +1530,53 @@ export class UserService {
     });
     const ownedSet = new Set(inventories.map((i) => String(i.productId)));
 
+    const filteredPosts = posts.filter((p) => (p as any).comparison);
+    const hasMore = filteredPosts.length > limit;
+    const paginatedPosts = hasMore ? filteredPosts.slice(0, limit) : filteredPosts;
+
     const results = await Promise.all(
-      posts
-        .filter((p) => (p as any).comparison)
-        .map(async (post) => {
-          const comp = (post as any).comparison!;
-          const stats = await this.getPostStats(String(post.id));
-          const choiceProductId = this.selectComparisonWinner(comp);
-          return {
-            id: String(post.id),
-            type: 'benchmark' as const,
-            user: userBase,
-            stats,
-            createdAt: post.createdAt.toISOString(),
-            contextType: this.mapContextType(post),
-            products: [
-              {
-                ...(await this.getProductBase(String(comp.product1Id)))!,
-                isOwned: ownedSet.has(String(comp.product1Id)),
-                choice: choiceProductId
-                  ? choiceProductId === String(comp.product1Id)
-                  : true,
-              },
-              {
-                ...(await this.getProductBase(String(comp.product2Id)))!,
-                isOwned: ownedSet.has(String(comp.product2Id)),
-                choice: choiceProductId
-                  ? choiceProductId === String(comp.product2Id)
-                  : false,
-              },
-            ],
-            content: post.body,
-          };
-        })
+      paginatedPosts.map(async (post) => {
+        const comp = (post as any).comparison!;
+        const stats = await this.getPostStats(String(post.id));
+        const choiceProductId = this.selectComparisonWinner(comp);
+        return {
+          id: String(post.id),
+          type: 'benchmark' as const,
+          user: userBase,
+          stats,
+          createdAt: post.createdAt.toISOString(),
+          contextType: this.mapContextType(post),
+          products: [
+            {
+              ...(await this.getProductBase(String(comp.product1Id)))!,
+              isOwned: ownedSet.has(String(comp.product1Id)),
+              choice: choiceProductId
+                ? choiceProductId === String(comp.product1Id)
+                : true,
+            },
+            {
+              ...(await this.getProductBase(String(comp.product2Id)))!,
+              isOwned: ownedSet.has(String(comp.product2Id)),
+              choice: choiceProductId
+                ? choiceProductId === String(comp.product2Id)
+                : false,
+            },
+          ],
+          content: post.body,
+        };
+      })
     );
-    return results;
+
+    const nextCursor = hasMore && results.length > 0 ? results[results.length - 1].id : undefined;
+
+    return {
+      items: results,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
   }
 
   private selectComparisonWinner(
@@ -1214,9 +1607,20 @@ export class UserService {
       : String(comparison.product2Id);
   }
 
-  async getUserTips(userId: string): Promise<any[]> {
+  async getUserTips(
+    userId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
+
+    const whereClause: any = { userId, type: 'TIPS' };
+    if (cursor) {
+      whereClause.id = { lt: cursor };
+    }
+
     const posts = await this.prisma.contentPost.findMany({
-      where: { userId, type: 'TIPS' } as any,
+      where: whereClause,
       include: {
         tip: true,
         product: {
@@ -1249,6 +1653,7 @@ export class UserService {
         mainCategory: true,
       } as any,
       orderBy: { createdAt: 'desc' },
+      take: limit + 1,
     });
 
     const userBase = await this.getUserBase(userId);
@@ -1278,17 +1683,35 @@ export class UserService {
         };
       })
     );
-    return results;
+
+    const hasMore = results.length > limit;
+    const paginatedResults = hasMore ? results.slice(0, limit) : results;
+    const nextCursor = hasMore && paginatedResults.length > 0 ? paginatedResults[paginatedResults.length - 1].id : undefined;
+
+    return {
+      items: paginatedResults,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
   }
 
-  async getUserReplies(userId: string): Promise<any[]> {
+  async getUserReplies(
+    userId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor || undefined;
+
     const comments = await this.prisma.contentComment.findMany({
       where: {
         userId,
         post: {
           type: 'QUESTION',
         },
-      } as any,
+      },
       include: {
         post: {
           include: {
@@ -1323,7 +1746,12 @@ export class UserService {
           },
         },
       } as any,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      ...(cursor && {
+        cursor: { id: cursor },
+        skip: 1,
+      }),
     });
 
     const userBase = await this.getUserBase(userId);
@@ -1353,13 +1781,32 @@ export class UserService {
         };
       })
     );
-    return results;
+
+    const hasMore = results.length > limit;
+    const paginatedResults = hasMore ? results.slice(0, limit) : results;
+    const nextCursor = hasMore && paginatedResults.length > 0 ? paginatedResults[paginatedResults.length - 1].id : undefined;
+
+    return {
+      items: paginatedResults,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
   }
 
-  async getUserLadderBadges(userId: string): Promise<any[]> {
+  async getUserLadderBadges(
+    userId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor =
+      options?.cursor && /^[0-9a-fA-F-]{36}$/.test(options.cursor) ? options.cursor : undefined;
+
     const [userBadges, totalUsers] = await Promise.all([
       this.prisma.userBadge.findMany({
-        where: { userId } as any,
+        where: { userId },
         include: {
           badge: {
             include: {
@@ -1377,7 +1824,13 @@ export class UserService {
           { claimed: 'desc' },
           { displayOrder: 'asc' },
           { claimedAt: 'asc' },
+          { id: 'asc' },
         ],
+        take: limit + 1,
+        ...(cursor && {
+          cursor: { id: cursor },
+          skip: 1,
+        }),
       }),
       this.prisma.user.count(),
     ]);
@@ -1405,7 +1858,10 @@ export class UserService {
       EPIC: 'Rare',
     };
 
-    return userBadges.map((ub) => {
+    const hasMore = userBadges.length > limit;
+    const paginatedBadges = hasMore ? userBadges.slice(0, limit) : userBadges;
+
+    const items = paginatedBadges.map((ub) => {
       const badge = ub.badge as any;
       const tasks = this.buildBadgeTasks(badge);
       const currentProgress = tasks.reduce(
@@ -1434,12 +1890,42 @@ export class UserService {
         tasks,
       };
     });
+
+    const nextCursor =
+      hasMore && paginatedBadges.length > 0 ? String(paginatedBadges[paginatedBadges.length - 1].id) : undefined;
+
+    return {
+      items,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
   }
 
-  async getUserBookmarks(userId: string): Promise<any[]> {
+  async getUserBookmarks(
+    userId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    // Cursor olarak öncelik: UUID favorite.id, değilse postId ile favorite id'yi çözmeye çalış
+    let favoriteCursorId: string | undefined;
+    if (options?.cursor) {
+      if (/^[0-9a-fA-F-]{36}$/.test(options.cursor)) {
+        favoriteCursorId = options.cursor;
+      } else {
+        const fav = await this.prisma.contentFavorite.findFirst({
+          where: { userId, postId: options.cursor },
+          select: { id: true },
+        });
+        favoriteCursorId = fav?.id;
+      }
+    }
+
     // Bookmarks = Kullanıcının favorite ettiği post'lar (tüm tiplerde)
     const favorites = await this.prisma.contentFavorite.findMany({
-      where: { userId } as any,
+      where: { userId },
       include: {
         post: {
           include: {
@@ -1477,7 +1963,12 @@ export class UserService {
           },
         },
       } as any,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      ...(favoriteCursorId && {
+        cursor: { id: favoriteCursorId },
+        skip: 1,
+      }),
     });
 
     // Post'lardaki unique userId'leri topla
@@ -1497,7 +1988,7 @@ export class UserService {
             id: uid,
             name: profile?.displayName || 'Anonymous',
             title: title?.title || '',
-            avatarUrl: avatar?.imageUrl ?? '',
+            avatar: avatar?.imageUrl ?? '',
           },
         };
       })
@@ -1512,9 +2003,12 @@ export class UserService {
     });
     const ownedSet = new Set(inventories.map((i) => String(i.productId)));
 
+    const hasMoreFavorites = favorites.length > limit;
+    const paginatedFavorites = hasMoreFavorites ? favorites.slice(0, limit) : favorites;
+
     const results: any[] = [];
 
-    for (const fav of favorites) {
+    for (const fav of paginatedFavorites) {
       const post = (fav as any).post;
       if (!post) continue;
 
@@ -1523,7 +2017,7 @@ export class UserService {
         id: postUserId,
         name: 'Anonymous',
         title: '',
-        avatarUrl: '',
+        avatar: '',
       };
 
       const stats = await this.getPostStats(String(post.id));
@@ -1615,10 +2109,10 @@ export class UserService {
         }
 
         default: {
-          // Unknown type -> "feed" olarak döndür
+          // Unknown type -> "post" olarak döndür
           results.push({
             id: String(post.id),
-            type: 'feed' as const,
+            type: 'post' as const,
             user: userBase,
             stats,
             createdAt: post.createdAt.toISOString(),
@@ -1629,9 +2123,24 @@ export class UserService {
           });
         }
       }
-    }
+      }
 
-    return results;
+    const hasMoreResults = favorites.length > limit;
+    const paginatedResults = hasMoreResults ? results.slice(0, limit) : results;
+    // Dış cursor olarak postId döndür (favorite.id yerine)
+    const nextCursor =
+      hasMoreFavorites && paginatedFavorites.length > 0
+        ? String(paginatedFavorites[paginatedFavorites.length - 1].postId)
+        : undefined;
+
+    return {
+      items: paginatedResults,
+      pagination: {
+        cursor: nextCursor,
+        hasMore: hasMoreResults,
+        limit,
+      },
+    };
   }
 
   private buildBadgeTasks(
@@ -1739,24 +2248,33 @@ export class UserService {
     userId: string,
     options?: {
       limit?: number;
+      cursor?: string;
       types?: ProfileFeedCardType[];
     }
-  ): Promise<any[]> {
-    const limit = options?.limit && options.limit > 0 ? options.limit : undefined;
+  ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 20;
+    const cursor = options?.cursor;
     const requestedTypes = options?.types?.length
       ? Array.from(new Set(options.types))
       : PROFILE_FEED_CARD_TYPES;
 
+    // Her kaynak için limit+1 çekiyoruz ki hasMore hesaplanabilsin
+    const perSourceLimit = limit + 1;
+
     const fetchers = requestedTypes.map((cardType) => {
       switch (cardType) {
         case 'feed':
-          return this.getUserReviews(userId);
+          return this.getUserReviews(userId, { limit: perSourceLimit });
         case 'benchmark':
-          return this.getUserBenchmarks(userId);
+          return this.getUserBenchmarks(userId, { limit: perSourceLimit });
         case 'tipsAndTricks':
-          return this.getUserTips(userId);
+          return this.getUserTips(userId, { limit: perSourceLimit });
         case 'question':
-          return this.getUserReplies(userId);
+          return this.getUserReplies(userId, { limit: perSourceLimit });
+        case 'experience':
+          return this.getUserReviews(userId, { limit: perSourceLimit });
+        case 'update':
+          return this.getUserUpdates(userId, { limit: perSourceLimit });
         case 'post':
         default:
           return this.getUserPosts(userId);
@@ -1764,18 +2282,44 @@ export class UserService {
     });
 
     const chunks = await Promise.all(fetchers);
-    const merged = chunks.flat();
+    const merged = chunks.flatMap((chunk: any) => chunk?.items || chunk || []);
+
     const resolveTimestamp = (item: any): number => {
       const value = item?.createdAt;
       return value ? new Date(value).getTime() : 0;
     };
-    merged.sort((a, b) => resolveTimestamp(b) - resolveTimestamp(a));
 
-    if (limit) {
-      return merged.slice(0, limit);
+    const sortKey = (item: any) => ({
+      time: resolveTimestamp(item),
+      id: String(item?.id ?? ''),
+    });
+
+    merged.sort((a, b) => {
+      const ka = sortKey(a);
+      const kb = sortKey(b);
+      if (ka.time !== kb.time) return kb.time - ka.time; // desc
+      return kb.id.localeCompare(ka.id); // tie-break desc
+    });
+
+    let startIndex = 0;
+    if (cursor) {
+      const idx = merged.findIndex((item) => String(item?.id) === cursor);
+      startIndex = idx >= 0 ? idx + 1 : 0;
     }
 
-    return merged;
+    const slice = merged.slice(startIndex, startIndex + limit + 1);
+    const hasMore = slice.length > limit;
+    const paginated = hasMore ? slice.slice(0, limit) : slice;
+    const nextCursor = hasMore && paginated.length > 0 ? String(paginated[paginated.length - 1].id) : undefined;
+
+    return {
+      items: paginated,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
   }
 
   /**
@@ -1831,24 +2375,24 @@ export class UserService {
       promises.push(this.getUserProfileCard(userId));
     }
 
-    const tabPromises: Promise<any[]>[] = [];
+    const tabPromises: Promise<any[] | { items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }>[] = [];
     if (includeTabs.includes('feed')) {
       tabPromises.push(this.getUserProfileFeed(userId, { limit }));
     }
     if (includeTabs.includes('reviews')) {
-      tabPromises.push(this.getUserReviews(userId));
+      tabPromises.push(this.getUserReviews(userId, { limit }));
     }
     if (includeTabs.includes('benchmarks')) {
-      tabPromises.push(this.getUserBenchmarks(userId));
+      tabPromises.push(this.getUserBenchmarks(userId, { limit }));
     }
     if (includeTabs.includes('tips')) {
-      tabPromises.push(this.getUserTips(userId));
+      tabPromises.push(this.getUserTips(userId, { limit }));
     }
     if (includeTabs.includes('replies')) {
-      tabPromises.push(this.getUserReplies(userId));
+      tabPromises.push(this.getUserReplies(userId, { limit }));
     }
     if (includeTabs.includes('ladder')) {
-      tabPromises.push(this.getUserLadderBadges(userId));
+      tabPromises.push(this.getUserLadderBadges(userId, { limit }));
     }
 
     promises.push(...tabPromises);
@@ -1860,22 +2404,22 @@ export class UserService {
       profileCard: includeProfileCard ? results[0] : null,
       tabs: {
         feed: includeTabs.includes('feed')
-          ? (results[tabIndex++] || []).slice(0, limit)
+          ? ((results[tabIndex]?.items || results[tabIndex] || []) as any[]).slice(0, limit)
           : undefined,
         reviews: includeTabs.includes('reviews')
-          ? (results[tabIndex++] || []).slice(0, limit)
+          ? ((results[tabIndex++]?.items || results[tabIndex - 1] || []) as any[]).slice(0, limit)
           : undefined,
         benchmarks: includeTabs.includes('benchmarks')
-          ? (results[tabIndex++] || []).slice(0, limit)
+          ? ((results[tabIndex++]?.items || results[tabIndex - 1] || []) as any[]).slice(0, limit)
           : undefined,
         tips: includeTabs.includes('tips')
-          ? (results[tabIndex++] || []).slice(0, limit)
+          ? ((results[tabIndex++]?.items || results[tabIndex - 1] || []) as any[]).slice(0, limit)
           : undefined,
         replies: includeTabs.includes('replies')
-          ? (results[tabIndex++] || []).slice(0, limit)
+          ? ((results[tabIndex++]?.items || results[tabIndex - 1] || []) as any[]).slice(0, limit)
           : undefined,
         ladder: includeTabs.includes('ladder')
-          ? (results[tabIndex++] || []).slice(0, limit)
+          ? ((results[tabIndex++]?.items || results[tabIndex - 1] || []) as any[]).slice(0, limit)
           : undefined,
       },
       meta: {
@@ -1932,7 +2476,7 @@ export class UserService {
     data: {
       fullName: string;
       userName: string;
-      avatarUrl?: string;
+      avatar?: string;
       bannerUrl?: string;
       selectedCategories?: Array<{
         categoryId: string;
@@ -1983,7 +2527,7 @@ export class UserService {
       }
 
       // Avatar varsa kaydet
-      if (data.avatarUrl) {
+      if (data.avatar) {
         // Önceki aktif avatar'ı pasif yap
         await tx.userAvatar.updateMany({
           where: { userId, isActive: true },
@@ -1994,7 +2538,7 @@ export class UserService {
         await tx.userAvatar.create({
           data: {
             userId,
-            imageUrl: data.avatarUrl,
+            imageUrl: data.avatar,
             isActive: true,
           },
         });

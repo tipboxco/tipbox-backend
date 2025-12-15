@@ -38,7 +38,7 @@ export interface BaseStats {
 
 export interface BasePost {
   id: string;
-  type: FeedItemType;
+  type?: FeedItemType; // Optional - type is only at FeedItem root level, not in data object
   user: BaseUser;
   stats: BaseStats;
   createdAt: string;
@@ -68,21 +68,40 @@ export interface BenchmarkProduct extends BaseProduct {
 
 export interface BenchmarkPost extends BasePost {
   contextData: ContextData;
-  products: BenchmarkProduct[];
   content: string;
 }
 
 // Review / Experience Post Item Types
+export type ContentType = 'Price and Shopping Experience' | 'Product and Usage Experience';
+
 export interface ExperienceContent {
-  title: string;
+  title: ContentType;
   content: string;
   rating: number;
 }
 
+export interface ReviewProduct extends BaseProduct {
+  // future: aggregate review stats can be added here
+}
+
 export interface ExperiencePost extends BasePost {
-  contextData: ContextData;
   content: ExperienceContent[];
   tags: string[];
+  images?: any[];
+}
+
+// Update Post Item Types
+export interface RelatedPostData {
+  id: string;
+  product: BaseProduct | null;
+  content: ExperienceContent[];
+  tags: string[];
+  images: string[];
+}
+
+export interface UpdatePost extends BasePost {
+  relatedPost: RelatedPostData;
+  content: string;
   images?: any[];
 }
 
@@ -102,11 +121,12 @@ export interface RepliesPost extends BasePost {
 
 // Feed Item Union Type
 export type FeedItem =
-  | { type: FeedItemType.FEED; data: Post }
   | { type: FeedItemType.BENCHMARK; data: BenchmarkPost }
   | { type: FeedItemType.POST; data: Post }
   | { type: FeedItemType.QUESTION; data: Post }
-  | { type: FeedItemType.TIPS_AND_TRICKS; data: TipsAndTricksPost };
+  | { type: FeedItemType.TIPS_AND_TRICKS; data: TipsAndTricksPost }
+  | { type: FeedItemType.EXPERIENCE; data: ExperiencePost }
+  | { type: FeedItemType.UPDATE; data: UpdatePost };
 
 // Feed Response
 export interface FeedResponse {
@@ -120,15 +140,50 @@ export interface FeedResponse {
 
 // Feed Filter Options
 export interface FeedFilterOptions {
-  types?: FeedItemType[];
-  categoryIds?: string[];
+  /**
+   * User interests (e.g. category or topic IDs)
+   */
+  interests?: string[];
+  /**
+   * Tags to filter posts by
+   */
+  tags?: string[];
+  /**
+   * Single primary category filter
+   */
+  category?: string;
+  /**
+   * Sort strategy for filtered feed
+   * - recent: newest first
+   * - top: based on engagement (likes/views)
+   */
+  sort?: 'recent' | 'top';
+  /**
+   * Filter by product IDs
+   */
   productIds?: string[];
+  /**
+   * Filter by user IDs
+   */
   userIds?: string[];
-  minLikes?: number;
-  minComments?: number;
+  /**
+   * Filter by date range
+   */
   dateRange?: {
     from?: string;
     to?: string;
   };
+  /**
+   * Minimum number of likes required
+   */
+  minLikes?: number;
+  /**
+   * Minimum number of comments required
+   */
+  minComments?: number;
+  /**
+   * Filter by feed item types
+   */
+  types?: FeedItemType[];
 }
 

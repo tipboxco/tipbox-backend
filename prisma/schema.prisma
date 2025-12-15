@@ -840,6 +840,7 @@ model Brand {
   rewards      BridgeReward[]
   userStats    BridgeUserStats[]
   brandCategory BrandCategory?     @relation(fields: [categoryId], references: [id])
+  wishboxEvents WishboxEvent[]
 
   @@map("brands")
 }
@@ -1108,13 +1109,16 @@ model WishboxEvent {
   endDate     DateTime           @map("end_date")
   status      WishboxEventStatus @default(DRAFT)
   eventType   WishboxEventType   @default(SURVEY) @map("event_type")
+  brandId     String?            @map("brand_id") @db.Uuid
   createdAt   DateTime           @default(now()) @map("created_at")
   updatedAt   DateTime           @updatedAt @map("updated_at")
   rewards     WishboxReward[]
   scenarios   WishboxScenario[]
   stats       WishboxStats[]
+  brand       Brand?             @relation(fields: [brandId], references: [id], onDelete: Cascade)
 
   @@map("wishbox_events")
+  @@index([brandId])
 }
 
 model WishboxScenario {

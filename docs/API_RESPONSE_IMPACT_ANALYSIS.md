@@ -173,7 +173,7 @@ export interface FeedResponse {
 ### Test Edilmesi Gerekenler
 1. ✅ `GET /users/:id/profile-card` → `stats` değerleri doğru mu?
 2. ✅ `GET /feed` → `stats` değerleri doğru mu?
-3. ✅ `GET /feed/filtered?minLikes=5` → Filtreleme çalışıyor mu?
+3. ✅ `GET /feed/filtered?interests=<categoryId>&tags=Review&sort=top` → Filtreleme çalışıyor mu?
 4. ✅ `GET /users/:id/posts` → `stats` değerleri doğru mu?
 5. ✅ `GET /explore/hottest` → `stats` değerleri doğru mu?
 

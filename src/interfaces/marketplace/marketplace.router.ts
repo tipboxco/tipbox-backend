@@ -54,11 +54,10 @@ const marketplaceService = new MarketplaceService();
  *           default: 50
  *         description: Sayfalama limiti
  *       - in: query
- *         name: offset
+ *         name: cursor
  *         schema:
- *           type: number
- *           default: 0
- *         description: Sayfalama offset'i
+ *           type: string
+ *         description: Son alınan item'ın ID'si (cursor)
  *       - in: query
  *         name: orderBy
  *         schema:
@@ -99,7 +98,7 @@ router.get('/listings', asyncHandler(async (req: Request, res: Response) => {
     type: req.query.type as 'BADGE' | 'COSMETIC' | 'LOOTBOX' | undefined,
     rarity: req.query.rarity as 'COMMON' | 'RARE' | 'EPIC' | undefined,
     limit: req.query.limit ? Number(req.query.limit) : undefined,
-    offset: req.query.offset ? Number(req.query.offset) : undefined,
+    cursor: typeof req.query.cursor === 'string' ? req.query.cursor : undefined,
     orderBy: req.query.orderBy as 'price_asc' | 'price_desc' | 'listedAt_desc' | 'listedAt_asc' | undefined,
   };
 
@@ -124,11 +123,10 @@ router.get('/listings', asyncHandler(async (req: Request, res: Response) => {
  *           default: 50
  *         description: Sayfalama limiti
  *       - in: query
- *         name: offset
+ *         name: cursor
  *         schema:
- *           type: number
- *           default: 0
- *         description: Sayfalama offset'i
+ *           type: string
+ *         description: Son alınan item'ın ID'si (cursor)
  *     responses:
  *       200:
  *         description: Başarılı - Kullanıcının NFT listesi
@@ -180,7 +178,7 @@ router.get('/my-nfts', authMiddleware, asyncHandler(async (req: Request, res: Re
 
   const query = {
     limit: req.query.limit ? Number(req.query.limit) : undefined,
-    offset: req.query.offset ? Number(req.query.offset) : undefined,
+    cursor: typeof req.query.cursor === 'string' ? req.query.cursor : undefined,
   };
 
   const nfts = await marketplaceService.listUserNFTs(userId, query);

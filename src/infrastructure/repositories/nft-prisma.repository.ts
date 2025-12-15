@@ -11,8 +11,10 @@ export interface FindNFTsFilter {
   minPrice?: number;
   maxPrice?: number;
   limit?: number;
-  offset?: number;
+  cursor?: string;
 }
+
+const isUuid = (value?: string) => !!value && /^[0-9a-fA-F-]{36}$/.test(value)
 
 export class NFTPrismaRepository {
   private prisma = getPrisma();
@@ -24,20 +26,34 @@ export class NFTPrismaRepository {
     return nft ? this.toDomain(nft) : null;
   }
 
-  async findByOwnerId(ownerId: string, limit?: number, offset?: number): Promise<NFT[]> {
+  async findByOwnerId(ownerId: string, limit?: number, cursor?: string): Promise<NFT[]> {
     // Prisma client type'ları henüz currentOwnerId'yi tanımıyor, raw query ile çözüyoruz
-    let query = `SELECT * FROM nfts WHERE current_owner_id = $1::uuid ORDER BY created_at DESC`;
     const params: any[] = [ownerId];
-    
-    if (limit !== undefined) {
-      query += ` LIMIT $2`;
-      params.push(limit);
-      if (offset !== undefined) {
-        query += ` OFFSET $3`;
-        params.push(offset);
-      }
+    let paramIndex = params.length + 1;
+
+    let cursorFilter = '';
+    if (cursor && isUuid(cursor)) {
+      cursorFilter = `
+        AND (created_at, id) < (
+          SELECT created_at, id FROM nfts WHERE id = $${paramIndex}::uuid
+        )
+      `;
+      params.push(cursor);
+      paramIndex++;
     }
-    
+
+    const takeLimit = (limit ?? 100) + 1; // +1 hasMore için
+    const limitParam = `$${paramIndex}`;
+    params.push(takeLimit);
+
+    const query = `
+      SELECT * FROM nfts
+      WHERE current_owner_id = $1::uuid
+      ${cursorFilter}
+      ORDER BY created_at DESC, id DESC
+      LIMIT ${limitParam}
+    `;
+
     const nfts = await this.prisma.$queryRawUnsafe<Array<{
       id: string;
       name: string;
@@ -107,14 +123,17 @@ export class NFTPrismaRepository {
         paramIndex++;
       }
 
-      const limit = filter.limit || 100;
-      const offset = filter.offset || 0;
-      
+      const limit = (filter.limit || 100) + 1;
       const limitParam = `$${paramIndex}`;
       params.push(limit);
       paramIndex++;
-      const offsetParam = `$${paramIndex}`;
-      params.push(offset);
+
+      let cursorFilter = '';
+      if (filter.cursor && isUuid(filter.cursor)) {
+        cursorFilter = ` AND (created_at, id) < (SELECT created_at, id FROM nfts WHERE id = $${paramIndex}::uuid)`;
+        params.push(filter.cursor);
+        paramIndex++;
+      }
 
       const ownerNfts = await this.prisma.$queryRawUnsafe<Array<{
         id: string;
@@ -128,7 +147,7 @@ export class NFTPrismaRepository {
         created_at: Date;
         updated_at: Date;
       }>>(
-        `SELECT * FROM nfts WHERE ${conditions.join(' AND ')} ORDER BY created_at DESC LIMIT ${limitParam} OFFSET ${offsetParam}`,
+        `SELECT * FROM nfts WHERE ${conditions.join(' AND ')}${cursorFilter} ORDER BY created_at DESC, id DESC LIMIT ${limitParam}`,
         ...params
       );
       

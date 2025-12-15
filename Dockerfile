@@ -9,6 +9,9 @@ COPY prisma ./prisma
 # Dependencies'leri yükle
 RUN npm install --legacy-peer-deps
 
+# Docker CLI kur (docker ps için)
+RUN apk add --no-cache docker-cli
+
 # Prisma Client'ı generate et (schema kopyalandıktan sonra)
 RUN npx prisma generate
 

@@ -82,7 +82,7 @@ const swaggerOptions = {
             id: { type: 'string' },
             name: { type: 'string' },
             title: { type: 'string' },
-            avatarUrl: { type: 'string', format: 'uri' },
+            avatar: { type: 'string', format: 'uri' },
           },
         },
         BaseStats: {
@@ -126,7 +126,7 @@ const swaggerOptions = {
             id: { type: 'string' },
             type: {
               type: 'string',
-              enum: ['feed', 'benchmark', 'post', 'question', 'tipsAndTricks'],
+              enum: ['benchmark', 'post', 'question', 'tipsAndTricks', 'experience', 'update'],
             },
             user: { $ref: '#/components/schemas/BaseUser' },
             stats: { $ref: '#/components/schemas/BaseStats' },
@@ -154,7 +154,7 @@ const swaggerOptions = {
             id: { type: 'string' },
             type: {
               type: 'string',
-              enum: ['feed', 'benchmark', 'post', 'question', 'tipsAndTricks'],
+              enum: ['benchmark', 'post', 'question', 'tipsAndTricks', 'experience', 'update'],
             },
             user: { $ref: '#/components/schemas/BaseUser' },
             stats: { $ref: '#/components/schemas/BaseStats' },
@@ -176,7 +176,7 @@ const swaggerOptions = {
             id: { type: 'string' },
             type: {
               type: 'string',
-              enum: ['feed', 'benchmark', 'post', 'question', 'tipsAndTricks'],
+              enum: ['benchmark', 'post', 'question', 'tipsAndTricks', 'experience', 'update'],
             },
             user: { $ref: '#/components/schemas/BaseUser' },
             stats: { $ref: '#/components/schemas/BaseStats' },
@@ -199,6 +199,58 @@ const swaggerOptions = {
             },
           },
         },
+        ReviewProduct: {
+          allOf: [
+            { $ref: '#/components/schemas/BaseProduct' },
+            {
+              type: 'object',
+              properties: {
+                isOwned: { type: 'boolean' },
+              },
+            },
+          ],
+        },
+        ExperienceContent: {
+          type: 'object',
+          properties: {
+            title: {
+              type: 'string',
+              enum: ['Price and Shopping Experience', 'Product and Usage Experience'],
+            },
+            content: { type: 'string' },
+            rating: { type: 'number' },
+          },
+        },
+        ExperiencePost: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            type: {
+              type: 'string',
+              enum: ['experience', 'update'],
+            },
+            user: { $ref: '#/components/schemas/BaseUser' },
+            stats: { $ref: '#/components/schemas/BaseStats' },
+            createdAt: { type: 'string', format: 'date-time' },
+            contextType: {
+              type: 'string',
+              enum: ['product_group', 'product', 'sub_category'],
+            },
+            product: { $ref: '#/components/schemas/ReviewProduct' },
+            content: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/ExperienceContent' },
+            },
+            tags: {
+              type: 'array',
+              items: { type: 'string' },
+            },
+            images: {
+              type: 'array',
+              items: { type: 'object' },
+            },
+          },
+        },
         FeedResponse: {
           type: 'object',
           properties: {
@@ -206,13 +258,6 @@ const swaggerOptions = {
               type: 'array',
               items: {
                 oneOf: [
-                  {
-                    type: 'object',
-                    properties: {
-                      type: { type: 'string', enum: ['feed'] },
-                      data: { $ref: '#/components/schemas/Post' },
-                    },
-                  },
                   {
                     type: 'object',
                     properties: {
@@ -239,6 +284,20 @@ const swaggerOptions = {
                     properties: {
                       type: { type: 'string', enum: ['tipsAndTricks'] },
                       data: { $ref: '#/components/schemas/TipsAndTricksPost' },
+                    },
+                  },
+                  {
+                    type: 'object',
+                    properties: {
+                      type: { type: 'string', enum: ['experience'] },
+                      data: { $ref: '#/components/schemas/ExperiencePost' },
+                    },
+                  },
+                  {
+                    type: 'object',
+                    properties: {
+                      type: { type: 'string', enum: ['update'] },
+                      data: { $ref: '#/components/schemas/ExperiencePost' },
                     },
                   },
                 ],
@@ -404,6 +463,54 @@ function getSwaggerSpec() {
   return swaggerJSDoc(swaggerOptions);
 }
 
+const swaggerAuthHelperJs = `
+(function () {
+  const STORAGE_KEY = 'tipbox_swagger_token';
+
+  function applyToken(ui, token) {
+    if (!ui || !token) return;
+    try {
+      window.localStorage.setItem(STORAGE_KEY, token);
+      ui.authActions.authorize({
+        bearerAuth: {
+          name: 'bearerAuth',
+          schema: { type: 'http', scheme: 'bearer' },
+          value: token,
+        },
+      });
+    } catch (err) {
+      console.warn('Swagger auth auto-apply failed', err);
+    }
+  }
+
+  window.addEventListener('load', function () {
+    const ui = window.ui;
+    if (!ui) return;
+
+    const saved = window.localStorage.getItem(STORAGE_KEY);
+    if (saved) applyToken(ui, saved);
+
+    const originalFetch = window.fetch;
+    window.fetch = async function (...args) {
+      const response = await originalFetch(...args);
+      try {
+        const url = args[0] ? args[0].toString() : '';
+        const method = (args[1]?.method || 'GET').toUpperCase();
+        if (url.includes('/auth/login') && method === 'POST') {
+          const clone = response.clone();
+          const data = await clone.json().catch(() => null);
+          const token = data?.token || data?.access_token || data?.accessToken;
+          if (token) applyToken(ui, token);
+        }
+      } catch (err) {
+        console.warn('Swagger auth token capture failed', err);
+      }
+      return response;
+    };
+  });
+})();
+`;
+
 const app = express();
 
 // CORS configuration - Config modülünden ortam bazlı değerleri al
@@ -451,6 +558,11 @@ app.get('/api', (req, res) => {
       'GET /wallets': 'Cüzdan bilgileri'
     }
   });
+});
+
+// Swagger UI için custom JS (login yanıtından token'ı otomatik uygular)
+app.get('/api-docs/custom-swagger.js', (req, res) => {
+  res.type('application/javascript').send(swaggerAuthHelperJs);
 });
 
 // Prometheus metrics endpoint
@@ -515,6 +627,7 @@ app.get('/api-docs', (req, res, next) => {
   swaggerUi.setup(swaggerSpec, {
     customCss: '.swagger-ui .topbar { display: none }',
     customSiteTitle: 'Tipbox API Documentation',
+    customJs: '/api-docs/custom-swagger.js',
     swaggerOptions: {
       persistAuthorization: true, // Token'ı tarayıcıda sakla
       displayRequestDuration: true, // İstek süresini göster

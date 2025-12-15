@@ -9,6 +9,9 @@ import {
   Post,
   BenchmarkPost,
   TipsAndTricksPost,
+  ExperiencePost,
+  ExperienceContent,
+  ReviewProduct,
   FeedFilterOptions,
   BaseUser,
   BaseStats,
@@ -43,6 +46,14 @@ export class FeedService {
     const limit = options?.limit || 20;
     const cacheKey = `feed:${userId}:${options?.cursor || 'first'}:${limit}`;
 
+    // Cursor olarak item (post) ID bekleniyor. Repository ise feed.id ile paginate ediyor.
+    // Bu nedenle gelen cursor'ı feed.id'ye çeviriyoruz.
+    let feedCursor: string | undefined = undefined;
+    if (options?.cursor) {
+      const cursorFeed = await this.feedRepo.findByPostId(userId, options.cursor);
+      feedCursor = cursorFeed?.id;
+    }
+
     try {
       // Cache check
       const cached = await this.cacheService.get<FeedResponse>(cacheKey);
@@ -58,7 +69,7 @@ export class FeedService {
     // Fetch feeds from database
     const { feeds, nextCursor } = await this.feedRepo.findByUserId(userId, {
       limit,
-      cursor: options?.cursor,
+      cursor: feedCursor,
     });
 
     if (feeds.length === 0) {
@@ -145,7 +156,11 @@ export class FeedService {
       });
     });
 
-    const orderedPosts = this.sortPostsByCreatedAt(posts);
+    // Order posts according to feed pagination order (avoid resort that breaks cursor)
+    const postMap = new Map(posts.map((p) => [p.id, p]));
+    const orderedPosts = feeds
+      .map((feed) => postMap.get(feed.postId))
+      .filter((p): p is typeof posts[number] => Boolean(p));
 
     // Get user inventories for benchmark isOwned check
     const inventories = await this.prisma.inventory.findMany({
@@ -206,13 +221,17 @@ export class FeedService {
 
         switch (post.type) {
           case ContentPostType.FREE:
-            return this.mapToPostItem(post, basePost, FeedItemType.FEED, images, ownedProductIds);
+            return this.mapToPostItem(post, basePost, FeedItemType.POST, images, ownedProductIds);
           case ContentPostType.COMPARE:
             return this.mapToBenchmarkItem(post, basePost, ownedProductIds, images);
           case ContentPostType.QUESTION:
             return this.mapToPostItem(post, basePost, FeedItemType.QUESTION, images, ownedProductIds);
           case ContentPostType.TIPS:
             return this.mapToTipsAndTricksItem(post, basePost, images, ownedProductIds);
+          case ContentPostType.EXPERIENCE:
+            return this.mapToExperienceItem(post, basePost, FeedItemType.EXPERIENCE, images, ownedProductIds);
+          case ContentPostType.UPDATE:
+            return this.mapToExperienceItem(post, basePost, FeedItemType.UPDATE, images, ownedProductIds);
           default:
             return this.mapToPostItem(post, basePost, FeedItemType.POST, images, ownedProductIds);
         }
@@ -222,7 +241,8 @@ export class FeedService {
     const response: FeedResponse = {
       items: feedItems,
       pagination: {
-        cursor: nextCursor,
+        // API'de cursor olarak son item'ın (post) ID'si döndürülür
+        cursor: feedItems.length > 0 ? feedItems[feedItems.length - 1].data.id : nextCursor,
         hasMore: !!nextCursor,
         limit,
       },
@@ -246,36 +266,25 @@ export class FeedService {
     filters: FeedFilterOptions,
     options?: { cursor?: string; limit?: number }
   ): Promise<FeedResponse> {
-    const limit =
-      options?.limit ??
-      (filters.types && filters.types.length > 0 ? filters.types.length * 20 : 20);
+    const limit = options?.limit ?? 20;
 
     // Build filter query
     const postWhere: any = {};
 
-    if (filters.types && filters.types.length > 0) {
-      const contentPostTypes = filters.types.map((type) => {
-        switch (type) {
-          case FeedItemType.FEED:
-          case FeedItemType.POST:
-            return ContentPostType.FREE;
-          case FeedItemType.BENCHMARK:
-            return ContentPostType.COMPARE;
-          case FeedItemType.QUESTION:
-            return ContentPostType.QUESTION;
-          case FeedItemType.TIPS_AND_TRICKS:
-            return ContentPostType.TIPS;
-          default:
-            return null;
-        }
-      }).filter(Boolean);
-      postWhere.type = { in: contentPostTypes };
+    // Merge category + interests into a single category filter
+    const mergedCategoryIds = new Set<string>();
+    if (filters.category) {
+      mergedCategoryIds.add(filters.category);
+    }
+    if (filters.interests && filters.interests.length > 0) {
+      filters.interests.forEach((id) => mergedCategoryIds.add(id));
     }
 
-    if (filters.categoryIds && filters.categoryIds.length > 0) {
+    if (mergedCategoryIds.size > 0) {
+      const categoryArray = Array.from(mergedCategoryIds);
       postWhere.OR = [
-        { mainCategoryId: { in: filters.categoryIds } },
-        { subCategoryId: { in: filters.categoryIds } },
+        { mainCategoryId: { in: categoryArray } },
+        { subCategoryId: { in: categoryArray } },
       ];
     }
 
@@ -285,6 +294,16 @@ export class FeedService {
 
     if (filters.userIds && filters.userIds.length > 0) {
       postWhere.userId = { in: filters.userIds };
+    }
+
+    // Tag-based filtering (contentPostTags or tags relations)
+    if (filters.tags && filters.tags.length > 0) {
+      (postWhere.AND ||= []).push({
+        OR: [
+          { contentPostTags: { some: { tag: { in: filters.tags } } } },
+          { tags: { some: { tag: { in: filters.tags } } } },
+        ],
+      });
     }
 
     if (filters.dateRange) {
@@ -300,6 +319,18 @@ export class FeedService {
     // Note: minLikes and minComments filtering will be done after fetching stats
 
     // Fetch feeds with post filters
+    const orderBy =
+      filters.sort === 'top'
+        ? [
+            { post: { likesCount: 'desc' as const } },
+            { post: { viewsCount: 'desc' as const } },
+            { createdAt: 'desc' as const },
+          ]
+        : [
+            { post: { isBoosted: 'desc' as const } },
+            { createdAt: 'desc' as const },
+          ];
+
     const feeds = await this.prisma.feed.findMany({
       where: {
         userId,
@@ -368,10 +399,7 @@ export class FeedService {
           },
         },
       },
-      orderBy: [
-        { post: { isBoosted: 'desc' } },
-        { createdAt: 'desc' },
-      ],
+      orderBy,
       take: limit + 1,
       ...(options?.cursor && {
         cursor: { id: options.cursor },
@@ -479,13 +507,17 @@ export class FeedService {
 
         switch (post.type) {
           case ContentPostType.FREE:
-            return this.mapToPostItem(post, basePost, FeedItemType.FEED, images, ownedProductIds);
+            return this.mapToPostItem(post, basePost, FeedItemType.POST, images, ownedProductIds);
           case ContentPostType.COMPARE:
             return this.mapToBenchmarkItem(post, basePost, ownedProductIds, images);
           case ContentPostType.QUESTION:
             return this.mapToPostItem(post, basePost, FeedItemType.QUESTION, images, ownedProductIds);
           case ContentPostType.TIPS:
             return this.mapToTipsAndTricksItem(post, basePost, images, ownedProductIds);
+          case ContentPostType.EXPERIENCE:
+            return this.mapToExperienceItem(post, basePost, FeedItemType.EXPERIENCE, images, ownedProductIds);
+          case ContentPostType.UPDATE:
+            return this.mapToExperienceItem(post, basePost, FeedItemType.UPDATE, images, ownedProductIds);
           default:
             return this.mapToPostItem(post, basePost, FeedItemType.POST, images, ownedProductIds);
         }
@@ -642,16 +674,6 @@ export class FeedService {
     return this.sortFeedItemsByTimestamp([...prioritized, ...leftovers]);
   }
 
-  private sortPostsByCreatedAt<T extends { createdAt?: Date | string }>(items: T[]): T[] {
-    const toTime = (value?: Date | string): number => {
-      if (!value) return 0;
-      if (value instanceof Date) return value.getTime();
-      const parsed = Date.parse(value);
-      return Number.isNaN(parsed) ? 0 : parsed;
-    };
-    return [...items].sort((a, b) => toTime(b.createdAt) - toTime(a.createdAt));
-  }
-
   private sortFeedItemsByTimestamp(items: FeedItem[]): FeedItem[] {
     const toTime = (item: FeedItem): number => {
       const value = item?.data?.createdAt;
@@ -665,14 +687,13 @@ export class FeedService {
   private mapToPostItem(
     post: any,
     basePost: any,
-    type: FeedItemType.FEED | FeedItemType.POST | FeedItemType.QUESTION,
+    type: FeedItemType.POST | FeedItemType.QUESTION,
     images: string[] = [],
     ownedProductIds?: Set<string>
   ): FeedItem {
     const contextData = this.buildContextData(post, ownedProductIds);
     const postData: Post = {
       ...basePost,
-      type,
       contextData,
       content: post.body,
       images,
@@ -722,7 +743,6 @@ export class FeedService {
 
     const benchmarkData: BenchmarkPost = {
       ...basePost,
-      type: FeedItemType.BENCHMARK,
       contextData: this.buildContextData(post, ownedProductIds),
       products,
       content: comparison.comparisonSummary || post.body,
@@ -744,7 +764,6 @@ export class FeedService {
 
     const tipsData: TipsAndTricksPost = {
       ...basePost,
-      type: FeedItemType.TIPS_AND_TRICKS,
       contextData: this.buildContextData(post, ownedProductIds),
       content: post.body,
       tag,
@@ -755,6 +774,237 @@ export class FeedService {
       type: FeedItemType.TIPS_AND_TRICKS,
       data: tipsData,
     };
+  }
+
+  private mapToExperienceItem(
+    post: any,
+    basePost: any,
+    type: FeedItemType.EXPERIENCE | FeedItemType.UPDATE,
+    images: string[] = [],
+    ownedProductIds?: Set<string>
+  ): FeedItem {
+    // Build product info
+    const productBase = post.product
+      ? this.getProductBase(post.product)
+      : post.productId
+      ? this.getProductBase({ id: post.productId, name: post.product?.name || '', imageUrl: post.product?.imageUrl || null, group: post.productGroup })
+      : null;
+
+    const product: ReviewProduct = productBase
+      ? {
+          ...productBase,
+          isOwned: ownedProductIds?.has(productBase.id) || false,
+        }
+      : {
+          id: post.productId || '',
+          name: post.product?.name || '',
+          subName: post.productGroup?.name || '',
+          image: post.product?.imageUrl || null,
+          isOwned: false,
+        };
+
+    // Parse experience content from body or create default
+    // EXPERIENCE posts store structured data in body, UPDATE posts are revisions
+    const experienceContent: ExperienceContent[] = this.parseExperienceContent(post.body);
+
+    // Get tags
+    const tags = post.tags?.map((t: any) => t.tag) || post.contentPostTags?.map((t: any) => t.tag) || [];
+
+    if (type === FeedItemType.UPDATE) {
+      const relatedPost = {
+        id: post.id,
+        product,
+        content: experienceContent,
+        tags,
+        images,
+      };
+
+      const updateData = {
+        ...basePost,
+        relatedPost,
+        content: post.body,
+        images,
+      };
+
+      return {
+        type,
+        data: updateData,
+      };
+    }
+
+    const experienceData: ExperiencePost = {
+      ...basePost,
+      product,
+      content: experienceContent,
+      tags,
+      images,
+    };
+
+    return {
+      type,
+      data: experienceData,
+    };
+  }
+
+  private parseExperienceContent(body: string): ExperienceContent[] {
+    // Try to parse structured experience content from body
+    // Format: [type] content (Rating: X/5)
+    const content: ExperienceContent[] = [];
+    
+    if (!body) {
+      return [
+        {
+          title: 'Product and Usage Experience',
+          content: '',
+          rating: 0,
+        },
+      ];
+    }
+
+    // First, try to parse body as JSON (in case it contains structured content array)
+    try {
+      const parsed = JSON.parse(body);
+      
+      // Handle case where parsed is an object with content array
+      let contentArray: any[] | undefined = undefined;
+      if (parsed && Array.isArray(parsed.content)) {
+        contentArray = parsed.content;
+      } else if (Array.isArray(parsed)) {
+        // Handle case where body is directly a JSON array
+        contentArray = parsed;
+      }
+      
+      if (contentArray && contentArray.length > 0) {
+        const transformedContent: ExperienceContent[] = [];
+        let hasPrice = false;
+        let hasUsage = false;
+        
+        for (const item of contentArray) {
+          if (item.title === 'Experience') {
+            // Split "Experience" into two items
+            // Generate random rating between 30-70 for both items
+            const randomRatingPrice = Math.floor(Math.random() * (70 - 30 + 1)) + 30;
+            const randomRatingUsage = Math.floor(Math.random() * (70 - 30 + 1)) + 30;
+            
+            transformedContent.push({
+              title: 'Price and Shopping Experience',
+              content: item.content || '',
+              rating: randomRatingPrice,
+            });
+            
+            transformedContent.push({
+              title: 'Product and Usage Experience',
+              content: item.content || '',
+              rating: randomRatingUsage,
+            });
+            hasPrice = true;
+            hasUsage = true;
+          } else if (item.title === 'Price and Shopping Experience') {
+            transformedContent.push({
+              title: item.title,
+              content: item.content || '',
+              rating: item.rating && item.rating > 0 ? item.rating : Math.floor(Math.random() * (70 - 30 + 1)) + 30,
+            });
+            hasPrice = true;
+          } else if (item.title === 'Product and Usage Experience') {
+            transformedContent.push({
+              title: item.title,
+              content: item.content || '',
+              rating: item.rating && item.rating > 0 ? item.rating : Math.floor(Math.random() * (70 - 30 + 1)) + 30,
+            });
+            hasUsage = true;
+          }
+        }
+        
+        // If only one type exists, add the missing one
+        if (hasPrice && !hasUsage) {
+          const randomRatingUsage = Math.floor(Math.random() * (70 - 30 + 1)) + 30;
+          transformedContent.push({
+            title: 'Product and Usage Experience',
+            content: transformedContent[0]?.content || '',
+            rating: randomRatingUsage,
+          });
+        } else if (hasUsage && !hasPrice) {
+          const randomRatingPrice = Math.floor(Math.random() * (70 - 30 + 1)) + 30;
+          transformedContent.unshift({
+            title: 'Price and Shopping Experience',
+            content: transformedContent[0]?.content || '',
+            rating: randomRatingPrice,
+          });
+        }
+        
+        if (transformedContent.length > 0) {
+          return transformedContent;
+        }
+      }
+    } catch (e) {
+      // Not JSON, continue with text parsing
+    }
+
+    // Try to extract experience sections from body
+    const priceMatch = body.match(/\[price_and_shopping[^\]]*\](.*?)(?:\[|Rating:|$)/is);
+    const usageMatch = body.match(/\[product_and_usage[^\]]*\](.*?)(?:\[|Rating:|$)/is);
+    const ratingMatch = body.match(/Rating:\s*(\d+)/i);
+    const extractedRating = ratingMatch ? parseInt(ratingMatch[1]) : null;
+
+    // Generate random ratings if not provided
+    const generateRating = () => extractedRating && extractedRating > 0 ? extractedRating : Math.floor(Math.random() * (70 - 30 + 1)) + 30;
+
+    if (priceMatch) {
+      content.push({
+        title: 'Price and Shopping Experience',
+        content: priceMatch[1].trim(),
+        rating: generateRating(),
+      });
+    }
+
+    if (usageMatch) {
+      content.push({
+        title: 'Product and Usage Experience',
+        content: usageMatch[1].trim(),
+        rating: generateRating(),
+      });
+    }
+
+    // If only one type found, add the missing one
+    if (content.length === 1) {
+      const existingContent = content[0].content;
+      if (priceMatch && !usageMatch) {
+        // Only price found, add usage
+        content.push({
+          title: 'Product and Usage Experience',
+          content: existingContent,
+          rating: generateRating(),
+        });
+      } else if (usageMatch && !priceMatch) {
+        // Only usage found, add price
+        content.unshift({
+          title: 'Price and Shopping Experience',
+          content: existingContent,
+          rating: generateRating(),
+        });
+      }
+    }
+
+    // If no structured content found, create both defaults
+    if (content.length === 0) {
+      const randomRatingPrice = Math.floor(Math.random() * (70 - 30 + 1)) + 30;
+      const randomRatingUsage = Math.floor(Math.random() * (70 - 30 + 1)) + 30;
+      
+      content.push({
+        title: 'Price and Shopping Experience',
+        content: body,
+        rating: randomRatingPrice,
+      });
+      
+      content.push({
+        title: 'Product and Usage Experience',
+        content: body,
+        rating: randomRatingUsage,
+      });
+    }
+
+    return content;
   }
 
   private selectComparisonWinner(
