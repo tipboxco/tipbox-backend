@@ -14,6 +14,14 @@ CREATE TABLE IF NOT EXISTS "brand_categories" (
     CONSTRAINT "brand_categories_pkey" PRIMARY KEY ("id")
 );
 
+-- Add slug column if it doesn't exist (table may have been created without it)
+ALTER TABLE "brand_categories" ADD COLUMN IF NOT EXISTS "slug" TEXT;
+ALTER TABLE "brand_categories" ADD COLUMN IF NOT EXISTS "description" TEXT;
+
+-- Make slug NOT NULL if it's NULL (set a default value first)
+UPDATE "brand_categories" SET "slug" = LOWER(REPLACE("name", ' ', '-')) WHERE "slug" IS NULL;
+ALTER TABLE "brand_categories" ALTER COLUMN "slug" SET NOT NULL;
+
 -- CreateIndex
 CREATE UNIQUE INDEX IF NOT EXISTS "brand_categories_slug_key" ON "brand_categories"("slug");
 
