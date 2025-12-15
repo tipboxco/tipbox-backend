@@ -21,7 +21,7 @@ function getDefaultCorsOrigins(env: string): string[] {
     case 'development':
       return ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173'];
     case 'test':
-      return ['http://localhost:3000', 'https://test-api.tipbox.co'];
+      return ['http://localhost:3000', 'https://api-test.tipbox.co', 'http://api-test.tipbox.co'];
     case 'production':
       return ['https://api.tipbox.co', 'https://api.tipbox.co/v1', 'https://api.tipbox.co/v1/docs', 'https://app.tipbox.co'];
     default:
