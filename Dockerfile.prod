@@ -1,5 +1,5 @@
 # Production Dockerfile
-FROM node:18-alpine AS builder
+FROM node:23.6.0-alpine AS builder
 
 WORKDIR /app
 
@@ -21,7 +21,7 @@ ENV NODE_OPTIONS=--max-old-space-size=4096
 RUN npm run build
 
 # Production image
-FROM node:18-alpine
+FROM node:23.6.0-alpine
 
 WORKDIR /app
 

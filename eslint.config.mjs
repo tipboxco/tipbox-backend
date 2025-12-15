@@ -1,7 +1,6 @@
 import js from "@eslint/js";
 import globals from "globals";
 import tseslint from "typescript-eslint";
-import pluginReact from "eslint-plugin-react";
 import { defineConfig } from "eslint/config";
 
 export default defineConfig([
@@ -17,17 +16,25 @@ export default defineConfig([
       "**/logs/**",
       "**/DmMessagingUI/**",
       "**/project-docs/**",
+      // JavaScript dosyalarını ignore et (CommonJS, test dosyaları vb.)
+      "**/*.js",
+      "**/tests/e2e/socket.io/**/*.js",
+      "**/tests/helpers/**/*.js",
+      "prisma/seed.js",
+      "test_seed.js",
+      "swagger-server.js",
     ],
   },
   {
-    files: ["**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}"],
+    files: ["**/*.{ts,tsx}"],
     plugins: { js },
     extends: ["js/recommended"],
-  },
-  {
-    files: ["**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}"],
-    languageOptions: { globals: globals.browser },
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        ...globals.jest,
+      },
+    },
   },
   tseslint.configs.recommended,
-  pluginReact.configs.flat.recommended,
 ]);

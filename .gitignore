@@ -13,7 +13,7 @@ build/
 !.env.example
 
 prisma/.env
-prisma/migrations/
+# prisma/migrations/ - Migration dosyaları commit edilmelidir, ignore edilmemeli
 .prisma/
 *.db
 
