@@ -1,6 +1,3 @@
--- CreateEnum
-CREATE TYPE "DMMessageContext" AS ENUM ('DM', 'SUPPORT');
-
 -- AlterEnum
 -- This migration adds more than one value to an enum.
 -- With PostgreSQL versions 11 and earlier, this is not possible
@@ -20,7 +17,8 @@ DROP INDEX "dm_requests_from_user_id_to_user_id_key";
 DROP INDEX "dm_threads_user_one_id_user_two_id_key";
 
 -- AlterTable
-ALTER TABLE "dm_messages" ADD COLUMN     "context" "DMMessageContext" NOT NULL DEFAULT 'DM';
+-- Column "context" already added in previous migration, skipping
+-- ALTER TABLE "dm_messages" ADD COLUMN "context" "dm_message_context" NOT NULL DEFAULT 'DM';
 
 -- AlterTable
 ALTER TABLE "dm_requests" ADD COLUMN     "closed_by_from_user_at" TIMESTAMP(3),
