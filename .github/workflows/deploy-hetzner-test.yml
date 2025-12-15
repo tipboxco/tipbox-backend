@@ -134,9 +134,9 @@ jobs:
               echo "⚠️  Backup failed or database not accessible, continuing..."
             }
             
-            # Tüm servisleri durdur (migration ve seed için)
-            echo "🛑 Stopping all containers..."
-            docker compose -f "$COMPOSE_FILE" stop || {
+            # Tüm servisleri durdur ve sil (migration ve seed için)
+            echo "🛑 Stopping and removing all containers..."
+            docker compose -f "$COMPOSE_FILE" down || {
               echo "⚠️  Some containers were not running, continuing..."
             }
             
@@ -144,12 +144,14 @@ jobs:
             echo "🔨 Building Docker images..."
             docker compose -f "$COMPOSE_FILE" build --no-cache backend
             
-            # Prisma Client generate (yeni schema değişiklikleri için)
-            echo "🔧 Generating Prisma Client..."
-            docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma generate || {
-              echo "❌ Prisma generate failed! Check the logs above."
-              docker compose -f "$COMPOSE_FILE" logs backend | tail -50
-              exit 1
+            # Prisma Client generate (host'ta - volume mount için)
+            echo "🔧 Generating Prisma Client on host..."
+            npx prisma generate || {
+              echo "⚠️  Prisma generate on host failed, trying in container..."
+              docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma generate || {
+                echo "❌ Prisma generate failed! Check the logs above."
+                exit 1
+              }
             }
             
             # Tüm servisleri başlat (database, redis, minio)
