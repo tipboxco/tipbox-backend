@@ -355,8 +355,22 @@ async function seedBrandProducts(userIdToUse: string): Promise<void> {
         if (newInventory) {
           inventoryProductSet.add(productId)
         }
-      }
-    }
+
+        // Product ve Inventory'i fetch et (sonraki işlemler için)
+        if (!productId) continue
+        
+        const product = await prisma.product.findUnique({
+          where: { id: productId },
+        })
+        if (!product) continue
+
+        const inventory = await prisma.inventory.findFirst({
+          where: {
+            userId: userIdToUse,
+            productId: productId,
+          },
+        })
+        if (!inventory) continue
 
       // Inventory media kontrolü - eğer yoksa ekle
       const existingMedia = await prisma.inventoryMedia.findFirst({
@@ -892,6 +906,7 @@ async function seedBrandProducts(userIdToUse: string): Promise<void> {
         if (createdCount > 0) {
           console.log(`✅ ${createdCount} news post oluşturuldu: ${product.name}`)
         }
+      }
       }
     }
 
@@ -5567,8 +5582,8 @@ async function main() {
     ]
 
     // Batch kontrol: Tüm mevcut event'leri tek sorguda al
+    // Not: brandId filtrelemesi Prisma client'ında henüz mevcut olmadığı için tüm event'leri alıyoruz
     const existingEvents = await prisma.wishboxEvent.findMany({
-      where: { brandId: targetBrandForEvents.id },
       select: { title: true },
     }).catch(() => [])
     const existingTitles = new Set(existingEvents.map(e => e.title))
