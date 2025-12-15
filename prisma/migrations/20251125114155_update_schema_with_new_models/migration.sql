@@ -1,5 +1,5 @@
--- AlterEnum
-ALTER TYPE "dm_request_status" ADD VALUE 'REPORTED';
+-- AlterEnum (REPORTED already added in previous migration)
+-- ALTER TYPE "dm_request_status" ADD VALUE 'REPORTED';
 
 -- AlterTable
 -- Add cosmetic_badge_id column if it doesn't exist (it may have been added in previous migration)
@@ -14,7 +14,7 @@ BEGIN
 END $$;
 
 -- CreateTable
-CREATE TABLE "boost_options" (
+CREATE TABLE IF NOT EXISTS "boost_options" (
     "id" UUID NOT NULL,
     "image" TEXT,
     "title" TEXT NOT NULL,
@@ -29,7 +29,7 @@ CREATE TABLE "boost_options" (
 );
 
 -- CreateTable
-CREATE TABLE "experience_durations" (
+CREATE TABLE IF NOT EXISTS "experience_durations" (
     "id" UUID NOT NULL,
     "name" TEXT NOT NULL,
     "is_active" BOOLEAN NOT NULL DEFAULT true,
@@ -40,7 +40,7 @@ CREATE TABLE "experience_durations" (
 );
 
 -- CreateTable
-CREATE TABLE "experience_locations" (
+CREATE TABLE IF NOT EXISTS "experience_locations" (
     "id" UUID NOT NULL,
     "name" TEXT NOT NULL,
     "is_active" BOOLEAN NOT NULL DEFAULT true,
@@ -51,7 +51,7 @@ CREATE TABLE "experience_locations" (
 );
 
 -- CreateTable
-CREATE TABLE "experience_purposes" (
+CREATE TABLE IF NOT EXISTS "experience_purposes" (
     "id" UUID NOT NULL,
     "name" TEXT NOT NULL,
     "is_active" BOOLEAN NOT NULL DEFAULT true,
@@ -62,13 +62,13 @@ CREATE TABLE "experience_purposes" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "experience_durations_name_key" ON "experience_durations"("name");
+CREATE UNIQUE INDEX IF NOT EXISTS "experience_durations_name_key" ON "experience_durations"("name");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "experience_locations_name_key" ON "experience_locations"("name");
+CREATE UNIQUE INDEX IF NOT EXISTS "experience_locations_name_key" ON "experience_locations"("name");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "experience_purposes_name_key" ON "experience_purposes"("name");
+CREATE UNIQUE INDEX IF NOT EXISTS "experience_purposes_name_key" ON "experience_purposes"("name");
 
 -- AddForeignKey
 -- Add foreign key constraint if it doesn't exist
