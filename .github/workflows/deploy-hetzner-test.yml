@@ -147,7 +147,9 @@ jobs:
             # Prisma Client generate (yeni schema değişiklikleri için)
             echo "🔧 Generating Prisma Client..."
             docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma generate || {
-              echo "⚠️  Prisma generate failed, but continuing..."
+              echo "❌ Prisma generate failed! Check the logs above."
+              docker compose -f "$COMPOSE_FILE" logs backend | tail -50
+              exit 1
             }
             
             # Tüm servisleri başlat (database, redis, minio)
@@ -182,7 +184,7 @@ jobs:
             
             # Seed data'ları ekle (eğer yoksa)
             echo "🌱 Running database seeds..."
-            docker compose -f "$COMPOSE_FILE" run --rm backend npm run db:seed:all || {
+            docker compose -f "$COMPOSE_FILE" run --rm backend npm run seed:all || {
               echo "⚠️  Seed failed or data already exists, continuing..."
             }
             
