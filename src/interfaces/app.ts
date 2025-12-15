@@ -42,8 +42,7 @@ function getSwaggerServers() {
       // Test ortamı için domain
       const testUrl = baseUrl || 'https://api-test.tipbox.co';
       return [
-        { url: testUrl, description: 'Test Environment' },
-        { url: `http://localhost:${PORT}`, description: 'Local (Fallback)' }
+        { url: testUrl, description: 'Test Environment' }
       ];
     case 'production':
       // Production için domain
