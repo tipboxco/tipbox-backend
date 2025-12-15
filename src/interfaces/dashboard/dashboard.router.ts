@@ -1408,7 +1408,7 @@ router.get('/', (req: Request, res: Response) => {
              alt="Tipbox Logo" 
              class="dashboard-header-logo" 
              onerror="this.style.display='none'">
-        <h1>Tipbox Developer Console</h1>
+        <h1>Tipbox Developer Dashboard</h1>
       </div>
     </div>
     
