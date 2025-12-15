@@ -1,8 +1,8 @@
 -- AlterTable
-ALTER TABLE "brands" ADD COLUMN     "category_id" UUID;
+ALTER TABLE "brands" ADD COLUMN IF NOT EXISTS "category_id" UUID;
 
 -- CreateTable
-CREATE TABLE "brand_categories" (
+CREATE TABLE IF NOT EXISTS "brand_categories" (
     "id" UUID NOT NULL,
     "name" TEXT NOT NULL,
     "image_url" TEXT,
@@ -13,7 +13,13 @@ CREATE TABLE "brand_categories" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "brand_categories_name_key" ON "brand_categories"("name");
+CREATE UNIQUE INDEX IF NOT EXISTS "brand_categories_name_key" ON "brand_categories"("name");
 
 -- AddForeignKey
-ALTER TABLE "brands" ADD CONSTRAINT "brands_category_id_fkey" FOREIGN KEY ("category_id") REFERENCES "brand_categories"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'brands_category_id_fkey'
+  ) THEN
+    ALTER TABLE "brands" ADD CONSTRAINT "brands_category_id_fkey" FOREIGN KEY ("category_id") REFERENCES "brand_categories"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  END IF;
+END $$;
