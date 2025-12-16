@@ -105,7 +105,7 @@ jobs:
             # Branch değişkenini al
             echo "📌 Deploying branch: $DEPLOY_BRANCH"
             PROJECT_DIR="/opt/tipbox-backend"
-            COMPOSE_FILE="docker-compose.yml"
+            COMPOSE_FILE="docker-compose.test.yml"
             
             # Proje dizinine git
             cd "$PROJECT_DIR" || {
@@ -120,8 +120,8 @@ jobs:
             git pull origin "$DEPLOY_BRANCH"
             
             # Environment dosyasının varlığını kontrol et
-            if [ ! -f .env ]; then
-              echo "❌ .env file not found! Please create it first."
+            if [ ! -f .env.test ]; then
+              echo "❌ .env.test file not found! Please create it first."
               exit 1
             fi
             
