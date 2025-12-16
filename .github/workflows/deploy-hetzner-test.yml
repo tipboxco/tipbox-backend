@@ -162,7 +162,7 @@ jobs:
             echo "⏳ Waiting for database to be ready..."
             sleep 5
             for i in {1..20}; do
-              if docker compose -f "$COMPOSE_FILE" exec -T postgres pg_isready -U postgres > /dev/null 2>&1; then
+              if docker compose -f "$COMPOSE_FILE" exec -T postgres pg_isready -U tipbox_user > /dev/null 2>&1; then
                 echo "✅ Database is ready!"
                 break
               fi
