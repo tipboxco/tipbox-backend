@@ -1,0 +1,64 @@
+name: 'Health Check'
+description: 'Check backend health endpoint'
+inputs:
+  compose_file:
+    description: 'Docker compose file name'
+    required: true
+  service:
+    description: 'Service name to check'
+    required: false
+    default: 'backend'
+  health_url:
+    description: 'Health check URL'
+    required: false
+    default: 'http://localhost:3000/health'
+  max_retries:
+    description: 'Maximum number of retries'
+    required: false
+    default: '30'
+  retry_interval:
+    description: 'Seconds between retries'
+    required: false
+    default: '2'
+  initial_delay:
+    description: 'Initial delay in seconds before checking'
+    required: false
+    default: '10'
+runs:
+  using: 'composite'
+  steps:
+    - name: Health check
+      shell: bash
+      run: |
+        set -e
+        
+        COMPOSE_FILE="${{ inputs.compose_file }}"
+        MAX_RETRIES="${{ inputs.max_retries }}"
+        RETRY_INTERVAL="${{ inputs.retry_interval }}"
+        INITIAL_DELAY="${{ inputs.initial_delay }}"
+        HEALTH_URL="${{ inputs.health_url }}"
+        
+        # Health check
+        echo "🏥 Checking backend health..."
+        sleep "$INITIAL_DELAY"
+        
+        RETRY_COUNT=0
+        
+        while [ $RETRY_COUNT -lt "$MAX_RETRIES" ]; do
+          if docker compose -f "$COMPOSE_FILE" exec -T "${{ inputs.service }}" node -e "require('http').get('$HEALTH_URL', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" 2>/dev/null; then
+            echo "✅ Backend is healthy!"
+            exit 0
+          fi
+          
+          RETRY_COUNT=$((RETRY_COUNT + 1))
+          if [ $RETRY_COUNT -eq "$MAX_RETRIES" ]; then
+            echo "❌ Health check failed after $MAX_RETRIES attempts"
+            echo "📋 Backend logs:"
+            docker compose -f "$COMPOSE_FILE" logs --tail=50 "${{ inputs.service }}"
+            exit 1
+          fi
+          
+          echo "⏳ Waiting for backend to be ready... ($RETRY_COUNT/$MAX_RETRIES)"
+          sleep "$RETRY_INTERVAL"
+        done
+

@@ -1,0 +1,32 @@
+name: 'Run Database Seeds'
+description: 'Run database seed scripts'
+inputs:
+  compose_file:
+    description: 'Docker compose file name'
+    required: true
+  service:
+    description: 'Service name to run seeds in'
+    required: false
+    default: 'backend'
+  seed_command:
+    description: 'Seed command to run'
+    required: false
+    default: 'npm run seed:all'
+runs:
+  using: 'composite'
+  steps:
+    - name: Run seeds
+      shell: bash
+      run: |
+        set -e
+        
+        COMPOSE_FILE="${{ inputs.compose_file }}"
+        
+        # Seed data'ları ekle (eğer yoksa)
+        echo "🌱 Running database seeds..."
+        docker compose -f "$COMPOSE_FILE" run --rm "${{ inputs.service }}" ${{ inputs.seed_command }} || {
+          echo "⚠️  Seed failed or data already exists, continuing..."
+        }
+        
+        echo "✅ Seeds completed (or skipped if data exists)"
+

@@ -1,0 +1,27 @@
+name: 'Start Infrastructure Services'
+description: 'Start infrastructure services (postgres, redis, minio)'
+inputs:
+  compose_file:
+    description: 'Docker compose file name'
+    required: true
+  services:
+    description: 'Comma-separated list of services to start'
+    required: false
+    default: 'postgres,redis,minio'
+runs:
+  using: 'composite'
+  steps:
+    - name: Start infrastructure services
+      shell: bash
+      run: |
+        set -e
+        
+        COMPOSE_FILE="${{ inputs.compose_file }}"
+        SERVICES="${{ inputs.services }}"
+        
+        # Tüm servisleri başlat (database, redis, minio)
+        echo "🚀 Starting infrastructure services..."
+        docker compose -f "$COMPOSE_FILE" up -d $SERVICES
+        
+        echo "✅ Infrastructure services started"
+

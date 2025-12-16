@@ -1,0 +1,24 @@
+name: 'Stop Services'
+description: 'Stop and remove all containers'
+inputs:
+  compose_file:
+    description: 'Docker compose file name'
+    required: true
+runs:
+  using: 'composite'
+  steps:
+    - name: Stop services
+      shell: bash
+      run: |
+        set -e
+        
+        COMPOSE_FILE="${{ inputs.compose_file }}"
+        
+        # Tüm servisleri durdur ve sil (migration ve seed için)
+        echo "🛑 Stopping and removing all containers..."
+        docker compose -f "$COMPOSE_FILE" down || {
+          echo "⚠️  Some containers were not running, continuing..."
+        }
+        
+        echo "✅ Services stopped"
+
