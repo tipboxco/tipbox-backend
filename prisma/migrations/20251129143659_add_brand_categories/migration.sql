@@ -1,13 +1,5 @@
--- CreateEnum (already created in previous migration)
--- CREATE TYPE "wishbox_event_type" AS ENUM ('SURVEY', 'POLL', 'CONTEST', 'CHALLENGE', 'PROMOTION');
-
 -- AlterTable
 ALTER TABLE "brands" ADD COLUMN IF NOT EXISTS "category_id" UUID;
-
--- AlterTable
-ALTER TABLE "wishbox_events" 
-ADD COLUMN IF NOT EXISTS "event_type" "wishbox_event_type" NOT NULL DEFAULT 'SURVEY',
-ADD COLUMN IF NOT EXISTS "image_url" TEXT;
 
 -- CreateTable
 CREATE TABLE IF NOT EXISTS "brand_categories" (

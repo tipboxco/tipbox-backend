@@ -39,11 +39,10 @@ function getSwaggerServers() {
         { url: `http://localhost:${PORT}`, description: 'Local Development' }
       ];
     case 'test':
-      // Test ortamı için IP veya domain
-      const testUrl = baseUrl || `http://188.245.150.117:${PORT}`;
+      // Test ortamı için domain
+      const testUrl = baseUrl || 'https://api-test.tipbox.co';
       return [
-        { url: testUrl, description: 'Test Environment' },
-        { url: `http://localhost:${PORT}`, description: 'Local (Fallback)' }
+        { url: testUrl, description: 'Test Environment' }
       ];
     case 'production':
       // Production için domain

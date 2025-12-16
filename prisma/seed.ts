@@ -4968,6 +4968,7 @@ async function main() {
     ]
 
     // Batch kontrol: Tüm mevcut event'leri tek sorguda al
+    // Not: brandId filtrelemesi Prisma client'ında henüz mevcut olmadığı için tüm event'leri alıyoruz
     const existingEvents = await prisma.wishboxEvent.findMany({
       where: { brandId: targetBrandForEvents.id } as any,
       select: { title: true },
@@ -5550,6 +5551,7 @@ async function main() {
         return prisma.brandCategory.create({
           data: {
             name: config.name,
+            slug: config.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
             imageUrl: getSeedMediaUrl(config.imageKey as any),
           }
         });
