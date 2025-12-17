@@ -1,0 +1,22 @@
+name: 'Start All Services'
+description: 'Start all services with docker-compose'
+inputs:
+  compose_file:
+    description: 'Docker compose file name'
+    required: true
+runs:
+  using: 'composite'
+  steps:
+    - name: Start all services
+      shell: bash
+      run: |
+        set -e
+        
+        COMPOSE_FILE="${{ inputs.compose_file }}"
+        
+        # Tüm servisleri başlat (backend, nginx, prisma-studio)
+        echo "🚀 Starting all services..."
+        docker compose -f "$COMPOSE_FILE" up -d
+        
+        echo "✅ All services started"
+

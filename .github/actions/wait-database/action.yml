@@ -1,0 +1,54 @@
+name: 'Wait for Database'
+description: 'Wait for database to be ready'
+inputs:
+  compose_file:
+    description: 'Docker compose file name'
+    required: true
+  db_user:
+    description: 'Database user to check'
+    required: true
+  max_attempts:
+    description: 'Maximum number of attempts'
+    required: false
+    default: '20'
+  wait_seconds:
+    description: 'Seconds to wait between attempts'
+    required: false
+    default: '2'
+  initial_delay:
+    description: 'Initial delay in seconds before checking'
+    required: false
+    default: '5'
+runs:
+  using: 'composite'
+  steps:
+    - name: Wait for database
+      shell: bash
+      run: |
+        set -e
+        
+        COMPOSE_FILE="${{ inputs.compose_file }}"
+        MAX_ATTEMPTS="${{ inputs.max_attempts }}"
+        WAIT_SECONDS="${{ inputs.wait_seconds }}"
+        INITIAL_DELAY="${{ inputs.initial_delay }}"
+        
+        # Database'in hazır olmasını bekle
+        echo "⏳ Waiting for database to be ready..."
+        sleep "$INITIAL_DELAY"
+        
+        for i in $(seq 1 "$MAX_ATTEMPTS"); do
+          if docker compose -f "$COMPOSE_FILE" exec -T postgres pg_isready -U "${{ inputs.db_user }}" > /dev/null 2>&1; then
+            echo "✅ Database is ready!"
+            exit 0
+          fi
+          
+          if [ $i -eq "$MAX_ATTEMPTS" ]; then
+            echo "❌ Database not ready after $MAX_ATTEMPTS attempts"
+            docker compose -f "$COMPOSE_FILE" logs postgres
+            exit 1
+          fi
+          
+          echo "⏳ Waiting for database... ($i/$MAX_ATTEMPTS)"
+          sleep "$WAIT_SECONDS"
+        done
+

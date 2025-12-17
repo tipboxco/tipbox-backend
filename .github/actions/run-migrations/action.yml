@@ -1,0 +1,31 @@
+name: 'Run Database Migrations'
+description: 'Run Prisma database migrations'
+inputs:
+  compose_file:
+    description: 'Docker compose file name'
+    required: true
+  service:
+    description: 'Service name to run migrations in'
+    required: false
+    default: 'backend'
+runs:
+  using: 'composite'
+  steps:
+    - name: Run migrations
+      shell: bash
+      run: |
+        set -e
+        
+        COMPOSE_FILE="${{ inputs.compose_file }}"
+        
+        # Migration'ları çalıştır (backend container başlatılmadan önce)
+        echo "📊 Running database migrations..."
+        docker compose -f "$COMPOSE_FILE" run --rm "${{ inputs.service }}" npx prisma migrate deploy || {
+          echo "❌ Migration failed! Check the logs above."
+          echo "📋 Migration logs:"
+          docker compose -f "$COMPOSE_FILE" logs "${{ inputs.service }}" | tail -50
+          exit 1
+        }
+        
+        echo "✅ Migrations completed"
+
