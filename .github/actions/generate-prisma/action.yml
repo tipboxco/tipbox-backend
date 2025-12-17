@@ -1,0 +1,32 @@
+name: 'Generate Prisma Client'
+description: 'Generate Prisma Client on host or in container'
+inputs:
+  compose_file:
+    description: 'Docker compose file name'
+    required: true
+  service:
+    description: 'Service name to use for container generation'
+    required: false
+    default: 'backend'
+runs:
+  using: 'composite'
+  steps:
+    - name: Generate Prisma Client
+      shell: bash
+      run: |
+        set -e
+        
+        COMPOSE_FILE="${{ inputs.compose_file }}"
+        
+        # Prisma Client generate (host'ta - volume mount için)
+        echo "🔧 Generating Prisma Client on host..."
+        npx prisma generate || {
+          echo "⚠️  Prisma generate on host failed, trying in container..."
+          docker compose -f "$COMPOSE_FILE" run --rm "${{ inputs.service }}" npx prisma generate || {
+            echo "❌ Prisma generate failed! Check the logs above."
+            exit 1
+          }
+        }
+        
+        echo "✅ Prisma Client generated"
+

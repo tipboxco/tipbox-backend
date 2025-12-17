@@ -1,0 +1,224 @@
+name: Deploy to Test Server
+
+on:
+  push:
+    branches:
+      - test
+      - staging
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to deploy'
+        required: true
+        default: 'test'
+        type: choice
+        options:
+          - test
+          - staging
+
+env:
+  NODE_VERSION: '23.6.0'
+
+jobs:
+  deploy:
+    name: Deploy to Test Server
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || 'test' }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Run linter
+        run: npm run lint
+        continue-on-error: true
+        env:
+          ESLINT_NO_DEV_ERRORS: true
+
+      - name: Check SSH secrets
+        id: check-secrets
+        run: |
+          if [ -z "${{ secrets.HETZNER_SSH_KEY }}" ]; then
+            echo "⚠️  HETZNER_SSH_KEY secret not configured. Skipping deployment."
+            echo "available=false" >> $GITHUB_OUTPUT
+          else
+            echo "available=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup SSH
+        if: steps.check-secrets.outputs.available == 'true'
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.HETZNER_SSH_KEY }}
+
+      - name: Add server to known hosts
+        if: steps.check-secrets.outputs.available == 'true'
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.HETZNER_HOST }} >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Configure SSH
+        if: steps.check-secrets.outputs.available == 'true'
+        run: |
+          cat >> ~/.ssh/config <<EOC
+          Host hetzner-deploy
+            HostName ${{ secrets.HETZNER_HOST }}
+            User ${{ secrets.HETZNER_USER }}
+            Port ${{ secrets.HETZNER_SSH_PORT || '22' }}
+            IdentityAgent $SSH_AUTH_SOCK
+            StrictHostKeyChecking accept-new
+          EOC
+          chmod 600 ~/.ssh/config
+
+      - name: Test SSH Connection
+        if: steps.check-secrets.outputs.available == 'true'
+        run: |
+          echo "Testing SSH connection..."
+          ssh -v hetzner-deploy "echo '✅ SSH connection successful!'"
+
+      - name: Prepare deployment
+        if: steps.check-secrets.outputs.available == 'true'
+        uses: ./.github/actions/execute-remote-stage
+        with:
+          ssh_host: hetzner-deploy
+          stage: prepare
+          project_dir: /opt/tipbox-backend
+          compose_file: docker-compose.test.yml
+          deploy_branch: ${{ github.event.inputs.branch || github.ref_name }}
+          env_file: .env.test
+
+      - name: Backup database
+        if: steps.check-secrets.outputs.available == 'true'
+        uses: ./.github/actions/execute-remote-stage
+        with:
+          ssh_host: hetzner-deploy
+          stage: backup
+          project_dir: /opt/tipbox-backend
+          compose_file: docker-compose.test.yml
+          db_user: tipbox_user
+          db_name: tipbox_dev
+
+      - name: Stop services
+        if: steps.check-secrets.outputs.available == 'true'
+        uses: ./.github/actions/execute-remote-stage
+        with:
+          ssh_host: hetzner-deploy
+          stage: stop
+          project_dir: /opt/tipbox-backend
+          compose_file: docker-compose.test.yml
+
+      - name: Build images
+        if: steps.check-secrets.outputs.available == 'true'
+        uses: ./.github/actions/execute-remote-stage
+        with:
+          ssh_host: hetzner-deploy
+          stage: build
+          project_dir: /opt/tipbox-backend
+          compose_file: docker-compose.test.yml
+
+      - name: Generate Prisma Client
+        if: steps.check-secrets.outputs.available == 'true'
+        uses: ./.github/actions/execute-remote-stage
+        with:
+          ssh_host: hetzner-deploy
+          stage: prisma
+          project_dir: /opt/tipbox-backend
+          compose_file: docker-compose.test.yml
+
+      - name: Start infrastructure services
+        if: steps.check-secrets.outputs.available == 'true'
+        uses: ./.github/actions/execute-remote-stage
+        with:
+          ssh_host: hetzner-deploy
+          stage: infrastructure
+          project_dir: /opt/tipbox-backend
+          compose_file: docker-compose.test.yml
+
+      - name: Wait for database
+        if: steps.check-secrets.outputs.available == 'true'
+        uses: ./.github/actions/execute-remote-stage
+        with:
+          ssh_host: hetzner-deploy
+          stage: wait-db
+          project_dir: /opt/tipbox-backend
+          compose_file: docker-compose.test.yml
+          db_user: tipbox_user
+
+      - name: Run migrations
+        if: steps.check-secrets.outputs.available == 'true'
+        uses: ./.github/actions/execute-remote-stage
+        with:
+          ssh_host: hetzner-deploy
+          stage: migrate
+          project_dir: /opt/tipbox-backend
+          compose_file: docker-compose.test.yml
+
+      - name: Run seeds
+        if: steps.check-secrets.outputs.available == 'true'
+        uses: ./.github/actions/execute-remote-stage
+        with:
+          ssh_host: hetzner-deploy
+          stage: seed
+          project_dir: /opt/tipbox-backend
+          compose_file: docker-compose.test.yml
+          db_user: tipbox_user
+          db_name: tipbox_dev
+
+      - name: Start all services
+        if: steps.check-secrets.outputs.available == 'true'
+        uses: ./.github/actions/execute-remote-stage
+        with:
+          ssh_host: hetzner-deploy
+          stage: start
+          project_dir: /opt/tipbox-backend
+          compose_file: docker-compose.test.yml
+
+      - name: Health check
+        if: steps.check-secrets.outputs.available == 'true'
+        uses: ./.github/actions/execute-remote-stage
+        with:
+          ssh_host: hetzner-deploy
+          stage: health
+          project_dir: /opt/tipbox-backend
+          compose_file: docker-compose.test.yml
+
+      - name: Cleanup deployment
+        if: steps.check-secrets.outputs.available == 'true'
+        uses: ./.github/actions/execute-remote-stage
+        with:
+          ssh_host: hetzner-deploy
+          stage: cleanup
+          project_dir: /opt/tipbox-backend
+          compose_file: docker-compose.test.yml
+
+      - name: Deployment Summary
+        if: success()
+        run: |
+          echo "## ✅ Deployment Successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Server**: ${{ secrets.HETZNER_HOST }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Time**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+      - name: Deployment Failed
+        if: failure()
+        run: |
+          echo "## ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Please check the logs above for details." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+
