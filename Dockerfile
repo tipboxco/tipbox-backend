@@ -1,4 +1,4 @@
-FROM node:23.6.0-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
@@ -6,8 +6,9 @@ WORKDIR /app
 COPY package*.json ./
 COPY prisma ./prisma
 
-# Dependencies'leri yükle
-RUN npm install --legacy-peer-deps
+# npm cache temizle ve dependencies'leri yükle
+RUN npm cache clean --force && \
+    npm install --legacy-peer-deps --no-optional
 
 # Docker CLI kur (docker ps için)
 RUN apk add --no-cache docker-cli
