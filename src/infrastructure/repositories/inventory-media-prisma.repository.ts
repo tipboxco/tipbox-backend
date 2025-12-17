@@ -1,6 +1,5 @@
 import { InventoryMedia } from '../../domain/inventory/inventory-media.entity';
 import { getPrisma } from './prisma.client';
-import { InventoryMediaType } from '../../domain/inventory/inventory-media-type.enum';
 
 export class InventoryMediaPrismaRepository {
   private prisma = getPrisma();
@@ -36,32 +35,6 @@ export class InventoryMediaPrismaRepository {
     return medias.map(media => this.toDomain(media));
   }
 
-  async findByType(inventoryId: string, type: InventoryMediaType): Promise<InventoryMedia[]> {
-    const medias = await this.prisma.inventoryMedia.findMany({
-      where: { 
-        inventoryId,
-        type 
-      },
-      include: {
-        inventory: {
-          include: {
-            user: true,
-            product: true
-          }
-        }
-      },
-      orderBy: { createdAt: 'desc' }
-    });
-    return medias.map(media => this.toDomain(media));
-  }
-
-  async findImagesByInventoryId(inventoryId: string): Promise<InventoryMedia[]> {
-    return this.findByType(inventoryId, InventoryMediaType.IMAGE);
-  }
-
-  async findVideosByInventoryId(inventoryId: string): Promise<InventoryMedia[]> {
-    return this.findByType(inventoryId, InventoryMediaType.VIDEO);
-  }
 
   async findByUserId(userId: string): Promise<InventoryMedia[]> {
     const medias = await this.prisma.inventoryMedia.findMany({
@@ -85,14 +58,12 @@ export class InventoryMediaPrismaRepository {
 
   async create(
     inventoryId: string, 
-    mediaUrl: string, 
-    type: InventoryMediaType
+    mediaUrl: string
   ): Promise<InventoryMedia> {
     const media = await this.prisma.inventoryMedia.create({
       data: {
         inventoryId,
-        mediaUrl,
-        type
+        mediaUrl
       },
       include: {
         inventory: {
@@ -108,7 +79,6 @@ export class InventoryMediaPrismaRepository {
 
   async update(id: string, data: { 
     mediaUrl?: string;
-    type?: InventoryMediaType;
   }): Promise<InventoryMedia | null> {
     const media = await this.prisma.inventoryMedia.update({
       where: { id },
@@ -153,14 +123,6 @@ export class InventoryMediaPrismaRepository {
     });
   }
 
-  async countByType(inventoryId: string, type: InventoryMediaType): Promise<number> {
-    return await this.prisma.inventoryMedia.count({
-      where: { 
-        inventoryId,
-        type 
-      }
-    });
-  }
 
   async list(): Promise<InventoryMedia[]> {
     const medias = await this.prisma.inventoryMedia.findMany({
@@ -182,7 +144,6 @@ export class InventoryMediaPrismaRepository {
       prismaMedia.id,
       prismaMedia.inventoryId,
       prismaMedia.mediaUrl,
-      prismaMedia.type as InventoryMediaType,
       prismaMedia.uploadedAt,
       prismaMedia.createdAt,
       prismaMedia.updatedAt

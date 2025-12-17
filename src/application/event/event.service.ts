@@ -16,7 +16,7 @@ import {
   LimitedTimeEventUser,
 } from '../../interfaces/event/event.dto';
 import { FeedItem, FeedItemType } from '../../interfaces/feed/feed.dto';
-import { buildMediaUrl } from '../../infrastructure/config/media.config';
+import { buildMediaUrl, resolveMediaUrl } from '../../infrastructure/config/media.config';
 
 export class EventService {
   private prisma: PrismaClient;
@@ -600,9 +600,10 @@ export class EventService {
       const rankIndex = sortedByScore.findIndex((s) => s.userId === userStat.userId);
       const rank = rankIndex >= 0 ? rankIndex + 1 : 0;
 
-      const avatarUrl =
+      const avatarUrl = resolveMediaUrl(
         statAny.user?.avatars?.[0]?.imageUrl ||
-        null;
+        null
+      );
 
       userScore = {
         id: userStat.userId,

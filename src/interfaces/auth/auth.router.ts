@@ -3,6 +3,7 @@ import { AuthService } from '../../application/auth/auth.service';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { UserAvatarPrismaRepository } from '../../infrastructure/repositories/user-avatar-prisma.repository';
 import { ProfilePrismaRepository } from '../../infrastructure/repositories/profile-prisma.repository';
+import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import logger from '../../infrastructure/logger/logger';
 
 const router = Router();
@@ -142,7 +143,7 @@ router.post('/login', asyncHandler(async (req: Request, res: Response) => {
 
   // Aktif avatar'ı çek
   const activeAvatar = await avatarRepo.findActiveByUserId(user.id);
-  const avatarUrl = activeAvatar?.imageUrl || null;
+  const avatarUrl = resolveMediaUrl(activeAvatar?.imageUrl || null);
 
   // Token oluştur
   const token = authService.generateToken(user);

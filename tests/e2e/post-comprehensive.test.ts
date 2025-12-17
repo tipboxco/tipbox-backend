@@ -9,7 +9,6 @@ import { TipsAndTricksBenefitCategory } from '../../src/domain/content/tips-and-
 import { ExperienceType } from '../../src/domain/content/experience-type.enum';
 import { ExperienceStatus } from '../../src/domain/content/experience-status.enum';
 import { ContentPostType } from '../../src/domain/content/content-post-type.enum';
-import { PostMediaType } from '@prisma/client';
 
 const BASE_URL = 'http://localhost:3000';
 
@@ -108,12 +107,6 @@ async function verifyPostMediaInDB(postId: string, expectedCount?: number): Prom
     for (const m of media) {
       if (!m.mediaUrl) {
         errors.push(`PostMedia'da mediaUrl eksik: ${m.id}`);
-      }
-      if (!m.type) {
-        errors.push(`PostMedia'da type eksik: ${m.id}`);
-      }
-      if (m.type !== PostMediaType.IMAGE && m.type !== PostMediaType.VIDEO) {
-        errors.push(`PostMedia'da geçersiz type: ${m.type}`);
       }
     }
     

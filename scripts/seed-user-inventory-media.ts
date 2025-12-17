@@ -12,7 +12,7 @@ process.env.S3_BUCKET_NAME = process.env.S3_BUCKET_NAME || 'tipbox-media';
 process.env.S3_ACCESS_KEY = process.env.S3_ACCESS_KEY || 'minioadmin';
 process.env.S3_SECRET_KEY = process.env.S3_SECRET_KEY || 'minioadmin123';
 
-import { PrismaClient, InventoryMediaType } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { readdirSync, readFileSync } from 'fs';
 import path from 'path';
 import { S3Service } from '../src/infrastructure/s3/s3.service';
@@ -80,7 +80,6 @@ async function main() {
       data: {
         inventoryId: inv.id,
         mediaUrl: url,
-        type: InventoryMediaType.IMAGE,
       },
     });
 

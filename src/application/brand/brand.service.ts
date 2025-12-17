@@ -561,9 +561,7 @@ export class BrandService {
           },
           include: {
             productExperiences: true,
-            media: {
-              where: { type: 'IMAGE' },
-            },
+            media: true, // type field'ı kaldırıldı, tüm media'ları getir
           },
         });
 
@@ -1850,26 +1848,24 @@ export class BrandService {
       : [];
     const ownedProductIds = new Set(inventories.map((inv) => String(inv.productId)));
 
-    // Batch fetch images
-    const postProductIds = posts.map((p) => p.productId).filter(Boolean) as string[];
-    const inventoryMediaMap = new Map<string, string[]>();
-    if (postProductIds.length > 0 && userId) {
-      const inventoriesWithMedia = await this.prisma.inventory.findMany({
+    // Batch fetch images from PostMedia (orderIndex'e göre sıralı)
+    const postIds = posts.map((p) => p.id);
+    const postMediaMap = new Map<string, string[]>();
+    if (postIds.length > 0) {
+      const allPostMedia = await this.prisma.postMedia.findMany({
         where: {
-          userId: userId,
-          productId: { in: postProductIds },
+          postId: { in: postIds },
         },
-        include: {
-          media: {
-            where: { type: 'IMAGE' },
-            select: { mediaUrl: true },
-          },
-        },
+        orderBy: { orderIndex: 'asc' }, // Kullanıcının yüklediği sırada
+        select: { postId: true, mediaUrl: true },
       });
 
-      inventoriesWithMedia.forEach((inv) => {
-        const key = `${inv.userId}-${inv.productId}`;
-        inventoryMediaMap.set(key, inv.media.map((m) => m.mediaUrl));
+      // Map'e dönüştür (postId -> mediaUrl array)
+      allPostMedia.forEach((media) => {
+        if (!postMediaMap.has(media.postId)) {
+          postMediaMap.set(media.postId, []);
+        }
+        postMediaMap.get(media.postId)!.push(media.mediaUrl);
       });
     }
 
@@ -1906,10 +1902,9 @@ export class BrandService {
         contextData,
       };
 
-      // Get images for this post
-      const postKey = `${post.userId}-${post.productId || ''}`;
-      let images = inventoryMediaMap.get(postKey) || [];
-      // Inventory'de media yoksa, ürün görselini fallback olarak kullan
+      // Get images for this post from PostMedia (orderIndex'e göre sıralı)
+      let images = postMediaMap.get(post.id) || [];
+      // PostMedia'da görsel yoksa, ürün görselini fallback olarak kullan
       if ((!images || images.length === 0) && post.product?.imageUrl) {
         images = [post.product.imageUrl];
       }

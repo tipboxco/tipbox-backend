@@ -1,4 +1,5 @@
 import { prisma } from './types';
+import { ProgressBar } from './helpers/progress-bar';
 // Import from JS file (no ts-node issues)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { getLastSeedRunTime, clearSeedMetadata, getSeedUserIds } = require('./seed-metadata');
@@ -12,8 +13,18 @@ const { getLastSeedRunTime, clearSeedMetadata, getSeedUserIds } = require('./see
  * - Eğer seed metadata varsa: Sadece seed timestamp'inden önceki veriler silinir
  * - Eğer seed metadata yoksa: TÜM veriler silinir (eski davranış)
  */
-export async function clearAllSeedData(): Promise<void> {
+export async function clearAllSeedData(forceClearAll: boolean = false): Promise<void> {
   console.log('🗑️  Seed verileri temizleniyor...');
+  
+  // Eğer forceClearAll true ise, metadata'ya bakmadan tüm verileri sil
+  if (forceClearAll) {
+    console.log('⚠️  FORCE MODE: TÜM veriler silinecek (metadata kontrolü yapılmıyor)!');
+    await clearAllData();
+    // Metadata'yı da temizle
+    clearSeedMetadata();
+    console.log('✅ Tüm veriler temizlendi');
+    return;
+  }
   
   const lastSeedRun = getLastSeedRunTime();
   const seedUserIds = getSeedUserIds();
@@ -40,17 +51,22 @@ export async function clearAllSeedData(): Promise<void> {
  * Tüm verileri sil (eski davranış)
  */
 async function clearAllData(): Promise<void> {
+  // Progress bar oluştur (toplam 15 ana grup)
+  const totalSteps = 15
+  const progress = new ProgressBar(totalSteps, 50)
 
   try {
     // Foreign key constraint'leri nedeniyle ters sırada silme
     // En son oluşturulan verilerden başla
     
     // Feed ve trending verileri
+    progress.increment('Feed ve trending verileri temizleniyor...')
     await prisma.feed.deleteMany({});
     await prisma.trendingPost.deleteMany({});
     await prisma.feedHighlight.deleteMany({});
 
     // Content verileri
+    progress.increment('Content verileri temizleniyor...')
     await prisma.contentFavorite.deleteMany({});
     await prisma.contentLike.deleteMany({});
     await prisma.contentCommentVote.deleteMany({});
@@ -58,6 +74,8 @@ async function clearAllData(): Promise<void> {
     await prisma.contentPostView.deleteMany({});
     await prisma.contentRating.deleteMany({});
     await prisma.contentPostTag.deleteMany({});
+    await prisma.topCommunityChoice.deleteMany({});
+    await prisma.postMedia.deleteMany({});
     await prisma.postComparisonScore.deleteMany({});
     await prisma.postComparison.deleteMany({});
     await prisma.postTag.deleteMany({});
@@ -67,6 +85,7 @@ async function clearAllData(): Promise<void> {
     await prisma.contentCollection.deleteMany({});
 
     // Marketplace verileri
+    progress.increment('Marketplace verileri temizleniyor...')
     await prisma.marketplaceBanner.deleteMany({});
     await prisma.nFTMarketListing.deleteMany({});
     await prisma.nFTTransaction.deleteMany({});
@@ -77,7 +96,9 @@ async function clearAllData(): Promise<void> {
     // Explore verileri
     await prisma.wishboxStats.deleteMany({});
     await prisma.wishboxReward.deleteMany({});
+    await prisma.choiceComment.deleteMany({});
     await prisma.scenarioChoice.deleteMany({});
+    await prisma.wishboxScenario.deleteMany({});
     await prisma.wishboxEvent.deleteMany({});
     await prisma.bridgeReward.deleteMany({});
     await prisma.bridgeUserStats.deleteMany({});
@@ -87,8 +108,10 @@ async function clearAllData(): Promise<void> {
     await prisma.brandSurveyAnswer.deleteMany({});
     await prisma.brandSurvey.deleteMany({});
     await prisma.brand.deleteMany({});
+    await prisma.brandCategory.deleteMany({});
 
     // Inventory verileri
+    progress.increment('Inventory verileri temizleniyor...')
     await prisma.inventoryMedia.deleteMany({});
     await prisma.productExperience.deleteMany({});
     await prisma.inventory.deleteMany({});
@@ -109,6 +132,7 @@ async function clearAllData(): Promise<void> {
     await prisma.profile.deleteMany({});
 
     // Expert verileri
+    progress.increment('Expert verileri temizleniyor...')
     await prisma.expertAnswer.deleteMany({});
     await prisma.expertRequestMedia.deleteMany({});
     await prisma.expertRequest.deleteMany({});
@@ -116,11 +140,13 @@ async function clearAllData(): Promise<void> {
     // Messaging verileri
     await prisma.dMFeedback.deleteMany({});
     await prisma.dMSupportSession.deleteMany({});
+    await prisma.supportRequestReport.deleteMany({});
     await prisma.dMMessage.deleteMany({});
     await prisma.dMRequest.deleteMany({});
     await prisma.dMThread.deleteMany({});
 
     // Gamification verileri
+    progress.increment('Gamification verileri temizleniyor...')
     await prisma.rewardClaim.deleteMany({});
     await prisma.achievementGoal.deleteMany({});
     await prisma.achievementChain.deleteMany({});
@@ -132,6 +158,7 @@ async function clearAllData(): Promise<void> {
     await prisma.wallet.deleteMany({});
 
     // Product verileri
+    progress.increment('Product verileri temizleniyor...')
     await prisma.productSuggestion.deleteMany({});
     await prisma.product.deleteMany({});
     await prisma.productGroup.deleteMany({});
@@ -141,22 +168,27 @@ async function clearAllData(): Promise<void> {
     await prisma.mainCategory.deleteMany({});
     await prisma.comparisonMetric.deleteMany({});
     await prisma.badgeCategory.deleteMany({});
+    await prisma.brandCategory.deleteMany({});
     await prisma.userTheme.deleteMany({});
 
     // Admin verileri
+    progress.increment('Admin verileri temizleniyor...')
     await prisma.manualReviewFlag.deleteMany({});
     await prisma.moderationAction.deleteMany({});
     await prisma.adminLog.deleteMany({});
 
     // Auth verileri
+    progress.increment('Auth verileri temizleniyor...')
     await prisma.passwordResetToken.deleteMany({});
     await prisma.emailVerificationCode.deleteMany({});
     await prisma.loginAttempt.deleteMany({});
 
     // User'ları sil (en son)
+    progress.increment('Kullanıcılar temizleniyor...')
     await prisma.user.deleteMany({});
 
-    console.log('✅ Tüm seed verileri temizlendi');
+    progress.complete('Tüm seed verileri temizlendi!')
+    console.log('\n✅ Tüm seed verileri temizlendi');
   } catch (error) {
     console.error('❌ Seed verileri temizlenirken hata oluştu:', error);
     throw error;
@@ -230,6 +262,14 @@ async function clearDataBeforeTimestamp(timestamp: Date, seedUserIds: string[]):
       
       await prisma.contentPostTag.deleteMany({
         where: { post: { userId: { in: seedUserIds } } }
+      });
+      
+      await prisma.topCommunityChoice.deleteMany({
+        where: { post: { userId: { in: seedUserIds } } }
+      });
+      
+      await prisma.postMedia.deleteMany({
+        where: { userId: { in: seedUserIds } }
       });
       
       await prisma.postComparisonScore.deleteMany({
@@ -424,6 +464,20 @@ async function clearDataBeforeTimestamp(timestamp: Date, seedUserIds: string[]):
         }
       });
       
+      await prisma.supportRequestReport.deleteMany({
+        where: {
+          OR: [
+            { reporterId: { in: seedUserIds } },
+            { request: {
+              OR: [
+                { fromUserId: { in: seedUserIds } },
+                { toUserId: { in: seedUserIds } }
+              ]
+            }}
+          ]
+        }
+      });
+      
       await prisma.dMMessage.deleteMany({
         where: {
           OR: [
@@ -545,12 +599,25 @@ async function clearDataBeforeTimestamp(timestamp: Date, seedUserIds: string[]):
         where: { createdAt: { lt: timestamp } }
       });
       
+      // BrandCategory'leri timestamp'e göre sil (seed sırasında oluşturulduysa)
+      await prisma.brandCategory.deleteMany({
+        where: { createdAt: { lt: timestamp } }
+      });
+      
       // Explore bridge verileri - timestamp'e göre
       await prisma.wishboxReward.deleteMany({
         where: { createdAt: { lt: timestamp } }
       });
       
+      await prisma.choiceComment.deleteMany({
+        where: { createdAt: { lt: timestamp } }
+      });
+      
       await prisma.scenarioChoice.deleteMany({
+        where: { createdAt: { lt: timestamp } }
+      });
+      
+      await prisma.wishboxScenario.deleteMany({
         where: { createdAt: { lt: timestamp } }
       });
       
@@ -598,7 +665,10 @@ async function clearDataBeforeTimestamp(timestamp: Date, seedUserIds: string[]):
 }
 
 if (require.main === module) {
-  clearAllSeedData()
+  // Komut satırı argümanlarını kontrol et
+  const forceClearAll = process.argv.includes('--force') || process.argv.includes('-f');
+  
+  clearAllSeedData(forceClearAll)
     .catch((e) => {
       console.error('❌ Clear seed data failed:', e);
       process.exit(1);
