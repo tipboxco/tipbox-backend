@@ -67,7 +67,6 @@ async function migratePostMediaFromInventory(): Promise<MigrationStats> {
           },
           include: {
             media: {
-              where: { type: 'IMAGE' },
               orderBy: { createdAt: 'asc' },
             },
           },

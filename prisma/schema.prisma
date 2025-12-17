@@ -427,17 +427,15 @@ model ProductExperience {
 }
 
 model InventoryMedia {
-  id          String             @id @default(uuid()) @db.Uuid
-  inventoryId String             @map("inventory_id") @db.Uuid
-  mediaUrl    String             @map("media_url")
-  type        InventoryMediaType
-  uploadedAt  DateTime           @default(now()) @map("uploaded_at")
-  createdAt   DateTime           @default(now()) @map("created_at")
-  updatedAt   DateTime           @updatedAt @map("updated_at")
-  inventory   Inventory          @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  id          String    @id @default(uuid()) @db.Uuid
+  inventoryId String    @map("inventory_id") @db.Uuid
+  mediaUrl    String    @map("media_url")
+  uploadedAt  DateTime  @default(now()) @map("uploaded_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  inventory   Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
 
   @@index([inventoryId])
-  @@index([inventoryId, type])
   @@map("inventory_media")
 }
 
@@ -1547,13 +1545,6 @@ enum ProductSuggestionStatus {
   REJECTED
 
   @@map("product_suggestion_status")
-}
-
-enum InventoryMediaType {
-  IMAGE
-  VIDEO
-
-  @@map("inventory_media_type")
 }
 
 enum ContentPostType {

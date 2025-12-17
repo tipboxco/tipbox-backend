@@ -164,7 +164,6 @@ export async function seedProductsAndContent(): Promise<void> {
     data: {
       inventoryId: inventory1.id,
       mediaUrl: INVENTORY_MEDIA_URL,
-      type: 'IMAGE',
     },
   });
 

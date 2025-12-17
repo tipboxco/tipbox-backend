@@ -136,7 +136,6 @@ export async function seedBrandProducts(): Promise<void> {
           data: {
             inventoryId: inventory.id,
             mediaUrl: getSeedMediaUrl(productConfig.imageKey as any),
-            type: 'IMAGE',
           },
         }).catch(() => {});
       }
@@ -318,7 +317,6 @@ export async function seedBrandProducts(): Promise<void> {
                 data: {
                   inventoryId: inventory.id,
                   mediaUrl: eventImageUrls[eventImageIndex],
-                  type: 'IMAGE',
                 },
               }).catch(() => {});
               eventImageIndex++;
@@ -361,7 +359,6 @@ export async function seedBrandProducts(): Promise<void> {
               data: {
                 inventoryId: inventory.id,
                 mediaUrl: eventImageUrls[eventImageIndex],
-                type: 'IMAGE',
               },
             }).catch(() => {});
             eventImageIndex++;
@@ -406,7 +403,6 @@ export async function seedBrandProducts(): Promise<void> {
               data: {
                 inventoryId: inventory.id,
                 mediaUrl: eventImageUrls[eventImageIndex],
-                type: 'IMAGE',
               },
             }).catch(() => {});
             eventImageIndex++;
@@ -455,7 +451,6 @@ export async function seedBrandProducts(): Promise<void> {
               data: {
                 inventoryId: inventory.id,
                 mediaUrl: eventImageUrls[eventImageIndex],
-                type: 'IMAGE',
               },
             }).catch(() => {});
             eventImageIndex++;
@@ -542,7 +537,6 @@ export async function seedBrandProducts(): Promise<void> {
                 data: {
                   inventoryId: inventory.id,
                   mediaUrl: eventImageUrls[eventImageIndex],
-                  type: 'IMAGE',
                 },
               }).catch(() => {});
               eventImageIndex++;
@@ -587,7 +581,6 @@ export async function seedBrandProducts(): Promise<void> {
               data: {
                 inventoryId: inventory.id,
                 mediaUrl: eventImageUrls[eventImageIndex],
-                type: 'IMAGE',
               },
             }).catch(() => {});
             eventImageIndex++;

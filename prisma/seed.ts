@@ -133,7 +133,6 @@ async function ensureProductImages(userIdToUse: string): Promise<void> {
     ? await prisma.inventoryMedia.findMany({
         where: {
           inventoryId: { in: Array.from(existingInventoryIds) },
-          type: 'IMAGE',
         },
         select: { inventoryId: true },
       }).catch(() => [])
@@ -168,7 +167,6 @@ async function ensureProductImages(userIdToUse: string): Promise<void> {
       data: {
         inventoryId,
         mediaUrl: product.imageUrl,
-        type: 'IMAGE',
       },
     }).catch(() => {})
     mediaInventorySet.add(inventoryId)
@@ -2100,7 +2098,6 @@ async function main() {
     data: {
       inventoryId: inventory1.id,
       mediaUrl: INVENTORY_MEDIA_URL,
-      type: 'IMAGE',
     }
   })
 
@@ -2111,7 +2108,7 @@ async function main() {
       data: {
         inventoryId: inventory1.id,
         mediaUrl: postImageUrl,
-        type: 'IMAGE',
+       
       }
     })
   }
@@ -2195,10 +2192,9 @@ async function main() {
         return {
           inventoryId: inventory.id,
           mediaUrl,
-          type: 'IMAGE' as const,
         };
       })
-      .filter((item): item is { inventoryId: string; mediaUrl: string; type: 'IMAGE' } => !!item);
+      .filter((item): item is { inventoryId: string; mediaUrl: string } => !!item);
 
     if (mediaData.length) {
       await prisma.inventoryMedia.createMany({ data: mediaData });
@@ -5501,7 +5497,6 @@ async function main() {
                 data: {
                   inventoryId: inventory.id,
                   mediaUrl,
-                  type: 'IMAGE',
                 },
               })
             }
@@ -8131,7 +8126,6 @@ async function main() {
               {
                 inventoryId: inventory.id,
                 mediaUrl: product.imageUrl || getSeedMediaUrl('product.headphone.primary'),
-                type: 'IMAGE',
               },
             ],
             skipDuplicates: true,

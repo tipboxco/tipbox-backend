@@ -12,7 +12,6 @@ import {
 import logger from '../../infrastructure/logger/logger';
 import { ExperienceType } from '../../domain/content/experience-type.enum';
 import { ExperienceStatus } from '../../domain/content/experience-status.enum';
-import { InventoryMediaType } from '../../domain/inventory/inventory-media-type.enum';
 
 export class InventoryService {
   private readonly prisma: PrismaClient;
@@ -178,7 +177,6 @@ export class InventoryService {
             data: dto.images.map((imageUrl) => ({
               inventoryId: createdInventory.id,
               mediaUrl: imageUrl,
-              type: InventoryMediaType.IMAGE,
             })),
           });
         }
