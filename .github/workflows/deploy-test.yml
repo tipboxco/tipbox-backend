@@ -1,4 +1,4 @@
-name: Deploy to Hetzner Test Server
+name: Deploy to Test Server
 
 on:
   push:
