@@ -488,6 +488,24 @@ model ContentPost {
   @@index([productId])
   @@index([createdAt])
   @@map("content_posts")
+  media                PostMedia[]
+}
+
+model PostMedia {
+  id        String        @id @default(uuid()) @db.Uuid
+  postId    String        @map("post_id") @db.VarChar(26)
+  userId    String        @map("user_id") @db.Uuid
+  mediaUrl  String        @map("media_url")
+  orderIndex Int          @default(0) @map("order_index")
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+  post      ContentPost   @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([postId, orderIndex])
+  @@index([userId])
+  @@index([userId, createdAt])
+  @@map("post_media")
 }
 
 model PostQuestion {

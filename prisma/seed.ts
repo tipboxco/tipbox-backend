@@ -5551,7 +5551,7 @@ async function main() {
         return prisma.brandCategory.create({
           data: {
             name: config.name,
-            slug: config.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+      
             imageUrl: getSeedMediaUrl(config.imageKey as any),
           }
         });

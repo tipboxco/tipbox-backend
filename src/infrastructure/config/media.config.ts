@@ -13,6 +13,21 @@ import { s3Config } from './s3.config';
  * 5) Varsayılan: http://localhost:9000
  */
 export function getPublicMediaBaseUrl(): string {
+  /**
+   * Öncelik sırası:
+   * 1) SEED_MEDIA_BASE_URL    -> Seed & frontend için önerilen tek base URL
+   * 2) MINIO_PUBLIC_ENDPOINT  -> Frontend'in doğrudan eriştiği host
+   * 3) S3_ENDPOINT            -> Container içi endpoint (production'da kullanmayın!)
+   * 4) s3Config.endpoint      -> S3 config'ten gelen endpoint
+   * 5) Varsayılan: http://localhost:9000
+   * 
+   * ÖNEMLİ: Production'da SEED_MEDIA_BASE_URL veya MINIO_PUBLIC_ENDPOINT set edilmelidir!
+   */
+  const hasPublicEndpoint = Boolean(
+    process.env.SEED_MEDIA_BASE_URL || 
+    process.env.MINIO_PUBLIC_ENDPOINT
+  );
+
   const raw =
     process.env.SEED_MEDIA_BASE_URL ||
     process.env.MINIO_PUBLIC_ENDPOINT ||
@@ -20,7 +35,14 @@ export function getPublicMediaBaseUrl(): string {
     s3Config.endpoint ||
     'http://localhost:9000';
 
-  // Container içi "minio:9000" adresini frontend'in erişebileceği host'a çevir
+  // Eğer SEED_MEDIA_BASE_URL veya MINIO_PUBLIC_ENDPOINT set edilmişse direkt kullan
+  // (Bu production endpoint'i olmalı, değiştirme)
+  if (hasPublicEndpoint) {
+    return raw.replace(/\/$/, '');
+  }
+
+  // Sadece development'ta container içi "minio:9000" adresini localhost'a çevir
+  // Production'da bu durum olmamalı (SEED_MEDIA_BASE_URL set edilmeli)
   const normalized = raw.replace('minio:9000', 'localhost:9000');
 
   // Trailing slash'i temizle
@@ -35,6 +57,40 @@ export function buildMediaUrl(relativePath: string): string {
   const base = getPublicMediaBaseUrl();
   const cleanPath = relativePath.replace(/^\/+/, '');
   return `${base}/${cleanPath}`;
+}
+
+/**
+ * Database'deki media URL'ini production endpoint'ine dönüştürür.
+ * 
+ * Eğer URL localhost veya minio:9000 içeriyorsa, production endpoint'ine çevirir.
+ * Bu sayede frontend her zaman doğru URL'yi alır.
+ * 
+ * @param dbUrl - Database'den gelen URL (örn: http://localhost:9000/tipbox-media/products/phone5.png)
+ * @returns Production endpoint'ine dönüştürülmüş URL
+ * 
+ * Örnek:
+ * - Input:  http://localhost:9000/tipbox-media/products/phone5.png
+ * - Output: http://api-test.tipbox.co:9000/tipbox-media/products/phone5.png
+ */
+export function normalizeMediaUrl(dbUrl: string | null | undefined): string | null {
+  if (!dbUrl) return null;
+
+  try {
+    const url = new URL(dbUrl);
+    const publicBase = getPublicMediaBaseUrl();
+    const publicUrl = new URL(publicBase);
+
+    // Eğer URL zaten production endpoint'ine işaret ediyorsa değiştirme
+    if (url.hostname === publicUrl.hostname && url.port === publicUrl.port) {
+      return dbUrl;
+    }
+
+    // URL'yi production endpoint'ine çevir
+    return `${publicBase}${url.pathname}${url.search}${url.hash}`;
+  } catch (error) {
+    // Geçersiz URL ise olduğu gibi döndür
+    return dbUrl;
+  }
 }
 
 

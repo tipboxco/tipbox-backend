@@ -1159,32 +1159,42 @@ export class UserService {
 
     const userBase = await this.getUserBase(userId);
     
-    // Batch fetch images from InventoryMedia for posts with products
-    const postProductIds = posts.map((p) => p.productId).filter(Boolean) as string[];
-    const inventoryMediaMap = new Map<string, string[]>();
+    // Batch fetch images from PostMedia (orderIndex'e göre sıralı)
+    const postIds = posts.map((p) => p.id);
+    const postMediaMap = new Map<string, string[]>();
     const ownedProductIds = new Set<string>();
     
+    if (postIds.length > 0) {
+      const allPostMedia = await this.prisma.postMedia.findMany({
+        where: {
+          postId: { in: postIds },
+        },
+        orderBy: { orderIndex: 'asc' }, // Kullanıcının yüklediği sırada
+        select: { postId: true, mediaUrl: true },
+      });
+
+      // Map'e dönüştür (postId -> mediaUrl array)
+      allPostMedia.forEach((media) => {
+        if (!postMediaMap.has(media.postId)) {
+          postMediaMap.set(media.postId, []);
+        }
+        postMediaMap.get(media.postId)!.push(media.mediaUrl);
+      });
+    }
+    
+    // Owned products için inventory kontrolü (başka bir yerde kullanılıyor olabilir)
+    const postProductIds = posts.map((p) => p.productId).filter(Boolean) as string[];
     if (postProductIds.length > 0) {
-      const inventoriesWithMedia = await this.prisma.inventory.findMany({
+      const inventories = await this.prisma.inventory.findMany({
         where: {
           userId,
           productId: { in: postProductIds },
         },
-        include: {
-          media: {
-            where: { type: 'IMAGE' },
-            orderBy: { createdAt: 'asc' },
-          },
-        },
+        select: { productId: true },
       });
-
-      for (const inventory of inventoriesWithMedia) {
-        ownedProductIds.add(String(inventory.productId));
-        const imageUrls = inventory.media.map((m) => m.mediaUrl);
-        if (imageUrls.length > 0) {
-          inventoryMediaMap.set(inventory.productId, imageUrls);
-        }
-      }
+      inventories.forEach((inv) => {
+        ownedProductIds.add(String(inv.productId));
+      });
     }
     
     const results = await Promise.all(
@@ -1192,7 +1202,8 @@ export class UserService {
         const stats = await this.getPostStats(post.id);
         const contextType = this.mapContextType(post);
         const contextData = this.buildContextDataFromPost(post, ownedProductIds);
-        const images = post.productId ? (inventoryMediaMap.get(post.productId) || []) : [];
+        // Get images for this post from PostMedia (orderIndex'e göre sıralı)
+        const images = postMediaMap.get(post.id) || [];
         return {
           id: String(post.id),
           type: 'post' as const,
@@ -1256,40 +1267,51 @@ export class UserService {
 
     const userBase = await this.getUserBase(userId);
 
-    // Batch fetch images from InventoryMedia for posts with products
-    const postProductIds = posts.map((p) => p.productId).filter(Boolean) as string[];
-    const inventoryMediaMap = new Map<string, string[]>();
+    // Batch fetch images from PostMedia (orderIndex'e göre sıralı)
+    const postIds = posts.map((p) => p.id);
+    const postMediaMap = new Map<string, string[]>();
     const ownedProductIds = new Set<string>();
+    
+    if (postIds.length > 0) {
+      const allPostMedia = await this.prisma.postMedia.findMany({
+        where: {
+          postId: { in: postIds },
+        },
+        orderBy: { orderIndex: 'asc' }, // Kullanıcının yüklediği sırada
+        select: { postId: true, mediaUrl: true },
+      });
 
+      // Map'e dönüştür (postId -> mediaUrl array)
+      allPostMedia.forEach((media) => {
+        if (!postMediaMap.has(media.postId)) {
+          postMediaMap.set(media.postId, []);
+        }
+        postMediaMap.get(media.postId)!.push(media.mediaUrl);
+      });
+    }
+
+    // Owned products için inventory kontrolü
+    const postProductIds = posts.map((p) => p.productId).filter(Boolean) as string[];
     if (postProductIds.length > 0) {
-      const inventoriesWithMedia = await this.prisma.inventory.findMany({
+      const inventories = await this.prisma.inventory.findMany({
         where: {
           userId,
           productId: { in: postProductIds },
         },
-        include: {
-          media: {
-            where: { type: 'IMAGE' },
-            orderBy: { createdAt: 'asc' },
-          },
-        },
+        select: { productId: true },
       });
-
-      for (const inventory of inventoriesWithMedia) {
-        ownedProductIds.add(String(inventory.productId));
-        const imageUrls = inventory.media.map((m) => m.mediaUrl);
-        if (imageUrls.length > 0) {
-          inventoryMediaMap.set(inventory.productId, imageUrls);
-        }
-      }
+      inventories.forEach((inv) => {
+        ownedProductIds.add(String(inv.productId));
+      });
     }
-
+    
     const results = await Promise.all(
       posts.map(async (post) => {
         const stats = await this.getPostStats(post.id);
         const contextType = this.mapContextType(post);
         const contextData = this.buildContextDataFromPost(post, ownedProductIds);
-        const images = post.productId ? (inventoryMediaMap.get(post.productId) || []) : [];
+        // Get images for this post from PostMedia (orderIndex'e göre sıralı)
+        const images = postMediaMap.get(post.id) || [];
         const productBase = contextData
           ? {
               id: contextData.id,

@@ -159,6 +159,18 @@ export class PostService {
         false // isBoosted
       );
 
+      // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
+      if (request.images && request.images.length > 0) {
+        await this.prisma.postMedia.createMany({
+          data: request.images.map((imageUrl, index) => ({
+            postId: post.id,
+            userId: userId,
+            mediaUrl: imageUrl,
+            orderIndex: index, // Kullanıcının yüklediği sırada
+          })),
+        });
+      }
+
       logger.info(`Free post created: ${post.id} by user ${userId}`);
       return { id: post.id };
     } catch (error) {
@@ -220,6 +232,18 @@ export class PostService {
         tipCategory,
         false // isVerified - can be verified later
       );
+
+      // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
+      if (request.images && request.images.length > 0) {
+        await this.prisma.postMedia.createMany({
+          data: request.images.map((imageUrl, index) => ({
+            postId: post.id,
+            userId: userId,
+            mediaUrl: imageUrl,
+            orderIndex: index, // Kullanıcının yüklediği sırada
+          })),
+        });
+      }
 
       logger.info(
         `Tips and tricks post created: ${post.id} by user ${userId}`
@@ -314,6 +338,18 @@ export class PostService {
         QuestionAnswerFormat.SHORT, // Default format
         undefined // relatedProductId
       );
+
+      // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
+      if (request.images && request.images.length > 0) {
+        await this.prisma.postMedia.createMany({
+          data: request.images.map((imageUrl, index) => ({
+            postId: post.id,
+            userId: userId,
+            mediaUrl: imageUrl,
+            orderIndex: index, // Kullanıcının yüklediği sırada
+          })),
+        });
+      }
 
       logger.info(`Question post created: ${post.id} by user ${userId}`);
       return { id: post.id };
@@ -482,6 +518,18 @@ export class PostService {
         false
       );
 
+      // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
+      if (request.images && request.images.length > 0) {
+        await this.prisma.postMedia.createMany({
+          data: request.images.map((imageUrl, index) => ({
+            postId: post.id,
+            userId: userId,
+            mediaUrl: imageUrl,
+            orderIndex: index, // Kullanıcının yüklediği sırada
+          })),
+        });
+      }
+
       logger.info(`Experience post created: ${post.id} by user ${userId}`);
       return { id: post.id };
     } catch (error) {
@@ -583,6 +631,18 @@ export class PostService {
         true, // inventoryRequired - update posts require inventory
         false
       );
+
+      // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
+      if (request.images && request.images.length > 0) {
+        await this.prisma.postMedia.createMany({
+          data: request.images.map((imageUrl, index) => ({
+            postId: post.id,
+            userId: userId,
+            mediaUrl: imageUrl,
+            orderIndex: index, // Kullanıcının yüklediği sırada
+          })),
+        });
+      }
 
       logger.info(`Update post created: ${post.id} by user ${userId}`);
       return { id: post.id };

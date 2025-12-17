@@ -169,26 +169,24 @@ export class FeedService {
     });
     const ownedProductIds = new Set(inventories.map((inv) => String(inv.productId)));
 
-    // Batch fetch images for posts (from InventoryMedia)
-    const postProductIds = posts.map((p) => p.productId).filter(Boolean) as string[];
-    const inventoryMediaMap = new Map<string, string[]>();
-    if (postProductIds.length > 0) {
-      const inventoriesWithMedia = await this.prisma.inventory.findMany({
+    // Batch fetch images from PostMedia (orderIndex'e göre sıralı)
+    const postIds = orderedPosts.map((p) => p.id);
+    const postMediaMap = new Map<string, string[]>();
+    if (postIds.length > 0) {
+      const allPostMedia = await this.prisma.postMedia.findMany({
         where: {
-          userId: { in: posts.map((p) => p.userId) },
-          productId: { in: postProductIds },
+          postId: { in: postIds },
         },
-        include: {
-          media: {
-            where: { type: 'IMAGE' },
-            select: { mediaUrl: true },
-          },
-        },
+        orderBy: { orderIndex: 'asc' }, // Kullanıcının yüklediği sırada
+        select: { postId: true, mediaUrl: true },
       });
 
-      inventoriesWithMedia.forEach((inv) => {
-        const key = `${inv.userId}-${inv.productId}`;
-        inventoryMediaMap.set(key, inv.media.map((m) => m.mediaUrl));
+      // Map'e dönüştür (postId -> mediaUrl array)
+      allPostMedia.forEach((media) => {
+        if (!postMediaMap.has(media.postId)) {
+          postMediaMap.set(media.postId, []);
+        }
+        postMediaMap.get(media.postId)!.push(media.mediaUrl);
       });
     }
 
@@ -215,9 +213,8 @@ export class FeedService {
           contextType: this.mapContextType(post),
         };
 
-        // Get images for this post
-        const postKey = `${post.userId}-${post.productId || ''}`;
-        const images = inventoryMediaMap.get(postKey) || [];
+        // Get images for this post from PostMedia (orderIndex'e göre sıralı)
+        const images = postMediaMap.get(post.id) || [];
 
         switch (post.type) {
           case ContentPostType.FREE:
@@ -456,26 +453,24 @@ export class FeedService {
     // Update posts and postIds after filtering
     posts = filteredFeeds.map((feed) => feed.post);
 
-    // Batch fetch images
-    const postProductIds = posts.map((p) => p.productId).filter(Boolean) as string[];
-    const inventoryMediaMap = new Map<string, string[]>();
-    if (postProductIds.length > 0) {
-      const inventoriesWithMedia = await this.prisma.inventory.findMany({
+    // Batch fetch images from PostMedia (orderIndex'e göre sıralı)
+    const postIds = posts.map((p) => p.id);
+    const postMediaMap = new Map<string, string[]>();
+    if (postIds.length > 0) {
+      const allPostMedia = await this.prisma.postMedia.findMany({
         where: {
-          userId: { in: posts.map((p) => p.userId) },
-          productId: { in: postProductIds },
+          postId: { in: postIds },
         },
-        include: {
-          media: {
-            where: { type: 'IMAGE' },
-            select: { mediaUrl: true },
-          },
-        },
+        orderBy: { orderIndex: 'asc' }, // Kullanıcının yüklediği sırada
+        select: { postId: true, mediaUrl: true },
       });
 
-      inventoriesWithMedia.forEach((inv) => {
-        const key = `${inv.userId}-${inv.productId}`;
-        inventoryMediaMap.set(key, inv.media.map((m) => m.mediaUrl));
+      // Map'e dönüştür (postId -> mediaUrl array)
+      allPostMedia.forEach((media) => {
+        if (!postMediaMap.has(media.postId)) {
+          postMediaMap.set(media.postId, []);
+        }
+        postMediaMap.get(media.postId)!.push(media.mediaUrl);
       });
     }
 
@@ -501,9 +496,8 @@ export class FeedService {
           contextType: this.mapContextType(post),
         };
 
-        // Get images for this post
-        const postKey = `${post.userId}-${post.productId || ''}`;
-        const images = inventoryMediaMap.get(postKey) || [];
+        // Get images for this post from PostMedia (orderIndex'e göre sıralı)
+        const images = postMediaMap.get(post.id) || [];
 
         switch (post.type) {
           case ContentPostType.FREE:

@@ -246,10 +246,10 @@ export async function seedBrandProducts(): Promise<void> {
         // 10 adet farklı URL için görseli yükle
         for (let i = 0; i < 10; i++) {
           const objectKey = `news/${brand.name.toLowerCase().replace(/\s+/g, '-')}/${product.id}/${Date.now()}-${i}-event.jpg`;
+          // uploadFile() zaten getPublicMediaBaseUrl() kullanarak doğru URL'i döndürür
+          // Production'da SEED_MEDIA_BASE_URL set edilmişse otomatik olarak production endpoint'i kullanılır
           const uploadedUrl = await s3Service.uploadFile(objectKey, eventImageBuffer, 'image/jpeg');
-          // Localhost uyumlu URL oluştur
-          const localhostUrl = uploadedUrl.replace('minio:9000', 'localhost:9000');
-          eventImageUrls.push(localhostUrl);
+          eventImageUrls.push(uploadedUrl);
         }
         console.log(`✅ ${eventImageUrls.length} adet event.jpg görseli MinIO'ya yüklendi`);
       } catch (error) {
