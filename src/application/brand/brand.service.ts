@@ -561,9 +561,7 @@ export class BrandService {
           },
           include: {
             productExperiences: true,
-            media: {
-              where: { type: 'IMAGE' },
-            },
+            media: true, // type field'ı kaldırıldı, tüm media'ları getir
           },
         });
 

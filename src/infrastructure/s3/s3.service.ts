@@ -1,7 +1,7 @@
 import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, PutBucketPolicyCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { s3Config } from '../config/s3.config';
-import { getPublicMediaBaseUrl } from '../config/media.config';
+import { getPublicMediaBaseUrl, buildMediaUrl } from '../config/media.config';
 import logger from '../logger/logger';
 import fs from 'fs';
 
@@ -199,21 +199,23 @@ export class S3Service {
 
   /**
    * Yüklenen dosyanın nihai URL'ini oluşturur
-   * @param fileName - Dosya adı
-   * @returns Dosyanın erişilebilir URL'i
+   * @param fileName - MinIO bucket path (örn: users/profile/9f2a1c/avatar.jpg)
+   * @returns Dosyanın erişilebilir tam URL'i (buildMediaUrl ile oluşturulur)
    */
   getFileUrl(fileName: string): string {
-    // Tüm public URL'ler için tek base kullan
-    const publicBase = getPublicMediaBaseUrl();
-    return `${publicBase}/${s3Config.bucketName}/${fileName}`;
+    // buildMediaUrl kullanarak tam URL oluştur
+    return buildMediaUrl(fileName);
   }
 
   /**
    * Buffer'dan dosya yükler
-   * @param fileName - Dosya adı
+   * @param fileName - Dosya adı (örn: users/profile/9f2a1c/avatar.jpg)
    * @param buffer - Dosya içeriği
    * @param contentType - Dosya tipi (MIME type)
-   * @returns Yüklenen dosyanın URL'i
+   * @returns Yüklenen dosyanın bucket path'i (tam URL değil, sadece path)
+   * 
+   * ÖNEMLİ: Bu metod sadece bucket path döndürür. Tam URL için getFileUrl() kullanın.
+   * DB'de sadece path tutulur, response'larda resolveMediaUrl() ile tam URL'ye çevrilir.
    */
   async uploadFile(fileName: string, buffer: Buffer, contentType: string): Promise<string> {
     try {
@@ -229,15 +231,17 @@ export class S3Service {
 
       await this.s3Client.send(command);
       
-      const fileUrl = this.getFileUrl(fileName);
+      // Sadece bucket path döndür (tam URL değil)
+      // DB'de sadece path tutulacak, response'larda resolveMediaUrl() ile tam URL'ye çevrilecek
       logger.info({
         message: 'Dosya başarıyla yüklendi',
         fileName,
-        fileUrl,
+        bucketPath: fileName,
         bucketName: s3Config.bucketName,
+        fullUrl: this.getFileUrl(fileName), // Log için tam URL
       });
       
-      return fileUrl;
+      return fileName; // Sadece path döndür
     } catch (error: any) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const isBucketError = error.name === 'NoSuchBucket' 

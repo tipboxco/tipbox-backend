@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { CacheService } from '../../infrastructure/cache/cache.service';
+import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import { MarketplaceBannerPrismaRepository } from '../../infrastructure/repositories/marketplace-banner-prisma.repository';
 import logger from '../../infrastructure/logger/logger';
 import {
@@ -481,7 +482,6 @@ export class ExploreService {
       },
       include: {
         media: {
-          where: { type: 'IMAGE' },
           take: 1,
           orderBy: { uploadedAt: 'desc' },
         },
@@ -532,7 +532,7 @@ export class ExploreService {
       id: userId,
       name: profile?.displayName || 'Anonymous',
       title: title?.title || '',
-      avatar: avatar?.imageUrl || '',
+      avatar: resolveMediaUrl(avatar?.imageUrl || null) || '',
     };
   }
 

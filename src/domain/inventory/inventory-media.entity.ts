@@ -30,9 +30,9 @@ export class InventoryMedia {
   }
 
   isValidMediaUrl(): boolean {
-    const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-    const ext = this.getFileExtension();
-    return ext ? imageExtensions.includes(ext) : false;
+      const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+      const ext = this.getFileExtension();
+      return ext ? imageExtensions.includes(ext) : false;
   }
 
   getMediaIcon(): string {

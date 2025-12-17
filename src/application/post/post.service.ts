@@ -22,6 +22,7 @@ import {
   Experience,
 } from '../../interfaces/post/post.dto';
 import { PrismaClient } from '@prisma/client';
+import { FeedService } from '../feed/feed.service';
 import logger from '../../infrastructure/logger/logger';
 
 export class PostService {
@@ -29,6 +30,7 @@ export class PostService {
   private tipRepo: PostTipPrismaRepository;
   private questionRepo: PostQuestionPrismaRepository;
   private comparisonRepo: PostComparisonPrismaRepository;
+  private feedService: FeedService;
   private prisma: PrismaClient;
 
   constructor() {
@@ -36,6 +38,7 @@ export class PostService {
     this.tipRepo = new PostTipPrismaRepository();
     this.questionRepo = new PostQuestionPrismaRepository();
     this.comparisonRepo = new PostComparisonPrismaRepository();
+    this.feedService = new FeedService();
     this.prisma = new PrismaClient();
   }
 
@@ -172,6 +175,12 @@ export class PostService {
       }
 
       logger.info(`Free post created: ${post.id} by user ${userId}`);
+      
+      // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
+      this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
+        logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
+      });
+      
       return { id: post.id };
     } catch (error) {
       logger.error(`Failed to create free post:`, error);
@@ -248,6 +257,12 @@ export class PostService {
       logger.info(
         `Tips and tricks post created: ${post.id} by user ${userId}`
       );
+      
+      // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
+      this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
+        logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
+      });
+      
       return { id: post.id };
     } catch (error) {
       logger.error(`Failed to create tips and tricks post:`, error);
@@ -352,6 +367,12 @@ export class PostService {
       }
 
       logger.info(`Question post created: ${post.id} by user ${userId}`);
+      
+      // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
+      this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
+        logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
+      });
+      
       return { id: post.id };
     } catch (error) {
       logger.error(`Failed to create question post:`, error);
@@ -465,6 +486,12 @@ export class PostService {
       );
 
       logger.info(`Benchmark post created: ${post.id} by user ${userId}`);
+      
+      // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
+      this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
+        logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
+      });
+      
       return { id: post.id };
     } catch (error) {
       logger.error(`Failed to create benchmark post:`, error);
@@ -531,6 +558,12 @@ export class PostService {
       }
 
       logger.info(`Experience post created: ${post.id} by user ${userId}`);
+      
+      // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
+      this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
+        logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
+      });
+      
       return { id: post.id };
     } catch (error) {
       logger.error(`Failed to create experience post:`, error);
@@ -645,6 +678,12 @@ export class PostService {
       }
 
       logger.info(`Update post created: ${post.id} by user ${userId}`);
+      
+      // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
+      this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
+        logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
+      });
+      
       return { id: post.id };
     } catch (error) {
       logger.error(`Failed to create update post:`, error);
@@ -693,7 +732,6 @@ export class PostService {
           media: inventory.media.map((m) => ({
             id: m.id,
             mediaUrl: m.mediaUrl,
-            type: m.type,
           })),
         },
       ];

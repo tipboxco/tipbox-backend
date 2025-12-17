@@ -51,12 +51,21 @@ export function getPublicMediaBaseUrl(): string {
 
 /**
  * Verilen relative path için tam media URL üretir.
- * Örn: buildMediaUrl('tipbox-media/catalog/home-appliances.png')
+ * DB'de sadece bucket path tutulur (örn: users/profile/9f2a1c/avatar.jpg)
+ * Bu fonksiyon PUBLIC_BASE_URL ile birleştirerek tam URL oluşturur.
+ * 
+ * Örn: 
+ * - Input:  'users/profile/9f2a1c/avatar.jpg'
+ * - Output: 'https://api-test.tipbox.co/media/users/profile/9f2a1c/avatar.jpg'
+ * 
+ * @param relativePath - MinIO bucket path (örn: users/profile/9f2a1c/avatar.jpg)
+ * @returns Tam media URL
  */
 export function buildMediaUrl(relativePath: string): string {
-  const base = getPublicMediaBaseUrl();
+  // PUBLIC_BASE_URL env değişkeni varsa onu kullan, yoksa getPublicMediaBaseUrl() kullan
+  const baseUrl = process.env.PUBLIC_BASE_URL || getPublicMediaBaseUrl();
   const cleanPath = relativePath.replace(/^\/+/, '');
-  return `${base}/${cleanPath}`;
+  return `${baseUrl}/media/${cleanPath}`;
 }
 
 /**
@@ -91,6 +100,36 @@ export function normalizeMediaUrl(dbUrl: string | null | undefined): string | nu
     // Geçersiz URL ise olduğu gibi döndür
     return dbUrl;
   }
+}
+
+/**
+ * Database'den gelen media path veya URL'ini tam URL'ye çevirir.
+ * 
+ * Eğer değer zaten bir URL ise (http:// veya https:// ile başlıyorsa), olduğu gibi döndürür.
+ * Eğer değer bir path ise (örn: users/profile/9f2a1c/avatar.jpg), buildMediaUrl ile tam URL'ye çevirir.
+ * 
+ * Bu fonksiyon hem eski URL formatını hem de yeni path formatını destekler.
+ * 
+ * @param mediaPathOrUrl - Database'den gelen path veya URL
+ * @returns Tam media URL veya null
+ * 
+ * Örnekler:
+ * - Input:  'users/profile/9f2a1c/avatar.jpg'
+ * - Output: 'https://api-test.tipbox.co/media/users/profile/9f2a1c/avatar.jpg'
+ * 
+ * - Input:  'https://api-test.tipbox.co/media/users/profile/9f2a1c/avatar.jpg'
+ * - Output: 'https://api-test.tipbox.co/media/users/profile/9f2a1c/avatar.jpg'
+ */
+export function resolveMediaUrl(mediaPathOrUrl: string | null | undefined): string | null {
+  if (!mediaPathOrUrl) return null;
+
+  // Eğer zaten bir URL ise (http:// veya https:// ile başlıyorsa), olduğu gibi döndür
+  if (mediaPathOrUrl.startsWith('http://') || mediaPathOrUrl.startsWith('https://')) {
+    return mediaPathOrUrl;
+  }
+
+  // Path ise buildMediaUrl ile tam URL'ye çevir
+  return buildMediaUrl(mediaPathOrUrl);
 }
 
 

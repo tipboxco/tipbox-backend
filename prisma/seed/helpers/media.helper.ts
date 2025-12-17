@@ -62,7 +62,24 @@ function getBucketName(): string {
   return process.env.S3_BUCKET_NAME || 'tipbox-media';
 }
 
-// Runtime'da URL oluştur
+/**
+ * Seed media için sadece path döndürür (bucket içindeki path)
+ * DB'ye yazılacak format: tipbox-media/products/phone6.png
+ * @param key Seed media key
+ * @returns Bucket path (örn: tipbox-media/products/phone6.png)
+ */
+export function getSeedMediaPath(key: SeedMediaKey): string {
+  const entry = seedMedia[key];
+
+  if (!entry) {
+    throw new Error(`Seed media anahtarı bulunamadı: ${key}`);
+  }
+
+  const bucketName = getBucketName();
+  return `${bucketName}/${entry.targetKey}`;
+}
+
+// Runtime'da URL oluştur (DEPRECATED: Seed için kullanmayın, sadece path kullanın)
 export function getSeedMediaUrl(key: SeedMediaKey, fallbackUrl?: string): string {
   const entry = seedMedia[key];
 
