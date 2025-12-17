@@ -17,7 +17,7 @@ on:
           - staging
 
 env:
-  NODE_VERSION: '23.6.0'
+  NODE_VERSION: '20'
 
 jobs:
   deploy:
