@@ -1,0 +1,56 @@
+name: 'Prepare Deployment'
+description: 'Navigate to project directory, pull latest code, and verify environment file'
+inputs:
+  project_dir:
+    description: 'Project directory path'
+    required: true
+  compose_file:
+    description: 'Docker compose file name'
+    required: true
+  env_file:
+    description: 'Environment file name to check'
+    required: true
+  deploy_branch:
+    description: 'Branch to deploy'
+    required: true
+outputs:
+  project_dir:
+    description: 'Project directory path'
+    value: ${{ inputs.project_dir }}
+  compose_file:
+    description: 'Docker compose file name'
+    value: ${{ inputs.compose_file }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Prepare deployment
+      shell: bash
+      run: |
+        set -e
+        
+        echo "🚀 Starting test environment deployment..."
+        echo "📌 Deploying branch: ${{ inputs.deploy_branch }}"
+        
+        PROJECT_DIR="${{ inputs.project_dir }}"
+        COMPOSE_FILE="${{ inputs.compose_file }}"
+        
+        # Proje dizinine git
+        cd "$PROJECT_DIR" || {
+          echo "❌ Project directory not found: $PROJECT_DIR"
+          exit 1
+        }
+        
+        # Git pull
+        echo "📥 Pulling latest changes from branch: ${{ inputs.deploy_branch }}"
+        git fetch origin
+        git checkout "${{ inputs.deploy_branch }}"
+        git pull origin "${{ inputs.deploy_branch }}"
+        
+        # Environment dosyasının varlığını kontrol et
+        if [ ! -f "${{ inputs.env_file }}" ]; then
+          echo "❌ ${{ inputs.env_file }} file not found! Please create it first."
+          exit 1
+        fi
+        
+        echo "✅ Preparation completed"
+

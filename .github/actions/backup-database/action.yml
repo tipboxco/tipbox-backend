@@ -1,0 +1,38 @@
+name: 'Backup Database'
+description: 'Create a database backup before deployment'
+inputs:
+  project_dir:
+    description: 'Project directory path'
+    required: true
+  compose_file:
+    description: 'Docker compose file name'
+    required: true
+  db_user:
+    description: 'Database user'
+    required: false
+    default: 'postgres'
+  db_name:
+    description: 'Database name'
+    required: true
+runs:
+  using: 'composite'
+  steps:
+    - name: Backup database
+      shell: bash
+      run: |
+        set -e
+        
+        PROJECT_DIR="${{ inputs.project_dir }}"
+        COMPOSE_FILE="${{ inputs.compose_file }}"
+        
+        # Database backup (opsiyonel ama önerilir)
+        echo "💾 Creating database backup..."
+        BACKUP_DIR="${PROJECT_DIR}/backups"
+        mkdir -p "$BACKUP_DIR"
+        BACKUP_FILE="${BACKUP_DIR}/backup-$(date +%Y%m%d-%H%M%S).sql"
+        docker compose -f "$COMPOSE_FILE" exec -T postgres pg_dump -U "${{ inputs.db_user }}" "${{ inputs.db_name }}" > "$BACKUP_FILE" 2>/dev/null || {
+          echo "⚠️  Backup failed or database not accessible, continuing..."
+        }
+        
+        echo "✅ Backup completed (if accessible)"
+

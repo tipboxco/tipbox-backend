@@ -1,0 +1,193 @@
+name: 'Execute Remote Deployment Stage'
+description: 'Execute a deployment stage on remote server via SSH'
+inputs:
+  ssh_host:
+    description: 'SSH host alias'
+    required: true
+  stage:
+    description: 'Stage name to execute'
+    required: true
+  project_dir:
+    description: 'Project directory path'
+    required: true
+  compose_file:
+    description: 'Docker compose file name'
+    required: true
+  deploy_branch:
+    description: 'Branch to deploy'
+    required: false
+  env_file:
+    description: 'Environment file name'
+    required: false
+  db_user:
+    description: 'Database user'
+    required: false
+  db_name:
+    description: 'Database name'
+    required: false
+runs:
+  using: 'composite'
+  steps:
+    - name: Execute stage
+      shell: bash
+      env:
+        SSH_HOST: ${{ inputs.ssh_host }}
+        STAGE: ${{ inputs.stage }}
+        PROJECT_DIR: ${{ inputs.project_dir }}
+        COMPOSE_FILE: ${{ inputs.compose_file }}
+        DEPLOY_BRANCH: ${{ inputs.deploy_branch }}
+        ENV_FILE: ${{ inputs.env_file }}
+        DB_USER: ${{ inputs.db_user }}
+        DB_NAME: ${{ inputs.db_name }}
+      run: |
+        ssh "$SSH_HOST" "export STAGE='$STAGE' PROJECT_DIR='$PROJECT_DIR' COMPOSE_FILE='$COMPOSE_FILE' DEPLOY_BRANCH='$DEPLOY_BRANCH' ENV_FILE='$ENV_FILE' DB_USER='$DB_USER' DB_NAME='$DB_NAME' && bash -s" << 'STAGE_SCRIPT'
+          set -e
+          
+          case "$STAGE" in
+            prepare)
+              echo "🚀 Starting test environment deployment..."
+              echo "📌 Deploying branch: $DEPLOY_BRANCH"
+              cd "$PROJECT_DIR" || { echo "❌ Project directory not found: $PROJECT_DIR"; exit 1; }
+              echo "📥 Pulling latest changes from branch: $DEPLOY_BRANCH"
+              git fetch origin
+              git checkout "$DEPLOY_BRANCH"
+              git pull origin "$DEPLOY_BRANCH"
+              if [ ! -f "$ENV_FILE" ]; then
+                echo "❌ $ENV_FILE file not found! Please create it first."
+                exit 1
+              fi
+              echo "✅ Preparation completed"
+              ;;
+            backup)
+              echo "💾 Creating database backup..."
+              cd "$PROJECT_DIR" || exit 1
+              BACKUP_DIR="${PROJECT_DIR}/backups"
+              mkdir -p "$BACKUP_DIR"
+              BACKUP_FILE="${BACKUP_DIR}/backup-$(date +%Y%m%d-%H%M%S).sql"
+              docker compose -f "$COMPOSE_FILE" exec -T postgres pg_dump -U "$DB_USER" "$DB_NAME" > "$BACKUP_FILE" 2>/dev/null || {
+                echo "⚠️  Backup failed or database not accessible, continuing..."
+              }
+              echo "✅ Backup completed (if accessible)"
+              ;;
+            stop)
+              echo "🛑 Stopping and removing all containers..."
+              cd "$PROJECT_DIR" || exit 1
+              docker compose -f "$COMPOSE_FILE" down || {
+                echo "⚠️  Some containers were not running, continuing..."
+              }
+              echo "✅ Services stopped"
+              ;;
+            build)
+              echo "🔨 Building Docker images..."
+              cd "$PROJECT_DIR" || exit 1
+              docker compose -f "$COMPOSE_FILE" build --no-cache backend
+              echo "✅ Images built successfully"
+              ;;
+            prisma)
+              echo "🔧 Generating Prisma Client on host..."
+              cd "$PROJECT_DIR" || exit 1
+              npx prisma generate || {
+                echo "⚠️  Prisma generate on host failed, trying in container..."
+                docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma generate || {
+                  echo "❌ Prisma generate failed! Check the logs above."
+                  exit 1
+                }
+              }
+              echo "✅ Prisma Client generated"
+              ;;
+            infrastructure)
+              echo "🚀 Starting infrastructure services..."
+              cd "$PROJECT_DIR" || exit 1
+              docker compose -f "$COMPOSE_FILE" up -d postgres redis minio
+              echo "✅ Infrastructure services started"
+              ;;
+            wait-db)
+              echo "⏳ Waiting for database to be ready..."
+              cd "$PROJECT_DIR" || exit 1
+              sleep 5
+              for i in {1..20}; do
+                if docker compose -f "$COMPOSE_FILE" exec -T postgres pg_isready -U "$DB_USER" > /dev/null 2>&1; then
+                  echo "✅ Database is ready!"
+                  break
+                fi
+                if [ $i -eq 20 ]; then
+                  echo "❌ Database not ready after 20 attempts"
+                  docker compose -f "$COMPOSE_FILE" logs postgres
+                  exit 1
+                fi
+                echo "⏳ Waiting for database... ($i/20)"
+                sleep 2
+              done
+              ;;
+            migrate)
+              echo "📊 Running database migrations..."
+              cd "$PROJECT_DIR" || exit 1
+              docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma migrate deploy || {
+                echo "❌ Migration failed! Check the logs above."
+                echo "📋 Migration logs:"
+                docker compose -f "$COMPOSE_FILE" logs backend | tail -50
+                exit 1
+              }
+              echo "✅ Migrations completed"
+              ;;
+            seed)
+              echo "🌱 Checking if database needs seeding..."
+              cd "$PROJECT_DIR" || exit 1
+              
+              # Check if users table has data (smart seed check)
+              HAS_DATA=$(docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT COUNT(*) FROM users WHERE email LIKE '%@tipbox.%' LIMIT 1;" 2>/dev/null | xargs || echo "0")
+              
+              if [ "$HAS_DATA" = "0" ] || [ -z "$HAS_DATA" ]; then
+                echo "🌱 Running database seeds..."
+                docker compose -f "$COMPOSE_FILE" run --rm backend npm run seed:all || {
+                  echo "⚠️  Seed failed, continuing..."
+                }
+                echo "✅ Seeds completed"
+              else
+                echo "⏭️  Database already has seed data, skipping..."
+                echo "✅ Seed check completed"
+              fi
+              ;;
+            start)
+              echo "🚀 Starting all services..."
+              cd "$PROJECT_DIR" || exit 1
+              docker compose -f "$COMPOSE_FILE" up -d
+              echo "✅ All services started"
+              ;;
+            health)
+              echo "🏥 Checking backend health..."
+              cd "$PROJECT_DIR" || exit 1
+              sleep 10
+              MAX_RETRIES=30
+              RETRY_COUNT=0
+              while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+                if docker compose -f "$COMPOSE_FILE" exec -T backend node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" 2>/dev/null; then
+                  echo "✅ Backend is healthy!"
+                  break
+                fi
+                RETRY_COUNT=$((RETRY_COUNT + 1))
+                if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+                  echo "❌ Health check failed after $MAX_RETRIES attempts"
+                  echo "📋 Backend logs:"
+                  docker compose -f "$COMPOSE_FILE" logs --tail=50 backend
+                  exit 1
+                fi
+                echo "⏳ Waiting for backend to be ready... ($RETRY_COUNT/$MAX_RETRIES)"
+                sleep 2
+              done
+              ;;
+            cleanup)
+              echo "🧹 Cleaning up old Docker images..."
+              cd "$PROJECT_DIR" || exit 1
+              docker image prune -f
+              echo "📊 Container status:"
+              docker compose -f "$COMPOSE_FILE" ps
+              echo "✅ Test environment deployment completed successfully!"
+              ;;
+            *)
+              echo "❌ Unknown stage: $STAGE"
+              exit 1
+              ;;
+          esac
+        STAGE_SCRIPT
+
