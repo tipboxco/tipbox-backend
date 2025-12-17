@@ -7,6 +7,8 @@ services:
       POSTGRES_USER: tipbox_user
       POSTGRES_PASSWORD: tipbox_test_password
       POSTGRES_DB: tipbox_test
+    expose:
+      - "5432"
     volumes:
       - postgres_test_data:/var/lib/postgresql/data
     networks:
@@ -18,14 +20,34 @@ services:
       retries: 5
       start_period: 30s
 
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: tipbox_pgadmin_test
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@tipbox.co
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - pgadmin_test_data:/var/lib/pgadmin
+    networks:
+      - tipbox_network
+
   minio:
     image: minio/minio:latest
     container_name: tipbox_minio_test
     restart: always
     command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin123
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
     volumes:
       - minio_test_data:/data
     networks:
@@ -41,25 +63,25 @@ services:
     image: redis:7-alpine
     container_name: tipbox_redis_test
     restart: always
+    expose:
+      - "6379"
     volumes:
       - redis_test_data:/data
     networks:
       - tipbox_network
-    command: redis-server --appendonly yes --requirepass tipbox_redis_test
+    command: redis-server --appendonly yes
     healthcheck:
-      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
       start_period: 10s
 
   backend:
-    build:
-      context: .
-      dockerfile: Dockerfile.prod
+    build: .
     container_name: tipbox_backend_test
     restart: always
-    command: npm run start:test
+    command: npm run dev
     env_file:
       - .env.test
     environment:
@@ -67,7 +89,7 @@ services:
       - NODE_OPTIONS=--max-old-space-size=4096
       # Container içinde çalışırken servis isimlerini kullan
       - DATABASE_URL=postgresql://tipbox_user:tipbox_test_password@postgres:5432/tipbox_test
-      - REDIS_URL=redis://:tipbox_redis_test@redis:6379
+      - REDIS_URL=redis://redis:6379
       - S3_ENDPOINT=http://minio:9000
       - PORT=3000
     depends_on:
@@ -77,11 +99,16 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     volumes:
+      - .:/app
+      - /app/node_modules
       - ./tipboxbackend-3e2c3d3c0b31.json:/app/tipboxbackend-3e2c3d3c0b31.json:ro
       - ./logs:/app/logs
+      # Docker daemon'a erişim için host docker.sock'u container'a bağla
+      - /var/run/docker.sock:/var/run/docker.sock
+    working_dir: /app
     networks:
       - tipbox_network
     healthcheck:
@@ -112,8 +139,30 @@ services:
       timeout: 10s
       retries: 3
 
+  prisma-studio:
+    build: .
+    container_name: tipbox_prisma_studio_test
+    restart: always
+    ports:
+      - "5555:5555"
+    env_file:
+      - .env.test
+    environment:
+      - DATABASE_URL=postgresql://tipbox_user:tipbox_test_password@postgres:5432/tipbox_test
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - /app/node_modules
+    working_dir: /app
+    command: npx prisma studio --port 5555 --browser none
+    networks:
+      - tipbox_network
+
 volumes:
   postgres_test_data:
+  pgadmin_test_data:
   minio_test_data:
   redis_test_data:
 

@@ -18,9 +18,9 @@ const swaggerOptions = {
       version: '1.0.0',
       description: 'Tipbox servisleri için API dokümantasyonu',
     },
-    servers: [
-      { url: `http://localhost:${PORT}`, description: 'Local' }
-    ],
+    // Servers belirtmezsek Swagger UI otomatik olarak bulunduğu domain'i kullanır
+    // Bu sayede HTTPS üzerinden açıldığında HTTPS ile istek atar
+    servers: [],
     components: {
       securitySchemes: {
         bearerAuth: {

@@ -5551,7 +5551,6 @@ async function main() {
         return prisma.brandCategory.create({
           data: {
             name: config.name,
-      
             imageUrl: getSeedMediaUrl(config.imageKey as any),
           }
         });
