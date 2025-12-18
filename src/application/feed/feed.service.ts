@@ -1,7 +1,7 @@
 import { FeedPrismaRepository } from '../../infrastructure/repositories/feed-prisma.repository';
 import { ProfilePrismaRepository } from '../../infrastructure/repositories/profile-prisma.repository';
 import { CacheService } from '../../infrastructure/cache/cache.service';
-import { resolveMediaUrl } from '../../infrastructure/config/media.config';
+import { resolveMediaUrl, getPublicMediaBaseUrl } from '../../infrastructure/config/media.config';
 import { PrismaClient } from '@prisma/client';
 import {
   FeedResponse,
@@ -37,6 +37,22 @@ export class FeedService {
     this.profileRepo = new ProfilePrismaRepository();
     this.cacheService = CacheService.getInstance();
     this.prisma = new PrismaClient();
+  }
+
+  /**
+   * Media path'ini tam URL'ye çevirir
+   */
+  private buildFullMediaUrl(path: string | null | undefined): string | null {
+    if (!path) return null;
+    
+    // Eğer zaten tam URL ise olduğu gibi döndür
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return path;
+    }
+    
+    // Path ise base URL ile birleştir
+    const baseUrl = getPublicMediaBaseUrl();
+    return `${baseUrl}/${path}`;
   }
 
   /**
@@ -187,7 +203,10 @@ export class FeedService {
           if (!postMediaMap.has(media.postId)) {
             postMediaMap.set(media.postId, []);
           }
-          postMediaMap.get(media.postId)!.push(media.mediaUrl);
+          const fullUrl = this.buildFullMediaUrl(media.mediaUrl);
+        if (fullUrl) {
+          postMediaMap.get(media.postId)!.push(fullUrl);
+        }
         });
       }
 
@@ -368,7 +387,10 @@ export class FeedService {
         if (!postMediaMap.has(media.postId)) {
           postMediaMap.set(media.postId, []);
         }
-        postMediaMap.get(media.postId)!.push(media.mediaUrl);
+        const fullUrl = this.buildFullMediaUrl(media.mediaUrl);
+        if (fullUrl) {
+          postMediaMap.get(media.postId)!.push(fullUrl);
+        }
       });
     }
 
@@ -652,7 +674,10 @@ export class FeedService {
         if (!postMediaMap.has(media.postId)) {
           postMediaMap.set(media.postId, []);
         }
-        postMediaMap.get(media.postId)!.push(media.mediaUrl);
+        const fullUrl = this.buildFullMediaUrl(media.mediaUrl);
+        if (fullUrl) {
+          postMediaMap.get(media.postId)!.push(fullUrl);
+        }
       });
     }
 
@@ -740,7 +765,7 @@ export class FeedService {
       id: String(product.id),
       name: product.name,
       subName: product.brand || product.group?.name || '',
-      image: product.imageUrl || null,
+      image: this.buildFullMediaUrl(product.imageUrl),
     };
   }
 
@@ -769,7 +794,7 @@ export class FeedService {
         id: String(product.id),
         name: product.name,
         subName: group?.name || subCategory?.name || '',
-        image: product.imageUrl || null,
+        image: this.buildFullMediaUrl(product.imageUrl),
         isOwned: ownedProductIds ? ownedProductIds.has(String(product.id)) : undefined,
       };
 
@@ -782,11 +807,12 @@ export class FeedService {
       const group = post.productGroup;
       if (group) {
         const subCategory = group.subCategory;
+        const imagePath = group.imageUrl || subCategory?.imageUrl || subCategory?.mainCategory?.imageUrl || null;
         return {
           id: String(group.id),
           name: group.name,
           subName: subCategory?.name || '',
-          image: group.imageUrl || subCategory?.imageUrl || subCategory?.mainCategory?.imageUrl || null,
+          image: this.buildFullMediaUrl(imagePath),
         };
       }
 
@@ -801,11 +827,12 @@ export class FeedService {
     // SUB_CATEGORIES (fallback olarak mainCategory bilgisini de kullan)
     if (post.subCategory) {
       const subCategory = post.subCategory;
+      const imagePath = subCategory.imageUrl || subCategory.mainCategory?.imageUrl || null;
       return {
         id: String(subCategory.id),
         name: subCategory.name,
         subName: subCategory.mainCategory?.name || '',
-        image: subCategory.imageUrl || subCategory.mainCategory?.imageUrl || null,
+        image: this.buildFullMediaUrl(imagePath),
       };
     }
 
@@ -814,7 +841,7 @@ export class FeedService {
         id: String(post.mainCategory.id),
         name: post.mainCategory.name,
         subName: '',
-        image: post.mainCategory.imageUrl || null,
+        image: this.buildFullMediaUrl(post.mainCategory.imageUrl),
       };
     }
 
@@ -975,7 +1002,7 @@ export class FeedService {
           id: post.productId || '',
           name: post.product?.name || '',
           subName: post.productGroup?.name || '',
-          image: post.product?.imageUrl || null,
+          image: this.buildFullMediaUrl(post.product?.imageUrl),
           isOwned: false,
         };
 

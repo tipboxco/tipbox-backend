@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import logger from '../../infrastructure/logger/logger';
+import { getPublicMediaBaseUrl } from '../../infrastructure/config/media.config';
 
 const prisma = new PrismaClient();
 
@@ -47,11 +48,27 @@ export class CatalogService {
         },
       });
 
-      return categories.map((category) => ({
-        categoryId: category.id,
-        name: category.name,
-        image: category.imageUrl,
-      }));
+      const baseUrl = getPublicMediaBaseUrl();
+
+      return categories.map((category) => {
+        let imageUrl: string | null = null;
+        
+        if (category.imageUrl) {
+          // Eğer zaten tam URL ise olduğu gibi kullan
+          if (category.imageUrl.startsWith('http://') || category.imageUrl.startsWith('https://')) {
+            imageUrl = category.imageUrl;
+          } else {
+            // Path ise base URL ile birleştir
+            imageUrl = `${baseUrl}/${category.imageUrl}`;
+          }
+        }
+
+        return {
+          categoryId: category.id,
+          name: category.name,
+          image: imageUrl,
+        };
+      });
     } catch (error) {
       logger.error('Failed to get all categories:', error);
       throw error;
@@ -77,11 +94,25 @@ export class CatalogService {
         },
       });
 
-      return subCategories.map((subCategory) => ({
-        subCategoryId: subCategory.id,
-        name: subCategory.name,
-        image: subCategory.imageUrl,
-      }));
+      const baseUrl = getPublicMediaBaseUrl();
+
+      return subCategories.map((subCategory) => {
+        let imageUrl: string | null = null;
+        
+        if (subCategory.imageUrl) {
+          if (subCategory.imageUrl.startsWith('http://') || subCategory.imageUrl.startsWith('https://')) {
+            imageUrl = subCategory.imageUrl;
+          } else {
+            imageUrl = `${baseUrl}/${subCategory.imageUrl}`;
+          }
+        }
+
+        return {
+          subCategoryId: subCategory.id,
+          name: subCategory.name,
+          image: imageUrl,
+        };
+      });
     } catch (error) {
       logger.error(`Failed to get sub-categories for category ${categoryId}:`, error);
       throw error;
@@ -108,12 +139,26 @@ export class CatalogService {
         },
       });
 
-      return productGroups.map((group) => ({
-        productGroupId: group.id,
-        name: group.name,
-        image: group.imageUrl,
-        subCategoryId: group.subCategoryId,
-      }));
+      const baseUrl = getPublicMediaBaseUrl();
+
+      return productGroups.map((group) => {
+        let imageUrl: string | null = null;
+        
+        if (group.imageUrl) {
+          if (group.imageUrl.startsWith('http://') || group.imageUrl.startsWith('https://')) {
+            imageUrl = group.imageUrl;
+          } else {
+            imageUrl = `${baseUrl}/${group.imageUrl}`;
+          }
+        }
+
+        return {
+          productGroupId: group.id,
+          name: group.name,
+          image: imageUrl,
+          subCategoryId: group.subCategoryId,
+        };
+      });
     } catch (error) {
       logger.error(`Failed to get product groups for sub-category ${subCategoryId}:`, error);
       throw error;
@@ -140,12 +185,26 @@ export class CatalogService {
         },
       });
 
-      return products.map((product) => ({
-        productId: product.id,
-        name: product.name,
-        image: product.imageUrl,
-        productGroupId: product.groupId || '',
-      }));
+      const baseUrl = getPublicMediaBaseUrl();
+
+      return products.map((product) => {
+        let imageUrl: string | null = null;
+        
+        if (product.imageUrl) {
+          if (product.imageUrl.startsWith('http://') || product.imageUrl.startsWith('https://')) {
+            imageUrl = product.imageUrl;
+          } else {
+            imageUrl = `${baseUrl}/${product.imageUrl}`;
+          }
+        }
+
+        return {
+          productId: product.id,
+          name: product.name,
+          image: imageUrl,
+          productGroupId: product.groupId || '',
+        };
+      });
     } catch (error) {
       logger.error(`Failed to get products for product group ${productGroupId}:`, error);
       throw error;

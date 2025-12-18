@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { FeedItem, FeedItemType, FeedResponse, ContextData, ExperiencePost, ExperienceContent } from '../../interfaces/feed/feed.dto';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
-import { buildMediaUrl } from '../../infrastructure/config/media.config';
+import { buildMediaUrl, getPublicMediaBaseUrl } from '../../infrastructure/config/media.config';
 import logger from '../../infrastructure/logger/logger';
 import { NotFoundError } from '../../infrastructure/errors/custom-errors';
 
@@ -244,6 +244,22 @@ export class BrandService {
   }
 
   /**
+   * Media path'ini tam URL'ye çevirir
+   */
+  private buildFullMediaUrl(path: string | null | undefined): string | null {
+    if (!path) return null;
+    
+    // Eğer zaten tam URL ise olduğu gibi döndür
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return path;
+    }
+    
+    // Path ise base URL ile birleştir
+    const baseUrl = getPublicMediaBaseUrl();
+    return `${baseUrl}/${path}`;
+  }
+
+  /**
    * Tüm brand kategorilerini listele
    */
   async getAllBrandCategories(): Promise<BrandCategoryItem[]> {
@@ -254,11 +270,28 @@ export class BrandService {
         },
       });
 
-      return categories.map((category) => ({
-        categoryId: category.id,
-        name: category.name,
-        image: category.imageUrl,
-      }));
+      const baseUrl = getPublicMediaBaseUrl();
+
+      return categories.map((category) => {
+        let imageUrl: string | null = null;
+        
+        if (category.imageUrl) {
+          // Eğer zaten tam URL ise olduğu gibi kullan
+          if (category.imageUrl.startsWith('http://') || category.imageUrl.startsWith('https://')) {
+            imageUrl = category.imageUrl;
+          } else {
+            // Path ise base URL ile birleştir
+            // Path formatı: tipbox-media/brand-categories/otomotiv.png
+            imageUrl = `${baseUrl}/${category.imageUrl}`;
+          }
+        }
+
+        return {
+          categoryId: category.id,
+          name: category.name,
+          image: imageUrl,
+        };
+      });
     } catch (error) {
       logger.error('Failed to get all brand categories:', error);
       throw error;
@@ -299,11 +332,27 @@ export class BrandService {
         },
       });
 
-      return brands.map((brand) => ({
-        brandId: brand.id,
-        name: brand.name,
-        image: brand.imageUrl,
-      }));
+      const baseUrl = getPublicMediaBaseUrl();
+
+      return brands.map((brand) => {
+        let imageUrl: string | null = null;
+        
+        if (brand.imageUrl) {
+          // Eğer zaten tam URL ise olduğu gibi kullan
+          if (brand.imageUrl.startsWith('http://') || brand.imageUrl.startsWith('https://')) {
+            imageUrl = brand.imageUrl;
+          } else {
+            // Path ise base URL ile birleştir
+            imageUrl = `${baseUrl}/${brand.imageUrl}`;
+          }
+        }
+
+        return {
+          brandId: brand.id,
+          name: brand.name,
+          image: imageUrl,
+        };
+      });
     } catch (error) {
       logger.error(`Failed to get brands for category ${categoryId}:`, error);
       throw error;
@@ -438,11 +487,24 @@ export class BrandService {
         isJoined = !!follow;
       }
 
+      let bannerImageUrl: string | null = null;
+      
+      if (brand.imageUrl) {
+        const baseUrl = getPublicMediaBaseUrl();
+        // Eğer zaten tam URL ise olduğu gibi kullan
+        if (brand.imageUrl.startsWith('http://') || brand.imageUrl.startsWith('https://')) {
+          bannerImageUrl = brand.imageUrl;
+        } else {
+          // Path ise base URL ile birleştir
+          bannerImageUrl = `${baseUrl}/${brand.imageUrl}`;
+        }
+      }
+
       return {
         brandId: brand.id,
         name: brand.name,
         description: brand.description,
-        bannerImage: brand.imageUrl || null,
+        bannerImage: bannerImageUrl,
         followers: followersCount,
         isJoined,
       };
@@ -1215,6 +1277,7 @@ export class BrandService {
       const nextCursor = hasMore && resultGroups.length > 0 ? resultGroups[resultGroups.length - 1].id : undefined;
 
       const items: BrandProductGroup[] = [];
+      const baseUrl = getPublicMediaBaseUrl();
 
       for (const group of resultGroups) {
         const groupProducts = group.products || [];
@@ -1223,10 +1286,18 @@ export class BrandService {
 
         const products = limitedProducts.map<BrandProduct>((product) => {
           const stats = this.calculateProductStats(product.contentPosts || []);
+          let imageUrl: string | null = null;
+          if (product.imageUrl) {
+            if (product.imageUrl.startsWith('http://') || product.imageUrl.startsWith('https://')) {
+              imageUrl = product.imageUrl;
+            } else {
+              imageUrl = `${baseUrl}/${product.imageUrl}`;
+            }
+          }
           return {
             productId: product.id,
             name: product.name,
-            image: product.imageUrl,
+            image: imageUrl,
             stats,
           };
         });
@@ -1311,7 +1382,7 @@ export class BrandService {
       return {
         productId: product.id,
         name: product.name,
-        image: product.imageUrl,
+        image: this.buildFullMediaUrl(product.imageUrl),
         stats,
       };
     });
@@ -1377,7 +1448,7 @@ export class BrandService {
       return {
         productId: product.id,
         name: product.name,
-        image: product.imageUrl,
+        image: this.buildFullMediaUrl(product.imageUrl),
         stats,
       };
     });
@@ -1477,7 +1548,7 @@ export class BrandService {
         groupData.products.push({
           productId: product.id,
           name: product.name,
-          image: product.imageUrl,
+          image: this.buildFullMediaUrl(product.imageUrl),
           stats,
         });
       }
@@ -1906,7 +1977,10 @@ export class BrandService {
       let images = postMediaMap.get(post.id) || [];
       // PostMedia'da görsel yoksa, ürün görselini fallback olarak kullan
       if ((!images || images.length === 0) && post.product?.imageUrl) {
-        images = [post.product.imageUrl];
+        const productImageUrl = this.buildFullMediaUrl(post.product.imageUrl);
+        if (productImageUrl) {
+          images = [productImageUrl];
+        }
       }
 
       // Map based on post type
@@ -1957,7 +2031,7 @@ export class BrandService {
         id: String(product.id),
         name: product.name,
         subName: group?.name || subCategory?.name || '',
-        image: product.imageUrl || null,
+        image: this.buildFullMediaUrl(product.imageUrl),
         isOwned: ownedProductIds ? ownedProductIds.has(String(product.id)) : undefined,
       };
     }
@@ -2016,7 +2090,7 @@ export class BrandService {
       id: String(product.id),
       name: product.name,
       subName: product.subName || product.brand || product.group?.name || '',
-      image: product.imageUrl || null,
+      image: this.buildFullMediaUrl(product.imageUrl),
     };
   }
 

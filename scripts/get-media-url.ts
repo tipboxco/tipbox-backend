@@ -34,3 +34,5 @@ console.log('   - Direkt MinIO URL: MinIO bucket public ise çalışır');
 console.log('   - Development: http://localhost:9000/tipbox-media/...');
 console.log('   - Production: http://api-test.tipbox.co:9000/tipbox-media/...\n');
 
+
+
