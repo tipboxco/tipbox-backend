@@ -51,6 +51,10 @@ runs:
               echo "📥 Pulling latest changes from branch: $DEPLOY_BRANCH"
               git fetch origin
               git checkout "$DEPLOY_BRANCH"
+              echo "🧹 Cleaning local changes..."
+              git reset --hard "origin/$DEPLOY_BRANCH"
+              git clean -fd
+              echo "📥 Pulling latest changes..."
               git pull origin "$DEPLOY_BRANCH"
               if [ ! -f "$ENV_FILE" ]; then
                 echo "❌ $ENV_FILE file not found! Please create it first."
