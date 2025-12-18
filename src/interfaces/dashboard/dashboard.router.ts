@@ -404,7 +404,7 @@ const dashboardScript = `
       const dangerousCommands = ['db:reset:all', 'db:reset:force'];
       if (dangerousCommands.includes(command)) {
         const confirmMessage = command === 'db:reset:force' 
-          ? 'Bu işlem tüm tabloları silecek ve migration\'ları baştan oluşturacak. Devam etmek istediğinize emin misiniz?'
+          ? 'Bu işlem tüm tabloları silecek ve migrationları baştan oluşturacak. Devam etmek istediğinize emin misiniz?'
           : 'Bu işlem tüm verileri (taxonomy dahil) silecek. Devam etmek istediğinize emin misiniz?';
         if (!confirm(confirmMessage)) {
           return;
