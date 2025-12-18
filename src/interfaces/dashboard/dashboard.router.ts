@@ -819,33 +819,51 @@ const dashboardScript = `
 router.get('/', (req: Request, res: Response) => {
   // Ortam bilgisini al
   const environment = process.env.NODE_ENV || 'development';
-  const envLabel = environment === 'production' ? 'Production' : environment === 'test' ? 'Test' : 'Development';
-  const envColor = environment === 'production' ? '#ff6b6b' : environment === 'test' ? '#ffd43b' : '#51cf66';
+  const envLabel = environment === 'production' ? 'Prod' : environment === 'test' ? 'Test' : 'Dev';
+  const envColor = environment === 'production' ? '#ef4444' : environment === 'test' ? '#f59e0b' : '#10b981';
   
-  // VPN IP adreslerini ortam değişkenlerinden al
+  // API hostname'lerini ortam değişkenlerinden al
+  const testApiHostname = process.env.TEST_API_HOSTNAME || 'api-test.tipbox.co';
+  const prodApiHostname = process.env.PROD_API_HOSTNAME || 'api.tipbox.co';
+  
+  // VPN IP adreslerini ortam değişkenlerinden al (Interfaces için)
   const testVpnIp = process.env.TEST_VPN_IP || '100.77.184.78';
   const prodVpnIp = process.env.PROD_VPN_IP || '';
   
-  // Ortama göre base URL belirle
-  let baseUrl: string;
+  // Ortama göre Main Services için base URL belirle (Backend, Swagger, Socket)
+  let apiBaseUrl: string;
   if (environment === 'test') {
-    baseUrl = `http://${testVpnIp}`;
-  } else if (environment === 'production' && prodVpnIp) {
-    baseUrl = `http://${prodVpnIp}`;
+    apiBaseUrl = `https://${testApiHostname}`;
+  } else if (environment === 'production') {
+    apiBaseUrl = `https://${prodApiHostname}`;
   } else {
     // Development ortamı - local
     const host = req.headers.host || 'localhost:3000';
     const protocol = req.protocol || 'http';
-    baseUrl = `${protocol}://${host.split(':')[0]}`;
+    apiBaseUrl = `${protocol}://${host}`;
+  }
+  
+  // Interfaces için base URL belirle (Prisma Studio, pgAdmin, MinIO)
+  let interfacesBaseUrl: string;
+  if (environment === 'test') {
+    interfacesBaseUrl = `http://${testVpnIp}`;
+  } else if (environment === 'production' && prodVpnIp) {
+    interfacesBaseUrl = `http://${prodVpnIp}`;
+  } else {
+    // Development ortamı - local
+    const host = req.headers.host || 'localhost:3000';
+    const protocol = req.protocol || 'http';
+    interfacesBaseUrl = `${protocol}://${host.split(':')[0]}`;
   }
   
   res.send(`
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tipbox Developer Console - ${envLabel}</title>
+  <title>${envLabel} -Tipbox Developer Console</title>
+  <link rel="icon" type="image/x-icon" href="https://tipbox.co/images/favicon.ico">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Jura:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -900,25 +918,25 @@ router.get('/', (req: Request, res: Response) => {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      padding: 8px 20px;
-      border-radius: 20px;
-      font-size: 0.95rem;
-      font-weight: 600;
+      padding: 10px 24px;
+      border-radius: 24px;
+      font-size: 1rem;
+      font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
-      background: rgba(255, 255, 255, 0.05);
-      border: 2px solid;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      letter-spacing: 0.8px;
+      border: none;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
     }
     .env-badge-dot {
-      width: 10px;
-      height: 10px;
+      width: 12px;
+      height: 12px;
       border-radius: 50%;
+      background: white;
       animation: pulse 2s ease-in-out infinite;
     }
     @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.7; transform: scale(0.85); }
     }
     @keyframes fadeInSlide {
       0% {
@@ -1462,10 +1480,10 @@ router.get('/', (req: Request, res: Response) => {
              alt="Tipbox Logo" 
              class="dashboard-header-logo" 
              onerror="this.style.display='none'">
-        <h1>Developer Dashboard</h1>
+        <h1>Developer Console</h1>
       </div>
-      <div class="env-badge" style="border-color: ${envColor}; color: ${envColor};">
-        <span class="env-badge-dot" style="background-color: ${envColor};"></span>
+      <div class="env-badge" style="background-color: ${envColor}; color: #FFFFFF;">
+        <span class="env-badge-dot"></span>
         ${envLabel}
       </div>
     </div>
@@ -1474,23 +1492,8 @@ router.get('/', (req: Request, res: Response) => {
       <h2 class="section-title">Main Services</h2>
       <div class="ports-grid">
         ${mainServices.map(service => {
-          let url: string;
-          if (environment === 'test' || environment === 'production') {
-            // Test/Prod ortamında VPN IP kullan
-            url = service.port === 3000
-              ? `${baseUrl}:${service.port}${service.path || ''}`
-              : `${baseUrl}:${service.port}${service.path || ''}`;
-          } else {
-            // Development ortamında localhost kullan
-            const host = req.headers.host || 'localhost:3000';
-            const [hostName] = host.split(':');
-            const protocol = req.protocol || 'http';
-            const baseForBackend = `${protocol}://${host}`;
-            const baseForOthers = `${protocol}://${hostName}`;
-            url = service.port === 3000
-              ? `${baseForBackend}${service.path || ''}`
-              : `${baseForOthers}:${service.port}${service.path || ''}`;
-          }
+          // Main Services için hostname kullan (Backend, Swagger, Socket)
+          const url = `${apiBaseUrl}${service.path || ''}`;
           return `
           <div class="port-card" onclick="window.open('${url}', '_blank')">
             <div class="service-header">
@@ -1537,21 +1540,8 @@ router.get('/', (req: Request, res: Response) => {
       <h2 class="section-title">Interfaces</h2>
       <div class="ports-grid">
         ${interfaceServices.map(service => {
-          let url: string;
-          if (environment === 'test' || environment === 'production') {
-            // Test/Prod ortamında VPN IP kullan
-            url = `${baseUrl}:${service.port}${service.path || ''}`;
-          } else {
-            // Development ortamında localhost kullan
-            const host = req.headers.host || 'localhost:3000';
-            const [hostName] = host.split(':');
-            const protocol = req.protocol || 'http';
-            const baseForBackend = `${protocol}://${host}`;
-            const baseForOthers = `${protocol}://${hostName}`;
-            url = service.port === 3000
-              ? `${baseForBackend}${service.path || ''}`
-              : `${baseForOthers}:${service.port}${service.path || ''}`;
-          }
+          // Interfaces için VPN IP veya localhost:port kullan
+          const url = `${interfacesBaseUrl}:${service.port}${service.path || ''}`;
           return `
           <div class="port-card" onclick="window.open('${url}', '_blank')">
             <div class="service-header">
