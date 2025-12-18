@@ -65,6 +65,7 @@ async function clearAndSeed(clearAll: boolean = false): Promise<void> {
     }
     
     console.log('\n🌱 Seed.ts çalıştırılıyor...\n');
+    console.log('ℹ️  Not: Seed görselleri seed.ts içinde otomatik olarak MinIO\'ya yüklenecek\n');
     
     // seed.ts'yi çalıştır
     const seedPath = path.join(process.cwd(), 'prisma', 'seed.ts');

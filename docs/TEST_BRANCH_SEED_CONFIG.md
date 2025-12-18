@@ -2,10 +2,11 @@
 
 ## 🎯 Amaç
 
-Test branch'inde deploy alındığında seed workflow çalıştığında, görsellerin URL'leri production endpoint'ini kullanmalıdır. Bu sayede:
-- ✅ Database'e kaydedilen URL'ler doğru endpoint'i içerir (`http://api-test.tipbox.co:9000`)
+Test branch'inde deploy alındığında seed workflow çalıştığında, görsellerin doğru şekilde yüklenmesi ve runtime'da production endpoint'i ile URL'lerin oluşturulması sağlanmalıdır. Bu sayede:
+- ✅ Görseller otomatik olarak MinIO'ya yüklenir
+- ✅ Database'de path tutulur (URL değil)
+- ✅ Runtime'da production endpoint'i ile URL oluşturulur
 - ✅ Frontend görselleri doğrudan erişebilir
-- ✅ Localhost URL'leri production'da kullanılmaz
 
 ## ⚙️ Yapılandırma
 
@@ -38,37 +39,60 @@ Test branch'ine push yapıldığında GitHub Actions workflow çalışır:
   run: docker compose run --rm backend npm run seed:all
 ```
 
-### 2. Seed Workflow
+### 2. Seed Workflow Akışı
 
-Seed workflow çalıştığında:
+#### Adım 1: Görseller Otomatik Yüklenir
+
+Seed başında `ensureSeedMediaUploaded()` otomatik çağrılır:
+
+```typescript
+// prisma/seed.ts başında
+await ensureSeedMediaUploaded();
+// ✅ Tüm seed-media-map.json'daki görseller MinIO'ya yüklenir
+```
+
+#### Adım 2: Seed Verileri Database'e Eklenir
 
 ```typescript
 // prisma/seed/helpers/media.helper.ts
-export function getSeedMediaUrl(key: SeedMediaKey): string {
-  const baseUrl = getMinioPublicEndpoint(); // .env'den SEED_MEDIA_BASE_URL okur
+export function getSeedMediaPath(key: SeedMediaKey): string {
+  const entry = seedMedia[key];
   const bucketName = getBucketName();
-  return `${baseUrl}/${bucketName}/${entry.targetKey}`;
+  return `${bucketName}/${entry.targetKey}`;
+  // → "tipbox-media/products/phones/phone1.png" (sadece path)
 }
-```
 
-**Örnek:**
-- Environment: `SEED_MEDIA_BASE_URL=http://api-test.tipbox.co:9000`
-- Key: `product.phone.phone1`
-- Target: `products/phones/phone1.png`
-- **Sonuç:** `http://api-test.tipbox.co:9000/tipbox-media/products/phones/phone1.png`
-
-### 3. Database'e Kayıt
-
-Seed workflow görselleri MinIO'ya yükler ve database'e URL'leri kaydeder:
-
-```typescript
+// seed.ts içinde
 const product = await prisma.product.create({
   data: {
     name: 'iPhone 15 Pro',
-    imageUrl: getSeedMediaUrl('product.phone.phone1'),
-    // imageUrl = "http://api-test.tipbox.co:9000/tipbox-media/products/phones/phone1.png"
+    imageUrl: getSeedMediaPath('product.phone.phone1'),
+    // imageUrl = "tipbox-media/products/phones/phone1.png" (path, URL değil)
   }
 });
+```
+
+**ÖNEMLİ:** Database'de sadece path tutulur, tam URL değil!
+
+#### Adım 3: Runtime'da URL Oluşturulur
+
+API response'larında `getPublicMediaBaseUrl()` kullanılır:
+
+```typescript
+// src/infrastructure/config/media.config.ts
+export function getPublicMediaBaseUrl(): string {
+  return process.env.SEED_MEDIA_BASE_URL || 
+         process.env.MINIO_PUBLIC_ENDPOINT || 
+         'http://localhost:9000';
+}
+
+// API response'larında
+const baseUrl = getPublicMediaBaseUrl();
+// → http://api-test.tipbox.co:9000 (production)
+// → http://localhost:9000 (development)
+
+const fullUrl = `${baseUrl}/${product.imageUrl}`;
+// → http://api-test.tipbox.co:9000/tipbox-media/products/phones/phone1.png
 ```
 
 ## ⚠️ Uyarı Sistemi
@@ -77,7 +101,7 @@ Eğer production ortamında (`NODE_ENV=production`) `SEED_MEDIA_BASE_URL` set ed
 
 ```
 ⚠️  UYARI: Production ortamında SEED_MEDIA_BASE_URL veya MINIO_PUBLIC_ENDPOINT set edilmemiş!
-   Seed görselleri localhost URL'leri ile kaydedilecek ve frontend erişemeyecek.
+   Runtime'da görsel URL'leri localhost olarak oluşturulacak ve frontend erişemeyecek.
    Lütfen .env dosyasına SEED_MEDIA_BASE_URL=http://api-test.tipbox.co:9000 ekleyin.
 ```
 
@@ -92,9 +116,10 @@ Eğer production ortamında (`NODE_ENV=production`) `SEED_MEDIA_BASE_URL` set ed
 ### Deploy Sonrası
 
 - [ ] Seed workflow başarıyla çalıştı
-- [ ] Database'deki URL'ler production endpoint'ini içeriyor
+- [ ] Görseller MinIO'ya yüklendi (seed log'larında görünür)
+- [ ] Database'de path'ler doğru format'ta (`tipbox-media/...`)
+- [ ] API response'larında production endpoint'i ile URL'ler oluşturuluyor
 - [ ] Frontend görselleri doğru gösteriyor
-- [ ] Localhost URL'leri yok
 
 ## 🔍 Doğrulama
 
@@ -106,40 +131,67 @@ docker compose exec backend env | grep SEED_MEDIA_BASE_URL
 # Çıktı: SEED_MEDIA_BASE_URL=http://api-test.tipbox.co:9000
 ```
 
-### 2. Database URL Kontrolü
+### 2. Database Path Kontrolü
 
 ```sql
--- Database'deki URL'leri kontrol et
+-- Database'deki path'leri kontrol et
 SELECT image_url FROM products WHERE image_url IS NOT NULL LIMIT 5;
 
--- Beklenen format:
--- http://api-test.tipbox.co:9000/tipbox-media/products/phones/phone1.png
+-- Beklenen format (path, URL değil):
+-- tipbox-media/products/phones/phone1.png
+-- tipbox-media/brand-categories/cameras.png
 ```
 
 ### 3. Seed Log Kontrolü
 
-Seed workflow çalıştığında log'larda şunu görmelisiniz:
+Seed workflow çalıştığında log'larda şunları görmelisiniz:
 
 ```
-✅ Production endpoint kullanılıyor: http://api-test.tipbox.co:9000
+📦 Seed görselleri MinIO'ya yükleniyor...
+   ✅ 10 görsel yüklendi...
+   ✅ 20 görsel yüklendi...
+✅ Seed görselleri yükleme tamamlandı:
+   📤 Yüklenen: 150
+   ⏭️  Atlanan: 0
+```
+
+### 4. API Response Kontrolü
+
+API endpoint'lerinden birine istek atın ve response'da URL'lerin production endpoint'i içerdiğini kontrol edin:
+
+```bash
+curl http://api-test.tipbox.co/api/brands | jq '.[0].image'
+# Beklenen: "http://api-test.tipbox.co:9000/tipbox-media/brand-categories/cameras.png"
 ```
 
 ## 🎯 Sonuç
 
 Test branch'inde deploy alındığında:
-- ✅ Seed workflow `.env` dosyasından `SEED_MEDIA_BASE_URL` okur
-- ✅ Database'e production endpoint'i ile URL'ler kaydedilir
-- ✅ Frontend doğrudan erişebilir
-- ✅ Localhost URL'leri kullanılmaz
+- ✅ Seed workflow görselleri otomatik olarak MinIO'ya yükler
+- ✅ Database'de path'ler tutulur (URL değil)
+- ✅ Runtime'da `getPublicMediaBaseUrl()` production endpoint'i ile URL oluşturur
+- ✅ Frontend görselleri doğrudan erişebilir
+- ✅ Environment değiştiğinde sadece env variable güncellenir
 
 ## 🔧 Sorun Giderme
 
-### Sorun: Database'de localhost URL'leri var
+### Sorun: Görseller MinIO'ya yüklenmiyor
+
+**Çözüm:**
+1. Seed log'larını kontrol edin (`ensureSeedMediaUploaded()` çalışıyor mu?)
+2. MinIO container'ının çalıştığını kontrol edin: `docker compose ps`
+3. `S3_ENDPOINT` ve credentials'ları kontrol edin
+
+### Sorun: API response'larında localhost URL'leri görünüyor
 
 **Çözüm:**
 1. `.env` dosyasına `SEED_MEDIA_BASE_URL=http://api-test.tipbox.co:9000` ekleyin
-2. Seed workflow'u tekrar çalıştırın: `docker compose run --rm backend npm run seed:all`
-3. Veya mevcut URL'leri normalize edin: `normalizeMediaUrl()` kullanın
+2. Backend container'ını yeniden başlatın: `docker compose restart backend`
+3. API response'larında `getPublicMediaBaseUrl()` kullanıldığından emin olun
+
+### Sorun: Database'de eski URL format'ı var (tam URL)
+
+**Not:** Eski seed'lerde URL format'ı kullanılıyordu. Yeni seed'lerde sadece path tutuluyor. Eski veriler için `normalizeMediaUrl()` kullanılabilir, ama yeni seed'lerde sorun olmamalı.
 
 ### Sorun: Seed workflow uyarı veriyor
 

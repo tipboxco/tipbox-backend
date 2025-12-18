@@ -3,10 +3,9 @@
  * Script, tests klasöründeki statik görselleri bucket içindeki ilgili klasöre koyar.
  */
 
-// Eğer docker dışından çalışıyorsak S3 endpoint'i localhost'a ayarla
-if (!process.env.S3_ENDPOINT || process.env.S3_ENDPOINT === 'http://minio:9000') {
-  process.env.S3_ENDPOINT = 'http://127.0.0.1:9000';
-}
+// Container içinde çalışıyorsak minio:9000 kullan, dışındaysa localhost:9000
+// S3_ENDPOINT zaten .env'de set edilmiş olmalı (container içinde: minio:9000, dışında: localhost:9000)
+// Burada değiştirmiyoruz, mevcut değeri kullanıyoruz
 
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -165,12 +164,25 @@ seedAssets.push({
 for (const fileName of catalogFiles) {
   const baseName = fileName.replace(path.extname(fileName), '');
   const slug = slugify(baseName || fileName);
+  const ext = path.extname(fileName).toLowerCase() || '.png';
+  
+  // Catalog görselleri
   seedAssets.push({
     key: `catalog.${slug}`,
     localPath: path.join(assetsBasePath, 'catalog', fileName),
-    targetKey: `catalog/${slug}${path.extname(fileName).toLowerCase() || '.png'}`,
+    targetKey: `catalog/${slug}${ext}`,
     contentType: inferContentType(fileName),
     description: `Kategori görseli: ${baseName}`,
+  });
+  
+  // Brand category görselleri (catalog görsellerinden kopyala)
+  // seed-media-map.json'da brand-categories/ klasörüne işaret ediyor
+  seedAssets.push({
+    key: `brand.category.${slug}`,
+    localPath: path.join(assetsBasePath, 'catalog', fileName),
+    targetKey: `brand-categories/${fileName}`, // Orijinal dosya adını koru (cameras.png, otomotiv.png)
+    contentType: inferContentType(fileName),
+    description: `Brand category görseli: ${baseName}`,
   });
 }
 

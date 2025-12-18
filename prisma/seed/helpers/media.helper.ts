@@ -1,4 +1,7 @@
 import mediaMap from '../seed-media-map.json';
+import { S3Service } from '../../../src/infrastructure/s3/s3.service';
+import { readFileSync, existsSync } from 'fs';
+import path from 'path';
 
 type MediaEntry = {
   targetKey: string;
@@ -7,6 +10,10 @@ type MediaEntry = {
 const seedMedia = mediaMap as Record<string, MediaEntry>;
 
 export type SeedMediaKey = keyof typeof seedMedia;
+
+// Seed media yükleme cache (bir kez yüklendikten sonra tekrar yüklemeyi önler)
+let seedMediaUploaded = false;
+const uploadedKeys = new Set<string>();
 
 // MinIO public endpoint'ini environment variable'lardan al
 function getMinioPublicEndpoint(): string {

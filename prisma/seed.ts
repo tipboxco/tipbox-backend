@@ -7,6 +7,7 @@ import { DEFAULT_PROFILE_BANNER_URL } from '../src/domain/user/profile.constants
 import { getSeedMediaPath, SeedMediaKey } from './seed/helpers/media.helper'
 import { S3Service } from '../src/infrastructure/s3/s3.service'
 import { ProgressBar } from './seed/helpers/progress-bar'
+import { ensureSeedMediaUploaded } from './seed/helpers/ensure-seed-media'
 // Import from JS file (no ts-node issues)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { markSeedStart, markSeedEnd, addSeedUserId } = require('./seed/seed-metadata')
@@ -1120,6 +1121,15 @@ async function main() {
   console.log(`📝 Seed kullanıcı ID'leri metadata'ya ekleniyor: ${allSeedUserIds.length} kullanıcı`)
   for (const userId of allSeedUserIds) {
     addSeedUserId(userId)
+  }
+
+  // Seed görsellerini MinIO'ya yükle (seed başında bir kez)
+  progress.increment('Seed görselleri yükleniyor...')
+  try {
+    await ensureSeedMediaUploaded();
+  } catch (error) {
+    console.warn('⚠️  Seed görselleri yüklenirken hata oluştu, devam ediliyor...');
+    console.warn('   Not: Eğer görseller zaten MinIO\'da varsa bu hata normal olabilir.');
   }
 
   // Hash password once for all users
