@@ -59,7 +59,18 @@ export class InventoryService {
 
         // Media'dan ilk resmi al
         const images = await this.mediaRepo.findImagesByInventoryId(inventory.id);
-        const image = images.length > 0 ? images[0].getMediaUrl() : null;
+        let image: string | null = null;
+        if (images.length > 0) {
+          const mediaUrl = images[0].getMediaUrl();
+          // Eğer zaten tam URL ise olduğu gibi kullan, değilse prefix ekle
+          if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) {
+            image = mediaUrl;
+          } else {
+            const { getPublicMediaBaseUrl } = await import('../../infrastructure/config/media.config');
+            const baseUrl = getPublicMediaBaseUrl();
+            image = `${baseUrl}/${mediaUrl}`;
+          }
+        }
 
         // Tags: Content post tags'lerinden al veya product group'dan
         const tags: string[] = [];

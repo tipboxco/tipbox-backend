@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs';
@@ -369,55 +369,159 @@ const dashboardScript = `
       }
     }
 
-    async function runAllSeeds() {
-      console.log('runAllSeeds called');
+    // Data Management komutlarını çalıştır
+    async function executeDataCommand(command) {
+      console.log('executeDataCommand called:', command);
       
-      const button = document.getElementById('btn-seed-all');
-      const status = document.getElementById('status-seed-all');
+      const commandMap = {
+        'db:seed': { buttonId: 'btn-db-seed', statusId: 'status-db-seed', progressId: 'progress-db-seed', progressFillId: 'progress-fill-db-seed', progressTextId: 'progress-text-db-seed' },
+        'db:seed:all': { buttonId: 'btn-db-seed-all', statusId: 'status-db-seed-all', progressId: 'progress-db-seed-all', progressFillId: 'progress-fill-db-seed-all', progressTextId: 'progress-text-db-seed-all' },
+        'db:reset': { buttonId: 'btn-db-reset', statusId: 'status-db-reset', progressId: 'progress-db-reset', progressFillId: 'progress-fill-db-reset', progressTextId: 'progress-text-db-reset' },
+        'db:reset:all': { buttonId: 'btn-db-reset-all', statusId: 'status-db-reset-all', progressId: 'progress-db-reset-all', progressFillId: 'progress-fill-db-reset-all', progressTextId: 'progress-text-db-reset-all' },
+        'db:reset:force': { buttonId: 'btn-db-reset-force', statusId: 'status-db-reset-force', progressId: 'progress-db-reset-force', progressFillId: 'progress-fill-db-reset-force', progressTextId: 'progress-text-db-reset-force' }
+      };
       
-      if (!button || !status) {
-        console.error('Button or status element not found for runAllSeeds');
-        alert('Button or status element not found');
+      const config = commandMap[command];
+      if (!config) {
+        console.error('Unknown command:', command);
+        alert('Unknown command: ' + command);
         return;
       }
       
-      button.disabled = true;
-      status.innerHTML = '<div class="status loading">Loading all seeds...</div>';
+      const button = document.getElementById(config.buttonId);
+      const status = document.getElementById(config.statusId);
+      const progressContainer = document.getElementById(config.progressId);
+      const progressFill = document.getElementById(config.progressFillId);
+      const progressText = document.getElementById(config.progressTextId);
       
-      let response = null;
+      if (!button || !status || !progressContainer || !progressFill || !progressText) {
+        console.error('Elements not found for command:', command);
+        alert('UI elements not found');
+        return;
+      }
+      
+      // Tehlikeli komutlar için onay iste
+      const dangerousCommands = ['db:reset:all', 'db:reset:force'];
+      if (dangerousCommands.includes(command)) {
+        const confirmMessage = command === 'db:reset:force' 
+          ? 'Bu işlem tüm tabloları silecek ve migration\'ları baştan oluşturacak. Devam etmek istediğinize emin misiniz?'
+          : 'Bu işlem tüm verileri (taxonomy dahil) silecek. Devam etmek istediğinize emin misiniz?';
+        if (!confirm(confirmMessage)) {
+          return;
+        }
+      }
+      
+      button.disabled = true;
+      status.innerHTML = '<div class="status loading">İşlem başlatılıyor...</div>';
+      progressContainer.style.display = 'block';
+      updateProgress(progressFill, progressText, 0);
+      
       try {
-        console.log('Fetching /seed with command: db:seed');
-        response = await fetch('/seed', {
+        console.log('Fetching /data-management with command:', command);
+        const response = await fetch('/data-management', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ command: 'db:seed' })
+          body: JSON.stringify({ command: command })
         });
         
         console.log('Response status:', response.status);
-        const data = await response.json();
-        console.log('Response data:', data);
         
-        if (response.ok) {
-          status.innerHTML = '<div class="status success">✓ ' + data.message + '</div>';
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Unknown error');
+        }
+        
+        // Stream response'u oku (progress için)
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let finalData = null;
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          
+          for (const line of lines) {
+            if (line.trim()) {
+              try {
+                const data = JSON.parse(line);
+                
+                // Progress bilgisi varsa güncelle
+                if (data.progress !== undefined) {
+                  updateProgress(progressFill, progressText, data.progress);
+                }
+                
+                // Status mesajı varsa güncelle
+                if (data.message) {
+                  if (data.type === 'progress') {
+                    status.innerHTML = '<div class="status loading">' + data.message + '</div>';
+                  } else {
+                    // Final message
+                    finalData = data;
+                  }
+                }
+                
+                // Error varsa
+                if (data.error) {
+                  throw new Error(data.error);
+                }
+              } catch (parseError) {
+                // JSON parse hatası, devam et
+                console.warn('Failed to parse line:', line);
+              }
+            }
+          }
+        }
+        
+        // Kalan buffer'ı parse et
+        if (buffer.trim()) {
+          try {
+            const data = JSON.parse(buffer);
+            if (data.message) finalData = data;
+            if (data.progress !== undefined) {
+              updateProgress(progressFill, progressText, data.progress);
+            }
+          } catch (e) {
+            // Ignore
+          }
+        }
+        
+        // Final durumu göster
+        updateProgress(progressFill, progressText, 100);
+        
+        if (finalData && finalData.message) {
+          status.innerHTML = '<div class="status success">✓ ' + finalData.message + '</div>';
         } else {
-          status.innerHTML = '<div class="status error">✗ ' + (data.error || 'Unknown error') + '</div>';
+          status.innerHTML = '<div class="status success">✓ İşlem tamamlandı</div>';
         }
       } catch (error) {
-        console.error('Seed error:', error);
+        console.error('Data management error:', error);
+        updateProgress(progressFill, progressText, 0);
         status.innerHTML = '<div class="status error">✗ Error: ' + error.message + '</div>';
         alert('Error: ' + error.message);
       } finally {
         button.disabled = false;
-          setTimeout(function() {
-            status.innerHTML = '';
-          }, 5000);
+        setTimeout(function() {
+          status.innerHTML = '';
+          progressContainer.style.display = 'none';
+          updateProgress(progressFill, progressText, 0);
+        }, 10000);
       }
     }
     
+    function updateProgress(progressFill, progressText, percentage) {
+      if (progressFill) progressFill.style.width = percentage + '%';
+      if (progressText) progressText.textContent = percentage + '%';
+    }
+    
     // Global scope'a fonksiyonları ekle (onclick için)
-    window.runAllSeeds = runAllSeeds;
+    window.executeDataCommand = executeDataCommand;
     window.confirmClearTestData = confirmClearTestData;
     window.confirmClearSeedData = confirmClearSeedData;
     window.executeConfirmedAction = executeConfirmedAction;
@@ -1381,6 +1485,58 @@ router.get('/', (req: Request, res: Response) => {
       color: #FAFAFA;
       font-size: 0.9375rem;
     }
+    .command-description {
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 16px;
+      font-size: 0.8125rem;
+    }
+    .command-description ul {
+      margin: 0;
+      padding-left: 20px;
+      color: #A3A3A3;
+      line-height: 1.6;
+    }
+    .command-description li {
+      margin-bottom: 4px;
+    }
+    .command-description code {
+      background: rgba(208, 242, 5, 0.1);
+      color: #D0F205;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-family: 'Courier New', monospace;
+    }
+    .progress-container {
+      margin-top: 12px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 8px;
+      border: 1px solid rgba(163, 163, 163, 0.1);
+    }
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #D0F205 0%, #B8D904 100%);
+      border-radius: 4px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+    .progress-text {
+      text-align: center;
+      font-size: 0.75rem;
+      color: #A3A3A3;
+      font-weight: 500;
+    }
     .modal-step-desc {
       font-size: 0.875rem;
       color: #A3A3A3;
@@ -1565,30 +1721,138 @@ router.get('/', (req: Request, res: Response) => {
     </div>
 
     <div class="section">
-      <h2 class="section-title">Database: Seed Management</h2>
+      <h2 class="section-title">Database: Data Management</h2>
       <div class="seed-grid">
-          <div class="seed-card">
-            <h3>
-            <i class="fas fa-database icon"></i>
-            Create All Seeds
-            </h3>
-          <p>Writes all seed data from <code>prisma/seed.ts</code> file to database.</p>
-          <button class="seed-button" onclick="runAllSeeds()" id="btn-seed-all">
-            Load Seeds
-            </button>
-          <div id="status-seed-all"></div>
-    </div>
+        <!-- db:seed -->
+        <div class="seed-card">
+          <h3>
+            <i class="fas fa-seedling icon"></i>
+            Seed Data (Taxonomy Preserved)
+          </h3>
+          <p><code>npm run db:seed</code></p>
+          <div class="command-description">
+            <ul>
+              <li>Prisma schema validation</li>
+              <li>Prisma client generate</li>
+              <li>Taxonomy korunur</li>
+              <li>User/content verileri temizlenir</li>
+              <li>Seed verileri eklenir</li>
+            </ul>
+          </div>
+          <button class="seed-button" onclick="executeDataCommand('db:seed')" id="btn-db-seed">
+            Run Seed
+          </button>
+          <div id="status-db-seed"></div>
+          <div id="progress-db-seed" class="progress-container" style="display: none;">
+            <div class="progress-bar">
+              <div class="progress-fill" id="progress-fill-db-seed"></div>
+            </div>
+            <div class="progress-text" id="progress-text-db-seed">0%</div>
+          </div>
+        </div>
 
+        <!-- db:seed:all -->
+        <div class="seed-card">
+          <h3>
+            <i class="fas fa-database icon"></i>
+            Seed All (Full Reset)
+          </h3>
+          <p><code>npm run db:seed:all</code></p>
+          <div class="command-description">
+            <ul>
+              <li>Prisma schema validation</li>
+              <li>Prisma client generate</li>
+              <li>Tüm veriler temizlenir (taxonomy dahil)</li>
+              <li>Seed verileri eklenir</li>
+            </ul>
+          </div>
+          <button class="seed-button" onclick="executeDataCommand('db:seed:all')" id="btn-db-seed-all">
+            Run Seed All
+          </button>
+          <div id="status-db-seed-all"></div>
+          <div id="progress-db-seed-all" class="progress-container" style="display: none;">
+            <div class="progress-bar">
+              <div class="progress-fill" id="progress-fill-db-seed-all"></div>
+            </div>
+            <div class="progress-text" id="progress-text-db-seed-all">0%</div>
+          </div>
+        </div>
+
+        <!-- db:reset -->
+        <div class="seed-card">
+          <h3>
+            <i class="fas fa-broom icon"></i>
+            Reset User/Content
+          </h3>
+          <p><code>npm run db:reset</code></p>
+          <div class="command-description">
+            <ul>
+              <li>Sadece user/content verileri temizlenir</li>
+              <li>Taxonomy/core veriler korunur</li>
+              <li>Seed çalıştırılmaz</li>
+            </ul>
+          </div>
+          <button class="seed-button" onclick="executeDataCommand('db:reset')" id="btn-db-reset">
+            Reset Data
+          </button>
+          <div id="status-db-reset"></div>
+          <div id="progress-db-reset" class="progress-container" style="display: none;">
+            <div class="progress-bar">
+              <div class="progress-fill" id="progress-fill-db-reset"></div>
+            </div>
+            <div class="progress-text" id="progress-text-db-reset">0%</div>
+          </div>
+        </div>
+
+        <!-- db:reset:all -->
         <div class="seed-card danger-card">
           <h3>
             <i class="fas fa-trash-alt icon"></i>
-            Clear All Seeds
+            Reset All Data
           </h3>
-          <p>Clears all seed data from the database.</p>
-          <button class="danger-button" id="btn-clear-seed">
-            Clear Seeds
+          <p><code>npm run db:reset:all</code></p>
+          <div class="command-description">
+            <ul>
+              <li>Tüm veriler temizlenir (taxonomy dahil)</li>
+              <li>Seed çalıştırılmaz</li>
+            </ul>
+          </div>
+          <button class="danger-button" onclick="executeDataCommand('db:reset:all')" id="btn-db-reset-all">
+            Reset All
           </button>
-          <div id="status-clear-seed"></div>
+          <div id="status-db-reset-all"></div>
+          <div id="progress-db-reset-all" class="progress-container" style="display: none;">
+            <div class="progress-bar">
+              <div class="progress-fill" id="progress-fill-db-reset-all"></div>
+            </div>
+            <div class="progress-text" id="progress-text-db-reset-all">0%</div>
+          </div>
+        </div>
+
+        <!-- db:reset:force -->
+        <div class="seed-card danger-card">
+          <h3>
+            <i class="fas fa-exclamation-triangle icon"></i>
+            Force Reset (Migration)
+          </h3>
+          <p><code>npm run db:reset:force</code></p>
+          <div class="command-description">
+            <ul>
+              <li>Tabloları siler</li>
+              <li>Migration'ları baştan oluşturur</li>
+              <li>Verisiz tablo (seed çalıştırılmaz)</li>
+            </ul>
+          </div>
+          <button class="danger-button" onclick="executeDataCommand('db:reset:force')" id="btn-db-reset-force">
+            Force Reset
+          </button>
+          <div id="status-db-reset-force"></div>
+          <div id="progress-db-reset-force" class="progress-container" style="display: none;">
+            <div class="progress-bar">
+              <div class="progress-fill" id="progress-fill-db-reset-force"></div>
+            </div>
+            <div class="progress-text" id="progress-text-db-reset-force">0%</div>
+          </div>
         </div>
       </div>
     </div>
@@ -2061,8 +2325,8 @@ router.get('/docker/status', async (req: Request, res: Response) => {
   }
 });
 
-// Seed çalıştırma endpoint'i (sadece izin verilen komutlar)
-router.post('/seed', async (req: Request, res: Response) => {
+// Data Management endpoint (5 komut için)
+router.post('/data-management', async (req: Request, res: Response) => {
   const { command } = req.body;
 
   if (!command) {
@@ -2070,45 +2334,164 @@ router.post('/seed', async (req: Request, res: Response) => {
   }
 
   // Only allow defined scripts to run
-  const validCommands = ['db:seed'];
+  const validCommands = ['db:seed', 'db:seed:all', 'db:reset', 'db:reset:all', 'db:reset:force'];
   if (!validCommands.includes(command)) {
     return res.status(400).json({ error: 'Invalid command' });
   }
 
   try {
     const projectRoot = getProjectRoot();
-    console.log('Seed command - Project root:', projectRoot);
-    console.log('Seed command - Command:', command);
-    console.log('Seed command - package.json exists:', fs.existsSync(path.join(projectRoot, 'package.json')));
+    console.log('Data management command - Project root:', projectRoot);
+    console.log('Data management command - Command:', command);
     
     const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
     
     // Önce package.json'ın varlığını kontrol et
     const packageJsonPath = path.join(projectRoot, 'package.json');
     if (!fs.existsSync(packageJsonPath)) {
-      throw new Error(`package.json not found in ${projectRoot}. __dirname: ${__dirname}, process.cwd(): ${process.cwd()}`);
+      throw new Error(`package.json not found in ${projectRoot}`);
     }
     
-    const { stdout, stderr } = await execAsync(`"${npmCommand}" run ${command}`, {
+    // Stream response için headers ayarla
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Transfer-Encoding', 'chunked');
+    
+    // Progress callback fonksiyonu
+    const sendProgress = (progress: number, message: string) => {
+      try {
+        res.write(JSON.stringify({ progress, message, type: 'progress' }) + '\n');
+      } catch (e) {
+        // Client bağlantısı kapandıysa sessizce devam et
+      }
+    };
+    
+    // Komut çalıştır (spawn ile stream için)
+    const isWindows = process.platform === 'win32';
+    const shellCommand = isWindows 
+      ? `"${npmCommand}" run ${command}`
+      : `npm run ${command}`;
+    
+    const childProcess = spawn(shellCommand, [], {
       cwd: projectRoot,
-      maxBuffer: 10 * 1024 * 1024, // 10MB
-      env: { ...process.env, NODE_ENV: process.env.NODE_ENV || 'development' }
+      env: { ...process.env, NODE_ENV: process.env.NODE_ENV || 'development' },
+      shell: true,
+      stdio: ['ignore', 'pipe', 'pipe']
     });
-
-    if (stderr && !stderr.includes('warning')) {
-      console.error('Seed stderr:', stderr);
-    }
-
-    const seedName = seedCommands.find(s => s.command === command)?.name || command;
-    res.json({ 
-      message: `${seedName} executed successfully`,
-      output: stdout 
+    
+    let stdout = '';
+    let stderr = '';
+    
+    // Progress tracking için komut bazlı aşamalar
+    const progressSteps: Record<string, number[]> = {
+      'db:seed': [20, 40, 60, 80, 100], // Schema, Generate, Clear, Seed, Complete
+      'db:seed:all': [20, 40, 60, 80, 100],
+      'db:reset': [50, 100], // Clear, Complete
+      'db:reset:all': [50, 100],
+      'db:reset:force': [33, 66, 100] // Drop, Migrate, Complete
+    };
+    
+    const steps = progressSteps[command] || [100];
+    let currentStepIndex = 0;
+    const stepKeywords: Record<string, string[][]> = {
+      'db:seed': [
+        ['Schema', 'schema', 'geçerli', 'validation'],
+        ['generate', 'Generate', 'Prisma client', 'client generate'],
+        ['temizleniyor', 'Clearing', 'Kullanıcı/içerik'],
+        ['Seed.ts', 'seed.ts', 'Seed işlemi', 'Seed verileri']
+      ],
+      'db:seed:all': [
+        ['Schema', 'schema', 'geçerli', 'validation'],
+        ['generate', 'Generate', 'Prisma client'],
+        ['TÜM seed', 'tüm veriler', 'Clearing'],
+        ['Seed.ts', 'seed.ts', 'Seed işlemi']
+      ],
+      'db:reset': [
+        ['Kullanıcı/içerik', 'temizleniyor', 'Clearing']
+      ],
+      'db:reset:all': [
+        ['TÜM', 'tüm veriler', 'Clearing', 'temizleniyor']
+      ],
+      'db:reset:force': [
+        ['migrate reset', 'Resetting', 'Dropping'],
+        ['migrations', 'Applying', 'Creating']
+      ]
+    };
+    
+    const keywords = stepKeywords[command] || [];
+    const progressMessages: Record<string, string[]> = {
+      'db:seed': ['Schema kontrol ediliyor...', 'Prisma client generate ediliyor...', 'Veriler temizleniyor...', 'Seed verileri ekleniyor...'],
+      'db:seed:all': ['Schema kontrol ediliyor...', 'Prisma client generate ediliyor...', 'Tüm veriler temizleniyor...', 'Seed verileri ekleniyor...'],
+      'db:reset': ['Kullanıcı/içerik verileri temizleniyor...'],
+      'db:reset:all': ['Tüm veriler temizleniyor...'],
+      'db:reset:force': ['Tablolar siliniyor...', 'Migration\'lar uygulanıyor...']
+    };
+    
+    // İlk progress gönder
+    sendProgress(5, 'İşlem başlatılıyor...');
+    
+    // Stdout stream
+    childProcess.stdout?.on('data', (data: Buffer) => {
+      const output = data.toString();
+      stdout += output;
+      
+      // Progress güncellemeleri (output'a göre)
+      for (let i = 0; i < keywords.length && i < steps.length; i++) {
+        if (keywords[i].some(keyword => output.includes(keyword))) {
+          if (currentStepIndex <= i) {
+            const messages = progressMessages[command] || ['İşleniyor...'];
+            sendProgress(steps[i], messages[i] || 'İşleniyor...');
+            currentStepIndex = i + 1;
+            break;
+          }
+        }
+      }
     });
+    
+    // Stderr stream
+    childProcess.stderr?.on('data', (data: Buffer) => {
+      const output = data.toString();
+      stderr += output;
+      // Warning'ler hariç hataları logla
+      if (!output.includes('warning') && !output.includes('Warning')) {
+        console.error('Command stderr:', output);
+      }
+    });
+    
+    // Process tamamlandığında
+    childProcess.on('close', (code) => {
+      if (code === 0) {
+        sendProgress(100, 'İşlem tamamlandı');
+        res.write(JSON.stringify({ 
+          message: `Command "${command}" executed successfully`,
+          output: stdout,
+          progress: 100
+        }) + '\n');
+        res.end();
+      } else {
+        res.write(JSON.stringify({ 
+          error: `Command failed with exit code ${code}`,
+          details: stderr || stdout,
+          progress: 0
+        }) + '\n');
+        res.end();
+      }
+    });
+    
+    childProcess.on('error', (error) => {
+      console.error('Command execution error:', error);
+      res.write(JSON.stringify({ 
+        error: error.message || 'Error occurred while executing command',
+        progress: 0
+      }) + '\n');
+      res.end();
+    });
+    
   } catch (error: any) {
-    console.error('Seed error:', error);
+    console.error('Data management error:', error);
     res.status(500).json({ 
-      error: error.message || 'Error occurred while executing seed',
-      details: error.stderr || error.stdout
+      error: error.message || 'Error occurred while executing command',
+      details: error.stderr || error.stdout,
+      progress: 0
     });
   }
 });

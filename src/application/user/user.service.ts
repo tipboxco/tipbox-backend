@@ -9,7 +9,7 @@ import { NotificationCode } from '../../domain/user/notification-code.enum';
 import { PrivacyCode } from '../../domain/user/privacy-code.enum';
 import { S3Service } from '../../infrastructure/s3/s3.service';
 import { CacheService } from '../../infrastructure/cache/cache.service';
-import { resolveMediaUrl } from '../../infrastructure/config/media.config';
+import { resolveMediaUrl, getPublicMediaBaseUrl } from '../../infrastructure/config/media.config';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import logger from '../../infrastructure/logger/logger';
@@ -1411,7 +1411,18 @@ export class UserService {
 
       const tags = await this.collectProductTags(String(inv.productId));
       const images = ((inv as any).media || [])
-        .map((m: any) => m.mediaUrl); // type field'ı kaldırıldı, tüm media'ları al
+        .map((m: any) => {
+          const mediaUrl = m.mediaUrl;
+          // Eğer zaten tam URL ise olduğu gibi kullan, değilse prefix ekle
+          if (mediaUrl && (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://'))) {
+            return mediaUrl;
+          } else if (mediaUrl) {
+            const baseUrl = getPublicMediaBaseUrl();
+            return `${baseUrl}/${mediaUrl}`;
+          }
+          return null;
+        })
+        .filter((url: string | null) => url !== null); // null değerleri filtrele
 
       const contextData = this.buildContextDataFromInventory(inv as any);
 
@@ -2216,11 +2227,24 @@ export class UserService {
     const subCategory = group?.subCategory;
     const mainCategory = subCategory?.mainCategory;
 
+    // Image URL'ini bul ve prefix ekle
+    const imagePath = product.imageUrl || group?.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
+    let imageUrl: string | null = null;
+    
+    if (imagePath) {
+      if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+        imageUrl = imagePath;
+      } else {
+        const baseUrl = getPublicMediaBaseUrl();
+        imageUrl = `${baseUrl}/${imagePath}`;
+      }
+    }
+
     return {
       id: String(product.id),
       name: product.name,
       subName: product.brand || group?.name || subCategory?.name || mainCategory?.name || '',
-      image: product.imageUrl || group?.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null,
+      image: imageUrl,
       isOwned: !!inventory.hasOwned,
     };
   }

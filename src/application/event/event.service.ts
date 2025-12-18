@@ -16,7 +16,7 @@ import {
   LimitedTimeEventUser,
 } from '../../interfaces/event/event.dto';
 import { FeedItem, FeedItemType } from '../../interfaces/feed/feed.dto';
-import { buildMediaUrl, resolveMediaUrl } from '../../infrastructure/config/media.config';
+import { buildMediaUrl, resolveMediaUrl, getPublicMediaBaseUrl } from '../../infrastructure/config/media.config';
 
 export class EventService {
   private prisma: PrismaClient;
@@ -63,9 +63,19 @@ export class EventService {
           const interaction = await this.getEventInteraction(event.id);
           const participants = await this.getEventParticipants(event.id, 2);
 
+          let imageUrl: string | null = null;
+          if (event.imageUrl) {
+            if (event.imageUrl.startsWith('http://') || event.imageUrl.startsWith('https://')) {
+              imageUrl = event.imageUrl;
+            } else {
+              const baseUrl = getPublicMediaBaseUrl();
+              imageUrl = `${baseUrl}/${event.imageUrl}`;
+            }
+          }
+
           return {
             eventId: event.id,
-            image: event.imageUrl,
+            image: imageUrl,
             title: event.title,
             description: event.description,
             startDate: event.startDate.toISOString(),
@@ -128,9 +138,19 @@ export class EventService {
           const interaction = await this.getEventInteraction(event.id);
           const participants = await this.getEventParticipants(event.id, 2); // Get first 2 participants
 
+          let imageUrl: string | null = null;
+          if (event.imageUrl) {
+            if (event.imageUrl.startsWith('http://') || event.imageUrl.startsWith('https://')) {
+              imageUrl = event.imageUrl;
+            } else {
+              const baseUrl = getPublicMediaBaseUrl();
+              imageUrl = `${baseUrl}/${event.imageUrl}`;
+            }
+          }
+
           return {
             eventId: event.id,
-            image: event.imageUrl,
+            image: imageUrl,
             title: event.title,
             description: event.description,
             startDate: event.startDate.toISOString(),
