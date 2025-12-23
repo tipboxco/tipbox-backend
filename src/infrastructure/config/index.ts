@@ -19,7 +19,15 @@ type Config = {
 function getDefaultCorsOrigins(env: string): string[] {
   switch (env) {
     case 'development':
-      return ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173'];
+      // Development'ta local network erişimi için esnek CORS
+      // Local network IP'leri için pattern: http://192.168.*.*, http://10.*.*.*, http://172.16-31.*.*
+      return [
+        'http://localhost:3000',
+        'http://localhost:3001',
+        'http://localhost:5173',
+        // Local network IP'leri için wildcard pattern (regex ile kontrol edilecek)
+        /^http:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|100\.)/,
+      ] as any; // TypeScript için any cast (cors kütüphanesi regex'i destekler)
     case 'test':
       return ['http://localhost:3000', 'https://api-test.tipbox.co', 'http://api-test.tipbox.co'];
     case 'production':

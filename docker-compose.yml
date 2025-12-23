@@ -63,7 +63,7 @@ services:
     container_name: tipbox_backend
     restart: always
     ports:
-      - "0.0.0.0:3000:3000"
+      - "3000:3000"  # Tüm network interface'lerinden erişim için (0.0.0.0:3000:3000 yerine)
     env_file:
       - .env
     environment:

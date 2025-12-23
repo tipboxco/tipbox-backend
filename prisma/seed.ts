@@ -42,10 +42,10 @@ let passwordHash: string
 // DB'ye sadece bucket path yazılacak: tipbox-media/products/phone6.png
 // DEFAULT_PROFILE_BANNER_URL env'den geliyor, eğer full URL ise .env'de path formatına çevrilmeli
 // Şimdilik sadece path kullanıyoruz
-const DEFAULT_BANNER_URL =  getSeedMediaPath('user.banner.primary')
-const PRIMARY_AVATAR_URL = getSeedMediaPath('user.avatar.primary')
-const MARKET_AVATAR_URL = getSeedMediaPath('user.avatar.market')
-const INVENTORY_MEDIA_URL = getSeedMediaPath('inventory.dyson-media')
+const DEFAULT_BANNER_URL =  getSeedMediaPath('user.banner.primary', true) || null
+const PRIMARY_AVATAR_URL = getSeedMediaPath('user.avatar.primary', true) || null
+const MARKET_AVATAR_URL = getSeedMediaPath('user.avatar.market', true) || null
+const INVENTORY_MEDIA_URL = getSeedMediaPath('inventory.dyson-media', true) || null
 const TRUST_USER_AVATAR_KEYS: SeedMediaKey[] = [
   'user.avatar.trust1',
   'user.avatar.trust2',
@@ -72,7 +72,7 @@ const TRUSTER_USER_TITLE_OPTIONS = [
 ]
 const COMMUNITY_COACH_USER_ID = '66666666-6666-4666-a666-666666666666'
 const COMMUNITY_COACH_EMAIL = 'coach@tipbox.co'
-const COMMUNITY_COACH_AVATAR_URL = getSeedMediaPath('user.avatar.truster3')
+const COMMUNITY_COACH_AVATAR_URL = getSeedMediaPath('user.avatar.truster3', true) || ''
 const TARGET_USER_TITLE = 'Marketplace Strategist'
 
 const MARKETPLACE_NFT_IMAGE_KEYS: SeedMediaKey[] = [
@@ -93,7 +93,7 @@ let marketplaceImageCursor = 0
 const nextMarketplaceImage = (): string => {
   const key = MARKETPLACE_NFT_IMAGE_KEYS[marketplaceImageCursor % MARKETPLACE_NFT_IMAGE_KEYS.length]
   marketplaceImageCursor += 1
-  return getSeedMediaPath(key)
+  return getSeedMediaPath(key, true) ?? ''
 }
 
 // Simple ULID generator for seed (avoids import issues)
@@ -135,7 +135,10 @@ async function ensureMainCategory(config: { name: string; description?: string; 
   if (existing) {
     const updateData: any = {};
     if (config.description !== undefined) updateData.description = config.description;
-    if (finalImageKey) updateData.imageUrl = getSeedMediaPath(finalImageKey);
+    if (finalImageKey) {
+      const imageUrl = getSeedMediaPath(finalImageKey, true);
+      if (imageUrl) updateData.imageUrl = imageUrl;
+    }
     
     if (Object.keys(updateData).length > 0) {
       return prisma.mainCategory.update({
@@ -150,7 +153,7 @@ async function ensureMainCategory(config: { name: string; description?: string; 
     data: {
       name: config.name,
       description: config.description,
-      imageUrl: finalImageKey ? getSeedMediaPath(finalImageKey) : null,
+      imageUrl: finalImageKey ? (getSeedMediaPath(finalImageKey, true) || null) : null,
     }
   });
 }
@@ -173,7 +176,10 @@ async function ensureSubCategory(config: { name: string; mainCategoryId: string;
   if (existing) {
     const updateData: any = {};
     if (config.description !== undefined) updateData.description = config.description;
-    if (finalImageKey) updateData.imageUrl = getSeedMediaPath(finalImageKey);
+    if (finalImageKey) {
+      const imageUrl = getSeedMediaPath(finalImageKey, true);
+      if (imageUrl) updateData.imageUrl = imageUrl;
+    }
     
     if (Object.keys(updateData).length > 0) {
       return prisma.subCategory.update({
@@ -189,7 +195,7 @@ async function ensureSubCategory(config: { name: string; mainCategoryId: string;
       name: config.name,
       mainCategoryId: config.mainCategoryId,
       description: config.description,
-      imageUrl: finalImageKey ? getSeedMediaPath(finalImageKey) : null,
+      imageUrl: finalImageKey ? (getSeedMediaPath(finalImageKey, true) || null) : null,
     }
   });
 }
@@ -206,7 +212,10 @@ async function ensureProductGroup(config: { name: string; subCategoryId: string;
   if (existing) {
     const updateData: any = {};
     if (config.description !== undefined) updateData.description = config.description;
-    if (config.imageKey) updateData.imageUrl = getSeedMediaPath(config.imageKey);
+    if (config.imageKey) {
+      const imageUrl = getSeedMediaPath(config.imageKey, true);
+      if (imageUrl) updateData.imageUrl = imageUrl;
+    }
     
     if (Object.keys(updateData).length > 0) {
       return prisma.productGroup.update({
@@ -222,7 +231,7 @@ async function ensureProductGroup(config: { name: string; subCategoryId: string;
       name: config.name,
       subCategoryId: config.subCategoryId,
       description: config.description,
-      imageUrl: config.imageKey ? getSeedMediaPath(config.imageKey) : null,
+      imageUrl: config.imageKey ? (getSeedMediaPath(config.imageKey, true) || null) : null,
     }
   });
 }
@@ -246,7 +255,10 @@ async function ensureProduct(config: { name: string; brand?: string; groupId?: s
     const updateData: any = {};
     if (config.description !== undefined) updateData.description = config.description;
     if (config.groupId !== undefined) updateData.groupId = config.groupId;
-    if (finalImageKey) updateData.imageUrl = getSeedMediaPath(finalImageKey);
+    if (finalImageKey) {
+      const imageUrl = getSeedMediaPath(finalImageKey, true);
+      if (imageUrl) updateData.imageUrl = imageUrl;
+    }
     
     if (Object.keys(updateData).length > 0) {
       return prisma.product.update({
@@ -263,7 +275,7 @@ async function ensureProduct(config: { name: string; brand?: string; groupId?: s
       brand: config.brand,
       groupId: config.groupId,
       description: config.description,
-      imageUrl: finalImageKey ? getSeedMediaPath(finalImageKey) : null,
+      imageUrl: finalImageKey ? (getSeedMediaPath(finalImageKey, true) || null) : null,
     }
   });
 }
@@ -411,8 +423,8 @@ async function updateAllEntityImages(): Promise<void> {
       const imageKey = getProductImageKey(product.name, product.brand || undefined);
       if (imageKey) {
         try {
-          const imagePath = getSeedMediaPath(imageKey);
-          if (product.imageUrl !== imagePath) {
+          const imagePath = getSeedMediaPath(imageKey, true);
+          if (imagePath && product.imageUrl !== imagePath) {
             await prisma.product.update({
               where: { id: product.id },
               data: { imageUrl: imagePath },
@@ -438,8 +450,8 @@ async function updateAllEntityImages(): Promise<void> {
       const imageKey = getMainCategoryImageKey(category.name);
       if (imageKey) {
         try {
-          const imagePath = getSeedMediaPath(imageKey);
-          if (category.imageUrl !== imagePath) {
+          const imagePath = getSeedMediaPath(imageKey, true);
+          if (imagePath && category.imageUrl !== imagePath) {
             await prisma.mainCategory.update({
               where: { id: category.id },
               data: { imageUrl: imagePath },
@@ -465,8 +477,8 @@ async function updateAllEntityImages(): Promise<void> {
       const imageKey = getSubCategoryImageKey(category.name);
       if (imageKey) {
         try {
-          const imagePath = getSeedMediaPath(imageKey);
-          if (category.imageUrl !== imagePath) {
+          const imagePath = getSeedMediaPath(imageKey, true);
+          if (imagePath && category.imageUrl !== imagePath) {
             await prisma.subCategory.update({
               where: { id: category.id },
               data: { imageUrl: imagePath },
@@ -492,8 +504,8 @@ async function updateAllEntityImages(): Promise<void> {
       const imageKey = getBrandCategoryImageKey(category.name);
       if (imageKey) {
         try {
-          const imagePath = getSeedMediaPath(imageKey);
-          if (category.imageUrl !== imagePath) {
+          const imagePath = getSeedMediaPath(imageKey, true);
+          if (imagePath && category.imageUrl !== imagePath) {
             await prisma.brandCategory.update({
               where: { id: category.id },
               data: { imageUrl: imagePath },
@@ -519,8 +531,8 @@ async function updateAllEntityImages(): Promise<void> {
       const imageKey = getBrandImageKey(brand.name);
       if (imageKey) {
         try {
-          const imagePath = getSeedMediaPath(imageKey);
-          if (brand.imageUrl !== imagePath) {
+          const imagePath = getSeedMediaPath(imageKey, true);
+          if (imagePath && brand.imageUrl !== imagePath) {
             await prisma.brand.update({
               where: { id: brand.id },
               data: { imageUrl: imagePath },
@@ -546,7 +558,7 @@ async function updateAllEntityImages(): Promise<void> {
       const imageKey = getBadgeImageKey(badge.name);
       if (imageKey) {
         try {
-          const imagePath = getSeedMediaPath(imageKey);
+          const imagePath = getSeedMediaPath(imageKey, true) || null;
           if (badge.imageUrl !== imagePath) {
             await prisma.badge.update({
               where: { id: badge.id },
@@ -592,10 +604,13 @@ async function ensureBrandCategory(config: { name: string; imageKey?: SeedMediaK
   
   if (existing) {
     if (finalImageKey) {
-      return prisma.brandCategory.update({
-        where: { id: existing.id },
-        data: { imageUrl: getSeedMediaPath(finalImageKey) }
-      });
+      const imageUrl = getSeedMediaPath(finalImageKey, true);
+      if (imageUrl) {
+        return prisma.brandCategory.update({
+          where: { id: existing.id },
+          data: { imageUrl }
+        });
+      }
     }
     return existing;
   }
@@ -603,7 +618,7 @@ async function ensureBrandCategory(config: { name: string; imageKey?: SeedMediaK
   return prisma.brandCategory.create({
     data: {
       name: config.name,
-      imageUrl: finalImageKey ? getSeedMediaPath(finalImageKey) : null,
+      imageUrl: finalImageKey ? (getSeedMediaPath(finalImageKey, true) || null) : null,
     }
   });
 }
@@ -611,14 +626,14 @@ async function ensureBrandCategory(config: { name: string; imageKey?: SeedMediaK
 // Brand için idempotent create/update
 async function ensureBrand(config: { name: string; categoryId?: string; description?: string; logoUrl?: string; imageUrl?: string; category?: string; imageKey?: SeedMediaKey }) {
   // Eğer imageKey belirtilmişse, imageUrl'yi otomatik oluştur
-  let finalImageUrl = config.imageUrl;
+  let finalImageUrl: string | undefined = config.imageUrl;
   if (config.imageKey) {
-    finalImageUrl = getSeedMediaPath(config.imageKey);
+    finalImageUrl = getSeedMediaPath(config.imageKey, true) || undefined;
   } else if (!finalImageUrl) {
     // Mapping'den otomatik bul
     const imageKey = getBrandImageKey(config.name);
     if (imageKey) {
-      finalImageUrl = getSeedMediaPath(imageKey);
+      finalImageUrl = getSeedMediaPath(imageKey, true) || undefined;
     }
   }
   
@@ -631,7 +646,7 @@ async function ensureBrand(config: { name: string; categoryId?: string; descript
     if (config.description !== undefined) updateData.description = config.description;
     if (config.categoryId !== undefined) updateData.categoryId = config.categoryId;
     if (config.logoUrl !== undefined) updateData.logoUrl = config.logoUrl;
-    if (finalImageUrl !== undefined) updateData.imageUrl = finalImageUrl;
+    if (finalImageUrl !== undefined && finalImageUrl !== null) updateData.imageUrl = finalImageUrl;
     
     if (Object.keys(updateData).length > 0) {
       return prisma.brand.update({
@@ -688,7 +703,10 @@ async function ensureBadge(config: { name: string; categoryId: string; descripti
     if (config.boostMultiplier !== undefined) updateData.boostMultiplier = config.boostMultiplier;
     if (config.rewardMultiplier !== undefined) updateData.rewardMultiplier = config.rewardMultiplier;
     if (config.categoryId) updateData.categoryId = config.categoryId;
-    if (finalImageKey) updateData.imageUrl = getSeedMediaPath(finalImageKey);
+    if (finalImageKey) {
+      const imageUrl = getSeedMediaPath(finalImageKey, true);
+      if (imageUrl) updateData.imageUrl = imageUrl;
+    }
     
     if (Object.keys(updateData).length > 0) {
       return prisma.badge.update({
@@ -708,7 +726,7 @@ async function ensureBadge(config: { name: string; categoryId: string; descripti
       rarity: config.rarity as any,
       boostMultiplier: config.boostMultiplier,
       rewardMultiplier: config.rewardMultiplier,
-      imageUrl: finalImageKey ? getSeedMediaPath(finalImageKey) : null,
+      imageUrl: finalImageKey ? (getSeedMediaPath(finalImageKey, true) || null) : null,
     }
   });
 }
@@ -1096,7 +1114,7 @@ async function ensureAllPostsHaveMedia(): Promise<void> {
         } else {
           // Post type'a göre varsayılan görsel kullan
           const mediaKey = defaultMediaKeys[post.type] || 'catalog.phones'
-          mediaUrl = getSeedMediaPath(mediaKey)
+          mediaUrl = getSeedMediaPath(mediaKey, true) || ''
         }
 
         return {
@@ -1727,7 +1745,7 @@ async function main() {
 
   const badges = await Promise.all(
     badgeConfigs.map(async ({ imageKey, ...config }) => {
-      const imageUrl = imageKey ? getSeedMediaPath(imageKey) : null;
+      const imageUrl = imageKey ? getSeedMediaPath(imageKey, true) || null : null;
       const existing = await prisma.badge.findFirst({
         where: { name: config.name }
       }).catch(() => null);
@@ -2086,7 +2104,7 @@ async function main() {
         }
         
         const mediaKey = defaultMediaKeys[postType] || 'catalog.phones'
-        mediaUrl = getSeedMediaPath(mediaKey)
+        mediaUrl = getSeedMediaPath(mediaKey, true) || ''
       }
       
       // PostMedia oluştur
@@ -2197,7 +2215,7 @@ async function main() {
     await prisma.userAvatar.update({
       where: { id: existingAvatar.id },
       data: {
-        imageUrl: PRIMARY_AVATAR_URL,
+        imageUrl: PRIMARY_AVATAR_URL ?? undefined,
         isActive: true,
       }
     })
@@ -2211,7 +2229,7 @@ async function main() {
     await prisma.userAvatar.create({
       data: {
         userId: userIdToUse,
-        imageUrl: PRIMARY_AVATAR_URL,
+        imageUrl: PRIMARY_AVATAR_URL ?? '',
         isActive: true,
       }
     })
@@ -2704,12 +2722,12 @@ async function main() {
     })
 
     const trustAvatarKey = TRUST_USER_AVATAR_KEYS[i % TRUST_USER_AVATAR_KEYS.length]
-    const trustAvatarUrl = getSeedMediaPath(trustAvatarKey)
+    const trustAvatarUrl = getSeedMediaPath(trustAvatarKey, true) || null
     await prisma.userAvatar.deleteMany({ where: { userId: trustUser.id } })
     await prisma.userAvatar.create({
       data: {
         userId: trustUser.id,
-        imageUrl: trustAvatarUrl,
+        imageUrl: trustAvatarUrl ?? '',
         isActive: true,
       },
     })
@@ -2779,12 +2797,12 @@ async function main() {
     })
 
     const trusterAvatarKey = TRUSTER_USER_AVATAR_KEYS[i % TRUSTER_USER_AVATAR_KEYS.length]
-    const trusterAvatarUrl = getSeedMediaPath(trusterAvatarKey)
+    const trusterAvatarUrl = getSeedMediaPath(trusterAvatarKey, true) || null
     await prisma.userAvatar.deleteMany({ where: { userId: trusterUser.id } })
     await prisma.userAvatar.create({
       data: {
         userId: trusterUser.id,
-        imageUrl: trusterAvatarUrl,
+        imageUrl: trusterAvatarUrl ?? '',
         isActive: true,
       },
     })
@@ -3361,7 +3379,7 @@ async function main() {
     await prisma.subCategory.update({
       where: { id: evYasamSubCategory.id },
       data: {
-        imageUrl: getSeedMediaPath('catalog.home-appliances')
+        imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null
       }
     });
   }
@@ -3379,7 +3397,7 @@ async function main() {
   await prisma.productGroup.update({
     where: { id: productGroup.id },
     data: {
-      imageUrl: getSeedMediaPath('catalog.home-appliances')
+      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null
     }
   });
 
@@ -3397,7 +3415,7 @@ async function main() {
   await prisma.product.update({
     where: { id: product1.id },
     data: {
-      imageUrl: getSeedMediaPath('catalog.home-appliances')
+      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null
     }
   });
 
@@ -3415,7 +3433,7 @@ async function main() {
   await prisma.product.update({
     where: { id: product2.id },
     data: {
-      imageUrl: getSeedMediaPath('catalog.home-appliances')
+      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null
     }
   });
 
@@ -3451,7 +3469,7 @@ async function main() {
           name: `${brand.name} Serisi`,
           description: `${brand.brand} marka telefon modelleri`,
           subCategoryId: akilliTelefonSubCat.id,
-          imageUrl: getSeedMediaPath(brand.phoneImage as any),
+          imageUrl: getSeedMediaPath(brand.phoneImage as any, true) || null,
         }
       });
       return group;
@@ -3478,7 +3496,7 @@ async function main() {
         brand: brand.brand,
         description: `${brand.brand} marka telefon modeli - ${i + 1}. ürün (Category View)`,
         groupId: null, // Category view için product group yok
-        imageUrl: getSeedMediaPath(selectedImage as any),
+        imageUrl: getSeedMediaPath(selectedImage as any, true) || null,
       }
     });
     categoryPhoneProducts.push(product);
@@ -3506,7 +3524,7 @@ async function main() {
           brand: brand.brand,
           description: `${brand.brand} ${modelName}${modelNumber} model telefon`,
           groupId: productGroup.id,
-          imageUrl: getSeedMediaPath(brandImage as any), // Hepsi aynı görsel (markanın görseli)
+          imageUrl: getSeedMediaPath(brandImage as any, true) || null, // Hepsi aynı görsel (markanın görseli)
         }
       });
       brandPhoneProducts.push(product);
@@ -3525,7 +3543,7 @@ async function main() {
       brand: 'Apple',
       description: "Apple'ın en yeni flagship telefonu",
       groupId: phoneProductGroups.find(g => g.name === 'iPhone Serisi')!.id,
-      imageUrl: getSeedMediaPath('product.phone.phone2' as any),
+      imageUrl: getSeedMediaPath('product.phone.phone2' as any, true) || null,
     }
   });
 
@@ -3569,7 +3587,7 @@ async function main() {
   await prisma.inventoryMedia.create({
     data: {
       inventoryId: inventory1.id,
-      mediaUrl: INVENTORY_MEDIA_URL,
+      mediaUrl: INVENTORY_MEDIA_URL ?? '',
     }
   })
 
@@ -3648,7 +3666,7 @@ async function main() {
     await prisma.inventoryMedia.deleteMany({ where: { inventoryId: inventory.id } });
     const mediaData = config.mediaKeys
       .map((key) => {
-        const mediaUrl = getSeedMediaPath(key as SeedMediaKey);
+        const mediaUrl = getSeedMediaPath(key as SeedMediaKey, true) || null;
         if (!mediaUrl) {
           return null;
         }
@@ -5536,7 +5554,7 @@ async function main() {
   await prisma.userAvatar.create({
     data: {
       userId: TARGET_USER_ID,
-      imageUrl: MARKET_AVATAR_URL,
+      imageUrl: MARKET_AVATAR_URL ?? '',
       isActive: true,
     }
   })
@@ -5687,7 +5705,7 @@ async function main() {
     createOrGetNFT({
       name: 'Premium Tipbox Badge',
       description: 'A rare badge for highly active users on the Tipbox platform',
-      imageUrl: getSeedMediaPath('badge.premium-shoper' as any),
+      imageUrl: getSeedMediaPath('badge.premium-shoper' as any, true) || null,
       type: 'BADGE',
       rarity: 'EPIC',
       isTransferable: true,
@@ -5696,7 +5714,7 @@ async function main() {
     createOrGetNFT({
       name: 'Early Adopter Badge',
       description: 'A badge reserved for the very first users of the platform',
-      imageUrl: getSeedMediaPath('badge.early-adapter' as any),
+      imageUrl: getSeedMediaPath('badge.early-adapter' as any, true) || null,
       type: 'BADGE',
       rarity: 'RARE',
       isTransferable: true,
@@ -5705,7 +5723,7 @@ async function main() {
     createOrGetNFT({
       name: 'Golden Frame',
       description: 'Profil çerçevesi için özel altın renkli cosmetic item',
-      imageUrl: getSeedMediaPath('badge.hardware-expert' as any),
+      imageUrl: getSeedMediaPath('badge.hardware-expert' as any, true) || null,
       type: 'COSMETIC',
       rarity: 'EPIC',
       isTransferable: true,
@@ -5716,7 +5734,7 @@ async function main() {
     createOrGetNFT({
       name: 'Silver Badge',
       description: 'Gümüş renkli özel badge',
-      imageUrl: getSeedMediaPath('badge.wish-marker' as any),
+      imageUrl: getSeedMediaPath('badge.wish-marker' as any, true) || null,
       type: 'BADGE',
       rarity: 'COMMON',
       isTransferable: true,
@@ -5725,7 +5743,7 @@ async function main() {
     createOrGetNFT({
       name: 'Rainbow Avatar Border',
       description: 'Profil avatarı için renkli çerçeve',
-      imageUrl: getSeedMediaPath('marketplace.rainbow-border' as any),
+      imageUrl: getSeedMediaPath('marketplace.rainbow-border' as any, true) || null,
       type: 'COSMETIC',
       rarity: 'RARE',
       isTransferable: true,
@@ -5734,7 +5752,7 @@ async function main() {
     createOrGetNFT({
       name: 'Mystery Lootbox',
       description: 'İçinde rastgele ödül bulunan gizemli kutu',
-      imageUrl: getSeedMediaPath('badge.premium-shoper' as any),
+      imageUrl: getSeedMediaPath('badge.premium-shoper' as any, true) || null,
       type: 'LOOTBOX',
       rarity: 'EPIC',
       isTransferable: true,
@@ -6370,7 +6388,7 @@ async function main() {
             id: generateUlid(),
             title: template.title,
             description: template.description,
-            imageUrl: getSeedMediaPath('event.primary' as any),
+            imageUrl: getSeedMediaPath('event.primary' as any, true) || null,
             startDate: today,
             endDate: template.endDate,
             status: 'PUBLISHED',
@@ -6414,7 +6432,7 @@ async function main() {
               id: generateUlid(),
               title: template.title,
               description: template.description,
-              imageUrl: getSeedMediaPath('event.primary' as any),
+              imageUrl: getSeedMediaPath('event.primary' as any, true) || null,
               startDate,
               endDate,
               status: 'PUBLISHED',
@@ -6476,7 +6494,7 @@ async function main() {
             id: generateUlid(),
             title: template.title,
             description: template.description,
-            imageUrl: getSeedMediaPath('event.primary' as any),
+            imageUrl: getSeedMediaPath('event.primary' as any, true) || null,
             startDate,
             endDate,
             status: 'PUBLISHED',
@@ -6524,7 +6542,7 @@ async function main() {
             id: generateUlid(),
             title: template.title,
             description: template.description,
-            imageUrl: getSeedMediaPath('event.primary' as any),
+            imageUrl: getSeedMediaPath('event.primary' as any, true) || null,
             startDate,
             endDate,
             status: 'PUBLISHED',
@@ -6557,7 +6575,7 @@ async function main() {
             id: generateUlid(),
             title: `${brand.name || 'Brand'} Satisfaction Survey`,
             description: `Share your experience with ${brand.name || 'this brand'} for the history list.`,
-            imageUrl: getSeedMediaPath('event.primary' as any),
+            imageUrl: getSeedMediaPath('event.primary' as any, true) || null,
             startDate,
             endDate,
             status: 'PUBLISHED',
@@ -6726,7 +6744,7 @@ async function main() {
             id: generateUlid(),
             title: template.title,
             description: template.description,
-            imageUrl: getSeedMediaPath('event.cardbg' as any),
+            imageUrl: getSeedMediaPath('event.cardbg' as any, true) || null,
             startDate: template.startDate,
             endDate: template.endDate,
             status: 'PUBLISHED',
@@ -6923,7 +6941,7 @@ async function main() {
             name: 'Explore Tech Products',
             description: 'Explore için teknoloji ürünleri',
             subCategoryId: exploreTechSubCategory.id,
-            imageUrl: getSeedMediaPath('product.laptop.macbook'),
+            imageUrl: getSeedMediaPath('product.laptop.macbook', true) || null,
           },
         })
       }
@@ -6935,7 +6953,7 @@ async function main() {
             name: 'Explore Home Products',
             description: 'Explore için ev ürünleri',
             subCategoryId: exploreEvYasamSubCategory.id,
-            imageUrl: getSeedMediaPath('product.vacuum.dyson'),
+            imageUrl: getSeedMediaPath('product.vacuum.dyson', true) || null,
           },
         })
       }
@@ -6965,7 +6983,7 @@ async function main() {
                 brand: productData.brand,
                 description: `Yeni eklenen ${productData.name} ürünü`,
                 groupId: productData.group.id,
-                imageUrl: getSeedMediaPath(productData.mediaKey as any),
+                imageUrl: getSeedMediaPath(productData.mediaKey as any, true) || null,
               },
             })
 
@@ -6980,7 +6998,7 @@ async function main() {
             })
 
             // Inventory media ekle
-            const mediaUrl = getSeedMediaPath(productData.mediaKey as any)
+            const mediaUrl = getSeedMediaPath(productData.mediaKey as any, true) || null
             if (mediaUrl) {
               await prisma.inventoryMedia.create({
                 data: {
@@ -7037,35 +7055,35 @@ async function main() {
       name: 'TechVision',
       description: 'Yenilikçi teknoloji ürünleri ve çözümleri sunan global marka',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.computers-tablets'),
+      imageUrl: getSeedMediaPath('catalog.computers-tablets', true) || null,
       category: 'Technology',
     },
     {
       name: 'SmartHome Pro',
       description: 'Akıllı ev sistemleri ve IoT cihazları konusunda uzman',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.home-appliances'),
+      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null,
       category: 'Home & Living',
     },
     {
       name: 'CoffeeDelight',
       description: 'Premium kahve makineleri ve barista ekipmanları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.home-appliances'),
+      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null,
       category: 'Kitchen',
     },
     {
       name: 'FitnessTech',
       description: 'Akıllı spor ekipmanları ve sağlık takip cihazları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras'),
+      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
       category: 'Health & Fitness',
     },
     {
       name: 'StyleHub',
       description: 'Modern ve şık yaşam ürünleri markası',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones'),
+      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
       category: 'Fashion',
     },
     {
@@ -7073,70 +7091,70 @@ async function main() {
       name: 'AudioMax',
       description: 'Premium ses sistemleri ve kulaklıklar',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.headphones'),
+      imageUrl: getSeedMediaPath('catalog.headphones', true) || null,
       category: 'Electronics',
     },
     {
       name: 'EcoLife',
       description: 'Sürdürülebilir ve çevre dostu ürünler',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.air-conditioner'),
+      imageUrl: getSeedMediaPath('catalog.air-conditioner', true) || null,
       category: 'Sustainability',
     },
     {
       name: 'GameZone',
       description: 'Oyun konsolları ve aksesuarları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.games'),
+      imageUrl: getSeedMediaPath('catalog.games', true) || null,
       category: 'Gaming',
     },
     {
       name: 'BeautyCare',
       description: 'Kişisel bakım ve güzellik ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones'),
+      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
       category: 'Beauty',
     },
     {
       name: 'OutdoorGear',
       description: 'Açık hava ve kamp ekipmanları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.drone'),
+      imageUrl: getSeedMediaPath('catalog.drone', true) || null,
       category: 'Outdoor',
     },
     {
       name: 'PetCare Plus',
       description: 'Evcil hayvan bakım ürünleri ve aksesuarları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras'),
+      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
       category: 'Pets',
     },
     {
       name: 'KitchenMaster',
       description: 'Profesyonel mutfak ekipmanları ve aletleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.home-appliances'),
+      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null,
       category: 'Kitchen',
     },
     {
       name: 'TravelEssentials',
       description: 'Seyahat ve gezi ekipmanları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones'),
+      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
       category: 'Travel',
     },
     {
       name: 'BabyCare',
       description: 'Bebek bakım ürünleri ve oyuncakları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras'),
+      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
       category: 'Baby',
     },
     {
       name: 'AutoParts Pro',
       description: 'Otomotiv yedek parça ve aksesuarları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.otomotiv'),
+      imageUrl: getSeedMediaPath('catalog.otomotiv', true) || null,
       category: 'Automotive',
     },
     // Additional brands for better distribution
@@ -7144,98 +7162,98 @@ async function main() {
       name: 'TechNova',
       description: 'Yeni nesil teknoloji çözümleri ve akıllı cihazlar',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.computers-tablets'),
+      imageUrl: getSeedMediaPath('catalog.computers-tablets', true) || null,
       category: 'Technology',
     },
     {
       name: 'SoundWave',
       description: 'Profesyonel ses ekipmanları ve müzik aletleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.headphones'),
+      imageUrl: getSeedMediaPath('catalog.headphones', true) || null,
       category: 'Electronics',
     },
     {
       name: 'FashionForward',
       description: 'Trend moda ve aksesuar koleksiyonları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones'),
+      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
       category: 'Fashion',
     },
     {
       name: 'PlayStation Pro',
       description: 'Gaming konsolları ve oyun aksesuarları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.games'),
+      imageUrl: getSeedMediaPath('catalog.games', true) || null,
       category: 'Gaming',
     },
     {
       name: 'GlowBeauty',
       description: 'Premium kozmetik ve cilt bakım ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones'),
+      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
       category: 'Beauty',
     },
     {
       name: 'AdventureGear',
       description: 'Doğa sporları ve macera ekipmanları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.drone'),
+      imageUrl: getSeedMediaPath('catalog.drone', true) || null,
       category: 'Outdoor',
     },
     {
       name: 'PetParadise',
       description: 'Evcil hayvan oyuncakları ve bakım ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras'),
+      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
       category: 'Pets',
     },
     {
       name: 'GreenLife',
       description: 'Organik ve sürdürülebilir yaşam ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.air-conditioner'),
+      imageUrl: getSeedMediaPath('catalog.air-conditioner', true) || null,
       category: 'Sustainability',
     },
     {
       name: 'Wanderlust',
       description: 'Seyahat çantaları ve gezi aksesuarları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones'),
+      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
       category: 'Travel',
     },
     {
       name: 'CarMax',
       description: 'Otomotiv bakım ürünleri ve aksesuarları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.otomotiv'),
+      imageUrl: getSeedMediaPath('catalog.otomotiv', true) || null,
       category: 'Automotive',
     },
     {
       name: 'BabyBloom',
       description: 'Bebek giyim ve bakım ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras'),
+      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
       category: 'Baby',
     },
     {
       name: 'FitLife',
       description: 'Spor giyim ve fitness ekipmanları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras'),
+      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
       category: 'Health & Fitness',
     },
     {
       name: 'HomeStyle',
       description: 'Ev dekorasyon ve mobilya ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.home-appliances'),
+      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null,
       category: 'Home & Living',
     },
     {
       name: 'ChefPro',
       description: 'Profesyonel aşçı ekipmanları ve mutfak aletleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.home-appliances'),
+      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null,
       category: 'Kitchen',
     },
     // --- Additional brands to ensure 5 per category ---
@@ -7244,21 +7262,21 @@ async function main() {
       name: 'FutureTech',
       description: 'Geleceğin akıllı cihazları ve inovatif çözümler',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.computers-tablets'),
+      imageUrl: getSeedMediaPath('catalog.computers-tablets', true) || null,
       category: 'Technology',
     },
     {
       name: 'NanoWorks',
       description: 'Kompakt ve verimli teknoloji ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.computers-tablets'),
+      imageUrl: getSeedMediaPath('catalog.computers-tablets', true) || null,
       category: 'Technology',
     },
     {
       name: 'SmartCore',
       description: 'Akıllı ekosistem ve bağlantılı cihazlar',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.computers-tablets'),
+      imageUrl: getSeedMediaPath('catalog.computers-tablets', true) || null,
       category: 'Technology',
     },
     // Home & Living (need 3 more)
@@ -7266,21 +7284,21 @@ async function main() {
       name: 'CozyNest',
       description: 'Rahat ve şık ev yaşam ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.home-appliances'),
+      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null,
       category: 'Home & Living',
     },
     {
       name: 'LivingPlus',
       description: 'Akıllı ev konfor çözümleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.home-appliances'),
+      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null,
       category: 'Home & Living',
     },
     {
       name: 'CasaPrime',
       description: 'Dekorasyon ve fonksiyonel ev aksesuarları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.home-appliances'),
+      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null,
       category: 'Home & Living',
     },
     // Kitchen (need 2 more)
@@ -7288,21 +7306,21 @@ async function main() {
       name: 'CookMasters',
       description: 'Mutfak şefleri için premium ekipmanlar',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.home-appliances'),
+      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null,
       category: 'Kitchen',
     },
     {
       name: 'KitchenCraft',
       description: 'Yaratıcı mutfak gereçleri ve aletleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.home-appliances'),
+      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null,
       category: 'Kitchen',
     },
     {
       name: 'GourmetHub',
       description: 'Gurmelere özel pişirme çözümleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.home-appliances'),
+      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null,
       category: 'Kitchen',
     },
     // Health & Fitness (need 3 more)
@@ -7310,21 +7328,21 @@ async function main() {
       name: 'WellnessPro',
       description: 'Sağlık ve wellness teknoloji ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras'),
+      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
       category: 'Health & Fitness',
     },
     {
       name: 'FitTrack',
       description: 'Akıllı takip cihazları ve fitness ekipmanları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras'),
+      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
       category: 'Health & Fitness',
     },
     {
       name: 'HealthGear',
       description: 'Evde spor ve sağlık destek ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras'),
+      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
       category: 'Health & Fitness',
     },
     // Fashion (need 3 more)
@@ -7332,21 +7350,21 @@ async function main() {
       name: 'UrbanStyle',
       description: 'Şehirli ve modern stil koleksiyonları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones'),
+      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
       category: 'Fashion',
     },
     {
       name: 'ChicLane',
       description: 'Zarif ve trend moda ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones'),
+      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
       category: 'Fashion',
     },
     {
       name: 'TrendLine',
       description: 'Sezonun öne çıkan aksesuar ve giyim ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones'),
+      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
       category: 'Fashion',
     },
     // Electronics (need 3 more)
@@ -7354,21 +7372,21 @@ async function main() {
       name: 'VoltEdge',
       description: 'Yüksek performanslı elektronik cihazlar',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.headphones'),
+      imageUrl: getSeedMediaPath('catalog.headphones', true) || null,
       category: 'Electronics',
     },
     {
       name: 'PulseAudio',
       description: 'Profesyonel ses ve müzik ekipmanları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.headphones'),
+      imageUrl: getSeedMediaPath('catalog.headphones', true) || null,
       category: 'Electronics',
     },
     {
       name: 'CircuitHub',
       description: 'Akıllı elektronik komponent ve aksesuarları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.computers-tablets'),
+      imageUrl: getSeedMediaPath('catalog.computers-tablets', true) || null,
       category: 'Electronics',
     },
     // Sustainability (need 3 more)
@@ -7376,21 +7394,21 @@ async function main() {
       name: 'EcoWave',
       description: 'Enerji verimli ve çevre dostu ürünler',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.air-conditioner'),
+      imageUrl: getSeedMediaPath('catalog.air-conditioner', true) || null,
       category: 'Sustainability',
     },
     {
       name: 'GreenNest',
       description: 'Geri dönüştürülebilir ve sürdürülebilir çözümler',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.air-conditioner'),
+      imageUrl: getSeedMediaPath('catalog.air-conditioner', true) || null,
       category: 'Sustainability',
     },
     {
       name: 'PureEarth',
       description: 'Doğa dostu yaşam ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.air-conditioner'),
+      imageUrl: getSeedMediaPath('catalog.air-conditioner', true) || null,
       category: 'Sustainability',
     },
     // Gaming (need 3 more)
@@ -7398,21 +7416,21 @@ async function main() {
       name: 'ProGamer',
       description: 'E-spor ekipmanları ve performans aksesuarları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.games'),
+      imageUrl: getSeedMediaPath('catalog.games', true) || null,
       category: 'Gaming',
     },
     {
       name: 'ArcadeHub',
       description: 'Retro ve arcade oyun çözümleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.games'),
+      imageUrl: getSeedMediaPath('catalog.games', true) || null,
       category: 'Gaming',
     },
     {
       name: 'NextLevel',
       description: 'Gaming donanımı ve çevre birimleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.games'),
+      imageUrl: getSeedMediaPath('catalog.games', true) || null,
       category: 'Gaming',
     },
     // Beauty (need 3 more)
@@ -7420,21 +7438,21 @@ async function main() {
       name: 'LuxeGlow',
       description: 'Lüks cilt bakım ve güzellik ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones'),
+      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
       category: 'Beauty',
     },
     {
       name: 'PureBeauty',
       description: 'Doğal içerikli kozmetik ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones'),
+      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
       category: 'Beauty',
     },
     {
       name: 'SkinEssence',
       description: 'Dermatolojik olarak test edilmiş bakım ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones'),
+      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
       category: 'Beauty',
     },
     // Outdoor (need 3 more)
@@ -7442,21 +7460,21 @@ async function main() {
       name: 'TrailBlaze',
       description: 'Doğa yürüyüşü ve kamp ekipmanları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.drone'),
+      imageUrl: getSeedMediaPath('catalog.drone', true) || null,
       category: 'Outdoor',
     },
     {
       name: 'CampPro',
       description: 'Profesyonel kampçılık çözümleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.drone'),
+      imageUrl: getSeedMediaPath('catalog.drone', true) || null,
       category: 'Outdoor',
     },
     {
       name: 'HikeMate',
       description: 'Trekking ve tırmanış ekipmanları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.drone'),
+      imageUrl: getSeedMediaPath('catalog.drone', true) || null,
       category: 'Outdoor',
     },
     // Pets (need 3 more)
@@ -7464,21 +7482,21 @@ async function main() {
       name: 'PawPlanet',
       description: 'Evcil hayvan yaşam ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras'),
+      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
       category: 'Pets',
     },
     {
       name: 'PetJoy',
       description: 'Pet oyuncak ve bakım ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras'),
+      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
       category: 'Pets',
     },
     {
       name: 'FurryCare',
       description: 'Evcil dostlar için sağlık ve bakım çözümleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras'),
+      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
       category: 'Pets',
     },
     // Travel (need 3 more)
@@ -7486,21 +7504,21 @@ async function main() {
       name: 'GlobeTrot',
       description: 'Seyahat aksesuarları ve bavullar',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones'),
+      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
       category: 'Travel',
     },
     {
       name: 'TripMate',
       description: 'Konforlu seyahat çözümleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones'),
+      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
       category: 'Travel',
     },
     {
       name: 'VoyagePro',
       description: 'Dayanıklı seyahat ekipmanları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones'),
+      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
       category: 'Travel',
     },
     // Baby (need 3 more)
@@ -7508,21 +7526,21 @@ async function main() {
       name: 'TinySteps',
       description: 'Bebek giyim ve bakım çözümleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras'),
+      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
       category: 'Baby',
     },
     {
       name: 'BabyNest',
       description: 'Konforlu bebek uyku ve bakım ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras'),
+      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
       category: 'Baby',
     },
     {
       name: 'LittleJoy',
       description: 'Bebek oyuncakları ve gelişim ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras'),
+      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
       category: 'Baby',
     },
     // Automotive (need 3 more)
@@ -7530,21 +7548,21 @@ async function main() {
       name: 'DriveMax',
       description: 'Otomotiv performans ve bakım ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.otomotiv'),
+      imageUrl: getSeedMediaPath('catalog.otomotiv', true) || null,
       category: 'Automotive',
     },
     {
       name: 'AutoGear',
       description: 'Araç içi aksesuar ve teknolojiler',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.otomotiv'),
+      imageUrl: getSeedMediaPath('catalog.otomotiv', true) || null,
       category: 'Automotive',
     },
     {
       name: 'MotoPro',
       description: 'Araç bakım ve güvenlik çözümleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.otomotiv'),
+      imageUrl: getSeedMediaPath('catalog.otomotiv', true) || null,
       category: 'Automotive',
     },
   ]
@@ -8775,7 +8793,7 @@ async function main() {
             name: productData.name,
             brand: brand.name, // Product.brand field'ına brand name'i yaz
             description: productData.description,
-            imageUrl: getSeedMediaPath(imageKey),
+            imageUrl: getSeedMediaPath(imageKey, true) || null,
             groupId: productGroupId, // ProductGroup'a bağla
           }
         })
@@ -8954,7 +8972,7 @@ async function main() {
           data: {
             name: groupDef.subCategoryName,
             description: `${audioMaxBrandV2.name} ${groupDef.name} ürünleri`,
-            imageUrl: getSeedMediaPath(groupDef.imageKey),
+            imageUrl: getSeedMediaPath(groupDef.imageKey, true) || null,
             mainCategoryId: mainCategory.id,
           },
         }))
@@ -8970,7 +8988,7 @@ async function main() {
             name: groupName,
             description: `${audioMaxBrandV2.name} markasının ${groupDef.name} ürünleri`,
             subCategoryId: subCategory.id,
-            imageUrl: getSeedMediaPath(groupDef.imageKey),
+            imageUrl: getSeedMediaPath(groupDef.imageKey, true) || null,
           },
         })
         createdAudioGroups++
@@ -8992,7 +9010,7 @@ async function main() {
             name: productDef.name,
             brand: audioMaxBrandV2.name,
             description: productDef.description,
-            imageUrl: getSeedMediaPath(productDef.imageKey),
+            imageUrl: getSeedMediaPath(productDef.imageKey, true) || null,
             groupId: productGroup.id,
           },
         })
@@ -9014,7 +9032,7 @@ async function main() {
           name: 'AudioMax Ekstra',
           description: 'AudioMax ek ürün grupları',
           mainCategoryId: TECH_MAIN_CATEGORY_ID,
-          imageUrl: getSeedMediaPath('catalog.headphones'),
+          imageUrl: getSeedMediaPath('catalog.headphones', true) || null,
         },
       })
     }
@@ -9076,7 +9094,7 @@ async function main() {
             name: `${audioMaxBrandV2.name} - ${grp.name}`,
             description: `${audioMaxBrandV2.name} ${grp.name}`,
             subCategoryId: EXTRA_SUBCATEGORY_ID,
-            imageUrl: getSeedMediaPath(grp.imageKey as SeedMediaKey),
+            imageUrl: getSeedMediaPath(grp.imageKey as SeedMediaKey, true) || null,
           },
         })
       }
@@ -9092,7 +9110,7 @@ async function main() {
             name: productDef.name,
             brand: audioMaxBrandV2.name,
             description: productDef.description,
-            imageUrl: getSeedMediaPath(productDef.imageKey as SeedMediaKey),
+            imageUrl: getSeedMediaPath(productDef.imageKey as SeedMediaKey, true) || null,
             groupId: productGroup.id,
           },
         })
@@ -9143,7 +9161,7 @@ async function main() {
               name: productDef.name,
               brand: audioMaxBrandV2.name,
               description: productDef.description,
-              imageUrl: getSeedMediaPath(productDef.imageKey as SeedMediaKey),
+              imageUrl: getSeedMediaPath(productDef.imageKey as SeedMediaKey, true) || null,
               groupId: mainAudioMaxGroupId,
             },
           })
@@ -9207,7 +9225,7 @@ async function main() {
             name: productName,
             brand: brandName,
             description: `${targetGroup.name} için otomatik eklenen ürün ${productIndex}`,
-            imageUrl: getSeedMediaPath(imageKey),
+            imageUrl: getSeedMediaPath(imageKey, true) || null,
             groupId: TARGET_GROUP_ID,
           },
         })
@@ -9264,7 +9282,7 @@ async function main() {
               name: 'Kulaklıklar',
               description: 'Kulaklık ve ses ekipmanları',
               mainCategoryId: techCategory.id,
-              imageUrl: getSeedMediaPath('catalog.headphones'),
+              imageUrl: getSeedMediaPath('catalog.headphones', true) || null,
             }
           })
         }
@@ -9326,7 +9344,7 @@ async function main() {
             name: productData.name,
             brand: specificBrand.name,
             description: productData.description,
-            imageUrl: getSeedMediaPath(imageKey),
+            imageUrl: getSeedMediaPath(imageKey, true) || null,
             groupId: specificProductGroup || null, // ProductGroup'a bağla
           }
         })
@@ -9337,7 +9355,7 @@ async function main() {
     }
 
     // AudioMax Audio Cable ürünlerinde imageUrl boşsa doldur
-    const audioCableImage = getSeedMediaPath('product.headphone.secondary')
+    const audioCableImage = getSeedMediaPath('product.headphone.secondary', true) || null
     const updatedAudioCables = await prisma.product.updateMany({
       where: {
         brand: specificBrand.name,
@@ -9389,7 +9407,7 @@ async function main() {
               name: 'Otomotiv Ürünleri',
               description: 'Otomotiv yedek parça ve aksesuarları',
               mainCategoryId: automotiveMainCategory.id,
-              imageUrl: getSeedMediaPath('catalog.otomotiv'),
+              imageUrl: getSeedMediaPath('catalog.otomotiv', true) || null,
             }
           })
         }
@@ -9407,7 +9425,7 @@ async function main() {
                 name: 'Temizlik Ürünleri',
                 description: 'Süpürge, temizlik robotu vb.',
                 mainCategoryId: evYasamCategory.id,
-                imageUrl: getSeedMediaPath('catalog.home-appliances'),
+                imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null,
               }
             })
           }
@@ -9429,7 +9447,7 @@ async function main() {
               name: 'AutoParts Pro Ürünleri',
               description: 'AutoParts Pro markasına ait otomotiv ürünleri',
               subCategoryId: subCategory.id,
-              imageUrl: autopartsBrand.imageUrl || getSeedMediaPath('catalog.otomotiv'),
+              imageUrl: autopartsBrand.imageUrl || getSeedMediaPath('catalog.otomotiv', true) || null,
             }
           })
         }
@@ -9464,7 +9482,7 @@ async function main() {
                 name: productData.name,
                 brand: autopartsBrand.name,
                 description: productData.description,
-                imageUrl: getSeedMediaPath(imageKey),
+                imageUrl: getSeedMediaPath(imageKey, true) || null,
                 groupId: autopartsProductGroup, // Foreign key ile ProductGroup'a bağla
               }
             })
@@ -9593,7 +9611,7 @@ async function main() {
             data: [
               {
                 inventoryId: inventory.id,
-                mediaUrl: product.imageUrl || getSeedMediaPath('product.headphone.primary'),
+                mediaUrl: product.imageUrl || (getSeedMediaPath('product.headphone.primary', true) ?? ''),
               },
             ],
             skipDuplicates: true,
@@ -11075,7 +11093,7 @@ async function main() {
             name: productData.name,
             brand: brandName,
             description: productData.description,
-            imageUrl: getSeedMediaPath(imageKey),
+            imageUrl: getSeedMediaPath(imageKey, true) || null,
             groupId: TARGET_PRODUCT_GROUP_ID,
           },
         })
