@@ -197,13 +197,11 @@ export async function seedBrandProducts(): Promise<void> {
             },
           });
 
-          // Post tag'leri ekle
+          // Post tag'leri ekle (maksimum 2 tag)
           await prisma.contentPostTag.createMany({
             data: [
               { postId: experiencePostId, tag: brand.name },
-              { postId: experiencePostId, tag: product.name },
               { postId: experiencePostId, tag: 'Deneyim' },
-              { postId: experiencePostId, tag: 'Kullanıcı Deneyimi' },
             ],
             skipDuplicates: true,
           });
@@ -346,9 +344,7 @@ export async function seedBrandProducts(): Promise<void> {
           await prisma.contentPostTag.createMany({
             data: [
               { postId: experiencePostId, tag: brand.name },
-              { postId: experiencePostId, tag: product.name },
               { postId: experiencePostId, tag: 'Deneyim' },
-              { postId: experiencePostId, tag: 'Haber' },
             ],
             skipDuplicates: true,
           });
@@ -568,8 +564,6 @@ export async function seedBrandProducts(): Promise<void> {
           await prisma.contentPostTag.createMany({
             data: [
               { postId: updatePostId, tag: brand.name },
-              { postId: updatePostId, tag: product.name },
-              { postId: updatePostId, tag: 'Haber' },
               { postId: updatePostId, tag: 'Güncelleme' },
             ],
             skipDuplicates: true,

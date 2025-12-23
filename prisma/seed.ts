@@ -2674,7 +2674,6 @@ async function main() {
       await prisma.contentPostTag.createMany({
         data: [
           { postId: tipsPostId, tag: 'Battery Life' },
-          { postId: tipsPostId, tag: 'Smartphone Tips' },
           { postId: tipsPostId, tag: 'Optimization' },
         ],
         skipDuplicates: true,
@@ -2757,7 +2756,6 @@ async function main() {
         data: [
           { postId: tipsPost2Id, tag: 'Photography' },
           { postId: tipsPost2Id, tag: 'Camera Tips' },
-          { postId: tipsPost2Id, tag: 'Mobile Photography' },
         ],
         skipDuplicates: true,
       }).catch(() => {})
@@ -2887,7 +2885,6 @@ async function main() {
         data: [
           { postId: tipsPost4Id, tag: 'Security' },
           { postId: tipsPost4Id, tag: 'Privacy' },
-          { postId: tipsPost4Id, tag: 'Digital Safety' },
         ],
         skipDuplicates: true,
       }).catch(() => {})
@@ -2952,7 +2949,6 @@ async function main() {
         data: [
           { postId: tipsPost5Id, tag: 'Performance' },
           { postId: tipsPost5Id, tag: 'Optimization' },
-          { postId: tipsPost5Id, tag: 'Speed' },
         ],
         skipDuplicates: true,
       }).catch(() => {})
@@ -3648,8 +3644,10 @@ async function main() {
     const postId = post.id
 
     if (postSeed.tags && postSeed.tags.length) {
+      // Maksimum 2 tag ekle (veritabanını şişirmemek için)
+      const tagsToAdd = postSeed.tags.slice(0, 2);
       await prisma.contentPostTag.createMany({
-        data: postSeed.tags.map((tag) => ({
+        data: tagsToAdd.map((tag) => ({
           postId,
           tag,
         })),
@@ -3929,15 +3927,17 @@ async function main() {
     }
 
     if (tipSeed.tags.length) {
+      // Maksimum 2 tag ekle
+      const tagsToAdd = tipSeed.tags.slice(0, 2);
       await prisma.postTag.create({
         data: {
           postId: tipPostId,
-          tag: tipSeed.tags[0],
+          tag: tagsToAdd[0],
         },
       }).catch(() => {});
 
       await prisma.contentPostTag.createMany({
-        data: tipSeed.tags.map((tag) => ({ postId: tipPostId, tag })),
+        data: tagsToAdd.map((tag) => ({ postId: tipPostId, tag })),
         skipDuplicates: true,
       });
     }
@@ -4445,8 +4445,10 @@ async function main() {
       const postId = post.id
 
       if (seed.tags.length) {
+        // Maksimum 2 tag ekle
+        const tagsToAdd = seed.tags.slice(0, 2);
         await prisma.contentPostTag.createMany({
-          data: seed.tags.map((tag) => ({
+          data: tagsToAdd.map((tag) => ({
             postId,
             tag,
           })),

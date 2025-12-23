@@ -146,8 +146,46 @@ const seedCommands = [
 
 // JavaScript kodunu ayrı bir değişkene al (template literal sorunlarını önlemek için)
 const dashboardScript = `
+    // CRITICAL: Placeholder fonksiyonları EN BAŞTA tanımla - onclick handler'ları için gerekli
+    // Bu fonksiyonlar script parse edilir edilmez kullanılabilir olmalı
+    (function() {
+      // Placeholder fonksiyonlar - hemen tanımla, sonra gerçek implementasyonu ekle
+      window.executeDataCommand = window.executeDataCommand || function(command) {
+        console.warn('executeDataCommand not yet initialized, command:', command);
+        alert('Sayfa yükleniyor, lütfen birkaç saniye bekleyip tekrar deneyin.');
+      };
+      
+      window.confirmClearTestData = window.confirmClearTestData || function() {
+        console.warn('confirmClearTestData not yet initialized');
+        alert('Sayfa yükleniyor, lütfen birkaç saniye bekleyip tekrar deneyin.');
+      };
+      
+      window.confirmClearSeedData = window.confirmClearSeedData || function() {
+        console.warn('confirmClearSeedData not yet initialized');
+        alert('Sayfa yükleniyor, lütfen birkaç saniye bekleyip tekrar deneyin.');
+      };
+      
+      window.executeConfirmedAction = window.executeConfirmedAction || function() {
+        console.warn('executeConfirmedAction not yet initialized');
+      };
+      
+      window.closeModal = window.closeModal || function() {
+        console.warn('closeModal not yet initialized');
+      };
+      
+      window.dockerContainerStop = window.dockerContainerStop || function(containerName) {
+        console.warn('dockerContainerStop not yet initialized');
+      };
+      
+      window.dockerContainerStart = window.dockerContainerStart || function(containerName) {
+        console.warn('dockerContainerStart not yet initialized');
+      };
+    })();
+    
     console.log('Dashboard script loaded');
     
+    // Fonksiyonları hemen tanımla ve window'a ekle (onclick için)
+    // Bu sayede script yüklenir yüklenmez fonksiyonlar kullanılabilir olur
     let pendingAction = null;
     let currentStepIndex = 0;
     let actionSteps = [];
@@ -180,6 +218,8 @@ const dashboardScript = `
       currentStepIndex = 0;
       actionSteps = [];
     }
+    // Hemen window'a ata
+    window.closeModal = closeModal;
 
     function confirmClearTestData() {
       console.log('confirmClearTestData called');
@@ -190,6 +230,8 @@ const dashboardScript = `
       pendingAction = 'clear-test';
       console.log('pendingAction set to:', pendingAction);
     }
+    // Hemen window'a ata
+    window.confirmClearTestData = confirmClearTestData;
 
     function confirmClearSeedData() {
       console.log('confirmClearSeedData called');
@@ -208,6 +250,8 @@ const dashboardScript = `
       currentStepIndex = 0;
       console.log('pendingAction set to:', pendingAction);
     }
+    // Hemen window'a ata
+    window.confirmClearSeedData = confirmClearSeedData;
 
     async function executeConfirmedAction() {
       console.log('executeConfirmedAction called, pendingAction:', pendingAction);
@@ -260,6 +304,8 @@ const dashboardScript = `
         console.error('Unknown action:', action);
       }
     }
+    // Hemen window'a ata
+    window.executeConfirmedAction = executeConfirmedAction;
 
     async function executeClearTestData(button, status) {
       console.log('executeClearTestData called');
@@ -404,7 +450,7 @@ const dashboardScript = `
       const dangerousCommands = ['db:reset:all', 'db:reset:force'];
       if (dangerousCommands.includes(command)) {
         const confirmMessage = command === 'db:reset:force' 
-          ? 'Bu işlem tüm tabloları silecek ve migration\'ları baştan oluşturacak. Devam etmek istediğinize emin misiniz?'
+          ? 'Bu işlem tüm tabloları silecek ve migrations baştan oluşturacak. Devam etmek istediğinize emin misiniz?'
           : 'Bu işlem tüm verileri (taxonomy dahil) silecek. Devam etmek istediğinize emin misiniz?';
         if (!confirm(confirmMessage)) {
           return;
@@ -514,18 +560,17 @@ const dashboardScript = `
         }, 10000);
       }
     }
+    // Hemen window'a ata - fonksiyon tanımlanır tanımlanmaz
+    window.executeDataCommand = executeDataCommand;
     
     function updateProgress(progressFill, progressText, percentage) {
       if (progressFill) progressFill.style.width = percentage + '%';
       if (progressText) progressText.textContent = percentage + '%';
     }
     
-    // Global scope'a fonksiyonları ekle (onclick için)
-    window.executeDataCommand = executeDataCommand;
-    window.confirmClearTestData = confirmClearTestData;
-    window.confirmClearSeedData = confirmClearSeedData;
-    window.executeConfirmedAction = executeConfirmedAction;
-    window.closeModal = closeModal;
+    // Tüm fonksiyonlar zaten window'a atandı (yukarıda)
+    // Burada sadece log yazdır
+    console.log('All functions initialized and added to window object');
 
     // Modal dışına tıklandığında kapat
     window.onclick = function(event) {
@@ -676,6 +721,8 @@ const dashboardScript = `
         buttons.forEach(function(btn) { btn.disabled = false; });
       }
     }
+    // Hemen window'a ata
+    window.dockerContainerStop = dockerContainerStop;
     
     async function dockerContainerStart(containerName) {
       try {
@@ -701,6 +748,8 @@ const dashboardScript = `
         buttons.forEach(function(btn) { btn.disabled = false; });
       }
     }
+    // Hemen window'a ata
+    window.dockerContainerStart = dockerContainerStart;
     
     // DOM yüklendikten sonra veya hemen çalıştır
     if (document.readyState === 'loading') {
@@ -972,6 +1021,42 @@ router.get('/', (req: Request, res: Response) => {
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Jura:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <script>
+    // CRITICAL: Placeholder fonksiyonları head'de hemen tanımla
+    // Bu sayede onclick handler'ları çalışmadan önce fonksiyonlar tanımlı olur
+    (function() {
+      window.executeDataCommand = window.executeDataCommand || function(command) {
+        console.warn('executeDataCommand not yet initialized, command:', command);
+        alert('Sayfa yükleniyor, lütfen birkaç saniye bekleyip tekrar deneyin.');
+      };
+      
+      window.confirmClearTestData = window.confirmClearTestData || function() {
+        console.warn('confirmClearTestData not yet initialized');
+        alert('Sayfa yükleniyor, lütfen birkaç saniye bekleyip tekrar deneyin.');
+      };
+      
+      window.confirmClearSeedData = window.confirmClearSeedData || function() {
+        console.warn('confirmClearSeedData not yet initialized');
+        alert('Sayfa yükleniyor, lütfen birkaç saniye bekleyip tekrar deneyin.');
+      };
+      
+      window.executeConfirmedAction = window.executeConfirmedAction || function() {
+        console.warn('executeConfirmedAction not yet initialized');
+      };
+      
+      window.closeModal = window.closeModal || function() {
+        console.warn('closeModal not yet initialized');
+      };
+      
+      window.dockerContainerStop = window.dockerContainerStop || function(containerName) {
+        console.warn('dockerContainerStop not yet initialized');
+      };
+      
+      window.dockerContainerStart = window.dockerContainerStart || function(containerName) {
+        console.warn('dockerContainerStart not yet initialized');
+      };
+    })();
+  </script>
   <style>
     * {
       margin: 0;
@@ -1839,7 +1924,7 @@ router.get('/', (req: Request, res: Response) => {
           <div class="command-description">
             <ul>
               <li>Tabloları siler</li>
-              <li>Migration'ları baştan oluşturur</li>
+              <li>Migrations baştan oluşturur</li>
               <li>Verisiz tablo (seed çalıştırılmaz)</li>
             </ul>
           </div>
@@ -2423,7 +2508,7 @@ router.post('/data-management', async (req: Request, res: Response) => {
       'db:seed:all': ['Schema kontrol ediliyor...', 'Prisma client generate ediliyor...', 'Tüm veriler temizleniyor...', 'Seed verileri ekleniyor...'],
       'db:reset': ['Kullanıcı/içerik verileri temizleniyor...'],
       'db:reset:all': ['Tüm veriler temizleniyor...'],
-      'db:reset:force': ['Tablolar siliniyor...', 'Migration\'lar uygulanıyor...']
+      'db:reset:force': ['Tablolar siliniyor...', 'Migrations uygulanıyor...']
     };
     
     // İlk progress gönder

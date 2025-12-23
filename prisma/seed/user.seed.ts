@@ -772,7 +772,6 @@ export async function seedUsersAndProfiles(): Promise<void> {
           data: [
             { postId: comparePostId, tag: 'Comparison' },
             { postId: comparePostId, tag: 'Benchmark' },
-            { postId: comparePostId, tag: 'Review' },
           ],
           skipDuplicates: true,
         }).catch(() => {})
@@ -874,6 +873,302 @@ export async function seedUsersAndProfiles(): Promise<void> {
       }).catch(() => {})
       
       console.log('✅ 5 TIPS posts created for Julia Havk')
+    }
+  }
+
+  // Create 5 different types of posts for all other users
+  const allUsersToCreatePosts = [
+    { id: TEST_USER_ID, name: 'Ömer Faruk' },
+    { id: TARGET_USER_ID, name: 'Market Test User' },
+    ...TRUST_USER_IDS.map((id, i) => ({ id, name: `Trust User ${i + 1}` })),
+    ...TRUSTER_USER_IDS.map((id, i) => ({ id, name: `Truster User ${i + 1}` })),
+  ]
+
+  console.log('📝 Creating 5 different types of posts for all users...')
+  
+  // Get categories and products for posts
+  const techCategory = await prisma.mainCategory.findFirst({ where: { name: 'Teknoloji' } })
+  const evYasamCategory = await prisma.mainCategory.findFirst({ where: { name: 'Ev & Yaşam' } })
+  const phoneSubCategory = await prisma.subCategory.findFirst({ where: { name: 'Akıllı Telefonlar' } })
+  const evYasamSubCategory = await prisma.subCategory.findFirst({ where: { name: 'Temizlik Ürünleri' } })
+  
+  const allProducts = await prisma.product.findMany({ take: 5 })
+  if (allProducts.length === 0) {
+    console.warn('⚠️ No products found, skipping post creation for other users')
+  } else {
+    for (const userInfo of allUsersToCreatePosts) {
+      const user = await prisma.user.findUnique({ where: { id: userInfo.id } })
+      if (!user) {
+        console.warn(`⚠️ User ${userInfo.name} (${userInfo.id}) not found, skipping`)
+        continue
+      }
+
+      const product1 = allProducts[0]
+      const product2 = allProducts.length > 1 ? allProducts[1] : allProducts[0]
+      const mainCategory = techCategory || evYasamCategory
+      const subCategory = phoneSubCategory || evYasamSubCategory
+
+      console.log(`📝 Creating posts for ${userInfo.name}...`)
+
+      // Check if posts already exist for this user
+      const existingPosts = await prisma.contentPost.findMany({
+        where: { userId: user.id },
+        take: 5,
+      })
+
+      if (existingPosts.length >= 5) {
+        console.log(`✅ ${userInfo.name} already has ${existingPosts.length} posts, skipping`)
+        continue
+      }
+
+      // 1. FREE Post
+      const existingFreePost = await prisma.contentPost.findFirst({
+        where: { userId: user.id, type: 'FREE' },
+      })
+      
+      if (!existingFreePost) {
+        const freePostId = generateUlid()
+        await prisma.contentPost.create({
+        data: {
+          id: freePostId,
+          userId: user.id,
+          type: 'FREE',
+          title: `${userInfo.name}'s Free Post: Product Insights and Thoughts`,
+          body: `This is a free-form post about my experience with ${product1.name}. I've been using it for a while now and wanted to share my honest thoughts. The build quality is impressive, and the user interface is intuitive. There are some areas that could be improved, but overall it's a solid product that I would recommend to others.`,
+          productId: product1.id,
+          mainCategoryId: mainCategory?.id || null,
+          subCategoryId: subCategory?.id || null,
+          inventoryRequired: false,
+          isBoosted: false,
+        },
+      }).catch((e) => console.warn(`Free post creation failed for ${userInfo.name}:`, e))
+
+        await prisma.contentPostTag.createMany({
+          data: [
+            { postId: freePostId, tag: 'Review' },
+            { postId: freePostId, tag: 'Experience' },
+          ],
+          skipDuplicates: true,
+        }).catch(() => {})
+      }
+
+      // 2. TIPS Post
+      const existingTipsPost = await prisma.contentPost.findFirst({
+        where: { userId: user.id, type: 'TIPS' },
+      })
+      
+      if (!existingTipsPost) {
+        const tipsPostId = generateUlid()
+        await prisma.contentPost.create({
+        data: {
+          id: tipsPostId,
+          userId: user.id,
+          type: 'TIPS',
+          title: `Pro Tips: Getting the Most Out of ${product1.name}`,
+          body: `After extensive use of ${product1.name}, I've discovered several tips that significantly enhance the experience. First, always keep the device updated to the latest software version for optimal performance. Second, customize the settings to match your usage patterns - this can improve battery life by up to 20%. Third, use the built-in optimization features regularly to maintain peak performance. These simple adjustments have made a huge difference in my daily usage.`,
+          productId: product1.id,
+          mainCategoryId: mainCategory?.id || null,
+          subCategoryId: subCategory?.id || null,
+          inventoryRequired: true,
+          isBoosted: false,
+        },
+      }).catch((e) => console.warn(`Tips post creation failed for ${userInfo.name}:`, e))
+
+        await prisma.postTip.create({
+          data: { postId: tipsPostId, tipCategory: 'USAGE', isVerified: true },
+        }).catch(() => {})
+
+        await prisma.contentPostTag.createMany({
+          data: [
+            { postId: tipsPostId, tag: 'Tips' },
+            { postId: tipsPostId, tag: 'Optimization' },
+          ],
+          skipDuplicates: true,
+        }).catch(() => {})
+
+        // Create inventory for tips post
+        await prisma.inventory.create({
+          data: {
+            userId: user.id,
+            productId: product1.id,
+            hasOwned: true,
+            experienceSummary: 'Long-term user with optimization experience',
+          },
+        }).catch(() => {})
+      }
+
+      // 3. QUESTION Post
+      const existingQuestionPost = await prisma.contentPost.findFirst({
+        where: { userId: user.id, type: 'QUESTION' },
+      })
+      
+      if (!existingQuestionPost) {
+        const questionPostId = generateUlid()
+        await prisma.contentPost.create({
+        data: {
+          id: questionPostId,
+          userId: user.id,
+          type: 'QUESTION',
+          title: `What are the best features of ${product1.name}?`,
+          body: `I'm considering purchasing ${product1.name} and would love to hear from other users. What features do you find most valuable? Are there any hidden features or settings that enhance the experience? What would you recommend to someone new to this product?`,
+          productId: product1.id,
+          mainCategoryId: mainCategory?.id || null,
+          subCategoryId: subCategory?.id || null,
+          inventoryRequired: false,
+          isBoosted: false,
+        },
+      }).catch((e) => console.warn(`Question post creation failed for ${userInfo.name}:`, e))
+
+        await prisma.postQuestion.create({
+          data: {
+            postId: questionPostId,
+            expectedAnswerFormat: 'LONG',
+            relatedProductId: product1.id,
+          },
+        }).catch(() => {})
+
+        await prisma.contentPostTag.createMany({
+          data: [
+            { postId: questionPostId, tag: 'Question' },
+            { postId: questionPostId, tag: 'Help' },
+          ],
+          skipDuplicates: true,
+        }).catch(() => {})
+      }
+
+      // 4. EXPERIENCE Post
+      const existingExperiencePost = await prisma.contentPost.findFirst({
+        where: { userId: user.id, type: 'EXPERIENCE' },
+      })
+      
+      if (!existingExperiencePost) {
+        const experiencePostId = generateUlid()
+        await prisma.contentPost.create({
+        data: {
+          id: experiencePostId,
+          userId: user.id,
+          type: 'EXPERIENCE',
+          title: `My Experience with ${product1.name}: Long-Term Review`,
+          body: `I've been using ${product1.name} for several months now, and I wanted to share my comprehensive experience. The initial setup was straightforward, and the learning curve was minimal. Daily performance has been consistently reliable, with excellent build quality that has held up well over time. The user interface is intuitive, and I appreciate the attention to detail in the design. Battery life has remained strong, and the overall experience has been very positive. I would definitely recommend this product to others looking for quality and reliability.`,
+          productId: product1.id,
+          mainCategoryId: mainCategory?.id || null,
+          subCategoryId: subCategory?.id || null,
+          inventoryRequired: true,
+          isBoosted: false,
+        },
+      }).catch((e) => console.warn(`Experience post creation failed for ${userInfo.name}:`, e))
+
+        await prisma.contentPostTag.createMany({
+          data: [
+            { postId: experiencePostId, tag: 'Experience' },
+            { postId: experiencePostId, tag: 'Long-Term Review' },
+          ],
+          skipDuplicates: true,
+        }).catch(() => {})
+      }
+
+      // 5. COMPARE Post (if we have 2 products) or UPDATE Post
+      const existingComparePost = await prisma.contentPost.findFirst({
+        where: { userId: user.id, type: 'COMPARE' },
+      })
+      const existingUpdatePost = await prisma.contentPost.findFirst({
+        where: { userId: user.id, type: 'UPDATE' },
+      })
+      
+      if (!existingComparePost && !existingUpdatePost) {
+        if (product2 && product1.id !== product2.id) {
+          const comparePostId = generateUlid()
+          await prisma.contentPost.create({
+            data: {
+              id: comparePostId,
+              userId: user.id,
+              type: 'COMPARE',
+              title: `Comparison: ${product1.name} vs ${product2.name}`,
+              body: `I've had the opportunity to test both ${product1.name} and ${product2.name} side by side. Here's my honest comparison: ${product1.name} excels in performance and build quality, while ${product2.name} offers better value and more features at a competitive price. Both are excellent choices depending on your priorities and budget.`,
+              productId: product1.id,
+              mainCategoryId: mainCategory?.id || null,
+              subCategoryId: subCategory?.id || null,
+              inventoryRequired: false,
+              isBoosted: false,
+            },
+          }).catch((e) => console.warn(`Compare post creation failed for ${userInfo.name}:`, e))
+
+          const comparison = await prisma.postComparison.create({
+            data: {
+              postId: comparePostId,
+              product1Id: product1.id,
+              product2Id: product2.id,
+              comparisonSummary: `Detailed comparison between ${product1.name} and ${product2.name}`,
+            },
+          }).catch(() => null)
+
+          if (comparison) {
+            const priceMetric = await prisma.comparisonMetric.findFirst({ where: { name: 'Fiyat' } })
+            const qualityMetric = await prisma.comparisonMetric.findFirst({ where: { name: 'Kalite' } })
+
+            if (priceMetric) {
+              await prisma.postComparisonScore.create({
+                data: {
+                  comparisonId: comparison.id,
+                  metricId: priceMetric.id,
+                  scoreProduct1: 8,
+                  scoreProduct2: 7,
+                  comment: 'Product 1 offers better value',
+                },
+              }).catch(() => {})
+            }
+            if (qualityMetric) {
+              await prisma.postComparisonScore.create({
+                data: {
+                  comparisonId: comparison.id,
+                  metricId: qualityMetric.id,
+                  scoreProduct1: 9,
+                  scoreProduct2: 8,
+                  comment: 'Product 1 has superior quality',
+                },
+              }).catch(() => {})
+            }
+          }
+
+          await prisma.contentPostTag.createMany({
+            data: [
+              { postId: comparePostId, tag: 'Comparison' },
+              { postId: comparePostId, tag: 'Benchmark' },
+            ],
+            skipDuplicates: true,
+          }).catch(() => {})
+        } else {
+          // UPDATE Post as fallback
+          const updatePostId = generateUlid()
+          await prisma.contentPost.create({
+            data: {
+              id: updatePostId,
+              userId: user.id,
+              type: 'UPDATE',
+              title: `Latest Update: ${product1.name} Software Improvements`,
+              body: `The recent software update for ${product1.name} has brought significant improvements. Performance is noticeably faster, battery optimization has been enhanced, and several new features have been added. The update is available now and I highly recommend installing it for the best experience.`,
+              productId: product1.id,
+              mainCategoryId: mainCategory?.id || null,
+              subCategoryId: subCategory?.id || null,
+              inventoryRequired: true,
+              isBoosted: false,
+            },
+          }).catch((e) => console.warn(`Update post creation failed for ${userInfo.name}:`, e))
+
+          await prisma.contentPostTag.createMany({
+            data: [
+              { postId: updatePostId, tag: 'Update' },
+              { postId: updatePostId, tag: 'News' },
+            ],
+            skipDuplicates: true,
+          }).catch(() => {})
+        }
+      }
+
+      const finalPostCount = await prisma.contentPost.count({
+        where: { userId: user.id },
+      })
+      console.log(`✅ Posts for ${userInfo.name}: ${finalPostCount} total`)
     }
   }
 
