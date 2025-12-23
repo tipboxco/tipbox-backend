@@ -12,24 +12,41 @@ import {
 import logger from '../../infrastructure/logger/logger';
 import { ExperienceType } from '../../domain/content/experience-type.enum';
 import { ExperienceStatus } from '../../domain/content/experience-status.enum';
+import { CacheService } from '../../infrastructure/cache/cache.service';
+import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
 
 export class InventoryService {
   private readonly prisma: PrismaClient;
   private readonly inventoryRepo: InventoryPrismaRepository;
   private readonly experienceRepo: ProductExperiencePrismaRepository;
   private readonly mediaRepo: InventoryMediaPrismaRepository;
+  private readonly cacheService: CacheService;
 
   constructor() {
     this.prisma = new PrismaClient();
     this.inventoryRepo = new InventoryPrismaRepository();
     this.experienceRepo = new ProductExperiencePrismaRepository();
     this.mediaRepo = new InventoryMediaPrismaRepository();
+    this.cacheService = CacheService.getInstance();
   }
 
   /**
    * Kullanıcının sahip olduğu ürünlerin listesini getir
    */
   async getUserInventoryList(userId: string): Promise<InventoryListItemResponse[]> {
+    const cacheKey = `inventory:user:${userId}:list`;
+
+    // Cache check (otomatik hit/miss işaretler)
+    try {
+      const cached = await this.cacheService.get<InventoryListItemResponse[]>(cacheKey);
+      if (cached) {
+        logger.info({ message: 'Inventory list served from cache', userId, cacheKey });
+        return cached;
+      }
+    } catch (error) {
+      logger.warn({ message: 'Cache error', error: error instanceof Error ? error.message : String(error) });
+    }
+
     try {
       const inventories = await this.inventoryRepo.findCurrentlyOwned(userId);
 
@@ -58,7 +75,7 @@ export class InventoryService {
         const experiences = await this.experienceRepo.findByInventoryId(inventory.id);
 
         // Media'dan ilk resmi al
-        const images = await this.mediaRepo.findImagesByInventoryId(inventory.id);
+        const images = await this.mediaRepo.findByInventoryId(inventory.id);
         let image: string | null = null;
         if (images.length > 0) {
           const mediaUrl = images[0].getMediaUrl();
@@ -133,6 +150,13 @@ export class InventoryService {
         userId,
         count: result.length,
       });
+
+      // Cache'e kaydet
+      try {
+        await this.cacheService.set(cacheKey, result, CACHE_TTL.MEDIUM); // 30 dakika
+      } catch (error) {
+        logger.warn({ message: 'Cache set failed', error: error instanceof Error ? error.message : String(error) });
+      }
 
       return result;
     } catch (error) {

@@ -1,6 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 import logger from '../../infrastructure/logger/logger';
 import { getPublicMediaBaseUrl } from '../../infrastructure/config/media.config';
+import { withCache } from '../../infrastructure/cache/cache-wrapper.helper';
+import { CACHE_KEYS } from '../../infrastructure/cache/cache-keys';
+import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
 
 const prisma = new PrismaClient();
 
@@ -36,49 +39,60 @@ export class CatalogService {
    * Tüm kategorileri listele
    */
   async getAllCategories(): Promise<CategoryItem[]> {
-    try {
-      const categories = await prisma.mainCategory.findMany({
-        select: {
-          id: true,
-          name: true,
-          imageUrl: true,
-        },
-        orderBy: {
-          name: 'asc',
-        },
-      });
+    return withCache(
+      CACHE_KEYS.STATIC_CATEGORIES(),
+      async () => {
+        const categories = await prisma.mainCategory.findMany({
+          select: {
+            id: true,
+            name: true,
+            imageUrl: true,
+          },
+          orderBy: {
+            name: 'asc',
+          },
+        });
 
-      const baseUrl = getPublicMediaBaseUrl();
+        const baseUrl = getPublicMediaBaseUrl();
 
-      return categories.map((category) => {
-        let imageUrl: string | null = null;
-        
-        if (category.imageUrl) {
-          // Eğer zaten tam URL ise olduğu gibi kullan
-          if (category.imageUrl.startsWith('http://') || category.imageUrl.startsWith('https://')) {
-            imageUrl = category.imageUrl;
-          } else {
-            // Path ise base URL ile birleştir
-            imageUrl = `${baseUrl}/${category.imageUrl}`;
+        return categories.map((category) => {
+          let imageUrl: string | null = null;
+          
+          if (category.imageUrl) {
+            // Eğer zaten tam URL ise olduğu gibi kullan
+            if (category.imageUrl.startsWith('http://') || category.imageUrl.startsWith('https://')) {
+              imageUrl = category.imageUrl;
+            } else {
+              // Path ise base URL ile birleştir
+              imageUrl = `${baseUrl}/${category.imageUrl}`;
+            }
           }
-        }
 
-        return {
-          categoryId: category.id,
-          name: category.name,
-          image: imageUrl,
-        };
-      });
-    } catch (error) {
-      logger.error('Failed to get all categories:', error);
-      throw error;
-    }
+          return {
+            categoryId: category.id,
+            name: category.name,
+            image: imageUrl,
+          };
+        });
+      },
+      CACHE_TTL.STATIC_CATEGORIES, // 24 saat - kategoriler çok nadir değişir
+      { logPrefix: 'CatalogService' }
+    );
   }
 
   /**
    * Kategoriye göre sub-kategorileri listele
    */
   async getSubCategoriesByCategoryId(categoryId: string): Promise<SubCategoryItem[]> {
+    return withCache(
+      CACHE_KEYS.CATEGORY(categoryId),
+      async () => this.fetchSubCategories(categoryId),
+      CACHE_TTL.CATEGORY, // 2 saat
+      { logPrefix: 'CatalogService' }
+    );
+  }
+
+  private async fetchSubCategories(categoryId: string): Promise<SubCategoryItem[]> {
     try {
       const subCategories = await prisma.subCategory.findMany({
         where: {
@@ -123,6 +137,15 @@ export class CatalogService {
    * Sub-kategoriye göre product group'ları listele
    */
   async getProductGroupsBySubCategoryId(subCategoryId: string): Promise<ProductGroupItem[]> {
+    return withCache(
+      CACHE_KEYS.SUB_CATEGORY(subCategoryId),
+      async () => this.fetchProductGroups(subCategoryId),
+      CACHE_TTL.SUB_CATEGORY, // 2 saat
+      { logPrefix: 'CatalogService' }
+    );
+  }
+
+  private async fetchProductGroups(subCategoryId: string): Promise<ProductGroupItem[]> {
     try {
       const productGroups = await prisma.productGroup.findMany({
         where: {
@@ -169,6 +192,15 @@ export class CatalogService {
    * Product group'a göre ürünleri listele
    */
   async getProductsByProductGroupId(productGroupId: string): Promise<ProductItem[]> {
+    return withCache(
+      `product-group:${productGroupId}:products`,
+      async () => this.fetchProducts(productGroupId),
+      CACHE_TTL.CATEGORY_PRODUCTS, // 1 saat
+      { logPrefix: 'CatalogService' }
+    );
+  }
+
+  private async fetchProducts(productGroupId: string): Promise<ProductItem[]> {
     try {
       const products = await prisma.product.findMany({
         where: {

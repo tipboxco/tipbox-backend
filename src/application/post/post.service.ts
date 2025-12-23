@@ -414,27 +414,29 @@ export class PostService {
    * Boost option listesi getir
    */
   async getBoostOptions(): Promise<BoostOption[]> {
-    try {
-      const boostOptions = await this.prisma.boostOption.findMany({
-        where: { isActive: true },
-        orderBy: [
-          { isPopular: 'desc' },
-          { amount: 'asc' },
-        ],
-      });
+    return withCache(
+      'post:boost-options:all',
+      async () => {
+        const boostOptions = await this.prisma.boostOption.findMany({
+          where: { isActive: true },
+          orderBy: [
+            { isPopular: 'desc' },
+            { amount: 'asc' },
+          ],
+        });
 
-      return boostOptions.map((option) => ({
-        id: option.id,
-        image: option.image || '',
-        title: option.title,
-        description: option.description || '',
-        amount: option.amount,
-        isPopular: option.isPopular,
-      }));
-    } catch (error) {
-      logger.error('Failed to get boost options', error);
-      throw error;
-    }
+        return boostOptions.map((option) => ({
+          id: option.id,
+          image: option.image || '',
+          title: option.title,
+          description: option.description || '',
+          amount: option.amount,
+          isPopular: option.isPopular,
+        }));
+      },
+      CACHE_TTL.LONG, // 1 saat - boost options nadiren değişir
+      { logPrefix: 'PostService' }
+    );
   }
 
   /**

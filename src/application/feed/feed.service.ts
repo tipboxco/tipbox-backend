@@ -74,7 +74,7 @@ export class FeedService {
     }
 
     try {
-      // Cache check
+      // Cache check (otomatik olarak cache hit/miss işaretler)
       const cached = await this.cacheService.get<FeedResponse>(cacheKey);
       if (cached) {
         logger.info({ message: 'Feed served from cache', userId, cacheKey });

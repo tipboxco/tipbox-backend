@@ -133,25 +133,38 @@ export class UserService {
   async getUserProfile(userId: string): Promise<User | null> {
     const cacheKey = `user:${userId}:profile`;
     
+    // Önce cache'ten kontrol et (graceful degradation)
+    // CacheService otomatik olarak cache hit/miss işaretler
     try {
-      // Önce cache'ten kontrol et
       const cachedUser = await this.cacheService.get<User>(cacheKey);
       if (cachedUser) {
+        logger.debug(`Cache hit for user profile: ${userId}`);
         return cachedUser;
       }
-
-      // Cache miss - veritabanından çek
-      const user = await this.userRepo.findById(userId);
-      if (user) {
-        // Cache'e kaydet (1 saat TTL)
-        await this.cacheService.set(cacheKey, user, 3600);
-      }
-      
-      return user;
     } catch (error) {
-      // Cache hatası durumunda doğrudan veritabanından çek
-      return this.userRepo.findById(userId);
+      logger.warn('Cache error while getting user profile, falling back to database', { 
+        error, 
+        userId,
+        operation: 'getUserProfile'
+      });
     }
+
+    // Cache miss veya cache error - veritabanından çek
+    const user = await this.userRepo.findById(userId);
+    if (user) {
+      // Cache'e kaydet (best effort - hata olsa bile devam et)
+      try {
+        await this.cacheService.set(cacheKey, user, 3600);
+      } catch (error) {
+        logger.warn('Cache set failed for user profile', { 
+          error, 
+          userId,
+          operation: 'getUserProfile'
+        });
+      }
+    }
+    
+    return user;
   }
 
   async getUserByEmail(email: string): Promise<User | null> {

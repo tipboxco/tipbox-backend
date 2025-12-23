@@ -5,6 +5,15 @@ import { UserAvatarPrismaRepository } from '../../infrastructure/repositories/us
 import { ProfilePrismaRepository } from '../../infrastructure/repositories/profile-prisma.repository';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import logger from '../../infrastructure/logger/logger';
+import { validateBody } from '../../infrastructure/middleware/validation.middleware';
+import { 
+  LoginSchema, 
+  RegisterSchema, 
+  ForgotPasswordSchema,
+  ResetPasswordSchema,
+  VerifyEmailSchema,
+  ResendVerificationSchema
+} from './auth.schemas';
 
 const router = Router();
 const authService = new AuthService();
@@ -109,16 +118,8 @@ const profileRepo = new ProfilePrismaRepository();
  *                   type: string
  *                   example: Giriş yapılırken bir hata oluştu
  */
-router.post('/login', asyncHandler(async (req: Request, res: Response) => {
+router.post('/login', validateBody(LoginSchema), asyncHandler(async (req: Request, res: Response) => {
   const { email, password } = req.body;
-
-  // Validasyon
-  if (!email || !password) {
-    return res.status(400).json({
-      success: false,
-      message: 'Email ve şifre alanları zorunludur',
-    });
-  }
 
   // Authentication
   const user = await authService.authenticate(email, password);
@@ -804,6 +805,58 @@ router.post('/reset-password', asyncHandler(async (req: Request, res: Response) 
   }
 
   res.json(result);
+}));
+
+/**
+ * @openapi
+ * /auth/logout:
+ *   post:
+ *     summary: Kullanıcı çıkışı
+ *     description: Mevcut JWT token'ı blacklist'e ekler ve geçersiz kılar
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Çıkış başarılı
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Çıkış yapıldı
+ *       401:
+ *         description: Yetkisiz erişim
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Unauthorized
+ */
+router.post('/logout', asyncHandler(async (req: Request, res: Response) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+  
+  const token = authHeader.split(' ')[1];
+  
+  // Token'ı blacklist'e ekle
+  const { blacklistToken } = await import('../../infrastructure/auth/token-blacklist');
+  await blacklistToken(token);
+  
+  res.json({
+    success: true,
+    message: 'Çıkış yapıldı'
+  });
 }));
 
 export default router; 

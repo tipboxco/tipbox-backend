@@ -17,12 +17,16 @@ import {
 } from '../../interfaces/event/event.dto';
 import { FeedItem, FeedItemType } from '../../interfaces/feed/feed.dto';
 import { buildMediaUrl, resolveMediaUrl, getPublicMediaBaseUrl } from '../../infrastructure/config/media.config';
+import { CacheService } from '../../infrastructure/cache/cache.service';
+import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
 
 export class EventService {
   private prisma: PrismaClient;
+  private cacheService: CacheService;
 
   constructor() {
     this.prisma = new PrismaClient();
+    this.cacheService = CacheService.getInstance();
   }
 
   /**
@@ -32,6 +36,19 @@ export class EventService {
     userId?: string,
     options?: { cursor?: string; limit?: number }
   ): Promise<ActiveEvent> {
+    const cacheKey = `events:active:${userId || 'guest'}:${options?.cursor || 'first'}:${options?.limit || 20}`;
+
+    // Cache check (otomatik hit/miss işaretler)
+    try {
+      const cached = await this.cacheService.get<ActiveEvent>(cacheKey);
+      if (cached) {
+        logger.info({ message: 'Active events served from cache', userId, cacheKey });
+        return cached;
+      }
+    } catch (error) {
+      logger.warn({ message: 'Cache error', error: error instanceof Error ? error.message : String(error) });
+    }
+
     try {
       const limit = options?.limit || 20;
       const now = new Date();
@@ -87,7 +104,7 @@ export class EventService {
         })
       );
 
-      return {
+      const result = {
         items: eventCards,
         pagination: {
           cursor: nextCursor,
@@ -95,6 +112,15 @@ export class EventService {
           limit,
         },
       };
+
+      // Cache'e kaydet
+      try {
+        await this.cacheService.set(cacheKey, result, CACHE_TTL.SHORT); // 5 dakika (events sık değişir)
+      } catch (error) {
+        logger.warn({ message: 'Cache set failed', error: error instanceof Error ? error.message : String(error) });
+      }
+
+      return result;
     } catch (error) {
       logger.error('Failed to get active events:', error);
       throw error;

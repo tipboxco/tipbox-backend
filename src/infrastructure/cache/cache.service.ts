@@ -1,13 +1,21 @@
 import { createClient, RedisClientType } from 'redis';
 import logger from '../logger/logger';
+import { markCacheStatus } from '../middleware/request-context.middleware';
 
 // CACHE_ENABLED === 'false' ise cache tamamen devre dışı
 const isCacheDisabled = process.env.CACHE_ENABLED === 'false';
+
+// Circuit breaker configuration
+const CIRCUIT_BREAKER_THRESHOLD = 5; // 5 hata sonrası circuit breaker aktif
+const CIRCUIT_BREAKER_TIMEOUT = 60000; // 60 saniye sonra tekrar dene
+const OPERATION_TIMEOUT = 5000; // 5 saniye operation timeout
 
 export class CacheService {
   private static instance: CacheService;
   private client: RedisClientType | null = null;
   private isConnected = false;
+  private errorCount = 0;
+  private circuitBreakerOpenUntil: number | null = null;
 
   private constructor() {}
 
@@ -72,6 +80,55 @@ export class CacheService {
   }
 
   /**
+   * Circuit breaker kontrolü
+   */
+  private isCircuitBreakerOpen(): boolean {
+    if (this.circuitBreakerOpenUntil === null) {
+      return false;
+    }
+    
+    if (Date.now() < this.circuitBreakerOpenUntil) {
+      return true;
+    }
+    
+    // Timeout geçti, circuit breaker'ı resetle
+    this.circuitBreakerOpenUntil = null;
+    this.errorCount = 0;
+    logger.info('Circuit breaker reset, attempting to reconnect cache');
+    return false;
+  }
+
+  /**
+   * Hata kaydı ve circuit breaker aktivasyonu
+   */
+  private recordError(): void {
+    this.errorCount++;
+    if (this.errorCount >= CIRCUIT_BREAKER_THRESHOLD) {
+      this.circuitBreakerOpenUntil = Date.now() + CIRCUIT_BREAKER_TIMEOUT;
+      logger.warn(`Circuit breaker activated for ${CIRCUIT_BREAKER_TIMEOUT}ms due to ${this.errorCount} consecutive errors`);
+    }
+  }
+
+  /**
+   * Başarılı operasyon kaydı
+   */
+  private recordSuccess(): void {
+    this.errorCount = 0;
+  }
+
+  /**
+   * Timeout ile cache operasyonu
+   */
+  private async withTimeout<T>(operation: Promise<T>, timeoutMs: number = OPERATION_TIMEOUT): Promise<T> {
+    return Promise.race([
+      operation,
+      new Promise<T>((_, reject) =>
+        setTimeout(() => reject(new Error('Cache operation timeout')), timeoutMs)
+      ),
+    ]);
+  }
+
+  /**
    * Redis'ten veri alır ve JSON.parse ile objeye çevirir
    * @param key - Cache anahtarı
    * @returns Parsed data veya null
@@ -81,19 +138,37 @@ export class CacheService {
       return null;
     }
 
+    if (this.isCircuitBreakerOpen()) {
+      logger.debug('Circuit breaker open, skipping cache get');
+      return null;
+    }
+
     if (!this.client || !this.isConnected) {
       logger.warn('Cache client not connected, skipping cache get');
       return null;
     }
 
     try {
-      const value = await this.client.get(key);
+      const value = await this.withTimeout(this.client.get(key));
       if (value === null) {
+        // Cache miss - otomatik olarak işaretle
+        markCacheStatus('miss');
         return null;
       }
-      return JSON.parse(value) as T;
+      const parsed = JSON.parse(value) as T;
+      this.recordSuccess();
+      
+      // Cache hit - otomatik olarak işaretle
+      markCacheStatus('hit');
+      
+      return parsed;
     } catch (error) {
       logger.error(`Error getting cache key ${key}:`, error);
+      this.recordError();
+      
+      // Cache error - bypass olarak işaretle
+      markCacheStatus('bypass');
+      
       return null;
     }
   }
@@ -109,6 +184,11 @@ export class CacheService {
       return;
     }
 
+    if (this.isCircuitBreakerOpen()) {
+      logger.debug('Circuit breaker open, skipping cache set');
+      return;
+    }
+
     if (!this.client || !this.isConnected) {
       logger.warn('Cache client not connected, skipping cache set');
       return;
@@ -116,10 +196,12 @@ export class CacheService {
 
     try {
       const serializedValue = JSON.stringify(value);
-      await this.client.setEx(key, ttlInSeconds, serializedValue);
+      await this.withTimeout(this.client.setEx(key, ttlInSeconds, serializedValue));
       logger.debug(`Cache set for key: ${key}, TTL: ${ttlInSeconds}s`);
+      this.recordSuccess();
     } catch (error) {
       logger.error(`Error setting cache key ${key}:`, error);
+      this.recordError();
     }
   }
 

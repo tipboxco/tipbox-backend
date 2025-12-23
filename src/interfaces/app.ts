@@ -13,6 +13,8 @@ import swaggerUi from 'swagger-ui-express';
 import swaggerJSDoc from 'swagger-jsdoc';
 import { requestLogger } from '../infrastructure/logger/request-logger.middleware';
 import { errorHandler } from '../infrastructure/logger/error-handler.middleware';
+import { requestTimingMiddleware } from '../infrastructure/middleware/request-timing.middleware';
+import { requestContextMiddleware } from '../infrastructure/middleware/request-context.middleware';
 import logger from '../infrastructure/logger/logger';
 import messagingRouter from './messaging/messaging.router';
 import catalogRouter from './catalog/catalog.router';
@@ -21,10 +23,12 @@ import searchRouter from './search/search.router';
 import dashboardRouter from './dashboard/dashboard.router';
 import postRouter from './post/post.router';
 import eventRouter from './event/event.router';
+import cacheRouter from './cache/cache.router';
 import { getMetricsService } from '../infrastructure/metrics/metrics.service';
 import { metricsMiddleware } from '../infrastructure/metrics/metrics.middleware';
 import config from '../infrastructure/config';
 import path from 'path';
+import helmet from 'helmet';
 
 const PORT = process.env.PORT || 3000;
 const nodeEnv = config.nodeEnv;
@@ -512,6 +516,46 @@ const swaggerAuthHelperJs = `
 
 const app = express();
 
+// Helmet - Security headers
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", 'data:', 'https:'],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true,
+  },
+  frameguard: {
+    action: 'deny',
+  },
+  noSniff: true,
+  xssFilter: true,
+  referrerPolicy: {
+    policy: 'strict-origin-when-cross-origin',
+  },
+}));
+
+// Additional security headers
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  res.removeHeader('X-Powered-By');
+  next();
+});
+
 // CORS configuration - Config modülünden ortam bazlı değerleri al
 const corsOptions = {
   origin: config.corsOrigins,
@@ -521,7 +565,25 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.use(express.json());
+
+// Body parser with size limits
+app.use(express.json({ 
+  limit: '10mb',
+  verify: (req, res, buf) => {
+    logger.debug(`Request size: ${buf.length} bytes`);
+  }
+}));
+
+app.use(express.urlencoded({ 
+  extended: true, 
+  limit: '10mb' 
+}));
+
+// Request context middleware (AsyncLocalStorage ile request tracking)
+app.use(requestContextMiddleware);
+
+// Request timing middleware (X-Response-Time header ekler)
+app.use(requestTimingMiddleware);
 
 // Request logger middleware
 app.use(requestLogger);
@@ -533,12 +595,66 @@ app.use(metricsMiddleware);
 const socketMessagingUiPath = path.resolve(process.cwd(), 'DmMessagingUI');
 app.use('/Socket', express.static(socketMessagingUiPath));
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
+// Health check endpoints
+import { 
+  checkSystemHealth, 
+  checkReadiness, 
+  checkLiveness 
+} from '../infrastructure/health/health-checks';
+
+// Comprehensive health check endpoint
+app.get('/health', async (req, res) => {
+  try {
+    const health = await checkSystemHealth();
+    
+    // Sistem error durumunda 503 döndür
+    const statusCode = health.status === 'error' ? 503 : 200;
+    
+    res.status(statusCode).json(health);
+  } catch (error) {
+    logger.error('Health check failed', { error });
+    res.status(503).json({
+      status: 'error',
+      timestamp: new Date().toISOString(),
+      message: 'Health check failed',
+    });
+  }
+});
+
+// Kubernetes readiness probe
+app.get('/ready', async (req, res) => {
+  try {
+    const isReady = await checkReadiness();
+    
+    if (isReady) {
+      res.status(200).json({ 
+        ready: true,
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      res.status(503).json({ 
+        ready: false,
+        timestamp: new Date().toISOString(),
+        message: 'Service not ready',
+      });
+    }
+  } catch (error) {
+    logger.error('Readiness check failed', { error });
+    res.status(503).json({ 
+      ready: false,
+      timestamp: new Date().toISOString(),
+      message: 'Readiness check failed',
+    });
+  }
+});
+
+// Kubernetes liveness probe
+app.get('/live', (req, res) => {
+  const isAlive = checkLiveness();
+  
+  res.status(isAlive ? 200 : 503).json({ 
+    alive: isAlive,
     timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
   });
 });
 
@@ -656,6 +772,9 @@ app.use('/events', eventRouter);
 // Dashboard hem root'ta hem de /dashboard'da çalışabilir
 app.use('/', dashboardRouter);
 app.use('/dashboard', dashboardRouter);
+
+// Cache management routes (admin only)
+app.use('/api/cache', cacheRouter);
 
 // Error handler middleware (en sona eklenmeli)
 app.use(errorHandler);

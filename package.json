@@ -24,7 +24,6 @@
     "docker:up": "node scripts/docker-up.js --detached",
     "docker:start": "node scripts/docker-up.js --start",
     "docker:restart": "node scripts/docker-up.js --restart",
-    
     "db:status": "docker-compose exec backend npx prisma migrate status",
     "dev:reset": "bash scripts/reset-dev.sh"
   },
@@ -105,7 +104,8 @@
     "ulid": "^3.0.1",
     "uuid": "^11.1.0",
     "winston": "^3.17.0",
-    "winston-daily-rotate-file": "^5.0.0"
+    "winston-daily-rotate-file": "^5.0.0",
+    "zod": "^4.2.1"
   },
   "lint-staged": {
     "*.{ts,tsx}": [
