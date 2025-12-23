@@ -43,7 +43,9 @@ export interface BasePost {
   stats: BaseStats;
   createdAt: string;
   contextType: ContextType;
+  source?: string; // Feed source: TRUSTER, BOOSTED, CATEGORY_MATCH, TRENDING, NEW_USER
 }
+
 
 export interface BaseProduct {
   id: string;
@@ -52,6 +54,7 @@ export interface BaseProduct {
   image: any; // URL or image object
   isOwned?: boolean;
 }
+
 
 // Post Item Types
 export interface Post extends BasePost {

@@ -5,10 +5,12 @@ import { MessagingService } from '../../application/messaging/messaging.service'
 import { SupportRequestService } from '../../application/messaging/support-request.service';
 import { SupportRequestStatus } from '../../domain/messaging/support-request-status.enum';
 import { SendTipsCreate, SupportRequestCreate, SupportType } from './messaging.dto';
+import { UserPrismaRepository } from '../../infrastructure/repositories/user-prisma.repository';
 
 const router = Router();
 const messagingService = new MessagingService();
 const supportRequestService = new SupportRequestService();
+const userRepo = new UserPrismaRepository();
 
 router.use(authMiddleware);
 
@@ -199,6 +201,89 @@ router.post(
     }
     await messagingService.sendDirectMessage(String(senderId), recipientUserId, message);
     return res.status(201).end();
+  }),
+);
+
+/**
+ * @openapi
+ * /messages/threads:
+ *   post:
+ *     summary: Thread oluştur veya mevcut thread'i getir
+ *     description: |
+ *       İki kullanıcı arasında thread oluşturur veya mevcut thread'i döndürür.
+ *       Eğer thread zaten varsa, mevcut thread ID'sini döner.
+ *       Thread oluşturulduktan sonra mesaj göndermek için bu thread ID'sini kullanabilirsiniz.
+ *     tags: [Inbox]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [recipientId]
+ *             properties:
+ *               recipientId:
+ *                 type: string
+ *                 description: Mesajlaşmak istediğiniz kullanıcının ID'si
+ *     responses:
+ *       200:
+ *         description: Thread başarıyla oluşturuldu veya mevcut thread bulundu
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                   format: uuid
+ *                   description: Thread ID (mesaj göndermek için kullanılır)
+ *                 userOneId:
+ *                   type: string
+ *                 userTwoId:
+ *                   type: string
+ *                 isActive:
+ *                   type: boolean
+ *                 startedAt:
+ *                   type: string
+ *                   format: date-time
+ *       400:
+ *         description: recipientId eksik veya geçersiz
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ *       404:
+ *         description: Alıcı kullanıcı bulunamadı
+ */
+router.post(
+  '/threads',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = (req as any).user;
+    const senderId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!senderId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+    const { recipientId } = req.body || {};
+    if (!recipientId || typeof recipientId !== 'string') {
+      return res.status(400).json({ message: 'recipientId is required' });
+    }
+
+    // Kullanıcı kontrolü
+    const recipient = await userRepo.findById(recipientId);
+    if (!recipient) {
+      return res.status(404).json({ message: 'Recipient user not found' });
+    }
+
+    // Thread oluştur veya mevcut thread'i al
+    const thread = await messagingService.createThreadIfNotExists(String(senderId), recipientId);
+    
+    return res.status(200).json({
+      id: thread.id,
+      userOneId: thread.userOneId,
+      userTwoId: thread.userTwoId,
+      isActive: thread.isActive,
+      startedAt: thread.startedAt,
+    });
   }),
 );
 

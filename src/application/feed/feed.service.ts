@@ -358,6 +358,12 @@ export class FeedService {
     });
 
     // Order posts according to feed pagination order (avoid resort that breaks cursor)
+    // Create feed source map (postId -> source)
+    const feedSourceMap = new Map<string, string>();
+    feeds.forEach((feed) => {
+      feedSourceMap.set(feed.postId, feed.source);
+    });
+
     const postMap = new Map(posts.map((p) => [p.id, p]));
     const orderedPosts = feeds
       .map((feed) => postMap.get(feed.postId))
@@ -409,12 +415,14 @@ export class FeedService {
       orderedPosts.map(async (post) => {
         const userBase = userBaseMap.get(String(post.userId)) || (await this.getUserBase(String(post.userId)));
         const stats = statsMap.get(post.id) || { likes: 0, comments: 0, shares: 0, bookmarks: 0 };
+        const feedSource = feedSourceMap.get(post.id);
         const basePost = {
           id: post.id,
           user: userBase,
           stats,
           createdAt: post.createdAt.toISOString(),
           contextType: this.mapContextType(post),
+          ...(feedSource && { source: feedSource }),
         };
 
         // Get images for this post from PostMedia (orderIndex'e göre sıralı)
@@ -520,16 +528,17 @@ export class FeedService {
     // Note: minLikes and minComments filtering will be done after fetching stats
 
     // Fetch feeds with post filters
+    // Post'un gerçek oluşturulma zamanına göre sırala (gönderim zamanı)
     const orderBy =
       filters.sort === 'top'
         ? [
             { post: { likesCount: 'desc' as const } },
             { post: { viewsCount: 'desc' as const } },
-            { createdAt: 'desc' as const },
+            { post: { createdAt: 'desc' as const } },
           ]
         : [
             { post: { isBoosted: 'desc' as const } },
-            { createdAt: 'desc' as const },
+            { post: { createdAt: 'desc' as const } },
           ];
 
     const feeds = await this.prisma.feed.findMany({

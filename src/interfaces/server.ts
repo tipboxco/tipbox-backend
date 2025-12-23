@@ -41,6 +41,10 @@ async function startServer() {
       cors: socketConfig.cors,
       transports: socketConfig.transports as any,
       allowEIO3: socketConfig.allowEIO3,
+      path: socketConfig.path || '/socket.io/',
+      connectTimeout: socketConfig.connectTimeout || 20000,
+      pingTimeout: socketConfig.pingTimeout || 5000,
+      pingInterval: socketConfig.pingInterval || 25000,
     });
 
     // Redis adapter'ı kur

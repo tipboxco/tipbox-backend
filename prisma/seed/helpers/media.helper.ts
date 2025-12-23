@@ -1,4 +1,7 @@
 import mediaMap from '../seed-media-map.json';
+import { S3Service } from '../../../src/infrastructure/s3/s3.service';
+import { readFileSync, existsSync } from 'fs';
+import path from 'path';
 
 type MediaEntry = {
   targetKey: string;
@@ -7,6 +10,10 @@ type MediaEntry = {
 const seedMedia = mediaMap as Record<string, MediaEntry>;
 
 export type SeedMediaKey = keyof typeof seedMedia;
+
+// Seed media yükleme cache (bir kez yüklendikten sonra tekrar yüklemeyi önler)
+let seedMediaUploaded = false;
+const uploadedKeys = new Set<string>();
 
 // MinIO public endpoint'ini environment variable'lardan al
 function getMinioPublicEndpoint(): string {
@@ -66,12 +73,19 @@ function getBucketName(): string {
  * Seed media için sadece path döndürür (bucket içindeki path)
  * DB'ye yazılacak format: tipbox-media/products/phone6.png
  * @param key Seed media key
- * @returns Bucket path (örn: tipbox-media/products/phone6.png)
+ * @param optional Eğer true ise, key bulunamazsa null döndürür (hata fırlatmaz)
+ * @returns Bucket path (örn: tipbox-media/products/phone6.png) veya null (optional=true ise)
  */
-export function getSeedMediaPath(key: SeedMediaKey): string {
+export function getSeedMediaPath(key: SeedMediaKey): string;
+export function getSeedMediaPath(key: SeedMediaKey, optional: true): string | null;
+export function getSeedMediaPath(key: SeedMediaKey, optional?: boolean): string | null {
   const entry = seedMedia[key];
 
   if (!entry) {
+    if (optional) {
+      // Optional ise null döndür
+      return null;
+    }
     throw new Error(`Seed media anahtarı bulunamadı: ${key}`);
   }
 

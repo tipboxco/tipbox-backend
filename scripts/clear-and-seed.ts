@@ -13,6 +13,7 @@
 
 import { execSync } from 'child_process';
 import path from 'path';
+import { clearUserContentMedia, clearAllMedia } from '../prisma/seed/helpers/clear-minio-media';
 
 async function clearAndSeed(clearAll: boolean = false): Promise<void> {
   console.log('🔍 Prisma schema kontrol ediliyor...\n');
@@ -47,16 +48,33 @@ async function clearAndSeed(clearAll: boolean = false): Promise<void> {
       process.exit(1);
     }
     
-    // Seed verilerini temizle
+    // MinIO görsellerini temizle (DB temizlemeden ÖNCE)
     if (clearAll) {
-      console.log('🧹 TÜM seed verileri temizleniyor (taxonomy dahil)...\n');
+      console.log('🧹 MinIO TÜM görselleri temizleniyor (taxonomy dahil)...\n');
+      try {
+        await clearAllMedia();
+      } catch (error) {
+        console.warn('⚠️  MinIO temizleme hatası, devam ediliyor...', error);
+      }
+    } else {
+      console.log('🧹 MinIO user/content görselleri temizleniyor (taxonomy korunuyor)...\n');
+      try {
+        await clearUserContentMedia();
+      } catch (error) {
+        console.warn('⚠️  MinIO temizleme hatası, devam ediliyor...', error);
+      }
+    }
+
+    // Seed verilerini temizle (DB)
+    if (clearAll) {
+      console.log('\n🧹 TÜM seed verileri temizleniyor (taxonomy dahil)...\n');
       const clearSeedPath = path.join(process.cwd(), 'prisma', 'seed', 'clear-seed-data.ts');
       execSync(`npx ts-node ${clearSeedPath} --force`, {
         stdio: 'inherit',
         cwd: process.cwd(),
       });
     } else {
-      console.log('🧹 Kullanıcı/içerik verileri temizleniyor (taxonomy korunuyor)...\n');
+      console.log('\n🧹 Kullanıcı/içerik verileri temizleniyor (taxonomy korunuyor)...\n');
       const clearUserContentPath = path.join(process.cwd(), 'prisma', 'seed', 'clear-user-content-data.ts');
       execSync(`npx ts-node ${clearUserContentPath}`, {
         stdio: 'inherit',
@@ -65,6 +83,7 @@ async function clearAndSeed(clearAll: boolean = false): Promise<void> {
     }
     
     console.log('\n🌱 Seed.ts çalıştırılıyor...\n');
+    console.log('ℹ️  Not: Seed görselleri seed.ts içinde otomatik olarak MinIO\'ya yüklenecek\n');
     
     // seed.ts'yi çalıştır
     const seedPath = path.join(process.cwd(), 'prisma', 'seed.ts');
