@@ -260,7 +260,11 @@ for (const pf of productFiles) {
   });
 }
 
+
 async function uploadSeedMedia(): Promise<void> {
+  // Önce manuel görselleri ekle
+  await addManualMediaAssets();
+  
   const s3Service = new S3Service();
   // JSON'da sadece targetKey tutulacak, URL runtime'da oluşturulacak
   const uploadResults: Record<string, { targetKey: string }> = {};

@@ -122,6 +122,12 @@ function daysAgo(days: number): Date {
 
 // MainCategory için idempotent create/update
 async function ensureMainCategory(config: { name: string; description?: string; imageKey?: SeedMediaKey }): Promise<{ id: string; name: string }> {
+  // Eğer imageKey belirtilmemişse, mapping'den otomatik bul
+  let finalImageKey = config.imageKey;
+  if (!finalImageKey) {
+    finalImageKey = getMainCategoryImageKey(config.name);
+  }
+  
   const existing = await prisma.mainCategory.findFirst({
     where: { name: config.name }
   });
@@ -129,7 +135,7 @@ async function ensureMainCategory(config: { name: string; description?: string; 
   if (existing) {
     const updateData: any = {};
     if (config.description !== undefined) updateData.description = config.description;
-    if (config.imageKey) updateData.imageUrl = getSeedMediaPath(config.imageKey);
+    if (finalImageKey) updateData.imageUrl = getSeedMediaPath(finalImageKey);
     
     if (Object.keys(updateData).length > 0) {
       return prisma.mainCategory.update({
@@ -144,13 +150,19 @@ async function ensureMainCategory(config: { name: string; description?: string; 
     data: {
       name: config.name,
       description: config.description,
-      imageUrl: config.imageKey ? getSeedMediaPath(config.imageKey) : null,
+      imageUrl: finalImageKey ? getSeedMediaPath(finalImageKey) : null,
     }
   });
 }
 
 // SubCategory için idempotent create/update
 async function ensureSubCategory(config: { name: string; mainCategoryId: string; description?: string; imageKey?: SeedMediaKey }): Promise<{ id: string; name: string; mainCategoryId: string }> {
+  // Eğer imageKey belirtilmemişse, mapping'den otomatik bul
+  let finalImageKey = config.imageKey;
+  if (!finalImageKey) {
+    finalImageKey = getSubCategoryImageKey(config.name);
+  }
+  
   const existing = await prisma.subCategory.findFirst({
     where: { 
       name: config.name,
@@ -161,7 +173,7 @@ async function ensureSubCategory(config: { name: string; mainCategoryId: string;
   if (existing) {
     const updateData: any = {};
     if (config.description !== undefined) updateData.description = config.description;
-    if (config.imageKey) updateData.imageUrl = getSeedMediaPath(config.imageKey);
+    if (finalImageKey) updateData.imageUrl = getSeedMediaPath(finalImageKey);
     
     if (Object.keys(updateData).length > 0) {
       return prisma.subCategory.update({
@@ -177,7 +189,7 @@ async function ensureSubCategory(config: { name: string; mainCategoryId: string;
       name: config.name,
       mainCategoryId: config.mainCategoryId,
       description: config.description,
-      imageUrl: config.imageKey ? getSeedMediaPath(config.imageKey) : null,
+      imageUrl: finalImageKey ? getSeedMediaPath(finalImageKey) : null,
     }
   });
 }
@@ -224,11 +236,17 @@ async function ensureProduct(config: { name: string; brand?: string; groupId?: s
     where: whereClause
   });
   
+  // Eğer imageKey belirtilmemişse, mapping'den otomatik bul
+  let finalImageKey = config.imageKey;
+  if (!finalImageKey) {
+    finalImageKey = getProductImageKey(config.name, config.brand);
+  }
+  
   if (existing) {
     const updateData: any = {};
     if (config.description !== undefined) updateData.description = config.description;
     if (config.groupId !== undefined) updateData.groupId = config.groupId;
-    if (config.imageKey) updateData.imageUrl = getSeedMediaPath(config.imageKey);
+    if (finalImageKey) updateData.imageUrl = getSeedMediaPath(finalImageKey);
     
     if (Object.keys(updateData).length > 0) {
       return prisma.product.update({
@@ -245,22 +263,338 @@ async function ensureProduct(config: { name: string; brand?: string; groupId?: s
       brand: config.brand,
       groupId: config.groupId,
       description: config.description,
-      imageUrl: config.imageKey ? getSeedMediaPath(config.imageKey) : null,
+      imageUrl: finalImageKey ? getSeedMediaPath(finalImageKey) : null,
     }
   });
 }
 
+/**
+ * Genel görsel mapping sistemi
+ * Tüm görsel tipleri için merkezi yönetim
+ * 
+ * Kullanım:
+ * - Yeni görsel eklemek için: 'Entity Name': 'media.key'
+ * - Mevcut görseli değiştirmek için: 'Entity Name': 'media.new-key'
+ */
+const MEDIA_IMAGE_MAPPING: Record<string, {
+  product?: Record<string, SeedMediaKey>;
+  mainCategory?: Record<string, SeedMediaKey>;
+  subCategory?: Record<string, SeedMediaKey>;
+  brandCategory?: Record<string, SeedMediaKey>;
+  brand?: Record<string, SeedMediaKey>;
+  badge?: Record<string, SeedMediaKey>;
+  post?: Record<string, SeedMediaKey>; // Post type bazlı
+  marketplaceBanner?: Record<string, SeedMediaKey>;
+  userAvatar?: Record<string, SeedMediaKey>; // User identifier bazlı
+  userBanner?: Record<string, SeedMediaKey>; // User identifier bazlı
+}> = {
+  // Örnek kullanım (kullanıcı buraya ekleyecek):
+  // product: {
+  //   'Avon Krem': 'product.avonkrem',
+  //   'Dyson V15': 'product.dyson-v2',
+  // },
+  // mainCategory: {
+  //   'Teknoloji': 'catalog.computers-tablets-new',
+  // },
+  // brand: {
+  //   'TechVision': 'brand.techvision-v2',
+  // },
+  // badge: {
+  //   'Early Bird': 'badge.early-bird-new',
+  // },
+};
+
+/**
+ * Product için görsel key'ini bul
+ */
+function getProductImageKey(productName: string, brand?: string | null): SeedMediaKey | undefined {
+  const mapping = MEDIA_IMAGE_MAPPING.product;
+  if (!mapping) return undefined;
+  
+  // 1. Product name ile bak
+  if (mapping[productName]) return mapping[productName];
+  
+  // 2. Brand + name kombinasyonu
+  if (brand && mapping[`${brand} ${productName}`]) {
+    return mapping[`${brand} ${productName}`];
+  }
+  
+  // 3. Sadece brand ile
+  if (brand && mapping[brand]) return mapping[brand];
+  
+  return undefined;
+}
+
+/**
+ * MainCategory için görsel key'ini bul
+ */
+function getMainCategoryImageKey(categoryName: string): SeedMediaKey | undefined {
+  return MEDIA_IMAGE_MAPPING.mainCategory?.[categoryName];
+}
+
+/**
+ * SubCategory için görsel key'ini bul
+ */
+function getSubCategoryImageKey(categoryName: string): SeedMediaKey | undefined {
+  return MEDIA_IMAGE_MAPPING.subCategory?.[categoryName];
+}
+
+/**
+ * BrandCategory için görsel key'ini bul
+ */
+function getBrandCategoryImageKey(categoryName: string): SeedMediaKey | undefined {
+  return MEDIA_IMAGE_MAPPING.brandCategory?.[categoryName];
+}
+
+/**
+ * Brand için görsel key'ini bul
+ */
+function getBrandImageKey(brandName: string): SeedMediaKey | undefined {
+  return MEDIA_IMAGE_MAPPING.brand?.[brandName];
+}
+
+/**
+ * Badge için görsel key'ini bul
+ */
+function getBadgeImageKey(badgeName: string): SeedMediaKey | undefined {
+  return MEDIA_IMAGE_MAPPING.badge?.[badgeName];
+}
+
+/**
+ * Post için görsel key'ini bul (type bazlı)
+ */
+function getPostImageKey(postType: string): SeedMediaKey | undefined {
+  return MEDIA_IMAGE_MAPPING.post?.[postType];
+}
+
+/**
+ * Marketplace banner için görsel key'ini bul
+ */
+function getMarketplaceBannerImageKey(bannerName: string): SeedMediaKey | undefined {
+  return MEDIA_IMAGE_MAPPING.marketplaceBanner?.[bannerName];
+}
+
+/**
+ * User avatar için görsel key'ini bul
+ */
+function getUserAvatarImageKey(userIdentifier: string): SeedMediaKey | undefined {
+  return MEDIA_IMAGE_MAPPING.userAvatar?.[userIdentifier];
+}
+
+/**
+ * User banner için görsel key'ini bul
+ */
+function getUserBannerImageKey(userIdentifier: string): SeedMediaKey | undefined {
+  return MEDIA_IMAGE_MAPPING.userBanner?.[userIdentifier];
+}
+
+/**
+ * Tüm entity'lerin görsellerini güncelle (sadece mapping'de belirtilenler)
+ * 
+ * NOT: Bu fonksiyon manuel olarak çağrılmalıdır (seed otomatik çalışmaz)
+ * 
+ * Kullanım:
+ * await updateAllEntityImages();
+ */
+async function updateAllEntityImages(): Promise<void> {
+  console.log('🖼️  Tüm entity görselleri güncelleniyor (mapping\'de belirtilenler)...\n');
+  
+  let totalUpdated = 0;
+  
+  // Products
+  if (MEDIA_IMAGE_MAPPING.product) {
+    console.log('📦 Product görselleri güncelleniyor...');
+    const products = await prisma.product.findMany();
+    let updated = 0;
+    
+    for (const product of products) {
+      const imageKey = getProductImageKey(product.name, product.brand || undefined);
+      if (imageKey) {
+        try {
+          const imagePath = getSeedMediaPath(imageKey);
+          if (product.imageUrl !== imagePath) {
+            await prisma.product.update({
+              where: { id: product.id },
+              data: { imageUrl: imagePath },
+            });
+            updated++;
+          }
+        } catch (error: any) {
+          console.warn(`  ⚠️  ${product.name}: ${error.message}`);
+        }
+      }
+    }
+    console.log(`  ✅ ${updated} product görseli güncellendi\n`);
+    totalUpdated += updated;
+  }
+  
+  // MainCategories
+  if (MEDIA_IMAGE_MAPPING.mainCategory) {
+    console.log('📁 MainCategory görselleri güncelleniyor...');
+    const categories = await prisma.mainCategory.findMany();
+    let updated = 0;
+    
+    for (const category of categories) {
+      const imageKey = getMainCategoryImageKey(category.name);
+      if (imageKey) {
+        try {
+          const imagePath = getSeedMediaPath(imageKey);
+          if (category.imageUrl !== imagePath) {
+            await prisma.mainCategory.update({
+              where: { id: category.id },
+              data: { imageUrl: imagePath },
+            });
+            updated++;
+          }
+        } catch (error: any) {
+          console.warn(`  ⚠️  ${category.name}: ${error.message}`);
+        }
+      }
+    }
+    console.log(`  ✅ ${updated} mainCategory görseli güncellendi\n`);
+    totalUpdated += updated;
+  }
+  
+  // SubCategories
+  if (MEDIA_IMAGE_MAPPING.subCategory) {
+    console.log('📁 SubCategory görselleri güncelleniyor...');
+    const categories = await prisma.subCategory.findMany();
+    let updated = 0;
+    
+    for (const category of categories) {
+      const imageKey = getSubCategoryImageKey(category.name);
+      if (imageKey) {
+        try {
+          const imagePath = getSeedMediaPath(imageKey);
+          if (category.imageUrl !== imagePath) {
+            await prisma.subCategory.update({
+              where: { id: category.id },
+              data: { imageUrl: imagePath },
+            });
+            updated++;
+          }
+        } catch (error: any) {
+          console.warn(`  ⚠️  ${category.name}: ${error.message}`);
+        }
+      }
+    }
+    console.log(`  ✅ ${updated} subCategory görseli güncellendi\n`);
+    totalUpdated += updated;
+  }
+  
+  // BrandCategories
+  if (MEDIA_IMAGE_MAPPING.brandCategory) {
+    console.log('🏷️  BrandCategory görselleri güncelleniyor...');
+    const categories = await prisma.brandCategory.findMany();
+    let updated = 0;
+    
+    for (const category of categories) {
+      const imageKey = getBrandCategoryImageKey(category.name);
+      if (imageKey) {
+        try {
+          const imagePath = getSeedMediaPath(imageKey);
+          if (category.imageUrl !== imagePath) {
+            await prisma.brandCategory.update({
+              where: { id: category.id },
+              data: { imageUrl: imagePath },
+            });
+            updated++;
+          }
+        } catch (error: any) {
+          console.warn(`  ⚠️  ${category.name}: ${error.message}`);
+        }
+      }
+    }
+    console.log(`  ✅ ${updated} brandCategory görseli güncellendi\n`);
+    totalUpdated += updated;
+  }
+  
+  // Brands
+  if (MEDIA_IMAGE_MAPPING.brand) {
+    console.log('🏢 Brand görselleri güncelleniyor...');
+    const brands = await prisma.brand.findMany();
+    let updated = 0;
+    
+    for (const brand of brands) {
+      const imageKey = getBrandImageKey(brand.name);
+      if (imageKey) {
+        try {
+          const imagePath = getSeedMediaPath(imageKey);
+          if (brand.imageUrl !== imagePath) {
+            await prisma.brand.update({
+              where: { id: brand.id },
+              data: { imageUrl: imagePath },
+            });
+            updated++;
+          }
+        } catch (error: any) {
+          console.warn(`  ⚠️  ${brand.name}: ${error.message}`);
+        }
+      }
+    }
+    console.log(`  ✅ ${updated} brand görseli güncellendi\n`);
+    totalUpdated += updated;
+  }
+  
+  // Badges
+  if (MEDIA_IMAGE_MAPPING.badge) {
+    console.log('🏆 Badge görselleri güncelleniyor...');
+    const badges = await prisma.badge.findMany();
+    let updated = 0;
+    
+    for (const badge of badges) {
+      const imageKey = getBadgeImageKey(badge.name);
+      if (imageKey) {
+        try {
+          const imagePath = getSeedMediaPath(imageKey);
+          if (badge.imageUrl !== imagePath) {
+            await prisma.badge.update({
+              where: { id: badge.id },
+              data: { imageUrl: imagePath },
+            });
+            updated++;
+          }
+        } catch (error: any) {
+          console.warn(`  ⚠️  ${badge.name}: ${error.message}`);
+        }
+      }
+    }
+    console.log(`  ✅ ${updated} badge görseli güncellendi\n`);
+    totalUpdated += updated;
+  }
+  
+  if (totalUpdated > 0) {
+    console.log(`✅ Toplam ${totalUpdated} entity görseli güncellendi`);
+  } else {
+    console.log('ℹ️  Güncellenecek görsel bulunamadı (mapping boş veya tüm görseller güncel)');
+  }
+}
+
+/**
+ * Product görsellerini güncelle (eski fonksiyon, geriye uyumluluk için)
+ * @deprecated updateAllEntityImages() kullanın
+ */
+async function updateProductImages(): Promise<void> {
+  await updateAllEntityImages();
+}
+
 // BrandCategory için idempotent create/update
 async function ensureBrandCategory(config: { name: string; imageKey?: SeedMediaKey }): Promise<{ id: string; name: string }> {
+  // Eğer imageKey belirtilmemişse, mapping'den otomatik bul
+  let finalImageKey = config.imageKey;
+  if (!finalImageKey) {
+    finalImageKey = getBrandCategoryImageKey(config.name);
+  }
+  
   const existing = await prisma.brandCategory.findUnique({
     where: { name: config.name }
   }).catch(() => null);
   
   if (existing) {
-    if (config.imageKey) {
+    if (finalImageKey) {
       return prisma.brandCategory.update({
         where: { id: existing.id },
-        data: { imageUrl: getSeedMediaPath(config.imageKey) }
+        data: { imageUrl: getSeedMediaPath(finalImageKey) }
       });
     }
     return existing;
@@ -269,13 +603,25 @@ async function ensureBrandCategory(config: { name: string; imageKey?: SeedMediaK
   return prisma.brandCategory.create({
     data: {
       name: config.name,
-      imageUrl: config.imageKey ? getSeedMediaPath(config.imageKey) : null,
+      imageUrl: finalImageKey ? getSeedMediaPath(finalImageKey) : null,
     }
   });
 }
 
 // Brand için idempotent create/update
-async function ensureBrand(config: { name: string; categoryId?: string; description?: string; logoUrl?: string; imageUrl?: string; category?: string }) {
+async function ensureBrand(config: { name: string; categoryId?: string; description?: string; logoUrl?: string; imageUrl?: string; category?: string; imageKey?: SeedMediaKey }) {
+  // Eğer imageKey belirtilmişse, imageUrl'yi otomatik oluştur
+  let finalImageUrl = config.imageUrl;
+  if (config.imageKey) {
+    finalImageUrl = getSeedMediaPath(config.imageKey);
+  } else if (!finalImageUrl) {
+    // Mapping'den otomatik bul
+    const imageKey = getBrandImageKey(config.name);
+    if (imageKey) {
+      finalImageUrl = getSeedMediaPath(imageKey);
+    }
+  }
+  
   const existing = await prisma.brand.findFirst({
     where: { name: config.name }
   });
@@ -285,7 +631,7 @@ async function ensureBrand(config: { name: string; categoryId?: string; descript
     if (config.description !== undefined) updateData.description = config.description;
     if (config.categoryId !== undefined) updateData.categoryId = config.categoryId;
     if (config.logoUrl !== undefined) updateData.logoUrl = config.logoUrl;
-    if (config.imageUrl !== undefined) updateData.imageUrl = config.imageUrl;
+    if (finalImageUrl !== undefined) updateData.imageUrl = finalImageUrl;
     
     if (Object.keys(updateData).length > 0) {
       return prisma.brand.update({
@@ -302,7 +648,7 @@ async function ensureBrand(config: { name: string; categoryId?: string; descript
       description: config.description,
       categoryId: config.categoryId,
       logoUrl: config.logoUrl,
-      imageUrl: config.imageUrl,
+      imageUrl: finalImageUrl,
     }
   });
 }
@@ -324,6 +670,12 @@ async function ensureBadgeCategory(config: { name: string; description?: string 
 
 // Badge için idempotent create/update
 async function ensureBadge(config: { name: string; categoryId: string; description?: string; type: string; rarity: string; boostMultiplier?: number; rewardMultiplier?: number; imageKey?: SeedMediaKey }): Promise<{ id: string; name: string; categoryId: string }> {
+  // Eğer imageKey belirtilmemişse, mapping'den otomatik bul
+  let finalImageKey = config.imageKey;
+  if (!finalImageKey) {
+    finalImageKey = getBadgeImageKey(config.name);
+  }
+  
   const existing = await prisma.badge.findFirst({
     where: { name: config.name }
   });
@@ -336,7 +688,7 @@ async function ensureBadge(config: { name: string; categoryId: string; descripti
     if (config.boostMultiplier !== undefined) updateData.boostMultiplier = config.boostMultiplier;
     if (config.rewardMultiplier !== undefined) updateData.rewardMultiplier = config.rewardMultiplier;
     if (config.categoryId) updateData.categoryId = config.categoryId;
-    if (config.imageKey) updateData.imageUrl = getSeedMediaPath(config.imageKey);
+    if (finalImageKey) updateData.imageUrl = getSeedMediaPath(finalImageKey);
     
     if (Object.keys(updateData).length > 0) {
       return prisma.badge.update({
@@ -356,7 +708,7 @@ async function ensureBadge(config: { name: string; categoryId: string; descripti
       rarity: config.rarity as any,
       boostMultiplier: config.boostMultiplier,
       rewardMultiplier: config.rewardMultiplier,
-      imageUrl: config.imageKey ? getSeedMediaPath(config.imageKey) : null,
+      imageUrl: finalImageKey ? getSeedMediaPath(finalImageKey) : null,
     }
   });
 }

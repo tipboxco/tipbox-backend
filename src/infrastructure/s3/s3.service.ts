@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, PutBucketPolicyCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, PutBucketPolicyCommand, ListObjectsV2Command, DeleteObjectsCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { s3Config } from '../config/s3.config';
 import { getPublicMediaBaseUrl, buildMediaUrl } from '../config/media.config';
@@ -263,5 +263,75 @@ export class S3Service {
       
       throw new Error(`Dosya yüklenemedi: ${errorMessage}`);
     }
+  }
+
+  /**
+   * Klasördeki tüm dosyaları recursive olarak sil
+   * @param folderPrefix - Klasör prefix'i (örn: 'users/', 'posts/')
+   * @returns Silinen dosya sayısı
+   */
+  async deleteFolder(folderPrefix: string): Promise<number> {
+    let deletedCount = 0;
+    let continuationToken: string | undefined;
+
+    do {
+      try {
+        // Klasördeki tüm dosyaları listele
+        const listCommand = new ListObjectsV2Command({
+          Bucket: s3Config.bucketName,
+          Prefix: folderPrefix,
+          ContinuationToken: continuationToken,
+          MaxKeys: 1000, // Batch size
+        });
+
+        const response = await this.s3Client.send(listCommand);
+
+        if (response.Contents && response.Contents.length > 0) {
+          // Batch delete (1000 dosya limit)
+          const objectsToDelete = response.Contents.map((obj) => ({
+            Key: obj.Key!,
+          }));
+
+          const deleteCommand = new DeleteObjectsCommand({
+            Bucket: s3Config.bucketName,
+            Delete: {
+              Objects: objectsToDelete,
+              Quiet: true,
+            },
+          });
+
+          const deleteResponse = await this.s3Client.send(deleteCommand);
+          deletedCount += objectsToDelete.length;
+
+          if (deleteResponse.Errors && deleteResponse.Errors.length > 0) {
+            logger.warn({
+              message: 'MinIO delete errors',
+              errors: deleteResponse.Errors,
+              folderPrefix,
+            });
+          }
+        }
+
+        continuationToken = response.NextContinuationToken;
+      } catch (error: any) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        logger.error({
+          message: 'MinIO folder delete error',
+          folderPrefix,
+          error: errorMsg,
+        });
+        throw new Error(`Klasör silinemedi: ${errorMsg}`);
+      }
+    } while (continuationToken);
+
+    return deletedCount;
+  }
+
+  /**
+   * Tüm bucket içeriğini temizle
+   * @returns Silinen dosya sayısı
+   */
+  async clearBucket(): Promise<number> {
+    return this.deleteFolder('');
   }
 }
