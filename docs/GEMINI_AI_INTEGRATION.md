@@ -84,8 +84,8 @@ src/
 # Gemini AI Configuration
 GEMINI_API_KEY=your-gemini-api-key-here
 # Free tier: gemini-1.5-flash (15 req/min)
-# Paid tier: gemini-1.5-pro (360 req/min) - Önerilen
-GEMINI_MODEL=gemini-1.5-pro
+# Paid tier: gemini-2.5-pro (360 req/min) - EN GÜÇLÜ MODEL 🚀
+GEMINI_MODEL=gemini-2.5-pro
 GEMINI_MAX_RETRIES=3
 GEMINI_TIMEOUT=30000
 ```
@@ -95,8 +95,8 @@ GEMINI_TIMEOUT=30000
 - `GEMINI_API_KEY`: Gemini API anahtarı (zorunlu)
 - `GEMINI_MODEL`: Kullanılacak model
   - Free tier: `gemini-1.5-flash` (15 req/min)
-  - **Paid tier: `gemini-1.5-pro` (360 req/min) - Önerilen**
-  - Experimental: `gemini-2.0-flash-exp`, `gemini-exp-1206`
+  - **Paid tier: `gemini-2.5-pro` (360 req/min) - EN GÜÇLÜ MODEL 🚀**
+  - Diğer: `gemini-1.5-pro`, `gemini-2.0-flash-exp`, `gemini-3-pro-preview`
 - `GEMINI_MAX_RETRIES`: Hata durumunda tekrar deneme sayısı (varsayılan: 3)
 - `GEMINI_TIMEOUT`: İstek timeout süresi (ms) (varsayılan: 30000)
 

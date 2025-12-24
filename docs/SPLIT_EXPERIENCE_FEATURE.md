@@ -35,7 +35,7 @@ npm install @google/generative-ai
 `.env` dosyanıza ekleyin:
 ```bash
 GEMINI_API_KEY=your-gemini-api-key-here
-GEMINI_MODEL=gemini-2.0-flash-exp
+GEMINI_MODEL=gemini-2.5-pro
 GEMINI_MAX_RETRIES=3
 GEMINI_TIMEOUT=30000
 ```
