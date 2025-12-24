@@ -18,7 +18,7 @@ export function getGeminiConfig(): GeminiConfig {
 
   return {
     apiKey,
-    model: process.env.GEMINI_MODEL || 'gemini-2.0-flash-exp',
+    model: process.env.GEMINI_MODEL || 'gemini-1.5-flash',
     maxRetries: parseInt(process.env.GEMINI_MAX_RETRIES || '3', 10),
     timeout: parseInt(process.env.GEMINI_TIMEOUT || '30000', 10),
   };
