@@ -185,6 +185,23 @@ import { ExperienceStatus } from '../../domain/content/experience-status.enum';
  *           type: array
  *           items:
  *             type: string
+ *     SplitExperienceRequest:
+ *       type: object
+ *       required:
+ *         - productId
+ *         - content
+ *       properties:
+ *         productId:
+ *           type: string
+ *         content:
+ *           type: string
+ *     SplitExperienceResponse:
+ *       type: object
+ *       properties:
+ *         experiences:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/Experience'
  */
 
 export interface CreatePostRequest {
@@ -257,6 +274,8 @@ export interface CreateUpdatePostRequest {
 }
 
 export interface SplitExperienceRequest {
+  userId: string;
+  productId: string;
   content: string;
 }
 

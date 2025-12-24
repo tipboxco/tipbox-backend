@@ -24,6 +24,7 @@ import {
 import { PrismaClient } from '@prisma/client';
 import { FeedService } from '../feed/feed.service';
 import logger from '../../infrastructure/logger/logger';
+import { GeminiService } from '../../infrastructure/ai/gemini.service';
 
 export class PostService {
   private postRepo: ContentPostPrismaRepository;
@@ -32,6 +33,7 @@ export class PostService {
   private comparisonRepo: PostComparisonPrismaRepository;
   private feedService: FeedService;
   private prisma: PrismaClient;
+  private geminiService: GeminiService;
 
   constructor() {
     this.postRepo = new ContentPostPrismaRepository();
@@ -40,6 +42,7 @@ export class PostService {
     this.comparisonRepo = new PostComparisonPrismaRepository();
     this.feedService = new FeedService();
     this.prisma = new PrismaClient();
+    this.geminiService = GeminiService.getInstance();
   }
 
   /**
@@ -580,49 +583,59 @@ export class PostService {
     request: SplitExperienceRequest
   ): Promise<SplitExperienceResponse> {
     try {
-      // TODO: Implement AI service to split experience
-      // For now, returning a mock implementation
-      // This should call an AI service to categorize the experience
+      // Ürün bilgilerini al
+      const product = await this.prisma.product.findUnique({
+        where: { id: request.productId },
+      });
 
-      // Mock implementation - split by keywords
-      const content = request.content.toLowerCase();
+      if (!product) {
+        throw new Error('Product not found');
+      }
+
+      // Gemini AI ile deneyimi ayır
+      const splitResult = await this.geminiService.splitExperience({
+        productName: product.name,
+        productBrand: product.brand || undefined,
+        productDescription: product.description || undefined,
+        experienceText: request.content,
+      });
+
+      // Response formatını oluştur
       const experiences: Experience[] = [];
 
-      // Simple keyword-based categorization
-      const priceKeywords = ['price', 'cost', 'buy', 'purchase', 'shop', 'money', 'affordable', 'expensive'];
-      const usageKeywords = ['use', 'usage', 'experience', 'quality', 'performance', 'result', 'effect'];
-
-      const hasPriceContent = priceKeywords.some((keyword) =>
-        content.includes(keyword)
-      );
-      const hasUsageContent = usageKeywords.some((keyword) =>
-        content.includes(keyword)
-      );
-
-      if (hasPriceContent) {
+      if (splitResult.priceAndShopping) {
         experiences.push({
           type: ExperienceType.PRICE_AND_SHOPPING,
-          content: request.content,
-          rating: 4, // Default rating
+          content: splitResult.priceAndShopping.content,
+          rating: splitResult.priceAndShopping.rating,
         });
       }
 
-      if (hasUsageContent) {
+      if (splitResult.productAndUsage) {
         experiences.push({
           type: ExperienceType.PRODUCT_AND_USAGE,
-          content: request.content,
-          rating: 4, // Default rating
+          content: splitResult.productAndUsage.content,
+          rating: splitResult.productAndUsage.rating,
         });
       }
 
-      // If no keywords found, default to product and usage
+      // Eğer hiçbir kategori yoksa (AI yanıt veremedi), tüm metni product usage'a koy
       if (experiences.length === 0) {
         experiences.push({
           type: ExperienceType.PRODUCT_AND_USAGE,
           content: request.content,
-          rating: 4,
+          rating: 3,
         });
       }
+
+      logger.info({
+        message: 'Experience split with AI',
+        userId: request.userId,
+        productId: request.productId,
+        experiencesCount: experiences.length,
+        hasPriceAndShopping: !!splitResult.priceAndShopping,
+        hasProductAndUsage: !!splitResult.productAndUsage,
+      });
 
       return { experiences };
     } catch (error) {

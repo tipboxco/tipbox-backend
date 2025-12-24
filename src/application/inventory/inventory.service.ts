@@ -14,6 +14,7 @@ import { ExperienceType } from '../../domain/content/experience-type.enum';
 import { ExperienceStatus } from '../../domain/content/experience-status.enum';
 import { CacheService } from '../../infrastructure/cache/cache.service';
 import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
+import { GeminiService } from '../../infrastructure/ai/gemini.service';
 
 export class InventoryService {
   private readonly prisma: PrismaClient;
@@ -21,6 +22,7 @@ export class InventoryService {
   private readonly experienceRepo: ProductExperiencePrismaRepository;
   private readonly mediaRepo: InventoryMediaPrismaRepository;
   private readonly cacheService: CacheService;
+  private readonly geminiService: GeminiService;
 
   constructor() {
     this.prisma = new PrismaClient();
@@ -28,6 +30,7 @@ export class InventoryService {
     this.experienceRepo = new ProductExperiencePrismaRepository();
     this.mediaRepo = new InventoryMediaPrismaRepository();
     this.cacheService = CacheService.getInstance();
+    this.geminiService = GeminiService.getInstance();
   }
 
   /**
@@ -163,6 +166,55 @@ export class InventoryService {
       logger.error({
         message: 'Error getting user inventory list',
         userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Kullanıcının deneyim metnini AI ile ayır
+   */
+  async splitExperienceWithAI(
+    userId: string,
+    productId: string,
+    experienceText: string
+  ): Promise<{
+    priceAndShopping: { content: string; rating: number } | null;
+    productAndUsage: { content: string; rating: number } | null;
+  }> {
+    try {
+      // Ürün bilgilerini al
+      const product = await this.prisma.product.findUnique({
+        where: { id: productId },
+      });
+
+      if (!product) {
+        throw new Error('Product not found');
+      }
+
+      // Gemini AI ile deneyimi ayır
+      const splitResult = await this.geminiService.splitExperience({
+        productName: product.name,
+        productBrand: product.brand || undefined,
+        productDescription: product.description || undefined,
+        experienceText,
+      });
+
+      logger.info({
+        message: 'Experience split with AI',
+        userId,
+        productId,
+        hasPriceAndShopping: !!splitResult.priceAndShopping,
+        hasProductAndUsage: !!splitResult.productAndUsage,
+      });
+
+      return splitResult;
+    } catch (error) {
+      logger.error({
+        message: 'Error splitting experience with AI',
+        userId,
+        productId,
         error: error instanceof Error ? error.message : String(error),
       });
       throw error;
