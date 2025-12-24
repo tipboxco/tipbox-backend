@@ -61,9 +61,20 @@ src/
 
 ### 1. Gemini API Key Alma
 
+#### Free Tier (Sınırlı)
 1. [Google AI Studio](https://makersuite.google.com/app/apikey) adresine gidin
 2. Yeni bir API key oluşturun
 3. API key'i kopyalayın
+4. **Limitler:** 15 istek/dakika, 1,500 istek/gün
+
+#### Paid Tier (Önerilen) 🚀
+1. [Google Cloud Console](https://console.cloud.google.com/) adresine gidin
+2. Yeni bir proje oluşturun veya mevcut projeyi seçin
+3. **Billing** menüsüne gidin ve **kredi kartı bilgilerinizi ekleyin**
+4. **APIs & Services > Library** > **"Generative Language API"** etkinleştirin
+5. **APIs & Services > Credentials** > **"Create Credentials" > "API Key"**
+6. Yeni API key'i kopyalayın
+7. **Limitler:** 360 istek/dakika, 10,000+ istek/gün
 
 ### 2. Environment Variables
 
@@ -72,7 +83,9 @@ src/
 ```bash
 # Gemini AI Configuration
 GEMINI_API_KEY=your-gemini-api-key-here
-GEMINI_MODEL=gemini-2.0-flash-exp
+# Free tier: gemini-1.5-flash (15 req/min)
+# Paid tier: gemini-1.5-pro (360 req/min) - Önerilen
+GEMINI_MODEL=gemini-1.5-pro
 GEMINI_MAX_RETRIES=3
 GEMINI_TIMEOUT=30000
 ```
@@ -80,7 +93,10 @@ GEMINI_TIMEOUT=30000
 #### Yapılandırma Parametreleri
 
 - `GEMINI_API_KEY`: Gemini API anahtarı (zorunlu)
-- `GEMINI_MODEL`: Kullanılacak model (varsayılan: `gemini-2.0-flash-exp`)
+- `GEMINI_MODEL`: Kullanılacak model
+  - Free tier: `gemini-1.5-flash` (15 req/min)
+  - **Paid tier: `gemini-1.5-pro` (360 req/min) - Önerilen**
+  - Experimental: `gemini-2.0-flash-exp`, `gemini-exp-1206`
 - `GEMINI_MAX_RETRIES`: Hata durumunda tekrar deneme sayısı (varsayılan: 3)
 - `GEMINI_TIMEOUT`: İstek timeout süresi (ms) (varsayılan: 30000)
 
