@@ -25,6 +25,7 @@ import { PrismaClient } from '@prisma/client';
 import { FeedService } from '../feed/feed.service';
 import logger from '../../infrastructure/logger/logger';
 import { GeminiService } from '../../infrastructure/ai/gemini.service';
+import { AiExperienceSplitPrismaRepository } from '../../infrastructure/repositories/ai-experience-split-prisma.repository';
 
 export class PostService {
   private postRepo: ContentPostPrismaRepository;
@@ -34,6 +35,7 @@ export class PostService {
   private feedService: FeedService;
   private prisma: PrismaClient;
   private geminiService: GeminiService;
+  private aiSplitRepo: AiExperienceSplitPrismaRepository;
 
   constructor() {
     this.postRepo = new ContentPostPrismaRepository();
@@ -43,6 +45,7 @@ export class PostService {
     this.feedService = new FeedService();
     this.prisma = new PrismaClient();
     this.geminiService = GeminiService.getInstance();
+    this.aiSplitRepo = new AiExperienceSplitPrismaRepository();
   }
 
   /**
@@ -550,6 +553,14 @@ export class PostService {
         false
       );
 
+      // AI Split ID'yi kaydet (eğer varsa)
+      if (request.aiSplitId) {
+        await this.prisma.contentPost.update({
+          where: { id: post.id },
+          data: { aiSplitId: request.aiSplitId }
+        });
+      }
+
       // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
       if (request.images && request.images.length > 0) {
         await this.prisma.postMedia.createMany({
@@ -562,7 +573,9 @@ export class PostService {
         });
       }
 
-      logger.info(`Experience post created: ${post.id} by user ${userId}`);
+      logger.info(`Experience post created: ${post.id} by user ${userId}`, {
+        aiSplitId: request.aiSplitId || null
+      });
       
       // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
       this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
@@ -577,11 +590,11 @@ export class PostService {
   }
 
   /**
-   * AI ile deneyimi ayır
+   * AI ile deneyimi ayır ve database'e kaydet
    */
   async splitExperience(
     request: SplitExperienceRequest
-  ): Promise<SplitExperienceResponse> {
+  ): Promise<SplitExperienceResponse & { aiSplitId: string }> {
     try {
       // Ürün bilgilerini al
       const product = await this.prisma.product.findUnique({
@@ -598,6 +611,22 @@ export class PostService {
         productBrand: product.brand || undefined,
         productDescription: product.description || undefined,
         experienceText: request.content,
+      });
+
+      // AI split sonucunu database'e kaydet
+      const aiSplit = await this.aiSplitRepo.create({
+        userId: request.userId,
+        productId: request.productId,
+        originalExperience: request.content,
+        priceAndShopping: splitResult.priceAndShopping?.content ?? null,
+        productAndUsage: splitResult.productAndUsage?.content ?? null,
+        priceAndShoppingRating: splitResult.priceAndShopping?.rating ?? null,
+        productAndUsageRating: splitResult.productAndUsage?.rating ?? null,
+        isEdited: false,
+        model: splitResult.metadata.model,
+        promptVersion: splitResult.metadata.promptVersion,
+        tokensUsed: splitResult.metadata.tokensUsed,
+        processingTimeMs: splitResult.metadata.processingTimeMs,
       });
 
       // Response formatını oluştur
@@ -629,15 +658,18 @@ export class PostService {
       }
 
       logger.info({
-        message: 'Experience split with AI',
+        message: 'Experience split with AI and saved',
         userId: request.userId,
         productId: request.productId,
+        aiSplitId: aiSplit.id,
+        tokensUsed: splitResult.metadata.tokensUsed,
+        processingTimeMs: splitResult.metadata.processingTimeMs,
         experiencesCount: experiences.length,
         hasPriceAndShopping: !!splitResult.priceAndShopping,
         hasProductAndUsage: !!splitResult.productAndUsage,
       });
 
-      return { experiences };
+      return { experiences, aiSplitId: aiSplit.id };
     } catch (error) {
       logger.error(`Failed to split experience:`, error);
       throw error;

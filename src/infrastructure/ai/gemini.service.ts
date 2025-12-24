@@ -19,6 +19,12 @@ export interface SplitExperienceResponse {
     content: string;
     rating: number;
   } | null;
+  metadata: {
+    tokensUsed: number | null;
+    processingTimeMs: number;
+    model: string;
+    promptVersion: string;
+  };
 }
 
 export class GeminiService {
@@ -61,18 +67,35 @@ export class GeminiService {
       const response = await result.response;
       const text = response.text();
 
+      // Token bilgisini al
+      const usageMetadata = response.usageMetadata;
+      const tokensUsed = usageMetadata?.totalTokenCount || null;
+
       const parsedResponse = this.parseSplitExperienceResponse(text);
 
       const duration = Date.now() - startTime;
+      
+      // Metadata ekle
+      const responseWithMetadata: SplitExperienceResponse = {
+        ...parsedResponse,
+        metadata: {
+          tokensUsed,
+          processingTimeMs: duration,
+          model: this.config.model,
+          promptVersion: 'v1.0'
+        }
+      };
+
       logger.info({
         message: 'Gemini AI deneyim ayrıştırması başarılı',
         productName: request.productName,
         duration: `${duration}ms`,
+        tokensUsed,
         hasPriceAndShopping: !!parsedResponse.priceAndShopping,
         hasProductAndUsage: !!parsedResponse.productAndUsage,
       });
 
-      return parsedResponse;
+      return responseWithMetadata;
     } catch (error) {
       const duration = Date.now() - startTime;
       

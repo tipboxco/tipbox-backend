@@ -264,6 +264,7 @@ export interface CreateExperiencePostRequest {
   experience: Experience[];
   status: ExperienceStatus;
   images?: string[];
+  aiSplitId?: string; // AI split sonucunun ID'si (optional)
 }
 
 export interface CreateUpdatePostRequest {
