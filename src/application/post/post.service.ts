@@ -24,6 +24,8 @@ import {
 import { PrismaClient } from '@prisma/client';
 import { FeedService } from '../feed/feed.service';
 import logger from '../../infrastructure/logger/logger';
+import { GeminiService } from '../../infrastructure/ai/gemini.service';
+import { AiExperienceSplitPrismaRepository } from '../../infrastructure/repositories/ai-experience-split-prisma.repository';
 
 export class PostService {
   private postRepo: ContentPostPrismaRepository;
@@ -32,6 +34,8 @@ export class PostService {
   private comparisonRepo: PostComparisonPrismaRepository;
   private feedService: FeedService;
   private prisma: PrismaClient;
+  private geminiService: GeminiService;
+  private aiSplitRepo: AiExperienceSplitPrismaRepository;
 
   constructor() {
     this.postRepo = new ContentPostPrismaRepository();
@@ -40,6 +44,8 @@ export class PostService {
     this.comparisonRepo = new PostComparisonPrismaRepository();
     this.feedService = new FeedService();
     this.prisma = new PrismaClient();
+    this.geminiService = GeminiService.getInstance();
+    this.aiSplitRepo = new AiExperienceSplitPrismaRepository();
   }
 
   /**
@@ -547,6 +553,14 @@ export class PostService {
         false
       );
 
+      // AI Split ID'yi kaydet (eğer varsa)
+      if (request.aiSplitId) {
+        await this.prisma.contentPost.update({
+          where: { id: post.id },
+          data: { aiSplitId: request.aiSplitId }
+        });
+      }
+
       // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
       if (request.images && request.images.length > 0) {
         await this.prisma.postMedia.createMany({
@@ -559,7 +573,9 @@ export class PostService {
         });
       }
 
-      logger.info(`Experience post created: ${post.id} by user ${userId}`);
+      logger.info(`Experience post created: ${post.id} by user ${userId}`, {
+        aiSplitId: request.aiSplitId || null
+      });
       
       // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
       this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
@@ -574,57 +590,86 @@ export class PostService {
   }
 
   /**
-   * AI ile deneyimi ayır
+   * AI ile deneyimi ayır ve database'e kaydet
    */
   async splitExperience(
     request: SplitExperienceRequest
-  ): Promise<SplitExperienceResponse> {
+  ): Promise<SplitExperienceResponse & { aiSplitId: string }> {
     try {
-      // TODO: Implement AI service to split experience
-      // For now, returning a mock implementation
-      // This should call an AI service to categorize the experience
+      // Ürün bilgilerini al
+      const product = await this.prisma.product.findUnique({
+        where: { id: request.productId },
+      });
 
-      // Mock implementation - split by keywords
-      const content = request.content.toLowerCase();
+      if (!product) {
+        throw new Error('Product not found');
+      }
+
+      // Gemini AI ile deneyimi ayır
+      const splitResult = await this.geminiService.splitExperience({
+        productName: product.name,
+        productBrand: product.brand || undefined,
+        productDescription: product.description || undefined,
+        experienceText: request.content,
+      });
+
+      // AI split sonucunu database'e kaydet
+      const aiSplit = await this.aiSplitRepo.create({
+        userId: request.userId,
+        productId: request.productId,
+        originalExperience: request.content,
+        priceAndShopping: splitResult.priceAndShopping?.content ?? null,
+        productAndUsage: splitResult.productAndUsage?.content ?? null,
+        priceAndShoppingRating: splitResult.priceAndShopping?.rating ?? null,
+        productAndUsageRating: splitResult.productAndUsage?.rating ?? null,
+        isEdited: false,
+        model: splitResult.metadata.model,
+        promptVersion: splitResult.metadata.promptVersion,
+        tokensUsed: splitResult.metadata.tokensUsed,
+        processingTimeMs: splitResult.metadata.processingTimeMs,
+      });
+
+      // Response formatını oluştur
       const experiences: Experience[] = [];
 
-      // Simple keyword-based categorization
-      const priceKeywords = ['price', 'cost', 'buy', 'purchase', 'shop', 'money', 'affordable', 'expensive'];
-      const usageKeywords = ['use', 'usage', 'experience', 'quality', 'performance', 'result', 'effect'];
-
-      const hasPriceContent = priceKeywords.some((keyword) =>
-        content.includes(keyword)
-      );
-      const hasUsageContent = usageKeywords.some((keyword) =>
-        content.includes(keyword)
-      );
-
-      if (hasPriceContent) {
+      if (splitResult.priceAndShopping) {
         experiences.push({
           type: ExperienceType.PRICE_AND_SHOPPING,
-          content: request.content,
-          rating: 4, // Default rating
+          content: splitResult.priceAndShopping.content,
+          rating: splitResult.priceAndShopping.rating,
         });
       }
 
-      if (hasUsageContent) {
+      if (splitResult.productAndUsage) {
         experiences.push({
           type: ExperienceType.PRODUCT_AND_USAGE,
-          content: request.content,
-          rating: 4, // Default rating
+          content: splitResult.productAndUsage.content,
+          rating: splitResult.productAndUsage.rating,
         });
       }
 
-      // If no keywords found, default to product and usage
+      // Eğer hiçbir kategori yoksa (AI yanıt veremedi), tüm metni product usage'a koy
       if (experiences.length === 0) {
         experiences.push({
           type: ExperienceType.PRODUCT_AND_USAGE,
           content: request.content,
-          rating: 4,
+          rating: 3,
         });
       }
 
-      return { experiences };
+      logger.info({
+        message: 'Experience split with AI and saved',
+        userId: request.userId,
+        productId: request.productId,
+        aiSplitId: aiSplit.id,
+        tokensUsed: splitResult.metadata.tokensUsed,
+        processingTimeMs: splitResult.metadata.processingTimeMs,
+        experiencesCount: experiences.length,
+        hasPriceAndShopping: !!splitResult.priceAndShopping,
+        hasProductAndUsage: !!splitResult.productAndUsage,
+      });
+
+      return { experiences, aiSplitId: aiSplit.id };
     } catch (error) {
       logger.error(`Failed to split experience:`, error);
       throw error;

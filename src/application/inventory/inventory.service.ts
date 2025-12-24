@@ -14,6 +14,8 @@ import { ExperienceType } from '../../domain/content/experience-type.enum';
 import { ExperienceStatus } from '../../domain/content/experience-status.enum';
 import { CacheService } from '../../infrastructure/cache/cache.service';
 import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
+import { GeminiService } from '../../infrastructure/ai/gemini.service';
+import { AiExperienceSplitPrismaRepository } from '../../infrastructure/repositories/ai-experience-split-prisma.repository';
 
 export class InventoryService {
   private readonly prisma: PrismaClient;
@@ -21,6 +23,8 @@ export class InventoryService {
   private readonly experienceRepo: ProductExperiencePrismaRepository;
   private readonly mediaRepo: InventoryMediaPrismaRepository;
   private readonly cacheService: CacheService;
+  private readonly geminiService: GeminiService;
+  private readonly aiSplitRepo: AiExperienceSplitPrismaRepository;
 
   constructor() {
     this.prisma = new PrismaClient();
@@ -28,6 +32,8 @@ export class InventoryService {
     this.experienceRepo = new ProductExperiencePrismaRepository();
     this.mediaRepo = new InventoryMediaPrismaRepository();
     this.cacheService = CacheService.getInstance();
+    this.geminiService = GeminiService.getInstance();
+    this.aiSplitRepo = new AiExperienceSplitPrismaRepository();
   }
 
   /**
@@ -170,6 +176,79 @@ export class InventoryService {
   }
 
   /**
+   * Kullanıcının deneyim metnini AI ile ayır ve database'e kaydet
+   */
+  async splitExperienceWithAI(
+    userId: string,
+    productId: string,
+    experienceText: string
+  ): Promise<{
+    aiSplitId: string;
+    priceAndShopping: { content: string; rating: number } | null;
+    productAndUsage: { content: string; rating: number } | null;
+  }> {
+    try {
+      // Ürün bilgilerini al
+      const product = await this.prisma.product.findUnique({
+        where: { id: productId },
+      });
+
+      if (!product) {
+        throw new Error('Product not found');
+      }
+
+      // Gemini AI ile deneyimi ayır
+      const splitResult = await this.geminiService.splitExperience({
+        productName: product.name,
+        productBrand: product.brand || undefined,
+        productDescription: product.description || undefined,
+        experienceText,
+      });
+
+      // AI split sonucunu database'e kaydet
+      const aiSplit = await this.aiSplitRepo.create({
+        userId,
+        productId,
+        originalExperience: experienceText,
+        priceAndShopping: splitResult.priceAndShopping?.content ?? null,
+        productAndUsage: splitResult.productAndUsage?.content ?? null,
+        priceAndShoppingRating: splitResult.priceAndShopping?.rating ?? null,
+        productAndUsageRating: splitResult.productAndUsage?.rating ?? null,
+        isEdited: false,
+        model: splitResult.metadata.model,
+        promptVersion: splitResult.metadata.promptVersion,
+        tokensUsed: splitResult.metadata.tokensUsed,
+        processingTimeMs: splitResult.metadata.processingTimeMs,
+      });
+
+      logger.info({
+        message: 'Experience split with AI and saved',
+        userId,
+        productId,
+        aiSplitId: aiSplit.id,
+        tokensUsed: splitResult.metadata.tokensUsed,
+        processingTimeMs: splitResult.metadata.processingTimeMs,
+        hasPriceAndShopping: !!splitResult.priceAndShopping,
+        hasProductAndUsage: !!splitResult.productAndUsage,
+      });
+
+      return {
+        aiSplitId: aiSplit.id,
+        priceAndShopping: splitResult.priceAndShopping,
+        productAndUsage: splitResult.productAndUsage,
+      };
+    } catch (error) {
+      logger.error({
+        message: 'Error splitting experience with AI',
+        userId,
+        productId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  /**
    * Inventory'ye yeni ürün ekle
    */
   async createInventoryItem(
@@ -194,6 +273,7 @@ export class InventoryService {
             productId: dto.productId,
             hasOwned,
             experienceSummary: dto.content,
+            aiSplitId: dto.aiSplitId || null,
           },
         });
 

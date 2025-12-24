@@ -185,6 +185,23 @@ import { ExperienceStatus } from '../../domain/content/experience-status.enum';
  *           type: array
  *           items:
  *             type: string
+ *     SplitExperienceRequest:
+ *       type: object
+ *       required:
+ *         - productId
+ *         - content
+ *       properties:
+ *         productId:
+ *           type: string
+ *         content:
+ *           type: string
+ *     SplitExperienceResponse:
+ *       type: object
+ *       properties:
+ *         experiences:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/Experience'
  */
 
 export interface CreatePostRequest {
@@ -247,6 +264,7 @@ export interface CreateExperiencePostRequest {
   experience: Experience[];
   status: ExperienceStatus;
   images?: string[];
+  aiSplitId?: string; // AI split sonucunun ID'si (optional)
 }
 
 export interface CreateUpdatePostRequest {
@@ -257,6 +275,8 @@ export interface CreateUpdatePostRequest {
 }
 
 export interface SplitExperienceRequest {
+  userId: string;
+  productId: string;
   content: string;
 }
 

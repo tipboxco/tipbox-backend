@@ -80,6 +80,7 @@ model User {
   wallets                 Wallet[]
   wishboxRewards          WishboxReward[]
   wishboxStats            WishboxStats[]
+  aiExperienceSplits      AiExperienceSplit[]     @relation("UserAiExperienceSplits")
 
   @@map("users")
 }
@@ -367,10 +368,11 @@ model Product {
   updatedAt          DateTime         @updatedAt @map("updated_at")
   contentPosts       ContentPost[]
   inventories        Inventory[]
-  comparisonProduct1 PostComparison[] @relation("ComparisonProduct1")
-  comparisonProduct2 PostComparison[] @relation("ComparisonProduct2")
+  comparisonProduct1 PostComparison[]      @relation("ComparisonProduct1")
+  comparisonProduct2 PostComparison[]      @relation("ComparisonProduct2")
   questionPosts      PostQuestion[]
-  group              ProductGroup?    @relation(fields: [groupId], references: [id])
+  group              ProductGroup?         @relation(fields: [groupId], references: [id])
+  aiExperienceSplits AiExperienceSplit[]   @relation("ProductAiExperienceSplits")
 
   @@map("products")
 }
@@ -399,10 +401,12 @@ model Inventory {
   productId          String              @map("product_id") @db.Uuid
   hasOwned           Boolean             @map("has_owned")
   experienceSummary  String?             @map("experience_summary")
+  aiSplitId          String?             @map("ai_split_id") @db.Uuid
   createdAt          DateTime            @default(now()) @map("created_at")
   updatedAt          DateTime            @updatedAt @map("updated_at")
   product            Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  aiSplit            AiExperienceSplit?  @relation(fields: [aiSplitId], references: [id], onDelete: SetNull)
   media              InventoryMedia[]
   productExperiences ProductExperience[]
 
@@ -410,6 +414,7 @@ model Inventory {
   @@index([userId])
   @@index([productId])
   @@index([userId, hasOwned])
+  @@index([aiSplitId])
   @@map("inventories")
 }
 
@@ -452,6 +457,7 @@ model ContentPost {
   inventoryRequired   Boolean              @map("inventory_required")
   isBoosted           Boolean              @map("is_boosted")
   boostedUntil        DateTime?            @map("boosted_until")
+  aiSplitId           String?              @map("ai_split_id") @db.Uuid
   likesCount          Int                  @default(0) @map("likes_count")
   commentsCount       Int                  @default(0) @map("comments_count")
   favoritesCount      Int                  @default(0) @map("favorites_count")
@@ -469,6 +475,7 @@ model ContentPost {
   product             Product?             @relation(fields: [productId], references: [id])
   subCategory         SubCategory?         @relation(fields: [subCategoryId], references: [id])
   user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  aiSplit             AiExperienceSplit?   @relation(fields: [aiSplitId], references: [id], onDelete: SetNull)
   feedHighlights      FeedHighlight[]
   feeds               Feed[]
   comparison          PostComparison?
@@ -485,6 +492,7 @@ model ContentPost {
   @@index([mainCategoryId])
   @@index([productId])
   @@index([createdAt])
+  @@index([aiSplitId])
   @@map("content_posts")
   media                PostMedia[]
 }
@@ -1496,6 +1504,33 @@ model ExpertAnswer {
   @@index([requestId])
   @@index([expertUserId])
   @@map("expert_answers")
+}
+
+model AiExperienceSplit {
+  id                        String        @id @default(uuid()) @db.Uuid
+  userId                    String        @map("user_id") @db.Uuid
+  productId                 String?       @map("product_id") @db.Uuid
+  originalExperience        String        @map("original_experience") @db.Text
+  priceAndShopping          String?       @map("price_and_shopping") @db.Text
+  productAndUsage           String?       @map("product_and_usage") @db.Text
+  priceAndShoppingRating    Int?          @map("price_and_shopping_rating")
+  productAndUsageRating     Int?          @map("product_and_usage_rating")
+  isEdited                  Boolean       @default(false) @map("is_edited")
+  model                     String        @default("gemini-2.5-pro")
+  promptVersion             String        @default("v1.0") @map("prompt_version")
+  tokensUsed                Int?          @map("tokens_used")
+  processingTimeMs          Int?          @map("processing_time_ms")
+  createdAt                 DateTime      @default(now()) @map("created_at")
+  updatedAt                 DateTime      @updatedAt @map("updated_at")
+  user                      User          @relation("UserAiExperienceSplits", fields: [userId], references: [id], onDelete: Cascade)
+  product                   Product?      @relation("ProductAiExperienceSplits", fields: [productId], references: [id], onDelete: SetNull)
+  inventories               Inventory[]
+  contentPosts              ContentPost[]
+
+  @@index([userId])
+  @@index([productId])
+  @@index([createdAt])
+  @@map("ai_experience_splits")
 }
 
 enum KycReviewStatus {

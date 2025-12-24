@@ -356,5 +356,95 @@ router.delete(
   })
 );
 
+/**
+ * @openapi
+ * /inventory/split-experience:
+ *   post:
+ *     summary: Deneyim metnini AI ile kategorilere ayır
+ *     description: Kullanıcının yazdığı deneyim metnini Gemini AI kullanarak "Price and Shopping Experience" ve "Product and Usage Experience" kategorilerine ayırır.
+ *     tags: [Inventory]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - productId
+ *               - experienceText
+ *             properties:
+ *               productId:
+ *                 type: string
+ *                 description: Ürün ID
+ *               experienceText:
+ *                 type: string
+ *                 description: Kullanıcının yazdığı deneyim metni
+ *     responses:
+ *       200:
+ *         description: Deneyim başarıyla ayrıştırıldı
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 priceAndShopping:
+ *                   type: object
+ *                   nullable: true
+ *                   properties:
+ *                     content:
+ *                       type: string
+ *                     rating:
+ *                       type: number
+ *                       minimum: 1
+ *                       maximum: 5
+ *                 productAndUsage:
+ *                   type: object
+ *                   nullable: true
+ *                   properties:
+ *                     content:
+ *                       type: string
+ *                     rating:
+ *                       type: number
+ *                       minimum: 1
+ *                       maximum: 5
+ *       400:
+ *         description: Geçersiz istek
+ *       401:
+ *         description: Unauthorized
+ *       503:
+ *         description: AI servisi hatası
+ */
+router.post(
+  '/split-experience',
+  authMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { productId, experienceText } = req.body;
+
+    if (!productId || typeof productId !== 'string') {
+      return res.status(400).json({ message: 'productId is required' });
+    }
+
+    if (!experienceText || typeof experienceText !== 'string') {
+      return res.status(400).json({ message: 'experienceText is required' });
+    }
+
+    if (experienceText.trim().length < 10) {
+      return res.status(400).json({ message: 'experienceText must be at least 10 characters' });
+    }
+
+    const result = await inventoryService.splitExperienceWithAI(userId, productId, experienceText);
+    res.json(result);
+  })
+);
+
 export default router;
 

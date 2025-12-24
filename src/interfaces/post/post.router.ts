@@ -682,5 +682,66 @@ router.get(
   })
 );
 
+/**
+ * @openapi
+ * /posts/split-experience:
+ *   post:
+ *     summary: Deneyim metnini AI ile kategorilere ayır
+ *     description: Kullanıcının yazdığı deneyim metnini Gemini AI kullanarak "Price and Shopping Experience" ve "Product and Usage Experience" kategorilerine ayırır.
+ *     tags: [Posts]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/SplitExperienceRequest'
+ *     responses:
+ *       200:
+ *         description: Deneyim başarıyla ayrıştırıldı
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SplitExperienceResponse'
+ *       400:
+ *         description: Geçersiz istek
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ *       503:
+ *         description: AI servisi hatası
+ */
+router.post(
+  '/split-experience',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const request: SplitExperienceRequest = {
+      userId: String(userId),
+      productId: req.body.productId,
+      content: req.body.content,
+    };
+
+    if (!request.productId || !request.content) {
+      return res.status(400).json({
+        message: 'productId and content are required',
+      });
+    }
+
+    if (request.content.trim().length < 10) {
+      return res.status(400).json({
+        message: 'content must be at least 10 characters',
+      });
+    }
+
+    const result = await postService.splitExperience(request);
+    return res.json(result);
+  })
+);
+
 export default router;
 
