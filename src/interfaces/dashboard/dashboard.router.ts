@@ -10,6 +10,7 @@ const execAsync = promisify(exec);
 const router = Router();
 
 // Container'lar için fallback port kontrolü (docker ps çalışmazsa)
+// Not: Container içinden erişim için service isimlerini kullanıyoruz (docker-compose.yml'deki service isimleri)
 const containerPortMap: Record<
   string,
   { host: string; port: number; type: 'http' | 'tcp'; path?: string }
@@ -21,6 +22,20 @@ const containerPortMap: Record<
   tipbox_pgadmin: { host: 'pgadmin', port: 80, type: 'http' },
   tipbox_prisma_studio: { host: 'prisma-studio', port: 5555, type: 'http' },
 };
+
+// Ortam değişkenine göre container isim suffix'ini belirle
+function getContainerNameSuffix(): string {
+  const env = process.env.NODE_ENV || 'development';
+  if (env === 'test') return '_test';
+  if (env === 'production') return '_prod';
+  return ''; // development için suffix yok
+}
+
+// Base container isimlerini ortam suffix'i ile birleştir
+function getContainerName(baseName: string): string {
+  const suffix = getContainerNameSuffix();
+  return baseName + suffix;
+}
 
 async function checkContainerByPort(containerName: string): Promise<boolean> {
   const cfg = containerPortMap[containerName];
@@ -2155,8 +2170,8 @@ router.post('/docker/stop', async (req: Request, res: Response) => {
   try {
     const projectRoot = getProjectRoot();
     
-    // Tipbox container'larını durdur
-    const containerNames = [
+    // Tipbox container'larını durdur (base isimler)
+    const baseContainerNames = [
       'tipbox_backend',
       'tipbox_minio',
       'tipbox_pgadmin',
@@ -2166,7 +2181,9 @@ router.post('/docker/stop', async (req: Request, res: Response) => {
     let stoppedCount = 0;
     const errors: string[] = [];
     
-    for (const containerName of containerNames) {
+    for (const baseName of baseContainerNames) {
+      // Ortam suffix'i ile container ismini oluştur
+      const containerName = getContainerName(baseName);
       try {
         await execAsync(`docker stop ${containerName}`, {
           cwd: projectRoot,
@@ -2308,7 +2325,10 @@ router.post('/docker/container/stop', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Invalid container name' });
     }
 
-    await execAsync(`docker stop ${containerName}`, {
+    // Ortam suffix'i ile container ismini oluştur
+    const fullContainerName = getContainerName(containerName);
+
+    await execAsync(`docker stop ${fullContainerName}`, {
       maxBuffer: 1024 * 1024,
       encoding: 'utf8'
     });
@@ -2339,7 +2359,10 @@ router.post('/docker/container/start', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Invalid container name' });
     }
 
-    await execAsync(`docker start ${containerName}`, {
+    // Ortam suffix'i ile container ismini oluştur
+    const fullContainerName = getContainerName(containerName);
+
+    await execAsync(`docker start ${fullContainerName}`, {
       maxBuffer: 1024 * 1024,
       encoding: 'utf8'
     });
@@ -2358,7 +2381,8 @@ router.post('/docker/container/start', async (req: Request, res: Response) => {
 
 router.get('/docker/status', async (req: Request, res: Response) => {
   try {
-    const containerNames = [
+    // Base container isimleri (ortam suffix'i olmadan)
+    const baseContainerNames = [
       'tipbox_backend',
       'tipbox_minio',
       'tipbox_pgadmin',
@@ -2368,32 +2392,44 @@ router.get('/docker/status', async (req: Request, res: Response) => {
     const statuses: Record<string, boolean> = {};
     let allRunning = true;
 
-    for (const containerName of containerNames) {
+    for (const baseName of baseContainerNames) {
+      // Ortam suffix'i ile container ismini oluştur
+      const containerName = getContainerName(baseName);
       let isRunning = false;
 
       // 1) Önce docker CLI ile kontrol etmeyi dene (varsa)
+      // Önceki commit'teki gibi: base name ile partial match yap (Docker filter zaten partial match yapıyor)
+      // Bu sayede hem tipbox_backend hem de tipbox_backend_test bulunur
       try {
-        const result = await execAsync(`docker ps --filter "name=${containerName}" --format "{{.Names}}"`, {
+        const result = await execAsync(`docker ps --filter "name=${baseName}" --format "{{.Names}}"`, {
           maxBuffer: 1024 * 1024,
           encoding: 'utf8'
         });
-        isRunning = result.stdout.trim().length > 0;
+        const output = result.stdout.trim();
+        // Container isminin base name ile başladığını ve tam olarak eşleştiğini kontrol et
+        isRunning = output.split('\n').some(line => {
+          const trimmed = line.trim();
+          return trimmed === containerName;
+        });
       } catch (error: any) {
         // docker yoksa veya erişilemiyorsa logla ama akışı bozma
-        console.warn(`docker ps kontrolü başarısız (${containerName}):`, error?.message || error);
+        console.warn(`docker ps kontrolü başarısız (${baseName}):`, error?.message || error);
       }
 
       // 2) CLI başarısızsa veya isim eşleşmiyorsa, port/health-check fallback kullan
+      // Not: checkContainerByPort base name kullanır çünkü port map'te base name'ler var
       if (!isRunning) {
         try {
-          isRunning = await checkContainerByPort(containerName);
-        } catch {
+          isRunning = await checkContainerByPort(baseName);
+        } catch (error: any) {
+          console.warn(`Port kontrolü başarısız (${baseName}):`, error?.message || error);
           isRunning = false;
         }
       }
 
-        statuses[containerName] = isRunning;
-        if (!isRunning) {
+      // Response'ta base name kullan (frontend'e gönderirken)
+      statuses[baseName] = isRunning;
+      if (!isRunning) {
         allRunning = false;
       }
     }
