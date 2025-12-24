@@ -75,14 +75,30 @@ export class GeminiService {
       return parsedResponse;
     } catch (error) {
       const duration = Date.now() - startTime;
+      
+      // Detaylı hata bilgisi
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      
       logger.error({
         message: 'Gemini AI deneyim ayrıştırması hatası',
         productName: request.productName,
         duration: `${duration}ms`,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage,
+        errorStack: errorStack,
+        errorDetails: error,
       });
 
-      throw new ExternalServiceError('AI servisi ile deneyim ayrıştırılamadı');
+      // Kullanıcıya daha açıklayıcı hata mesajı
+      if (errorMessage.includes('API key')) {
+        throw new ExternalServiceError('Gemini API key tanımlı değil veya geçersiz');
+      } else if (errorMessage.includes('quota') || errorMessage.includes('rate limit')) {
+        throw new ExternalServiceError('Gemini API rate limit aşıldı');
+      } else if (errorMessage.includes('network') || errorMessage.includes('timeout')) {
+        throw new ExternalServiceError('Gemini API\'ye bağlanılamadı');
+      }
+
+      throw new ExternalServiceError(`AI servisi hatası: ${errorMessage}`);
     }
   }
 
