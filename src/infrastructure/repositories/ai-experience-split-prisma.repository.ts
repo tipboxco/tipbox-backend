@@ -9,6 +9,10 @@ export interface CreateAiExperienceSplitData {
   productAndUsage?: string | null;
   priceAndShoppingRating?: number | null;
   productAndUsageRating?: number | null;
+  priceAndShoppingPlaceholder?: string | null;
+  productAndUsagePlaceholder?: string | null;
+  priceAndShoppingIsEnhanced?: boolean | null;
+  productAndUsageIsEnhanced?: boolean | null;
   isEdited?: boolean;
   model?: string;
   promptVersion?: string;
