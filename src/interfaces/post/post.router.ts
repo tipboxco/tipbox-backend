@@ -432,12 +432,20 @@ router.post(
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
+    const userId = userPayload.id || userPayload.userId || userPayload.sub;
+
     const request: SplitExperienceRequest = {
+      userId,
+      productId: req.body.productId,
       content: req.body.content,
     };
 
     if (!request.content) {
       return res.status(400).json({ message: 'content is required' });
+    }
+
+    if (!request.productId) {
+      return res.status(400).json({ message: 'productId is required' });
     }
 
     const result = await postService.splitExperience(request);

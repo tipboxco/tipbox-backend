@@ -14,10 +14,12 @@ export interface SplitExperienceResponse {
   priceAndShopping: {
     content: string;
     rating: number;
+    placeholder?: string;
   } | null;
   productAndUsage: {
     content: string;
     rating: number;
+    placeholder?: string;
   } | null;
   metadata: {
     tokensUsed: number | null;
@@ -82,7 +84,7 @@ export class GeminiService {
           tokensUsed,
           processingTimeMs: duration,
           model: this.config.model,
-          promptVersion: 'v1.0'
+          promptVersion: 'v2.0'
         }
       };
 
@@ -157,36 +159,71 @@ Kullanıcı Deneyimi:
 ${request.experienceText}
 """
 
-ÖNEMLI KURALLAR:
-- Metni dikkatlice oku ve ilgili kategorilere ayır
+KRİTİK KURALLAR:
+- Metni dikkatlice oku ve SADECE ilgili kategoriye ait bilgileri ayır
+- Aynı metni her iki kategoriye de KOPYALAMA - bu kesinlikle yasak!
+- Eğer metin sadece bir kategoriye aitse, diğer kategoriyi mutlaka null yap
+- Eğer metin çok kısa ve belirsizse, metni en uygun kategoriye koy, diğerini null yap
 - Her kategori için 1-5 arası bir rating (derecelendirme) ver
-- Eğer metinde bir kategoriye ait bilgi yoksa, o kategoriyi null olarak döndür
 - Metni olduğu gibi koru, sadece kategorilere ayır (yeniden yazma)
 - Türkçe dilbilgisi ve yazım kurallarına dikkat et
+
+ÖRNEKLER:
+
+Örnek 1 - Sadece Fiyat:
+Girdi: "Çok pahalı buldum, 18.000 TL verdim."
+Çıktı:
+\`\`\`json
+{
+  "priceAndShopping": {
+    "content": "Çok pahalı buldum, 18.000 TL verdim.",
+    "rating": 2
+  },
+  "productAndUsage": null
+}
+\`\`\`
+
+Örnek 2 - Sadece Ürün:
+Girdi: "Pil ömrü kötü."
+Çıktı:
+\`\`\`json
+{
+  "priceAndShopping": null,
+  "productAndUsage": {
+    "content": "Pil ömrü kötü.",
+    "rating": 2
+  }
+}
+\`\`\`
+
+Örnek 3 - Karışık Uzun Metin:
+Girdi: "Dyson'dan 949 TL'ye aldım. Teslimat hızlıydı. Ürün çok iyi, lazer teknolojisi harika. Pil ömrü 60 dakika."
+Çıktı:
+\`\`\`json
+{
+  "priceAndShopping": {
+    "content": "Dyson'dan 949 TL'ye aldım. Teslimat hızlıydı.",
+    "rating": 5
+  },
+  "productAndUsage": {
+    "content": "Ürün çok iyi, lazer teknolojisi harika. Pil ömrü 60 dakika.",
+    "rating": 5
+  }
+}
+\`\`\`
 
 Lütfen aşağıdaki JSON formatında yanıt ver:
 
 \`\`\`json
 {
   "priceAndShopping": {
-    "content": "Fiyat ve alışveriş deneyimi metni buraya...",
-    "rating": 4
-  },
-  "productAndUsage": {
-    "content": "Ürün ve kullanım deneyimi metni buraya...",
-    "rating": 5
-  }
-}
-\`\`\`
-
-Eğer bir kategori yoksa:
-\`\`\`json
-{
-  "priceAndShopping": null,
+    "content": "...",
+    "rating": 1-5
+  } | null,
   "productAndUsage": {
     "content": "...",
-    "rating": 5
-  }
+    "rating": 1-5
+  } | null
 }
 \`\`\`
 `.trim();
@@ -195,7 +232,7 @@ Eğer bir kategori yoksa:
   /**
    * Gemini AI yanıtını parse et
    */
-  private parseSplitExperienceResponse(text: string): SplitExperienceResponse {
+  private parseSplitExperienceResponse(text: string): Omit<SplitExperienceResponse, 'metadata'> {
     try {
       // JSON kısmını çıkar (```json ... ``` formatındaysa)
       const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
@@ -204,22 +241,44 @@ Eğer bir kategori yoksa:
       const parsed = JSON.parse(jsonText);
 
       // Validasyon
-      const result: SplitExperienceResponse = {
+      const result: Omit<SplitExperienceResponse, 'metadata'> = {
         priceAndShopping: null,
         productAndUsage: null,
       };
 
+      // Placeholder metinleri
+      const placeholders = {
+        priceAndShopping: 'Ürünün fiyatı, teslimat süreci veya satın alma deneyiminiz hakkında bilgi ekleyin...',
+        productAndUsage: 'Ürünün performansı, kullanım deneyimi veya özellikler hakkında bilgi ekleyin...',
+      };
+
       if (parsed.priceAndShopping && typeof parsed.priceAndShopping === 'object') {
+        const content = String(parsed.priceAndShopping.content || '').trim();
         result.priceAndShopping = {
-          content: String(parsed.priceAndShopping.content || '').trim(),
+          content,
           rating: this.normalizeRating(parsed.priceAndShopping.rating),
+        };
+      } else {
+        // Boş kategori - placeholder ekle
+        result.priceAndShopping = {
+          content: '',
+          rating: 0,
+          placeholder: placeholders.priceAndShopping,
         };
       }
 
       if (parsed.productAndUsage && typeof parsed.productAndUsage === 'object') {
+        const content = String(parsed.productAndUsage.content || '').trim();
         result.productAndUsage = {
-          content: String(parsed.productAndUsage.content || '').trim(),
+          content,
           rating: this.normalizeRating(parsed.productAndUsage.rating),
+        };
+      } else {
+        // Boş kategori - placeholder ekle
+        result.productAndUsage = {
+          content: '',
+          rating: 0,
+          placeholder: placeholders.productAndUsage,
         };
       }
 
