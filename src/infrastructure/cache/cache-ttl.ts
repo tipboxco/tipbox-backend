@@ -66,6 +66,9 @@ export const CACHE_TTL = {
   STATIC_BRANDS: 86400,        // 24 saat - statik markalar
   STATIC_TAGS: 86400,          // 24 saat - statik tag'ler
   
+  // AI related
+  AI_SPLIT_EXPERIENCE: 604800, // 7 gün - aynı metin tekrar sorulursa cache'ten dön (maliyet tasarrufu)
+  
   // Special values
   SHORT: 300,                  // 5 dakika - kısa süreli cache için
   MEDIUM: 1800,                // 30 dakika - orta süreli cache için

@@ -200,13 +200,18 @@ import { ExperienceStatus } from '../../domain/content/experience-status.enum';
  *       properties:
  *         content:
  *           type: string
+ *           description: Kategori içeriği (AI tarafından standartlaştırılmış)
  *         rating:
  *           type: number
  *           minimum: 0
  *           maximum: 5
+ *           description: Deneyim puanı (0-5 arası)
  *         placeholder:
  *           type: string
- *           description: Kategori boşsa, kullanıcıya gösterilecek ipucu metni
+ *           description: Kategori boş veya eksikse, kullanıcıya gösterilecek ipucu metni (AI tarafından dinamik üretilir)
+ *         isEnhanced:
+ *           type: boolean
+ *           description: İçeriğin AI tarafından iyileştirilip iyileştirilmediği
  *     SplitExperienceResponse:
  *       type: object
  *       properties:
@@ -312,6 +317,7 @@ export interface ExperienceCategory {
   content: string;
   rating: number;
   placeholder?: string;
+  isEnhanced?: boolean;
 }
 
 export interface SplitExperienceResponse {

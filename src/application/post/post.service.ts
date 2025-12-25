@@ -607,6 +607,7 @@ export class PostService {
 
       // Gemini AI ile deneyimi ayır
       const splitResult = await this.geminiService.splitExperience({
+        productId: request.productId,
         productName: product.name,
         productBrand: product.brand || undefined,
         productDescription: product.description || undefined,
@@ -622,6 +623,10 @@ export class PostService {
         productAndUsage: splitResult.productAndUsage?.content ?? null,
         priceAndShoppingRating: splitResult.priceAndShopping?.rating ?? null,
         productAndUsageRating: splitResult.productAndUsage?.rating ?? null,
+        priceAndShoppingPlaceholder: splitResult.priceAndShopping?.placeholder ?? null,
+        productAndUsagePlaceholder: splitResult.productAndUsage?.placeholder ?? null,
+        priceAndShoppingIsEnhanced: splitResult.priceAndShopping?.isEnhanced ?? null,
+        productAndUsageIsEnhanced: splitResult.productAndUsage?.isEnhanced ?? null,
         isEdited: false,
         model: splitResult.metadata.model,
         promptVersion: splitResult.metadata.promptVersion,
