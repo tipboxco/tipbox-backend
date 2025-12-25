@@ -9,7 +9,7 @@ import { NotificationCode } from '../../domain/user/notification-code.enum';
 import { PrivacyCode } from '../../domain/user/privacy-code.enum';
 import { S3Service } from '../../infrastructure/s3/s3.service';
 import { CacheService } from '../../infrastructure/cache/cache.service';
-import { resolveMediaUrl, getPublicMediaBaseUrl } from '../../infrastructure/config/media.config';
+import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import logger from '../../infrastructure/logger/logger';
@@ -75,9 +75,8 @@ const EXPERIENCE_SECTION_TITLES = {
   USAGE: 'Product and Usage Experience',
 } as const;
 
-const BADGE_PLACEHOLDER_URL =
-  process.env.DEFAULT_BADGE_IMAGE_URL ||
-  'https://cdn.tipbox.co/assets/badges/default.png';
+// Default badge image path (bucket path format)
+const DEFAULT_BADGE_IMAGE_PATH = 'badges/custom/HardwareExpert.png'; // Fallback badge görseli
 
 const COLLECTION_RARITY_MAP: Record<string, RarityType> = {
   COMMON: 'Usual',
@@ -491,13 +490,20 @@ export class UserService {
       if (!avatarMap.has(a.userId)) avatarMap.set(a.userId, a.imageUrl);
     });
 
-    return profiles.map(p => ({
-      id: String(p.userId),
-      userName: p.userName ?? null,
-      titles: (titleMap.get(String(p.userId)) || []).slice(0, 3),
-      avatar: avatarMap.get(String(p.userId)) ?? null,
-      name: p.displayName,
-    }));
+    // Default avatar path'ini resolve et
+    const defaultAvatarPath = 'avatars/default/default-useravatar.png';
+    const defaultAvatarUrl = resolveMediaUrl(defaultAvatarPath);
+
+    return profiles.map(p => {
+      const avatarUrl = resolveMediaUrl(avatarMap.get(String(p.userId)) ?? null);
+      return {
+        id: String(p.userId),
+        userName: p.userName ?? null,
+        titles: (titleMap.get(String(p.userId)) || []).slice(0, 3),
+        avatar: avatarUrl || defaultAvatarUrl || '',
+        name: p.displayName,
+      };
+    });
   }
 
   async removeTrust(userId: string, targetUserId: string): Promise<boolean> {
@@ -660,14 +666,21 @@ export class UserService {
       if (!avatarMap.has(a.userId)) avatarMap.set(a.userId, a.imageUrl);
     });
 
-    return profiles.map(p => ({
-      id: String(p.userId),
-      userName: p.userName ?? null,
-      titles: (titleMap.get(String(p.userId)) || []).slice(0, 3),
-      avatar: avatarMap.get(String(p.userId)) ?? null,
-      name: p.displayName,
-      isTrusted: myTrustedSet.has(String(p.userId)),
-    }));
+    // Default avatar path'ini resolve et
+    const defaultAvatarPath = 'avatars/default/default-useravatar.png';
+    const defaultAvatarUrl = resolveMediaUrl(defaultAvatarPath);
+
+    return profiles.map(p => {
+      const avatarUrl = resolveMediaUrl(avatarMap.get(String(p.userId)) ?? null);
+      return {
+        id: String(p.userId),
+        userName: p.userName ?? null,
+        titles: (titleMap.get(String(p.userId)) || []).slice(0, 3),
+        avatar: avatarUrl || defaultAvatarUrl || '',
+        name: p.displayName,
+        isTrusted: myTrustedSet.has(String(p.userId)),
+      };
+    });
   }
 
   async blockUser(userId: string, targetUserId: string): Promise<void> {
@@ -775,7 +788,7 @@ export class UserService {
         id: String(badge?.id || ''),
         title: badge?.name || '',
         rarity: COLLECTION_RARITY_MAP[badge?.rarity || 'COMMON'] || 'Usual',
-        image: badge?.imageUrl ?? BADGE_PLACEHOLDER_URL,
+        image: this.resolveBadgeImage(badge),
         isClaimed: !!ub.claimed,
         nftAddress: badge?.nftAddress ?? null,
         earnedDate: ub.claimedAt ? ub.claimedAt.toISOString() : null,
@@ -863,7 +876,7 @@ export class UserService {
       return {
         id: String(badge.id),
         title: badge.name || '',
-        image: badge.imageUrl || BADGE_PLACEHOLDER_URL,
+        image: this.resolveBadgeImage(badge),
         description: badge.description || '',
         current,
         total: total || 1,
@@ -961,7 +974,7 @@ export class UserService {
         id: String(badge?.id || ''),
         title: badge?.name || '',
         rarity: COLLECTION_RARITY_MAP[badge?.rarity || 'COMMON'] || 'Usual',
-        image: badge?.imageUrl ?? BADGE_PLACEHOLDER_URL,
+        image: this.resolveBadgeImage(badge),
         isClaimed: true,
         nftAddress: rw.nftAddress ?? null,
         earnedDate: rw.awardedAt ? rw.awardedAt.toISOString() : null,
@@ -1043,19 +1056,40 @@ export class UserService {
       id: userId,
       name: profile?.displayName || 'Anonymous',
       title: title?.title || '',
-      avatar: avatar?.imageUrl ?? '',
+      avatar: resolveMediaUrl(avatar?.imageUrl ?? null) || '',
     };
   }
 
   private async getProductBase(productId: string | null) {
     if (!productId) return null;
-    const product = await this.prisma.product.findUnique({ where: { id: productId } as any, include: { group: true } as any });
+    const product = await this.prisma.product.findUnique({ 
+      where: { id: productId } as any, 
+      include: { 
+        group: {
+          include: {
+            subCategory: {
+              include: {
+                mainCategory: true,
+              },
+            },
+          },
+        },
+      } as any 
+    });
     if (!product) return null;
+    
+    const group = (product as any).group;
+    const subCategory = group?.subCategory;
+    const mainCategory = subCategory?.mainCategory;
+    
+    // Image URL'ini bul ve prefix ekle (fallback chain: product -> group -> subCategory -> mainCategory)
+    const imagePath = (product as any).imageUrl || group?.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
+    
     return {
       id: String(product.id),
       name: product.name,
-      subName: product.brand || (product as any).group?.name || '',
-      image: (product as any).imageUrl || null,
+      subName: product.brand || group?.name || subCategory?.name || mainCategory?.name || '',
+      image: resolveMediaUrl(imagePath),
     };
   }
 
@@ -1089,11 +1123,12 @@ export class UserService {
       const group = product.group;
       const subCategory = group?.subCategory;
       const mainCategory = subCategory?.mainCategory || post.subCategory?.mainCategory || post.mainCategory;
+      const imagePath = product.imageUrl || group?.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
       return {
         id: String(product.id),
         name: product.name,
         subName: group?.name || subCategory?.name || mainCategory?.name || '',
-        image: product.imageUrl || group?.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null,
+        image: resolveMediaUrl(imagePath),
         isOwned: ownedProductIds ? ownedProductIds.has(String(product.id)) : undefined,
       };
     }
@@ -1102,21 +1137,23 @@ export class UserService {
       const group = post.productGroup;
       const subCategory = group.subCategory;
       const mainCategory = subCategory?.mainCategory || post.mainCategory;
+      const imagePath = group.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
       return {
         id: String(group.id),
         name: group.name,
         subName: subCategory?.name || mainCategory?.name || '',
-        image: group.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null,
+        image: resolveMediaUrl(imagePath),
       };
     }
 
     if (contextType === ContextType.SUB_CATEGORY && post.subCategory) {
       const subCategory = post.subCategory;
+      const imagePath = subCategory.imageUrl || subCategory.mainCategory?.imageUrl || null;
       return {
         id: String(subCategory.id),
         name: subCategory.name,
         subName: subCategory.mainCategory?.name || '',
-        image: subCategory.imageUrl || subCategory.mainCategory?.imageUrl || null,
+        image: resolveMediaUrl(imagePath),
       };
     }
 
@@ -1125,7 +1162,7 @@ export class UserService {
         id: String(post.mainCategory.id),
         name: post.mainCategory.name,
         subName: '',
-        image: post.mainCategory.imageUrl || null,
+        image: resolveMediaUrl(post.mainCategory.imageUrl || null),
       };
     }
 
@@ -1192,7 +1229,10 @@ export class UserService {
         if (!postMediaMap.has(media.postId)) {
           postMediaMap.set(media.postId, []);
         }
-        postMediaMap.get(media.postId)!.push(media.mediaUrl);
+        const resolvedUrl = resolveMediaUrl(media.mediaUrl);
+        if (resolvedUrl) {
+          postMediaMap.get(media.postId)!.push(resolvedUrl);
+        }
       });
     }
     
@@ -1300,7 +1340,10 @@ export class UserService {
         if (!postMediaMap.has(media.postId)) {
           postMediaMap.set(media.postId, []);
         }
-        postMediaMap.get(media.postId)!.push(media.mediaUrl);
+        const resolvedUrl = resolveMediaUrl(media.mediaUrl);
+        if (resolvedUrl) {
+          postMediaMap.get(media.postId)!.push(resolvedUrl);
+        }
       });
     }
 
@@ -1430,8 +1473,7 @@ export class UserService {
           if (mediaUrl && (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://'))) {
             return mediaUrl;
           } else if (mediaUrl) {
-            const baseUrl = getPublicMediaBaseUrl();
-            return `${baseUrl}/${mediaUrl}`;
+            return resolveMediaUrl(mediaUrl);
           }
           return null;
         })
@@ -2034,7 +2076,7 @@ export class UserService {
             id: uid,
             name: profile?.displayName || 'Anonymous',
             title: title?.title || '',
-            avatar: avatar?.imageUrl ?? '',
+            avatar: resolveMediaUrl(avatar?.imageUrl ?? null) || '',
           },
         };
       })
@@ -2217,7 +2259,49 @@ export class UserService {
   }
 
   private resolveBadgeImage(badge?: { imageUrl?: string | null }): string {
-    return badge?.imageUrl || BADGE_PLACEHOLDER_URL;
+    if (!badge?.imageUrl) {
+      // Default badge görseli (bucket path formatı)
+      return DEFAULT_BADGE_IMAGE_PATH;
+    }
+
+    const imageUrl = badge.imageUrl;
+
+    // Eğer cdn.tipbox.co içeriyorsa, bucket path formatına çevir
+    if (imageUrl.includes('cdn.tipbox.co')) {
+      try {
+        const url = new URL(imageUrl);
+        // /assets/badges/default.png -> badges/custom/HardwareExpert.png (default için)
+        // /assets/badges/custom/WishMarker.png -> badges/custom/WishMarker.png
+        let path = url.pathname.replace(/^\/assets\//, ''); // /assets/ prefix'ini kaldır
+        if (path === 'badges/default.png') {
+          path = DEFAULT_BADGE_IMAGE_PATH;
+        }
+        return path; // Bucket path formatında döndür (tipbox-media/ prefix'i yok)
+      } catch {
+        // URL parse hatası olursa default kullan
+        return DEFAULT_BADGE_IMAGE_PATH;
+      }
+    }
+
+    // Eğer zaten bir URL ise (http:// veya https:// ile başlıyorsa), path'e çevir
+    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+      try {
+        const url = new URL(imageUrl);
+        // http://localhost:9000/tipbox-media/badges/custom/WishMarker.png -> badges/custom/WishMarker.png
+        let path = url.pathname.replace(/^\/tipbox-media\//, '').replace(/^\//, '');
+        if (!path) {
+          return DEFAULT_BADGE_IMAGE_PATH;
+        }
+        return path; // Bucket path formatında döndür
+      } catch {
+        // URL parse hatası olursa default kullan
+        return DEFAULT_BADGE_IMAGE_PATH;
+      }
+    }
+
+    // Zaten path formatı ise (tipbox-media/ prefix'i varsa kaldır)
+    const cleanPath = imageUrl.replace(/^tipbox-media\//, '').replace(/^\//, '');
+    return cleanPath || DEFAULT_BADGE_IMAGE_PATH;
   }
 
   private buildNftAddress(badgeId?: string | null, userBadgeId?: string): string {
@@ -2248,8 +2332,7 @@ export class UserService {
       if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
         imageUrl = imagePath;
       } else {
-        const baseUrl = getPublicMediaBaseUrl();
-        imageUrl = `${baseUrl}/${imagePath}`;
+        imageUrl = resolveMediaUrl(imagePath);
       }
     }
 

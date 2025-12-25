@@ -986,3 +986,4 @@ Sorularınız için backend ekibi ile iletişime geçebilirsiniz.
 
 **Not:** Bu dokümantasyon, backend servislerindeki mevcut endpoint'lerin detaylı açıklamalarını içerir. Endpoint'lerde değişiklik olması durumunda bu dokümantasyon güncellenmelidir.
 
+

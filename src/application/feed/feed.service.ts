@@ -1,7 +1,7 @@
 import { FeedPrismaRepository } from '../../infrastructure/repositories/feed-prisma.repository';
 import { ProfilePrismaRepository } from '../../infrastructure/repositories/profile-prisma.repository';
 import { CacheService } from '../../infrastructure/cache/cache.service';
-import { resolveMediaUrl, getPublicMediaBaseUrl } from '../../infrastructure/config/media.config';
+import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import { PrismaClient } from '@prisma/client';
 import {
   FeedResponse,
@@ -41,18 +41,10 @@ export class FeedService {
 
   /**
    * Media path'ini tam URL'ye çevirir
+   * resolveMediaUrl kullanarak doğru formatı garanti eder
    */
   private buildFullMediaUrl(path: string | null | undefined): string | null {
-    if (!path) return null;
-    
-    // Eğer zaten tam URL ise olduğu gibi döndür
-    if (path.startsWith('http://') || path.startsWith('https://')) {
-      return path;
-    }
-    
-    // Path ise base URL ile birleştir
-    const baseUrl = getPublicMediaBaseUrl();
-    return `${baseUrl}/${path}`;
+    return resolveMediaUrl(path);
   }
 
   /**

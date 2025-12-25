@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { FeedItem, FeedItemType, FeedResponse, ContextData, ExperiencePost, ExperienceContent } from '../../interfaces/feed/feed.dto';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
-import { buildMediaUrl, getPublicMediaBaseUrl } from '../../infrastructure/config/media.config';
+import { buildMediaUrl, resolveMediaUrl } from '../../infrastructure/config/media.config';
 import logger from '../../infrastructure/logger/logger';
 import { NotFoundError } from '../../infrastructure/errors/custom-errors';
 
@@ -245,18 +245,10 @@ export class BrandService {
 
   /**
    * Media path'ini tam URL'ye çevirir
+   * resolveMediaUrl kullanarak doğru formatı garanti eder
    */
   private buildFullMediaUrl(path: string | null | undefined): string | null {
-    if (!path) return null;
-    
-    // Eğer zaten tam URL ise olduğu gibi döndür
-    if (path.startsWith('http://') || path.startsWith('https://')) {
-      return path;
-    }
-    
-    // Path ise base URL ile birleştir
-    const baseUrl = getPublicMediaBaseUrl();
-    return `${baseUrl}/${path}`;
+    return resolveMediaUrl(path);
   }
 
   /**
@@ -270,21 +262,8 @@ export class BrandService {
         },
       });
 
-      const baseUrl = getPublicMediaBaseUrl();
-
       return categories.map((category) => {
-        let imageUrl: string | null = null;
-        
-        if (category.imageUrl) {
-          // Eğer zaten tam URL ise olduğu gibi kullan
-          if (category.imageUrl.startsWith('http://') || category.imageUrl.startsWith('https://')) {
-            imageUrl = category.imageUrl;
-          } else {
-            // Path ise base URL ile birleştir
-            // Path formatı: tipbox-media/brand-categories/otomotiv.png
-            imageUrl = `${baseUrl}/${category.imageUrl}`;
-          }
-        }
+        const imageUrl = resolveMediaUrl(category.imageUrl);
 
         return {
           categoryId: category.id,
@@ -332,20 +311,8 @@ export class BrandService {
         },
       });
 
-      const baseUrl = getPublicMediaBaseUrl();
-
       return brands.map((brand) => {
-        let imageUrl: string | null = null;
-        
-        if (brand.imageUrl) {
-          // Eğer zaten tam URL ise olduğu gibi kullan
-          if (brand.imageUrl.startsWith('http://') || brand.imageUrl.startsWith('https://')) {
-            imageUrl = brand.imageUrl;
-          } else {
-            // Path ise base URL ile birleştir
-            imageUrl = `${baseUrl}/${brand.imageUrl}`;
-          }
-        }
+        const imageUrl = resolveMediaUrl(brand.imageUrl);
 
         return {
           brandId: brand.id,
@@ -490,14 +457,7 @@ export class BrandService {
       let bannerImageUrl: string | null = null;
       
       if (brand.imageUrl) {
-        const baseUrl = getPublicMediaBaseUrl();
-        // Eğer zaten tam URL ise olduğu gibi kullan
-        if (brand.imageUrl.startsWith('http://') || brand.imageUrl.startsWith('https://')) {
-          bannerImageUrl = brand.imageUrl;
-        } else {
-          // Path ise base URL ile birleştir
-          bannerImageUrl = `${baseUrl}/${brand.imageUrl}`;
-        }
+        bannerImageUrl = resolveMediaUrl(brand.imageUrl);
       }
 
       return {
@@ -749,7 +709,7 @@ export class BrandService {
       },
     });
 
-    const badgeImageUrl = buildMediaUrl('tipbox-media/brandbadge/badge1.png');
+    const badgeImageUrl = buildMediaUrl('brandbadge/badge1.png');
     const rewards: EventRewards = {
       title: reward ? `Badge Reward #${reward.rewardId}` : 'Participation Badge',
       badgeImage: badgeImageUrl,
@@ -956,7 +916,7 @@ export class BrandService {
 
     // Distinct badge'leri map'le
     const uniqueBadgesMap = new Map<string, BrandHistoryBadge>();
-    const defaultBadgeImage = buildMediaUrl('tipbox-media/badge/badge1.png');
+    const defaultBadgeImage = buildMediaUrl('badge/badge1.png');
     
     for (const br of allRewards) {
       if (!uniqueBadgesMap.has(br.badgeId)) {
@@ -1079,7 +1039,7 @@ export class BrandService {
     const hasMore = rewards.length > limit;
     const resultRewards = hasMore ? rewards.slice(0, limit) : rewards;
 
-    const defaultBadgeImage = buildMediaUrl('tipbox-media/badge/badge1.png');
+    const defaultBadgeImage = buildMediaUrl('badge/badge1.png');
     const items: BrandHistoryPointsItem[] = resultRewards.map((r) => ({
       id: r.id,
       title: r.badge.name,
@@ -1277,7 +1237,6 @@ export class BrandService {
       const nextCursor = hasMore && resultGroups.length > 0 ? resultGroups[resultGroups.length - 1].id : undefined;
 
       const items: BrandProductGroup[] = [];
-      const baseUrl = getPublicMediaBaseUrl();
 
       for (const group of resultGroups) {
         const groupProducts = group.products || [];
@@ -1286,14 +1245,7 @@ export class BrandService {
 
         const products = limitedProducts.map<BrandProduct>((product) => {
           const stats = this.calculateProductStats(product.contentPosts || []);
-          let imageUrl: string | null = null;
-          if (product.imageUrl) {
-            if (product.imageUrl.startsWith('http://') || product.imageUrl.startsWith('https://')) {
-              imageUrl = product.imageUrl;
-            } else {
-              imageUrl = `${baseUrl}/${product.imageUrl}`;
-            }
-          }
+          const imageUrl = resolveMediaUrl(product.imageUrl);
           return {
             productId: product.id,
             name: product.name,
@@ -1946,7 +1898,7 @@ export class BrandService {
         id: post.user.id,
         name: post.user.profile?.displayName || post.user.email || 'Anonymous',
         title: post.user.titles?.[0]?.title || '',
-        avatar: post.user.avatars?.[0]?.imageUrl || '',
+        avatar: resolveMediaUrl(post.user.avatars?.[0]?.imageUrl || null) || '',
       };
 
       const stats = {
@@ -1974,7 +1926,7 @@ export class BrandService {
       };
 
       // Get images for this post from PostMedia (orderIndex'e göre sıralı)
-      let images = postMediaMap.get(post.id) || [];
+      let images = (postMediaMap.get(post.id) || []).map((mediaUrl: string) => resolveMediaUrl(mediaUrl)).filter((url: string | null): url is string => url !== null);
       // PostMedia'da görsel yoksa, ürün görselini fallback olarak kullan
       if ((!images || images.length === 0) && post.product?.imageUrl) {
         const productImageUrl = this.buildFullMediaUrl(post.product.imageUrl);
@@ -2142,7 +2094,7 @@ export class BrandService {
         
         // Inventory'den gelen görselleri de kullan
         if (inventory.media && inventory.media.length > 0) {
-          images = inventory.media.map((m: any) => m.mediaUrl);
+          images = inventory.media.map((m: any) => resolveMediaUrl(m.mediaUrl)).filter((url: string | null): url is string => url !== null);
         }
       }
     }

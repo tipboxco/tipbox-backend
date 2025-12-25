@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import logger from '../../infrastructure/logger/logger';
-import { getPublicMediaBaseUrl } from '../../infrastructure/config/media.config';
+import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import { withCache } from '../../infrastructure/cache/cache-wrapper.helper';
 import { CACHE_KEYS } from '../../infrastructure/cache/cache-keys';
 import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
@@ -53,20 +53,10 @@ export class CatalogService {
           },
         });
 
-        const baseUrl = getPublicMediaBaseUrl();
+        const { resolveMediaUrl } = await import('../../infrastructure/config/media.config');
 
         return categories.map((category) => {
-          let imageUrl: string | null = null;
-          
-          if (category.imageUrl) {
-            // Eğer zaten tam URL ise olduğu gibi kullan
-            if (category.imageUrl.startsWith('http://') || category.imageUrl.startsWith('https://')) {
-              imageUrl = category.imageUrl;
-            } else {
-              // Path ise base URL ile birleştir
-              imageUrl = `${baseUrl}/${category.imageUrl}`;
-            }
-          }
+          const imageUrl = resolveMediaUrl(category.imageUrl);
 
           return {
             categoryId: category.id,
@@ -108,18 +98,8 @@ export class CatalogService {
         },
       });
 
-      const baseUrl = getPublicMediaBaseUrl();
-
       return subCategories.map((subCategory) => {
-        let imageUrl: string | null = null;
-        
-        if (subCategory.imageUrl) {
-          if (subCategory.imageUrl.startsWith('http://') || subCategory.imageUrl.startsWith('https://')) {
-            imageUrl = subCategory.imageUrl;
-          } else {
-            imageUrl = `${baseUrl}/${subCategory.imageUrl}`;
-          }
-        }
+        const imageUrl = resolveMediaUrl(subCategory.imageUrl);
 
         return {
           subCategoryId: subCategory.id,
@@ -162,18 +142,8 @@ export class CatalogService {
         },
       });
 
-      const baseUrl = getPublicMediaBaseUrl();
-
       return productGroups.map((group) => {
-        let imageUrl: string | null = null;
-        
-        if (group.imageUrl) {
-          if (group.imageUrl.startsWith('http://') || group.imageUrl.startsWith('https://')) {
-            imageUrl = group.imageUrl;
-          } else {
-            imageUrl = `${baseUrl}/${group.imageUrl}`;
-          }
-        }
+        const imageUrl = resolveMediaUrl(group.imageUrl);
 
         return {
           productGroupId: group.id,
@@ -217,18 +187,8 @@ export class CatalogService {
         },
       });
 
-      const baseUrl = getPublicMediaBaseUrl();
-
       return products.map((product) => {
-        let imageUrl: string | null = null;
-        
-        if (product.imageUrl) {
-          if (product.imageUrl.startsWith('http://') || product.imageUrl.startsWith('https://')) {
-            imageUrl = product.imageUrl;
-          } else {
-            imageUrl = `${baseUrl}/${product.imageUrl}`;
-          }
-        }
+        const imageUrl = resolveMediaUrl(product.imageUrl);
 
         return {
           productId: product.id,

@@ -13,6 +13,7 @@
     "worker": "ts-node src/infrastructure/workers/index.ts",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
+    "db:upload-media": "docker-compose exec backend npx ts-node scripts/upload-seed-media.ts",
     "db:seed": "docker-compose exec backend npx ts-node scripts/clear-and-seed.ts",
     "db:seed:all": "docker-compose exec backend npx ts-node scripts/clear-and-seed.ts --all",
     "db:reset": "docker-compose exec backend npx ts-node prisma/seed/clear-user-content-data.ts",

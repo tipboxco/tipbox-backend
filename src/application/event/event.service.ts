@@ -16,7 +16,7 @@ import {
   LimitedTimeEventUser,
 } from '../../interfaces/event/event.dto';
 import { FeedItem, FeedItemType } from '../../interfaces/feed/feed.dto';
-import { buildMediaUrl, resolveMediaUrl, getPublicMediaBaseUrl } from '../../infrastructure/config/media.config';
+import { buildMediaUrl, resolveMediaUrl } from '../../infrastructure/config/media.config';
 import { CacheService } from '../../infrastructure/cache/cache.service';
 import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
 
@@ -82,12 +82,7 @@ export class EventService {
 
           let imageUrl: string | null = null;
           if (event.imageUrl) {
-            if (event.imageUrl.startsWith('http://') || event.imageUrl.startsWith('https://')) {
-              imageUrl = event.imageUrl;
-            } else {
-              const baseUrl = getPublicMediaBaseUrl();
-              imageUrl = `${baseUrl}/${event.imageUrl}`;
-            }
+            imageUrl = resolveMediaUrl(event.imageUrl);
           }
 
           return {
@@ -166,12 +161,7 @@ export class EventService {
 
           let imageUrl: string | null = null;
           if (event.imageUrl) {
-            if (event.imageUrl.startsWith('http://') || event.imageUrl.startsWith('https://')) {
-              imageUrl = event.imageUrl;
-            } else {
-              const baseUrl = getPublicMediaBaseUrl();
-              imageUrl = `${baseUrl}/${event.imageUrl}`;
-            }
+            imageUrl = resolveMediaUrl(event.imageUrl);
           }
 
           return {
@@ -254,7 +244,7 @@ export class EventService {
 
       const rewardBadges: RewardBadge[] = eventBadges.map((badge) => ({
         id: badge.id,
-        image: badge.imageUrl,
+        image: resolveMediaUrl(badge.imageUrl || null),
         title: badge.name,
       }));
 
@@ -267,7 +257,7 @@ export class EventService {
 
       return {
         eventId: event.id,
-        banner: event.imageUrl,
+        banner: resolveMediaUrl(event.imageUrl || null),
         title: event.title,
         description: event.description,
         startDate: event.startDate.toISOString(),
@@ -421,6 +411,13 @@ export class EventService {
       // Convert posts to a loosely-typed FeedItem array compatible with the frontend FeedItem union
       const feedItems: FeedItem[] = resultPosts.map((post) => {
         const baseType = this.mapContentPostTypeToFeedItemType(post.type);
+        
+        // Product image için fallback chain: product -> group -> subCategory -> mainCategory
+        const product = post.product as any;
+        const group = product?.group;
+        const subCategory = group?.subCategory;
+        const mainCategory = subCategory?.mainCategory;
+        const imagePath = product?.imageUrl || group?.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
 
         return {
           type: baseType as any,
@@ -431,7 +428,7 @@ export class EventService {
               id: post.user.id,
               name: post.user.profile?.displayName || post.user.email || 'Anonymous',
               title: post.user.titles?.[0]?.title || '',
-              avatar: post.user.avatars?.[0]?.imageUrl || '',
+              avatar: resolveMediaUrl(post.user.avatars?.[0]?.imageUrl || null) || '',
             },
             stats: {
               likes: post.likesCount,
@@ -445,7 +442,7 @@ export class EventService {
               id: post.productId || '',
               name: post.product?.name || '',
               subName: post.productGroup?.name || '',
-              image: post.product?.imageUrl || null,
+              image: resolveMediaUrl(imagePath),
             },
             content: post.body,
             images: [] as any[],
@@ -550,7 +547,7 @@ export class EventService {
             id: badge.id,
             title: badge.name,
             description: badge.description || null,
-            image: badge.imageUrl || null,
+            image: resolveMediaUrl(badge.imageUrl || null),
             current,
             total,
           };
@@ -623,7 +620,7 @@ export class EventService {
 
     const leaderboardUsers: LimitedTimeEventLeaderboardUser[] = topUsers.map((s, index) => ({
       id: s.userId,
-      avatar: s.user.avatars?.[0]?.imageUrl || null,
+      avatar: resolveMediaUrl(s.user.avatars?.[0]?.imageUrl || null),
       rank: index + 1,
     }));
 
@@ -659,8 +656,8 @@ export class EventService {
       };
     }
 
-    const backgroundImage = buildMediaUrl('tipbox-media/event/eventcardbg.png');
-    const eventImage = buildMediaUrl('tipbox-media/event/event.png');
+    const backgroundImage = buildMediaUrl('event/eventcardbg.png');
+    const eventImage = buildMediaUrl('event/event.png');
 
     return {
       id: event.id,
@@ -721,7 +718,7 @@ export class EventService {
 
     return stats.map((stat) => ({
       userId: stat.user.id,
-      avatar: stat.user.avatars?.[0]?.imageUrl || null,
+      avatar: resolveMediaUrl(stat.user.avatars?.[0]?.imageUrl || null),
       userName: stat.user.profile?.displayName || stat.user.email || 'Anonymous',
     }));
   }

@@ -1,14 +1,14 @@
 # Messaging Socket Events Reference
 
-This document summarizes the real-time messaging events exposed by the backend. All socket connections must provide a valid JWT during the Socket.IO handshake (`io.use` middleware already enforces this). Once connected, each user is placed into a personal room `user:{userId}` and can optionally join thread rooms `thread:{threadId}` for active conversations.
+This document summarizes the real-time messaging events exposed by the backend. All socket connections must provide a valid JWT during the Socket.IO handshake (`io.use` middleware already enforces this). Once connected, each user is placed into a personal room with their `userId` (as string) and can optionally join thread rooms `thread:{threadId}` for active conversations.
 
 ## Outgoing Events
 
 | Event | Emitted To | Payload |
 |-------|------------|---------|
-| `new_message` | `thread:{threadId}`, `user:{recipientId}` | [`NewMessageEvent`](../src/infrastructure/realtime/messaging-events.ts) |
-| `message_sent` | `user:{senderId}` | [`MessageSentEvent`](../src/infrastructure/realtime/messaging-events.ts) |
-| `message_read` | `thread:{threadId}`, `user:{senderId}` | [`MessageReadEvent`](../src/infrastructure/realtime/messaging-events.ts) |
+| `new_message` | `thread:{threadId}`, `{recipientId}` (user room) | [`NewMessageEvent`](../src/infrastructure/realtime/messaging-events.ts) |
+| `message_sent` | `{senderId}` (user room) | [`MessageSentEvent`](../src/infrastructure/realtime/messaging-events.ts) |
+| `message_read` | `thread:{threadId}`, `{senderId}` (user room) | [`MessageReadEvent`](../src/infrastructure/realtime/messaging-events.ts) |
 | `user_typing` | `thread:{threadId}` (excluding origin socket) | [`TypingEvent`](../src/infrastructure/realtime/messaging-events.ts) |
 | `user_presence` | All clients | [`PresenceEvent`](../src/infrastructure/realtime/messaging-events.ts) |
 | `connected` | Origin socket | `{ message, userId, userEmail }` |
@@ -33,8 +33,8 @@ This document summarizes the real-time messaging events exposed by the backend. 
 
 ## Rooms Summary
 
-- `user:{userId}` – Personal notifications (message arrivals, presence updates).
-- `thread:{threadId}` – Live conversation updates (messages, typing, read receipts).
+- `{userId}` (string) – Personal notifications (message arrivals, presence updates). Each user is automatically joined to their userId room upon connection.
+- `thread:{threadId}` – Live conversation updates (messages, typing, read receipts). Users must explicitly join via `join_thread` event.
 
 Use these event contracts when updating the frontend client or automated tests. Refer to the TypeScript interfaces in [`src/infrastructure/realtime/messaging-events.ts`](../src/infrastructure/realtime/messaging-events.ts) for the exact schema.*** End Patch to docs/MESSAGING_SOCKET_EVENTS.md***
 

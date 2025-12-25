@@ -89,9 +89,8 @@ export class InventoryService {
           if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) {
             image = mediaUrl;
           } else {
-            const { getPublicMediaBaseUrl } = await import('../../infrastructure/config/media.config');
-            const baseUrl = getPublicMediaBaseUrl();
-            image = `${baseUrl}/${mediaUrl}`;
+            const { resolveMediaUrl } = await import('../../infrastructure/config/media.config');
+            image = resolveMediaUrl(mediaUrl);
           }
         }
 

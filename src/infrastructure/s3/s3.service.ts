@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, PutBucketPolicyCommand, ListObjectsV2Command, DeleteObjectsCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, PutBucketPolicyCommand, ListObjectsV2Command, DeleteObjectsCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { s3Config } from '../config/s3.config';
 import { getPublicMediaBaseUrl, buildMediaUrl } from '../config/media.config';
@@ -40,6 +40,18 @@ export class S3Service {
           isDevelopment,
         });
       }
+    }
+    
+    // Test ortamında endpoint kullanımını logla
+    if (process.env.NODE_ENV === 'test') {
+      logger.info({
+        message: 'S3Service: Test ortamı endpoint yapılandırması',
+        originalEndpoint: s3Config.endpoint,
+        effectiveEndpoint,
+        isEndpointFromEnv,
+        isContainerEnvironment,
+        dockerContainer: process.env.DOCKER_CONTAINER,
+      });
     }
     
     this.effectiveEndpoint = effectiveEndpoint;
@@ -205,6 +217,38 @@ export class S3Service {
   getFileUrl(fileName: string): string {
     // buildMediaUrl kullanarak tam URL oluştur
     return buildMediaUrl(fileName);
+  }
+
+  /**
+   * Dosyanın MinIO'da mevcut olup olmadığını kontrol eder
+   * @param fileName - Dosya adı (örn: users/profile/9f2a1c/avatar.jpg)
+   * @returns Dosya mevcutsa true, yoksa false
+   */
+  async fileExists(fileName: string): Promise<boolean> {
+    try {
+      await this.s3Client.send(new HeadObjectCommand({
+        Bucket: s3Config.bucketName,
+        Key: fileName,
+      }));
+      return true;
+    } catch (error: any) {
+      const isNotFound = error.name === 'NotFound' 
+        || error.name === 'NoSuchKey'
+        || error.Code === 'NoSuchKey'
+        || error.$metadata?.httpStatusCode === 404;
+      
+      if (isNotFound) {
+        return false;
+      }
+      
+      // Diğer hatalar için false döndür (bucket yoksa vs.)
+      logger.warn({
+        message: 'Dosya kontrolü sırasında hata (dosya yok sayılıyor)',
+        fileName,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return false;
+    }
   }
 
   /**

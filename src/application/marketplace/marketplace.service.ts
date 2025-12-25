@@ -195,7 +195,7 @@ export class MarketplaceService {
       
       // Kullanıcı avatarını al
       const avatar = await this.avatarRepo.findActiveByUserId(userId);
-      const userAvatar = avatar?.imageUrl;
+      const userAvatar = resolveMediaUrl(avatar?.imageUrl || null);
 
       return {
         id: listing.id,
@@ -257,7 +257,7 @@ export class MarketplaceService {
       const profile = await this.profileRepo.findByUserId(userId);
       const username = profile?.userName || 'Unknown';
       const avatar = await this.avatarRepo.findActiveByUserId(userId);
-      const userAvatar = avatar?.imageUrl;
+      const userAvatar = resolveMediaUrl(avatar?.imageUrl || null);
 
       return {
         id: updatedListing.id,

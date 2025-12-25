@@ -1,11 +1,22 @@
 /**
  * Seed ortamında kullanılan görselleri MinIO'ya yükler ve URL haritası üretir.
- * Script, tests klasöründeki statik görselleri bucket içindeki ilgili klasöre koyar.
+ * Script, tests/assets klasöründeki tüm görselleri klasör yapısına göre sistematik olarak yükler.
+ * 
+ * Klasör Yapısı:
+ * - badge/ → badges/custom/
+ * - brandbadge/ → badges/brand/
+ * - Brand Banners/ → brands/banners/
+ * - brands/electronics/ → brands/catalog/
+ * - brands/Cosmetic/ → brands/catalog/
+ * - catalog/ → catalog/ ve brand-categories/
+ * - event/ → event/
+ * - marketplace/ → marketplace/
+ * - post/ → post-media/
+ * - product/ → products/
+ * - userprofile/ → profile-pictures/ ve profile-banners/
+ * - WhatsNews/ → news/
+ * - Apple/ → products/apple/
  */
-
-// Container içinde çalışıyorsak minio:9000 kullan, dışındaysa localhost:9000
-// S3_ENDPOINT zaten .env'de set edilmiş olmalı (container içinde: minio:9000, dışında: localhost:9000)
-// Burada değiştirmiyoruz, mevcut değeri kullanıyoruz
 
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -24,7 +35,6 @@ const TARGET_USER_ID = '248cc91f-b551-4ecc-a885-db1163571330';
 const bucketName = process.env.S3_BUCKET_NAME || 'tipbox-media';
 
 // Frontend'in erişeceği public MinIO endpoint'i
-// Öncelik: SEED_MEDIA_BASE_URL > MINIO_PUBLIC_ENDPOINT > S3_ENDPOINT (minio:9000 -> localhost:9000) > http://localhost:9000
 const rawPublicEndpoint =
   process.env.SEED_MEDIA_BASE_URL ||
   process.env.MINIO_PUBLIC_ENDPOINT ||
@@ -35,50 +45,6 @@ const publicBucketBase = `${publicEndpoint}/${bucketName}`;
 const outputMapPath = path.join(__dirname, '../prisma/seed/seed-media-map.json');
 
 const assetsBasePath = path.join(__dirname, '../tests/assets');
-
-const catalogFiles = [
-  'air conditioner.png',
-  'cameras.png',
-  'computers-tablets.png',
-  'drone.png',
-  'games.png',
-  'headphones.png',
-  'home appliances.png',
-  'kucukev.png',
-  'phones.png',
-  'printers.png',
-  'smart home devices.png',
-  'TV.png',
-  'otomotiv.png',
-];
-
-type BadgeFileConfig = {
-  fileName: string;
-  badgeName: string;
-  extraKeys?: string[];
-};
-
-const badgeFiles: BadgeFileConfig[] = [
-  { fileName: 'EarlyAdapter.png', badgeName: 'Early Bird', extraKeys: ['badge.early-adapter'] },
-  { fileName: 'HardwareExpert.png', badgeName: 'Welcome', extraKeys: ['badge.hardware-expert'] },
-  { fileName: 'PremiumShoper.png', badgeName: 'Tip Master', extraKeys: ['badge.premium-shoper'] },
-  { fileName: 'WishMarker.png', badgeName: 'First Post', extraKeys: ['badge.wish-marker'] },
-  { fileName: 'HardwareExpert.png', badgeName: 'Community Hero' },
-  { fileName: 'PremiumShoper.png', badgeName: 'Beta Tester' },
-  { fileName: 'HardwareExpert.png', badgeName: 'Benchmark Sage' },
-  { fileName: 'PremiumShoper.png', badgeName: 'Experience Curator' },
-  { fileName: 'WishMarker.png', badgeName: 'Bridge Ambassador' },
-  { fileName: 'EarlyAdapter.png', badgeName: 'Brand Visionary' },
-];
-
-// Brand ve product için kullanılacak product görselleri
-const productFiles = [
-  { key: 'product.vacuum.dyson', fileName: 'dyson.png' },
-  { key: 'product.laptop.macbook', fileName: 'macbook.png' },
-  { key: 'product.headphone.primary', fileName: 'headphone.png' },
-  { key: 'product.headphone.secondary', fileName: 'headphone2.png' },
-  { key: 'product.phone.samsung', fileName: 'samsun.png' },
-];
 
 const slugify = (value: string) =>
   value
@@ -104,170 +70,612 @@ const inferContentType = (filePath: string): string => {
   }
 };
 
-const seedAssets: SeedAsset[] = [
-  {
-    key: 'user.avatar.primary',
-    localPath: path.join(assetsBasePath, 'userprofile', 'ozan.jpg'),
-    targetKey: `profile-pictures/${TEST_USER_ID}/seed-avatar.jpg`,
-    contentType: 'image/jpeg',
-    description: 'Ana test kullanıcısının profil fotoğrafı',
-  },
-  {
-    key: 'user.banner.primary',
-    localPath: path.join(assetsBasePath, 'userprofile', 'banner.png'),
-    targetKey: `profile-banners/${TEST_USER_ID}/seed-banner.png`,
-    contentType: 'image/png',
-    description: 'Ana test kullanıcısının profil banner görseli',
-  },
-];
+/**
+ * Bir klasördeki tüm dosyaları recursive olarak bulur
+ */
+async function getAllFiles(dirPath: string, arrayOfFiles: string[] = []): Promise<string[]> {
+  const files = await fs.readdir(dirPath);
 
-seedAssets.push({
-  key: 'user.avatar.market',
-  localPath: path.join(assetsBasePath, 'userprofile', 'ozan.jpg'),
-  targetKey: `profile-pictures/${TARGET_USER_ID}/seed-avatar.jpg`,
-  contentType: 'image/jpeg',
-  description: 'Market test kullanıcısının profil fotoğrafı (placeholder)',
-});
+  for (const file of files) {
+    const filePath = path.join(dirPath, file);
+    const stat = await fs.stat(filePath);
 
-const trustAvatarSeeds = [
-  { key: 'user.avatar.trust1', fileName: 'useravatar.jpg' },
-  { key: 'user.avatar.trust2', fileName: 'useravatar2.jpg' },
-  { key: 'user.avatar.trust3', fileName: 'useravatar3.jpg' },
-  { key: 'user.avatar.trust4', fileName: 'useravatar4.png' },
-  { key: 'user.avatar.trust5', fileName: 'ozan.jpg' },
-];
-
-const trusterAvatarSeeds = [
-  { key: 'user.avatar.truster1', fileName: 'useravatar2.jpg' },
-  { key: 'user.avatar.truster2', fileName: 'useravatar3.jpg' },
-  { key: 'user.avatar.truster3', fileName: 'useravatar4.png' },
-];
-
-for (const seed of [...trustAvatarSeeds, ...trusterAvatarSeeds]) {
-  seedAssets.push({
-    key: seed.key,
-    localPath: path.join(assetsBasePath, 'userprofile', seed.fileName),
-    targetKey: `userprofile/${seed.fileName}`,
-    contentType: inferContentType(seed.fileName),
-    description: `Trust/Truster avatar: ${seed.key}`,
-  });
-}
-
-seedAssets.push({
-  key: 'inventory.dyson-media',
-  localPath: path.join(__dirname, '../tests/post.png'),
-  targetKey: 'inventory/dyson-default.png',
-  contentType: 'image/png',
-  description: 'Dyson ürünleri için envanter görseli',
-});
-
-for (const fileName of catalogFiles) {
-  const baseName = fileName.replace(path.extname(fileName), '');
-  const slug = slugify(baseName || fileName);
-  const ext = path.extname(fileName).toLowerCase() || '.png';
-  
-  // Catalog görselleri
-  seedAssets.push({
-    key: `catalog.${slug}`,
-    localPath: path.join(assetsBasePath, 'catalog', fileName),
-    targetKey: `catalog/${slug}${ext}`,
-    contentType: inferContentType(fileName),
-    description: `Kategori görseli: ${baseName}`,
-  });
-  
-  // Brand category görselleri (catalog görsellerinden kopyala)
-  // seed-media-map.json'da brand-categories/ klasörüne işaret ediyor
-  seedAssets.push({
-    key: `brand.category.${slug}`,
-    localPath: path.join(assetsBasePath, 'catalog', fileName),
-    targetKey: `brand-categories/${fileName}`, // Orijinal dosya adını koru (cameras.png, otomotiv.png)
-    contentType: inferContentType(fileName),
-    description: `Brand category görseli: ${baseName}`,
-  });
-}
-
-// Badge görsellerini ekle (TEST_USER_ID için)
-for (const badgeFile of badgeFiles) {
-  const slug = slugify(badgeFile.badgeName);
-  const targetFileName = badgeFile.fileName;
-  seedAssets.push({
-    key: `badge.${slug}`,
-    localPath: path.join(assetsBasePath, 'badge', badgeFile.fileName),
-    targetKey: `badges/custom/${targetFileName}`,
-    contentType: inferContentType(badgeFile.fileName),
-    description: `Badge görseli: ${badgeFile.badgeName} (custom path)`,
-  });
-
-  if (badgeFile.extraKeys) {
-    for (const extraKey of badgeFile.extraKeys) {
-      seedAssets.push({
-        key: extraKey,
-        localPath: path.join(assetsBasePath, 'badge', badgeFile.fileName),
-        targetKey: `badges/custom/${targetFileName}`,
-        contentType: inferContentType(badgeFile.fileName),
-        description: `Ek badge görseli alias: ${extraKey}`,
-      });
+    if (stat.isDirectory()) {
+      arrayOfFiles = await getAllFiles(filePath, arrayOfFiles);
+    } else {
+      arrayOfFiles.push(filePath);
     }
   }
+
+  return arrayOfFiles;
 }
 
-seedAssets.push({
-  key: 'marketplace.rainbow-border',
-  localPath: path.join(assetsBasePath, 'marketplace', 'marketplace.jpg'),
-  targetKey: 'marketplace/rainbow-border.jpg',
-  contentType: 'image/jpeg',
-  description: 'Marketplace listing varsayılan görseli',
-});
-
-// Post görselini ekle (TEST_USER_ID için)
-seedAssets.push({
-  key: 'post.image.primary',
-  localPath: path.join(assetsBasePath, 'post', 'post.jpg'),
-  targetKey: `post-media/${TEST_USER_ID}/post.jpg`,
-  contentType: 'image/jpeg',
-  description: `Post görseli (User: ${TEST_USER_ID})`,
-});
-
-// Telefon görsellerini ekle (product.phone.phone1-6)
-const phoneFiles = [
-  { fileName: 'phone1.png', brand: 'Samsung' },
-  { fileName: 'phone2.png', brand: 'iPhone' },
-  { fileName: 'phone3.png', brand: 'Redmi' },
-  { fileName: 'phone4.png', brand: 'Oppo' },
-  { fileName: 'phone5.png', brand: 'Nokia' },
-  { fileName: 'phone6.png', brand: 'Blackberry' },
-];
-
-for (const phoneFile of phoneFiles) {
-  const phoneNumber = phoneFile.fileName.replace('phone', '').replace('.png', '');
-  seedAssets.push({
-    key: `product.phone.phone${phoneNumber}`,
-    localPath: path.join(assetsBasePath, 'product', phoneFile.fileName),
-    targetKey: `products/phones/phone${phoneNumber}.png`,
-    contentType: 'image/png',
-    description: `Telefon görseli: ${phoneFile.brand} (phone${phoneNumber})`,
-  });
+/**
+ * Dosya adından key oluşturur
+ */
+function generateKeyFromPath(filePath: string, basePath: string): string {
+  const relativePath = path.relative(basePath, filePath);
+  const normalized = relativePath.replace(/\\/g, '/').replace(/\//g, '.');
+  const withoutExt = normalized.replace(/\.[^/.]+$/, '');
+  return withoutExt.toLowerCase();
 }
 
-// Product görsellerini ekle (brand / product / mainCategory / SubCategory seed'lerinde kullanılacak)
-for (const pf of productFiles) {
-  seedAssets.push({
-    key: pf.key,
-    localPath: path.join(assetsBasePath, 'product', pf.fileName),
-    targetKey: `products/${pf.fileName.toLowerCase()}`,
-    contentType: inferContentType(pf.fileName),
-    description: `Ürün görseli: ${pf.key}`,
-  });
-}
+const seedAssets: SeedAsset[] = [];
 
+/**
+ * Tüm görselleri sistematik olarak ekle
+ */
+async function buildSeedAssets(): Promise<void> {
+  console.log('📦 Seed görselleri taranıyor...\n');
+
+  // 1. BADGE GÖRSELLERİ → badges/custom/
+  console.log('🏆 Badge görselleri ekleniyor...');
+  const badgePath = path.join(assetsBasePath, 'badge');
+  try {
+    const badgeFiles = await fs.readdir(badgePath);
+    for (const file of badgeFiles) {
+      if (file.startsWith('.')) continue;
+      const filePath = path.join(badgePath, file);
+      const stat = await fs.stat(filePath);
+      if (stat.isFile()) {
+        const key = `badge.${slugify(file.replace(/\.[^/.]+$/, ''))}`;
+        seedAssets.push({
+          key,
+          localPath: filePath,
+          targetKey: `badges/custom/${file}`,
+          contentType: inferContentType(filePath),
+          description: `Badge görseli: ${file}`,
+        });
+      }
+    }
+    console.log(`   ✅ ${badgeFiles.filter(f => !f.startsWith('.')).length} badge görseli eklendi`);
+  } catch (error) {
+    console.warn(`   ⚠️  Badge klasörü okunamadı: ${error}`);
+  }
+
+  // 2. BRAND BADGE GÖRSELLERİ → badges/brand/
+  console.log('🏷️  Brand badge görselleri ekleniyor...');
+  const brandBadgePath = path.join(assetsBasePath, 'brandbadge');
+  try {
+    const brandBadgeFiles = await fs.readdir(brandBadgePath);
+    for (const file of brandBadgeFiles) {
+      if (file.startsWith('.')) continue;
+      const filePath = path.join(brandBadgePath, file);
+      const stat = await fs.stat(filePath);
+      if (stat.isFile()) {
+        const key = `badge.brand.${slugify(file.replace(/\.[^/.]+$/, ''))}`;
+        seedAssets.push({
+          key,
+          localPath: filePath,
+          targetKey: `badges/brand/${file}`,
+          contentType: inferContentType(filePath),
+          description: `Brand badge görseli: ${file}`,
+        });
+      }
+    }
+    console.log(`   ✅ ${brandBadgeFiles.filter(f => !f.startsWith('.')).length} brand badge görseli eklendi`);
+  } catch (error) {
+    console.warn(`   ⚠️  Brand badge klasörü okunamadı: ${error}`);
+  }
+
+  // 3. BRAND BANNERS → brands/banners/
+  console.log('🎨 Brand banner görselleri ekleniyor...');
+  const brandBannersPath = path.join(assetsBasePath, 'Brand Banners');
+  const brandBannersPathUnderscore = path.join(assetsBasePath, 'Brand_Banners');
+  let effectiveBrandBannersPath: string | null = null;
+  
+  try {
+    try {
+      await fs.access(brandBannersPath);
+      effectiveBrandBannersPath = brandBannersPath;
+    } catch {
+      try {
+        await fs.access(brandBannersPathUnderscore);
+        effectiveBrandBannersPath = brandBannersPathUnderscore;
+      } catch {
+        console.warn(`   ⚠️  Brand Banners klasörü bulunamadı (Brand Banners veya Brand_Banners)`);
+        throw new Error('Brand Banners klasörü bulunamadı');
+      }
+    }
+    
+    const bannerFiles = await fs.readdir(effectiveBrandBannersPath);
+    for (const file of bannerFiles) {
+      if (file.startsWith('.')) continue;
+      const filePath = path.join(effectiveBrandBannersPath, file);
+      const stat = await fs.stat(filePath);
+      if (stat.isFile()) {
+        // brandpage-electronic-apple.jpg → brand.banner.electronic-apple
+        const nameWithoutExt = file.replace(/\.[^/.]+$/, '');
+        const key = `brand.banner.${slugify(nameWithoutExt.replace('brandpage-', ''))}`;
+        seedAssets.push({
+          key,
+          localPath: filePath,
+          targetKey: `brands/banners/${file}`,
+          contentType: inferContentType(filePath),
+          description: `Brand banner: ${file}`,
+        });
+      }
+    }
+    console.log(`   ✅ ${bannerFiles.filter(f => !f.startsWith('.')).length} brand banner görseli eklendi`);
+  } catch (error) {
+    console.warn(`   ⚠️  Brand Banners klasörü okunamadı: ${error}`);
+  }
+
+  // 4. BRANDS/ELECTRONICS → brands/catalog/
+  console.log('📱 Electronics brand catalog görselleri ekleniyor...');
+  const brandsElectronicsPath = path.join(assetsBasePath, 'brands', 'electronics');
+  try {
+    const electronicFiles = await fs.readdir(brandsElectronicsPath);
+    for (const file of electronicFiles) {
+      if (file.startsWith('.')) continue;
+      const filePath = path.join(brandsElectronicsPath, file);
+      const stat = await fs.stat(filePath);
+      if (stat.isFile()) {
+        // brandcatalog-electronic-apple.png → brand.catalog.electronic-apple
+        const nameWithoutExt = file.replace(/\.[^/.]+$/, '');
+        const key = `brand.catalog.${slugify(nameWithoutExt.replace('brandcatalog-', ''))}`;
+        seedAssets.push({
+          key,
+          localPath: filePath,
+          targetKey: `brands/catalog/${file}`,
+          contentType: inferContentType(filePath),
+          description: `Electronics brand catalog: ${file}`,
+        });
+      }
+    }
+    console.log(`   ✅ ${electronicFiles.filter(f => !f.startsWith('.')).length} electronics brand catalog görseli eklendi`);
+  } catch (error) {
+    console.warn(`   ⚠️  Brands/electronics klasörü okunamadı: ${error}`);
+  }
+
+  // 5. BRANDS/COSMETIC → brands/catalog/
+  console.log('💄 Cosmetic brand catalog görselleri ekleniyor...');
+  const brandsCosmeticPath = path.join(assetsBasePath, 'brands', 'Cosmetic');
+  const brandsCosmeticPathLowercase = path.join(assetsBasePath, 'brands', 'cosmetic');
+  let effectiveBrandsCosmeticPath: string | null = null;
+  
+  try {
+    try {
+      await fs.access(brandsCosmeticPath);
+      effectiveBrandsCosmeticPath = brandsCosmeticPath;
+    } catch {
+      try {
+        await fs.access(brandsCosmeticPathLowercase);
+        effectiveBrandsCosmeticPath = brandsCosmeticPathLowercase;
+      } catch {
+        console.warn(`   ⚠️  Brands/Cosmetic klasörü bulunamadı (Cosmetic veya cosmetic)`);
+        throw new Error('Brands/Cosmetic klasörü bulunamadı');
+      }
+    }
+    
+    const cosmeticFiles = await fs.readdir(effectiveBrandsCosmeticPath);
+    for (const file of cosmeticFiles) {
+      if (file.startsWith('.')) continue;
+      const filePath = path.join(effectiveBrandsCosmeticPath, file);
+      const stat = await fs.stat(filePath);
+      if (stat.isFile()) {
+        // brandcatalog-cosmetic-chanel.png → brand.catalog.cosmetic-chanel
+        const nameWithoutExt = file.replace(/\.[^/.]+$/, '');
+        const key = `brand.catalog.${slugify(nameWithoutExt.replace('brandcatalog-', ''))}`;
+        seedAssets.push({
+          key,
+          localPath: filePath,
+          targetKey: `brands/catalog/${file}`,
+          contentType: inferContentType(filePath),
+          description: `Cosmetic brand catalog: ${file}`,
+        });
+      }
+    }
+    console.log(`   ✅ ${cosmeticFiles.filter(f => !f.startsWith('.')).length} cosmetic brand catalog görseli eklendi`);
+  } catch (error) {
+    console.warn(`   ⚠️  Brands/Cosmetic klasörü okunamadı: ${error}`);
+  }
+
+  // 6. CATALOG → catalog/ ve brand-categories/
+  console.log('📁 Catalog görselleri ekleniyor...');
+  const catalogPath = path.join(assetsBasePath, 'catalog');
+  try {
+    const catalogFiles = await fs.readdir(catalogPath);
+    for (const file of catalogFiles) {
+      if (file.startsWith('.')) continue;
+      const filePath = path.join(catalogPath, file);
+      const stat = await fs.stat(filePath);
+      if (stat.isFile()) {
+        const nameWithoutExt = file.replace(/\.[^/.]+$/, '');
+        const slug = slugify(nameWithoutExt);
+        
+        // Catalog görseli
+        seedAssets.push({
+          key: `catalog.${slug}`,
+          localPath: filePath,
+          targetKey: `catalog/${slug}${path.extname(file)}`,
+          contentType: inferContentType(filePath),
+          description: `Catalog görseli: ${nameWithoutExt}`,
+        });
+        
+        // Brand category görseli (aynı dosya)
+        seedAssets.push({
+          key: `brand.category.${slug}`,
+          localPath: filePath,
+          targetKey: `brand-categories/${file}`, // Orijinal dosya adını koru
+          contentType: inferContentType(filePath),
+          description: `Brand category görseli: ${nameWithoutExt}`,
+        });
+      }
+    }
+    console.log(`   ✅ ${catalogFiles.filter(f => !f.startsWith('.')).length} catalog görseli eklendi (her biri 2 kez: catalog + brand-categories)`);
+  } catch (error) {
+    console.warn(`   ⚠️  Catalog klasörü okunamadı: ${error}`);
+  }
+
+  // 7. EVENT/EVENTS → event/
+  console.log('🎉 Event görselleri ekleniyor...');
+  const eventPath = path.join(assetsBasePath, 'event');
+  const eventsPath = path.join(assetsBasePath, 'events');
+  let effectiveEventPath: string | null = null;
+  
+  try {
+    try {
+      await fs.access(eventPath);
+      effectiveEventPath = eventPath;
+    } catch {
+      try {
+        await fs.access(eventsPath);
+        effectiveEventPath = eventsPath;
+      } catch {
+        console.warn(`   ⚠️  Event klasörü bulunamadı (event veya events)`);
+        throw new Error('Event klasörü bulunamadı');
+      }
+    }
+    
+    const eventFiles = await fs.readdir(effectiveEventPath);
+    for (const file of eventFiles) {
+      if (file.startsWith('.')) continue;
+      const filePath = path.join(effectiveEventPath, file);
+      const stat = await fs.stat(filePath);
+      if (stat.isFile()) {
+        const nameWithoutExt = file.replace(/\.[^/.]+$/, '');
+        const key = `event.${slugify(nameWithoutExt)}`;
+        seedAssets.push({
+          key,
+          localPath: filePath,
+          targetKey: `event/${file}`,
+          contentType: inferContentType(filePath),
+          description: `Event görseli: ${file}`,
+        });
+      }
+    }
+    console.log(`   ✅ ${eventFiles.filter(f => !f.startsWith('.')).length} event görseli eklendi`);
+  } catch (error) {
+    console.warn(`   ⚠️  Event klasörü okunamadı: ${error}`);
+  }
+
+  // 8. MARKETPLACE → marketplace/
+  console.log('🛒 Marketplace görselleri ekleniyor...');
+  const marketplacePath = path.join(assetsBasePath, 'marketplace');
+  try {
+    const marketplaceFiles = await fs.readdir(marketplacePath);
+    for (const file of marketplaceFiles) {
+      if (file.startsWith('.')) continue;
+      const filePath = path.join(marketplacePath, file);
+      const stat = await fs.stat(filePath);
+      if (stat.isFile()) {
+        const nameWithoutExt = file.replace(/\.[^/.]+$/, '');
+        const key = `marketplace.${slugify(nameWithoutExt)}`;
+        seedAssets.push({
+          key,
+          localPath: filePath,
+          targetKey: `marketplace/${file}`,
+          contentType: inferContentType(filePath),
+          description: `Marketplace görseli: ${file}`,
+        });
+      }
+    }
+    console.log(`   ✅ ${marketplaceFiles.filter(f => !f.startsWith('.')).length} marketplace görseli eklendi`);
+  } catch (error) {
+    console.warn(`   ⚠️  Marketplace klasörü okunamadı: ${error}`);
+  }
+
+  // 9. POST → post-media/
+  console.log('📝 Post görselleri ekleniyor...');
+  const postPath = path.join(assetsBasePath, 'post');
+  try {
+    const postFiles = await fs.readdir(postPath);
+    for (const file of postFiles) {
+      if (file.startsWith('.')) continue;
+      const filePath = path.join(postPath, file);
+      const stat = await fs.stat(filePath);
+      if (stat.isFile()) {
+        const nameWithoutExt = file.replace(/\.[^/.]+$/, '');
+        const key = `post.${slugify(nameWithoutExt)}`;
+        seedAssets.push({
+          key,
+          localPath: filePath,
+          targetKey: `post-media/${TEST_USER_ID}/${file}`,
+          contentType: inferContentType(filePath),
+          description: `Post görseli: ${file}`,
+        });
+      }
+    }
+    console.log(`   ✅ ${postFiles.filter(f => !f.startsWith('.')).length} post görseli eklendi`);
+  } catch (error) {
+    console.warn(`   ⚠️  Post klasörü okunamadı: ${error}`);
+  }
+
+  // 10. PRODUCT → products/
+  console.log('📦 Product görselleri ekleniyor...');
+  const productPath = path.join(assetsBasePath, 'product');
+  try {
+    const productFiles = await fs.readdir(productPath);
+    for (const file of productFiles) {
+      if (file.startsWith('.')) continue;
+      const filePath = path.join(productPath, file);
+      const stat = await fs.stat(filePath);
+      if (stat.isFile()) {
+        const nameWithoutExt = file.replace(/\.[^/.]+$/, '');
+        
+        // Özel product mapping'leri
+        if (file.startsWith('phone')) {
+          const phoneNumber = file.match(/phone(\d+)/)?.[1] || '';
+          seedAssets.push({
+            key: `product.phone.phone${phoneNumber}`,
+            localPath: filePath,
+            targetKey: `products/phones/phone${phoneNumber}${path.extname(file)}`,
+            contentType: inferContentType(filePath),
+            description: `Phone product: ${file}`,
+          });
+        } else if (file === 'dyson.png') {
+          seedAssets.push({
+            key: 'product.vacuum.dyson',
+            localPath: filePath,
+            targetKey: `products/${file}`,
+            contentType: inferContentType(filePath),
+            description: `Product: ${file}`,
+          });
+        } else if (file === 'macbook.png') {
+          seedAssets.push({
+            key: 'product.laptop.macbook',
+            localPath: filePath,
+            targetKey: `products/${file}`,
+            contentType: inferContentType(filePath),
+            description: `Product: ${file}`,
+          });
+        } else if (file === 'headphone.png') {
+          seedAssets.push({
+            key: 'product.headphone.primary',
+            localPath: filePath,
+            targetKey: `products/${file}`,
+            contentType: inferContentType(filePath),
+            description: `Product: ${file}`,
+          });
+        } else if (file === 'headphone2.png') {
+          seedAssets.push({
+            key: 'product.headphone.secondary',
+            localPath: filePath,
+            targetKey: `products/${file}`,
+            contentType: inferContentType(filePath),
+            description: `Product: ${file}`,
+          });
+        } else if (file === 'samsun.png') {
+          seedAssets.push({
+            key: 'product.phone.samsung',
+            localPath: filePath,
+            targetKey: `products/${file}`,
+            contentType: inferContentType(filePath),
+            description: `Product: ${file}`,
+          });
+        } else if (file === 'smartwatch.png') {
+          seedAssets.push({
+            key: 'product.smartwatch',
+            localPath: filePath,
+            targetKey: `products/${file}`,
+            contentType: inferContentType(filePath),
+            description: `Product: ${file}`,
+          });
+        } else if (file.startsWith('electronic-post-') || file.startsWith('makeup-post-')) {
+          // Post görselleri için ayrı key
+          const key = `product.post.${slugify(nameWithoutExt)}`;
+          seedAssets.push({
+            key,
+            localPath: filePath,
+            targetKey: `products/posts/${file}`,
+            contentType: inferContentType(filePath),
+            description: `Product post görseli: ${file}`,
+          });
+        } else {
+          // Diğer product görselleri
+          const key = `product.${slugify(nameWithoutExt)}`;
+          seedAssets.push({
+            key,
+            localPath: filePath,
+            targetKey: `products/${file}`,
+            contentType: inferContentType(filePath),
+            description: `Product: ${file}`,
+          });
+        }
+      }
+    }
+    console.log(`   ✅ ${productFiles.filter(f => !f.startsWith('.')).length} product görseli eklendi`);
+  } catch (error) {
+    console.warn(`   ⚠️  Product klasörü okunamadı: ${error}`);
+  }
+
+  // 11. USERPROFILE → profile-pictures/ ve profile-banners/
+  console.log('👤 User profile görselleri ekleniyor...');
+  const userProfilePath = path.join(assetsBasePath, 'userprofile');
+  try {
+    const profileFiles = await fs.readdir(userProfilePath);
+    for (const file of profileFiles) {
+      if (file.startsWith('.')) continue;
+      const filePath = path.join(userProfilePath, file);
+      const stat = await fs.stat(filePath);
+      if (stat.isFile()) {
+        const nameWithoutExt = file.replace(/\.[^/.]+$/, '');
+        
+        if (file === 'banner.png') {
+          seedAssets.push({
+            key: 'user.banner.primary',
+            localPath: filePath,
+            targetKey: `profile-banners/${TEST_USER_ID}/seed-banner.png`,
+            contentType: inferContentType(filePath),
+            description: `User banner: ${file}`,
+          });
+        } else if (file === 'ozan.jpg') {
+          seedAssets.push({
+            key: 'user.avatar.primary',
+            localPath: filePath,
+            targetKey: `profile-pictures/${TEST_USER_ID}/seed-avatar.jpg`,
+            contentType: inferContentType(filePath),
+            description: `User avatar: ${file}`,
+          });
+          seedAssets.push({
+            key: 'user.avatar.market',
+            localPath: filePath,
+            targetKey: `profile-pictures/${TARGET_USER_ID}/seed-avatar.jpg`,
+            contentType: inferContentType(filePath),
+            description: `Market user avatar: ${file}`,
+          });
+        } else {
+          // Diğer user avatar'ları
+          const key = `user.avatar.${slugify(nameWithoutExt)}`;
+          seedAssets.push({
+            key,
+            localPath: filePath,
+            targetKey: `userprofile/${file}`,
+            contentType: inferContentType(filePath),
+            description: `User avatar: ${file}`,
+          });
+        }
+      }
+    }
+    console.log(`   ✅ ${profileFiles.filter(f => !f.startsWith('.')).length} user profile görseli eklendi`);
+  } catch (error) {
+    console.warn(`   ⚠️  Userprofile klasörü okunamadı: ${error}`);
+  }
+
+  // 11b. DEFAULT AVATAR → avatars/default/
+  console.log('👤 Default avatar görseli ekleniyor...');
+  const defaultAvatarPath = path.join(assetsBasePath, 'defaultavatar');
+  try {
+    const defaultAvatarFiles = await fs.readdir(defaultAvatarPath);
+    for (const file of defaultAvatarFiles) {
+      if (file.startsWith('.')) continue;
+      const filePath = path.join(defaultAvatarPath, file);
+      const stat = await fs.stat(filePath);
+      if (stat.isFile()) {
+        if (file === 'default-useravatar.png') {
+          seedAssets.push({
+            key: 'user.avatar.default',
+            localPath: filePath,
+            targetKey: `avatars/default/default-useravatar.png`,
+            contentType: inferContentType(filePath),
+            description: `Default user avatar: ${file}`,
+          });
+        } else {
+          // Diğer default avatar dosyaları
+          const nameWithoutExt = file.replace(/\.[^/.]+$/, '');
+          const key = `user.avatar.default.${slugify(nameWithoutExt)}`;
+          seedAssets.push({
+            key,
+            localPath: filePath,
+            targetKey: `avatars/default/${file}`,
+            contentType: inferContentType(filePath),
+            description: `Default avatar: ${file}`,
+          });
+        }
+      }
+    }
+    console.log(`   ✅ ${defaultAvatarFiles.filter(f => !f.startsWith('.')).length} default avatar görseli eklendi`);
+  } catch (error) {
+    console.warn(`   ⚠️  Defaultavatar klasörü okunamadı: ${error}`);
+  }
+
+  // 12. WHATSNEWS → news/
+  console.log('📰 What\'s News görselleri ekleniyor...');
+  const whatsNewsPath = path.join(assetsBasePath, 'WhatsNews');
+  try {
+    const newsFiles = await fs.readdir(whatsNewsPath);
+    for (const file of newsFiles) {
+      if (file.startsWith('.')) continue;
+      const filePath = path.join(whatsNewsPath, file);
+      const stat = await fs.stat(filePath);
+      if (stat.isFile()) {
+        const nameWithoutExt = file.replace(/\.[^/.]+$/, '');
+        const key = `news.${slugify(nameWithoutExt)}`;
+        seedAssets.push({
+          key,
+          localPath: filePath,
+          targetKey: `news/${file}`,
+          contentType: inferContentType(filePath),
+          description: `What's News görseli: ${file}`,
+        });
+      }
+    }
+    console.log(`   ✅ ${newsFiles.filter(f => !f.startsWith('.')).length} news görseli eklendi`);
+  } catch (error) {
+    console.warn(`   ⚠️  WhatsNews klasörü okunamadı: ${error}`);
+  }
+
+  // 13. APPLE PRODUCTS → products/apple/
+  console.log('🍎 Apple product görselleri ekleniyor...');
+  const applePath = path.join(assetsBasePath, 'Apple');
+  const applePathUnderscore = path.join(assetsBasePath, 'Apple_Products');
+  let effectiveApplePath: string | null = null;
+  
+  try {
+    try {
+      await fs.access(applePath);
+      effectiveApplePath = applePath;
+    } catch {
+      try {
+        await fs.access(applePathUnderscore);
+        effectiveApplePath = applePathUnderscore;
+      } catch {
+        console.warn(`   ⚠️  Apple klasörü bulunamadı (Apple veya Apple_Products)`);
+        throw new Error('Apple klasörü bulunamadı');
+      }
+    }
+    
+    const appleFiles = await fs.readdir(effectiveApplePath);
+    for (const file of appleFiles) {
+      if (file.startsWith('.')) continue;
+      const filePath = path.join(effectiveApplePath, file);
+      const stat = await fs.stat(filePath);
+      if (stat.isFile()) {
+        // apple-product-airpods4.png → product.apple.airpods4
+        const nameWithoutExt = file.replace(/\.[^/.]+$/, '');
+        const productName = nameWithoutExt.replace('apple-product-', '');
+        const slugifiedProductName = slugify(productName);
+        const key = `product.apple.${slugifiedProductName}`;
+        // targetKey için orijinal dosya adını kullan (MinIO'da büyük/küçük harf korunmalı)
+        seedAssets.push({
+          key,
+          localPath: filePath,
+          targetKey: `products/apple/${productName}${path.extname(file)}`,
+          contentType: inferContentType(filePath),
+          description: `Apple product: ${file}`,
+        });
+      }
+    }
+    console.log(`   ✅ ${appleFiles.filter(f => !f.startsWith('.')).length} Apple product görseli eklendi`);
+  } catch (error) {
+    console.warn(`   ⚠️  Apple klasörü okunamadı: ${error}`);
+  }
+
+  console.log(`\n✅ Toplam ${seedAssets.length} görsel eklendi\n`);
+}
 
 async function uploadSeedMedia(): Promise<void> {
-  // Önce manuel görselleri ekle
-  await addManualMediaAssets();
+  // Tüm görselleri ekle
+  await buildSeedAssets();
   
   const s3Service = new S3Service();
-  // JSON'da sadece targetKey tutulacak, URL runtime'da oluşturulacak
   const uploadResults: Record<string, { targetKey: string }> = {};
+
+  console.log('📤 Görseller MinIO\'ya yükleniyor...\n');
+
+  let uploadedCount = 0;
+  let skippedCount = 0;
 
   for (const asset of seedAssets) {
     try {
@@ -277,29 +685,46 @@ async function uploadSeedMedia(): Promise<void> {
       continue;
     }
 
+    // MinIO'da dosyanın mevcut olup olmadığını kontrol et
+    const exists = await s3Service.fileExists(asset.targetKey);
+    
+    if (exists) {
+      // Dosya zaten mevcut, atla
+      skippedCount++;
+      uploadResults[asset.key] = {
+        targetKey: asset.targetKey,
+      };
+      continue;
+    }
+
     const fileBuffer = await fs.readFile(asset.localPath);
     const contentType = asset.contentType || inferContentType(asset.localPath);
-    console.log(`\n☁️  Yükleniyor: ${asset.key}`);
-    console.log(`   Kaynak: ${asset.localPath}`);
+    
+    console.log(`☁️  Yükleniyor: ${asset.key}`);
+    console.log(`   Kaynak: ${path.relative(process.cwd(), asset.localPath)}`);
     console.log(`   Hedef:  ${asset.targetKey}`);
 
     const uploadedUrl = await s3Service.uploadFile(asset.targetKey, fileBuffer, contentType);
     const publicUrl = `${publicBucketBase}/${asset.targetKey}`;
 
     console.log(`✅ MinIO URL: ${uploadedUrl}`);
-    console.log(`🌐 Public URL: ${publicUrl}`);
+    console.log(`🌐 Public URL: ${publicUrl}\n`);
 
-    // Sadece targetKey kaydediliyor, URL runtime'da oluşturulacak
     uploadResults[asset.key] = {
       targetKey: asset.targetKey,
     };
+    uploadedCount++;
   }
 
   await fs.mkdir(path.dirname(outputMapPath), { recursive: true });
   await fs.writeFile(outputMapPath, JSON.stringify(uploadResults, null, 2), 'utf-8');
 
-  console.log(`\n📄 seed-media-map güncellendi: ${outputMapPath}`);
+  console.log(`\n📄 seed-media-map.json güncellendi: ${outputMapPath}`);
   console.log(`ℹ️  URL'ler runtime'da ${publicEndpoint} endpoint'inden oluşturulacak`);
+  console.log(`\n📊 Yükleme Özeti:`);
+  console.log(`   ✅ Yeni yüklenen: ${uploadedCount}`);
+  console.log(`   ⏭️  Zaten mevcut (atlandı): ${skippedCount}`);
+  console.log(`   📦 Toplam: ${Object.keys(uploadResults).length} görsel`);
 }
 
 uploadSeedMedia()
@@ -310,4 +735,3 @@ uploadSeedMedia()
     console.error('\n❌ Seed görselleri yüklenemedi:', error);
     process.exit(1);
   });
-

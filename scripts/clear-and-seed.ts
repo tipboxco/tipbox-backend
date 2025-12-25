@@ -13,7 +13,11 @@
 
 import { execSync } from 'child_process';
 import path from 'path';
-import { clearUserContentMedia, clearAllMedia } from '../prisma/seed/helpers/clear-minio-media';
+// MinIO işlemleri artık ayrı script'ler ile yapılıyor
+// - Temizleme: scripts/clear-minio-media.ts (eğer gerekirse)
+// - Yükleme: scripts/upload-seed-media.ts
+// import { clearUserContentMedia, clearAllMedia } from '../prisma/seed/helpers/clear-minio-media';
+// import { ensureSeedMediaUploaded } from '../prisma/seed/helpers/ensure-seed-media';
 
 async function clearAndSeed(clearAll: boolean = false): Promise<void> {
   console.log('🔍 Prisma schema kontrol ediliyor...\n');
@@ -48,22 +52,6 @@ async function clearAndSeed(clearAll: boolean = false): Promise<void> {
       process.exit(1);
     }
     
-    // MinIO görsellerini temizle (DB temizlemeden ÖNCE)
-    if (clearAll) {
-      console.log('🧹 MinIO TÜM görselleri temizleniyor (taxonomy dahil)...\n');
-      try {
-        await clearAllMedia();
-      } catch (error) {
-        console.warn('⚠️  MinIO temizleme hatası, devam ediliyor...', error);
-      }
-    } else {
-      console.log('🧹 MinIO user/content görselleri temizleniyor (taxonomy korunuyor)...\n');
-      try {
-        await clearUserContentMedia();
-      } catch (error) {
-        console.warn('⚠️  MinIO temizleme hatası, devam ediliyor...', error);
-      }
-    }
 
     // Seed verilerini temizle (DB)
     if (clearAll) {
@@ -83,13 +71,16 @@ async function clearAndSeed(clearAll: boolean = false): Promise<void> {
     }
     
     console.log('\n🌱 Seed.ts çalıştırılıyor...\n');
-    console.log('ℹ️  Not: Seed görselleri seed.ts içinde otomatik olarak MinIO\'ya yüklenecek\n');
     
-    // seed.ts'yi çalıştır
+    // seed.ts'yi çalıştır (SKIP_SEED_MEDIA_UPLOAD=true ile görselleri tekrar yüklemesin)
     const seedPath = path.join(process.cwd(), 'prisma', 'seed.ts');
     execSync(`npx ts-node ${seedPath}`, {
       stdio: 'inherit',
       cwd: process.cwd(),
+      env: {
+        ...process.env,
+        SKIP_SEED_MEDIA_UPLOAD: 'true', // seed.ts içinde görselleri tekrar yüklemesin
+      },
     });
     
     console.log('\n✅ Seed işlemi tamamlandı!');

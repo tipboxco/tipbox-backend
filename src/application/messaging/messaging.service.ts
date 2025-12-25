@@ -18,6 +18,7 @@ import {
 } from '../../interfaces/messaging/messaging.dto';
 import { SupportRequestService } from './support-request.service';
 import { DMRequestStatus } from '../../domain/messaging/dm-request-status.enum';
+import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 
 export interface InboxMessageItem {
   id: string;
@@ -379,7 +380,7 @@ export class MessagingService {
             id: message.senderId,
             senderName,
             senderTitle: sender.titles?.[0]?.title ?? '',
-            senderAvatar: sender.avatars?.[0]?.imageUrl ?? '',
+            senderAvatar: resolveMediaUrl(sender.avatars?.[0]?.imageUrl) || resolveMediaUrl('avatars/default/default-useravatar.png') || '',
           };
 
           const messageData: Message = {
@@ -445,7 +446,7 @@ export class MessagingService {
           id: message.senderId,
           senderName,
           senderTitle: sender.titles?.[0]?.title ?? '',
-          senderAvatar: sender.avatars?.[0]?.imageUrl ?? '',
+          senderAvatar: resolveMediaUrl(sender.avatars?.[0]?.imageUrl) || resolveMediaUrl('avatars/default/default-useravatar.png') || '',
         };
 
         // TIPS mesajı kontrolü - message içeriğine göre
@@ -505,7 +506,7 @@ export class MessagingService {
           id: transfer.fromUserId,
           senderName,
           senderTitle: sender.titles?.[0]?.title ?? '',
-          senderAvatar: sender.avatars?.[0]?.imageUrl ?? '',
+          senderAvatar: resolveMediaUrl(sender.avatars?.[0]?.imageUrl) || resolveMediaUrl('avatars/default/default-useravatar.png') || '',
         };
 
         const tipsInfo: TipsInfo = {
@@ -570,7 +571,7 @@ export class MessagingService {
             id: request.fromUserId,
             senderName,
             senderTitle: senderUser.titles?.[0]?.title ?? '',
-            senderAvatar: senderUser.avatars?.[0]?.imageUrl ?? '',
+            senderAvatar: resolveMediaUrl(senderUser.avatars?.[0]?.imageUrl) || resolveMediaUrl('avatars/default/default-useravatar.png') || '',
           };
 
         // Map DMRequestStatus to SupportRequestStatus
@@ -708,7 +709,9 @@ export class MessagingService {
           || 'Unknown';
 
         const senderTitle = counterpart?.titles?.[0]?.title ?? null;
-        const senderAvatar = counterpart?.avatars?.[0]?.imageUrl ?? null;
+        const senderAvatarUrl = counterpart?.avatars?.[0]?.imageUrl ?? null;
+        const defaultAvatarPath = 'avatars/default/default-useravatar.png';
+        const senderAvatar = resolveMediaUrl(senderAvatarUrl) || resolveMediaUrl(defaultAvatarPath) || '';
 
         return {
           id: thread.id,
@@ -750,7 +753,9 @@ export class MessagingService {
           || 'Unknown';
 
         const senderTitle = counterpart?.titles?.[0]?.title ?? '';
-        const senderAvatar = counterpart?.avatars?.[0]?.imageUrl ?? '';
+        const senderAvatarUrl = counterpart?.avatars?.[0]?.imageUrl ?? '';
+        const defaultAvatarPath = 'avatars/default/default-useravatar.png';
+        const senderAvatar = resolveMediaUrl(senderAvatarUrl) || resolveMediaUrl(defaultAvatarPath) || '';
 
         const sender: SenderUser = {
           id: isUserOne ? thread.userTwoId : thread.userOneId,
@@ -826,7 +831,7 @@ export class MessagingService {
           id: dmRequest.fromUserId,
           senderName,
           senderTitle: requestCreator.titles?.[0]?.title ?? '',
-          senderAvatar: requestCreator.avatars?.[0]?.imageUrl ?? '',
+          senderAvatar: resolveMediaUrl(requestCreator.avatars?.[0]?.imageUrl) || resolveMediaUrl('avatars/default/default-useravatar.png') || '',
         };
 
         // Map DMRequestStatus to SupportRequestStatus
@@ -929,7 +934,7 @@ export class MessagingService {
           id: transfer.fromUserId,
           senderName,
           senderTitle: sender.titles?.[0]?.title ?? '',
-          senderAvatar: sender.avatars?.[0]?.imageUrl ?? '',
+          senderAvatar: resolveMediaUrl(sender.avatars?.[0]?.imageUrl) || resolveMediaUrl('avatars/default/default-useravatar.png') || '',
         };
 
         const tipsInfo: TipsInfo = {

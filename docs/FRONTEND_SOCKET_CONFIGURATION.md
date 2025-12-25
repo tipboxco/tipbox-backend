@@ -480,36 +480,39 @@ socket.on('message_send_error', (error) => {
 ```
 1. Her iki kullanıcı da Socket.IO bağlantısı kurar (JWT token ile)
    ↓
-2. Backend her kullanıcıyı kendi userId room'una ekler
+2. Backend her kullanıcıyı otomatik olarak kendi userId room'una ekler (room adı: userId string)
    ↓
 3. Kullanıcı A thread oluşturur/alır (REST API)
    ↓
-4. Kullanıcı A thread room'una katılır (join_thread)
+4. Kullanıcı A thread room'una katılır (join_thread) - room adı: "thread:{threadId}"
    ↓
 5. Kullanıcı A mesaj gönderir (send_message)
    ↓
 6. Backend mesajı veritabanına kaydeder
    ↓
 7. Backend:
-   - Kullanıcı B'nin kişisel room'una 'new_message' gönderir
-   - Thread room'una 'new_message' gönderir (her iki kullanıcı da dinliyorsa)
-   - Kullanıcı A'nın kişisel room'una 'message_sent' gönderir
+   - Kullanıcı B'nin kişisel room'una (userId) 'new_message' gönderir
+   - Thread room'una ('thread:{threadId}') 'new_message' gönderir (her iki kullanıcı da dinliyorsa)
+   - Kullanıcı A'nın kişisel room'una (userId) 'message_sent' gönderir
    ↓
 8. Kullanıcı B 'new_message' event'ini alır ve UI'da gösterir
    ↓
-9. Kullanıcı B thread'i açarsa, thread room'una katılır
+9. Kullanıcı B thread'i açarsa, thread room'una katılır (join_thread)
    ↓
 10. Kullanıcı B mesajı okuduğunda 'mark_message_read' gönderir
    ↓
-11. Backend 'message_read' event'ini Kullanıcı A'ya gönderir
+11. Backend 'message_read' event'ini Kullanıcı A'ya gönderir (kişisel room ve thread room)
 ```
 
 ## 🔐 Güvenlik Notları
 
-1. **JWT Token:** Her socket bağlantısında geçerli bir JWT token gönderilmelidir
-2. **Thread Erişim Kontrolü:** Backend, kullanıcının thread'e erişim yetkisi olup olmadığını kontrol eder
-3. **CORS:** Backend CORS ayarları environment variable'lardan okunur. Development ortamında tüm origin'lere izin verilir
-4. **Room İzolasyonu:** Kullanıcılar sadece kendi thread'lerine erişebilir
+1. **JWT Token:** Her socket bağlantısında geçerli bir JWT token gönderilmelidir. Token `auth.token` ile gönderilir ve backend `socket.handshake.auth.token` ile alır.
+2. **Thread Erişim Kontrolü:** Backend, kullanıcının thread'e erişim yetkisi olup olmadığını kontrol eder. `join_thread` event'inde erişim kontrolü yapılır.
+3. **CORS:** Backend CORS ayarları environment variable'lardan okunur. Development ortamında (`NODE_ENV=development`) tüm origin'lere izin verilir.
+4. **Room İzolasyonu:** Kullanıcılar sadece kendi thread'lerine erişebilir. Backend her thread erişiminde `validateThreadAccess` kontrolü yapar.
+5. **Room Adları:** 
+   - Kullanıcı room'u: `userId` (string, otomatik katılım)
+   - Thread room'u: `thread:{threadId}` (manuel katılım gerekli)
 
 ## ⚠️ Socket Bağlantı Sorunları ve Çözümleri
 
@@ -548,6 +551,251 @@ location /socket.io/ {
     proxy_read_timeout 60s;
 }
 ```
+
+## 📱 Mobil Uygulama (React Native) İçin Özel Notlar
+
+### Token Yönetimi
+
+React Native'de token'ı güvenli bir şekilde saklamak için `@react-native-async-storage/async-storage` veya `expo-secure-store` kullanın:
+
+```typescript
+// AsyncStorage kullanımı (basit)
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const token = await AsyncStorage.getItem('authToken');
+
+// SecureStore kullanımı (daha güvenli - Expo)
+import * as SecureStore from 'expo-secure-store';
+
+const token = await SecureStore.getItemAsync('authToken');
+```
+
+### App Lifecycle Yönetimi
+
+React Native'de uygulama arka plana gittiğinde socket bağlantısını yönetmek:
+
+```typescript
+import { AppState } from 'react-native';
+
+useEffect(() => {
+  const subscription = AppState.addEventListener('change', (nextAppState) => {
+    if (nextAppState === 'background') {
+      // Uygulama arka plana gitti - socket otomatik olarak bağlı kalır
+      console.log('App background');
+    } else if (nextAppState === 'active') {
+      // Uygulama ön plana geldi - socket bağlantısını kontrol et
+      if (socket && !socket.connected) {
+        socket.connect();
+      }
+      console.log('App active');
+    }
+  });
+
+  return () => {
+    subscription.remove();
+  };
+}, [socket]);
+```
+
+### Network State Yönetimi
+
+Ağ durumunu izleyerek socket bağlantısını yönetmek:
+
+```typescript
+import NetInfo from '@react-native-community/netinfo';
+
+useEffect(() => {
+  const unsubscribe = NetInfo.addEventListener(state => {
+    if (state.isConnected && socket && !socket.connected) {
+      // Ağ bağlantısı geri geldi, socket'i yeniden bağla
+      socket.connect();
+    }
+  });
+
+  return () => {
+    unsubscribe();
+  };
+}, [socket]);
+```
+
+### Global Socket Context (React Native)
+
+Tüm uygulamada tek bir socket instance kullanmak için Context API:
+
+```typescript
+// contexts/SocketContext.tsx
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import { io, Socket } from 'socket.io-client';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const BACKEND_URL = 'https://api.tipbox.com';
+
+interface SocketContextType {
+  socket: Socket | null;
+  isConnected: boolean;
+}
+
+const SocketContext = createContext<SocketContextType>({
+  socket: null,
+  isConnected: false,
+});
+
+export function SocketProvider({ children }: { children: React.ReactNode }) {
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const socketRef = useRef<Socket | null>(null);
+
+  useEffect(() => {
+    async function initSocket() {
+      const token = await AsyncStorage.getItem('authToken');
+      if (!token) return;
+
+      // Mevcut socket varsa yeniden kullan
+      if (socketRef.current?.connected) {
+        setSocket(socketRef.current);
+        setIsConnected(true);
+        return;
+      }
+
+      // Yeni socket bağlantısı
+      const newSocket = io(BACKEND_URL, {
+        auth: { token },
+        transports: ['websocket', 'polling'],
+        path: '/socket.io/',
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionAttempts: 5,
+        timeout: 20000,
+      });
+
+      newSocket.on('connect', () => {
+        setIsConnected(true);
+        console.log('Socket bağlandı');
+      });
+
+      newSocket.on('disconnect', () => {
+        setIsConnected(false);
+        console.log('Socket bağlantısı kesildi');
+      });
+
+      newSocket.on('connected', (data) => {
+        console.log('Backend onayı:', data);
+      });
+
+      newSocket.on('connect_error', (error) => {
+        console.error('Bağlantı hatası:', error.message);
+        setIsConnected(false);
+      });
+
+      socketRef.current = newSocket;
+      setSocket(newSocket);
+    }
+
+    initSocket();
+
+    return () => {
+      // Cleanup - socket'i kapatma, sadece event listener'ları temizle
+    };
+  }, []);
+
+  return (
+    <SocketContext.Provider value={{ socket, isConnected }}>
+      {children}
+    </SocketContext.Provider>
+  );
+}
+
+export function useSocket() {
+  return useContext(SocketContext);
+}
+```
+
+### Chat Screen Örneği (React Native)
+
+```typescript
+// screens/ChatScreen.tsx
+import React, { useEffect, useState } from 'react';
+import { View, FlatList, TextInput, Button, Alert } from 'react-native';
+import { useSocket } from '../contexts/SocketContext';
+
+export function ChatScreen({ threadId }: { threadId: string }) {
+  const { socket, isConnected } = useSocket();
+  const [messages, setMessages] = useState<any[]>([]);
+  const [messageText, setMessageText] = useState('');
+
+  useEffect(() => {
+    if (!socket || !threadId) return;
+
+    // Thread room'una katıl
+    socket.emit('join_thread', threadId);
+
+    socket.once('thread_joined', () => {
+      console.log('Thread room\'una katıldı');
+      // Mesajları yükle
+      loadMessages(threadId);
+    });
+
+    socket.once('thread_join_error', (error: { reason: string }) => {
+      Alert.alert('Hata', error.reason);
+    });
+
+    // Yeni mesajları dinle
+    const handleNewMessage = (data: any) => {
+      setMessages(prev => [...prev, data]);
+    };
+
+    socket.on('new_message', handleNewMessage);
+
+    return () => {
+      socket.emit('leave_thread', threadId);
+      socket.off('new_message', handleNewMessage);
+    };
+  }, [socket, threadId]);
+
+  const sendMessage = () => {
+    if (!socket || !threadId || !messageText.trim()) return;
+
+    socket.emit('send_message', {
+      threadId,
+      message: messageText.trim(),
+    });
+
+    socket.once('message_send_error', (error: { reason: string }) => {
+      Alert.alert('Hata', error.reason);
+    });
+
+    setMessageText('');
+  };
+
+  return (
+    <View style={{ flex: 1 }}>
+      <FlatList
+        data={messages}
+        keyExtractor={(item) => item.messageId}
+        renderItem={({ item }) => (
+          <View>
+            <Text>{item.message}</Text>
+          </View>
+        )}
+      />
+      <TextInput
+        value={messageText}
+        onChangeText={setMessageText}
+        placeholder="Mesaj yazın..."
+      />
+      <Button title="Gönder" onPress={sendMessage} disabled={!isConnected} />
+    </View>
+  );
+}
+```
+
+### Önemli Mobil Notlar
+
+1. **Token Güvenliği:** Token'ı `AsyncStorage` yerine `SecureStore` veya `Keychain` kullanarak saklayın
+2. **Background Mode:** iOS ve Android'de background mode için özel izinler gerekebilir
+3. **Battery Optimization:** Android'de battery optimization ayarları socket bağlantısını etkileyebilir
+4. **Network Changes:** Ağ değişikliklerinde (WiFi ↔ Mobile Data) socket otomatik olarak yeniden bağlanır
+5. **Deep Linking:** Chat ekranına deep link ile gelindiğinde socket bağlantısının hazır olduğundan emin olun
 
 ## 📚 İlgili Dokümantasyon
 

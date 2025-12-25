@@ -54,18 +54,23 @@ export function getPublicMediaBaseUrl(): string {
  * DB'de sadece bucket path tutulur (örn: users/profile/9f2a1c/avatar.jpg)
  * Bu fonksiyon PUBLIC_BASE_URL ile birleştirerek tam URL oluşturur.
  * 
- * Örn: 
- * - Input:  'users/profile/9f2a1c/avatar.jpg'
- * - Output: 'https://api-test.tipbox.co/media/users/profile/9f2a1c/avatar.jpg'
+ * MinIO için doğru format: http://localhost:9000/tipbox-media/path/to/file.jpg
  * 
- * @param relativePath - MinIO bucket path (örn: users/profile/9f2a1c/avatar.jpg)
+ * Örn: 
+ * - Input:  'profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg'
+ * - Output: 'http://localhost:9000/tipbox-media/profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg'
+ * 
+ * @param relativePath - MinIO bucket path (örn: profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg)
  * @returns Tam media URL
  */
 export function buildMediaUrl(relativePath: string): string {
   // PUBLIC_BASE_URL env değişkeni varsa onu kullan, yoksa getPublicMediaBaseUrl() kullan
   const baseUrl = process.env.PUBLIC_BASE_URL || getPublicMediaBaseUrl();
-  const cleanPath = relativePath.replace(/^\/+/, '');
-  return `${baseUrl}/media/${cleanPath}`;
+  const cleanPath = relativePath.replace(/^\/+/, '').replace(/^tipbox-media\//, ''); // tipbox-media/ prefix'ini kaldır (zaten ekleyeceğiz)
+  const bucketName = s3Config.bucketName;
+  
+  // MinIO için doğru format: http://endpoint/bucket-name/object-key
+  return `${baseUrl}/${bucketName}/${cleanPath}`;
 }
 
 /**
@@ -106,7 +111,7 @@ export function normalizeMediaUrl(dbUrl: string | null | undefined): string | nu
  * Database'den gelen media path veya URL'ini tam URL'ye çevirir.
  * 
  * Eğer değer zaten bir URL ise (http:// veya https:// ile başlıyorsa), olduğu gibi döndürür.
- * Eğer değer bir path ise (örn: users/profile/9f2a1c/avatar.jpg), buildMediaUrl ile tam URL'ye çevirir.
+ * Eğer değer bir path ise (örn: profile-pictures/... veya tipbox-media/profile-pictures/...), buildMediaUrl ile tam URL'ye çevirir.
  * 
  * Bu fonksiyon hem eski URL formatını hem de yeni path formatını destekler.
  * 
@@ -114,11 +119,14 @@ export function normalizeMediaUrl(dbUrl: string | null | undefined): string | nu
  * @returns Tam media URL veya null
  * 
  * Örnekler:
- * - Input:  'users/profile/9f2a1c/avatar.jpg'
- * - Output: 'https://api-test.tipbox.co/media/users/profile/9f2a1c/avatar.jpg'
+ * - Input:  'profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg'
+ * - Output: 'http://localhost:9000/tipbox-media/profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg'
  * 
- * - Input:  'https://api-test.tipbox.co/media/users/profile/9f2a1c/avatar.jpg'
- * - Output: 'https://api-test.tipbox.co/media/users/profile/9f2a1c/avatar.jpg'
+ * - Input:  'tipbox-media/profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg'
+ * - Output: 'http://localhost:9000/tipbox-media/profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg'
+ * 
+ * - Input:  'http://localhost:9000/tipbox-media/profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg'
+ * - Output: 'http://localhost:9000/tipbox-media/profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg'
  */
 export function resolveMediaUrl(mediaPathOrUrl: string | null | undefined): string | null {
   if (!mediaPathOrUrl) return null;
@@ -129,6 +137,7 @@ export function resolveMediaUrl(mediaPathOrUrl: string | null | undefined): stri
   }
 
   // Path ise buildMediaUrl ile tam URL'ye çevir
+  // buildMediaUrl zaten tipbox-media/ prefix'ini kaldırıp tekrar ekliyor, bu yüzden güvenli
   return buildMediaUrl(mediaPathOrUrl);
 }
 
