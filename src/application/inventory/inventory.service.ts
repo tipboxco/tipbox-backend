@@ -24,7 +24,7 @@ export class InventoryService {
   private readonly mediaRepo: InventoryMediaPrismaRepository;
   private readonly cacheService: CacheService;
   private readonly geminiService: GeminiService;
-  private readonly aiSplitRepo: AiExperienceSplitPrismaRepository;
+  private readonly experienceSnippetRepo: AiExperienceSplitPrismaRepository;
 
   constructor() {
     this.prisma = new PrismaClient();
@@ -33,7 +33,7 @@ export class InventoryService {
     this.mediaRepo = new InventoryMediaPrismaRepository();
     this.cacheService = CacheService.getInstance();
     this.geminiService = GeminiService.getInstance();
-    this.aiSplitRepo = new AiExperienceSplitPrismaRepository();
+    this.experienceSnippetRepo = new AiExperienceSplitPrismaRepository();
   }
 
   /**
@@ -183,7 +183,7 @@ export class InventoryService {
     productId: string,
     experienceText: string
   ): Promise<{
-    aiSplitId: string;
+    experienceSnippetId: string;
     priceAndShopping: { 
       content: string; 
       rating: number; 
@@ -223,7 +223,7 @@ export class InventoryService {
       });
 
       // AI split sonucunu database'e kaydet
-      const aiSplit = await this.aiSplitRepo.create({
+      const experienceSnippet = await this.experienceSnippetRepo.create({
         userId,
         productId,
         originalExperience: experienceText,
@@ -246,7 +246,7 @@ export class InventoryService {
         message: 'Experience split with AI and saved',
         userId,
         productId,
-        aiSplitId: aiSplit.id,
+        experienceSnippetId: experienceSnippet.id,
         tokensUsed: splitResult.metadata.tokensUsed,
         processingTimeMs: splitResult.metadata.processingTimeMs,
         hasPriceAndShopping: !!splitResult.priceAndShopping?.content,
@@ -254,7 +254,7 @@ export class InventoryService {
       });
 
       return {
-        aiSplitId: aiSplit.id,
+        experienceSnippetId: experienceSnippet.id,
         priceAndShopping: splitResult.priceAndShopping,
         productAndUsage: splitResult.productAndUsage,
         metadata: splitResult.metadata,
@@ -295,7 +295,7 @@ export class InventoryService {
             productId: dto.productId,
             hasOwned,
             experienceSummary: dto.content,
-            aiSplitId: dto.aiSplitId || null,
+            experienceSnippetId: dto.experienceSnippetId || null,
           },
         });
 

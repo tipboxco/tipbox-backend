@@ -396,25 +396,25 @@ model ProductSuggestion {
 }
 
 model Inventory {
-  id                 String              @id @default(uuid()) @db.Uuid
-  userId             String              @map("user_id") @db.Uuid
-  productId          String              @map("product_id") @db.Uuid
-  hasOwned           Boolean             @map("has_owned")
-  experienceSummary  String?             @map("experience_summary")
-  aiSplitId          String?             @map("ai_split_id") @db.Uuid
-  createdAt          DateTime            @default(now()) @map("created_at")
-  updatedAt          DateTime            @updatedAt @map("updated_at")
-  product            Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
-  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  aiSplit            AiExperienceSplit?  @relation(fields: [aiSplitId], references: [id], onDelete: SetNull)
-  media              InventoryMedia[]
-  productExperiences ProductExperience[]
+  id                   String              @id @default(uuid()) @db.Uuid
+  userId               String              @map("user_id") @db.Uuid
+  productId            String              @map("product_id") @db.Uuid
+  hasOwned             Boolean             @map("has_owned")
+  experienceSummary    String?             @map("experience_summary")
+  experienceSnippetId  String?             @map("experience_snippet_id") @db.Uuid
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @updatedAt @map("updated_at")
+  product              Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  experienceSnippet    AiExperienceSplit?  @relation(fields: [experienceSnippetId], references: [id], onDelete: SetNull)
+  media                InventoryMedia[]
+  productExperiences   ProductExperience[]
 
   @@unique([userId, productId])
   @@index([userId])
   @@index([productId])
   @@index([userId, hasOwned])
-  @@index([aiSplitId])
+  @@index([experienceSnippetId])
   @@map("inventories")
 }
 
@@ -457,7 +457,7 @@ model ContentPost {
   inventoryRequired   Boolean              @map("inventory_required")
   isBoosted           Boolean              @map("is_boosted")
   boostedUntil        DateTime?            @map("boosted_until")
-  aiSplitId           String?              @map("ai_split_id") @db.Uuid
+  experienceSnippetId String?              @map("experience_snippet_id") @db.Uuid
   likesCount          Int                  @default(0) @map("likes_count")
   commentsCount       Int                  @default(0) @map("comments_count")
   favoritesCount      Int                  @default(0) @map("favorites_count")
@@ -475,7 +475,7 @@ model ContentPost {
   product             Product?             @relation(fields: [productId], references: [id])
   subCategory         SubCategory?         @relation(fields: [subCategoryId], references: [id])
   user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  aiSplit             AiExperienceSplit?   @relation(fields: [aiSplitId], references: [id], onDelete: SetNull)
+  experienceSnippet   AiExperienceSplit?   @relation(fields: [experienceSnippetId], references: [id], onDelete: SetNull)
   feedHighlights      FeedHighlight[]
   feeds               Feed[]
   comparison          PostComparison?
@@ -492,7 +492,7 @@ model ContentPost {
   @@index([mainCategoryId])
   @@index([productId])
   @@index([createdAt])
-  @@index([aiSplitId])
+  @@index([experienceSnippetId])
   @@map("content_posts")
   media                PostMedia[]
 }
