@@ -316,7 +316,7 @@ export interface SplitExperienceRequest {
 export interface ExperienceCategory {
   content: string;
   rating: number;
-  placeholder?: string;
+  placeholder?: string | null;
   isEnhanced?: boolean;
 }
 
