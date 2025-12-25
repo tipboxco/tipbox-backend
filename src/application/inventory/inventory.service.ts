@@ -184,8 +184,24 @@ export class InventoryService {
     experienceText: string
   ): Promise<{
     aiSplitId: string;
-    priceAndShopping: { content: string; rating: number } | null;
-    productAndUsage: { content: string; rating: number } | null;
+    priceAndShopping: { 
+      content: string; 
+      rating: number; 
+      placeholder?: string; 
+      isEnhanced?: boolean;
+    } | null;
+    productAndUsage: { 
+      content: string; 
+      rating: number; 
+      placeholder?: string; 
+      isEnhanced?: boolean;
+    } | null;
+    metadata: {
+      tokensUsed: number | null;
+      processingTimeMs: number;
+      model: string;
+      promptVersion: string;
+    };
   }> {
     try {
       // Ürün bilgilerini al
@@ -199,6 +215,7 @@ export class InventoryService {
 
       // Gemini AI ile deneyimi ayır
       const splitResult = await this.geminiService.splitExperience({
+        productId,
         productName: product.name,
         productBrand: product.brand || undefined,
         productDescription: product.description || undefined,
@@ -228,14 +245,15 @@ export class InventoryService {
         aiSplitId: aiSplit.id,
         tokensUsed: splitResult.metadata.tokensUsed,
         processingTimeMs: splitResult.metadata.processingTimeMs,
-        hasPriceAndShopping: !!splitResult.priceAndShopping,
-        hasProductAndUsage: !!splitResult.productAndUsage,
+        hasPriceAndShopping: !!splitResult.priceAndShopping?.content,
+        hasProductAndUsage: !!splitResult.productAndUsage?.content,
       });
 
       return {
         aiSplitId: aiSplit.id,
         priceAndShopping: splitResult.priceAndShopping,
         productAndUsage: splitResult.productAndUsage,
+        metadata: splitResult.metadata,
       };
     } catch (error) {
       logger.error({

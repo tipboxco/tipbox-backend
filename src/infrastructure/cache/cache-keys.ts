@@ -66,6 +66,10 @@ export const CACHE_KEYS = {
   STATIC_CATEGORIES: () => `static:categories`,
   STATIC_BRANDS: () => `static:brands`,
   STATIC_TAGS: () => `static:tags`,
+  
+  // AI related
+  AI_SPLIT_EXPERIENCE: (experienceTextHash: string, productId: string) => 
+    `ai:split:${productId}:${experienceTextHash}`,
 };
 
 /**
@@ -80,5 +84,6 @@ export const CACHE_PATTERNS = {
   DM_THREAD_ALL: (threadId: string) => `dm:thread:${threadId}:*`,
   DM_USER: (userId: string) => `dm:${userId}:*`,
   WALLET_USER: (userId: string) => `wallet:${userId}:*`,
+  AI_PRODUCT: (productId: string) => `ai:split:${productId}:*`,
 };
 
