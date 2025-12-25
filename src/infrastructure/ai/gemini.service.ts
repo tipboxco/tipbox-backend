@@ -25,13 +25,13 @@ export interface SplitExperienceResponse {
   priceAndShopping: {
     content: string;
     rating: number;
-    placeholder?: string;
+    placeholder?: string | null;
     isEnhanced?: boolean;
   } | null;
   productAndUsage: {
     content: string;
     rating: number;
-    placeholder?: string;
+    placeholder?: string | null;
     isEnhanced?: boolean;
   } | null;
   metadata: {
@@ -528,14 +528,21 @@ Lütfen aşağıdaki JSON formatında yanıt ver:
       // Price and Shopping kategorisi
       if (parsed.priceAndShopping && typeof parsed.priceAndShopping === 'object') {
         const content = String(parsed.priceAndShopping.content || '').trim();
-        const placeholder = parsed.priceAndShopping.placeholder 
+        
+        // Placeholder: AI'dan gelen veya fallback
+        let placeholder = parsed.priceAndShopping.placeholder 
           ? String(parsed.priceAndShopping.placeholder).trim() 
-          : undefined;
+          : null;
+        
+        // Eğer içerik varsa ama placeholder yoksa, içerik eksik demektir - fallback kullan
+        if (content && !placeholder) {
+          placeholder = fallbackPlaceholders.priceAndShopping;
+        }
         
         result.priceAndShopping = {
           content,
           rating: this.normalizeRating(parsed.priceAndShopping.rating),
-          placeholder, // AI'ın ürettiği placeholder (varsa)
+          placeholder, // AI'ın ürettiği veya fallback placeholder
           isEnhanced: content.length > 0, // İçerik varsa iyileştirilmiştir
         };
       } else {
@@ -551,14 +558,21 @@ Lütfen aşağıdaki JSON formatında yanıt ver:
       // Product and Usage kategorisi
       if (parsed.productAndUsage && typeof parsed.productAndUsage === 'object') {
         const content = String(parsed.productAndUsage.content || '').trim();
-        const placeholder = parsed.productAndUsage.placeholder 
+        
+        // Placeholder: AI'dan gelen veya fallback
+        let placeholder = parsed.productAndUsage.placeholder 
           ? String(parsed.productAndUsage.placeholder).trim() 
-          : undefined;
+          : null;
+        
+        // Eğer içerik varsa ama placeholder yoksa, içerik eksik demektir - fallback kullan
+        if (content && !placeholder) {
+          placeholder = fallbackPlaceholders.productAndUsage;
+        }
         
         result.productAndUsage = {
           content,
           rating: this.normalizeRating(parsed.productAndUsage.rating),
-          placeholder, // AI'ın ürettiği placeholder (varsa)
+          placeholder, // AI'ın ürettiği veya fallback placeholder
           isEnhanced: content.length > 0,
         };
       } else {

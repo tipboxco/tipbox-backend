@@ -35,7 +35,7 @@ export class PostService {
   private feedService: FeedService;
   private prisma: PrismaClient;
   private geminiService: GeminiService;
-  private aiSplitRepo: AiExperienceSplitPrismaRepository;
+  private experienceSnippetRepo: AiExperienceSplitPrismaRepository;
 
   constructor() {
     this.postRepo = new ContentPostPrismaRepository();
@@ -45,7 +45,7 @@ export class PostService {
     this.feedService = new FeedService();
     this.prisma = new PrismaClient();
     this.geminiService = GeminiService.getInstance();
-    this.aiSplitRepo = new AiExperienceSplitPrismaRepository();
+    this.experienceSnippetRepo = new AiExperienceSplitPrismaRepository();
   }
 
   /**
@@ -554,10 +554,10 @@ export class PostService {
       );
 
       // AI Split ID'yi kaydet (eğer varsa)
-      if (request.aiSplitId) {
+      if (request.experienceSnippetId) {
         await this.prisma.contentPost.update({
           where: { id: post.id },
-          data: { aiSplitId: request.aiSplitId }
+          data: { experienceSnippetId: request.experienceSnippetId }
         });
       }
 
@@ -574,7 +574,7 @@ export class PostService {
       }
 
       logger.info(`Experience post created: ${post.id} by user ${userId}`, {
-        aiSplitId: request.aiSplitId || null
+        experienceSnippetId: request.experienceSnippetId || null
       });
       
       // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
@@ -615,7 +615,7 @@ export class PostService {
       });
 
       // AI split sonucunu database'e kaydet
-      const aiSplit = await this.aiSplitRepo.create({
+      const experienceSnippet = await this.experienceSnippetRepo.create({
         userId: request.userId,
         productId: request.productId,
         originalExperience: request.content,
@@ -638,7 +638,7 @@ export class PostService {
         message: 'Experience split with AI and saved',
         userId: request.userId,
         productId: request.productId,
-        aiSplitId: aiSplit.id,
+        experienceSnippetId: experienceSnippet.id,
         tokensUsed: splitResult.metadata.tokensUsed,
         processingTimeMs: splitResult.metadata.processingTimeMs,
         hasPriceAndShopping: !!splitResult.priceAndShopping?.content,

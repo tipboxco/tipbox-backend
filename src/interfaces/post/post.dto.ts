@@ -297,7 +297,7 @@ export interface CreateExperiencePostRequest {
   experience: Experience[];
   status: ExperienceStatus;
   images?: string[];
-  aiSplitId?: string; // AI split sonucunun ID'si (optional)
+  experienceSnippetId?: string; // Experience snippet ID (optional)
 }
 
 export interface CreateUpdatePostRequest {
@@ -316,7 +316,7 @@ export interface SplitExperienceRequest {
 export interface ExperienceCategory {
   content: string;
   rating: number;
-  placeholder?: string;
+  placeholder?: string | null;
   isEnhanced?: boolean;
 }
 

@@ -55,6 +55,6 @@ export interface CreateInventoryRequest {
   status: ExperienceStatus;
   images?: string[];
   userId?: string;
-  aiSplitId?: string; // AI split sonucunun ID'si (optional)
+  experienceSnippetId?: string; // Experience snippet ID (optional)
 }
 
