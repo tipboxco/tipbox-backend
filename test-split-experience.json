@@ -1,5 +1,41 @@
 {
-  "productId": "01JFQM5XZT8VHQN9YKXR2W3E4P",
-  "experienceText": "Dyson V15s Detect Submarine'i resmi Dyson mağazasından 949 TL'ye aldım. Fiyat diğer kablosuz süpürgelere göre premium ama Dyson'ın kendini konumlandırdığı yerde haklı. Teslimat 2 gün içinde geldi ve kutu açılışında her şey eksiksizdi, şarj ünitesi, farklı başlıklar ve kullanım kılavuzu gayet düzgündü. Ödeme sırasında 6 taksit imkanı sunuldu, bu da fiyatı biraz daha makul hale getirdi.\n\nÜrünü kullanmaya başladığımda gerçekten fark yaratan özelliklerini gördüm. Özellikle yeşil lazer teknolojisi sayesinde göz ile görülmeyen toz parçacıklarını bile görebiliyorsunuz. LCD ekran üzerinde gerçek zamanlı olarak toplanan toz miktarını izlemek çok etkileyici. Pil ömrü normal modda yaklaşık 60 dakika, güçlü modda ise 10-15 dakika arası. Ben genelde normal modda kullanıyorum ve 100 m²'lik evimi tek şarjda temizleyebiliyorum. Ses seviyesi de diğer kablosuz süpürgelere göre oldukça makul, komşuları rahatsız etmiyor. Tek eksi yanı biraz ağır, uzun süre kullanımda kollar yoruluyor ama performansı buna değiyor."
+  "testCases": [
+    {
+      "name": "Uzun ve Kapsamlı Deneyim",
+      "productId": "01JFQM5XZT8VHQN9YKXR2W3E4P",
+      "experienceText": "Dyson V15s Detect Submarine'i resmi Dyson mağazasından 949 TL'ye aldım. Fiyat diğer kablosuz süpürgelere göre premium ama Dyson'ın kendini konumlandırdığı yerde haklı. Teslimat 2 gün içinde geldi ve kutu açılışında her şey eksiksizdi, şarj ünitesi, farklı başlıklar ve kullanım kılavuzu gayet düzgündü. Ödeme sırasında 6 taksit imkanı sunuldu, bu da fiyatı biraz daha makul hale getirdi.\n\nÜrünü kullanmaya başladığımda gerçekten fark yaratan özelliklerini gördüm. Özellikle yeşil lazer teknolojisi sayesinde göz ile görülmeyen toz parçacıklarını bile görebiliyorsunuz. LCD ekran üzerinde gerçek zamanlı olarak toplanan toz miktarını izlemek çok etkileyici. Pil ömrü normal modda yaklaşık 60 dakika, güçlü modda ise 10-15 dakika arası. Ben genelde normal modda kullanıyorum ve 100 m²'lik evimi tek şarjda temizleyebiliyorum. Ses seviyesi de diğer kablosuz süpürgelere göre oldukça makul, komşuları rahatsız etmiyor. Tek eksi yanı biraz ağır, uzun süre kullanımda kollar yoruluyor ama performansı buna değiyor.",
+      "expectedBehavior": "Her iki kategori de dolu olmalı"
+    },
+    {
+      "name": "Sadece Fiyat - Çok Kısa",
+      "productId": "01JFQM5XZT8VHQN9YKXR2W3E4P",
+      "experienceText": "Çok pahalı buldum, 18.000 TL verdim.",
+      "expectedBehavior": "Sadece priceAndShopping dolu, productAndUsage boş ve placeholder ile gelmeli"
+    },
+    {
+      "name": "Sadece Ürün Özelliği",
+      "productId": "01JFQM5XZT8VHQN9YKXR2W3E4P",
+      "experienceText": "Pil ömrü kötü, sadece 15 dakika dayanıyor.",
+      "expectedBehavior": "Sadece productAndUsage dolu, priceAndShopping boş ve placeholder ile gelmeli"
+    },
+    {
+      "name": "Çok Kısa - Genel Yorum",
+      "productId": "01JFQM5XZT8VHQN9YKXR2W3E4P",
+      "experienceText": "Çok beğendim, harika!",
+      "expectedBehavior": "AI en uygun kategoriyi seçmeli, diğeri boş ve placeholder ile gelmeli"
+    },
+    {
+      "name": "Karışık Ama Kısa",
+      "productId": "01JFQM5XZT8VHQN9YKXR2W3E4P",
+      "experienceText": "Pahalı ama kaliteli.",
+      "expectedBehavior": "AI kategorilere ayırmalı veya en uygununu seçip diğerini boş bırakmalı"
+    },
+    {
+      "name": "Sadece Teslimat",
+      "productId": "01JFQM5XZT8VHQN9YKXR2W3E4P",
+      "experienceText": "Kargo çok hızlıydı, 2 günde geldi.",
+      "expectedBehavior": "Sadece priceAndShopping dolu, productAndUsage boş ve placeholder ile gelmeli"
+    }
+  ]
 }
 

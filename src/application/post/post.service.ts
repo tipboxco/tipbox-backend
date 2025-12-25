@@ -594,7 +594,7 @@ export class PostService {
    */
   async splitExperience(
     request: SplitExperienceRequest
-  ): Promise<SplitExperienceResponse & { aiSplitId: string }> {
+  ): Promise<SplitExperienceResponse> {
     try {
       // Ürün bilgilerini al
       const product = await this.prisma.product.findUnique({
@@ -629,34 +629,6 @@ export class PostService {
         processingTimeMs: splitResult.metadata.processingTimeMs,
       });
 
-      // Response formatını oluştur
-      const experiences: Experience[] = [];
-
-      if (splitResult.priceAndShopping) {
-        experiences.push({
-          type: ExperienceType.PRICE_AND_SHOPPING,
-          content: splitResult.priceAndShopping.content,
-          rating: splitResult.priceAndShopping.rating,
-        });
-      }
-
-      if (splitResult.productAndUsage) {
-        experiences.push({
-          type: ExperienceType.PRODUCT_AND_USAGE,
-          content: splitResult.productAndUsage.content,
-          rating: splitResult.productAndUsage.rating,
-        });
-      }
-
-      // Eğer hiçbir kategori yoksa (AI yanıt veremedi), tüm metni product usage'a koy
-      if (experiences.length === 0) {
-        experiences.push({
-          type: ExperienceType.PRODUCT_AND_USAGE,
-          content: request.content,
-          rating: 3,
-        });
-      }
-
       logger.info({
         message: 'Experience split with AI and saved',
         userId: request.userId,
@@ -664,12 +636,11 @@ export class PostService {
         aiSplitId: aiSplit.id,
         tokensUsed: splitResult.metadata.tokensUsed,
         processingTimeMs: splitResult.metadata.processingTimeMs,
-        experiencesCount: experiences.length,
-        hasPriceAndShopping: !!splitResult.priceAndShopping,
-        hasProductAndUsage: !!splitResult.productAndUsage,
+        hasPriceAndShopping: !!splitResult.priceAndShopping?.content,
+        hasProductAndUsage: !!splitResult.productAndUsage?.content,
       });
 
-      return { experiences, aiSplitId: aiSplit.id };
+      return splitResult;
     } catch (error) {
       logger.error(`Failed to split experience:`, error);
       throw error;

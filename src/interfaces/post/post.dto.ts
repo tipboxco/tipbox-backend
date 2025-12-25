@@ -195,13 +195,41 @@ import { ExperienceStatus } from '../../domain/content/experience-status.enum';
  *           type: string
  *         content:
  *           type: string
+ *     ExperienceCategory:
+ *       type: object
+ *       properties:
+ *         content:
+ *           type: string
+ *         rating:
+ *           type: number
+ *           minimum: 0
+ *           maximum: 5
+ *         placeholder:
+ *           type: string
+ *           description: Kategori boşsa, kullanıcıya gösterilecek ipucu metni
  *     SplitExperienceResponse:
  *       type: object
  *       properties:
- *         experiences:
- *           type: array
- *           items:
- *             $ref: '#/components/schemas/Experience'
+ *         priceAndShopping:
+ *           oneOf:
+ *             - $ref: '#/components/schemas/ExperienceCategory'
+ *             - type: 'null'
+ *         productAndUsage:
+ *           oneOf:
+ *             - $ref: '#/components/schemas/ExperienceCategory'
+ *             - type: 'null'
+ *         metadata:
+ *           type: object
+ *           properties:
+ *             tokensUsed:
+ *               type: number
+ *               nullable: true
+ *             processingTimeMs:
+ *               type: number
+ *             model:
+ *               type: string
+ *             promptVersion:
+ *               type: string
  */
 
 export interface CreatePostRequest {
@@ -280,7 +308,20 @@ export interface SplitExperienceRequest {
   content: string;
 }
 
+export interface ExperienceCategory {
+  content: string;
+  rating: number;
+  placeholder?: string;
+}
+
 export interface SplitExperienceResponse {
-  experiences: Experience[];
+  priceAndShopping: ExperienceCategory | null;
+  productAndUsage: ExperienceCategory | null;
+  metadata: {
+    tokensUsed: number | null;
+    processingTimeMs: number;
+    model: string;
+    promptVersion: string;
+  };
 }
 
