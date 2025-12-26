@@ -418,16 +418,16 @@ const MEDIA_IMAGE_MAPPING: {
     'Technology': 'brand.category.computers-tablets',
     'Home & Living': 'brand.category.home-appliances',
     'Kitchen': 'brand.category.home-appliances',
-    'Health & Fitness': 'brand.category.home-appliances', // Fallback
-    'Fashion': 'brand.category.home-appliances', // Fallback
+    'Health & Fitness': 'brand.category.headphones',
+    'Fashion': 'brand.category.headphones',
     'Electronics': 'brand.category.phones',
-    'Sustainability': 'brand.category.home-appliances', // Fallback
+    'Sustainability': 'brand.category.smart-home-devices',
     'Gaming': 'brand.category.games',
-    'Beauty': 'brand.category.home-appliances', // Fallback
-    'Outdoor': 'brand.category.home-appliances', // Fallback
-    'Pets': 'brand.category.home-appliances', // Fallback
-    'Travel': 'brand.category.home-appliances', // Fallback
-    'Baby': 'brand.category.home-appliances', // Fallback
+    'Beauty': 'brand.category.cameras',
+    'Outdoor': 'brand.category.drone',
+    'Pets': 'brand.category.kucukev',
+    'Travel': 'brand.category.cameras',
+    'Baby': 'brand.category.kucukev',
     'Automotive': 'brand.category.otomotiv',
   },
   // Badge görselleri (tests/assets/badge klasöründen)
@@ -1268,6 +1268,466 @@ async function migratePostMediaFromInventory(): Promise<void> {
 /**
  * Tüm ContentPost'lar için PostMedia kontrolü yapıp eksik olanları ekler
  */
+
+// ===== BRAND CATEGORY GÖRSELLERİNİ GÜNCELLE =====
+async function updateBrandCategoryImages(): Promise<void> {
+  const s3Service = new S3Service()
+  const catalogImagesDir = path.join(__dirname, '../tests/assets/catalog')
+  
+  const categoryImageMap: Record<string, string> = {
+    'Automotive': 'otomotiv.png',
+    'Baby': 'kucukev.png',
+    'Beauty': 'cameras.png',
+    'Electronics': 'phones.png',
+    'Fashion': 'headphones.png',
+    'Gaming': 'games.png',
+    'Health & Fitness': 'headphones.png',
+    'Home & Living': 'home appliances.png',
+    'Kitchen': 'home appliances.png',
+    'Outdoor': 'drone.png',
+    'Pets': 'kucukev.png',
+    'Sustainability': 'smart home devices.png',
+    'Technology': 'computers-tablets.png',
+    'Travel': 'cameras.png',
+  }
+
+  const categories = await prisma.brandCategory.findMany()
+  let updated = 0
+  let uploaded = 0
+
+  for (const category of categories) {
+    const imageFileName = categoryImageMap[category.name]
+    if (!imageFileName) continue
+
+    const imagePath = path.join(catalogImagesDir, imageFileName)
+    if (!existsSync(imagePath)) continue
+
+    const targetKey = `brand-categories/${imageFileName}`
+    
+    // MinIO'ya yükle
+    const fileExists = await s3Service.fileExists(targetKey)
+    if (!fileExists) {
+      const fileBuffer = readFileSync(imagePath)
+      const contentType = imagePath.endsWith('.png') ? 'image/png' : 'image/jpeg'
+      await s3Service.uploadFile(targetKey, fileBuffer, contentType)
+      uploaded++
+    }
+
+    // DB'yi güncelle
+    if (category.imageUrl !== targetKey) {
+      await prisma.brandCategory.update({
+        where: { id: category.id },
+        data: { imageUrl: targetKey },
+      })
+      updated++
+    }
+  }
+
+  console.log(`   ✅ ${uploaded} görsel yüklendi, ${updated} kategori güncellendi`)
+}
+
+// ===== BRAND BANNER GÖRSELLERİNİ GÜNCELLE =====
+async function updateBrandBannerImages(): Promise<void> {
+  const s3Service = new S3Service()
+  const brandBannersDir = path.join(__dirname, '../tests/assets/Brand_Banners')
+  
+  const brandBannerMap: Record<string, string> = {
+    'Apple': 'brandpage-electronic-apple.jpg',
+    'ASUS': 'brandpage-electronic-asus.jpg',
+    'Canon': 'brandpage-electronic-canon.jpg',
+    'Dyson': 'brandpage-electronic-dyson.jpg',
+    'JBL': 'brandpage-electronic-jbl.jpg',
+    'MSI': 'brandpage-electronic-msi.jpg',
+    'NVIDIA': 'brandpage-electronic-nvidia.jpg',
+    'Samsung': 'brandpage-electronic-samsung.jpg',
+    'Shark': 'brandpage-electronic-shark.jpg',
+    'SteelSeries': 'brandpage-electronic-steelseries.jpg',
+    'Xiaomi': 'brandpage-electronic-xiaomi.jpg',
+  }
+
+  const electronicsCategory = await prisma.brandCategory.findFirst({
+    where: { name: 'Electronics' },
+  })
+
+  if (!electronicsCategory) {
+    console.warn('   ⚠️  Electronics kategorisi bulunamadı')
+    return
+  }
+
+  const brands = await prisma.brand.findMany({
+    where: { categoryId: electronicsCategory.id },
+  })
+
+  let updated = 0
+  let uploaded = 0
+
+  for (const brand of brands) {
+    const bannerFileName = brandBannerMap[brand.name]
+    if (!bannerFileName) continue
+
+    const bannerPath = path.join(brandBannersDir, bannerFileName)
+    if (!existsSync(bannerPath)) continue
+
+    const targetKey = `brands/banners/${bannerFileName}`
+    
+    // MinIO'ya yükle
+    const fileExists = await s3Service.fileExists(targetKey)
+    if (!fileExists) {
+      const fileBuffer = readFileSync(bannerPath)
+      await s3Service.uploadFile(targetKey, fileBuffer, 'image/jpeg')
+      uploaded++
+    }
+
+    // DB'yi güncelle
+    if (brand.imageUrl !== targetKey) {
+      await prisma.brand.update({
+        where: { id: brand.id },
+        data: { imageUrl: targetKey },
+      })
+      updated++
+    }
+  }
+
+  console.log(`   ✅ ${uploaded} görsel yüklendi, ${updated} brand güncellendi`)
+}
+
+// ===== EVENT GÖRSELLERİNİ YÜKLE VE EVENT'LERE ATA =====
+async function uploadAndAssignEventImages(): Promise<void> {
+  const s3Service = new S3Service()
+  const eventsAssetsDir = path.join(__dirname, '../tests/assets/events')
+  
+  const communityEventImages = [
+    'communityevents-the-gaming-night.jpg',
+    'communityevents-the-urban-commuter.jpg',
+    'communityevents-the-rainy-day-sanctuary.jpg',
+    'communityevents-the-hikers-summit.jpg',
+    'communityevents-the-content-creator.jpg',
+    'communityevents-the-skincare-ritual.jpg',
+    'communityevents-the-digital-nomad-day.jpg',
+    'communityevents-the-smart-home-geek.jpg',
+    'communityevents-the-masterchef-weekend.jpg',
+    'communityevents-the-road-trip-ready.jpg',
+  ]
+
+  const defaultEventImages = ['event.png', 'eventcardbg.png']
+
+  let uploaded = 0
+  let updated = 0
+
+  // Community event görsellerini yükle
+  for (const fileName of communityEventImages) {
+    const filePath = path.join(eventsAssetsDir, fileName)
+    if (!existsSync(filePath)) continue
+
+    const targetKey = `events/${fileName}`
+    const fileExists = await s3Service.fileExists(targetKey)
+    if (!fileExists) {
+      const fileBuffer = readFileSync(filePath)
+      await s3Service.uploadFile(targetKey, fileBuffer, 'image/jpeg')
+      uploaded++
+    }
+  }
+
+  // Default görselleri yükle
+  for (const fileName of defaultEventImages) {
+    const filePath = path.join(eventsAssetsDir, fileName)
+    if (!existsSync(filePath)) continue
+
+    const targetKey = `events/${fileName}`
+    const fileExists = await s3Service.fileExists(targetKey)
+    if (!fileExists) {
+      const fileBuffer = readFileSync(filePath)
+      await s3Service.uploadFile(targetKey, fileBuffer, fileName.endsWith('.png') ? 'image/png' : 'image/jpeg')
+      uploaded++
+    }
+  }
+
+  // Event'lere görseller ata
+  const events = await prisma.wishboxEvent.findMany({
+    where: {
+      OR: [
+        { imageUrl: null },
+        { imageUrl: 'events/event.png' },
+      ],
+    },
+  })
+
+  const communityImageKeys = communityEventImages.map(f => `events/${f}`)
+  let imageIndex = 0
+
+  for (const event of events) {
+    const randomImageKey = communityImageKeys[imageIndex % communityImageKeys.length]
+    imageIndex++
+
+    await prisma.wishboxEvent.update({
+      where: { id: event.id },
+      data: { imageUrl: randomImageKey },
+    })
+    updated++
+  }
+
+  console.log(`   ✅ ${uploaded} görsel yüklendi, ${updated} event güncellendi`)
+}
+
+// ===== APPLE BRAND EVENTS EKLE =====
+async function addAppleBrandEvents(): Promise<void> {
+  const APPLE_BRAND_ID = '081d5660-a6d6-412a-b0ae-1557acaaa028'
+  const appleBrand = await prisma.brand.findUnique({
+    where: { id: APPLE_BRAND_ID },
+  })
+
+  if (!appleBrand) {
+    console.warn(`   ⚠️  Apple brand bulunamadı: ${APPLE_BRAND_ID}`)
+    return
+  }
+
+  const existingEvents = await prisma.wishboxEvent.findMany({
+    where: { brandId: APPLE_BRAND_ID } as any,
+    select: { title: true },
+  })
+
+  const existingTitles = new Set(existingEvents.map(e => e.title))
+  const today = new Date()
+
+  const surveyEvents = [
+    { title: 'Apple Ürün Deneyimi Anketi', description: 'Apple ürünlerinizi kullanırken yaşadığınız deneyimleri paylaşın.', eventType: 'SURVEY' as const },
+    { title: 'Apple Ekosistem Memnuniyeti', description: 'Apple ekosisteminin birlikte kullanım deneyiminizi değerlendirin.', eventType: 'SURVEY' as const },
+    { title: 'Apple Watch Kullanım Anketi', description: 'Apple Watch kullanıcıları! Sağlık takibi ve özellikler hakkındaki görüşlerinizi paylaşın.', eventType: 'SURVEY' as const },
+    { title: 'AirPods Deneyim Anketi', description: 'AirPods kullanıcıları! Ses kalitesi ve konfor hakkındaki görüşlerinizi paylaşın.', eventType: 'SURVEY' as const },
+    { title: 'MacBook Performans Değerlendirmesi', description: 'MacBook kullanıcıları! Performans ve pil ömrü hakkındaki görüşlerinizi paylaşın.', eventType: 'SURVEY' as const },
+  ]
+
+  const otherEvents = [
+    { title: 'Apple Ürün Fotoğraf Yarışması', description: 'En güzel Apple ürün fotoğrafınızı paylaşın ve ödüller kazanın!', eventType: 'CONTEST' as const },
+    { title: 'Apple Kullanım İpuçları Challenge', description: 'Apple ürünlerinizle ilgili en yararlı ipuçlarınızı paylaşın.', eventType: 'CHALLENGE' as const },
+    { title: 'En İyi Apple Ürünü Anketi', description: 'Hangi Apple ürününü en çok seviyorsunuz?', eventType: 'POLL' as const },
+    { title: 'Apple Yeni Özellik İstekleri', description: 'Apple\'dan hangi yeni özellikleri görmek istersiniz?', eventType: 'POLL' as const },
+    { title: 'Apple Ürün Karşılaştırma Challenge', description: 'Farklı Apple ürün modellerini karşılaştırın.', eventType: 'CHALLENGE' as const },
+  ]
+
+  const allEvents = [...surveyEvents, ...otherEvents]
+  const communityEventImages = [
+    'communityevents-the-gaming-night.jpg',
+    'communityevents-the-urban-commuter.jpg',
+    'communityevents-the-rainy-day-sanctuary.jpg',
+    'communityevents-the-hikers-summit.jpg',
+    'communityevents-the-content-creator.jpg',
+  ]
+
+  let created = 0
+
+  for (let i = 0; i < allEvents.length; i++) {
+    const eventData = allEvents[i]
+    if (existingTitles.has(eventData.title)) continue
+
+    const startDate = new Date(today)
+    startDate.setDate(today.getDate() + i * 2)
+    const endDate = new Date(startDate)
+    endDate.setDate(startDate.getDate() + 14)
+
+    const randomImage = communityEventImages[i % communityEventImages.length]
+    const imageUrl = `events/${randomImage}`
+
+    await prisma.wishboxEvent.create({
+      data: {
+        id: generateUlid(),
+        title: eventData.title,
+        description: eventData.description,
+        eventType: eventData.eventType,
+        brandId: APPLE_BRAND_ID,
+        imageUrl,
+        startDate,
+        endDate,
+        isActive: true,
+      } as any,
+    })
+    created++
+  }
+
+  console.log(`   ✅ ${created} Apple brand event eklendi`)
+}
+
+// ===== APPLE FEED IPHONE GÖRSELLERİNİ GÜNCELLE =====
+async function updateAppleFeedIphoneImages(): Promise<void> {
+  const s3Service = new S3Service()
+  const APPLE_BRAND_ID = '081d5660-a6d6-412a-b0ae-1557acaaa028'
+  const APPLE_PRODUCTS_DIR = path.join(__dirname, '../tests/assets/Apple_Products')
+  
+  const IPHONE_IMAGES = [
+    'apple-product-iphone17.png',
+    'apple-product-iphone17pro.png',
+    'apple-product-iphone16e.png',
+    'apple-product-iphoneair.png',
+  ]
+
+  function getRandomIphoneImage(postId: string): string {
+    let hash = 0
+    for (let i = 0; i < postId.length; i++) {
+      hash = ((hash << 5) - hash) + postId.charCodeAt(i)
+      hash = hash & hash
+    }
+    const index = Math.abs(hash) % IPHONE_IMAGES.length
+    return IPHONE_IMAGES[index]
+  }
+
+  const appleBrand = await prisma.brand.findUnique({
+    where: { id: APPLE_BRAND_ID },
+  })
+
+  if (!appleBrand) {
+    console.warn(`   ⚠️  Apple brand bulunamadı: ${APPLE_BRAND_ID}`)
+    return
+  }
+
+  const appleProducts = await prisma.product.findMany({
+    where: {
+      brand: appleBrand.name,
+      OR: [
+        { name: { contains: 'iPhone', mode: 'insensitive' } },
+        { name: { startsWith: 'Apple', mode: 'insensitive' } },
+      ],
+    },
+  })
+
+  if (appleProducts.length === 0) {
+    console.warn('   ⚠️  Apple iPhone ürünü bulunamadı')
+    return
+  }
+
+  const productIds = appleProducts.map(p => p.id)
+  const posts = await prisma.contentPost.findMany({
+    where: { productId: { in: productIds } },
+  })
+
+  if (posts.length === 0) {
+    console.warn('   ⚠️  iPhone ürünlerine ait post bulunamadı')
+    return
+  }
+
+  let updated = 0
+  let uploaded = 0
+
+  for (const post of posts) {
+    const randomImage = getRandomIphoneImage(post.id)
+    const imagePath = path.join(APPLE_PRODUCTS_DIR, randomImage)
+    const targetKey = `products/apple/${randomImage}`
+
+    if (!existsSync(imagePath)) continue
+
+    // MinIO'ya yükle
+    const fileExists = await s3Service.fileExists(targetKey)
+    if (!fileExists) {
+      const fileBuffer = readFileSync(imagePath)
+      await s3Service.uploadFile(targetKey, fileBuffer, 'image/png')
+      uploaded++
+    }
+
+    // PostMedia'yı güncelle veya oluştur
+    const existingMedia = await prisma.postMedia.findFirst({
+      where: { postId: post.id },
+    })
+
+    if (existingMedia) {
+      await prisma.postMedia.update({
+        where: { id: existingMedia.id },
+        data: { mediaUrl: targetKey },
+      })
+    } else {
+      await prisma.postMedia.create({
+        data: {
+          postId: post.id,
+          userId: post.userId,
+          mediaUrl: targetKey,
+          orderIndex: 0,
+        },
+      })
+    }
+    updated++
+  }
+
+  console.log(`   ✅ ${uploaded} görsel yüklendi, ${updated} post media güncellendi`)
+}
+
+// ===== EVENT POST'LARINA PRODUCT EKLE =====
+async function addProductToEventPosts(): Promise<void> {
+  // Event'e ait post'ları bul (scenario choice'lar üzerinden)
+  const scenarios = await prisma.wishboxScenario.findMany({
+    include: {
+      choices: {
+        include: {
+          user: true,
+        },
+      },
+    },
+  })
+
+  const participantUserIds = new Set<string>()
+  scenarios.forEach((scenario) => {
+    scenario.choices.forEach((choice) => {
+      participantUserIds.add(choice.userId)
+    })
+  })
+
+  if (participantUserIds.size === 0) {
+    console.warn('   ⚠️  Event\'e katılan kullanıcı bulunamadı')
+    return
+  }
+
+  // Bu kullanıcıların productId'si olmayan post'larını bul
+  const posts = await prisma.contentPost.findMany({
+    where: {
+      userId: { in: Array.from(participantUserIds) },
+      productId: null,
+    },
+  })
+
+  if (posts.length === 0) {
+    console.warn('   ⚠️  Güncellenecek post bulunamadı')
+    return
+  }
+
+  // Varsayılan product'ı bul
+  const targetProduct = await prisma.product.findFirst({
+    include: {
+      group: {
+        include: {
+          subCategory: {
+            include: {
+              mainCategory: true,
+            },
+          },
+        },
+      },
+    },
+  })
+
+  if (!targetProduct) {
+    console.warn('   ⚠️  Product bulunamadı')
+    return
+  }
+
+  const productGroup = (targetProduct as any).group
+  const subCategory = productGroup?.subCategory
+  const mainCategory = subCategory?.mainCategory
+
+  let updated = 0
+
+  for (const post of posts) {
+    await prisma.contentPost.update({
+      where: { id: post.id },
+      data: {
+        productId: targetProduct.id,
+        productGroupId: targetProduct.groupId || post.productGroupId || undefined,
+        subCategoryId: productGroup?.subCategoryId || post.subCategoryId || undefined,
+        mainCategoryId: mainCategory?.id || post.mainCategoryId || undefined,
+      },
+    })
+    updated++
+  }
+
+  console.log(`   ✅ ${updated} post güncellendi`)
+}
+
 async function ensureAllPostsHaveMedia(): Promise<void> {
   interface Stats {
     totalPosts: number
@@ -1566,14 +2026,14 @@ async function seedBrandProducts(userIdToUse: string): Promise<void> {
             productMap.set(product.name, product.id)
           }
         })
-      }
-      
+        }
+
       // Batch kontrol: Tüm mevcut inventory'leri tek sorguda al
       const allProductIds = Array.from(productMap.values())
       const existingInventories = allProductIds.length > 0
         ? await prisma.inventory.findMany({
             where: {
-              userId: userIdToUse,
+            userId: userIdToUse,
               productId: { in: allProductIds },
             },
             select: { productId: true },
@@ -11908,6 +12368,72 @@ async function main() {
       console.error('   Stack:', error.stack)
     }
     throw error // Seed'i durdur
+  }
+
+  // ===== BRAND CATEGORY GÖRSELLERİNİ GÜNCELLE =====
+  try {
+    progress.increment('Brand category görselleri güncelleniyor...')
+    console.log('\n🏷️  Brand category görselleri güncelleniyor...')
+    await updateBrandCategoryImages()
+    console.log('✅ Brand category görselleri güncellendi')
+  } catch (error) {
+    console.error('❌ Brand category görselleri güncelleme hatası:', error)
+    // Hata olsa bile devam et
+  }
+
+  // ===== BRAND BANNER GÖRSELLERİNİ GÜNCELLE =====
+  try {
+    progress.increment('Brand banner görselleri güncelleniyor...')
+    console.log('\n🎨 Brand banner görselleri güncelleniyor...')
+    await updateBrandBannerImages()
+    console.log('✅ Brand banner görselleri güncellendi')
+  } catch (error) {
+    console.error('❌ Brand banner görselleri güncelleme hatası:', error)
+    // Hata olsa bile devam et
+  }
+
+  // ===== EVENT GÖRSELLERİNİ YÜKLE VE EVENT'LERE ATA =====
+  try {
+    progress.increment('Event görselleri yükleniyor...')
+    console.log('\n🎉 Event görselleri yükleniyor ve event\'lere atanıyor...')
+    await uploadAndAssignEventImages()
+    console.log('✅ Event görselleri yüklendi ve atandı')
+  } catch (error) {
+    console.error('❌ Event görselleri yükleme hatası:', error)
+    // Hata olsa bile devam et
+  }
+
+  // ===== APPLE BRAND EVENTS EKLE =====
+  try {
+    progress.increment('Apple brand events ekleniyor...')
+    console.log('\n🍎 Apple brand events ekleniyor...')
+    await addAppleBrandEvents()
+    console.log('✅ Apple brand events eklendi')
+  } catch (error) {
+    console.error('❌ Apple brand events ekleme hatası:', error)
+    // Hata olsa bile devam et
+  }
+
+  // ===== APPLE FEED IPHONE GÖRSELLERİNİ GÜNCELLE =====
+  try {
+    progress.increment('Apple feed iPhone görselleri güncelleniyor...')
+    console.log('\n📱 Apple feed iPhone görselleri güncelleniyor...')
+    await updateAppleFeedIphoneImages()
+    console.log('✅ Apple feed iPhone görselleri güncellendi')
+  } catch (error) {
+    console.error('❌ Apple feed iPhone görselleri güncelleme hatası:', error)
+    // Hata olsa bile devam et
+  }
+
+  // ===== EVENT POST'LARINA PRODUCT EKLE =====
+  try {
+    progress.increment('Event post\'larına product ekleniyor...')
+    console.log('\n📝 Event post\'larına product bilgisi ekleniyor...')
+    await addProductToEventPosts()
+    console.log('✅ Event post\'larına product eklendi')
+  } catch (error) {
+    console.error('❌ Event post\'larına product ekleme hatası:', error)
+    // Hata olsa bile devam et
   }
   
   // Seed sonunu işaretle (metadata için)

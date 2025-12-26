@@ -194,7 +194,8 @@ export class ExploreService {
         };
 
         // Get images for this post from PostMedia (orderIndex'e göre sıralı)
-        const images = postMediaMap.get(post.id) || [];
+        const rawImages = postMediaMap.get(post.id) || [];
+        const images = rawImages.map((img: string) => resolveMediaUrl(img) || img);
 
         switch (post.type) {
           case ContentPostType.FREE:
@@ -252,13 +253,17 @@ export class ExploreService {
 
     const banners = await this.bannerRepo.findActive();
 
-    const response: MarketplaceBannerResponse[] = banners.map((banner) => ({
-      id: banner.id,
-      title: banner.title,
-      description: banner.description || undefined,
-      imageUrl: banner.imageUrl,
-      linkUrl: banner.linkUrl || undefined,
-    }));
+    const response: MarketplaceBannerResponse[] = banners.map((banner) => {
+      // imageUrl boş string ise null'a çevir
+      const imagePath = banner.imageUrl && banner.imageUrl.trim() !== '' ? banner.imageUrl : null;
+      return {
+        id: banner.id,
+        title: banner.title,
+        description: banner.description || undefined,
+        imageUrl: resolveMediaUrl(imagePath) || '',
+        linkUrl: banner.linkUrl || undefined,
+      };
+    });
 
     // Cache for 30 minutes
     try {
@@ -340,7 +345,7 @@ export class ExploreService {
         return {
           eventId: event.id,
           eventType: event.eventType || 'SURVEY',
-          image: (event as any).imageUrl || null,
+          image: resolveMediaUrl((event as any).imageUrl) || null,
           title: event.title,
           description: event.description || '',
           startDate: event.startDate.toISOString(),
@@ -415,7 +420,7 @@ export class ExploreService {
     const response = {
       items: resultBrands.map((brand) => ({
         brandId: brand.id,
-        images: brand.logoUrl || null,
+        images: resolveMediaUrl(brand.logoUrl) || null,
         title: brand.name,
         description: brand.description || '',
       })),
@@ -499,7 +504,7 @@ export class ExploreService {
     const response = {
       items: resultProducts.map((product) => ({
         productId: product.id,
-        images: productImageMap.get(product.id) || product.imageUrl || null,
+        images: resolveMediaUrl(productImageMap.get(product.id) || product.imageUrl) || null,
         title: product.name,
       })),
       pagination: {
@@ -542,7 +547,7 @@ export class ExploreService {
       id: String(product.id),
       name: product.name,
       subName: product.brand || product.group?.name || '',
-      image: product.imageUrl || null,
+      image: resolveMediaUrl(product.imageUrl) || null,
     };
   }
 
@@ -568,7 +573,7 @@ export class ExploreService {
         id: String(product.id),
         name: product.name,
         subName: group?.name || subCategory?.name || '',
-        image: product.imageUrl || null,
+        image: resolveMediaUrl(product.imageUrl) || null,
       };
     }
 
@@ -576,11 +581,12 @@ export class ExploreService {
       const group = post.productGroup;
       if (group) {
         const subCategory = group.subCategory;
+        const imageUrl = group.imageUrl || subCategory?.imageUrl || subCategory?.mainCategory?.imageUrl || null;
         return {
           id: String(group.id),
           name: group.name,
           subName: subCategory?.name || '',
-          image: group.imageUrl || subCategory?.imageUrl || subCategory?.mainCategory?.imageUrl || null,
+          image: resolveMediaUrl(imageUrl) || null,
         };
       }
 
@@ -595,11 +601,12 @@ export class ExploreService {
     // SUB_CATEGORY (fallback olarak mainCategory bilgisini de kullan)
     if (post.subCategory) {
       const subCategory = post.subCategory;
+      const imageUrl = subCategory.imageUrl || subCategory.mainCategory?.imageUrl || null;
       return {
         id: String(subCategory.id),
         name: subCategory.name,
         subName: subCategory.mainCategory?.name || '',
-        image: subCategory.imageUrl || subCategory.mainCategory?.imageUrl || null,
+        image: resolveMediaUrl(imageUrl) || null,
       };
     }
 
@@ -608,7 +615,7 @@ export class ExploreService {
         id: String(post.mainCategory.id),
         name: post.mainCategory.name,
         subName: '',
-        image: post.mainCategory.imageUrl || null,
+        image: resolveMediaUrl(post.mainCategory.imageUrl) || null,
       };
     }
 
@@ -707,7 +714,7 @@ export class ExploreService {
           id: post.productId || '',
           name: post.product?.name || '',
           subName: post.productGroup?.name || '',
-          image: post.product?.imageUrl || null,
+          image: resolveMediaUrl(post.product?.imageUrl) || null,
           isOwned: false,
         };
 

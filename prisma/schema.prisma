@@ -401,7 +401,7 @@ model Inventory {
   productId            String              @map("product_id") @db.Uuid
   hasOwned             Boolean             @map("has_owned")
   experienceSummary    String?             @map("experience_summary")
-  experienceSnippetId  String?             @map("experience_snippet_id") @db.Uuid
+  experienceSnippetId  String?             @map("ai_split_id") @db.Uuid
   createdAt            DateTime            @default(now()) @map("created_at")
   updatedAt            DateTime            @updatedAt @map("updated_at")
   product              Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -457,7 +457,7 @@ model ContentPost {
   inventoryRequired   Boolean              @map("inventory_required")
   isBoosted           Boolean              @map("is_boosted")
   boostedUntil        DateTime?            @map("boosted_until")
-  experienceSnippetId String?              @map("experience_snippet_id") @db.Uuid
+  experienceSnippetId String?              @map("ai_split_id") @db.Uuid
   likesCount          Int                  @default(0) @map("likes_count")
   commentsCount       Int                  @default(0) @map("comments_count")
   favoritesCount      Int                  @default(0) @map("favorites_count")
@@ -1515,13 +1515,9 @@ model AiExperienceSplit {
   productAndUsage               String?       @map("product_and_usage") @db.Text
   priceAndShoppingRating        Int?          @map("price_and_shopping_rating")
   productAndUsageRating         Int?          @map("product_and_usage_rating")
-  priceAndShoppingPlaceholder   String?       @map("price_and_shopping_placeholder") @db.Text
-  productAndUsagePlaceholder    String?       @map("product_and_usage_placeholder") @db.Text
-  priceAndShoppingIsEnhanced    Boolean?      @map("price_and_shopping_is_enhanced")
-  productAndUsageIsEnhanced     Boolean?      @map("product_and_usage_is_enhanced")
   isEdited                      Boolean       @default(false) @map("is_edited")
   model                         String        @default("gemini-2.5-pro")
-  promptVersion                 String        @default("v2.1") @map("prompt_version")
+  promptVersion                 String        @default("v1.0") @map("prompt_version")
   tokensUsed                    Int?          @map("tokens_used")
   processingTimeMs              Int?          @map("processing_time_ms")
   createdAt                     DateTime      @default(now()) @map("created_at")

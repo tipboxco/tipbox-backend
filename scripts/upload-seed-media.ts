@@ -308,7 +308,7 @@ async function buildSeedAssets(): Promise<void> {
     console.warn(`   ⚠️  Catalog klasörü okunamadı: ${error}`);
   }
 
-  // 7. EVENT/EVENTS → event/
+  // 7. EVENT/EVENTS → events/
   console.log('🎉 Event görselleri ekleniyor...');
   const eventPath = path.join(assetsBasePath, 'event');
   const eventsPath = path.join(assetsBasePath, 'events');
@@ -339,7 +339,7 @@ async function buildSeedAssets(): Promise<void> {
         seedAssets.push({
           key,
           localPath: filePath,
-          targetKey: `event/${file}`,
+          targetKey: `events/${file}`, // events/ klasörüne yükle
           contentType: inferContentType(filePath),
           description: `Event görseli: ${file}`,
         });

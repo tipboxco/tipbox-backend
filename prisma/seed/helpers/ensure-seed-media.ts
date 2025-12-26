@@ -598,11 +598,11 @@ export async function ensureSeedMediaUploaded(): Promise<void> {
     } catch (error: any) {
       // Hata olsa bile devam et
       const errorMsg = error instanceof Error ? error.message : String(error);
-      console.error(`❌ ${key} yüklenirken hata:`);
-      console.error(`   Hedef: ${entry.targetKey}`);
-      console.error(`   Hata: ${errorMsg}\n`);
-      uploadErrors.push({ key, targetKey: entry.targetKey, error: errorMsg });
-      errorCount++;
+        console.error(`❌ ${key} yüklenirken hata:`);
+        console.error(`   Hedef: ${entry.targetKey}`);
+        console.error(`   Hata: ${errorMsg}\n`);
+        uploadErrors.push({ key, targetKey: entry.targetKey, error: errorMsg });
+        errorCount++;
     }
   }
   

@@ -2260,48 +2260,12 @@ export class UserService {
 
   private resolveBadgeImage(badge?: { imageUrl?: string | null }): string {
     if (!badge?.imageUrl) {
-      // Default badge görseli (bucket path formatı)
-      return DEFAULT_BADGE_IMAGE_PATH;
+      // Default badge görseli için resolveMediaUrl kullan
+      return resolveMediaUrl(DEFAULT_BADGE_IMAGE_PATH) || DEFAULT_BADGE_IMAGE_PATH;
     }
 
-    const imageUrl = badge.imageUrl;
-
-    // Eğer cdn.tipbox.co içeriyorsa, bucket path formatına çevir
-    if (imageUrl.includes('cdn.tipbox.co')) {
-      try {
-        const url = new URL(imageUrl);
-        // /assets/badges/default.png -> badges/custom/HardwareExpert.png (default için)
-        // /assets/badges/custom/WishMarker.png -> badges/custom/WishMarker.png
-        let path = url.pathname.replace(/^\/assets\//, ''); // /assets/ prefix'ini kaldır
-        if (path === 'badges/default.png') {
-          path = DEFAULT_BADGE_IMAGE_PATH;
-        }
-        return path; // Bucket path formatında döndür (tipbox-media/ prefix'i yok)
-      } catch {
-        // URL parse hatası olursa default kullan
-        return DEFAULT_BADGE_IMAGE_PATH;
-      }
-    }
-
-    // Eğer zaten bir URL ise (http:// veya https:// ile başlıyorsa), path'e çevir
-    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-      try {
-        const url = new URL(imageUrl);
-        // http://localhost:9000/tipbox-media/badges/custom/WishMarker.png -> badges/custom/WishMarker.png
-        let path = url.pathname.replace(/^\/tipbox-media\//, '').replace(/^\//, '');
-        if (!path) {
-          return DEFAULT_BADGE_IMAGE_PATH;
-        }
-        return path; // Bucket path formatında döndür
-      } catch {
-        // URL parse hatası olursa default kullan
-        return DEFAULT_BADGE_IMAGE_PATH;
-      }
-    }
-
-    // Zaten path formatı ise (tipbox-media/ prefix'i varsa kaldır)
-    const cleanPath = imageUrl.replace(/^tipbox-media\//, '').replace(/^\//, '');
-    return cleanPath || DEFAULT_BADGE_IMAGE_PATH;
+    // resolveMediaUrl kullanarak prefix ekle
+    return resolveMediaUrl(badge.imageUrl) || DEFAULT_BADGE_IMAGE_PATH;
   }
 
   private buildNftAddress(badgeId?: string | null, userBadgeId?: string): string {

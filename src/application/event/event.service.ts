@@ -395,6 +395,9 @@ export class EventService {
           likes: true,
           comments: true,
           favorites: true,
+          media: {
+            orderBy: { orderIndex: 'asc' },
+          },
         },
         orderBy: { createdAt: 'desc' },
         take: limit + 1,
@@ -445,7 +448,7 @@ export class EventService {
               image: resolveMediaUrl(imagePath),
             },
             content: post.body,
-            images: [] as any[],
+            images: (post.media || []).map((m: any) => resolveMediaUrl(m.mediaUrl)).filter((url: string | null): url is string => url !== null),
           } as any,
         } as any;
       });
