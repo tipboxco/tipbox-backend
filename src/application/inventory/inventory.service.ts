@@ -175,6 +175,44 @@ export class InventoryService {
   }
 
   /**
+   * Duration, Location, Purpose seçeneklerini getir
+   */
+  async getExperienceOptions(): Promise<{
+    durations: Array<{ id: string; name: string }>;
+    locations: Array<{ id: string; name: string }>;
+    purposes: Array<{ id: string; name: string }>;
+  }> {
+    try {
+      const [durations, locations, purposes] = await Promise.all([
+        this.prisma.experienceDuration.findMany({
+          where: { isActive: true },
+          orderBy: { name: 'asc' },
+        }),
+        this.prisma.experienceLocation.findMany({
+          where: { isActive: true },
+          orderBy: { name: 'asc' },
+        }),
+        this.prisma.experiencePurpose.findMany({
+          where: { isActive: true },
+          orderBy: { name: 'asc' },
+        }),
+      ]);
+
+      return {
+        durations: durations.map((d) => ({ id: d.id, name: d.name })),
+        locations: locations.map((l) => ({ id: l.id, name: l.name })),
+        purposes: purposes.map((p) => ({ id: p.id, name: p.name })),
+      };
+    } catch (error) {
+      logger.error({
+        message: 'Error getting experience options',
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  /**
    * Kullanıcının deneyim metnini AI ile ayır ve database'e kaydet
    */
   async splitExperienceWithAI(
@@ -295,6 +333,9 @@ export class InventoryService {
             hasOwned,
             experienceSummary: dto.content,
             experienceSnippetId: dto.experienceSnippetId || null,
+            experienceDurationId: dto.selectedDurationId || null,
+            experienceLocationId: dto.selectedLocationId || null,
+            experiencePurposeId: dto.selectedPurposeId || null,
           },
         });
 

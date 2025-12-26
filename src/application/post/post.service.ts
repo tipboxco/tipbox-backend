@@ -553,13 +553,16 @@ export class PostService {
         false
       );
 
-      // AI Split ID'yi kaydet (eğer varsa)
-      if (request.experienceSnippetId) {
-        await this.prisma.contentPost.update({
-          where: { id: post.id },
-          data: { experienceSnippetId: request.experienceSnippetId }
-        });
-      }
+      // AI Split ID ve Taxonomy ID'leri kaydet
+      await this.prisma.contentPost.update({
+        where: { id: post.id },
+        data: { 
+          experienceSnippetId: request.experienceSnippetId || null,
+          experienceDurationId: request.selectedDurationId || null,
+          experienceLocationId: request.selectedLocationId || null,
+          experiencePurposeId: request.selectedPurposeId || null,
+        }
+      });
 
       // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
       if (request.images && request.images.length > 0) {
@@ -645,7 +648,12 @@ export class PostService {
         hasProductAndUsage: !!splitResult.productAndUsage?.content,
       });
 
-      return splitResult;
+      return {
+        experienceSnippetId: experienceSnippet.id,
+        priceAndShopping: splitResult.priceAndShopping,
+        productAndUsage: splitResult.productAndUsage,
+        metadata: splitResult.metadata,
+      };
     } catch (error) {
       logger.error(`Failed to split experience:`, error);
       throw error;

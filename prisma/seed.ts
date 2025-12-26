@@ -7,6 +7,7 @@ import { DEFAULT_PROFILE_BANNER_URL } from '../src/domain/user/profile.constants
 import { getSeedMediaPath, SeedMediaKey } from './seed/helpers/media.helper'
 import { S3Service } from '../src/infrastructure/s3/s3.service'
 import { ProgressBar } from './seed/helpers/progress-bar'
+import { seedTaxonomy } from './seed/taxonomy.seed'
 // MinIO görsel yükleme artık ayrı bir script ile yapılıyor (upload-seed-media.ts)
 // import { ensureSeedMediaUploaded } from './seed/helpers/ensure-seed-media'
 // Import from JS file (no ts-node issues)
@@ -2339,7 +2340,12 @@ async function main() {
   progress.increment('Şifre hashleniyor...')
   passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, 10)
 
-  // 1. User Themes
+  // 1. Taxonomy (Experience Options)
+  console.log('\n📋 Creating taxonomy (Experience Durations, Locations, Purposes)...')
+  await seedTaxonomy()
+  progress.increment('Taxonomy oluşturuldu')
+
+  // 2. User Themes
   console.log('📱 Creating user themes...')
   const themeConfigs = [
     { name: 'Light', description: 'Açık tema - günün her saati için ideal' },

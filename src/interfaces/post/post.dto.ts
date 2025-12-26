@@ -321,6 +321,7 @@ export interface ExperienceCategory {
 }
 
 export interface SplitExperienceResponse {
+  experienceSnippetId: string;
   priceAndShopping: ExperienceCategory | null;
   productAndUsage: ExperienceCategory | null;
   metadata: {
