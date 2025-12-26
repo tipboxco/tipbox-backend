@@ -361,6 +361,7 @@ router.post(
       experience: req.body.experience,
       status: req.body.status as ExperienceStatus,
       images: req.body.images || [],
+      experienceSnippetId: req.body.experienceSnippetId,
     };
 
     if (
