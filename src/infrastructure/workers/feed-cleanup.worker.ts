@@ -15,7 +15,7 @@ export class FeedCleanupWorker {
     this.cleanupService = new FeedCleanupService();
 
     this.worker = new Worker(
-      'feed:cleanup',
+      'feed-cleanup',
       async (job: Job<FeedCleanupJobData>) => {
         return this.processJob(job);
       },

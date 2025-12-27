@@ -6,7 +6,7 @@ export class FeedCleanupScheduler {
   private queue: Queue<FeedCleanupJobData>;
 
   constructor() {
-    this.queue = new Queue('feed:cleanup', {
+    this.queue = new Queue('feed-cleanup', {
       connection: {
         host: process.env.REDIS_HOST || 'localhost',
         port: parseInt(process.env.REDIS_PORT || '6379'),
