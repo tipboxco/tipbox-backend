@@ -27,6 +27,7 @@ import { generateIdForModel } from '../../infrastructure/ids/id.strategy';
 import logger from '../../infrastructure/logger/logger';
 import { FeedScoringService } from './feed-scoring.service';
 import { FeedCleanupScheduler } from '../../infrastructure/scheduler/feed-cleanup.scheduler';
+import { FeedDistributionScheduler } from '../../infrastructure/scheduler/feed-distribution.scheduler';
 
 export class FeedService {
   private readonly feedRepo: FeedPrismaRepository;
@@ -35,6 +36,7 @@ export class FeedService {
   private readonly prisma: PrismaClient;
   private readonly scoringService: FeedScoringService;
   private readonly cleanupScheduler: FeedCleanupScheduler;
+  private readonly distributionScheduler: FeedDistributionScheduler;
   
   // Post counter for batch scoring
   private postCounter: number = 0;
@@ -46,6 +48,7 @@ export class FeedService {
     this.prisma = new PrismaClient();
     this.scoringService = new FeedScoringService();
     this.cleanupScheduler = new FeedCleanupScheduler();
+    this.distributionScheduler = new FeedDistributionScheduler();
   }
 
   /**
@@ -1249,18 +1252,23 @@ export class FeedService {
   }
 
   /**
-   * Yeni post oluşturulduğunda tüm aktif kullanıcıların feed'ine ekler (RELEVANCE SCORING ile)
+   * Post'u feed'lere ekle (Asynchronous with BullMQ)
    * 
-   * Batch Scoring Stratejisi:
-   * - Her 10 postta 1: Full scoring (trust, inventory, engagement, recency, boost)
-   * - 9 post: Fast scoring (category, boost, recency)
+   * Fan-out on Write stratejisi ile çalışır:
+   * - Post oluşturulduğunda bu metod çağrılır
+   * - Feed distribution job'ı queue'ya eklenir (non-blocking)
+   * - Worker arka planda hedef kullanıcılara feed dağıtır
    * 
-   * Threshold Kontrolü:
-   * - Minimum score: 5 puan (altında olanlar feed'e eklenmez)
-   * - Time window: 14 gün (eski postlar feed'e eklenmez)
+   * Performance optimizations:
+   * - Asynchronous processing (ana thread bloklanmaz)
+   * - Batch scoring (100'er kullanıcı)
+   * - Chunked inserts (500'er kayıt)
+   * - Controlled concurrency (max 3 chunk paralel)
+   * - Retry mechanism (max 3 attempt per chunk)
+   * - Score threshold filtering (minimum 5 puan)
    * 
-   * Cleanup Kontrolü:
-   * - Kullanıcı feed count > 1000 ise optimization job queue'ya eklenir (MVP için 1000'e düşürüldü)
+   * @param postId - Post ID
+   * @param postAuthorId - Post yazarının ID'si
    */
   async addPostToFeeds(postId: string, postAuthorId: string): Promise<void> {
     try {
@@ -1297,177 +1305,39 @@ export class FeedService {
         return;
       }
 
-      // Tüm aktif kullanıcıları al
-      const allActiveUsers = await this.prisma.user.findMany({
-        where: { status: 'ACTIVE' },
-        select: { id: true },
+      // Feed distribution job'ı queue'ya ekle (non-blocking)
+      await this.distributionScheduler.queueFeedDistribution(
+        postId,
+        postAuthorId,
+        {
+          mainCategoryId: post.mainCategoryId,
+          subCategoryId: post.subCategoryId,
+          productGroupId: post.productGroupId,
+          productId: post.productId,
+          likesCount: (post as any).likesCount || 0,
+          commentsCount: (post as any).commentsCount || 0,
+          viewsCount: (post as any).viewsCount || 0,
+          sharesCount: (post as any).sharesCount || 0,
+          isBoosted: post.isBoosted,
+          boostedUntil: post.boostedUntil,
+          createdAt: post.createdAt,
+        },
+        isFullScoring ? 'full' : 'fast'
+      );
+
+      logger.info({
+        message: 'Feed distribution job queued successfully',
+        postId,
+        scoringType: isFullScoring ? 'FULL' : 'FAST',
+        postCounter: this.postCounter,
       });
-
-      // Feed kaydları için array
-      const feedRecords: Array<{
-        id: string;
-        userId: string;
-        postId: string;
-        source: FeedSource;
-        relevanceScore: number;
-        seen: boolean;
-      }> = [];
-
-      // Scoring stratejisine göre işlem
-      if (isFullScoring) {
-        logger.info({
-          message: 'Using FULL SCORING',
-          postId,
-          postCounter: this.postCounter,
-        });
-
-        // Her kullanıcı için full scoring
-        for (const user of allActiveUsers) {
-          if (user.id === postAuthorId) continue; // Post sahibini hariç tut
-
-          const scoringResult = await this.scoringService.calculateFullScore(
-            user.id,
-            postId,
-            postAuthorId,
-            {
-              mainCategoryId: post.mainCategoryId,
-              subCategoryId: post.subCategoryId,
-              productGroupId: post.productGroupId,
-              productId: post.productId,
-              likesCount: (post as any).likesCount || 0,
-              commentsCount: (post as any).commentsCount || 0,
-              viewsCount: (post as any).viewsCount || 0,
-              sharesCount: (post as any).sharesCount || 0,
-              isBoosted: post.isBoosted,
-              boostedUntil: post.boostedUntil,
-              createdAt: post.createdAt,
-            }
-          );
-
-          // Threshold kontrolü (minimum 5 puan)
-          if (scoringResult.score < 5) {
-            continue; // Bu kullanıcıya ekleme
-          }
-
-          feedRecords.push({
-            id: generateIdForModel('Feed'),
-            userId: user.id,
-            postId,
-            source: scoringResult.source,
-            relevanceScore: scoringResult.score,
-            seen: false,
-          });
-        }
-      } else {
-        logger.info({
-          message: 'Using FAST SCORING',
-          postId,
-          postCounter: this.postCounter,
-        });
-
-        // Her kullanıcı için fast scoring
-        for (const user of allActiveUsers) {
-          if (user.id === postAuthorId) continue;
-
-          const scoringResult = await this.scoringService.calculateFastScore(user.id, {
-            mainCategoryId: post.mainCategoryId,
-            subCategoryId: post.subCategoryId,
-            isBoosted: post.isBoosted,
-            boostedUntil: post.boostedUntil,
-            createdAt: post.createdAt,
-          });
-
-          // Threshold kontrolü (minimum 5 puan)
-          if (scoringResult.score < 5) {
-            continue;
-          }
-
-          feedRecords.push({
-            id: generateIdForModel('Feed'),
-            userId: user.id,
-            postId,
-            source: scoringResult.source,
-            relevanceScore: scoringResult.score,
-            seen: false,
-          });
-        }
-      }
-
-      if (feedRecords.length > 0) {
-        // Batch insert
-        await this.prisma.feed.createMany({
-          data: feedRecords,
-          skipDuplicates: true,
-        });
-
-        // Her kullanıcı için unseenFeedCount'u artır ve feed limit kontrolü
-        const uniqueUserIds = Array.from(new Set(feedRecords.map((r) => r.userId)));
-        
-        for (const userId of uniqueUserIds) {
-          // Unseen count artır
-          await this.feedRepo.incrementUnseenFeedCount(userId).catch(() => {});
-
-          // Feed count kontrolü
-          const userFeedCount = await this.prisma.feed.count({
-            where: { userId },
-          });
-
-          // 1000+ feed varsa optimization job queue'ya ekle (MVP için 1000'e düşürüldü)
-          if (userFeedCount > 1000) {
-            await this.cleanupScheduler.queueUserOptimization(userId).catch((err) => {
-              logger.warn({
-                message: 'Failed to queue user optimization',
-                userId,
-                error: err.message,
-              });
-            });
-          }
-
-          // Cache'i invalidate et
-          try {
-            const cachePattern = `feed:${userId}:*`;
-            await this.cacheService.delPattern(cachePattern).catch(() => {});
-          } catch (error) {
-            logger.warn({
-              message: 'Failed to invalidate feed cache',
-              userId,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
-        }
-
-        // İstatistikler
-        const sourceCounts = feedRecords.reduce((acc, r) => {
-          acc[r.source] = (acc[r.source] || 0) + 1;
-          return acc;
-        }, {} as Record<FeedSource, number>);
-
-        const avgScore =
-          feedRecords.reduce((sum, r) => sum + r.relevanceScore, 0) / feedRecords.length;
-
-        logger.info({
-          message: 'Post added to feeds with relevance scoring',
-          postId,
-          scoringType: isFullScoring ? 'FULL' : 'FAST',
-          feedCount: feedRecords.length,
-          sourceCounts,
-          avgScore: Math.round(avgScore * 100) / 100,
-          minScore: Math.min(...feedRecords.map((r) => r.relevanceScore)),
-          maxScore: Math.max(...feedRecords.map((r) => r.relevanceScore)),
-        });
-      } else {
-        logger.info({
-          message: 'No feeds created (all users below threshold)',
-          postId,
-        });
-      }
     } catch (error) {
       logger.error({
-        message: 'Failed to add post to feeds',
+        message: 'Failed to queue feed distribution',
         postId,
         error: error instanceof Error ? error.message : String(error),
       });
-      // Hata olsa bile devam et
+      // Hata olsa bile devam et - post oluşturma başarısız sayılmamalı
     }
   }
 
