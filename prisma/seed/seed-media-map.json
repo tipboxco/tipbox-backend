@@ -216,40 +216,40 @@
     "targetKey": "brand-categories/smart home devices.png"
   },
   "event.communityevents-the-content-creator": {
-    "targetKey": "event/communityevents-the-content-creator.jpg"
+    "targetKey": "events/communityevents-the-content-creator.jpg"
   },
   "event.communityevents-the-digital-nomad-day": {
-    "targetKey": "event/communityevents-the-digital-nomad-day.jpg"
+    "targetKey": "events/communityevents-the-digital-nomad-day.jpg"
   },
   "event.communityevents-the-gaming-night": {
-    "targetKey": "event/communityevents-the-gaming-night.jpg"
+    "targetKey": "events/communityevents-the-gaming-night.jpg"
   },
   "event.communityevents-the-hikers-summit": {
-    "targetKey": "event/communityevents-the-hikers-summit.jpg"
+    "targetKey": "events/communityevents-the-hikers-summit.jpg"
   },
   "event.communityevents-the-masterchef-weekend": {
-    "targetKey": "event/communityevents-the-masterchef-weekend.jpg"
+    "targetKey": "events/communityevents-the-masterchef-weekend.jpg"
   },
   "event.communityevents-the-rainy-day-sanctuary": {
-    "targetKey": "event/communityevents-the-rainy-day-sanctuary.jpg"
+    "targetKey": "events/communityevents-the-rainy-day-sanctuary.jpg"
   },
   "event.communityevents-the-road-trip-ready": {
-    "targetKey": "event/communityevents-the-road-trip-ready.jpg"
+    "targetKey": "events/communityevents-the-road-trip-ready.jpg"
   },
   "event.communityevents-the-skincare-ritual": {
-    "targetKey": "event/communityevents-the-skincare-ritual.jpg"
+    "targetKey": "events/communityevents-the-skincare-ritual.jpg"
   },
   "event.communityevents-the-smart-home-geek": {
-    "targetKey": "event/communityevents-the-smart-home-geek.jpg"
+    "targetKey": "events/communityevents-the-smart-home-geek.jpg"
   },
   "event.communityevents-the-urban-commuter": {
-    "targetKey": "event/communityevents-the-urban-commuter.jpg"
+    "targetKey": "events/communityevents-the-urban-commuter.jpg"
   },
   "event.event": {
-    "targetKey": "event/event.png"
+    "targetKey": "events/event.png"
   },
   "event.eventcardbg": {
-    "targetKey": "event/eventcardbg.png"
+    "targetKey": "events/eventcardbg.png"
   },
   "marketplace.marketplace": {
     "targetKey": "marketplace/marketplace.jpg"
