@@ -1260,7 +1260,7 @@ export class FeedService {
    * - Time window: 14 gün (eski postlar feed'e eklenmez)
    * 
    * Cleanup Kontrolü:
-   * - Kullanıcı feed count > 2000 ise optimization job queue'ya eklenir
+   * - Kullanıcı feed count > 1000 ise optimization job queue'ya eklenir (MVP için 1000'e düşürüldü)
    */
   async addPostToFeeds(postId: string, postAuthorId: string): Promise<void> {
     try {
@@ -1412,8 +1412,8 @@ export class FeedService {
             where: { userId },
           });
 
-          // 2000+ feed varsa optimization job queue'ya ekle
-          if (userFeedCount > 2000) {
+          // 1000+ feed varsa optimization job queue'ya ekle (MVP için 1000'e düşürüldü)
+          if (userFeedCount > 1000) {
             await this.cleanupScheduler.queueUserOptimization(userId).catch((err) => {
               logger.warn({
                 message: 'Failed to queue user optimization',

@@ -19,9 +19,9 @@ export interface CleanupStats {
 export class FeedCleanupService {
   private readonly prisma: PrismaClient;
 
-  // Configurable thresholds
+  // Configurable thresholds - MVP için optimize edildi
   private readonly CONFIG = {
-    MAX_FEEDS_PER_USER: 2000,
+    MAX_FEEDS_PER_USER: 1000, // 2000'den 1000'e düşürüldü (MVP)
     UNSEEN_CLEANUP_THRESHOLD: 2.5,
     SEEN_CLEANUP_THRESHOLD: 1.5,
     TIME_WINDOW_DAYS: 14,
