@@ -1,11 +1,17 @@
 import { NotificationWorker } from './notification.worker';
+import { FeedCleanupWorker } from './feed-cleanup.worker';
+import { FeedCleanupScheduler } from '../scheduler/feed-cleanup.scheduler';
 import logger from '../logger/logger';
 
 class WorkerManager {
   private notificationWorker: NotificationWorker;
+  private feedCleanupWorker: FeedCleanupWorker;
+  private feedCleanupScheduler: FeedCleanupScheduler;
 
   constructor() {
     this.notificationWorker = new NotificationWorker();
+    this.feedCleanupWorker = new FeedCleanupWorker();
+    this.feedCleanupScheduler = new FeedCleanupScheduler();
   }
 
   /**
@@ -17,6 +23,13 @@ class WorkerManager {
 
       // Notification worker'ı başlat
       await this.notificationWorker.start();
+
+      // Feed cleanup worker'ı başlat (zaten constructor'da aktif)
+      logger.info('FeedCleanupWorker started');
+
+      // Feed cleanup scheduler'ı başlat (günlük job schedule et)
+      await this.feedCleanupScheduler.scheduleDaily();
+      logger.info('FeedCleanupScheduler started');
 
       logger.info('All workers started successfully');
 
@@ -36,6 +49,8 @@ class WorkerManager {
       logger.info('Stopping all workers...');
 
       await this.notificationWorker.stop();
+      await this.feedCleanupWorker.stop();
+      await this.feedCleanupScheduler.close();
 
       logger.info('All workers stopped successfully');
     } catch (error) {

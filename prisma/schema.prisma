@@ -1368,20 +1368,24 @@ model DMFeedback {
 }
 
 model Feed {
-  id        String      @id @db.VarChar(26)
-  userId    String      @map("user_id") @db.Uuid
-  postId    String      @map("post_id") @db.VarChar(26)
-  source    FeedSource
-  seen      Boolean     @default(false)
-  createdAt DateTime    @default(now()) @map("created_at")
-  updatedAt DateTime    @updatedAt @map("updated_at")
-  post      ContentPost @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String      @id @db.VarChar(26)
+  userId         String      @map("user_id") @db.Uuid
+  postId         String      @map("post_id") @db.VarChar(26)
+  source         FeedSource
+  seen           Boolean     @default(false)
+  relevanceScore Float       @default(0) @map("relevance_score") @db.DoublePrecision
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+  post           ContentPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([userId, seen])
   @@index([userId, source])
   @@index([postId])
+  @@index([userId, relevanceScore(sort: Desc)])
+  @@index([relevanceScore(sort: Desc), createdAt(sort: Desc)])
+  @@index([userId, relevanceScore(sort: Desc), createdAt(sort: Desc)])
   @@map("feeds")
 }
 
@@ -1792,6 +1796,11 @@ enum FeedSource {
   TRENDING
   NEW_USER
   BOOSTED
+  TRUSTER_NETWORK
+  MUTUAL_TRUST
+  INVENTORY_MATCH
+  PRODUCT_GROUP_MATCH
+  ENGAGEMENT_HIGH
 
   @@map("feed_source")
 }
