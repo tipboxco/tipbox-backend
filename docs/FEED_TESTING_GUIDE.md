@@ -396,12 +396,12 @@ describe('FeedCleanupService', () => {
   });
 
   describe('optimizeUserFeeds', () => {
-    it('should keep max 2000 feeds per user', async () => {
+    it('should keep max 1000 feeds per user', async () => {
       const userId = 'user-1-uuid';
 
-      // Create 2100 feeds
+      // Create 1100 feeds
       const feeds = [];
-      for (let i = 0; i < 2100; i++) {
+      for (let i = 0; i < 1100; i++) {
         feeds.push({
           id: `feed-bulk-${i}`,
           userId,
@@ -418,7 +418,7 @@ describe('FeedCleanupService', () => {
 
       const count = await prisma.feed.count({ where: { userId } });
 
-      expect(count).toBeLessThanOrEqual(2000);
+      expect(count).toBeLessThanOrEqual(1000);
 
       // Cleanup
       await prisma.feed.deleteMany({ where: { userId } });
