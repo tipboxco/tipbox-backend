@@ -6,14 +6,22 @@ export class FeedCleanupScheduler {
   private queue: Queue<FeedCleanupJobData>;
 
   constructor() {
+    // Redis connection - Docker'da "redis" host'unu kullan, local'de "localhost"
+    const redisHost = process.env.REDIS_HOST || (process.env.DOCKER_CONTAINER === 'true' ? 'redis' : 'localhost');
+    const redisPort = parseInt(process.env.REDIS_PORT || '6379');
+    
     this.queue = new Queue('feed-cleanup', {
       connection: {
-        host: process.env.REDIS_HOST || 'localhost',
-        port: parseInt(process.env.REDIS_PORT || '6379'),
+        host: redisHost,
+        port: redisPort,
       },
     });
 
-    logger.info({ message: 'FeedCleanupScheduler initialized' });
+    logger.info({ 
+      message: 'FeedCleanupScheduler initialized',
+      redisHost,
+      redisPort 
+    });
   }
 
   /**

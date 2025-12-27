@@ -14,6 +14,10 @@ export class FeedCleanupWorker {
   constructor() {
     this.cleanupService = new FeedCleanupService();
 
+    // Redis connection - Docker'da "redis" host'unu kullan, local'de "localhost"
+    const redisHost = process.env.REDIS_HOST || (process.env.DOCKER_CONTAINER === 'true' ? 'redis' : 'localhost');
+    const redisPort = parseInt(process.env.REDIS_PORT || '6379');
+
     this.worker = new Worker(
       'feed-cleanup',
       async (job: Job<FeedCleanupJobData>) => {
@@ -21,8 +25,8 @@ export class FeedCleanupWorker {
       },
       {
         connection: {
-          host: process.env.REDIS_HOST || 'localhost',
-          port: parseInt(process.env.REDIS_PORT || '6379'),
+          host: redisHost,
+          port: redisPort,
         },
         concurrency: 5, // Max 5 job paralel
         limiter: {
@@ -50,7 +54,11 @@ export class FeedCleanupWorker {
       });
     });
 
-    logger.info({ message: 'FeedCleanupWorker initialized' });
+    logger.info({ 
+      message: 'FeedCleanupWorker initialized',
+      redisHost,
+      redisPort
+    });
   }
 
   private async processJob(job: Job<FeedCleanupJobData>): Promise<any> {
