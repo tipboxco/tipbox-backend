@@ -797,6 +797,530 @@ export function ChatScreen({ threadId }: { threadId: string }) {
 4. **Network Changes:** Ağ değişikliklerinde (WiFi ↔ Mobile Data) socket otomatik olarak yeniden bağlanır
 5. **Deep Linking:** Chat ekranına deep link ile gelindiğinde socket bağlantısının hazır olduğundan emin olun
 
+## 🔄 Mobil Uygulama Socket Yaşam Döngüsü
+
+### Login Sonrası Socket Bağlantısı
+
+Login başarılı olduğunda socket bağlantısı otomatik olarak başlatılmalı:
+
+```typescript
+// src/features/auth/api/hooks.ts
+export function useLogin() {
+  const { connectSocket } = useSocketService();
+
+  return useMutation({
+    mutationFn: loginApi,
+    onSuccess: async (data) => {
+      // Token'ı kaydet
+      await SecureStore.setItemAsync('authToken', data.token);
+      
+      // Socket bağlantısını başlat
+      await connectSocket();
+    },
+  });
+}
+```
+
+### Logout Sonrası Socket Disconnect
+
+Logout yapıldığında socket bağlantısı kapatılmalı:
+
+```typescript
+// src/store/appStore.ts
+export const useAppStore = create((set) => ({
+  logout: async () => {
+    const { disconnectSocket } = useSocketService();
+    
+    // Socket bağlantısını kapat
+    await disconnectSocket();
+    
+    // Token'ı sil
+    await SecureStore.deleteItemAsync('authToken');
+    
+    // State'i temizle
+    set({ user: null, isAuthenticated: false });
+  },
+}));
+```
+
+### App Başlangıcında Socket Bağlantısı
+
+Uygulama başladığında, eğer kullanıcı zaten login ise socket bağlantısı başlatılmalı:
+
+```typescript
+// App.tsx
+import { useEffect } from 'react';
+import { AppState } from 'react-native';
+import { useSocketService } from './src/services/SocketService';
+import { useAppStore } from './src/store/appStore';
+
+export default function App() {
+  const { connectSocket, isConnected } = useSocketService();
+  const { isAuthenticated } = useAppStore();
+
+  useEffect(() => {
+    // App başlangıcında socket bağlantısını kontrol et
+    if (isAuthenticated && !isConnected) {
+      connectSocket();
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    // AppState değişikliklerini dinle
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active' && isAuthenticated && !isConnected) {
+        // Foreground'a geldiğinde socket bağlantısını kontrol et
+        connectSocket();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [isAuthenticated, isConnected]);
+}
+```
+
+## ✅ Backend Gereksinimleri
+
+Socket'in çalışması için backend'de şunlar olmalı:
+
+### 1. Socket.IO Server Çalışıyor Olmalı
+
+- Backend'de Socket.IO server'ı çalışıyor olmalı
+- URL: `http://192.168.1.165:3000` (veya `api.config.ts`'deki BASE_URL)
+- Path: `/socket.io/`
+- Port: 3000 (veya environment variable'dan)
+
+### 2. JWT Token Authentication
+
+Backend, socket bağlantısında JWT token'ı doğrulamalı:
+- Token `auth.token` ile gönderilir
+- Backend `socket.handshake.auth.token` ile alır
+- Token geçerli ve süresi dolmamış olmalı
+- Backend `AuthService.validateToken()` ile doğrular
+
+### 3. Backend Event'leri
+
+Backend şu event'leri desteklemeli:
+
+| Event | Yön | Açıklama |
+|-------|-----|----------|
+| `connect` | Client → Server | Bağlantı başarılı |
+| `connected` | Server → Client | Backend bağlantı onayı (`{ message, userId, userEmail }`) |
+| `disconnect` | Her iki yön | Bağlantı kesildi |
+| `thread_joined` | Server → Client | Thread room'una katılım başarılı |
+| `thread_join_error` | Server → Client | Thread katılım hatası |
+| `new_message` | Server → Client | Yeni mesaj geldi |
+| `message_sent` | Server → Client | Mesaj gönderildi (onay) |
+| `message_send_error` | Server → Client | Mesaj gönderme hatası |
+| `user_typing` | Server → Client | Kullanıcı yazıyor |
+| `message_read` | Server → Client | Mesaj okundu |
+
+## 📋 Kontrol Listesi
+
+Socket'in çalışıp çalışmadığını kontrol etmek için:
+
+### 1. Backend Socket Server Çalışıyor mu?
+
+```bash
+# Backend'de socket server'ın çalıştığından emin olun
+# Terminal'de backend loglarını kontrol edin:
+# "SocketHandler initialized successfully" mesajını görmelisiniz
+# "User connected: {email}" mesajını görmelisiniz (login sonrası)
+```
+
+### 2. Token Geçerli mi?
+
+- Login yapıldıktan sonra token SecureStore'a kaydediliyor
+- Token geçerli ve süresi dolmamış olmalı
+- Token formatı: JWT (JSON Web Token)
+- Backend token'ı doğrulayabilmeli
+
+### 3. URL Doğru mu?
+
+- `src/config/api.config.ts` dosyasındaki `BASE_URL` doğru olmalı
+- Örnek: `http://192.168.1.165:3000` (development)
+- Production'da: `https://api.tipbox.com`
+- URL'de protokol (`http://` veya `https://`) olmalı
+
+### 4. Network Bağlantısı Var mı?
+
+- Cihaz ve backend aynı network'te olmalı (development için)
+- Firewall socket bağlantısını engellememeli
+- Port 3000 açık olmalı (veya backend'in kullandığı port)
+
+### 5. CORS Ayarları Doğru mu?
+
+- Development ortamında (`NODE_ENV=development`) backend tüm origin'lere izin verir
+- Production'da `CORS_ORIGINS` environment variable'ında mobil uygulama origin'i olmalı
+- Socket.IO CORS ayarları backend'de yapılandırılmış olmalı
+
+## 🐛 Hata Ayıklama
+
+### Timeout Hatası
+
+```
+ERROR [SocketService] Max reconnection attempts reached
+ERROR [SocketService] Connection error details: {"message": "timeout", ...}
+```
+
+**Olası Nedenler:**
+1. Backend socket server çalışmıyor
+2. Network bağlantısı yok
+3. Firewall socket bağlantısını engelliyor
+4. Backend URL yanlış
+5. Port yanlış veya kapalı
+
+**Çözüm:**
+1. Backend'de socket server'ın çalıştığını kontrol edin
+2. Backend loglarını kontrol edin (`SocketHandler initialized successfully`)
+3. Network bağlantısını test edin (ping, curl)
+4. `api.config.ts`'deki URL'i kontrol edin
+5. Port'un açık olduğundan emin olun
+
+### Authentication Hatası
+
+```
+ERROR [SocketService] Authentication error: ...
+ERROR [SocketService] Connection error: Invalid authentication token
+```
+
+**Olası Nedenler:**
+1. Token geçersiz veya süresi dolmuş
+2. Backend token'ı doğrulayamıyor
+3. Token formatı yanlış
+4. Token SecureStore'dan okunamıyor
+
+**Çözüm:**
+1. Yeniden login yapın
+2. Token'ın geçerli olduğundan emin olun
+3. SecureStore'dan token'ı okuyup kontrol edin
+4. Backend loglarını kontrol edin (`Socket authentication error`)
+
+### Connection Refused Hatası
+
+```
+ERROR [SocketService] Connection error: connect ECONNREFUSED
+```
+
+**Olası Nedenler:**
+1. Backend çalışmıyor
+2. Yanlış URL veya port
+3. Network bağlantısı yok
+
+**Çözüm:**
+1. Backend'in çalıştığını kontrol edin
+2. URL ve port'u kontrol edin
+3. Network bağlantısını test edin
+
+## 📝 Log Mesajları
+
+Socket bağlantısı sırasında şu log mesajları görülebilir:
+
+### Başarılı Bağlantı
+
+```
+[SocketService] Connecting to: http://192.168.1.165:3000
+[SocketService] Access token available: true
+[SocketService] Connected to server, socket ID: <socket-id>
+[SocketService] Backend connection confirmed: { message, userId, userEmail }
+```
+
+### Hata Durumu
+
+```
+[SocketService] Connection attempt 1/5 failed: timeout
+[SocketService] Max reconnection attempts reached
+[SocketService] Socket features disabled. Application will continue with REST API only.
+```
+
+### Backend Logları (Başarılı)
+
+```
+SocketHandler initialized successfully
+Socket authenticated for user: user@example.com (ID: 123)
+User connected: user@example.com (ID: 123)
+User user@example.com joined room: 123
+```
+
+### Backend Logları (Hata)
+
+```
+Socket connection attempt without token
+Socket connection attempt with invalid token
+Socket authentication error: ...
+```
+
+## ⚠️ Önemli Notlar
+
+1. **Socket Bağlantısı Kritik Değil**: Socket bağlantısı başarısız olsa bile uygulama REST API ile çalışmaya devam eder. Socket özellikleri (real-time mesajlaşma, typing indicators) devre dışı kalır.
+
+2. **Otomatik Yeniden Bağlanma**: Socket.IO otomatik olarak yeniden bağlanmayı dener (5 deneme). Başarısız olursa socket özellikleri devre dışı kalır.
+
+3. **Token Güncelleme**: Token yenilendiğinde socket bağlantısı otomatik olarak güncellenmez. Yeniden bağlanma gerekebilir veya token refresh mekanizması implement edilmeli.
+
+4. **Background Mode**: iOS ve Android'de background mode için özel izinler gerekebilir. Socket bağlantısı background'da kesilebilir.
+
+5. **Battery Optimization**: Android'de battery optimization ayarları socket bağlantısını etkileyebilir. Kullanıcıdan battery optimization'ı devre dışı bırakması istenebilir.
+
+6. **Network Changes**: Ağ değişikliklerinde (WiFi ↔ Mobile Data) socket otomatik olarak yeniden bağlanır. Ancak bağlantı kesintisi olabilir.
+
+## 🐛 "Thread Endpoint Not Available" Hatası
+
+### Hata Mesajı
+```
+INFO [MessageDetail] Thread endpoint not available, using recipientUserId as threadId (fallback mode)
+```
+
+### Neden Oluşur?
+
+Bu hata, mobil uygulamanın `POST /messages/threads` endpoint'ine istek atamadığında veya istek başarısız olduğunda oluşur. Uygulama fallback moduna geçer ve `recipientUserId`'yi `threadId` olarak kullanır.
+
+### Olası Nedenler
+
+1. **Network Hatası**
+   - Backend'e erişilemiyor
+   - Timeout oluşuyor
+   - Network bağlantısı kesik
+
+2. **Authentication Hatası**
+   - Token geçersiz veya süresi dolmuş
+   - Token header'da gönderilmiyor
+   - Token formatı yanlış
+
+3. **Endpoint URL Hatası**
+   - Base URL yanlış
+   - Endpoint path yanlış (`/messages/threads`)
+   - Port yanlış
+
+4. **Request Formatı Hatası**
+   - `recipientId` eksik veya yanlış format
+   - Request body formatı yanlış
+   - Content-Type header eksik
+
+5. **Backend Yanıt Hatası**
+   - Backend 404 döndürüyor (recipient user not found)
+   - Backend 401 döndürüyor (unauthorized)
+   - Backend 500 döndürüyor (server error)
+
+### Debug Adımları
+
+#### 1. Network Loglarını Kontrol Et
+
+Mobil uygulamada network isteklerini loglayın:
+
+```typescript
+// Thread endpoint çağrısı öncesi
+console.log('[MessageDetail] Calling thread endpoint:', {
+  url: `${BASE_URL}/messages/threads`,
+  recipientId: recipientUserId,
+  token: token ? 'present' : 'missing',
+});
+
+try {
+  const response = await fetch(`${BASE_URL}/messages/threads`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ recipientId: recipientUserId }),
+  });
+
+  console.log('[MessageDetail] Thread endpoint response:', {
+    status: response.status,
+    ok: response.ok,
+    statusText: response.statusText,
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    console.error('[MessageDetail] Thread endpoint error:', errorData);
+  } else {
+    const data = await response.json();
+    console.log('[MessageDetail] Thread endpoint success:', data);
+  }
+} catch (error) {
+  console.error('[MessageDetail] Thread endpoint exception:', error);
+}
+```
+
+#### 2. Backend Loglarını Kontrol Et
+
+Backend terminalinde şu logları kontrol edin:
+
+```bash
+# Başarılı istek için:
+POST /messages/threads 200
+
+# Hata durumları için:
+POST /messages/threads 401 - Unauthorized
+POST /messages/threads 404 - Recipient user not found
+POST /messages/threads 400 - recipientId is required
+```
+
+#### 3. Market Test User Kontrolü
+
+Market test user'ın veritabanında var olduğundan emin olun:
+
+```sql
+-- Market test user ID: 248cc91f-b551-4ecc-a885-db1163571330
+SELECT id, email, status FROM users WHERE id = '248cc91f-b551-4ecc-a885-db1163571330';
+```
+
+#### 4. Token Kontrolü
+
+Token'ın geçerli olduğundan emin olun:
+
+```typescript
+// Token'ı decode edip kontrol et
+const tokenPayload = jwt.decode(token);
+console.log('Token payload:', tokenPayload);
+console.log('Token expired:', tokenPayload?.exp < Date.now() / 1000);
+```
+
+#### 5. Endpoint Testi
+
+Backend endpoint'ini manuel olarak test edin:
+
+```bash
+# curl ile test
+curl -X POST http://192.168.1.165:3000/messages/threads \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{"recipientId": "248cc91f-b551-4ecc-a885-db1163571330"}'
+```
+
+### Çözüm Önerileri
+
+#### 1. Error Handling İyileştirmesi
+
+Mobil uygulamada thread endpoint çağrısını iyileştirin:
+
+```typescript
+async function getOrCreateThread(recipientId: string): Promise<string | null> {
+  try {
+    const response = await fetch(`${BASE_URL}/messages/threads`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ recipientId }),
+      timeout: 10000, // 10 saniye timeout
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('[MessageDetail] Thread endpoint error:', {
+        status: response.status,
+        error: errorData,
+      });
+
+      // 404: Recipient user not found
+      if (response.status === 404) {
+        throw new Error('Recipient user not found');
+      }
+
+      // 401: Unauthorized
+      if (response.status === 401) {
+        throw new Error('Authentication failed');
+      }
+
+      throw new Error(`Thread endpoint failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.id; // threadId
+  } catch (error) {
+    console.error('[MessageDetail] Thread endpoint exception:', error);
+    
+    // Fallback: recipientUserId'yi threadId olarak kullan
+    console.warn('[MessageDetail] Thread endpoint not available, using recipientUserId as threadId (fallback mode)');
+    return recipientId; // Fallback
+  }
+}
+```
+
+#### 2. Retry Mekanizması
+
+Network hatalarında retry ekleyin:
+
+```typescript
+async function getOrCreateThreadWithRetry(
+  recipientId: string,
+  maxRetries: number = 3
+): Promise<string | null> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const threadId = await getOrCreateThread(recipientId);
+      return threadId;
+    } catch (error) {
+      if (attempt === maxRetries) {
+        console.error('[MessageDetail] Max retries reached, using fallback');
+        return recipientId; // Fallback
+      }
+      
+      // Exponential backoff
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+    }
+  }
+  
+  return recipientId; // Fallback
+}
+```
+
+#### 3. Market Test User Özel Durumu
+
+Eğer market test user için özel bir durum varsa, kontrol ekleyin:
+
+```typescript
+const MARKET_TEST_USER_ID = '248cc91f-b551-4ecc-a885-db1163571330';
+
+async function getOrCreateThread(recipientId: string): Promise<string | null> {
+  // Market test user için özel kontrol
+  if (recipientId === MARKET_TEST_USER_ID) {
+    console.log('[MessageDetail] Market test user detected, ensuring user exists');
+    // Özel işlemler...
+  }
+
+  // Normal thread endpoint çağrısı
+  // ...
+}
+```
+
+### Backend Kontrolü
+
+Backend'de market test user'ın var olduğundan emin olun:
+
+```typescript
+// Backend'de recipient kontrolü
+const recipient = await userRepo.findById(recipientId);
+if (!recipient) {
+  return res.status(404).json({ message: 'Recipient user not found' });
+}
+```
+
+### Özet
+
+1. **Backend çalışıyor mu?** - Backend loglarını kontrol edin
+2. **Token geçerli mi?** - Token'ı decode edip kontrol edin
+3. **Network bağlantısı var mı?** - Network isteklerini loglayın
+4. **Market test user var mı?** - Veritabanında kontrol edin
+5. **Endpoint doğru mu?** - URL ve path'i kontrol edin
+
+Fallback modu çalışıyor, ancak thread endpoint'inin neden başarısız olduğunu bulmak için yukarıdaki adımları takip edin.
+
+## 🔗 İlgili Dosyalar (Mobil Uygulama)
+
+- `src/services/SocketService/index.ts` - Socket service implementasyonu
+- `src/features/auth/api/hooks.ts` - Login sonrası socket bağlantısı
+- `src/store/appStore.ts` - Logout sonrası socket disconnect
+- `App.tsx` - App başlangıcında socket bağlantısı
+- `src/config/api.config.ts` - API ve socket URL konfigürasyonu
+- `MessageDetail` component - Thread endpoint çağrısı yapılan yer
+
 ## 📚 İlgili Dokümantasyon
 
 - [MESSAGING_SOCKET_EVENTS.md](./MESSAGING_SOCKET_EVENTS.md) - Tüm socket event'lerinin listesi

@@ -6,10 +6,12 @@ Bu dokümantasyon, seed workflow'unun tüm yönlerini kapsar: görsel yükleme, 
 
 1. [Genel Bakış](#genel-bakış)
 2. [Seed Workflow Akışı](#seed-workflow-akışı)
-3. [Görsel Yükleme Sistemi](#görsel-yükleme-sistemi)
-4. [Yeni Seed Verisi Ekleme](#yeni-seed-verisi-ekleme)
-5. [Production URL Yapılandırması](#production-url-yapılandırması)
-6. [Komutlar ve Kullanım](#komutlar-ve-kullanım)
+3. [Seed Optimizasyon Stratejisi](#seed-optimizasyon-stratejisi)
+4. [Görsel Yükleme Sistemi](#görsel-yükleme-sistemi)
+5. [Yeni Seed Verisi Ekleme](#yeni-seed-verisi-ekleme)
+6. [Production URL Yapılandırması](#production-url-yapılandırması)
+7. [Migration Gereksinimleri](#migration-gereksinimleri)
+8. [Komutlar ve Kullanım](#komutlar-ve-kullanım)
 
 ---
 
@@ -89,6 +91,116 @@ const baseUrl = getPublicMediaBaseUrl();
 
 const fullUrl = `${baseUrl}/${brand.imageUrl}`;
 // → http://localhost:9000/tipbox-media/brand-categories/cameras.png
+```
+
+---
+
+## ⚡ Seed Optimizasyon Stratejisi
+
+### Genel Bakış
+
+Seed verileri maliyet optimizasyonu için iki kategoriye ayrılmıştır:
+
+1. **Test Kategorileri** (Electronics, Beauty/Cosmetics): Tam veri seti
+2. **Diğer Kategoriler**: Minimal veri seti
+
+### Test Kategorileri
+
+**Brand Categories:**
+- `Electronics` - Tam product ve post seti
+- `Beauty` (Cosmetics) - Tam product ve post seti
+
+**Bu kategoriler için:**
+- ✅ Tüm product'lar oluşturulur (config'de tanımlı tüm product'lar)
+- ✅ Her product için **20 post** oluşturulur
+- ✅ Post type dağılımı:
+  - EXPERIENCE: 6 post
+  - COMPARE: 3 post
+  - UPDATE: 4 post
+  - QUESTION: 3 post
+  - TIPS: 2 post
+  - FREE: 2 post
+
+### Diğer Kategoriler
+
+**Brand Categories:**
+- Technology, Home & Living, Kitchen, Health & Fitness, Fashion, Gaming, Outdoor, Pets, Travel, Baby, Automotive, Sustainability
+
+**Bu kategoriler için:**
+- ⚠️ Sadece **ilk 1-2 product** oluşturulur (config'de tanımlı olsa bile)
+- ⚠️ Her product için **5 post** oluşturulur
+- ⚠️ Post type dağılımı:
+  - EXPERIENCE: 2 post
+  - COMPARE: 1 post
+  - UPDATE: 1 post
+  - QUESTION: 1 post
+
+### Diğer Post Kaynakları (Sınırlandırılmış)
+
+Seed dosyasında diğer post oluşturma noktaları da optimize edilmiştir:
+
+```typescript
+// AudioMax brand feed posts
+// Önceki: 20 post → Şimdi: 10 post
+
+// Trending posts
+// Önceki: randomBetween(5, 8) → Şimdi: randomBetween(2, 3)
+
+// Brand experiences boost
+// Önceki: 15 post → Şimdi: 5 post
+
+// Julia Havk TIPS posts
+// Önceki: 5 post → Şimdi: 3 post
+```
+
+### Kaldırılan Fonksiyonlar
+
+**`ensureAllPostsHaveMedia()` fonksiyonu kaldırılmıştır:**
+- Bu fonksiyon tüm post'lara otomatik media ekliyordu
+- Maliyet artışına neden oluyordu
+- Artık sadece görsel gerektiren post'lar için `ensurePostMedia()` kullanılıyor
+
+### Seed Başında Veri Temizleme
+
+Seed başında tüm ContentPost ve PostMedia kayıtları temizlenir:
+
+```typescript
+// prisma/seed.ts - main() fonksiyonunun başında
+await prisma.postMedia.deleteMany()
+await prisma.contentPost.deleteMany()
+// ... diğer ilgili tablolar
+```
+
+**ÖNEMLİ:** Bu temizleme işlemi seed'in her çalıştırılmasında yapılır, böylece duplicate veriler oluşmaz.
+
+### Product Görsel Yükleme
+
+**Test kategorileri için özel görsel yükleme:**
+- Electronics: `tests/assets/brands/electronics/` klasöründen görseller
+- Cosmetics: `tests/assets/brands/Cosmetic/` klasöründen görseller
+- Apple Products: `tests/assets/Apple_Products/` klasöründen görseller
+
+Bu görseller gerçeğe yakın test verileri için kullanılır.
+
+### Örnek: Brand Product Oluşturma
+
+```typescript
+// prisma/seed.ts - seedBrandProducts() fonksiyonu
+const isTestCategory = brandCategory?.name === 'Electronics' || brandCategory?.name === 'Beauty'
+
+// Test kategorisi değilse, sadece ilk 1-2 product'ı al
+if (!isTestCategory && productConfigs.length > 2) {
+  productConfigs = productConfigs.slice(0, 2)
+  console.log(`  ⚠️  Non-test category: Limiting to ${productConfigs.length} products`)
+}
+
+// Post sayısı belirleme
+const totalPostsPerProduct = isTestCategory ? 20 : 5
+
+// Post type dağılımı
+const postDistribution = isTestCategory
+  ? { EXPERIENCE: 6, COMPARE: 3, UPDATE: 4, QUESTION: 3, TIPS: 2, FREE: 2 }
+  : { EXPERIENCE: 2, COMPARE: 1, UPDATE: 1, QUESTION: 1 }
 ```
 
 ---
@@ -367,6 +479,69 @@ const fullUrl = `${baseUrl}/${product.imageUrl}`;
 
 ---
 
+## 🔄 Migration Gereksinimleri
+
+### Önemli: Migration'ları Uygulama
+
+Seed çalıştırmadan **ÖNCE** tüm migration'ların uygulandığından emin olun:
+
+```bash
+# Migration durumunu kontrol et
+docker-compose exec backend npx prisma migrate status
+
+# Uygulanmamış migration'ları uygula
+docker-compose exec backend npx prisma migrate deploy
+```
+
+### Gerekli Migration'lar
+
+**Experience Taxonomy Relations:**
+- `experience_snippet_id` kolonu (Inventory, ContentPost)
+- `experience_duration_id` kolonu (Inventory, ContentPost)
+- `experience_location_id` kolonu (Inventory, ContentPost)
+- `experience_purpose_id` kolonu (Inventory, ContentPost)
+
+Bu kolonlar olmadan seed çalıştırılırsa hata alırsınız:
+```
+The column `inventories.experience_snippet_id` does not exist in the current database.
+```
+
+### Prisma Client Generate
+
+Migration uygulandıktan sonra Prisma Client'ı yeniden generate edin:
+
+```bash
+docker-compose exec backend npx prisma generate
+```
+
+**ÖNEMLİ:** Container içinde çalıştırın, local'de değil!
+
+### Schema Değişiklikleri Sonrası
+
+Schema'da değişiklik yaptıktan sonra:
+
+1. Migration oluştur:
+   ```bash
+   docker-compose exec backend npx prisma migrate dev --name your_migration_name
+   ```
+
+2. Migration'ı uygula:
+   ```bash
+   docker-compose exec backend npx prisma migrate deploy
+   ```
+
+3. Prisma Client'ı generate et:
+   ```bash
+   docker-compose exec backend npx prisma generate
+   ```
+
+4. Seed'i çalıştır:
+   ```bash
+   npm run db:seed:all
+   ```
+
+---
+
 ## 🛠️ Komutlar ve Kullanım
 
 ### Seed Komutları
@@ -456,6 +631,20 @@ await prisma.mainCategory.create({
 - **Seed'de**: `getSeedMediaPath()` kullan (path döndürür)
 - **Runtime'da**: `getPublicMediaBaseUrl()` + path = tam URL
 
+### 6. Seed Optimizasyonu
+
+- **Test kategorileri** (Electronics, Beauty): Tam veri seti
+- **Diğer kategoriler**: Minimal veri seti (1-2 product, 5 post per product)
+- **`ensureAllPostsHaveMedia()` kaldırıldı**: Artık sadece görsel gerektiren post'lar için media ekleniyor
+- **Diğer post kaynakları sınırlandırıldı**: AudioMax feed (10), trending (2-3), brand experiences (5), Julia Havk TIPS (3)
+
+### 7. Seed Başında Veri Temizleme
+
+Seed başında (`main()` fonksiyonunun başında) tüm ContentPost ve PostMedia kayıtları temizlenir. Bu sayede:
+- Duplicate veriler oluşmaz
+- Her seed çalıştırmasında temiz bir başlangıç yapılır
+- Taxonomy verileri korunur (eğer `db:seed` kullanıyorsanız)
+
 ---
 
 ## ❓ Sık Sorulan Sorular
@@ -488,6 +677,30 @@ await prisma.mainCategory.create({
 
 **A:** Idempotent helper fonksiyonlar kullan (`ensureMainCategory`, `ensureBrand`, vb.). Bu fonksiyonlar zaten varsa günceller, yoksa oluşturur ve mevcut ID'yi korur.
 
+### Q: Seed çalıştırırken "column does not exist" hatası alıyorum, ne yapmalıyım?
+
+**A:** 
+1. Migration durumunu kontrol et: `docker-compose exec backend npx prisma migrate status`
+2. Uygulanmamış migration'ları uygula: `docker-compose exec backend npx prisma migrate deploy`
+3. Prisma Client'ı generate et: `docker-compose exec backend npx prisma generate`
+4. Seed'i tekrar çalıştır: `npm run db:seed:all`
+
+### Q: Test kategorileri ve diğer kategoriler arasındaki fark nedir?
+
+**A:**
+- **Test kategorileri** (Electronics, Beauty): Tam veri seti - tüm product'lar ve her product için 20 post
+- **Diğer kategoriler**: Minimal veri seti - sadece 1-2 product ve her product için 5 post
+- Bu optimizasyon maliyetleri düşürmek için yapılmıştır
+
+### Q: Seed başında hangi veriler temizleniyor?
+
+**A:** Seed başında (`main()` fonksiyonunun başında) şu veriler temizlenir:
+- `PostMedia` - Tüm post media kayıtları
+- `ContentPost` - Tüm content post kayıtları
+- İlgili tablolar (comments, likes, favorites, views, vb.)
+
+**ÖNEMLİ:** Taxonomy verileri (categories, brands, vb.) korunur (eğer `db:seed` kullanıyorsanız).
+
 ---
 
 ## 🎯 Hızlı Referans
@@ -507,6 +720,11 @@ await prisma.mainCategory.create({
 ### Komut Özeti
 
 ```bash
+# Migration işlemleri (seed'den önce)
+docker-compose exec backend npx prisma migrate status      # Durum kontrolü
+docker-compose exec backend npx prisma migrate deploy     # Migration uygula
+docker-compose exec backend npx prisma generate           # Prisma Client generate
+
 # Seed işlemleri
 npm run db:seed          # Seed (taxonomy korunur)
 npm run db:seed:all      # Seed All (tüm veriler temizlenir)
