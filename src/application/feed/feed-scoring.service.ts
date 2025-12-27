@@ -116,7 +116,14 @@ export class FeedScoringService {
         },
       };
     } catch (error) {
-      logger.error({ message: 'Full scoring error', error, userId, postId });
+      console.error('❌ FULL SCORING ERROR:', error);
+      logger.error({ 
+        message: 'Full scoring error', 
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
+        userId, 
+        postId 
+      });
       return this.getFallbackScore();
     }
   }
@@ -156,7 +163,13 @@ export class FeedScoringService {
         },
       };
     } catch (error) {
-      logger.error({ message: 'Fast scoring error', error, userId });
+      console.error('❌ FAST SCORING ERROR:', error);
+      logger.error({ 
+        message: 'Fast scoring error', 
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorStack: error instanceof Error ? error.stack : undefined,
+        userId 
+      });
       return this.getFallbackScore();
     }
   }
@@ -245,6 +258,7 @@ export class FeedScoringService {
 
   /**
    * Basit kategori match kontrolü (fast scoring için de kullanılır)
+   * Kullanıcının inventory'sindeki ürünlerin kategorilerine göre kontrol eder
    */
   private async checkSimpleCategoryMatch(
     userId: string,
@@ -254,17 +268,52 @@ export class FeedScoringService {
     }
   ): Promise<boolean> {
     const postCategoryId = postData.mainCategoryId || postData.subCategoryId;
+    console.log('🔍 [CATEGORY MATCH] Post Category ID:', postCategoryId);
+    
     if (!postCategoryId) return false;
 
-    const userPrefs = await this.prisma.userFeedPreferences.findUnique({
+    // Kullanıcının inventory'sindeki ürünlerin kategorilerini al
+    const userInventory = await this.prisma.inventory.findMany({
       where: { userId },
-      select: { preferredCategories: true },
+      include: {
+        product: {
+          include: {
+            group: {
+              include: {
+                subCategory: {
+                  include: {
+                    mainCategory: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      take: 20, // İlk 20 inventory item'ına bakmak yeterli (performance için)
     });
 
-    if (!userPrefs?.preferredCategories) return false;
+    console.log('🔍 [CATEGORY MATCH] User inventory count:', userInventory.length);
 
-    const preferredCategories = userPrefs.preferredCategories.split(',').filter(Boolean);
-    return preferredCategories.includes(postCategoryId);
+    if (userInventory.length === 0) return false;
+
+    // Inventory'deki ürünlerin kategorilerini topla
+    const userCategoryIds = new Set<string>();
+    for (const item of userInventory) {
+      if (item.product?.group?.subCategory?.mainCategory?.id) {
+        userCategoryIds.add(item.product.group.subCategory.mainCategory.id);
+      }
+      if (item.product?.group?.subCategory?.id) {
+        userCategoryIds.add(item.product.group.subCategory.id);
+      }
+    }
+
+    console.log('🔍 [CATEGORY MATCH] User category IDs:', Array.from(userCategoryIds));
+    const hasMatch = userCategoryIds.has(postCategoryId);
+    console.log('🔍 [CATEGORY MATCH] Has match:', hasMatch);
+
+    // Post'un kategorisi kullanıcının inventory kategorilerinde var mı?
+    return hasMatch;
   }
 
   /**

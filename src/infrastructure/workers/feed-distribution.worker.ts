@@ -227,19 +227,24 @@ export class FeedDistributionWorker {
             let scoringResult;
 
             if (scoringType === 'full') {
+              // BullMQ job'dan gelen string date'leri Date objesine dönüştür
               scoringResult = await this.scoringService.calculateFullScore(
                 userId,
                 postId,
                 postAuthorId,
-                postData
+                {
+                  ...postData,
+                  boostedUntil: postData.boostedUntil ? new Date(postData.boostedUntil) : null,
+                  createdAt: new Date(postData.createdAt),
+                }
               );
             } else {
               scoringResult = await this.scoringService.calculateFastScore(userId, {
                 mainCategoryId: postData.mainCategoryId,
                 subCategoryId: postData.subCategoryId,
                 isBoosted: postData.isBoosted,
-                boostedUntil: postData.boostedUntil,
-                createdAt: postData.createdAt,
+                boostedUntil: postData.boostedUntil ? new Date(postData.boostedUntil) : null,
+                createdAt: new Date(postData.createdAt), // String'i Date'e dönüştür
               });
             }
 
