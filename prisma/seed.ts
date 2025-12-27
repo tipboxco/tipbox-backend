@@ -1539,8 +1539,8 @@ async function addAppleBrandEvents(): Promise<void> {
         imageUrl,
         startDate,
         endDate,
-        isActive: true,
-      } as any,
+        status: 'PUBLISHED',
+      },
     })
     created++
   }
@@ -1962,6 +1962,14 @@ async function seedBrandProducts(userIdToUse: string): Promise<void> {
   for (const brand of brands) {
     console.log(`📦 Brand için product'lar oluşturuluyor: ${brand.name}`)
 
+    // Brand category'yi kontrol et (Electronics veya Beauty/Cosmetics için özel işlem)
+    const brandCategory = brand.categoryId ? await prisma.brandCategory.findUnique({
+      where: { id: brand.categoryId },
+      select: { name: true },
+    }).catch(() => null) : null
+    
+    const isTestCategory = brandCategory?.name === 'Electronics' || brandCategory?.name === 'Beauty'
+    
     // Brand'a göre kategori seç
     const isTechBrand = ['TechVision', 'FitnessTech'].includes(brand.name)
     const subCategory = isTechBrand ? techSubCategory : evYasamSubCategory
@@ -1975,7 +1983,15 @@ async function seedBrandProducts(userIdToUse: string): Promise<void> {
     })
 
     // Brand'a özel product'lar oluştur
-    const productConfigs = getProductConfigsForBrand(brand.name)
+    let productConfigs = getProductConfigsForBrand(brand.name)
+    
+    // Test kategorisi değilse, sadece ilk 1-2 product'ı al
+    if (!isTestCategory && productConfigs.length > 2) {
+      productConfigs = productConfigs.slice(0, 2)
+      console.log(`  ⚠️  Non-test category: Limiting to ${productConfigs.length} products for ${brand.name}`)
+    } else if (isTestCategory) {
+      console.log(`  ✅ Test category: Using all ${productConfigs.length} products for ${brand.name}`)
+    }
     
     // Debug: Product config kontrolü
     if (productConfigs.length === 0) {
@@ -2304,6 +2320,37 @@ async function main() {
   console.log(`   MinIO Bucket: ${s3BucketName}`)
   console.log(`   MinIO Container: ${s3Endpoint.includes('minio:9000') ? 'tipbox_minio_' + nodeEnv : 'Harici MinIO'}`)
   console.log('═══════════════════════════════════════════════════════════\n')
+
+  // Veri temizleme: Mevcut post ve PostMedia kayıtlarını sil
+  console.log('🧹 Mevcut post ve PostMedia kayıtları temizleniyor...')
+  try {
+    // İlişkili tabloları önce sil (foreign key constraint'leri nedeniyle)
+    await prisma.contentCommentVote.deleteMany({})
+    await prisma.contentComment.deleteMany({})
+    await prisma.contentLike.deleteMany({})
+    await prisma.contentFavorite.deleteMany({})
+    await prisma.contentPostView.deleteMany({})
+    await prisma.contentPostTag.deleteMany({})
+    await prisma.postComparisonScore.deleteMany({})
+    await prisma.postComparison.deleteMany({})
+    await prisma.postQuestion.deleteMany({})
+    await prisma.postTip.deleteMany({})
+    await prisma.postTag.deleteMany({})
+    await prisma.feedHighlight.deleteMany({})
+    await prisma.trendingPost.deleteMany({})
+    await prisma.topCommunityChoice.deleteMany({})
+    
+    // PostMedia'yı sil
+    await prisma.postMedia.deleteMany({})
+    
+    // ContentPost'ları sil
+    await prisma.contentPost.deleteMany({})
+    
+    console.log('✅ Mevcut post ve PostMedia kayıtları temizlendi\n')
+  } catch (error) {
+    console.error('⚠️  Veri temizleme sırasında hata:', error)
+    throw error
+  }
 
   // Progress bar oluştur (toplam 25 ana adım - PostMedia migration eklendi)
   const totalSteps = 25
@@ -3827,7 +3874,7 @@ async function main() {
       },
     })
     
-    if (existingJuliaPosts >= 5) {
+    if (existingJuliaPosts >= 3) { // 5'ten 3'e düşürüldü
       console.log(`✅ Julia zaten ${existingJuliaPosts} TIPS post'una sahip, post oluşturma atlanıyor`)
     } else {
       console.log(`📝 Julia'nın ${existingJuliaPosts} TIPS post'u var, yeni post'lar oluşturuluyor...`)
@@ -4068,135 +4115,7 @@ async function main() {
         console.error(`❌ Post media upload failed for tips post ${tipsPost3Id}:`, error)
       }
       
-      // 4. TIPS Post - Security & Privacy
-      const tipsPost4 = await createOrGetContentPost({
-        userId: juliaUser.id,
-        type: 'TIPS',
-        title: 'Essential Security Tips: Protect Your Digital Life',
-        body: 'In today\'s digital world, security should be your top priority. Always enable two-factor authentication (2FA) on all important accounts - this single step prevents 99% of unauthorized access attempts. Use a password manager to generate and store unique, strong passwords for each account. Regularly review app permissions and revoke access for apps you no longer use. Enable Find My Device features and set up remote wipe capabilities. Be cautious with public Wi-Fi - use a VPN when accessing sensitive information. Finally, keep your device and apps updated - security patches are released regularly to fix vulnerabilities. These practices have kept my accounts secure for years without a single breach.',
-        productId: product1.id,
-        mainCategoryId: techCategory?.id || null,
-        subCategoryId: phoneSubCategory?.id || null,
-        inventoryRequired: true,
-        isBoosted: false,
-      }).catch((e) => {
-        console.warn('Tips post 4 creation failed:', e)
-        return null
-      })
-      const tipsPost4Id = tipsPost4?.id || generateUlid()
-      
-      // Duplicate kontrolü: post_id unique constraint
-      const existingTip4 = await prisma.postTip.findFirst({
-        where: { postId: tipsPost4Id }
-      });
-      if (!existingTip4 && tipsPost4) {
-        await prisma.postTip.create({
-          data: { postId: tipsPost4Id, tipCategory: 'OTHER', isVerified: true },
-        }).catch(() => {})
-      }
-      
-      await prisma.contentPostTag.createMany({
-        data: [
-          { postId: tipsPost4Id, tag: 'Security' },
-          { postId: tipsPost4Id, tag: 'Privacy' },
-        ],
-        skipDuplicates: true,
-      }).catch(() => {})
-      
-      // Add PostMedia for tips post 4
-      try {
-        const s3Service = new S3Service()
-        const postImagePath = path.join(__dirname, '../tests/assets/post/post.jpg')
-        if (existsSync(postImagePath)) {
-          const postImageBuffer = readFileSync(postImagePath)
-          const postImageKey = `posts/${juliaUser.id}/${tipsPost4Id}/image-0.jpg`
-          const postMediaPath = await s3Service.uploadFile(postImageKey, postImageBuffer, 'image/jpeg')
-          
-          if (postMediaPath) {
-            const createdMedia = await prisma.postMedia.create({
-              data: {
-                postId: tipsPost4Id,
-                userId: juliaUser.id,
-                mediaUrl: postMediaPath,
-                orderIndex: 0,
-              },
-            })
-            console.log(`✅ PostMedia oluşturuldu: ${createdMedia.id} (post: ${tipsPost4Id})`)
-          } else {
-            console.warn(`⚠️ PostMedia path alınamadı (post: ${tipsPost4Id})`)
-          }
-        } else {
-          console.warn(`⚠️ Post görseli bulunamadı: ${postImagePath}`)
-        }
-      } catch (error) {
-        console.error(`❌ Post media upload failed for tips post ${tipsPost4Id}:`, error)
-      }
-      
-      // 5. TIPS Post - Performance Optimization
-      const tipsPost5 = await createOrGetContentPost({
-        userId: juliaUser.id,
-        type: 'TIPS',
-        title: 'Speed Up Your Device: Performance Optimization Guide',
-        body: 'Is your device feeling sluggish? These optimization tips will bring back that snappy performance. First, restart your device weekly - this clears memory leaks and refreshes system processes. Disable unnecessary animations and transitions in accessibility settings for instant responsiveness. Clear Safari/Chrome browsing data regularly - accumulated cache can slow down web browsing significantly. Limit background app refresh to only essential apps. Close unused apps from the app switcher, but don\'t force-quit everything - the system manages memory efficiently. Finally, if performance issues persist, consider a factory reset after backing up your data - this often resolves deep-seated software issues. After applying these tips, my device feels as fast as the day I bought it.',
-        productId: product1.id,
-        mainCategoryId: techCategory?.id || null,
-        subCategoryId: phoneSubCategory?.id || null,
-        inventoryRequired: true,
-        isBoosted: false,
-      }).catch((e) => {
-        console.warn('Tips post 5 creation failed:', e)
-        return null
-      })
-      const tipsPost5Id = tipsPost5?.id || generateUlid()
-      
-      // Duplicate kontrolü: post_id unique constraint
-      const existingTip5 = await prisma.postTip.findFirst({
-        where: { postId: tipsPost5Id }
-      });
-      if (!existingTip5 && tipsPost5) {
-        await prisma.postTip.create({
-          data: { postId: tipsPost5Id, tipCategory: 'USAGE', isVerified: true },
-        }).catch(() => {})
-      }
-      
-      await prisma.contentPostTag.createMany({
-        data: [
-          { postId: tipsPost5Id, tag: 'Performance' },
-          { postId: tipsPost5Id, tag: 'Optimization' },
-        ],
-        skipDuplicates: true,
-      }).catch(() => {})
-      
-      // Add PostMedia for tips post 5
-      try {
-        const s3Service = new S3Service()
-        const postImagePath = path.join(__dirname, '../tests/assets/post/post.jpg')
-        if (existsSync(postImagePath)) {
-          const postImageBuffer = readFileSync(postImagePath)
-          const postImageKey = `posts/${juliaUser.id}/${tipsPost5Id}/image-0.jpg`
-          const postMediaPath = await s3Service.uploadFile(postImageKey, postImageBuffer, 'image/jpeg')
-          
-          if (postMediaPath) {
-            const createdMedia = await prisma.postMedia.create({
-              data: {
-                postId: tipsPost5Id,
-                userId: juliaUser.id,
-                mediaUrl: postMediaPath,
-                orderIndex: 0,
-              },
-            })
-            console.log(`✅ PostMedia oluşturuldu: ${createdMedia.id} (post: ${tipsPost5Id})`)
-          } else {
-            console.warn(`⚠️ PostMedia path alınamadı (post: ${tipsPost5Id})`)
-          }
-        } else {
-          console.warn(`⚠️ Post görseli bulunamadı: ${postImagePath}`)
-        }
-      } catch (error) {
-        console.error(`❌ Post media upload failed for tips post ${tipsPost5Id}:`, error)
-      }
-      
-      console.log('✅ 5 TIPS posts created for Julia Havk')
+      console.log('✅ 3 TIPS posts created for Julia Havk')
       }
     }
   }
@@ -10699,7 +10618,7 @@ async function main() {
         },
       })
 
-      const targetAudioMaxFeedPosts = 20
+      const targetAudioMaxFeedPosts = 10 // 20'den 10'a düşürüldü
       const postsNeeded = Math.max(0, targetAudioMaxFeedPosts - existingAudioMaxFeedPosts)
 
       if (postsNeeded > 0) {
@@ -10977,8 +10896,8 @@ async function main() {
 
     if (brandProducts.length === 0) continue
 
-    // Her brand için 5-8 trending post oluştur
-    const trendingPostCount = randomBetween(5, 8)
+    // Her brand için 2-3 trending post oluştur (5-8'den 2-3'e düşürüldü)
+    const trendingPostCount = randomBetween(2, 3)
     const trendingTemplates = [
       {
         type: 'FREE' as const,
@@ -11773,6 +11692,10 @@ async function main() {
       }
       
       // 4. Her product için experiences, comparisons ve news seed data ekle
+      // Electronics ve Cosmetics için 20 post, diğerleri için 5 post
+      const isTestCategory = category.name === 'Electronics' || category.name === 'Beauty'
+      const totalPostsPerProduct = isTestCategory ? 20 : 5
+      
       for (let prodIndex = 0; prodIndex < brandProducts.length; prodIndex++) {
         const product = brandProducts[prodIndex]
         // Category ID'lerini product'tan veya group üzerinden al
@@ -11785,9 +11708,15 @@ async function main() {
         }
         
         console.log(`      \n      📱 [${prodIndex + 1}/${brandProducts.length}] Processing product: ${product.name} (${product.id})`)
+        console.log(`        📊 Target: ${totalPostsPerProduct} posts per product (${isTestCategory ? 'Test Category' : 'Other Category'})`)
         
-        // EXPERIENCES - Her product için en az 10-15 experience post
-        const targetExperiences = 12
+        // Post type dağılımı: Electronics/Cosmetics için 20, diğerleri için 5
+        const postDistribution = isTestCategory
+          ? { EXPERIENCE: 6, COMPARE: 3, UPDATE: 4, QUESTION: 3, TIPS: 2, FREE: 2 }
+          : { EXPERIENCE: 2, COMPARE: 1, UPDATE: 1, QUESTION: 1 }
+        
+        // EXPERIENCES
+        const targetExperiences = postDistribution.EXPERIENCE
         const existingExperiences = await prisma.contentPost.count({
           where: {
             productId: product.id,
@@ -11845,8 +11774,8 @@ async function main() {
           console.log(`        ✅ Product already has ${existingExperiences} EXPERIENCE posts (>= ${targetExperiences})`)
         }
         
-        // COMPARISONS - Her product için en az 5-8 comparison post
-        const targetComparisons = 6
+        // COMPARISONS
+        const targetComparisons = postDistribution.COMPARE || 0
         const existingComparisons = await prisma.contentPost.count({
           where: {
             productId: product.id,
@@ -11919,8 +11848,8 @@ async function main() {
           console.log(`        ✅ Product already has ${existingComparisons} COMPARE posts (>= ${targetComparisons})`)
         }
         
-        // NEWS (UPDATE) - Her product için en az 5-8 news post
-        const targetNews = 6
+        // NEWS (UPDATE)
+        const targetNews = postDistribution.UPDATE || 0
         const existingNews = await prisma.contentPost.count({
           where: {
             productId: product.id,
@@ -11975,50 +11904,192 @@ async function main() {
           console.log(`        ✅ Product already has ${existingNews} UPDATE news posts (>= ${targetNews})`)
         }
 
-        // EXTRA: News feed formatı için en az 9 güncel haber (image + stats ile)
-        const extraNewsTarget = 9
-        if (existingNews < extraNewsTarget) {
-          const extrasToCreate = extraNewsTarget - existingNews
-          console.log(`        📰 Adding ${extrasToCreate} neutral news posts for feed format...`)
-          const neutralTemplates = [
-            `${product.name} receives a stability patch focusing on battery and connectivity.`,
-            `${brand.name} confirms a minor feature rollout for ${product.name} users this week.`,
-            `Early adopters of ${product.name} report smoother performance after the latest update.`,
-            `${product.name} gets quality-of-life tweaks, improving everyday usability.`,
-          ]
-          for (let i = 0; i < extrasToCreate; i++) {
-            const templateBody = neutralTemplates[i % neutralTemplates.length]
-            const title = `${product.name} News Update #${existingNews + i + 1}`
-            const post = await createOrGetContentPost({
-              userId: userIdToUse,
+        // QUESTION posts (sadece test kategorileri için)
+        if (postDistribution.QUESTION) {
+          const targetQuestions = postDistribution.QUESTION
+          const existingQuestions = await prisma.contentPost.count({
+            where: {
               productId: product.id,
-              type: 'UPDATE',
-              title,
-              body: templateBody,
-              productGroupId: product.groupId || null,
-              mainCategoryId,
-              subCategoryId,
-              inventoryRequired: false,
-              isBoosted: false,
-              createdAt: daysAgo(randomBetween(1, 20)),
-            }).catch((error) => {
-              console.warn(`⚠️ Failed to create neutral news post for ${product.name}: ${error}`)
-              return null
-            })
+              type: 'QUESTION',
+            },
+          })
+          
+          if (existingQuestions < targetQuestions) {
+            const toCreate = targetQuestions - existingQuestions
+            console.log(`        ❓ Creating ${toCreate} QUESTION posts...`)
             
-            if (!post) continue
-            const newsPostId = post.id
-
-            await prisma.contentPostTag.createMany({
-              data: [
-                { postId: newsPostId, tag: brand.name },
-                { postId: newsPostId, tag: 'News' },
-              ],
-              skipDuplicates: true,
-            }).catch(() => {})
+            const questionTemplates = [
+              `What are the main differences between ${product.name} and similar products in the market?`,
+              `Is ${product.name} worth the price? Looking for honest opinions.`,
+              `Has anyone experienced any issues with ${product.name}? What should I watch out for?`,
+              `What accessories work best with ${product.name}?`,
+              `How does ${product.name} perform in real-world usage compared to reviews?`,
+            ]
+            
+            for (let i = 0; i < toCreate; i++) {
+              const templateBody = questionTemplates[i % questionTemplates.length]
+              const title = `Question about ${product.name} #${existingQuestions + i + 1}`
+              
+              const post = await createOrGetContentPost({
+                userId: userIdToUse,
+                type: 'QUESTION',
+                title,
+                body: templateBody,
+                productId: product.id,
+                mainCategoryId,
+                subCategoryId,
+                inventoryRequired: false,
+                isBoosted: false,
+                createdAt: daysAgo(randomBetween(1, 30)),
+              }).catch(() => null)
+              
+              if (!post) continue
+              const questionPostId = post.id
+              
+              // PostQuestion relation ekle
+              await prisma.postQuestion.create({
+                data: {
+                  postId: questionPostId,
+                  expectedAnswerFormat: 'LONG',
+                },
+              }).catch(() => {})
+              
+              // Post tag'leri ekle
+              await prisma.contentPostTag.createMany({
+                data: [
+                  { postId: questionPostId, tag: brand.name },
+                  { postId: questionPostId, tag: 'Soru' },
+                ],
+                skipDuplicates: true,
+              }).catch(() => {})
+            }
+            
+            console.log(`        ✅ Created ${toCreate} QUESTION posts for "${product.name}"`)
+          } else {
+            console.log(`        ✅ Product already has ${existingQuestions} QUESTION posts (>= ${targetQuestions})`)
           }
-        } else {
-          console.log(`        ℹ️ Product already has ${existingNews} news posts (>= ${extraNewsTarget})`)
+        }
+        
+        // TIPS posts (sadece test kategorileri için)
+        if (postDistribution.TIPS) {
+          const targetTips = postDistribution.TIPS
+          const existingTips = await prisma.contentPost.count({
+            where: {
+              productId: product.id,
+              type: 'TIPS',
+            },
+          })
+          
+          if (existingTips < targetTips) {
+            const toCreate = targetTips - existingTips
+            console.log(`        💡 Creating ${toCreate} TIPS posts...`)
+            
+            const tipsTemplates = [
+              `Pro tip: ${product.name} performs best when used in [specific scenario].`,
+              `Here's a hidden feature in ${product.name} that most people don't know about.`,
+              `To get the most out of ${product.name}, make sure to [specific tip].`,
+              `My favorite way to use ${product.name} is [specific use case].`,
+            ]
+            
+            for (let i = 0; i < toCreate; i++) {
+              const templateBody = tipsTemplates[i % tipsTemplates.length]
+              const title = `Tip for ${product.name} #${existingTips + i + 1}`
+              
+              const post = await createOrGetContentPost({
+                userId: userIdToUse,
+                type: 'TIPS',
+                title,
+                body: templateBody,
+                productId: product.id,
+                mainCategoryId,
+                subCategoryId,
+                inventoryRequired: false,
+                isBoosted: false,
+                createdAt: daysAgo(randomBetween(1, 30)),
+              }).catch(() => null)
+              
+              if (!post) continue
+              const tipsPostId = post.id
+              
+              // PostTip relation ekle
+              await prisma.postTip.create({
+                data: {
+                  postId: tipsPostId,
+                  tipCategory: 'USAGE',
+                  isVerified: false,
+                },
+              }).catch(() => {})
+              
+              // Post tag'leri ekle
+              await prisma.contentPostTag.createMany({
+                data: [
+                  { postId: tipsPostId, tag: brand.name },
+                  { postId: tipsPostId, tag: 'İpucu' },
+                ],
+                skipDuplicates: true,
+              }).catch(() => {})
+            }
+            
+            console.log(`        ✅ Created ${toCreate} TIPS posts for "${product.name}"`)
+          } else {
+            console.log(`        ✅ Product already has ${existingTips} TIPS posts (>= ${targetTips})`)
+          }
+        }
+        
+        // FREE posts (sadece test kategorileri için)
+        if (postDistribution.FREE) {
+          const targetFree = postDistribution.FREE
+          const existingFree = await prisma.contentPost.count({
+            where: {
+              productId: product.id,
+              type: 'FREE',
+            },
+          })
+          
+          if (existingFree < targetFree) {
+            const toCreate = targetFree - existingFree
+            console.log(`        🆓 Creating ${toCreate} FREE posts...`)
+            
+            const freeTemplates = [
+              `Free resource: Complete guide to getting started with ${product.name}.`,
+              `Free download: ${product.name} setup checklist and optimization tips.`,
+              `Free tutorial: How to maximize ${product.name} performance.`,
+            ]
+            
+            for (let i = 0; i < toCreate; i++) {
+              const templateBody = freeTemplates[i % freeTemplates.length]
+              const title = `Free Resource: ${product.name} #${existingFree + i + 1}`
+              
+              const post = await createOrGetContentPost({
+                userId: userIdToUse,
+                type: 'FREE',
+                title,
+                body: templateBody,
+                productId: product.id,
+                mainCategoryId,
+                subCategoryId,
+                inventoryRequired: false,
+                isBoosted: false,
+                createdAt: daysAgo(randomBetween(1, 30)),
+              }).catch(() => null)
+              
+              if (!post) continue
+              const freePostId = post.id
+              
+              // Post tag'leri ekle
+              await prisma.contentPostTag.createMany({
+                data: [
+                  { postId: freePostId, tag: brand.name },
+                  { postId: freePostId, tag: 'Ücretsiz' },
+                ],
+                skipDuplicates: true,
+              }).catch(() => {})
+            }
+            
+            console.log(`        ✅ Created ${toCreate} FREE posts for "${product.name}"`)
+          } else {
+            console.log(`        ✅ Product already has ${existingFree} FREE posts (>= ${targetFree})`)
+          }
         }
       }
       
@@ -12069,7 +12140,7 @@ async function main() {
         },
       })
       
-      const targetExpCount = 15
+      const targetExpCount = 5 // 15'ten 5'e düşürüldü (brand experiences boost)
       
       if (existingExpCount < targetExpCount) {
         const toCreate = targetExpCount - existingExpCount
@@ -12365,7 +12436,8 @@ async function main() {
   try {
     progress.increment('Eksik PostMedia kayıtları tamamlanıyor...')
     console.log('\n📸 Eksik PostMedia kayıtları kontrol ediliyor...')
-    await ensureAllPostsHaveMedia()
+    // ensureAllPostsHaveMedia() kaldırıldı - sadece görsel gerektiren post'lar için PostMedia ekleniyor
+    // await ensureAllPostsHaveMedia()
     console.log('✅ PostMedia kontrolü tamamlandı')
   } catch (error) {
     console.error('❌ PostMedia kontrolü hatası:', error)
