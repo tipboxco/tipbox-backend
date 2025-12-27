@@ -2469,7 +2469,9 @@ async function calculateInventoryScoreForSeed(userId: string, post: any): Promis
       where: {
         userId,
         product: {
-          productGroupId: post.productGroupId as any,
+          group: {
+            id: post.productGroupId,
+          }
         }
       }
     })
@@ -2482,7 +2484,13 @@ async function calculateInventoryScoreForSeed(userId: string, post: any): Promis
       where: {
         userId,
         product: {
-          mainCategoryId: post.mainCategoryId as any,
+          group: {
+            subCategory: {
+              mainCategory: {
+                id: post.mainCategoryId,
+              }
+            }
+          }
         }
       }
     })
