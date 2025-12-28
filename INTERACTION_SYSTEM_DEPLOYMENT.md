@@ -52,15 +52,29 @@ Tüm planlanan görevler başarıyla tamamlandı:
 
 Migration dosyası oluşturuldu: `prisma/migrations/20251228040057_add_content_share_and_comment_likes_count/migration.sql`
 
-**Development/Test ortamında:**
+#### Development/Test ortamında:
 ```bash
 npx prisma migrate dev
 ```
 
-**Production ortamında:**
+#### Production ortamında:
 ```bash
 npx prisma migrate deploy
 ```
+
+#### Docker ortamında:
+```bash
+# 1. Container içinde migration çalıştır
+docker-compose exec backend npx prisma migrate deploy
+
+# 2. Prisma client'ı yenile
+docker-compose exec backend npx prisma generate
+
+# 3. Backend servisini yeniden başlat
+docker-compose restart backend
+```
+
+> **Önemli**: Migration çalıştırdıktan sonra mutlaka Prisma client'ı yenileyin ve servisi restart edin!
 
 ### 2. Prisma Client Yenileme
 
