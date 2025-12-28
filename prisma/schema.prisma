@@ -28,6 +28,7 @@ model User {
   contentComments         ContentComment[]
   contentFavorites        ContentFavorite[]
   contentLikes            ContentLike[]
+  contentShares           ContentShare[]
   contentPostViews        ContentPostView[]
   contentPosts            ContentPost[]
   contentRatings          ContentRating[]
@@ -357,22 +358,22 @@ model ProductGroup {
 }
 
 model Product {
-  id                 String           @id @default(uuid()) @db.Uuid
+  id                 String              @id @default(uuid()) @db.Uuid
   name               String
   brand              String?
   description        String?
-  imageUrl           String?          @map("image_url")
-  subName            String?          @map("sub_name")
-  groupId            String?          @map("group_id") @db.Uuid
-  createdAt          DateTime         @default(now()) @map("created_at")
-  updatedAt          DateTime         @updatedAt @map("updated_at")
+  imageUrl           String?             @map("image_url")
+  subName            String?             @map("sub_name")
+  groupId            String?             @map("group_id") @db.Uuid
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
   contentPosts       ContentPost[]
   inventories        Inventory[]
-  comparisonProduct1 PostComparison[]      @relation("ComparisonProduct1")
-  comparisonProduct2 PostComparison[]      @relation("ComparisonProduct2")
+  comparisonProduct1 PostComparison[]    @relation("ComparisonProduct1")
+  comparisonProduct2 PostComparison[]    @relation("ComparisonProduct2")
   questionPosts      PostQuestion[]
-  group              ProductGroup?         @relation(fields: [groupId], references: [id])
-  aiExperienceSplits AiExperienceSplit[]   @relation("ProductAiExperienceSplits")
+  group              ProductGroup?       @relation(fields: [groupId], references: [id])
+  aiExperienceSplits AiExperienceSplit[] @relation("ProductAiExperienceSplits")
 
   @@map("products")
 }
@@ -396,21 +397,21 @@ model ProductSuggestion {
 }
 
 model Inventory {
-  id                   String               @id @default(uuid()) @db.Uuid
-  userId               String               @map("user_id") @db.Uuid
-  productId            String               @map("product_id") @db.Uuid
-  hasOwned             Boolean              @map("has_owned")
-  experienceSummary    String?              @map("experience_summary")
-  experienceSnippetId  String?              @map("experience_snippet_id") @db.Uuid
-  experienceDurationId String?              @map("experience_duration_id") @db.Uuid
-  experienceLocationId String?              @map("experience_location_id") @db.Uuid
-  experiencePurposeId  String?              @map("experience_purpose_id") @db.Uuid
-  createdAt            DateTime             @default(now()) @map("created_at")
-  updatedAt            DateTime             @updatedAt @map("updated_at")
-  product              Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
-  user                 User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  experienceSnippet    AiExperienceSplit?   @relation(fields: [experienceSnippetId], references: [id], onDelete: SetNull)
-  experienceDuration   ExperienceDuration?  @relation(fields: [experienceDurationId], references: [id], onDelete: SetNull)
+  id                   String              @id @default(uuid()) @db.Uuid
+  userId               String              @map("user_id") @db.Uuid
+  productId            String              @map("product_id") @db.Uuid
+  hasOwned             Boolean             @map("has_owned")
+  experienceSummary    String?             @map("experience_summary")
+  experienceSnippetId  String?             @map("experience_snippet_id") @db.Uuid
+  experienceDurationId String?             @map("experience_duration_id") @db.Uuid
+  experienceLocationId String?             @map("experience_location_id") @db.Uuid
+  experiencePurposeId  String?             @map("experience_purpose_id") @db.Uuid
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @updatedAt @map("updated_at")
+  product              Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  experienceSnippet    AiExperienceSplit?  @relation(fields: [experienceSnippetId], references: [id], onDelete: SetNull)
+  experienceDuration   ExperienceDuration? @relation(fields: [experienceDurationId], references: [id], onDelete: SetNull)
   experienceLocation   ExperienceLocation? @relation(fields: [experienceLocationId], references: [id], onDelete: SetNull)
   experiencePurpose    ExperiencePurpose?  @relation(fields: [experiencePurposeId], references: [id], onDelete: SetNull)
   media                InventoryMedia[]
@@ -480,6 +481,7 @@ model ContentPost {
   comments             ContentComment[]
   favorites            ContentFavorite[]
   likes                ContentLike[]
+  shares               ContentShare[]
   contentPostTags      ContentPostTag[]
   views                ContentPostView[]
   mainCategory         MainCategory?        @relation(fields: [mainCategoryId], references: [id])
@@ -499,6 +501,7 @@ model ContentPost {
   tip                  PostTip?
   topCommunityChoices  TopCommunityChoice[]
   trendingPosts        TrendingPost[]
+  media                PostMedia[]
 
   @@index([userId])
   @@index([userId, createdAt])
@@ -512,18 +515,17 @@ model ContentPost {
   @@index([experienceLocationId])
   @@index([experiencePurposeId])
   @@map("content_posts")
-  media                PostMedia[]
 }
 
 model PostMedia {
-  id        String        @id @default(uuid()) @db.Uuid
-  postId    String        @map("post_id") @db.VarChar(26)
-  userId    String        @map("user_id") @db.Uuid
-  mediaUrl  String        @map("media_url")
-  orderIndex Int          @default(0) @map("order_index")
-  createdAt DateTime      @default(now()) @map("created_at")
-  updatedAt DateTime      @updatedAt @map("updated_at")
-  post      ContentPost   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  id         String      @id @default(uuid()) @db.Uuid
+  postId     String      @map("post_id") @db.VarChar(26)
+  userId     String      @map("user_id") @db.Uuid
+  mediaUrl   String      @map("media_url")
+  orderIndex Int         @default(0) @map("order_index")
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
+  post       ContentPost @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@index([postId])
   @@index([postId, orderIndex])
@@ -625,21 +627,22 @@ model ContentPostTag {
 }
 
 model ContentComment {
-  id        String               @id @db.VarChar(26)
-  postId    String               @map("post_id") @db.VarChar(26)
-  userId    String               @map("user_id") @db.Uuid
-  parentId  String?              @map("parent_id") @db.VarChar(26)
-  comment   String
-  isAnswer  Boolean              @map("is_answer")
-  createdAt DateTime             @default(now()) @map("created_at")
-  updatedAt DateTime             @updatedAt @map("updated_at")
-  votes     ContentCommentVote[]
-  parent    ContentComment?      @relation("CommentReplies", fields: [parentId], references: [id])
-  replies   ContentComment[]     @relation("CommentReplies")
-  post      ContentPost          @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  likes     ContentLike[]
-  ratings   ContentRating[]
+  id         String               @id @db.VarChar(26)
+  postId     String               @map("post_id") @db.VarChar(26)
+  userId     String               @map("user_id") @db.Uuid
+  parentId   String?              @map("parent_id") @db.VarChar(26)
+  comment    String
+  isAnswer   Boolean              @map("is_answer")
+  likesCount Int                  @default(0) @map("likes_count")
+  createdAt  DateTime             @default(now()) @map("created_at")
+  updatedAt  DateTime             @updatedAt @map("updated_at")
+  votes      ContentCommentVote[]
+  parent     ContentComment?      @relation("CommentReplies", fields: [parentId], references: [id])
+  replies    ContentComment[]     @relation("CommentReplies")
+  post       ContentPost          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user       User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  likes      ContentLike[]
+  ratings    ContentRating[]
 
   @@index([postId])
   @@index([userId])
@@ -679,6 +682,23 @@ model ContentFavorite {
   @@index([userId])
   @@index([postId])
   @@map("content_favorites")
+}
+
+model ContentShare {
+  id        String      @id @default(uuid()) @db.Uuid
+  userId    String      @map("user_id") @db.Uuid
+  postId    String      @map("post_id") @db.VarChar(26)
+  shareType ShareType   @map("share_type")
+  platform  String?
+  createdAt DateTime    @default(now()) @map("created_at")
+  post      ContentPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([postId])
+  @@index([userId])
+  @@index([shareType])
+  @@map("content_shares")
 }
 
 model ContentCollection {
@@ -866,22 +886,22 @@ model BrandCategory {
 }
 
 model Brand {
-  id           String              @id @default(uuid()) @db.Uuid
-  name         String
-  description  String?
-  logoUrl      String?             @map("logo_url")
-  imageUrl     String?             @map("image_url")
-  category     String?
-  categoryId   String?             @map("category_id") @db.Uuid
-  createdAt    DateTime            @default(now()) @map("created_at")
-  updatedAt    DateTime            @updatedAt @map("updated_at")
-  surveys      BrandSurvey[]
-  followers    BridgeFollower[]
-  leaderboards BridgeLeaderboard[]
-  bridgePosts  BridgePost[]
-  rewards      BridgeReward[]
-  userStats    BridgeUserStats[]
-  brandCategory BrandCategory?     @relation(fields: [categoryId], references: [id])
+  id            String              @id @default(uuid()) @db.Uuid
+  name          String
+  description   String?
+  logoUrl       String?             @map("logo_url")
+  imageUrl      String?             @map("image_url")
+  category      String?
+  categoryId    String?             @map("category_id") @db.Uuid
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
+  surveys       BrandSurvey[]
+  followers     BridgeFollower[]
+  leaderboards  BridgeLeaderboard[]
+  bridgePosts   BridgePost[]
+  rewards       BridgeReward[]
+  userStats     BridgeUserStats[]
+  brandCategory BrandCategory?      @relation(fields: [categoryId], references: [id])
   wishboxEvents WishboxEvent[]
 
   @@map("brands")
@@ -1159,8 +1179,8 @@ model WishboxEvent {
   stats       WishboxStats[]
   brand       Brand?             @relation(fields: [brandId], references: [id], onDelete: Cascade)
 
-  @@map("wishbox_events")
   @@index([brandId])
+  @@map("wishbox_events")
 }
 
 model WishboxScenario {
@@ -1529,25 +1549,25 @@ model ExpertAnswer {
 }
 
 model AiExperienceSplit {
-  id                            String        @id @default(uuid()) @db.Uuid
-  userId                        String        @map("user_id") @db.Uuid
-  productId                     String?       @map("product_id") @db.Uuid
-  originalExperience            String        @map("original_experience") @db.Text
-  priceAndShopping              String?       @map("price_and_shopping") @db.Text
-  productAndUsage               String?       @map("product_and_usage") @db.Text
-  priceAndShoppingRating        Int?          @map("price_and_shopping_rating")
-  productAndUsageRating         Int?          @map("product_and_usage_rating")
-  isEdited                      Boolean       @default(false) @map("is_edited")
-  model                         String        @default("gemini-2.5-pro")
-  promptVersion                 String        @default("v1.0") @map("prompt_version")
-  tokensUsed                    Int?          @map("tokens_used")
-  processingTimeMs              Int?          @map("processing_time_ms")
-  createdAt                     DateTime      @default(now()) @map("created_at")
-  updatedAt                     DateTime      @updatedAt @map("updated_at")
-  user                          User          @relation("UserAiExperienceSplits", fields: [userId], references: [id], onDelete: Cascade)
-  product                       Product?      @relation("ProductAiExperienceSplits", fields: [productId], references: [id], onDelete: SetNull)
-  inventories                   Inventory[]
-  contentPosts                  ContentPost[]
+  id                     String        @id @default(uuid()) @db.Uuid
+  userId                 String        @map("user_id") @db.Uuid
+  productId              String?       @map("product_id") @db.Uuid
+  originalExperience     String        @map("original_experience") @db.Text
+  priceAndShopping       String?       @map("price_and_shopping") @db.Text
+  productAndUsage        String?       @map("product_and_usage") @db.Text
+  priceAndShoppingRating Int?          @map("price_and_shopping_rating")
+  productAndUsageRating  Int?          @map("product_and_usage_rating")
+  isEdited               Boolean       @default(false) @map("is_edited")
+  model                  String        @default("gemini-2.5-pro")
+  promptVersion          String        @default("v1.0") @map("prompt_version")
+  tokensUsed             Int?          @map("tokens_used")
+  processingTimeMs       Int?          @map("processing_time_ms")
+  createdAt              DateTime      @default(now()) @map("created_at")
+  updatedAt              DateTime      @updatedAt @map("updated_at")
+  user                   User          @relation("UserAiExperienceSplits", fields: [userId], references: [id], onDelete: Cascade)
+  product                Product?      @relation("ProductAiExperienceSplits", fields: [productId], references: [id], onDelete: SetNull)
+  inventories            Inventory[]
+  contentPosts           ContentPost[]
 
   @@index([userId])
   @@index([productId])
@@ -1613,6 +1633,13 @@ enum ContentPostType {
   UPDATE
 
   @@map("content_post_type")
+}
+
+enum ShareType {
+  INTERNAL_REPOST
+  EXTERNAL_SHARE
+
+  @@map("share_type")
 }
 
 enum QuestionAnswerFormat {
@@ -1862,37 +1889,37 @@ model BoostOption {
 }
 
 model ExperienceDuration {
-  id            String        @id @default(uuid()) @db.Uuid
-  name          String        @unique
-  isActive      Boolean       @default(true) @map("is_active")
-  createdAt     DateTime      @default(now()) @map("created_at")
-  updatedAt     DateTime      @updatedAt @map("updated_at")
-  inventories   Inventory[]
-  contentPosts  ContentPost[]
+  id           String        @id @default(uuid()) @db.Uuid
+  name         String        @unique
+  isActive     Boolean       @default(true) @map("is_active")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  inventories  Inventory[]
+  contentPosts ContentPost[]
 
   @@map("experience_durations")
 }
 
 model ExperienceLocation {
-  id            String        @id @default(uuid()) @db.Uuid
-  name          String        @unique
-  isActive      Boolean       @default(true) @map("is_active")
-  createdAt     DateTime      @default(now()) @map("created_at")
-  updatedAt     DateTime      @updatedAt @map("updated_at")
-  inventories   Inventory[]
-  contentPosts  ContentPost[]
+  id           String        @id @default(uuid()) @db.Uuid
+  name         String        @unique
+  isActive     Boolean       @default(true) @map("is_active")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  inventories  Inventory[]
+  contentPosts ContentPost[]
 
   @@map("experience_locations")
 }
 
 model ExperiencePurpose {
-  id            String        @id @default(uuid()) @db.Uuid
-  name          String        @unique
-  isActive      Boolean       @default(true) @map("is_active")
-  createdAt     DateTime      @default(now()) @map("created_at")
-  updatedAt     DateTime      @updatedAt @map("updated_at")
-  inventories   Inventory[]
-  contentPosts  ContentPost[]
+  id           String        @id @default(uuid()) @db.Uuid
+  name         String        @unique
+  isActive     Boolean       @default(true) @map("is_active")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  inventories  Inventory[]
+  contentPosts ContentPost[]
 
   @@map("experience_purposes")
 }
