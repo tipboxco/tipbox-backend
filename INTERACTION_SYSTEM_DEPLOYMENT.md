@@ -13,25 +13,30 @@ Tüm planlanan görevler başarıyla tamamlandı:
    - `ContentShare` entity oluşturuldu
    - `ShareType` enum oluşturuldu
    - `ContentComment` entity güncellendi (likesCount, string tip'leri)
+   - `ContentFavorite` entity güncellendi (string tip'leri)
 
 3. ✅ **Infrastructure Layer - Repositories**
    - `ContentCommentPrismaRepository` oluşturuldu
    - `ContentSharePrismaRepository` oluşturuldu
+   - `ContentFavoritePrismaRepository` oluşturuldu (yeni)
    - `ContentPostPrismaRepository`'ye increment/decrement metotları eklendi
 
 4. ✅ **Application Layer**
-   - `InteractionService` genişletildi (8 yeni metot):
+   - `InteractionService` genişletildi (11 yeni metot):
      - `createComment()`
      - `deleteComment()`
      - `getPostComments()`
      - `likeComment()`
      - `unlikeComment()`
      - `sharePost()`
+     - `favoritePost()` (güncellendi - repository kullanıyor)
+     - `unfavoritePost()` (güncellendi - repository kullanıyor)
+     - `getUserFavorites()` (yeni)
      - `getUserInteractionStatus()`
    - Mevcut metotlar string tip'lerine güncellendi
 
 5. ✅ **API Layer**
-   - `interaction.router.ts` oluşturuldu (12 endpoint)
+   - `interaction.router.ts` oluşturuldu (13 endpoint)
    - Tüm endpoint'ler için Swagger annotations eklendi
    - `app.ts`'e router entegre edildi
 
@@ -88,6 +93,7 @@ Tüm endpoint'ler `/interactions` prefix'i ile kullanılır:
 ### Bookmark Endpoints
 - `POST /interactions/posts/:postId/bookmark` - Favorilere ekle
 - `DELETE /interactions/posts/:postId/bookmark` - Favorilerden çıkar
+- `GET /interactions/bookmarks` - Kullanıcının favorilerini listele
 
 ### Comment Endpoints
 - `POST /interactions/posts/:postId/comments` - Yorum yap
@@ -151,6 +157,12 @@ Swagger UI'da tüm endpoint'leri görmek için:
    Headers: Authorization: Bearer <token>
    ```
 
+6. **Favorileri Listeleyin:**
+   ```
+   GET /interactions/bookmarks?limit=50
+   Headers: Authorization: Bearer <token>
+   ```
+
 ## 📝 Notlar
 
 ### Type Safety
@@ -210,14 +222,16 @@ Herhangi bir sorun yaşarsanız:
 ## ✨ Özet
 
 Tüm planlanan özellikler başarıyla implement edildi:
-- ✅ 8 yeni servis metodu
-- ✅ 12 yeni API endpoint
+- ✅ 11 yeni/güncellenmiş servis metodu
+- ✅ 13 yeni API endpoint
 - ✅ 3 yeni notification tipi
-- ✅ 2 yeni repository
-- ✅ 2 yeni domain entity
+- ✅ 3 yeni repository (Comment, Share, Favorite)
+- ✅ 1 yeni domain entity (ContentShare)
+- ✅ 2 güncellenen entity (ContentComment, ContentFavorite)
 - ✅ Swagger dokümantasyonu
 - ✅ Type-safe implementation
 - ✅ Linting errors düzeltildi
+- ✅ Bookmark (Favorite) sistemi tam entegre
 
 Sistem kullanıma hazır! 🎉
 

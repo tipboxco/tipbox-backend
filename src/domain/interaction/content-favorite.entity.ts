@@ -1,18 +1,18 @@
 export class ContentFavorite {
   constructor(
     public readonly id: string,
-    public readonly userId: number,
-    public readonly postId: number,
+    public readonly userId: string,
+    public readonly postId: string,
     public readonly createdAt: Date,
     public readonly updatedAt: Date
   ) {}
 
   // Essential business methods only
-  belongsToUser(userId: number): boolean {
+  belongsToUser(userId: string): boolean {
     return this.userId === userId;
   }
 
-  belongsToPost(postId: number): boolean {
+  belongsToPost(postId: string): boolean {
     return this.postId === postId;
   }
 

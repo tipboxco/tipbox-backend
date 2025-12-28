@@ -1,6 +1,7 @@
 import { ContentLike } from '../../domain/interaction/content-like.entity';
 import { ContentComment } from '../../domain/interaction/content-comment.entity';
 import { ContentShare } from '../../domain/interaction/content-share.entity';
+import { ContentFavorite } from '../../domain/interaction/content-favorite.entity';
 import { ContentPost } from '../../domain/content/content-post.entity';
 import { User } from '../../domain/user/user.entity';
 import { ShareType } from '../../domain/interaction/share-type.enum';
@@ -8,6 +9,7 @@ import { ContentLikePrismaRepository } from '../../infrastructure/repositories/c
 import { ContentPostPrismaRepository } from '../../infrastructure/repositories/content-post-prisma.repository';
 import { ContentCommentPrismaRepository } from '../../infrastructure/repositories/content-comment-prisma.repository';
 import { ContentSharePrismaRepository } from '../../infrastructure/repositories/content-share-prisma.repository';
+import { ContentFavoritePrismaRepository } from '../../infrastructure/repositories/content-favorite-prisma.repository';
 import { UserPrismaRepository } from '../../infrastructure/repositories/user-prisma.repository';
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import SocketManager from '../../infrastructure/realtime/socket-manager';
@@ -18,6 +20,7 @@ export class InteractionService {
   private contentPostRepo = new ContentPostPrismaRepository();
   private commentRepo = new ContentCommentPrismaRepository();
   private shareRepo = new ContentSharePrismaRepository();
+  private favoriteRepo = new ContentFavoritePrismaRepository();
   private userRepo = new UserPrismaRepository();
   private prisma = getPrisma();
 
@@ -107,9 +110,9 @@ export class InteractionService {
   }
 
   /**
-   * Bir gönderiyi favorilere ekle
+   * Bir gönderiyi favorilere ekle (bookmark)
    */
-  async favoritePost(userId: string, postId: string): Promise<void> {
+  async favoritePost(userId: string, postId: string): Promise<ContentFavorite> {
     try {
       // Gönderiyi kontrol et
       const post = await this.contentPostRepo.findById(postId);
@@ -118,25 +121,15 @@ export class InteractionService {
       }
 
       // Zaten favoride mi kontrol et
-      const existingFavorite = await this.prisma.contentFavorite.findUnique({
-        where: {
-          userId_postId: {
-            userId: userId,
-            postId: postId
-          }
-        }
-      });
-
+      const existingFavorite = await this.favoriteRepo.findByUserAndPost(userId, postId);
       if (existingFavorite) {
         throw new Error('Post already favorited');
       }
 
       // Favoriye ekle
-      await this.prisma.contentFavorite.create({
-        data: {
-          userId: userId,
-          postId: postId
-        }
+      const favorite = await this.favoriteRepo.create({
+        userId,
+        postId,
       });
 
       // Favori sayısını güncelle
@@ -162,6 +155,7 @@ export class InteractionService {
       }
 
       logger.info(`User ${userId} favorited post ${postId}`);
+      return favorite;
     } catch (error) {
       logger.error(`Failed to favorite post ${postId} by user ${userId}:`, error);
       throw error;
@@ -169,32 +163,17 @@ export class InteractionService {
   }
 
   /**
-   * Bir gönderiyi favorilerden çıkar
+   * Bir gönderiyi favorilerden çıkar (unbookmark)
    */
   async unfavoritePost(userId: string, postId: string): Promise<void> {
     try {
       // Favoriyi bul ve sil
-      const favorite = await this.prisma.contentFavorite.findUnique({
-        where: {
-          userId_postId: {
-            userId: userId,
-            postId: postId
-          }
-        }
-      });
-
+      const favorite = await this.favoriteRepo.findByUserAndPost(userId, postId);
       if (!favorite) {
         throw new Error('Favorite not found');
       }
 
-      await this.prisma.contentFavorite.delete({
-        where: {
-          userId_postId: {
-            userId: userId,
-            postId: postId
-          }
-        }
-      });
+      await this.favoriteRepo.delete(userId, postId);
 
       // Favori sayısını güncelle
       await this.contentPostRepo.decrementFavoriteCount(postId);
@@ -202,6 +181,18 @@ export class InteractionService {
       logger.info(`User ${userId} unfavorited post ${postId}`);
     } catch (error) {
       logger.error(`Failed to unfavorite post ${postId} by user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Kullanıcının favorilerini getir
+   */
+  async getUserFavorites(userId: string, limit = 50): Promise<ContentFavorite[]> {
+    try {
+      return await this.favoriteRepo.findByUserId(userId, limit);
+    } catch (error) {
+      logger.error(`Failed to get favorites for user ${userId}:`, error);
       throw error;
     }
   }
@@ -540,9 +531,7 @@ export class InteractionService {
     try {
       const [like, favorite, share] = await Promise.all([
         this.contentLikeRepo.findByUserAndPost(userId, postId),
-        this.prisma.contentFavorite.findUnique({
-          where: { userId_postId: { userId, postId } },
-        }),
+        this.favoriteRepo.findByUserAndPost(userId, postId),
         this.shareRepo.findByUserAndPost(userId, postId),
       ]);
 

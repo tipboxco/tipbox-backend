@@ -107,10 +107,11 @@ router.post(
     const userId = (req as any).user?.id;
     const { postId } = req.params;
 
-    await interactionService.favoritePost(userId, postId);
+    const favorite = await interactionService.favoritePost(userId, postId);
 
     return res.status(200).json({
       success: true,
+      data: favorite,
       message: 'Post bookmarked successfully',
     });
   })
@@ -145,6 +146,39 @@ router.delete(
     return res.status(200).json({
       success: true,
       message: 'Post unbookmarked successfully',
+    });
+  })
+);
+
+/**
+ * @openapi
+ * /interactions/bookmarks:
+ *   get:
+ *     summary: Kullanıcının favorilerini getir
+ *     tags: [Interactions]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *     responses:
+ *       200:
+ *         description: Favoriler listelendi
+ */
+router.get(
+  '/bookmarks',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as any).user?.id;
+    const limit = parseInt(req.query.limit as string) || 50;
+
+    const favorites = await interactionService.getUserFavorites(userId, limit);
+
+    return res.status(200).json({
+      success: true,
+      data: favorites,
     });
   })
 );
