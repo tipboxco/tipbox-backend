@@ -268,8 +268,6 @@ export class FeedScoringService {
     }
   ): Promise<boolean> {
     const postCategoryId = postData.mainCategoryId || postData.subCategoryId;
-    console.log('🔍 [CATEGORY MATCH] Post Category ID:', postCategoryId);
-    
     if (!postCategoryId) return false;
 
     // Kullanıcının inventory'sindeki ürünlerin kategorilerini al
@@ -293,8 +291,6 @@ export class FeedScoringService {
       take: 20, // İlk 20 inventory item'ına bakmak yeterli (performance için)
     });
 
-    console.log('🔍 [CATEGORY MATCH] User inventory count:', userInventory.length);
-
     if (userInventory.length === 0) return false;
 
     // Inventory'deki ürünlerin kategorilerini topla
@@ -308,12 +304,8 @@ export class FeedScoringService {
       }
     }
 
-    console.log('🔍 [CATEGORY MATCH] User category IDs:', Array.from(userCategoryIds));
-    const hasMatch = userCategoryIds.has(postCategoryId);
-    console.log('🔍 [CATEGORY MATCH] Has match:', hasMatch);
-
     // Post'un kategorisi kullanıcının inventory kategorilerinde var mı?
-    return hasMatch;
+    return userCategoryIds.has(postCategoryId);
   }
 
   /**

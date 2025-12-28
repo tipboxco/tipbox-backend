@@ -5,6 +5,7 @@ import { ProfilePrismaRepository } from '../../infrastructure/repositories/profi
 import { UserSettingsPrismaRepository } from '../../infrastructure/repositories/user-settings-prisma.repository';
 import { UserDevicePrismaRepository } from '../../infrastructure/repositories/user-device-prisma.repository';
 import { UserPrivacySettingPrismaRepository } from '../../infrastructure/repositories/user-privacy-setting-prisma.repository';
+import { TrustRelationPrismaRepository } from '../../infrastructure/repositories/trust-relation-prisma.repository';
 import { NotificationCode } from '../../domain/user/notification-code.enum';
 import { PrivacyCode } from '../../domain/user/privacy-code.enum';
 import { S3Service } from '../../infrastructure/s3/s3.service';
@@ -108,6 +109,7 @@ export class UserService {
   private readonly settingsRepo: UserSettingsPrismaRepository;
   private readonly deviceRepo: UserDevicePrismaRepository;
   private readonly privacySettingRepo: UserPrivacySettingPrismaRepository;
+  private readonly trustRelationRepo: TrustRelationPrismaRepository;
   private readonly prisma: PrismaClient;
 
   constructor(private readonly userRepo = new UserPrismaRepository()) {
@@ -117,6 +119,7 @@ export class UserService {
     this.settingsRepo = new UserSettingsPrismaRepository();
     this.deviceRepo = new UserDevicePrismaRepository();
     this.privacySettingRepo = new UserPrivacySettingPrismaRepository();
+    this.trustRelationRepo = new TrustRelationPrismaRepository();
     this.prisma = new PrismaClient();
   }
 
@@ -540,25 +543,21 @@ export class UserService {
 
   async addTrust(userId: string, targetUserId: string): Promise<void> {
     // Check if relation already exists
-    const existing = await this.prisma.trustRelation.findUnique({
-      where: { trusterId_trustedUserId: { trusterId: userId, trustedUserId: targetUserId } }
-    });
+    const existing = await this.trustRelationRepo.findByUsers(userId, targetUserId);
 
     if (existing) {
-      // Even if exists, recalculate counts to ensure accuracy
-      await this.recalculateTrustCounts(userId, targetUserId);
+      logger.info({ message: 'Trust relation already exists', userId, targetUserId });
       return;
     }
 
-    // idempotent create
-    await this.prisma.trustRelation.upsert({
-      where: { trusterId_trustedUserId: { trusterId: userId, trustedUserId: targetUserId } },
-      update: {},
-      create: { trusterId: userId, trustedUserId: targetUserId },
-    });
-
-    // Recalculate trust/truster counts for both users to ensure accuracy
-    await this.recalculateTrustCounts(userId, targetUserId);
+    // Create trust relation using repository
+    // Bu metod otomatik olarak:
+    // 1. Trust relation oluşturur
+    // 2. Profile count'ları günceller
+    // 3. Backfill job'ı kuyruğa ekler
+    await this.trustRelationRepo.create(userId, targetUserId);
+    
+    logger.info({ message: 'Trust relation created successfully', userId, targetUserId });
   }
 
   /**
