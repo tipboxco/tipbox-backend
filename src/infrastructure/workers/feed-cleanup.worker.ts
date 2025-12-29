@@ -1,6 +1,7 @@
 import { Worker, Job } from 'bullmq';
 import { FeedCleanupService } from '../../application/feed/feed-cleanup.service';
 import logger from '../logger/logger';
+import RedisConfigManager from '../config/redis.config';
 
 export interface FeedCleanupJobData {
   type: 'low-score-cleanup' | 'user-optimization';
@@ -14,9 +15,9 @@ export class FeedCleanupWorker {
   constructor() {
     this.cleanupService = new FeedCleanupService();
 
-    // Redis connection - Docker'da "redis" host'unu kullan, local'de "localhost"
-    const redisHost = process.env.REDIS_HOST || (process.env.DOCKER_CONTAINER === 'true' ? 'redis' : 'localhost');
-    const redisPort = parseInt(process.env.REDIS_PORT || '6379');
+    // Redis connection - REDIS_URL'den parse et
+    const redisHost = RedisConfigManager.parseRedisHost();
+    const redisPort = RedisConfigManager.parseRedisPort();
 
     this.worker = new Worker(
       'feed-cleanup',

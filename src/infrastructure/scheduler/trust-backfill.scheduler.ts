@@ -1,5 +1,6 @@
 import { Queue } from 'bullmq';
 import logger from '../logger/logger';
+import RedisConfigManager from '../config/redis.config';
 
 export interface TrustBackfillJobData {
   trusterId: string;
@@ -11,9 +12,8 @@ export class TrustBackfillScheduler {
   private queue: Queue<TrustBackfillJobData>;
 
   constructor() {
-    const redisHost = process.env.REDIS_HOST || 
-      (process.env.DOCKER_CONTAINER === 'true' ? 'redis' : 'localhost');
-    const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10);
+    const redisHost = RedisConfigManager.parseRedisHost();
+    const redisPort = RedisConfigManager.parseRedisPort();
 
     this.queue = new Queue<TrustBackfillJobData>('trust-backfill', {
       connection: {

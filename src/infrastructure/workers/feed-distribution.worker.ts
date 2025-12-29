@@ -4,6 +4,7 @@ import { FeedScoringService } from '../../application/feed/feed-scoring.service'
 import { FeedSource } from '../../domain/admin/feed-source.enum';
 import { generateIdForModel } from '../../infrastructure/ids/id.strategy';
 import logger from '../logger/logger';
+import RedisConfigManager from '../config/redis.config';
 
 export interface FeedDistributionJobData {
   postId: string;
@@ -49,10 +50,8 @@ export class FeedDistributionWorker {
     this.prisma = new PrismaClient();
     this.scoringService = new FeedScoringService();
 
-    const redisHost =
-      process.env.REDIS_HOST ||
-      (process.env.DOCKER_CONTAINER === 'true' ? 'redis' : 'localhost');
-    const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10);
+    const redisHost = RedisConfigManager.parseRedisHost();
+    const redisPort = RedisConfigManager.parseRedisPort();
 
     this.worker = new Worker(
       'feed-distribution',

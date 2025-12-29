@@ -19,17 +19,16 @@ export class NotificationWorker {
       await this.redisConfig.initialize();
       const redisConfig = this.redisConfig.getConfig();
 
+      const redisHost = RedisConfigManager.parseRedisHost(redisConfig.url);
+      const redisPort = RedisConfigManager.parseRedisPort(redisConfig.url);
+
       this.worker = new Worker(
         'notifications',
         this.processNotificationJob.bind(this),
         {
           connection: {
-            host: redisConfig.url.includes('://') 
-              ? redisConfig.url.split('://')[1].split(':')[0]
-              : 'localhost',
-            port: redisConfig.url.includes(':') 
-              ? parseInt(redisConfig.url.split(':').pop() || '6379')
-              : 6379,
+            host: redisHost,
+            port: redisPort,
           },
           concurrency: 5, // Aynı anda 5 iş işle
         }

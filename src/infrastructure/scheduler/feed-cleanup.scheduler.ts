@@ -1,14 +1,15 @@
 import { Queue } from 'bullmq';
 import logger from '../logger/logger';
 import { FeedCleanupJobData } from '../workers/feed-cleanup.worker';
+import RedisConfigManager from '../config/redis.config';
 
 export class FeedCleanupScheduler {
   private queue: Queue<FeedCleanupJobData>;
 
   constructor() {
-    // Redis connection - Docker'da "redis" host'unu kullan, local'de "localhost"
-    const redisHost = process.env.REDIS_HOST || (process.env.DOCKER_CONTAINER === 'true' ? 'redis' : 'localhost');
-    const redisPort = parseInt(process.env.REDIS_PORT || '6379');
+    // Redis connection - REDIS_URL'den parse et
+    const redisHost = RedisConfigManager.parseRedisHost();
+    const redisPort = RedisConfigManager.parseRedisPort();
     
     this.queue = new Queue('feed-cleanup', {
       connection: {

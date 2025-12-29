@@ -6,6 +6,7 @@ import { FeedSource } from '../../domain/admin/feed-source.enum';
 import { generateIdForModel } from '../ids/id.strategy';
 import logger from '../logger/logger';
 import { TrustBackfillJobData } from '../scheduler/trust-backfill.scheduler';
+import RedisConfigManager from '../config/redis.config';
 
 export class TrustBackfillWorker {
   private worker: Worker;
@@ -22,9 +23,8 @@ export class TrustBackfillWorker {
     this.scoringService = new FeedScoringService();
     this.cacheService = CacheService.getInstance();
 
-    const redisHost = process.env.REDIS_HOST ||
-      (process.env.DOCKER_CONTAINER === 'true' ? 'redis' : 'localhost');
-    const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10);
+    const redisHost = RedisConfigManager.parseRedisHost();
+    const redisPort = RedisConfigManager.parseRedisPort();
 
     this.worker = new Worker(
       'trust-backfill',

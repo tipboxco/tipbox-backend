@@ -1,16 +1,15 @@
 import { Queue, QueueEvents } from 'bullmq';
 import logger from '../logger/logger';
 import { FeedDistributionJobData } from '../workers/feed-distribution.worker';
+import RedisConfigManager from '../config/redis.config';
 
 export class FeedDistributionScheduler {
   private queue: Queue<FeedDistributionJobData>;
   private queueEvents: QueueEvents;
 
   constructor() {
-    const redisHost =
-      process.env.REDIS_HOST ||
-      (process.env.DOCKER_CONTAINER === 'true' ? 'redis' : 'localhost');
-    const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10);
+    const redisHost = RedisConfigManager.parseRedisHost();
+    const redisPort = RedisConfigManager.parseRedisPort();
 
     this.queue = new Queue('feed-distribution', {
       connection: {
