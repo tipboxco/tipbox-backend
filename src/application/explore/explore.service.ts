@@ -245,7 +245,20 @@ export class ExploreService {
       const cached = await this.cacheService.get<MarketplaceBannerResponse[]>(cacheKey);
       if (cached) {
         logger.info({ message: 'Marketplace banners served from cache', cacheKey });
-        return cached;
+        // Cache'den gelen verileri de resolveMediaUrl ile işle (cache'deki path'ler güncellenmiş olabilir)
+        return cached.map((banner) => {
+          // Eğer imageUrl zaten tam URL ise (http:// ile başlıyorsa) olduğu gibi döndür
+          if (banner.imageUrl && (banner.imageUrl.startsWith('http://') || banner.imageUrl.startsWith('https://'))) {
+            return banner;
+          }
+          // Path ise resolveMediaUrl ile tam URL'ye çevir
+          const imagePath = banner.imageUrl && banner.imageUrl.trim() !== '' ? banner.imageUrl : null;
+          const resolvedImageUrl = imagePath ? resolveMediaUrl(imagePath) : null;
+          return {
+            ...banner,
+            imageUrl: resolvedImageUrl || '',
+          };
+        });
       }
     } catch (error) {
       logger.warn({ message: 'Cache error', error: error instanceof Error ? error.message : String(error) });
@@ -256,11 +269,13 @@ export class ExploreService {
     const response: MarketplaceBannerResponse[] = banners.map((banner) => {
       // imageUrl boş string ise null'a çevir
       const imagePath = banner.imageUrl && banner.imageUrl.trim() !== '' ? banner.imageUrl : null;
+      // resolveMediaUrl ile path'i tam URL'ye çevir, null ise boş string döndür
+      const resolvedImageUrl = imagePath ? resolveMediaUrl(imagePath) : null;
       return {
         id: banner.id,
         title: banner.title,
         description: banner.description || undefined,
-        imageUrl: resolveMediaUrl(imagePath) || '',
+        imageUrl: resolvedImageUrl || '',
         linkUrl: banner.linkUrl || undefined,
       };
     });

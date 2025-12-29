@@ -81,7 +81,23 @@ socket.on('connect_error', (error) => {
 
 #### 1. Thread Oluşturma veya Mevcut Thread'i Alma
 
-İlk mesaj gönderilmeden önce thread oluşturulmalı veya mevcut thread alınmalıdır. Bu işlem REST API üzerinden yapılır:
+**Neden Gerekli?**
+
+`POST /messages/threads` endpoint'i **sadece thread ID almak için** kullanılır. Mesaj göndermek için REST API kullanılmaz, her şey socket üzerinden gerçekleşir.
+
+1. **Thread ID Almak**: Socket ile mesaj göndermek (`send_message`) ve thread room'una katılmak (`join_thread`) için `threadId` gerekir.
+
+2. **Thread Oluşturma**: İki kullanıcı arasında ilk mesajlaşma başlatılırken yeni bir thread oluşturulur.
+
+3. **Mevcut Thread'i Bulma**: Eğer kullanıcılar arasında zaten bir thread varsa, yeni thread oluşturmak yerine mevcut thread ID'si döner (duplicate thread'ler önlenir).
+
+4. **Socket Room Yönetimi**: Socket ile mesajlaşmak için `join_thread` event'ine thread ID gönderilmesi gerekir.
+
+5. **Mesaj Geçmişi**: Thread ID ile mesaj geçmişi (`GET /messages/{threadId}`) alınabilir.
+
+**Önemli:** Bu endpoint mesaj göndermek için değil, sadece thread ID almak için kullanılır. Mesaj göndermek için socket `send_message` event'i kullanılır.
+
+**Kullanım Senaryosu:**
 
 ```typescript
 // REST API ile thread oluştur veya al
@@ -100,11 +116,18 @@ async function getOrCreateThread(recipientId: string) {
   }
   
   const thread = await response.json();
-  return thread.id; // threadId
+  return thread.id; // threadId - Bu ID'yi mesaj göndermek için kullanacaksınız
 }
 ```
 
-**Not:** Eğer thread zaten varsa, mevcut thread ID'si döner. Yeni thread oluşturulursa, yeni thread ID'si döner.
+**Backend Davranışı:**
+
+- **Thread Varsa**: Mevcut thread ID'sini döner (yeni thread oluşturmaz)
+- **Thread Yoksa**: Yeni bir normal DM thread oluşturur ve thread ID'sini döner
+- **Kullanıcı Yoksa**: 404 döner (`Recipient user not found`)
+- **Auth Hatası**: 401 döner (`Unauthorized`)
+
+**Not:** Eğer thread zaten varsa, mevcut thread ID'si döner. Yeni thread oluşturulursa, yeni thread ID'si döner. Her iki durumda da thread ID alınır ve mesaj göndermek için kullanılır.
 
 #### 2. Thread Room'una Katılma
 
@@ -132,10 +155,13 @@ function openThread(threadId: string) {
 
 #### 3. Mesaj Gönderme
 
-**Yöntem 1: Socket üzerinden gönderme (Önerilen)**
+**⚠️ Önemli:** Mesaj göndermek için **sadece Socket kullanılır**. REST API endpoint'i (`POST /messages`) kullanılmaz.
+
+**Socket üzerinden mesaj gönderme:**
 
 ```typescript
 function sendMessage(threadId: string, message: string) {
+  // Socket ile mesaj gönder
   socket.emit('send_message', {
     threadId: threadId,
     message: message,
@@ -144,29 +170,25 @@ function sendMessage(threadId: string, message: string) {
   // Hata durumunu dinle
   socket.once('message_send_error', (error: { reason: string }) => {
     console.error('Mesaj gönderilemedi:', error.reason);
-  });
-}
-```
-
-**Yöntem 2: REST API üzerinden gönderme**
-
-```typescript
-async function sendMessageViaAPI(recipientId: string, message: string) {
-  const response = await fetch(`${BACKEND_URL}/messages`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      recipientId,
-      message,
-    }),
+    // Kullanıcıya hata mesajı göster
   });
   
-  return await response.json();
+  // Başarılı gönderim onayını dinle (opsiyonel)
+  socket.once('message_sent', (data: MessageSentEvent) => {
+    console.log('Mesaj gönderildi:', data);
+    // UI'da mesajı "gönderildi" olarak işaretle
+  });
 }
 ```
+
+**Backend İşleyişi:**
+
+1. Socket `send_message` event'ini alır
+2. Thread erişim kontrolü yapılır
+3. Mesaj veritabanına kaydedilir
+4. Socket event'leri gönderilir:
+   - `new_message` → Alıcıya gönderilir
+   - `message_sent` → Göndericiye onay olarak gönderilir
 
 #### 4. Yeni Mesajları Dinleme
 
@@ -399,22 +421,25 @@ export function useMessaging(socket: Socket | null, threadId: string | null) {
    const socketA = io(BACKEND_URL, { auth: { token: tokenA } });
    ```
 
-2. **Thread Oluşturma/Alma:**
+2. **Thread ID Alma (REST API):**
    ```typescript
+   // Sadece thread ID almak için REST API kullanılır
    const thread = await getOrCreateThread(userBId);
+   // thread.id → threadId
    ```
 
-3. **Thread Room'una Katılma:**
+3. **Thread Room'una Katılma (Socket):**
    ```typescript
    socketA.emit('join_thread', thread.id);
    ```
 
-4. **Mesaj Gönderme:**
+4. **Mesaj Gönderme (Socket - Tek Yöntem):**
    ```typescript
+   // Mesaj göndermek için SADECE socket kullanılır
    socketA.emit('send_message', { threadId: thread.id, message: 'Merhaba!' });
    ```
 
-5. **Onay Dinleme:**
+5. **Onay Dinleme (Socket):**
    ```typescript
    socketA.on('message_sent', (data) => {
      console.log('Mesaj gönderildi:', data);
@@ -482,24 +507,24 @@ socket.on('message_send_error', (error) => {
    ↓
 2. Backend her kullanıcıyı otomatik olarak kendi userId room'una ekler (room adı: userId string)
    ↓
-3. Kullanıcı A thread oluşturur/alır (REST API)
+3. Kullanıcı A thread ID alır (REST API: POST /messages/threads) - Sadece thread ID için
    ↓
-4. Kullanıcı A thread room'una katılır (join_thread) - room adı: "thread:{threadId}"
+4. Kullanıcı A thread room'una katılır (Socket: join_thread) - room adı: "thread:{threadId}"
    ↓
-5. Kullanıcı A mesaj gönderir (send_message)
+5. Kullanıcı A mesaj gönderir (Socket: send_message) - REST API kullanılmaz
    ↓
 6. Backend mesajı veritabanına kaydeder
    ↓
-7. Backend:
+7. Backend Socket event'leri gönderir:
    - Kullanıcı B'nin kişisel room'una (userId) 'new_message' gönderir
    - Thread room'una ('thread:{threadId}') 'new_message' gönderir (her iki kullanıcı da dinliyorsa)
    - Kullanıcı A'nın kişisel room'una (userId) 'message_sent' gönderir
    ↓
 8. Kullanıcı B 'new_message' event'ini alır ve UI'da gösterir
    ↓
-9. Kullanıcı B thread'i açarsa, thread room'una katılır (join_thread)
+9. Kullanıcı B thread'i açarsa, thread room'una katılır (Socket: join_thread)
    ↓
-10. Kullanıcı B mesajı okuduğunda 'mark_message_read' gönderir
+10. Kullanıcı B mesajı okuduğunda 'mark_message_read' gönderir (Socket)
    ↓
 11. Backend 'message_read' event'ini Kullanıcı A'ya gönderir (kişisel room ve thread room)
 ```
@@ -1320,6 +1345,187 @@ Fallback modu çalışıyor, ancak thread endpoint'inin neden başarısız oldu�
 - `App.tsx` - App başlangıcında socket bağlantısı
 - `src/config/api.config.ts` - API ve socket URL konfigürasyonu
 - `MessageDetail` component - Thread endpoint çağrısı yapılan yer
+
+## 🔧 Backend'de Socket Nasıl Çalışıyor?
+
+### Mimari Yapı
+
+Backend'de socket işlemleri şu katmanlar üzerinden gerçekleşir:
+
+```
+Socket.IO Server (io)
+    ↓
+SocketHandler (socket.handler.ts)
+    ↓
+MessagingService (messaging.service.ts)
+    ↓
+Database (Prisma)
+```
+
+### Socket Handler → MessagingService İlişkisi
+
+**Socket Handler** (`src/infrastructure/realtime/socket.handler.ts`):
+- Socket event'lerini dinler (`send_message`, `join_thread`, vs.)
+- İstekleri doğrular (thread erişim kontrolü, validasyon)
+- **MessagingService**'i çağırarak iş mantığını uygular
+- Socket event'lerini göndermez (MessagingService yapar)
+
+**MessagingService** (`src/application/messaging/messaging.service.ts`):
+- İş mantığını uygular (mesaj kaydetme, thread oluşturma)
+- Veritabanı işlemlerini yapar
+- **SocketHandler**'ı kullanarak socket event'lerini gönderir
+
+### Mesaj Gönderme Akışı (Backend)
+
+#### 1. Socket Event Alınır
+
+```typescript
+// socket.handler.ts
+socket.on('send_message', async (data: { threadId: string; message: string }) => {
+  // 1. Validasyon
+  if (!threadId || !message) {
+    socket.emit('message_send_error', { reason: 'Invalid data' });
+    return;
+  }
+
+  // 2. Thread erişim kontrolü
+  const hasAccess = await this.messagingService.validateThreadAccess(threadId, userId);
+  if (!hasAccess) {
+    socket.emit('message_send_error', { reason: 'Access denied' });
+    return;
+  }
+
+  // 3. Thread bilgisini al
+  const thread = await this.messagingService.getThreadById(threadId);
+  const recipientId = thread.userOneId === userId ? thread.userTwoId : thread.userOneId;
+
+  // 4. MessagingService'i çağır (iş mantığı burada)
+  await this.messagingService.sendDirectMessage(userId, recipientId, message.trim());
+});
+```
+
+#### 2. MessagingService İş Mantığını Uygular
+
+```typescript
+// messaging.service.ts
+async sendDirectMessage(senderId: string, recipientId: string, message: string) {
+  // 1. Kullanıcı kontrolü
+  const sender = await this.userRepo.findById(String(senderId));
+  const recipient = await this.userRepo.findById(String(recipientId));
+  if (!sender || !recipient) throw new Error('User not found');
+
+  // 2. Thread oluştur veya al
+  const thread = await this.createThreadIfNotExists(senderId, recipientId);
+
+  // 3. Mesajı veritabanına kaydet
+  const createdMessage = await this.prisma.dMMessage.create({
+    data: {
+      threadId: thread.id,
+      senderId: String(senderId),
+      message,
+      isRead: false,
+      context: "DM",
+      sentAt: new Date(),
+    },
+  });
+
+  // 4. Thread'i güncelle
+  await this.prisma.dMThread.update({
+    where: { id: thread.id },
+    data: { updatedAt: new Date() },
+  });
+
+  // 5. Socket event'lerini gönder (SocketHandler kullanarak)
+  const socketHandler = SocketManager.getInstance().getSocketHandler();
+  const newMessageEvent = {
+    messageId: createdMessage.id,
+    threadId: thread.id,
+    senderId: senderId,
+    recipientId: recipientId,
+    message,
+    messageType: 'message' as const,
+    context: "DM",
+    timestamp: createdMessage.sentAt.toISOString(),
+  };
+
+  // Alıcıya gönder
+  socketHandler.sendMessageToUser(recipientId, 'new_message', newMessageEvent);
+  
+  // Thread room'una gönder
+  socketHandler.sendToRoom(`thread:${thread.id}`, 'new_message', newMessageEvent);
+
+  // Göndericiye onay gönder
+  socketHandler.sendMessageToUser(senderId, 'message_sent', newMessageEvent);
+}
+```
+
+### Servisler Arası İlişki
+
+```
+┌─────────────────────────────────────────┐
+│         Socket.IO Server (io)           │
+│  - Socket bağlantılarını yönetir        │
+│  - Event'leri dinler                    │
+└─────────────────┬───────────────────────┘
+                  │
+                  ↓
+┌─────────────────────────────────────────┐
+│      SocketHandler (socket.handler.ts)  │
+│  - Socket event handler'ları             │
+│  - Validasyon ve erişim kontrolü        │
+│  - MessagingService'i çağırır           │
+└─────────────────┬───────────────────────┘
+                  │
+                  ↓
+┌─────────────────────────────────────────┐
+│   MessagingService (messaging.service)  │
+│  - İş mantığı (mesaj kaydetme, thread) │
+│  - Veritabanı işlemleri                 │
+│  - SocketHandler'ı kullanarak event     │
+│    gönderir (sendMessageToUser, etc.)  │
+└─────────────────┬───────────────────────┘
+                  │
+                  ↓
+┌─────────────────────────────────────────┐
+│         Database (Prisma)               │
+│  - DMMessage, DMThread tabloları        │
+└─────────────────────────────────────────┘
+```
+
+### Önemli Noktalar
+
+1. **Socket Handler → MessagingService**: Socket Handler, iş mantığını MessagingService'e devreder
+2. **MessagingService → SocketHandler**: MessagingService, socket event'lerini göndermek için SocketHandler'ı kullanır
+3. **Circular Dependency Yok**: SocketHandler MessagingService'i constructor'da alır, MessagingService SocketHandler'ı singleton pattern ile alır
+4. **Separation of Concerns**: 
+   - SocketHandler: Socket işlemleri, validasyon
+   - MessagingService: İş mantığı, veritabanı, socket bildirimleri
+
+### Socket Event Gönderme Metodları
+
+SocketHandler'da şu metodlar kullanılır:
+
+```typescript
+// Belirli bir kullanıcıya mesaj gönder
+socketHandler.sendMessageToUser(userId, 'new_message', eventData);
+
+// Belirli bir room'a mesaj gönder
+socketHandler.sendToRoom('thread:threadId', 'new_message', eventData);
+
+// Tüm client'lara yayın yap
+socketHandler.broadcast('user_presence', eventData);
+```
+
+### Özet: Backend Akışı
+
+1. **Client** → Socket event gönderir (`send_message`)
+2. **SocketHandler** → Event'i alır, validasyon yapar
+3. **SocketHandler** → MessagingService'i çağırır
+4. **MessagingService** → Veritabanına mesajı kaydeder
+5. **MessagingService** → SocketHandler'ı kullanarak socket event'lerini gönderir
+6. **Client** → Socket event'lerini alır (`new_message`, `message_sent`)
+
+**Sonuç:** Backend'de socket sadece iletişim katmanıdır. İş mantığı MessagingService'de, socket event gönderme de MessagingService içinde SocketHandler kullanılarak yapılır.
 
 ## 📚 İlgili Dokümantasyon
 

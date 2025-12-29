@@ -470,6 +470,7 @@ model ContentPost {
   experienceDurationId String?              @map("experience_duration_id") @db.Uuid
   experienceLocationId String?              @map("experience_location_id") @db.Uuid
   experiencePurposeId  String?              @map("experience_purpose_id") @db.Uuid
+  eventId             String?              @map("event_id") @db.VarChar(26)
   likesCount           Int                  @default(0) @map("likes_count")
   commentsCount        Int                  @default(0) @map("comments_count")
   favoritesCount       Int                  @default(0) @map("favorites_count")
@@ -491,6 +492,7 @@ model ContentPost {
   experienceDuration   ExperienceDuration?  @relation(fields: [experienceDurationId], references: [id], onDelete: SetNull)
   experienceLocation   ExperienceLocation?  @relation(fields: [experienceLocationId], references: [id], onDelete: SetNull)
   experiencePurpose    ExperiencePurpose?   @relation(fields: [experiencePurposeId], references: [id], onDelete: SetNull)
+  event                WishboxEvent?        @relation(fields: [eventId], references: [id], onDelete: SetNull)
   feedHighlights       FeedHighlight[]
   feeds                Feed[]
   comparison           PostComparison?
@@ -511,6 +513,8 @@ model ContentPost {
   @@index([experienceDurationId])
   @@index([experienceLocationId])
   @@index([experiencePurposeId])
+  @@index([eventId])
+  @@index([eventId, createdAt])
   @@map("content_posts")
   media                PostMedia[]
 }
@@ -1157,6 +1161,7 @@ model WishboxEvent {
   rewards     WishboxReward[]
   scenarios   WishboxScenario[]
   stats       WishboxStats[]
+  posts       ContentPost[]
   brand       Brand?             @relation(fields: [brandId], references: [id], onDelete: Cascade)
 
   @@map("wishbox_events")

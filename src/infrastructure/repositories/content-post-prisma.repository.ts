@@ -120,7 +120,8 @@ export class ContentPostPrismaRepository {
     productGroupId?: string,
     productId?: string,
     inventoryRequired: boolean = false,
-    isBoosted: boolean = false
+    isBoosted: boolean = false,
+    eventId?: string
   ): Promise<ContentPost> {
     const post = await this.prisma.contentPost.create({
       data: {
@@ -134,7 +135,8 @@ export class ContentPostPrismaRepository {
         productGroupId: productGroupId || null,
         productId: productId || null,
         inventoryRequired,
-        isBoosted
+        isBoosted,
+        eventId: eventId || null
       },
       include: {
         user: true,

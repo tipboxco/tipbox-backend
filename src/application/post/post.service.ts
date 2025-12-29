@@ -49,6 +49,30 @@ export class PostService {
   }
 
   /**
+   * Event validation - event mevcut ve aktif mi kontrol eder
+   */
+  private async validateEvent(eventId: string): Promise<void> {
+    const event = await this.prisma.wishboxEvent.findUnique({
+      where: { id: eventId },
+    });
+
+    if (!event) {
+      throw new Error(`Event not found: ${eventId}`);
+    }
+
+    // Event'in aktif olup olmadığını kontrol et
+    const now = new Date();
+    if (event.startDate > now || event.endDate < now) {
+      throw new Error('Event is not active');
+    }
+
+    // Event status'u PUBLISHED olmalı
+    if (event.status !== 'PUBLISHED') {
+      throw new Error('Event is not published');
+    }
+  }
+
+  /**
    * Context type'dan category ID'lerini resolve eder
    */
   private async resolveContextIds(
@@ -132,7 +156,7 @@ export class PostService {
   async createFreePost(
     userId: string,
     request: CreatePostRequest
-  ): Promise<{ id: string }> {
+  ): Promise<{ id: string; message: string; success: boolean }> {
     try {
       // Context validation
       if (
@@ -143,6 +167,11 @@ export class PostService {
         throw new Error(
           'Free posts can only be created for sub_category, product_group, or product'
         );
+      }
+
+      // Event validation (if eventId is provided)
+      if (request.eventId) {
+        await this.validateEvent(request.eventId);
       }
 
       const contextIds = await this.resolveContextIds(
@@ -165,7 +194,8 @@ export class PostService {
         contextIds.productGroupId,
         contextIds.productId,
         false, // inventoryRequired
-        false // isBoosted
+        false, // isBoosted
+        request.eventId // eventId
       );
 
       // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
@@ -187,7 +217,11 @@ export class PostService {
         logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
       });
       
-      return { id: post.id };
+      return { 
+        id: post.id,
+        message: 'Post başarıyla oluşturuldu',
+        success: true
+      };
     } catch (error) {
       logger.error(`Failed to create free post:`, error);
       throw error;
@@ -200,7 +234,7 @@ export class PostService {
   async createTipsAndTricksPost(
     userId: string,
     request: CreateTipsAndTricksPostRequest
-  ): Promise<{ id: string }> {
+  ): Promise<{ id: string; message: string; success: boolean }> {
     try {
       // Context validation
       if (
@@ -211,6 +245,11 @@ export class PostService {
         throw new Error(
           'Tips and tricks posts can only be created for sub_category, product_group, or product'
         );
+      }
+
+      // Event validation (if eventId is provided)
+      if (request.eventId) {
+        await this.validateEvent(request.eventId);
       }
 
       const contextIds = await this.resolveContextIds(
@@ -238,7 +277,8 @@ export class PostService {
         contextIds.productGroupId,
         contextIds.productId,
         false,
-        false
+        false,
+        request.eventId // eventId
       );
 
       // Create PostTip
@@ -269,7 +309,11 @@ export class PostService {
         logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
       });
       
-      return { id: post.id };
+      return { 
+        id: post.id,
+        message: 'Tips & tricks post başarıyla oluşturuldu',
+        success: true
+      };
     } catch (error) {
       logger.error(`Failed to create tips and tricks post:`, error);
       throw error;
@@ -302,7 +346,7 @@ export class PostService {
   async createQuestionPost(
     userId: string,
     request: CreateQuestionPostRequest
-  ): Promise<{ id: string }> {
+  ): Promise<{ id: string; message: string; success: boolean }> {
     try {
       // Context validation
       if (
@@ -313,6 +357,11 @@ export class PostService {
         throw new Error(
           'Question posts can only be created for sub_category, product_group, or product'
         );
+      }
+
+      // Event validation (if eventId is provided)
+      if (request.eventId) {
+        await this.validateEvent(request.eventId);
       }
 
       const contextIds = await this.resolveContextIds(
@@ -343,7 +392,8 @@ export class PostService {
         contextIds.productGroupId,
         contextIds.productId,
         false,
-        true // isBoosted - question posts are boosted
+        true, // isBoosted - question posts are boosted
+        request.eventId // eventId
       );
 
       // Set boosted until date (e.g., 7 days from now)
@@ -379,7 +429,11 @@ export class PostService {
         logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
       });
       
-      return { id: post.id };
+      return { 
+        id: post.id,
+        message: 'Question post başarıyla oluşturuldu',
+        success: true
+      };
     } catch (error) {
       logger.error(`Failed to create question post:`, error);
       throw error;
@@ -451,7 +505,7 @@ export class PostService {
   async createBenchmarkPost(
     userId: string,
     request: CreateBenchmarkPostRequest
-  ): Promise<{ id: string }> {
+  ): Promise<{ id: string; message: string; success: boolean }> {
     try {
       // Benchmark posts can only be created for products
       if (request.contextType !== ContextType.PRODUCT) {
@@ -468,6 +522,11 @@ export class PostService {
       const product1 = selectedProducts[0];
       const product2 = selectedProducts[1];
 
+      // Event validation (if eventId is provided)
+      if (request.eventId) {
+        await this.validateEvent(request.eventId);
+      }
+
       const contextIds = await this.resolveContextIds(
         request.contextType,
         request.contextId
@@ -483,7 +542,8 @@ export class PostService {
         contextIds.productGroupId,
         contextIds.productId,
         false,
-        false
+        false,
+        request.eventId // eventId
       );
 
       // Create PostComparison
@@ -493,6 +553,18 @@ export class PostService {
         product2.productId // productId is already a string (UUID)
       );
 
+      // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
+      if (request.images && request.images.length > 0) {
+        await this.prisma.postMedia.createMany({
+          data: request.images.map((imageUrl, index) => ({
+            postId: post.id,
+            userId: userId,
+            mediaUrl: imageUrl,
+            orderIndex: index, // Kullanıcının yüklediği sırada
+          })),
+        });
+      }
+
       logger.info(`Benchmark post created: ${post.id} by user ${userId}`);
       
       // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
@@ -500,7 +572,11 @@ export class PostService {
         logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
       });
       
-      return { id: post.id };
+      return { 
+        id: post.id,
+        message: 'Benchmark post başarıyla oluşturuldu',
+        success: true
+      };
     } catch (error) {
       logger.error(`Failed to create benchmark post:`, error);
       throw error;
@@ -513,11 +589,16 @@ export class PostService {
   async createExperiencePost(
     userId: string,
     request: CreateExperiencePostRequest
-  ): Promise<{ id: string }> {
+  ): Promise<{ id: string; message: string; success: boolean }> {
     try {
       // Experience posts can only be created for products
       if (request.contextType !== ContextType.PRODUCT) {
         throw new Error('Experience posts can only be created for products');
+      }
+
+      // Event validation (if eventId is provided)
+      if (request.eventId) {
+        await this.validateEvent(request.eventId);
       }
 
       const contextIds = await this.resolveContextIds(
@@ -550,7 +631,8 @@ export class PostService {
         contextIds.productGroupId,
         contextIds.productId,
         true, // inventoryRequired - experience posts require inventory
-        false
+        false,
+        request.eventId // eventId
       );
 
       // AI Split ID ve Taxonomy ID'leri kaydet
@@ -561,6 +643,7 @@ export class PostService {
           experienceDurationId: request.selectedDurationId || null,
           experienceLocationId: request.selectedLocationId || null,
           experiencePurposeId: request.selectedPurposeId || null,
+          eventId: request.eventId || null, // eventId'yi de güncelle (eğer create'de set edilmediyse)
         }
       });
 
@@ -585,7 +668,11 @@ export class PostService {
         logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
       });
       
-      return { id: post.id };
+      return { 
+        id: post.id,
+        message: 'Experience post başarıyla oluşturuldu',
+        success: true
+      };
     } catch (error) {
       logger.error(`Failed to create experience post:`, error);
       throw error;
@@ -666,11 +753,16 @@ export class PostService {
   async createUpdatePost(
     userId: string,
     request: CreateUpdatePostRequest
-  ): Promise<{ id: string }> {
+  ): Promise<{ id: string; message: string; success: boolean }> {
     try {
       // Update posts can only be created for products
       if (request.contextType !== ContextType.PRODUCT) {
         throw new Error('Update posts can only be created for products');
+      }
+
+      // Event validation (if eventId is provided)
+      if (request.eventId) {
+        await this.validateEvent(request.eventId);
       }
 
       const contextIds = await this.resolveContextIds(
@@ -693,7 +785,8 @@ export class PostService {
         contextIds.productGroupId,
         contextIds.productId,
         true, // inventoryRequired - update posts require inventory
-        false
+        false,
+        request.eventId // eventId
       );
 
       // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
@@ -715,7 +808,11 @@ export class PostService {
         logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
       });
       
-      return { id: post.id };
+      return { 
+        id: post.id,
+        message: 'Update post başarıyla oluşturuldu',
+        success: true
+      };
     } catch (error) {
       logger.error(`Failed to create update post:`, error);
       throw error;

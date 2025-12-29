@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import multer, { FileFilterCallback } from 'multer';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { authMiddleware } from '../auth/auth.middleware';
 import { PostService } from '../../application/post/post.service';
@@ -15,11 +16,125 @@ import { ContextType } from '../../domain/content/context-type.enum';
 import { TipsAndTricksBenefitCategory } from '../../domain/content/tips-and-tricks-benefit-category.enum';
 import { ExperienceType } from '../../domain/content/experience-type.enum';
 import { ExperienceStatus } from '../../domain/content/experience-status.enum';
+import { S3Service } from '../../infrastructure/s3/s3.service';
+import { v4 as uuidv4 } from 'uuid';
+import logger from '../../infrastructure/logger/logger';
 
 const router = Router();
 const postService = new PostService();
+const s3Service = new S3Service();
+
+// Multer configuration for post image uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit per file
+  },
+  fileFilter: (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
+    // Only image files allowed (including HEIC for iOS devices)
+    const allowedMimeTypes = [
+      'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+      'image/heic', 'image/heif' // HEIC/HEIF support for iOS
+    ];
+    
+    // Check MIME type
+    if (file.mimetype && allowedMimeTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else if (file.originalname) {
+      // Fallback: Check file extension if MIME type is not available
+      const ext = file.originalname.split('.').pop()?.toLowerCase();
+      const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif'];
+      if (ext && allowedExtensions.includes(ext)) {
+        cb(null, true);
+      } else {
+        cb(new Error(`Desteklenmeyen dosya formatı: ${file.mimetype || ext || 'bilinmeyen'}. Sadece resim dosyaları yüklenebilir (JPG, PNG, GIF, WebP, HEIC)`));
+      }
+    } else {
+      cb(new Error('Dosya formatı algılanamadı. Sadece resim dosyaları yüklenebilir (JPG, PNG, GIF, WebP, HEIC)'));
+    }
+  },
+});
 
 router.use(authMiddleware);
+
+/**
+ * Helper function: Upload images from multipart/form-data or use provided URLs
+ */
+async function processPostImages(
+  req: Request,
+  userId: string
+): Promise<string[]> {
+  const multerReq = req as any;
+  const files: Express.Multer.File[] = Array.isArray(multerReq.files) 
+    ? multerReq.files 
+    : (multerReq.file ? [multerReq.file] : []);
+
+  // If files are uploaded via multipart/form-data
+  if (files && files.length > 0) {
+    const imageUrls: string[] = [];
+    
+    for (const file of files) {
+      try {
+        // Determine file extension from MIME type
+        const mimeToExtension: Record<string, string> = {
+          'image/jpeg': 'jpg',
+          'image/jpg': 'jpg',
+          'image/png': 'png',
+          'image/gif': 'gif',
+          'image/webp': 'webp',
+          'image/heic': 'heic', // HEIC support for iOS
+          'image/heif': 'heif', // HEIF support for iOS
+        };
+
+        let fileExtension = 'jpg'; // Default
+        if (file.mimetype && mimeToExtension[file.mimetype]) {
+          fileExtension = mimeToExtension[file.mimetype];
+        } else if (file.originalname && file.originalname.includes('.')) {
+          const parts = file.originalname.split('.');
+          if (parts.length > 1) {
+            const ext = parts[parts.length - 1].toLowerCase();
+            // Validate extension (including HEIC/HEIF for iOS)
+            const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif'];
+            if (allowedExtensions.includes(ext)) {
+              fileExtension = ext;
+            }
+          }
+        }
+
+        // Create file path
+        const fileName = `posts/${userId}/${uuidv4()}.${fileExtension}`;
+        
+        // Upload to S3
+        const imageUrl = await s3Service.uploadFile(fileName, file.buffer, file.mimetype);
+        imageUrls.push(imageUrl);
+
+        logger.info({
+          message: 'Post image uploaded',
+          userId,
+          fileName,
+          fileSize: file.size,
+          mimeType: file.mimetype,
+        });
+      } catch (error) {
+        logger.error({
+          message: `Failed to upload post image: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          userId,
+          error,
+        });
+        throw new Error(`Image upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+    
+    return imageUrls;
+  }
+
+  // If images are provided as URLs (JSON request)
+  if (req.body.images && Array.isArray(req.body.images)) {
+    return req.body.images;
+  }
+
+  return [];
+}
 
 /**
  * @openapi
@@ -36,6 +151,28 @@ router.use(authMiddleware);
  *         application/json:
  *           schema:
  *             $ref: '#/components/schemas/CreatePostRequest'
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - contextType
+ *               - contextId
+ *               - description
+ *             properties:
+ *               contextType:
+ *                 type: string
+ *                 enum: [product_group, product, sub_category]
+ *               contextId:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               images:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *               eventId:
+ *                 type: string
  *     responses:
  *       201:
  *         description: Gönderi başarıyla oluşturuldu
@@ -53,6 +190,7 @@ router.use(authMiddleware);
  */
 router.post(
   '/free',
+  upload.array('images', 10), // Support up to 10 images via multipart/form-data
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = (req as any).user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
@@ -60,11 +198,15 @@ router.post(
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
+    // Process images (from files or URLs)
+    const images = await processPostImages(req, String(userId));
+
     const request: CreatePostRequest = {
       contextType: req.body.contextType as ContextType,
       contextId: req.body.contextId,
       description: req.body.description,
-      images: req.body.images || [],
+      images: images,
+      eventId: req.body.eventId, // Optional event ID
     };
 
     if (!request.contextType || !request.contextId || !request.description) {
@@ -110,6 +252,7 @@ router.post(
  */
 router.post(
   '/tips-and-tricks',
+  upload.array('images', 10), // Support up to 10 images via multipart/form-data
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = (req as any).user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
@@ -117,12 +260,16 @@ router.post(
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
+    // Process images (from files or URLs)
+    const images = await processPostImages(req, String(userId));
+
     const request: CreateTipsAndTricksPostRequest = {
       contextType: req.body.contextType as ContextType,
       contextId: req.body.contextId,
       description: req.body.description,
       benefitCategory: req.body.benefitCategory as TipsAndTricksBenefitCategory,
-      images: req.body.images || [],
+      images: images,
+      eventId: req.body.eventId, // Optional event ID
     };
 
     if (
@@ -177,6 +324,7 @@ router.post(
  */
 router.post(
   '/question',
+  upload.array('images', 10), // Support up to 10 images via multipart/form-data
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = (req as any).user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
@@ -184,12 +332,16 @@ router.post(
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
+    // Process images (from files or URLs)
+    const images = await processPostImages(req, String(userId));
+
     const request: CreateQuestionPostRequest = {
       contextType: req.body.contextType as ContextType,
       contextId: req.body.contextId,
       description: req.body.description,
-      images: req.body.images || [],
+      images: images,
       selectedBoostOptionId: req.body.selectedBoostOptionId,
+      eventId: req.body.eventId, // Optional event ID
     };
 
     if (
@@ -278,6 +430,7 @@ router.get(
  */
 router.post(
   '/benchmark',
+  upload.array('images', 10), // Support up to 10 images via multipart/form-data
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = (req as any).user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
@@ -285,11 +438,16 @@ router.post(
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
+    // Process images (from files or URLs)
+    const images = await processPostImages(req, String(userId));
+
     const request: CreateBenchmarkPostRequest = {
       contextType: req.body.contextType as ContextType,
       contextId: req.body.contextId,
       products: req.body.products,
       description: req.body.description,
+      images: images, // Images support for benchmark posts
+      eventId: req.body.eventId, // Optional event ID
     };
 
     if (
@@ -344,12 +502,16 @@ router.post(
  */
 router.post(
   '/experience',
+  upload.array('images', 10), // Support up to 10 images via multipart/form-data
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = (req as any).user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
       return res.status(401).json({ message: 'Unauthorized' });
     }
+
+    // Process images (from files or URLs)
+    const images = await processPostImages(req, String(userId));
 
     const request: CreateExperiencePostRequest = {
       contextType: req.body.contextType as ContextType,
@@ -360,8 +522,9 @@ router.post(
       content: req.body.content,
       experience: req.body.experience,
       status: req.body.status as ExperienceStatus,
-      images: req.body.images || [],
+      images: images,
       experienceSnippetId: req.body.experienceSnippetId,
+      eventId: req.body.eventId, // Optional event ID
     };
 
     if (
@@ -601,6 +764,7 @@ router.delete(
  */
 router.post(
   '/update',
+  upload.array('images', 10), // Support up to 10 images via multipart/form-data
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = (req as any).user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
@@ -608,11 +772,15 @@ router.post(
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
+    // Process images (from files or URLs)
+    const images = await processPostImages(req, String(userId));
+
     const request: CreateUpdatePostRequest = {
       contextType: req.body.contextType as ContextType,
       contextId: req.body.contextId,
       content: req.body.content,
-      images: req.body.images || [],
+      images: images,
+      eventId: req.body.eventId, // Optional event ID
     };
 
     if (!request.contextType || !request.contextId || !request.content) {

@@ -36,6 +36,10 @@ import { ExperienceStatus } from '../../domain/content/experience-status.enum';
  *           type: array
  *           items:
  *             type: string
+ *         eventId:
+ *           type: string
+ *           description: Optional event ID to link post to event
+ *           example: "01ARZ3NDEKTSV4RRFFQ69G5FAV"
  *     CreateTipsAndTricksPostRequest:
  *       type: object
  *       required:
@@ -56,6 +60,9 @@ import { ExperienceStatus } from '../../domain/content/experience-status.enum';
  *           type: array
  *           items:
  *             type: string
+ *         eventId:
+ *           type: string
+ *           description: Optional event ID to link post to event
  *     BoostOption:
  *       type: object
  *       properties:
@@ -91,6 +98,9 @@ import { ExperienceStatus } from '../../domain/content/experience-status.enum';
  *             type: string
  *         selectedBoostOptionId:
  *           type: string
+ *         eventId:
+ *           type: string
+ *           description: Optional event ID to link post to event
  *     Product:
  *       type: object
  *       required:
@@ -119,6 +129,13 @@ import { ExperienceStatus } from '../../domain/content/experience-status.enum';
  *             $ref: '#/components/schemas/Product'
  *         description:
  *           type: string
+ *         images:
+ *           type: array
+ *           items:
+ *             type: string
+ *         eventId:
+ *           type: string
+ *           description: Optional event ID to link post to event
  *     Experience:
  *       type: object
  *       required:
@@ -168,6 +185,9 @@ import { ExperienceStatus } from '../../domain/content/experience-status.enum';
  *           type: array
  *           items:
  *             type: string
+ *         eventId:
+ *           type: string
+ *           description: Optional event ID to link post to event
  *     CreateUpdatePostRequest:
  *       type: object
  *       required:
@@ -185,6 +205,9 @@ import { ExperienceStatus } from '../../domain/content/experience-status.enum';
  *           type: array
  *           items:
  *             type: string
+ *         eventId:
+ *           type: string
+ *           description: Optional event ID to link post to event
  *     SplitExperienceRequest:
  *       type: object
  *       required:
@@ -242,6 +265,7 @@ export interface CreatePostRequest {
   contextId: string;
   description: string;
   images?: string[];
+  eventId?: string; // Optional event ID to link post to event
 }
 
 export interface CreateTipsAndTricksPostRequest {
@@ -250,6 +274,7 @@ export interface CreateTipsAndTricksPostRequest {
   description: string;
   benefitCategory: TipsAndTricksBenefitCategory;
   images?: string[];
+  eventId?: string; // Optional event ID to link post to event
 }
 
 export interface BoostOption {
@@ -267,6 +292,7 @@ export interface CreateQuestionPostRequest {
   description: string;
   images?: string[];
   selectedBoostOptionId: string;
+  eventId?: string; // Optional event ID to link post to event
 }
 
 export interface Product {
@@ -279,6 +305,8 @@ export interface CreateBenchmarkPostRequest {
   contextId: string;
   products: Product[];
   description: string;
+  images?: string[]; // Images support for benchmark posts
+  eventId?: string; // Optional event ID to link post to event
 }
 
 export interface Experience {
@@ -298,6 +326,7 @@ export interface CreateExperiencePostRequest {
   status: ExperienceStatus;
   images?: string[];
   experienceSnippetId?: string; // Experience snippet ID (optional)
+  eventId?: string; // Optional event ID to link post to event
 }
 
 export interface CreateUpdatePostRequest {
@@ -305,6 +334,7 @@ export interface CreateUpdatePostRequest {
   contextId: string;
   content: string;
   images?: string[];
+  eventId?: string; // Optional event ID to link post to event
 }
 
 export interface SplitExperienceRequest {

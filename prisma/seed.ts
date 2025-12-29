@@ -6994,9 +6994,9 @@ async function main() {
     isActive: boolean;
     displayOrder: number;
   }> = [
-    { title: 'Yeni Sezon NFT Koleksiyonu', description: 'Sınırlı sayıda özel avatar ve badge NFT\'leri şimdi satışta!', imageUrl: getSeedMediaPath('explore.event.primary', true), linkUrl: '/marketplace/listings?type=BADGE', isActive: true, displayOrder: 1 },
-    { title: 'Epic Rarity İndirimi', description: '%30 indirimli EPIC rarity NFT\'lere göz at', imageUrl: getSeedMediaPath('explore.event.primary', true), linkUrl: '/marketplace/listings?rarity=EPIC', isActive: true, displayOrder: 2 },
-    { title: 'Yeni Markalar Platformda', description: 'Ünlü markalar TipBox\'a katıldı! Hemen keşfet.', imageUrl: getSeedMediaPath('explore.event.primary', true), linkUrl: '/explore/brands/new', isActive: true, displayOrder: 3 }
+    { title: 'Yeni Sezon NFT Koleksiyonu', description: 'Sınırlı sayıda özel avatar ve badge NFT\'leri şimdi satışta!', imageUrl: getSeedMediaPath('marketplace.marketplace', true), linkUrl: '/marketplace/listings?type=BADGE', isActive: true, displayOrder: 1 },
+    { title: 'Epic Rarity İndirimi', description: '%30 indirimli EPIC rarity NFT\'lere göz at', imageUrl: getSeedMediaPath('marketplace.marketplace', true), linkUrl: '/marketplace/listings?rarity=EPIC', isActive: true, displayOrder: 2 },
+    { title: 'Yeni Markalar Platformda', description: 'Ünlü markalar TipBox\'a katıldı! Hemen keşfet.', imageUrl: getSeedMediaPath('marketplace.marketplace', true), linkUrl: '/explore/brands/new', isActive: true, displayOrder: 3 }
   ]
   
   const banners = await Promise.all(
@@ -7006,6 +7006,15 @@ async function main() {
       })
       
       if (existing) {
+        // Mevcut banner'ın imageUrl'si boş ise güncelle
+        if (!existing.imageUrl || existing.imageUrl.trim() === '') {
+          return prisma.marketplaceBanner.update({
+            where: { id: existing.id },
+            data: {
+              imageUrl: config.imageUrl || '',
+            }
+          })
+        }
         return existing
       }
       
