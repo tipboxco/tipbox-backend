@@ -1,21 +1,22 @@
 export class ContentComment {
   constructor(
     public readonly id: string,
-    public readonly postId: number,
-    public readonly userId: number,
-    public readonly parentId: number | null,
+    public readonly postId: string,
+    public readonly userId: string,
+    public readonly parentId: string | null,
     public readonly comment: string,
     public readonly isAnswer: boolean,
+    public readonly likesCount: number,
     public readonly createdAt: Date,
     public readonly updatedAt: Date
   ) {}
 
   // Essential business methods only
-  belongsToPost(postId: number): boolean {
+  belongsToPost(postId: string): boolean {
     return this.postId === postId;
   }
 
-  belongsToUser(userId: number): boolean {
+  belongsToUser(userId: string): boolean {
     return this.userId === userId;
   }
 
@@ -48,5 +49,9 @@ export class ContentComment {
       (Date.now() - this.createdAt.getTime()) / (1000 * 60)
     );
     return minutesSinceCreated <= 60; // Within last hour
+  }
+
+  getLikesCount(): number {
+    return this.likesCount;
   }
 }

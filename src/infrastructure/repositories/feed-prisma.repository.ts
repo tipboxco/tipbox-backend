@@ -44,8 +44,9 @@ export class FeedPrismaRepository {
           },
         },
       },
-      // Deterministic sıralama için tie-breaker olarak id ekle
+      // YENİ SIRALAMA: relevance_score önce (seen penalty ile düşenler aşağıda)
       orderBy: [
+        { relevanceScore: 'desc' },
         { post: { isBoosted: 'desc' } },
         { createdAt: 'desc' },
         { id: 'desc' },
@@ -83,15 +84,21 @@ export class FeedPrismaRepository {
   }
 
   async markAsSeen(feedId: string): Promise<Feed | null> {
-    // Get feed to get userId before updating
+    // Get feed to get userId and current score before updating
     const feedBeforeUpdate = await this.prisma.feed.findUnique({
       where: { id: feedId },
-      select: { userId: true, seen: true }
+      select: { userId: true, seen: true, relevanceScore: true }
     });
 
+    if (!feedBeforeUpdate) return null;
+
+    // Update: seen = true, apply 50% penalty
     const feed = await this.prisma.feed.update({
       where: { id: feedId },
-      data: { seen: true },
+      data: { 
+        seen: true,
+        relevanceScore: feedBeforeUpdate.relevanceScore * 0.5 // Seen penalty: 50%
+      },
     });
 
     // Decrement unseenFeedCount if feed was previously unseen
@@ -110,16 +117,26 @@ export class FeedPrismaRepository {
   }
 
   async markMultipleAsSeen(feedIds: string[]): Promise<number> {
-    // Get feeds to get userIds before updating
+    if (feedIds.length === 0) return 0;
+
+    // Get feeds to get userIds and current scores before updating
     const feedsBeforeUpdate = await this.prisma.feed.findMany({
       where: { id: { in: feedIds } },
-      select: { userId: true, seen: true }
+      select: { id: true, userId: true, seen: true, relevanceScore: true }
     });
 
-    const result = await this.prisma.feed.updateMany({
-      where: { id: { in: feedIds } },
-      data: { seen: true },
+    // Update feeds: seen = true, relevanceScore = relevanceScore * 0.5 (batch)
+    const updatePromises = feedsBeforeUpdate.map((feed) => {
+      return this.prisma.feed.update({
+        where: { id: feed.id },
+        data: {
+          seen: true,
+          relevanceScore: feed.relevanceScore * 0.5, // Seen penalty: 50%
+        },
+      });
     });
+
+    await Promise.all(updatePromises);
 
     // Count unseen feeds per user and decrement their unseenFeedCount
     const unseenCountsByUser = new Map<string, number>();
@@ -142,7 +159,7 @@ export class FeedPrismaRepository {
       });
     }
 
-    return result.count;
+    return feedsBeforeUpdate.length;
   }
 
   async countUnseen(userId: string): Promise<number> {
@@ -178,6 +195,44 @@ export class FeedPrismaRepository {
     });
   }
 
+  /**
+   * User feedback'e göre feed score'unu güncelle
+   * 
+   * @param feedId - Feed ID
+   * @param multiplier - Score multiplier (örn: 0.3 = %30'a düş)
+   * @param increment - Score increment (örn: 10 = +10 puan)
+   */
+  async updateScoreByFeedback(
+    feedId: string,
+    multiplier?: number | null,
+    increment?: number | null
+  ): Promise<void> {
+    const feed = await this.prisma.feed.findUnique({
+      where: { id: feedId },
+      select: { relevanceScore: true },
+    });
+
+    if (!feed) return;
+
+    let newScore = feed.relevanceScore;
+
+    if (multiplier !== null && multiplier !== undefined) {
+      newScore = newScore * multiplier;
+    }
+
+    if (increment !== null && increment !== undefined) {
+      newScore = newScore + increment;
+    }
+
+    // Min 0, Max 120 (safeguard)
+    newScore = Math.max(0, Math.min(120, newScore));
+
+    await this.prisma.feed.update({
+      where: { id: feedId },
+      data: { relevanceScore: newScore },
+    });
+  }
+
   private toDomain(prismaFeed: any): Feed {
     return new Feed(
       prismaFeed.id,
@@ -185,6 +240,7 @@ export class FeedPrismaRepository {
       prismaFeed.postId,
       prismaFeed.source as FeedSource,
       prismaFeed.seen,
+      prismaFeed.relevanceScore || 0,
       prismaFeed.createdAt,
       prismaFeed.updatedAt
     );

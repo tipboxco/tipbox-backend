@@ -2289,6 +2289,251 @@ function getProductConfigsForBrand(brandName: string): Array<{
   return configs[brandName] || []
 }
 
+/**
+ * Tüm kullanıcılar için feed relevance score hesapla
+ * Seed sonrasında bir kez çalıştırılır
+ */
+async function calculateFeedScoresForAllUsers() {
+  // Tüm feed kayıtlarını al (relevance_score = 0 olanlar)
+  const feedsToScore = await prisma.feed.findMany({
+    where: {
+      relevanceScore: 0 as any, // Sadece score hesaplanmamış olanlar
+    },
+    include: {
+      post: {
+        include: {
+          user: true,
+          product: true,
+          productGroup: true,
+          subCategory: true,
+          mainCategory: true,
+        }
+      }
+    },
+    orderBy: { createdAt: 'desc' },
+  })
+
+  if (feedsToScore.length === 0) {
+    console.log('ℹ️  No feeds to score')
+    return
+  }
+
+  console.log(`📊 Found ${feedsToScore.length} feeds to score`)
+
+  let processed = 0
+  const BATCH_SIZE = 50
+
+  // Batch'ler halinde işle
+  for (let i = 0; i < feedsToScore.length; i += BATCH_SIZE) {
+    const batch = feedsToScore.slice(i, i + BATCH_SIZE)
+    
+    // Her feed için score hesapla
+    const updatePromises = batch.map(async (feed) => {
+      try {
+        const post = feed.post as any
+        const userId = feed.userId
+        
+        // Score hesaplama mantığı
+        let score = 0
+
+        // 1. Trust Score (0-40)
+        const trustScore = await calculateTrustScoreForSeed(userId, post.userId)
+        score += trustScore
+
+        // 2. Inventory Score (0-30)
+        const inventoryScore = await calculateInventoryScoreForSeed(userId, post)
+        score += inventoryScore
+
+        // 3. Engagement Score (0-20)
+        const engagementScore = calculateEngagementScoreForSeed(post)
+        score += engagementScore
+
+        // 4. Recency Score (0-10)
+        const recencyScore = calculateRecencyScoreForSeed(post.createdAt)
+        score += recencyScore
+
+        // 5. Boost Score (0-10)
+        const boostScore = post.isBoosted && (!post.boostedUntil || post.boostedUntil > new Date()) ? 10 : 0
+        score += boostScore
+
+        // Determine best source based on scores
+        let bestSource: any = feed.source
+        if (trustScore >= 20) {
+          bestSource = 'MUTUAL_TRUST'
+        } else if (trustScore >= 10) {
+          bestSource = 'TRUSTER'
+        } else if (inventoryScore >= 20) {
+          bestSource = 'INVENTORY_MATCH'
+        } else if (inventoryScore >= 10) {
+          bestSource = 'PRODUCT_GROUP_MATCH'
+        } else if (engagementScore >= 15) {
+          bestSource = 'ENGAGEMENT_HIGH'
+        } else if (boostScore > 0) {
+          bestSource = 'BOOSTED'
+        }
+
+        // Update feed with calculated score
+        await prisma.feed.update({
+          where: { id: feed.id },
+          data: {
+            relevanceScore: Math.max(0, Math.min(100, score)) as any, // 0-100 arası clamp
+            source: bestSource,
+          }
+        })
+
+        processed++
+      } catch (error) {
+        console.error(`❌ Error scoring feed ${feed.id}:`, error)
+        // Fallback: Default score
+        await prisma.feed.update({
+          where: { id: feed.id },
+          data: { relevanceScore: 10 as any }
+        })
+        processed++
+      }
+    })
+
+    await Promise.all(updatePromises)
+    
+    const progress = Math.round((processed / feedsToScore.length) * 100)
+    console.log(`   ⏳ Processed ${processed}/${feedsToScore.length} feeds (${progress}%)`)
+  }
+
+  // Final stats
+  const scoreStats = await prisma.$queryRaw<Array<{range: string, count: bigint}>>`
+    SELECT 
+      CASE 
+        WHEN relevance_score < 10 THEN '0-10'
+        WHEN relevance_score < 30 THEN '10-30'
+        WHEN relevance_score < 50 THEN '30-50'
+        ELSE '50+'
+      END as range,
+      COUNT(*) as count
+    FROM feeds
+    GROUP BY range
+    ORDER BY range
+  `
+  
+  console.log('\n📊 Score Distribution:')
+  scoreStats.forEach(row => {
+    console.log(`   ${row.range}: ${row.count.toString()} feeds`)
+  })
+}
+
+/**
+ * Trust score hesaplama (seed için)
+ */
+async function calculateTrustScoreForSeed(userId: string, authorId: string): Promise<number> {
+  if (userId === authorId) return 0
+
+  const [userTrustsAuthor, authorTrustsUser] = await Promise.all([
+    prisma.trustRelation.findFirst({
+      where: { trusterId: userId, trustedUserId: authorId }
+    }),
+    prisma.trustRelation.findFirst({
+      where: { trusterId: authorId, trustedUserId: userId }
+    }),
+  ])
+
+  // Mutual trust
+  if (userTrustsAuthor && authorTrustsUser) return 40
+
+  // User trusts author
+  if (userTrustsAuthor) return 20
+
+  // Author trusts user (network effect)
+  if (authorTrustsUser) return 10
+
+  return 0
+}
+
+/**
+ * Inventory score hesaplama (seed için)
+ */
+async function calculateInventoryScoreForSeed(userId: string, post: any): Promise<number> {
+  if (!post.productId) return 0
+
+  const userInventory = await prisma.inventory.findFirst({
+    where: { 
+      userId,
+      productId: post.productId,
+    }
+  })
+
+  // Exact product match
+  if (userInventory) return 30
+
+  // Product group match
+  if (post.productGroupId) {
+    const groupMatch = await prisma.inventory.findFirst({
+      where: {
+        userId,
+        product: {
+          group: {
+            id: post.productGroupId,
+          }
+        }
+      }
+    })
+    if (groupMatch) return 20
+  }
+
+  // Category match
+  if (post.mainCategoryId) {
+    const categoryMatch = await prisma.inventory.findFirst({
+      where: {
+        userId,
+        product: {
+          group: {
+            subCategory: {
+              mainCategory: {
+                id: post.mainCategoryId,
+              }
+            }
+          }
+        }
+      }
+    })
+    if (categoryMatch) return 10
+  }
+
+  return 0
+}
+
+/**
+ * Engagement score hesaplama (seed için)
+ */
+function calculateEngagementScoreForSeed(post: any): number {
+  const likes = post.likesCount || 0
+  const comments = post.commentsCount || 0
+  const views = post.viewsCount || 1 // Minimum 1 to avoid division by zero
+  const shares = post.sharesCount || 0
+
+  // Weighted engagement
+  const totalEngagement = (likes * 1) + (comments * 3) + (shares * 5)
+  const engagementRate = totalEngagement / views
+
+  // Normalize to 0-20
+  if (engagementRate > 0.5) return 20      // Very high engagement
+  if (engagementRate > 0.2) return 15      // High engagement
+  if (engagementRate > 0.1) return 10      // Medium engagement
+  if (engagementRate > 0.05) return 5      // Low engagement
+  return 2                                  // Very low engagement
+}
+
+/**
+ * Recency score hesaplama (seed için)
+ */
+function calculateRecencyScoreForSeed(createdAt: Date): number {
+  const now = new Date()
+  const ageInHours = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60)
+
+  if (ageInHours < 48) return 10        // Very recent (last 2 days)
+  if (ageInHours < 168) return 7        // Recent (last week)
+  if (ageInHours < 336) return 4        // Medium (last 2 weeks)
+  return 1                               // Old
+}
+
 async function main() {
   console.error('🌱 Starting seed process...') // Using stderr to ensure output
   
@@ -6238,6 +6483,11 @@ async function main() {
   }
 
   console.log(`✅ Feed entries created for ${allUsers.length} users`)
+
+  // Feed Scoring - Tüm feed kayıtları için relevance score hesapla
+  console.log('\n🎯 Calculating relevance scores for all feed entries...')
+  await calculateFeedScoresForAllUsers()
+  console.log('✅ Feed scores calculated successfully')
 
   // Profil istatistiklerini (post/trust/truster) senkronize et
   console.log('📈 Syncing profile stats for test user...')

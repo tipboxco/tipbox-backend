@@ -8,6 +8,7 @@ import marketplaceRouter from './marketplace/marketplace.router';
 import exploreRouter from './explore/explore.router';
 import expertRouter from './expert/expert.router';
 import inventoryRouter from './inventory/inventory.router';
+import interactionRouter from './interaction/interaction.router';
 import { authMiddleware } from './auth/auth.middleware';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJSDoc from 'swagger-jsdoc';
@@ -767,6 +768,7 @@ app.use('/brands', brandRouter);
 app.use('/search', searchRouter);
 app.use('/posts', postRouter);
 app.use('/events', eventRouter);
+app.use('/interactions', interactionRouter);
 
 // Dashboard endpoint - en sona eklenmeli ki diğer route'lar çalışabilsin
 // Dashboard hem root'ta hem de /dashboard'da çalışabilir

@@ -211,5 +211,200 @@ router.get('/filtered', asyncHandler(async (req: Request, res: Response) => {
   res.json(feed);
 }));
 
+/**
+ * @openapi
+ * /feed/seen:
+ *   post:
+ *     summary: Feed item'ları seen olarak işaretle
+ *     description: Viewport tracking ile görülen feed'leri seen işaretle ve seen penalty uygula
+ *     tags: [Feed]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - feedIds
+ *             properties:
+ *               feedIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Seen olarak işaretlenecek feed ID'leri
+ *                 example: ["feed123", "feed456"]
+ *     responses:
+ *       200:
+ *         description: Feed'ler başarıyla seen işaretlendi
+ *       400:
+ *         description: Geçersiz request
+ *       401:
+ *         description: Unauthorized
+ */
+router.post('/seen', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = (req as any).user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const { feedIds } = req.body;
+
+  if (!feedIds || !Array.isArray(feedIds) || feedIds.length === 0) {
+    return res.status(400).json({ message: 'feedIds array is required' });
+  }
+
+  // Validation: Max 50 feed per request
+  if (feedIds.length > 50) {
+    return res.status(400).json({ message: 'Maximum 50 feeds per request' });
+  }
+
+  await feedService.markFeedAsSeen(feedIds);
+
+  res.status(200).json({
+    message: 'Feeds marked as seen',
+    count: feedIds.length,
+  });
+}));
+
+/**
+ * @openapi
+ * /feed/{feedId}/hide:
+ *   post:
+ *     summary: Feed'i gizle
+ *     description: Feed'i gizle (score * 0.3)
+ *     tags: [Feed]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: feedId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Feed gizlendi
+ */
+router.post('/:feedId/hide', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = (req as any).user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const { feedId } = req.params;
+
+  await feedService.handleUserFeedback(feedId, userId, 'hide');
+
+  res.status(200).json({ message: 'Feed hidden' });
+}));
+
+/**
+ * @openapi
+ * /feed/{feedId}/not-interested:
+ *   post:
+ *     summary: İlgilenmiyorum
+ *     description: Feed'i düşük öncelikli yap (score * 0.3)
+ *     tags: [Feed]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: feedId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Feedback kaydedildi
+ */
+router.post('/:feedId/not-interested', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = (req as any).user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const { feedId } = req.params;
+
+  await feedService.handleUserFeedback(feedId, userId, 'not_interested');
+
+  res.status(200).json({ message: 'Feedback recorded' });
+}));
+
+/**
+ * @openapi
+ * /feed/{feedId}/save:
+ *   post:
+ *     summary: Feed'i kaydet/bookmark
+ *     description: Feed'i kaydet ve score'u artır (score + 10)
+ *     tags: [Feed]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: feedId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Feed kaydedildi
+ */
+router.post('/:feedId/save', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = (req as any).user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const { feedId } = req.params;
+
+  await feedService.handleUserFeedback(feedId, userId, 'save');
+
+  res.status(200).json({ message: 'Feed saved' });
+}));
+
+/**
+ * @openapi
+ * /feed/{feedId}/report:
+ *   post:
+ *     summary: Feed'i şikayet et
+ *     description: Feed'i sil ve post'u moderation'a gönder
+ *     tags: [Feed]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: feedId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Feed rapor edildi
+ */
+router.post('/:feedId/report', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = (req as any).user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const { feedId } = req.params;
+
+  await feedService.handleUserFeedback(feedId, userId, 'report');
+
+  res.status(200).json({ message: 'Feed reported' });
+}));
+
 export default router;
 

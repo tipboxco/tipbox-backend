@@ -1,8 +1,22 @@
 import { TrustRelation } from '../../domain/user/trust-relation.entity';
 import { getPrisma } from './prisma.client';
+import { TrustBackfillScheduler } from '../scheduler/trust-backfill.scheduler';
+import logger from '../logger/logger';
+
+// Singleton scheduler instance (her repository instance'ında yeni oluşturulmasın)
+let trustBackfillSchedulerInstance: TrustBackfillScheduler | null = null;
 
 export class TrustRelationPrismaRepository {
   private prisma = getPrisma();
+  private trustBackfillScheduler: TrustBackfillScheduler;
+
+  constructor() {
+    // Singleton pattern - tek instance kullan
+    if (!trustBackfillSchedulerInstance) {
+      trustBackfillSchedulerInstance = new TrustBackfillScheduler();
+    }
+    this.trustBackfillScheduler = trustBackfillSchedulerInstance;
+  }
 
   async findById(id: string): Promise<TrustRelation | null> {
     const relation = await this.prisma.trustRelation.findUnique({ where: { id } });
@@ -63,6 +77,28 @@ export class TrustRelationPrismaRepository {
           increment: 1
         }
       } as any
+    });
+
+    // 🚀 EVENT: Trust backfill job'ı kuyruğa ekle (async - bloke etmez)
+    logger.info({ 
+      message: 'Queueing trust backfill job', 
+      trusterId: String(trusterId), 
+      trustedUserId: String(trustedUserId) 
+    });
+    
+    this.trustBackfillScheduler.queueTrustBackfill(
+      String(trusterId), 
+      String(trustedUserId),
+      14 // 14 günlük geçmiş
+    ).then((jobId) => {
+      logger.info({ message: 'Trust backfill job queued successfully', jobId, trusterId, trustedUserId });
+    }).catch((err) => {
+      logger.warn({ 
+        message: 'Failed to queue trust backfill job', 
+        trusterId, 
+        trustedUserId, 
+        error: err.message 
+      });
     });
 
     return this.toDomain(relation);

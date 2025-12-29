@@ -25,18 +25,30 @@ import { ContentPostType } from '../../domain/content/content-post-type.enum';
 import { FeedSource } from '../../domain/admin/feed-source.enum';
 import { generateIdForModel } from '../../infrastructure/ids/id.strategy';
 import logger from '../../infrastructure/logger/logger';
+import { FeedScoringService } from './feed-scoring.service';
+import { FeedCleanupScheduler } from '../../infrastructure/scheduler/feed-cleanup.scheduler';
+import { FeedDistributionScheduler } from '../../infrastructure/scheduler/feed-distribution.scheduler';
 
 export class FeedService {
   private readonly feedRepo: FeedPrismaRepository;
   private readonly profileRepo: ProfilePrismaRepository;
   private readonly cacheService: CacheService;
   private readonly prisma: PrismaClient;
+  private readonly scoringService: FeedScoringService;
+  private readonly cleanupScheduler: FeedCleanupScheduler;
+  private readonly distributionScheduler: FeedDistributionScheduler;
+  
+  // Post counter for batch scoring
+  private postCounter: number = 0;
 
   constructor() {
     this.feedRepo = new FeedPrismaRepository();
     this.profileRepo = new ProfilePrismaRepository();
     this.cacheService = CacheService.getInstance();
     this.prisma = new PrismaClient();
+    this.scoringService = new FeedScoringService();
+    this.cleanupScheduler = new FeedCleanupScheduler();
+    this.distributionScheduler = new FeedDistributionScheduler();
   }
 
   /**
@@ -1240,16 +1252,30 @@ export class FeedService {
   }
 
   /**
-   * Yeni post oluşturulduğunda tüm aktif kullanıcıların feed'ine ekler
-   * Source öncelik sırası:
-   * 1. TRUSTER: Post sahibini trust eden kullanıcılar
-   * 2. BOOSTED: Boosted post'lar
-   * 3. CATEGORY_MATCH: Post'un kategorisi kullanıcının ilgi alanlarında varsa
-   * 4. TRENDING: (Gelecekte algoritma ile belirlenecek)
-   * 5. NEW_USER: Yukarıdakilerin hiçbiri değilse (fallback)
+   * Post'u feed'lere ekle (Asynchronous with BullMQ)
+   * 
+   * Fan-out on Write stratejisi ile çalışır:
+   * - Post oluşturulduğunda bu metod çağrılır
+   * - Feed distribution job'ı queue'ya eklenir (non-blocking)
+   * - Worker arka planda hedef kullanıcılara feed dağıtır
+   * 
+   * Performance optimizations:
+   * - Asynchronous processing (ana thread bloklanmaz)
+   * - Batch scoring (100'er kullanıcı)
+   * - Chunked inserts (500'er kayıt)
+   * - Controlled concurrency (max 3 chunk paralel)
+   * - Retry mechanism (max 3 attempt per chunk)
+   * - Score threshold filtering (minimum 5 puan)
+   * 
+   * @param postId - Post ID
+   * @param postAuthorId - Post yazarının ID'si
    */
   async addPostToFeeds(postId: string, postAuthorId: string): Promise<void> {
     try {
+      // Post counter artır (batch scoring için)
+      this.postCounter++;
+      const isFullScoring = this.postCounter % 10 === 0;
+
       // Post bilgilerini al
       const post = await this.prisma.contentPost.findUnique({
         where: { id: postId },
@@ -1267,128 +1293,179 @@ export class FeedService {
         return;
       }
 
-      // Post'un kategori bilgilerini al
-      const postCategoryId = post.mainCategoryId || post.subCategoryId;
+      // Time window kontrolü (14 günden eski postlar feed'e eklenmez)
+      const postAge = Date.now() - post.createdAt.getTime();
+      const maxAge = 14 * 24 * 60 * 60 * 1000; // 14 gün
+      if (postAge > maxAge) {
+        logger.info({
+          message: 'Post too old for feed addition',
+          postId,
+          postAge: Math.floor(postAge / (24 * 60 * 60 * 1000)) + ' days',
+        });
+        return;
+      }
 
-      // Tüm aktif kullanıcıları al
-      const allActiveUsers = await this.prisma.user.findMany({
-        where: { status: 'ACTIVE' },
-        select: { id: true },
-      });
-
-      // Post sahibini trust edenler
-      const trusters = await this.prisma.trustRelation.findMany({
-        where: { trustedUserId: postAuthorId },
-        select: { trusterId: true },
-      });
-      const trusterIds = new Set(trusters.map((t) => t.trusterId));
-
-      // Kullanıcı feed preferences'larını batch olarak al
-      const userIds = allActiveUsers.map((u) => u.id);
-      const userPreferences = await this.prisma.userFeedPreferences.findMany({
-        where: { userId: { in: userIds } },
-        select: { userId: true, preferredCategories: true },
-      });
-      const preferencesMap = new Map(
-        userPreferences.map((pref) => [pref.userId, pref.preferredCategories])
+      // Feed distribution job'ı queue'ya ekle (non-blocking)
+      await this.distributionScheduler.queueFeedDistribution(
+        postId,
+        postAuthorId,
+        {
+          mainCategoryId: post.mainCategoryId,
+          subCategoryId: post.subCategoryId,
+          productGroupId: post.productGroupId,
+          productId: post.productId,
+          likesCount: (post as any).likesCount || 0,
+          commentsCount: (post as any).commentsCount || 0,
+          viewsCount: (post as any).viewsCount || 0,
+          sharesCount: (post as any).sharesCount || 0,
+          isBoosted: post.isBoosted,
+          boostedUntil: post.boostedUntil,
+          createdAt: post.createdAt,
+        },
+        isFullScoring ? 'full' : 'fast'
       );
 
-      // Her kullanıcı için source belirle (öncelik sırasına göre)
-      const feedRecords: Array<{
-        id: string;
-        userId: string;
-        postId: string;
-        source: FeedSource;
-        seen: boolean;
-      }> = [];
-
-      for (const user of allActiveUsers) {
-        if (user.id === postAuthorId) continue; // Post sahibini hariç tut
-
-        let source: FeedSource | null = null;
-
-        // 1. Truster ise TRUSTER source (en yüksek öncelik)
-        if (trusterIds.has(user.id)) {
-          source = FeedSource.TRUSTER;
-        }
-        // 2. Boosted post ise BOOSTED source
-        else if (post.isBoosted) {
-          source = FeedSource.BOOSTED;
-        }
-        // 3. Kategori eşleşmesi varsa CATEGORY_MATCH
-        else if (postCategoryId) {
-          const userPrefs = preferencesMap.get(user.id);
-          if (userPrefs) {
-            const preferredCategories = userPrefs.split(',').filter(Boolean);
-            if (preferredCategories.includes(postCategoryId)) {
-              source = FeedSource.CATEGORY_MATCH;
-            }
-          }
-        }
-        // 4. TRENDING (gelecekte algoritma ile belirlenecek - şimdilik atlanıyor)
-        // else if (isTrending) {
-        //   source = FeedSource.TRENDING;
-        // }
-        // 5. Yukarıdakilerin hiçbiri değilse NEW_USER (fallback)
-        if (!source) {
-          source = FeedSource.NEW_USER;
-        }
-
-        // Feed kaydını oluştur
-        feedRecords.push({
-          id: generateIdForModel('Feed'),
-          userId: user.id,
-          postId,
-          source,
-          seen: false,
-        });
-      }
-
-      if (feedRecords.length > 0) {
-        // Batch insert
-        await this.prisma.feed.createMany({
-          data: feedRecords,
-          skipDuplicates: true, // Duplicate hatası varsa atla
-        });
-
-        // Her kullanıcı için unseenFeedCount'u artır ve cache'i invalidate et
-        const uniqueUserIds = Array.from(new Set(feedRecords.map((r) => r.userId)));
-        for (const userId of uniqueUserIds) {
-          await this.feedRepo.incrementUnseenFeedCount(userId).catch(() => {});
-          
-          // Cache'i invalidate et (yeni post eklendiği için feed değişti)
-          try {
-            const cachePattern = `feed:${userId}:*`;
-            await this.cacheService.delPattern(cachePattern).catch(() => {});
-          } catch (error) {
-            logger.warn({
-              message: 'Failed to invalidate feed cache',
-              userId,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
-        }
-
-        // Source bazlı istatistikler
-        const sourceCounts = feedRecords.reduce((acc, r) => {
-          acc[r.source] = (acc[r.source] || 0) + 1;
-          return acc;
-        }, {} as Record<FeedSource, number>);
-
-        logger.info({
-          message: 'Post added to all users feeds with source prioritization',
-          postId,
-          feedCount: feedRecords.length,
-          sourceCounts,
-        });
-      }
+      logger.info({
+        message: 'Feed distribution job queued successfully',
+        postId,
+        scoringType: isFullScoring ? 'FULL' : 'FAST',
+        postCounter: this.postCounter,
+      });
     } catch (error) {
       logger.error({
-        message: 'Failed to add post to feeds',
+        message: 'Failed to queue feed distribution',
         postId,
         error: error instanceof Error ? error.message : String(error),
       });
-      // Hata olsa bile devam et, post oluşturma işlemi başarısız olmasın
+      // Hata olsa bile devam et - post oluşturma başarısız sayılmamalı
+    }
+  }
+
+  /**
+   * Feed item'ları seen olarak işaretle ve seen penalty uygula
+   * Seen penalty: Mevcut score'un %50'sine düş
+   * 
+   * Frontend'den viewport tracking ile tetiklenir:
+   * - Feed item viewport'a 2 saniye + görünür olunca çağrılır
+   * - Batch update: Birden fazla feed item tek request'te
+   */
+  async markFeedAsSeen(feedIds: string[]): Promise<void> {
+    try {
+      if (feedIds.length === 0) return;
+
+      // Batch seen marking + score penalty
+      const updatedCount = await this.feedRepo.markMultipleAsSeen(feedIds);
+
+      logger.info({
+        message: 'Feeds marked as seen with penalty',
+        count: updatedCount,
+        feedIds: feedIds.slice(0, 5), // İlk 5 ID log'la
+      });
+
+      // Feed sahibi kullanıcıları bul ve cache invalidate et
+      const feeds = await this.prisma.feed.findMany({
+        where: { id: { in: feedIds } },
+        select: { userId: true },
+        distinct: ['userId'],
+      });
+
+      for (const feed of feeds) {
+        try {
+          const cachePattern = `feed:${feed.userId}:*`;
+          await this.cacheService.delPattern(cachePattern).catch(() => {});
+        } catch (error) {
+          // Cache error - continue
+        }
+      }
+    } catch (error) {
+      logger.error({
+        message: 'Failed to mark feeds as seen',
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /**
+   * Kullanıcı feedback'i ile feed score'unu güncelle
+   * 
+   * Feedback Tipleri:
+   * - hide: Feed'i gizle (score * 0.3)
+   * - not_interested: İlgilenmiyorum (score * 0.3)
+   * - save: Kaydet (score + 10)
+   * - report: Şikayet et (feed sil, post moderate)
+   */
+  async handleUserFeedback(
+    feedId: string,
+    userId: string,
+    feedbackType: 'hide' | 'not_interested' | 'save' | 'report'
+  ): Promise<void> {
+    try {
+      switch (feedbackType) {
+        case 'hide':
+        case 'not_interested':
+          // Score'u %30'a düşür
+          await this.feedRepo.updateScoreByFeedback(feedId, 0.3);
+          logger.info({
+            message: 'Feed hidden by user',
+            feedId,
+            userId,
+            feedbackType,
+          });
+          break;
+
+        case 'save':
+          // Score'u +10 artır
+          await this.feedRepo.updateScoreByFeedback(feedId, null, 10);
+          logger.info({
+            message: 'Feed saved by user',
+            feedId,
+            userId,
+          });
+          break;
+
+        case 'report':
+          // Feed'i sil ve post'u moderate'e gönder
+          const feed = await this.prisma.feed.findUnique({
+            where: { id: feedId },
+            select: { postId: true },
+          });
+
+          if (feed) {
+            // Post'u moderate durumuna al
+            await this.prisma.contentPost.update({
+              where: { id: feed.postId },
+              data: { status: 'PENDING_MODERATION' as any },
+            });
+
+            // Feed'i sil
+            await this.feedRepo.delete(feedId);
+
+            logger.warn({
+              message: 'Feed reported and removed',
+              feedId,
+              postId: feed.postId,
+              userId,
+            });
+          }
+          break;
+      }
+
+      // Cache invalidate
+      try {
+        const cachePattern = `feed:${userId}:*`;
+        await this.cacheService.delPattern(cachePattern).catch(() => {});
+      } catch (error) {
+        // Cache error - continue
+      }
+    } catch (error) {
+      logger.error({
+        message: 'Failed to handle user feedback',
+        feedId,
+        userId,
+        feedbackType,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     }
   }
 

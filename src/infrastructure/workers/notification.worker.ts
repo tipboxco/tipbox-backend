@@ -89,6 +89,15 @@ export class NotificationWorker {
         case 'COMMENT_ADDED':
           await this.handleCommentNotification(userId, data);
           break;
+        case 'POST_SHARED':
+          await this.handlePostSharedNotification(userId, data);
+          break;
+        case 'COMMENT_LIKED':
+          await this.handleCommentLikedNotification(userId, data);
+          break;
+        case 'COMMENT_REPLIED':
+          await this.handleCommentRepliedNotification(userId, data);
+          break;
         case 'SYSTEM_ANNOUNCEMENT':
           await this.handleSystemAnnouncement(userId, data);
           break;
@@ -186,6 +195,61 @@ export class NotificationWorker {
     });
 
     logger.info(`Comment notification sent to user ${userId}: ${data.commenterName}`);
+  }
+
+  /**
+   * Post paylaşım bildirimi işler
+   */
+  private async handlePostSharedNotification(userId: string, data: any): Promise<void> {
+    await this.sendSocketNotification(userId, {
+      type: 'POST_SHARED',
+      title: 'Postunuz Paylaşıldı! 🔄',
+      message: `${data.sharerName} postunuzu paylaştı`,
+      sharerName: data.sharerName,
+      sharerId: data.sharerId,
+      postId: data.postId,
+      shareType: data.shareType,
+      timestamp: new Date().toISOString(),
+    });
+
+    logger.info(`Post shared notification sent to user ${userId}: ${data.sharerName}`);
+  }
+
+  /**
+   * Yorum beğeni bildirimi işler
+   */
+  private async handleCommentLikedNotification(userId: string, data: any): Promise<void> {
+    await this.sendSocketNotification(userId, {
+      type: 'COMMENT_LIKED',
+      title: 'Yorumunuz Beğenildi! 💙',
+      message: `${data.likerName} yorumunuzu beğendi`,
+      likerName: data.likerName,
+      likerId: data.likerId,
+      commentId: data.commentId,
+      postId: data.postId,
+      timestamp: new Date().toISOString(),
+    });
+
+    logger.info(`Comment liked notification sent to user ${userId}: ${data.likerName}`);
+  }
+
+  /**
+   * Yorum yanıt bildirimi işler
+   */
+  private async handleCommentRepliedNotification(userId: string, data: any): Promise<void> {
+    await this.sendSocketNotification(userId, {
+      type: 'COMMENT_REPLIED',
+      title: 'Yorumunuza Yanıt Verildi! 💬',
+      message: `${data.replierName} yorumunuza yanıt verdi`,
+      replierName: data.replierName,
+      replierId: data.replierId,
+      commentId: data.commentId,
+      parentCommentId: data.parentCommentId,
+      postId: data.postId,
+      timestamp: new Date().toISOString(),
+    });
+
+    logger.info(`Comment reply notification sent to user ${userId}: ${data.replierName}`);
   }
 
   /**
