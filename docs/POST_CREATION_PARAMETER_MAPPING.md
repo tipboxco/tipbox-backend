@@ -497,3 +497,4 @@ Tüm post oluşturma endpoint'leri aynı response formatını döner:
 Backend'de 6/7 post tipi için endpoint mevcut. Event post'ları için özel endpoint eksik. Parametre uyumsuzlukları mevcut ancak bunlar frontend'de mapping ile çözülebilir. Backend organizasyonu genel olarak iyi durumda.
 
 
+

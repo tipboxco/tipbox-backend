@@ -463,3 +463,4 @@ CreatePostRequest:
 Seçenek 1 (Mevcut Endpoint'lere `eventId` Ekleme) önerilen çözümdür. Minimal değişiklik ile maksimum esneklik sağlar ve mevcut kod yapısını korur.
 
 
+

@@ -421,8 +421,61 @@ export class UserService {
 
         for (const [index, badge] of badges.entries()) {
           if (!badge?.id) continue;
+          
+          // Badge ID'si UUID formatında mı kontrol et
+          // Eğer değilse, name'e göre badge'i bul
+          let badgeId = badge.id;
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          
+          if (!uuidRegex.test(badgeId)) {
+            // UUID değilse, name'e göre badge'i bul
+            // Önce direkt name ile dene
+            let foundBadge = await tx.badge.findFirst({
+              where: {
+                name: { equals: badgeId, mode: 'insensitive' },
+              },
+              select: { id: true },
+            });
+            
+            // Bulunamazsa, slug formatını normal formata çevirip dene
+            // Örn: "home_appliance" -> "Home Appliance"
+            if (!foundBadge) {
+              const normalizedName = badgeId
+                .split('_')
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                .join(' ');
+              
+              foundBadge = await tx.badge.findFirst({
+                where: {
+                  name: { equals: normalizedName, mode: 'insensitive' },
+                },
+                select: { id: true },
+              });
+            }
+            
+            // Hala bulunamazsa, contains ile dene (kısmi eşleşme)
+            if (!foundBadge) {
+              foundBadge = await tx.badge.findFirst({
+                where: {
+                  OR: [
+                    { name: { contains: badgeId, mode: 'insensitive' } },
+                    { name: { contains: badgeId.replace(/_/g, ' '), mode: 'insensitive' } },
+                  ],
+                },
+                select: { id: true },
+              });
+            }
+            
+            if (!foundBadge) {
+              logger.warn(`Badge not found by name: ${badgeId}`);
+              continue;
+            }
+            
+            badgeId = foundBadge.id;
+          }
+          
           await tx.userBadge.upsert({
-            where: { userId_badgeId: { userId, badgeId: badge.id } },
+            where: { userId_badgeId: { userId, badgeId } },
             update: {
               isVisible: true,
               displayOrder: index,
@@ -430,7 +483,7 @@ export class UserService {
             },
             create: {
               userId,
-              badgeId: badge.id,
+              badgeId,
               isVisible: true,
               displayOrder: index,
               visibility: 'PUBLIC',
