@@ -12,7 +12,8 @@ import { ContentSharePrismaRepository } from '../../infrastructure/repositories/
 import { ContentFavoritePrismaRepository } from '../../infrastructure/repositories/content-favorite-prisma.repository';
 import { UserPrismaRepository } from '../../infrastructure/repositories/user-prisma.repository';
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
-import SocketManager from '../../infrastructure/realtime/socket-manager';
+import { NotificationService } from '../notification/notification.service';
+import { NotificationType } from '../../domain/notification/notification-type.enum';
 import logger from '../../infrastructure/logger/logger';
 
 export class InteractionService {
@@ -23,6 +24,7 @@ export class InteractionService {
   private favoriteRepo = new ContentFavoritePrismaRepository();
   private userRepo = new UserPrismaRepository();
   private prisma = getPrisma();
+  private notificationService = new NotificationService();
 
   constructor() {}
 
@@ -63,16 +65,13 @@ export class InteractionService {
       if (post.userId !== userId) {
         const liker = await this.userRepo.findById(userId);
         if (liker) {
-          SocketManager.getInstance().getSocketHandler().sendMessageToUser(
+          await this.notificationService.sendNotification(
             post.userId,
-            'new_notification',
+            NotificationType.POST_LIKED,
             {
-              type: 'post_liked',
-              message: `${liker.name || liker.email} gönderinizi beğendi.`,
-              postId: post.id,
-              likerId: liker.id,
               likerName: liker.name || liker.email,
-              timestamp: new Date().toISOString(),
+              likerId: liker.id,
+              postId: post.id,
             }
           );
         }
@@ -139,16 +138,13 @@ export class InteractionService {
       if (post.userId !== userId) {
         const user = await this.userRepo.findById(userId);
         if (user) {
-          SocketManager.getInstance().getSocketHandler().sendMessageToUser(
+          await this.notificationService.sendNotification(
             post.userId,
-            'new_notification',
+            NotificationType.POST_FAVORITED,
             {
-              type: 'post_favorited',
-              message: `${user.name || user.email} gönderinizi favorilere ekledi.`,
-              postId: post.id,
-              userId: user.id,
               userName: user.name || user.email,
-              timestamp: new Date().toISOString(),
+              userId: user.id,
+              postId: post.id,
             }
           );
         }
@@ -264,17 +260,14 @@ export class InteractionService {
       if (post.userId !== userId && !parentId) {
         const commenter = await this.userRepo.findById(userId);
         if (commenter) {
-          SocketManager.getInstance().getSocketHandler().sendMessageToUser(
+          await this.notificationService.sendNotification(
             post.userId,
-            'new_notification',
+            NotificationType.POST_COMMENTED,
             {
-              type: 'post_commented',
-              message: `${commenter.name || commenter.email} gönderinize yorum yaptı.`,
+              commenterName: commenter.name || commenter.email,
+              commenterId: commenter.id,
               postId: post.id,
               commentId: comment.id,
-              commenterId: commenter.id,
-              commenterName: commenter.name || commenter.email,
-              timestamp: new Date().toISOString(),
             }
           );
         }
@@ -286,18 +279,15 @@ export class InteractionService {
         if (parentComment && parentComment.userId !== userId) {
           const replier = await this.userRepo.findById(userId);
           if (replier) {
-            SocketManager.getInstance().getSocketHandler().sendMessageToUser(
+            await this.notificationService.sendNotification(
               parentComment.userId,
-              'new_notification',
+              NotificationType.COMMENT_REPLIED,
               {
-                type: 'comment_replied',
-                message: `${replier.name || replier.email} yorumunuza yanıt verdi.`,
+                replierName: replier.name || replier.email,
+                replierId: replier.id,
                 postId: post.id,
                 commentId: comment.id,
                 parentCommentId: parentId,
-                replierId: replier.id,
-                replierName: replier.name || replier.email,
-                timestamp: new Date().toISOString(),
               }
             );
           }
@@ -415,17 +405,14 @@ export class InteractionService {
       if (comment.userId !== userId) {
         const liker = await this.userRepo.findById(userId);
         if (liker) {
-          SocketManager.getInstance().getSocketHandler().sendMessageToUser(
+          await this.notificationService.sendNotification(
             comment.userId,
-            'new_notification',
+            NotificationType.COMMENT_LIKED,
             {
-              type: 'comment_liked',
-              message: `${liker.name || liker.email} yorumunuzu beğendi.`,
+              likerName: liker.name || liker.email,
+              likerId: liker.id,
               commentId: comment.id,
               postId: comment.postId,
-              likerId: liker.id,
-              likerName: liker.name || liker.email,
-              timestamp: new Date().toISOString(),
             }
           );
         }
@@ -496,17 +483,14 @@ export class InteractionService {
       if (post.userId !== userId) {
         const sharer = await this.userRepo.findById(userId);
         if (sharer) {
-          SocketManager.getInstance().getSocketHandler().sendMessageToUser(
+          await this.notificationService.sendNotification(
             post.userId,
-            'new_notification',
+            NotificationType.POST_SHARED,
             {
-              type: 'post_shared',
-              message: `${sharer.name || sharer.email} gönderinizi paylaştı.`,
-              postId: post.id,
-              sharerId: sharer.id,
               sharerName: sharer.name || sharer.email,
+              sharerId: sharer.id,
+              postId: post.id,
               shareType,
-              timestamp: new Date().toISOString(),
             }
           );
         }
