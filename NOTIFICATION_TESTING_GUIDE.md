@@ -8,27 +8,43 @@ git branch  # feat/notification-system olmalı
 git log --oneline -3  # Son commit'leri kontrol et
 ```
 
-### 2. Database Güncellemesi
+### 2. Docker Container'ları Başlat
 ```bash
-# Development database'i güncelle
-npm run db:push
-
-# Prisma client'ı regenerate et
-npx prisma generate
-```
-
-### 3. Build Kontrolü
-```bash
-npm run build  # Hata olmamalı
-```
-
-### 4. Server Başlatma
-```bash
-# Docker container'ları başlat
+# Docker container'ları başlat (PostgreSQL, Redis, etc.)
 npm run docker:up
 
-# Backend server'ı başlat
-npm run dev
+# Ya da
+docker-compose up -d
+```
+
+### 3. Database Güncellemesi
+```bash
+# Development database'i güncelle (Docker içinde)
+npm run db:push
+
+# Prisma client'ı regenerate et (Docker içinde)
+npm run db:generate
+
+# Migration durumunu kontrol et
+npm run db:status
+```
+
+### 4. Build Kontrolü
+```bash
+# Docker container içinde build
+docker-compose exec backend npm run build
+
+# Ya da local'de (TypeScript kontrolü için)
+npm run build
+```
+
+### 5. Backend Logs İzleme
+```bash
+# Backend container logs'larını izle
+docker-compose logs -f backend
+
+# Ya da
+docker logs -f tipbox_backend
 ```
 
 ## 📱 Manuel Test Senaryoları
@@ -176,9 +192,11 @@ Body:
 
 **Manuel Test için:**
 ```typescript
-// Backend console'da:
-const gamificationService = new GamificationService();
-await gamificationService.grantBadgeToUser('USER_ID', 'BADGE_ID');
+// Docker container içinde Node.js console:
+docker-compose exec backend node
+> const { GamificationService } = require('./dist/application/gamification/gamification.service');
+> const gamificationService = new GamificationService();
+> await gamificationService.grantBadgeToUser('USER_ID', 'BADGE_ID');
 ```
 
 ### Test 7: Okundu İşaretleme
@@ -261,10 +279,22 @@ Headers:
 
 ## 🔍 Log Kontrolü
 
+### Backend Container Logs
+```bash
+# Tüm backend logs'larını izle
+docker-compose logs -f backend
+
+# Sadece notification ile ilgili logs
+docker-compose logs -f backend | grep -i notification
+
+# Son 100 satır
+docker-compose logs --tail=100 backend
+```
+
 ### Worker Logs
 ```bash
-# Terminal'de worker log'larını izle
-tail -f logs/2025-12-30.log | grep -i notification
+# Worker logs'larını izle (backend container içinde çalışıyor)
+docker-compose logs -f backend | grep -i "notification worker"
 ```
 
 **Beklenen log örnekleri:**
@@ -277,8 +307,10 @@ tail -f logs/2025-12-30.log | grep -i notification
 
 ### Database Kontrolü
 ```bash
-# Prisma Studio ile database'i kontrol et
-npx prisma studio
+# Prisma Studio'yu başlat (Docker container üzerinden)
+docker-compose exec backend npx prisma studio
+
+# Browser'da: http://localhost:5555
 ```
 
 **Kontrol edilecekler:**
@@ -300,25 +332,64 @@ socket.on('notification', (data) => {
 });
 ```
 
-### Queue Kontrolü
+### Queue Kontrolü (Redis)
 ```bash
-# BullMQ dashboard (eğer kuruluysa)
-# http://localhost:3000/admin/queues
+# Redis container'a bağlan
+docker-compose exec redis redis-cli
 
-# Ya da Redis'ten queue'yu kontrol et
-redis-cli
+# Queue'ları listele
 > KEYS bull:notifications:*
+
+# Queue uzunluğunu kontrol et
 > LLEN bull:notifications:wait
+
+# Queue'daki işleri görüntüle
+> LRANGE bull:notifications:wait 0 -1
+
+# Redis'i temizle (dikkatli!)
+> FLUSHALL
+```
+
+### PostgreSQL Database Kontrolü
+```bash
+# PostgreSQL container'a bağlan
+docker-compose exec postgres psql -U postgres -d tipbox_dev
+
+# Notification tablolarını kontrol et
+\dt notifications
+\dt push_tokens
+
+# Kayıt sayılarını kontrol et
+SELECT COUNT(*) FROM notifications;
+SELECT COUNT(*) FROM push_tokens;
+SELECT * FROM notifications ORDER BY created_at DESC LIMIT 5;
+
+# Çıkış
+\q
 ```
 
 ### Expo Push Token Doğrulama
-```javascript
-// Backend'de
-import { Expo } from 'expo-server-sdk';
+```bash
+# Backend container içinde Node.js konsolu
+docker-compose exec backend node
 
-const expo = new Expo();
-console.log(expo.isExpoPushToken('ExponentPushToken[xxxxxx]'));
+# Token doğrulama
+> const { Expo } = require('expo-server-sdk');
+> const expo = new Expo();
+> console.log(expo.isExpoPushToken('ExponentPushToken[xxxxxx]'));
 // true dönmeli
+```
+
+### Container Durumu Kontrolü
+```bash
+# Tüm container'ların durumunu kontrol et
+docker-compose ps
+
+# Backend container'ın sağlık durumu
+docker inspect tipbox_backend --format='{{.State.Health.Status}}'
+
+# Backend container içine gir
+docker-compose exec backend sh
 ```
 
 ## ✅ Test Checklist
@@ -381,43 +452,128 @@ REDIS_URL=production_redis_url
 
 ### Load Test
 ```bash
-# Çok sayıda bildirim gönder
-# Apache Bench veya k6 ile test et
+# Apache Bench ile test (Docker dışından)
 ab -n 1000 -c 10 http://localhost:3000/notifications/
+
+# k6 ile test
+docker run --rm -i grafana/k6 run - <script.js
 ```
 
 ### Queue Performance
 ```bash
-# Worker'ın kaç saniyede kaç bildirim işlediğini kontrol et
-# Log'lardan calculation yap
+# BullMQ dashboard (eğer eklemişseniz)
+# http://localhost:3000/admin/queues
+
+# Redis'ten queue metriklerini kontrol et
+docker-compose exec redis redis-cli
+> INFO stats
+> SLOWLOG get 10
 ```
 
-## 🔗 Faydalı Komutlar
+## 🔗 Faydalı Docker Komutları
 
 ```bash
-# Worker'ı restart et
-pm2 restart notification-worker
+# Container'ları yeniden başlat
+docker-compose restart backend
 
-# Redis'i temizle (development)
-redis-cli FLUSHALL
+# Container'ları durdur
+docker-compose stop
+
+# Container'ları sil ve yeniden oluştur
+docker-compose down
+docker-compose up -d
+
+# Backend container'ı rebuild et
+docker-compose up -d --build backend
+
+# Container logs'larını temizle
+docker-compose down
+docker system prune -f
+
+# Backend container içinde komut çalıştır
+docker-compose exec backend npm run build
+docker-compose exec backend npx prisma studio
+docker-compose exec backend npm run db:seed
 
 # Database'i sıfırla (development)
 npm run db:reset
 
 # Prisma Studio aç
-npx prisma studio
+npm run db:generate  # 5555 portunda açılır
 
-# Log'ları izle
-tail -f logs/*.log
+# Redis'i temizle (development)
+docker-compose exec redis redis-cli FLUSHALL
+
+# PostgreSQL backup al
+docker-compose exec postgres pg_dump -U postgres tipbox_dev > backup.sql
 
 # Git durumu
 git status
 git log --oneline
 ```
 
+## 🔧 Troubleshooting
+
+### Problem: Container başlamıyor
+```bash
+# Container logs'larını kontrol et
+docker-compose logs backend
+
+# Container'ı rebuild et
+docker-compose up -d --build backend
+```
+
+### Problem: Database bağlantı hatası
+```bash
+# PostgreSQL container'ın çalıştığını kontrol et
+docker-compose ps postgres
+
+# Database connection string'i kontrol et
+docker-compose exec backend printenv | grep DATABASE_URL
+
+# PostgreSQL'e manuel bağlan
+docker-compose exec postgres psql -U postgres -d tipbox_dev
+```
+
+### Problem: Redis bağlantı hatası
+```bash
+# Redis container'ın çalıştığını kontrol et
+docker-compose ps redis
+
+# Redis'e bağlanabilir misiniz?
+docker-compose exec redis redis-cli ping
+# PONG dönmeli
+```
+
+### Problem: Notification worker çalışmıyor
+```bash
+# Worker logs'larını kontrol et
+docker-compose logs backend | grep -i worker
+
+# Backend container'ı restart et
+docker-compose restart backend
+
+# Worker process'ini kontrol et
+docker-compose exec backend ps aux | grep node
+```
+
+### Problem: Port çakışması
+```bash
+# Kullanılan portları kontrol et
+lsof -i :3000  # Backend port
+lsof -i :5432  # PostgreSQL port
+lsof -i :6379  # Redis port
+lsof -i :5555  # Prisma Studio port
+
+# Docker'ı restart et
+docker-compose down
+docker-compose up -d
+```
+
 ---
 
 **Test Tarihi:** 30 Aralık 2025  
 **Branch:** feat/notification-system  
-**Versiyon:** 1.0.0
+**Versiyon:** 1.0.0  
+**Docker Compose Version:** Compatible with project setup
 
