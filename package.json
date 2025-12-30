@@ -20,12 +20,15 @@
     "db:reset:all": "docker-compose exec backend npx ts-node prisma/seed/clear-seed-data.ts --force",
     "db:reset:force": "docker-compose exec backend npx prisma migrate reset --force --skip-seed",
     "db:migrate": "docker-compose exec backend npx prisma migrate dev",
+    "db:migrate:deploy": "docker-compose exec backend npx prisma migrate deploy",
     "db:generate": "docker-compose exec backend npx prisma generate",
     "db:push": "docker-compose exec backend npx prisma db push",
+    "db:status": "docker-compose exec backend npx prisma migrate status",
+    "db:setup": "bash scripts/docker-migrate-and-seed.sh",
+    "db:setup:full": "bash scripts/docker-migrate-and-seed.sh --with-seed",
     "docker:up": "node scripts/docker-up.js --detached",
     "docker:start": "node scripts/docker-up.js --start",
     "docker:restart": "node scripts/docker-up.js --restart",
-    "db:status": "docker-compose exec backend npx prisma migrate status",
     "dev:reset": "bash scripts/reset-dev.sh"
   },
   "prisma": {
