@@ -4,29 +4,64 @@
 
 ## 🎯 Hızlı Başlangıç
 
-### Temel Migration + Schema Sync (Önerilen)
+### Manuel Migration + Schema Sync
 
 ```bash
-npm run db:setup
+# 1. Migration'ları uygula
+npm run db:migrate:deploy
+
+# 2. Prisma Client'ı yenile
+npm run db:generate
+
+# 3. Schema sync (eksik kolonları ekle)
+npm run db:push
+
+# 4. Backend'i restart et
+docker-compose restart backend
 ```
 
-Bu komut şunları yapar:
-1. ✅ Database bağlantısını kontrol eder
-2. ✅ Migration durumunu gösterir
-3. ✅ Migration'ları uygular (`migrate deploy`)
-4. ✅ Prisma Client'ı yeniler (`generate`)
-5. ✅ Schema sync yapar (`db push`)
-6. ✅ Backend'i restart eder
-7. ✅ Servis hazır olmasını bekler
-
-### Migration + Seed (Tam Kurulum)
+### Seed İşlemi
 
 ```bash
-npm run db:setup:full
+# Minimal seed (kullanıcı verileri)
+npm run db:seed
+
+# Tam seed (tüm veriler)
+npm run db:seed:all
 ```
 
-Yukarıdaki adımlara ek olarak:
-8. ✅ Seed verilerini yükler
+---
+
+## 🚀 CI/CD Pipeline (GitHub Actions)
+
+Migration ve seed işlemleri otomatik olarak **GitHub Actions** ile yapılır:
+
+### Test Ortamına Deploy
+
+```bash
+git push origin test
+```
+
+Pipeline otomatik olarak:
+1. ✅ Database backup alır
+2. ✅ Migration'ları uygular (`prisma migrate deploy`)
+3. ✅ Prisma Client'ı yeniler (`prisma generate`)
+4. ✅ Schema sync yapar (`prisma db push`)
+5. ✅ Seed kontrolü yapar (data varsa atlar)
+6. ✅ Servisleri başlatır
+7. ✅ Health check yapar
+
+### Workflow Dosyası
+
+`.github/workflows/deploy-test.yml` - Test ortamı deployment
+- Migration step (satır 158-166)
+- Seed step (satır 167-177)
+
+### Custom Action
+
+`.github/actions/execute-remote-stage/action.yml`
+- `migrate` stage: Migration + Generate + Schema Sync
+- `seed` stage: Smart seed (data varsa atlar)
 
 ---
 

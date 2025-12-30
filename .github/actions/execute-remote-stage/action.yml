@@ -126,12 +126,29 @@ runs:
             migrate)
               echo "📊 Running database migrations..."
               cd "$PROJECT_DIR" || exit 1
+              
+              # 1. Prisma Client'ı yeniden generate et
+              echo "🔧 Generating Prisma Client..."
+              docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma generate || {
+                echo "❌ Prisma generate failed!"
+                exit 1
+              }
+              
+              # 2. Migration'ları uygula
+              echo "📊 Deploying migrations..."
               docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma migrate deploy || {
                 echo "❌ Migration failed! Check the logs above."
                 echo "📋 Migration logs:"
                 docker compose -f "$COMPOSE_FILE" logs backend | tail -50
                 exit 1
               }
+              
+              # 3. Schema sync yap (eksik kolonları ekle)
+              echo "🔄 Syncing schema..."
+              docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma db push --accept-data-loss || {
+                echo "⚠️  Schema push failed, but migration succeeded. Continuing..."
+              }
+              
               echo "✅ Migrations completed"
               ;;
             seed)
@@ -143,8 +160,16 @@ runs:
               
               if [ "$HAS_DATA" = "0" ] || [ -z "$HAS_DATA" ]; then
                 echo "🌱 Running database seeds..."
-                docker compose -f "$COMPOSE_FILE" run --rm backend npm run seed:all || {
-                  echo "⚠️  Seed failed, continuing..."
+                
+                # Önce Prisma Client'ın güncel olduğundan emin ol
+                docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma generate
+                
+                # Seed'i çalıştır
+                docker compose -f "$COMPOSE_FILE" run --rm backend npx ts-node scripts/clear-and-seed.ts --all || {
+                  echo "⚠️  Full seed failed, trying minimal seed..."
+                  docker compose -f "$COMPOSE_FILE" run --rm backend npx ts-node scripts/clear-and-seed.ts || {
+                    echo "⚠️  Seed failed, continuing without seed data..."
+                  }
                 }
                 echo "✅ Seeds completed"
               else
