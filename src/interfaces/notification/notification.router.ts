@@ -12,8 +12,50 @@ const pushTokenService = new PushTokenService();
 const settingsRepo = new UserSettingsPrismaRepository();
 
 /**
- * @route GET /api/v1/notifications
- * @desc Get user's notifications
+ * @openapi
+ * /api/v1/notifications:
+ *   get:
+ *     tags:
+ *       - Notifications
+ *     summary: Get user notifications
+ *     description: Retrieve a paginated list of user notifications
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *         description: Number of notifications to return
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *         description: Number of notifications to skip
+ *       - in: query
+ *         name: unreadOnly
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         description: Filter only unread notifications
+ *     responses:
+ *       200:
+ *         description: Notifications retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Notification'
+ *       500:
+ *         description: Server error
  */
 router.get('/', authMiddleware, async (req: Request, res: Response) => {
   try {
@@ -40,8 +82,32 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
 });
 
 /**
- * @route GET /api/v1/notifications/unread-count
- * @desc Get unread notifications count
+ * @openapi
+ * /api/v1/notifications/unread-count:
+ *   get:
+ *     tags:
+ *       - Notifications
+ *     summary: Get unread notifications count
+ *     description: Get the total count of unread notifications for the current user
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Count retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     count:
+ *                       type: integer
+ *       500:
+ *         description: Server error
  */
 router.get('/unread-count', authMiddleware, async (req: Request, res: Response) => {
   try {
@@ -62,8 +128,28 @@ router.get('/unread-count', authMiddleware, async (req: Request, res: Response) 
 });
 
 /**
- * @route PUT /api/v1/notifications/:id/read
- * @desc Mark notification as read
+ * @openapi
+ * /api/v1/notifications/{id}/read:
+ *   put:
+ *     tags:
+ *       - Notifications
+ *     summary: Mark notification as read
+ *     description: Mark a specific notification as read
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Notification ID
+ *     responses:
+ *       200:
+ *         description: Notification marked as read
+ *       500:
+ *         description: Server error
  */
 router.put('/:id/read', authMiddleware, async (req: Request, res: Response) => {
   try {
@@ -84,8 +170,34 @@ router.put('/:id/read', authMiddleware, async (req: Request, res: Response) => {
 });
 
 /**
- * @route PUT /api/v1/notifications/mark-all-read
- * @desc Mark all notifications as read
+ * @openapi
+ * /api/v1/notifications/mark-all-read:
+ *   put:
+ *     tags:
+ *       - Notifications
+ *     summary: Mark all notifications as read
+ *     description: Mark all user notifications as read
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: All notifications marked as read
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     count:
+ *                       type: integer
+ *       500:
+ *         description: Server error
  */
 router.put('/mark-all-read', authMiddleware, async (req: Request, res: Response) => {
   try {
@@ -107,8 +219,28 @@ router.put('/mark-all-read', authMiddleware, async (req: Request, res: Response)
 });
 
 /**
- * @route DELETE /api/v1/notifications/:id
- * @desc Delete a notification
+ * @openapi
+ * /api/v1/notifications/{id}:
+ *   delete:
+ *     tags:
+ *       - Notifications
+ *     summary: Delete a notification
+ *     description: Delete a specific notification
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Notification ID
+ *     responses:
+ *       200:
+ *         description: Notification deleted successfully
+ *       500:
+ *         description: Server error
  */
 router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
   try {
@@ -129,8 +261,29 @@ router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
 });
 
 /**
- * @route GET /api/v1/notifications/settings
- * @desc Get notification settings
+ * @openapi
+ * /api/v1/notifications/settings:
+ *   get:
+ *     tags:
+ *       - Notifications
+ *     summary: Get notification settings
+ *     description: Get user's notification preferences
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Settings retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/NotificationSettings'
+ *       500:
+ *         description: Server error
  */
 router.get('/settings', authMiddleware, async (req: Request, res: Response) => {
   try {
@@ -176,8 +329,26 @@ router.get('/settings', authMiddleware, async (req: Request, res: Response) => {
 });
 
 /**
- * @route PUT /api/v1/notifications/settings
- * @desc Update notification settings
+ * @openapi
+ * /api/v1/notifications/settings:
+ *   put:
+ *     tags:
+ *       - Notifications
+ *     summary: Update notification settings
+ *     description: Update user's notification preferences
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UpdateNotificationSettings'
+ *     responses:
+ *       200:
+ *         description: Settings updated successfully
+ *       500:
+ *         description: Server error
  */
 router.put('/settings', authMiddleware, async (req: Request, res: Response) => {
   try {
@@ -206,8 +377,39 @@ router.put('/settings', authMiddleware, async (req: Request, res: Response) => {
 });
 
 /**
- * @route POST /api/v1/notifications/push-token
- * @desc Register push token
+ * @openapi
+ * /api/v1/notifications/push-token:
+ *   post:
+ *     tags:
+ *       - Notifications
+ *     summary: Register push token
+ *     description: Register an Expo push notification token for the current user
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *               - deviceType
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 description: Expo push notification token
+ *               deviceType:
+ *                 type: string
+ *                 enum: [ios, android, web]
+ *                 description: Device type
+ *     responses:
+ *       200:
+ *         description: Push token registered successfully
+ *       400:
+ *         description: Invalid request body
+ *       500:
+ *         description: Server error
  */
 router.post('/push-token', authMiddleware, async (req: Request, res: Response) => {
   try {
@@ -238,8 +440,34 @@ router.post('/push-token', authMiddleware, async (req: Request, res: Response) =
 });
 
 /**
- * @route DELETE /api/v1/notifications/push-token
- * @desc Delete push token
+ * @openapi
+ * /api/v1/notifications/push-token:
+ *   delete:
+ *     tags:
+ *       - Notifications
+ *     summary: Delete push token
+ *     description: Remove a registered push notification token
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 description: Expo push notification token to remove
+ *     responses:
+ *       200:
+ *         description: Push token deleted successfully
+ *       400:
+ *         description: Invalid request body
+ *       500:
+ *         description: Server error
  */
 router.delete('/push-token', authMiddleware, async (req: Request, res: Response) => {
   try {
