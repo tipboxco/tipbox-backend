@@ -13,7 +13,7 @@ const settingsRepo = new UserSettingsPrismaRepository();
 
 /**
  * @openapi
- * /api/v1/notifications:
+ * /notifications:
  *   get:
  *     tags:
  *       - Notifications
@@ -59,7 +59,13 @@ const settingsRepo = new UserSettingsPrismaRepository();
  */
 router.get('/', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
     const { limit, offset, unreadOnly } = req.query as unknown as GetNotificationsQuery;
 
     const notifications = await notificationService.getUserNotifications(userId, {
@@ -83,7 +89,7 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /api/v1/notifications/unread-count:
+ * /notifications/unread-count:
  *   get:
  *     tags:
  *       - Notifications
@@ -111,7 +117,13 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
  */
 router.get('/unread-count', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
     const count = await notificationService.getUnreadCount(userId);
 
     return res.json({
@@ -129,7 +141,7 @@ router.get('/unread-count', authMiddleware, async (req: Request, res: Response) 
 
 /**
  * @openapi
- * /api/v1/notifications/{id}/read:
+ * /notifications/{id}/read:
  *   put:
  *     tags:
  *       - Notifications
@@ -171,7 +183,7 @@ router.put('/:id/read', authMiddleware, async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /api/v1/notifications/mark-all-read:
+ * /notifications/mark-all-read:
  *   put:
  *     tags:
  *       - Notifications
@@ -201,7 +213,13 @@ router.put('/:id/read', authMiddleware, async (req: Request, res: Response) => {
  */
 router.put('/mark-all-read', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
     const count = await notificationService.markAllAsRead(userId);
 
     return res.json({
@@ -220,7 +238,7 @@ router.put('/mark-all-read', authMiddleware, async (req: Request, res: Response)
 
 /**
  * @openapi
- * /api/v1/notifications/{id}:
+ * /notifications/{id}:
  *   delete:
  *     tags:
  *       - Notifications
@@ -262,7 +280,7 @@ router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /api/v1/notifications/settings:
+ * /notifications/settings:
  *   get:
  *     tags:
  *       - Notifications
@@ -287,7 +305,13 @@ router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
  */
 router.get('/settings', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
     const settings = await settingsRepo.findByUserId(userId);
 
     if (!settings) {
@@ -330,7 +354,7 @@ router.get('/settings', authMiddleware, async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /api/v1/notifications/settings:
+ * /notifications/settings:
  *   put:
  *     tags:
  *       - Notifications
@@ -352,7 +376,13 @@ router.get('/settings', authMiddleware, async (req: Request, res: Response) => {
  */
 router.put('/settings', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
     const updates: UpdateNotificationSettingsDto = req.body;
 
     let settings = await settingsRepo.findByUserId(userId);
@@ -378,7 +408,7 @@ router.put('/settings', authMiddleware, async (req: Request, res: Response) => {
 
 /**
  * @openapi
- * /api/v1/notifications/push-token:
+ * /notifications/push-token:
  *   post:
  *     tags:
  *       - Notifications
@@ -413,7 +443,13 @@ router.put('/settings', authMiddleware, async (req: Request, res: Response) => {
  */
 router.post('/push-token', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user.userId;
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
     const { token, deviceType }: RegisterPushTokenDto = req.body;
 
     if (!token || !deviceType) {
@@ -441,7 +477,7 @@ router.post('/push-token', authMiddleware, async (req: Request, res: Response) =
 
 /**
  * @openapi
- * /api/v1/notifications/push-token:
+    * /notifications/push-token:
  *   delete:
  *     tags:
  *       - Notifications

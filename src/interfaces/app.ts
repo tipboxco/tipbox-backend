@@ -828,7 +828,7 @@ app.use('/search', searchRouter);
 app.use('/posts', postRouter);
 app.use('/events', eventRouter);
 app.use('/interactions', interactionRouter);
-app.use('/api/v1/notifications', authMiddleware, notificationRouter);
+app.use('/notifications', authMiddleware, notificationRouter);
 
 // Dashboard endpoint - en sona eklenmeli ki diğer route'lar çalışabilsin
 // Dashboard hem root'ta hem de /dashboard'da çalışabilir

@@ -56,9 +56,9 @@ export class GamificationService {
         userId,
         NotificationType.NEW_BADGE,
         {
-          badgeName: mockBadge.getName(),
-          badgeIcon: mockBadge.hasImage() ? mockBadge.imageUrl : '🏆',
-          badgeId: mockBadge.id,
+        badgeName: mockBadge.getName(),
+        badgeIcon: mockBadge.hasImage() ? mockBadge.imageUrl : '🏆',
+        badgeId: mockBadge.id,
         }
       );
 
@@ -96,9 +96,9 @@ export class GamificationService {
         userId,
         NotificationType.ACHIEVEMENT_UNLOCKED,
         {
-          achievementName: 'İlk Başarı',
-          achievementIcon: '🏆',
-          achievementId,
+        achievementName: 'İlk Başarı',
+        achievementIcon: '🏆',
+        achievementId,
         }
       );
 

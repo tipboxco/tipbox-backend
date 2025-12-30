@@ -128,7 +128,7 @@ export class NotificationWorker {
       const { default: SocketManager } = await import('../realtime/socket-manager');
       const socketManager = SocketManager.getInstance();
       const socketHandler = socketManager.getSocketHandler();
-
+      
       socketHandler.sendMessageToUser(userId, 'notification', notification);
     } catch (error) {
       logger.error(`Failed to send socket notification to user ${userId}:`, error);

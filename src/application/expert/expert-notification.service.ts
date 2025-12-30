@@ -61,11 +61,11 @@ export class ExpertNotificationService {
             expertUserId,
             NotificationType.EXPERT_REQUEST_AVAILABLE,
             {
-              requestId,
-              category,
-              description: description.substring(0, 100) + (description.length > 100 ? '...' : ''),
-              tipsAmount,
-              createdAt: request.createdAt.toISOString(),
+            requestId,
+            category,
+            description: description.substring(0, 100) + (description.length > 100 ? '...' : ''),
+            tipsAmount,
+            createdAt: request.createdAt.toISOString(),
             }
           );
 
