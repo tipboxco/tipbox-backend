@@ -361,13 +361,9 @@ router.get(
     }
 
     const result = await exploreService.getNewProducts({ cursor, limit });
-    res.json(result);
+    return res.json(result);
   })
 );
-
-export default router;
-
-
 
 export default router;
 

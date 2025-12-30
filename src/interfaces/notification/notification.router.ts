@@ -26,13 +26,13 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
       unreadOnly: (typeof unreadOnly === 'string' && unreadOnly === 'true') || unreadOnly === true,
     });
 
-    res.json({
+    return res.json({
       success: true,
       data: notifications.map((n) => n.toJSON()),
     });
   } catch (error) {
     logger.error('Error getting notifications:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to get notifications',
     });
@@ -48,13 +48,13 @@ router.get('/unread-count', authMiddleware, async (req: Request, res: Response) 
     const userId = (req as any).user.userId;
     const count = await notificationService.getUnreadCount(userId);
 
-    res.json({
+    return res.json({
       success: true,
       data: { count },
     });
   } catch (error) {
     logger.error('Error getting unread count:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to get unread count',
     });
@@ -70,13 +70,13 @@ router.put('/:id/read', authMiddleware, async (req: Request, res: Response) => {
     const { id } = req.params;
     await notificationService.markAsRead(id);
 
-    res.json({
+    return res.json({
       success: true,
       message: 'Notification marked as read',
     });
   } catch (error) {
     logger.error('Error marking notification as read:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to mark notification as read',
     });
@@ -92,14 +92,14 @@ router.put('/mark-all-read', authMiddleware, async (req: Request, res: Response)
     const userId = (req as any).user.userId;
     const count = await notificationService.markAllAsRead(userId);
 
-    res.json({
+    return res.json({
       success: true,
       message: `${count} notifications marked as read`,
       data: { count },
     });
   } catch (error) {
     logger.error('Error marking all notifications as read:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to mark all notifications as read',
     });
@@ -115,13 +115,13 @@ router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
     const { id } = req.params;
     await notificationService.deleteNotification(id);
 
-    res.json({
+    return res.json({
       success: true,
       message: 'Notification deleted',
     });
   } catch (error) {
     logger.error('Error deleting notification:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to delete notification',
     });
