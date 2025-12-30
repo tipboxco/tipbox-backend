@@ -1432,10 +1432,11 @@ export class FeedService {
 
           if (feed) {
             // Post'u moderate durumuna al
-            await this.prisma.contentPost.update({
-              where: { id: feed.postId },
-              data: { status: 'PENDING_MODERATION' as any },
-            });
+            // TODO: status field is not in ContentPost schema, needs to be added to prisma schema
+            // await this.prisma.contentPost.update({
+            //   where: { id: feed.postId },
+            //   data: { status: 'PENDING_MODERATION' as any },
+            // });
 
             // Feed'i sil
             await this.feedRepo.delete(feedId);

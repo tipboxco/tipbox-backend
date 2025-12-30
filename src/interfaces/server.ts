@@ -14,7 +14,7 @@ import QueueProvider from '../infrastructure/queue/queue.provider';
 import { getPrisma } from '../infrastructure/repositories/prisma.client';
 import WorkerManager from '../infrastructure/workers';
 
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 async function startServer() {
   try {

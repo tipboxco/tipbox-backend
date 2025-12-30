@@ -186,10 +186,10 @@ router.get('/my-nfts', authMiddleware, asyncHandler(async (req: Request, res: Re
   logger.info({
     message: 'my-nfts response',
     userId: userId,
-    nftCount: nfts.length
+    nftCount: nfts.items.length
   });
   
-  res.json(nfts);
+  return res.json(nfts);
 }));
 
 /**

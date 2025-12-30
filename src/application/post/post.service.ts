@@ -4,6 +4,8 @@ import { PostQuestionPrismaRepository } from '../../infrastructure/repositories/
 import { PostComparisonPrismaRepository } from '../../infrastructure/repositories/post-comparison-prisma.repository';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
 import { ContextType } from '../../domain/content/context-type.enum';
+import { withCache } from '../../infrastructure/cache/cache-wrapper.helper';
+import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
 import { TipsAndTricksBenefitCategory } from '../../domain/content/tips-and-tricks-benefit-category.enum';
 import { TipCategory } from '../../domain/content/tip-category.enum';
 import { QuestionAnswerFormat } from '../../domain/content/question-answer-format.enum';

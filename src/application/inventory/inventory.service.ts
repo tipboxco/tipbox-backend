@@ -224,13 +224,13 @@ export class InventoryService {
     priceAndShopping: { 
       content: string; 
       rating: number; 
-      placeholder?: string; 
+      placeholder?: string | null; 
       isEnhanced?: boolean;
     } | null;
     productAndUsage: { 
       content: string; 
       rating: number; 
-      placeholder?: string; 
+      placeholder?: string | null; 
       isEnhanced?: boolean;
     } | null;
     metadata: {

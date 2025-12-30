@@ -33,7 +33,7 @@ export function requestTimingMiddleware(req: Request, res: Response, next: NextF
       }
     }
     
-    return originalSend.call(this, data);
+    return originalSend.call(this as any, data);
   } as any;
 
   // Response tamamlandığında timing'i log'la
