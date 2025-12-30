@@ -3,6 +3,8 @@ import { DmMessagePrismaRepository } from '../../infrastructure/repositories/dm-
 import { DMThreadPrismaRepository } from '../../infrastructure/repositories/dm-thread-prisma.repository';
 import { UserPrismaRepository } from '../../infrastructure/repositories/user-prisma.repository';
 import SocketManager from '../../infrastructure/realtime/socket-manager';
+import { NotificationService } from '../notification/notification.service';
+import { NotificationType } from '../../domain/notification/notification-type.enum';
 import logger from '../../infrastructure/logger/logger';
 import { PrismaClient } from '@prisma/client';
 import {
@@ -42,6 +44,7 @@ export class MessagingService {
   private dmThreadRepo = new DMThreadPrismaRepository();
   private userRepo = new UserPrismaRepository();
   private supportRequestService = new SupportRequestService();
+  private notificationService = new NotificationService();
   private prisma = new PrismaClient();
   async createThreadIfNotExists(senderId: string, recipientId: string) {
     // Sadece normal DM thread'leri kontrol et (support thread'leri hariç)
@@ -113,6 +116,20 @@ export class MessagingService {
 
     // Göndericiye message_sent event'i gönder
     socketHandler.sendMessageToUser(senderId, 'message_sent', newMessageEvent);
+
+    // Notification servisine bildir
+    if (sender) {
+      await this.notificationService.sendNotification(
+        recipientId,
+        NotificationType.NEW_MESSAGE,
+        {
+          senderName: sender.name || sender.email,
+          senderId: sender.id,
+          messagePreview: message.substring(0, 50),
+          threadId: thread.id,
+        }
+      );
+    }
 
     logger.info(`Direct message sent from ${senderId} to ${recipientId}, socket events emitted`);
   }

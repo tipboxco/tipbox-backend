@@ -4,14 +4,15 @@ import { UserAchievement } from '../../domain/gamification/user-achievement.enti
 import { BadgeRarity } from '../../domain/gamification/badge-rarity.enum';
 import { BadgeType } from '../../domain/gamification/badge-type.enum';
 import { BadgeVisibility } from '../../domain/gamification/badge-visibility.enum';
-import QueueProvider from '../../infrastructure/queue/queue.provider';
+import { NotificationService } from '../notification/notification.service';
+import { NotificationType } from '../../domain/notification/notification-type.enum';
 import logger from '../../infrastructure/logger/logger';
 
 export class GamificationService {
-  private readonly queueProvider: QueueProvider;
+  private readonly notificationService: NotificationService;
 
   constructor() {
-    this.queueProvider = QueueProvider.getInstance();
+    this.notificationService = new NotificationService();
   }
 
   /**
@@ -50,18 +51,18 @@ export class GamificationService {
 
       logger.info(`Badge ${mockBadge.name} granted to user ${userId}`);
 
-      // Rozet veritabanında atandıktan sonra, bildirim kuyruğuna ekle
-      await this.queueProvider.addNotificationJob({
-        type: 'NEW_BADGE',
+      // Rozet bildirimini NotificationService ile gönder
+      await this.notificationService.sendNotification(
         userId,
-        badgeName: mockBadge.getName(),
-        badgeIcon: mockBadge.hasImage() ? mockBadge.imageUrl : '🏆',
-        badgeId: mockBadge.id,
-        badgeCategory: mockBadge.categoryId,
-        badgeRarity: mockBadge.rarity,
-      });
+        NotificationType.NEW_BADGE,
+        {
+          badgeName: mockBadge.getName(),
+          badgeIcon: mockBadge.hasImage() ? mockBadge.imageUrl : '🏆',
+          badgeId: mockBadge.id,
+        }
+      );
 
-      logger.info(`Notification job added for badge ${mockBadge.getName()} to user ${userId}`);
+      logger.info(`Notification sent for badge ${mockBadge.getName()} to user ${userId}`);
 
       return mockUserBadge;
     } catch (error) {
@@ -90,17 +91,18 @@ export class GamificationService {
 
       logger.info(`Achievement ${achievementId} granted to user ${userId}`);
 
-      // Başarı veritabanında atandıktan sonra, bildirim kuyruğuna ekle
-      await this.queueProvider.addNotificationJob({
-        type: 'ACHIEVEMENT_UNLOCKED',
+      // Başarı bildirimini NotificationService ile gönder
+      await this.notificationService.sendNotification(
         userId,
-        achievementName: 'İlk Başarı',
-        achievementIcon: '🏆',
-        achievementId,
-        progress: 100,
-      });
+        NotificationType.ACHIEVEMENT_UNLOCKED,
+        {
+          achievementName: 'İlk Başarı',
+          achievementIcon: '🏆',
+          achievementId,
+        }
+      );
 
-      logger.info(`Notification job added for achievement ${achievementId} to user ${userId}`);
+      logger.info(`Notification sent for achievement ${achievementId} to user ${userId}`);
 
       return mockUserAchievement;
     } catch (error) {
