@@ -35,7 +35,7 @@ router.get(
   (req: Request, res: Response) => {
     const metrics = cacheMetrics.getMetrics();
     
-    res.json({
+    return res.json({
       success: true,
       data: {
         ...metrics,
@@ -70,7 +70,7 @@ router.post(
       adminId: (req as any).user?.id,
     });
     
-    res.json({
+    return res.json({
       success: true,
       message: 'Cache metrics reset successfully',
     });
@@ -110,7 +110,7 @@ router.delete(
       adminId: (req as any).user?.id,
     });
     
-    res.json({
+    return res.json({
       success: true,
       message: `User cache invalidated for userId: ${userId}`,
     });
@@ -150,7 +150,7 @@ router.delete(
       adminId: (req as any).user?.id,
     });
     
-    res.json({
+    return res.json({
       success: true,
       message: `Post cache invalidated for postId: ${postId}`,
     });
@@ -190,7 +190,7 @@ router.delete(
       adminId: (req as any).user?.id,
     });
     
-    res.json({
+    return res.json({
       success: true,
       message: `Feed cache invalidated for userId: ${userId}`,
     });
@@ -221,7 +221,7 @@ router.delete(
       adminId: (req as any).user?.id,
     });
     
-    res.json({
+    return res.json({
       success: true,
       message: 'Trending cache invalidated',
     });
@@ -247,7 +247,7 @@ router.get(
   (req: Request, res: Response) => {
     const isConnected = cacheService.isCacheConnected();
     
-    res.json({
+    return res.json({
       success: true,
       data: {
         connected: isConnected,

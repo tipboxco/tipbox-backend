@@ -157,7 +157,7 @@ router.post(
       images: body.images || [],
     });
 
-    res.status(201).json(created);
+    return res.status(201).json(created);
   })
 );
 
@@ -194,7 +194,7 @@ router.get(
     }
 
     const result = await inventoryService.getUserInventoryList(userId);
-    res.json(result);
+    return res.json(result);
   })
 );
 
@@ -267,7 +267,7 @@ router.patch(
         hasOwned,
         experienceSummary,
       });
-      res.json(result);
+      return res.json(result);
     } catch (error) {
       if (error instanceof Error) {
         if (error.message.includes('not found')) {
@@ -338,9 +338,9 @@ router.delete(
     try {
       const success = await inventoryService.deleteInventoryItem(userId, inventoryId);
       if (success) {
-        res.json({ success: true, message: 'Inventory item deleted successfully' });
+        return res.json({ success: true, message: 'Inventory item deleted successfully' });
       } else {
-        res.status(500).json({ success: false, message: 'Failed to delete inventory item' });
+        return res.status(500).json({ success: false, message: 'Failed to delete inventory item' });
       }
     } catch (error) {
       if (error instanceof Error) {
@@ -415,7 +415,7 @@ router.get(
     }
 
     const result = await inventoryService.getExperienceOptions();
-    res.json(result);
+    return res.json(result);
   })
 );
 
@@ -505,7 +505,7 @@ router.post(
     }
 
     const result = await inventoryService.splitExperienceWithAI(userId, productId, experienceText);
-    res.json(result);
+    return res.json(result);
   })
 );
 

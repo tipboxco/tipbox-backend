@@ -105,7 +105,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
     cursor,
     ...(typeof limitParam === 'number' ? { limit: limitParam } : {}),
   });
-  res.json(feed);
+  return res.json(feed);
 }));
 
 /**
@@ -208,7 +208,7 @@ router.get('/filtered', asyncHandler(async (req: Request, res: Response) => {
     cursor,
     limit,
   });
-  res.json(feed);
+  return res.json(feed);
 }));
 
 /**
@@ -264,7 +264,7 @@ router.post('/seen', asyncHandler(async (req: Request, res: Response) => {
 
   await feedService.markFeedAsSeen(feedIds);
 
-  res.status(200).json({
+  return res.status(200).json({
     message: 'Feeds marked as seen',
     count: feedIds.length,
   });
@@ -301,7 +301,7 @@ router.post('/:feedId/hide', asyncHandler(async (req: Request, res: Response) =>
 
   await feedService.handleUserFeedback(feedId, userId, 'hide');
 
-  res.status(200).json({ message: 'Feed hidden' });
+  return res.status(200).json({ message: 'Feed hidden' });
 }));
 
 /**
@@ -335,7 +335,7 @@ router.post('/:feedId/not-interested', asyncHandler(async (req: Request, res: Re
 
   await feedService.handleUserFeedback(feedId, userId, 'not_interested');
 
-  res.status(200).json({ message: 'Feedback recorded' });
+  return res.status(200).json({ message: 'Feedback recorded' });
 }));
 
 /**
@@ -369,7 +369,7 @@ router.post('/:feedId/save', asyncHandler(async (req: Request, res: Response) =>
 
   await feedService.handleUserFeedback(feedId, userId, 'save');
 
-  res.status(200).json({ message: 'Feed saved' });
+  return res.status(200).json({ message: 'Feed saved' });
 }));
 
 /**
@@ -403,7 +403,7 @@ router.post('/:feedId/report', asyncHandler(async (req: Request, res: Response) 
 
   await feedService.handleUserFeedback(feedId, userId, 'report');
 
-  res.status(200).json({ message: 'Feed reported' });
+  return res.status(200).json({ message: 'Feed reported' });
 }));
 
 export default router;

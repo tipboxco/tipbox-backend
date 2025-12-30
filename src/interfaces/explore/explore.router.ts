@@ -100,7 +100,7 @@ router.get(
     }
 
     const result = await exploreService.getHottestPosts(String(userId), { cursor, limit });
-    res.json(result);
+    return res.json(result);
   })
 );
 
@@ -137,7 +137,7 @@ router.get(
   '/marketplace-banners',
   asyncHandler(async (req: Request, res: Response) => {
     const banners = await exploreService.getMarketplaceBanners();
-    res.json(banners);
+    return res.json(banners);
   })
 );
 
@@ -227,7 +227,7 @@ router.get(
     }
 
     const result = await exploreService.getWhatsNewsEvents({ cursor, limit });
-    res.json(result);
+    return res.json(result);
   })
 );
 
@@ -295,7 +295,7 @@ router.get(
     }
 
     const result = await exploreService.getNewBrands({ cursor, limit });
-    res.json(result);
+    return res.json(result);
   })
 );
 

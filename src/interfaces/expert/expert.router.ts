@@ -77,7 +77,7 @@ router.get(
 
     try {
       const balance = await tipsBalanceService.getUserTipsBalance(userId);
-      res.json({
+      return res.json({
         balance,
         cached: false, // Bu bilgi şu an service'den dönmüyor, gerekirse eklenebilir
       });
@@ -87,7 +87,7 @@ router.get(
         userId,
         error: error instanceof Error ? error.message : String(error),
       });
-      res.status(500).json({ message: 'Failed to get tips balance' });
+      return res.status(500).json({ message: 'Failed to get tips balance' });
     }
   })
 );
@@ -277,7 +277,7 @@ router.post(
       mediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
     });
 
-    res.status(201).json(result);
+    return res.status(201).json(result);
   })
 );
 
@@ -377,7 +377,7 @@ router.patch(
       const result = await expertService.updateExpertRequestTips(userId, requestId, {
         tipsAmount,
       });
-      res.json(result);
+      return res.json(result);
     } catch (error) {
       if (error instanceof Error) {
         if (error.message.includes('not found')) {
@@ -455,7 +455,7 @@ router.get(
     }
 
     const result = await expertService.getAnsweredExpertRequests();
-    res.json(result);
+    return res.json(result);
   })
 );
 
@@ -561,7 +561,7 @@ router.get(
       return res.status(404).json({ message: 'Request not found or not answered' });
     }
 
-    res.json(result);
+    return res.json(result);
   })
 );
 
@@ -605,7 +605,7 @@ router.get(
     }
 
     const result = await expertService.getMyExpertRequests(userId);
-    res.json(result);
+    return res.json(result);
   })
 );
 
@@ -642,7 +642,7 @@ router.get(
     }
 
     const result = await expertService.getMyAnsweredRequests(userId);
-    res.json(result);
+    return res.json(result);
   })
 );
 
@@ -679,7 +679,7 @@ router.get(
     }
 
     const result = await expertService.getMyPendingRequests(userId);
-    res.json(result);
+    return res.json(result);
   })
 );
 
@@ -802,7 +802,7 @@ router.post(
       const result = await expertService.createExpertAnswer(expertUserId, requestId, {
         content: content.trim(),
       });
-      res.status(201).json(result);
+      return res.status(201).json(result);
     } catch (error) {
       if (error instanceof Error) {
         if (error.message.includes('not found')) {
@@ -899,7 +899,7 @@ router.get(
     }
 
     const result = await expertService.getMyExpertAnswers(expertUserId);
-    res.json(result);
+    return res.json(result);
   })
 );
 
@@ -969,7 +969,7 @@ router.post(
       const result = await expertService.acceptExpertAnswer(userId, requestId, {
         answerId,
       });
-      res.json(result);
+      return res.json(result);
     } catch (error) {
       if (error instanceof Error) {
         if (error.message.includes('not found')) {
@@ -1031,7 +1031,7 @@ router.get(
       label: EXPERT_CATEGORY_NAMES[category],
     }));
 
-    res.json({ categories });
+    return res.json({ categories });
   })
 );
 
@@ -1069,7 +1069,7 @@ router.get(
     const { requestId } = req.params;
     const status = await expertService.getExpertRequestStatus(requestId);
 
-    res.json({
+    return res.json({
       id: status.id,
       status: status.status,
       description: status.description,
@@ -1129,7 +1129,7 @@ router.post(
 
     try {
       const result = await expertService.acceptToAnswer(expertUserId, requestId);
-      res.json(result);
+      return res.json(result);
     } catch (error) {
       if (error instanceof Error) {
         if (error.message.includes('not found')) {

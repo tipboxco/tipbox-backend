@@ -24,7 +24,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
     updatedAt: wallet.updatedAt.toISOString()
   }));
 
-  res.json(response);
+  return res.json(response);
 }));
 
 router.get('/active', asyncHandler(async (req: Request, res: Response) => {
@@ -47,7 +47,7 @@ router.get('/active', asyncHandler(async (req: Request, res: Response) => {
     updatedAt: activeWallet.updatedAt.toISOString()
   };
 
-  res.json(response);
+  return res.json(response);
 }));
 
 router.post('/connect', asyncHandler(async (req: Request, res: Response) => {
@@ -77,7 +77,7 @@ router.post('/connect', asyncHandler(async (req: Request, res: Response) => {
     updatedAt: wallet.updatedAt.toISOString()
   };
 
-  res.status(201).json(response);
+  return res.status(201).json(response);
 }));
 
 router.patch('/:id/disconnect', asyncHandler(async (req: Request, res: Response) => {
@@ -100,7 +100,7 @@ router.patch('/:id/disconnect', asyncHandler(async (req: Request, res: Response)
     updatedAt: wallet.updatedAt.toISOString()
   };
 
-  res.json(response);
+  return res.json(response);
 }));
 
 router.patch('/:id/activate', asyncHandler(async (req: Request, res: Response) => {
@@ -123,7 +123,7 @@ router.patch('/:id/activate', asyncHandler(async (req: Request, res: Response) =
     updatedAt: wallet.updatedAt.toISOString()
   };
 
-  res.json(response);
+  return res.json(response);
 }));
 
 router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
@@ -134,7 +134,7 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
     return res.status(404).json({ message: 'Wallet not found' });
   }
 
-  res.status(204).send();
+  return res.status(204).send();
 }));
 
 export default router;
