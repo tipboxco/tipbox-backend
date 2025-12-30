@@ -616,6 +616,64 @@ const FEED_PRODUCT_IMAGE_POOL: SeedMediaKey[] = [
  * Kullanım:
  * await updateAllEntityImages();
  */
+// Main Category görsellerini Product Catalog'dan güncelle
+async function updateMainCategoryImagesFromProductCatalog(): Promise<void> {
+  console.log('🔄 Main Category görselleri Product Catalog\'dan güncelleniyor...\n');
+  
+  // Kategori isimleri ile Product Catalog dosya isimleri eşleştirmesi (tüm isimler İngilizce)
+  const categoryImageMapping: Record<string, string> = {
+    'Cosmetics': 'product-catalog.main-category.cosmetic',
+    'Electronics': 'product-catalog.main-category.electronic',
+    'Sports & Outdoors': 'product-catalog.main-category.sports-outdoors',
+    'Home & Living': 'product-catalog.main-category.home-living',
+    'Fashion': 'product-catalog.main-category.fashion',
+    'Kitchen': 'product-catalog.main-category.appliances',
+    'Hobbies & Entertainment': 'product-catalog.main-category.hobbies-music-art',
+    'Automotive': 'product-catalog.main-category.automotive-motorcycle',
+    'Baby & Kids': 'product-catalog.main-category.baby-kids',
+    'Garden & Hardware': 'product-catalog.main-category.garden-hardware',
+    'Office & Stationery': 'product-catalog.main-category.office-stationery',
+    'Pet Supplies': 'product-catalog.main-category.pet-supplies',
+    'Health & Fitness': 'product-catalog.main-category.cosmetic',
+  };
+  
+  const categories = await prisma.mainCategory.findMany();
+  let updated = 0;
+  let skipped = 0;
+  
+  for (const category of categories) {
+    const imageKey = categoryImageMapping[category.name];
+    if (!imageKey) {
+      console.warn(`  ⚠️  "${category.name}" için mapping bulunamadı`);
+      skipped++;
+      continue;
+    }
+    
+    try {
+      const imagePath = getSeedMediaPath(imageKey as SeedMediaKey, true);
+      if (imagePath && category.imageUrl !== imagePath) {
+        await prisma.mainCategory.update({
+          where: { id: category.id },
+          data: { imageUrl: imagePath },
+        });
+        console.log(`  ✅ ${category.name} → ${imagePath}`);
+        updated++;
+      } else if (category.imageUrl === imagePath) {
+        console.log(`  ⏭️  ${category.name} zaten güncel`);
+        skipped++;
+      } else {
+        console.warn(`  ⚠️  ${category.name} için görsel bulunamadı: ${imageKey}`);
+        skipped++;
+      }
+    } catch (error: any) {
+      console.warn(`  ❌ ${category.name} güncellenirken hata: ${error.message}`);
+      skipped++;
+    }
+  }
+  
+  console.log(`\n✅ ${updated} kategori güncellendi, ${skipped} kategori atlandı\n`);
+}
+
 async function updateAllEntityImages(): Promise<void> {
   console.log('🖼️  Tüm entity görselleri güncelleniyor (mapping\'de belirtilenler)...\n');
   
@@ -1814,12 +1872,12 @@ async function ensureAllPostsHaveMedia(): Promise<void> {
       // Post type'a göre varsayılan görsel seç (product görselleriyle zenginleştirilmiş)
       // Feed akışında daha fazla çeşitlilik için product görselleri kullanılıyor
       const defaultMediaKeys: Record<string, SeedMediaKey> = {
-        'FREE': 'catalog.phones',
-        'TIPS': 'catalog.phones',
-        'COMPARE': 'catalog.computers-tablets',
-        'QUESTION': 'catalog.phones',
-        'EXPERIENCE': 'catalog.home-appliances',
-        'UPDATE': 'catalog.phones',
+        'FREE': 'product-catalog.sub-category.electronics.smartphone-group',
+        'TIPS': 'product-catalog.sub-category.electronics.smartphone-group',
+        'COMPARE': 'product-catalog.sub-category.electronics.laptops-groups',
+        'QUESTION': 'product-catalog.sub-category.electronics.smartphone-group',
+        'EXPERIENCE': 'product-catalog.main-category.appliances',
+        'UPDATE': 'product-catalog.sub-category.electronics.smartphone-group',
       }
 
       const mediaData = batch.map((post, index) => {
@@ -1838,11 +1896,11 @@ async function ensureAllPostsHaveMedia(): Promise<void> {
             if (productImageUrl) {
               mediaUrl = productImageUrl
             } else {
-              const mediaKey = defaultMediaKeys[post.type] || 'catalog.phones'
+              const mediaKey = defaultMediaKeys[post.type] || 'product-catalog.sub-category.electronics.smartphone-group'
               mediaUrl = getSeedMediaPath(mediaKey, true) || ''
             }
           } else {
-            const mediaKey = defaultMediaKeys[post.type] || 'catalog.phones'
+            const mediaKey = defaultMediaKeys[post.type] || 'product-catalog.sub-category.electronics.smartphone-group'
             mediaUrl = getSeedMediaPath(mediaKey, true) || ''
           }
         }
@@ -1918,8 +1976,8 @@ async function seedBrandProducts(userIdToUse: string): Promise<void> {
   console.log('🏷️ [seedBrandProducts] Fonksiyon başlatılıyor...')
   
   // Kategorileri bul
-  const techCategory = await prisma.mainCategory.findFirst({ where: { name: 'Teknoloji' } })
-  const evYasamCategory = await prisma.mainCategory.findFirst({ where: { name: 'Ev & Yaşam' } })
+  const techCategory = await prisma.mainCategory.findFirst({ where: { name: 'Electronics' } })
+  const evYasamCategory = await prisma.mainCategory.findFirst({ where: { name: 'Home & Living' } })
   
   if (!techCategory || !evYasamCategory) {
     console.warn('⚠️ Kategoriler bulunamadı, brand products seed atlanıyor')
@@ -1933,14 +1991,14 @@ async function seedBrandProducts(userIdToUse: string): Promise<void> {
     name: 'Akıllı Telefonlar',
     mainCategoryId: techCategory.id,
     description: 'iPhone, Android, Samsung, Xiaomi vs.',
-    imageKey: 'catalog.phones',
+    imageKey: 'product-catalog.sub-category.electronics.smartphone-group',
   })
 
   const evYasamSubCategory = await ensureSubCategory({
     name: 'Temizlik Ürünleri',
     mainCategoryId: evYasamCategory.id,
     description: 'Süpürge, temizlik robotu vb.',
-    imageKey: 'catalog.home-appliances',
+    imageKey: 'product-catalog.sub-category.cosmetics.skin-care',
   })
 
   // Brand'ları bul (tüm brand'ları al)
@@ -2665,21 +2723,22 @@ async function main() {
   // 2. Main Categories
   progress.increment('Ana kategoriler oluşturuluyor...')
   console.log('\n📂 Creating main categories...')
-  // Görsel eşleştirmeleri: kategori isimlerine göre assets/catalog görselleri
+  // Görsel eşleştirmeleri: Product Catalog klasöründen sistematik görseller
+  // İlk 3 kategori: Cosmetics, Electronics, Sports & Outdoors (gerçek veriler mevcut)
   const categoryConfigs = [
-    { name: 'Teknoloji', description: 'Elektronik cihazlar, yazılım, mobil uygulamalar', imageKey: 'catalog.computers-tablets' },
-    { name: 'Ev & Yaşam', description: 'Ev eşyaları, dekorasyon, temizlik ürünleri', imageKey: 'catalog.home-appliances' },
-    { name: 'Gıda & İçecek', description: 'Yiyecek, içecek, gıda takviyesi ürünleri', imageKey: 'catalog.air-conditioner' },
-    { name: 'Moda & Aksesuar', description: 'Giyim, ayakkabı, çanta, takı ve aksesuarlar', imageKey: 'catalog.printers' },
-    { name: 'Sağlık & Güzellik', description: 'Kişisel bakım, kozmetik, sağlık ürünleri', imageKey: 'catalog.smart-home-devices' },
-    { name: 'Spor & Outdoor', description: 'Spor ekipmanları, outdoor aktiviteler, fitness', imageKey: 'catalog.drone' },
-    { name: 'Hobi & Eğlence', description: 'Kitap, oyun, müzik, sanat malzemeleri', imageKey: 'catalog.games' },
-    { name: 'Otomotiv', description: 'Araç aksesuarları, bakım ürünleri, parçalar', imageKey: 'catalog.otomotiv' },
-    { name: 'Technology', description: 'Consumer electronics, gadgets and digital services', imageKey: 'catalog.computers-tablets' },
-    { name: 'Fashion', description: 'Lifestyle, apparel and accessory brands', imageKey: 'catalog.games' },
-    { name: 'Health & Fitness', description: 'Health monitoring, wellness and fitness devices', imageKey: 'catalog.smart-home-devices' },
-    { name: 'Kitchen', description: 'Kitchen appliances and coffee/brewing equipment', imageKey: 'catalog.home-appliances' },
-    { name: 'Home & Living', description: 'Home comfort, living and decoration products', imageKey: 'catalog.kucukev' },
+    { name: 'Cosmetics', description: 'Personal care, beauty products, skincare and makeup', imageKey: 'product-catalog.main-category.cosmetic' },
+    { name: 'Electronics', description: 'Consumer electronics, gadgets and digital services', imageKey: 'product-catalog.main-category.electronic' },
+    { name: 'Sports & Outdoors', description: 'Sports equipment, outdoor activities, fitness gear', imageKey: 'product-catalog.main-category.sports-outdoors' },
+    { name: 'Home & Living', description: 'Home comfort, living and decoration products', imageKey: 'product-catalog.main-category.home-living' },
+    { name: 'Fashion', description: 'Lifestyle, apparel and accessory brands', imageKey: 'product-catalog.main-category.fashion' },
+    { name: 'Kitchen', description: 'Kitchen appliances and coffee/brewing equipment', imageKey: 'product-catalog.main-category.appliances' },
+    { name: 'Hobbies & Entertainment', description: 'Books, games, music, art supplies', imageKey: 'product-catalog.main-category.hobbies-music-art' },
+    { name: 'Automotive', description: 'Vehicle accessories, maintenance products, parts', imageKey: 'product-catalog.main-category.automotive-motorcycle' },
+    { name: 'Baby & Kids', description: 'Baby products, toys, children accessories', imageKey: 'product-catalog.main-category.baby-kids' },
+    { name: 'Garden & Hardware', description: 'Gardening tools, hardware supplies', imageKey: 'product-catalog.main-category.garden-hardware' },
+    { name: 'Office & Stationery', description: 'Office supplies, stationery products', imageKey: 'product-catalog.main-category.office-stationery' },
+    { name: 'Pet Supplies', description: 'Pet care products and accessories', imageKey: 'product-catalog.main-category.pet-supplies' },
+    { name: 'Health & Fitness', description: 'Health monitoring, wellness and fitness devices', imageKey: 'product-catalog.main-category.cosmetic' },
   ];
 
   // Mevcut kategorileri bul veya oluştur (idempotent - ID'ler korunur)
@@ -2695,13 +2754,39 @@ async function main() {
 
   console.log(`✅ ${mainCategories.length} ana kategori oluşturuldu/güncellendi`)
 
-  // 2.a Duplicate Teknoloji kategorisini temizle
+  // 2.a Main Category görsellerini Product Catalog'dan güncelle
+  try {
+    await updateMainCategoryImagesFromProductCatalog()
+  } catch (error: any) {
+    console.warn(`  ⚠️  Main category görselleri güncellenirken hata: ${error.message}`)
+    // Hata olsa bile devam et
+  }
+
+  // 2.b Duplicate kategorileri temizle (eski Türkçe isimler varsa)
   {
-    const tech = await prisma.mainCategory.findFirst({ where: { name: 'Technology' } });
-    const trTech = await prisma.mainCategory.findFirst({ where: { name: 'Teknoloji' } });
-    if (tech && trTech && tech.id !== trTech.id) {
-      await prisma.mainCategory.delete({ where: { id: trTech.id } }).catch(() => undefined);
-      console.log('🧹 Duplicate "Teknoloji" kategorisi silindi (Technology mevcut olduğu için).');
+    // Eski Türkçe kategorileri kontrol et ve sil
+    const oldTurkishCategories = ['Teknoloji', 'Ev & Yaşam', 'Gıda & İçecek', 'Moda & Aksesuar', 'Sağlık & Güzellik', 'Spor & Outdoor', 'Hobi & Eğlence', 'Otomotiv'];
+    for (const oldName of oldTurkishCategories) {
+      const oldCategory = await prisma.mainCategory.findFirst({ where: { name: oldName } });
+      if (oldCategory) {
+        // İngilizce karşılığını bul
+        const englishName = oldName === 'Teknoloji' ? 'Electronics' :
+                           oldName === 'Ev & Yaşam' ? 'Home & Living' :
+                           oldName === 'Gıda & İçecek' ? 'Kitchen' :
+                           oldName === 'Moda & Aksesuar' ? 'Fashion' :
+                           oldName === 'Sağlık & Güzellik' ? 'Cosmetics' :
+                           oldName === 'Spor & Outdoor' ? 'Sports & Outdoors' :
+                           oldName === 'Hobi & Eğlence' ? 'Hobbies & Entertainment' :
+                           oldName === 'Otomotiv' ? 'Automotive' : null;
+        
+        if (englishName) {
+          const newCategory = await prisma.mainCategory.findFirst({ where: { name: englishName } });
+          if (newCategory && newCategory.id !== oldCategory.id) {
+            await prisma.mainCategory.delete({ where: { id: oldCategory.id } }).catch(() => undefined);
+            console.log(`🧹 Duplicate "${oldName}" kategorisi silindi (${englishName} mevcut olduğu için).`);
+          }
+        }
+      }
     }
 
     // Technology Sub 1-10 gibi otomatik subcategory oluşturma kaldırıldı
@@ -3104,19 +3189,19 @@ async function main() {
   // 6. Sub Categories for Technology
   console.log('📁 Creating sub categories for Technology...')
   const techCategory = await prisma.mainCategory.findFirst({
-    where: { name: { in: ['Technology', 'Teknoloji'] } },
+    where: { name: 'Electronics' },
   });
   if (!techCategory) {
-    throw new Error('Teknoloji/Technology main category bulunamadı, seed durduruldu');
+    throw new Error('Electronics main category bulunamadı, seed durduruldu');
   }
   const TECH_MAIN_CATEGORY_ID = techCategory.id;
   
   // SubCategory konfigürasyonları
   const subCategoryConfigs = [
-    { name: 'Akıllı Telefonlar', description: 'iPhone, Android, Samsung, Xiaomi vs.', imageKey: 'catalog.phones' },
-    { name: 'Laptoplar', description: 'Dizüstü bilgisayarlar, ultrabook, gaming laptop', imageKey: 'catalog.computers-tablets' },
-    { name: 'Kulaklıklar', description: 'Kablosuz, kablolu, gaming, studio kulaklık', imageKey: 'catalog.headphones' },
-    { name: 'Akıllı Saatler', description: 'Apple Watch, Samsung Galaxy Watch, fitness tracker', imageKey: 'catalog.tv' },
+    { name: 'Akıllı Telefonlar', description: 'iPhone, Android, Samsung, Xiaomi vs.', imageKey: 'product-catalog.sub-category.electronics.smartphone-group' },
+    { name: 'Laptoplar', description: 'Dizüstü bilgisayarlar, ultrabook, gaming laptop', imageKey: 'product-catalog.sub-category.electronics.laptops-groups' },
+    { name: 'Kulaklıklar', description: 'Kablosuz, kablolu, gaming, studio kulaklık', imageKey: 'product-catalog.sub-category.electronics.headphones-group' },
+    { name: 'Akıllı Saatler', description: 'Apple Watch, Samsung Galaxy Watch, fitness tracker', imageKey: 'product-catalog.sub-category.electronics.smartwatches' },
   ];
 
   // Mevcut sub kategorileri bul veya oluştur (idempotent - ID'ler korunur)
@@ -3204,12 +3289,12 @@ async function main() {
       if (!mediaUrl) {
         // Post type'a göre varsayılan görsel seç
         const defaultMediaKeys: Record<string, SeedMediaKey> = {
-          'FREE': 'catalog.phones',
-          'TIPS': 'catalog.phones',
-          'COMPARE': 'catalog.computers-tablets',
-          'QUESTION': 'catalog.phones',
-          'EXPERIENCE': 'catalog.home-appliances',
-          'UPDATE': 'catalog.phones',
+          'FREE': 'product-catalog.sub-category.electronics.smartphone-group',
+          'TIPS': 'product-catalog.sub-category.electronics.smartphone-group',
+          'COMPARE': 'product-catalog.sub-category.electronics.laptops-groups',
+          'QUESTION': 'product-catalog.sub-category.electronics.smartphone-group',
+          'EXPERIENCE': 'product-catalog.main-category.appliances',
+          'UPDATE': 'product-catalog.sub-category.electronics.smartphone-group',
         }
         
         // Feed akışında çeşitlilik için bazen product görselleri kullan
@@ -3221,11 +3306,11 @@ async function main() {
           if (productImageUrl) {
             mediaUrl = productImageUrl
           } else {
-            const mediaKey = defaultMediaKeys[postType] || 'catalog.phones'
+            const mediaKey = defaultMediaKeys[postType] || 'product-catalog.sub-category.electronics.smartphone-group'
             mediaUrl = getSeedMediaPath(mediaKey, true) || ''
           }
         } else {
-          const mediaKey = defaultMediaKeys[postType] || 'catalog.phones'
+          const mediaKey = defaultMediaKeys[postType] || 'product-catalog.sub-category.electronics.smartphone-group'
           mediaUrl = getSeedMediaPath(mediaKey, true) || ''
         }
       }
@@ -4125,10 +4210,9 @@ async function main() {
       console.log(`📝 Julia'nın ${existingJuliaPosts} TIPS post'u var, yeni post'lar oluşturuluyor...`)
     
       // Get existing products and categories
-      // Önce "Technology" kategorisini ara, yoksa "Teknoloji" ara
-      const techCategory = await prisma.mainCategory.findFirst({ where: { name: 'Technology' } }) 
-        || await prisma.mainCategory.findFirst({ where: { name: 'Teknoloji' } })
-      const evYasamCategory = await prisma.mainCategory.findFirst({ where: { name: 'Ev & Yaşam' } })
+      // Kategorileri bul
+      const techCategory = await prisma.mainCategory.findFirst({ where: { name: 'Electronics' } })
+      const evYasamCategory = await prisma.mainCategory.findFirst({ where: { name: 'Home & Living' } })
       const phoneSubCategory = await prisma.subCategory.findFirst({ where: { name: 'Akıllı Telefonlar' } })
       const evYasamSubCategory = await prisma.subCategory.findFirst({ where: { name: 'Temizlik Ürünleri' } })
       
@@ -4367,8 +4451,8 @@ async function main() {
 
   // Products & Product Groups
   progress.increment('Product\'lar ve product group\'lar oluşturuluyor...')
-  // Ev & Yaşam kategorisi için sub category bul
-  const evYasamCategory = mainCategories.find(c => c.name === 'Ev & Yaşam')!
+  // Home & Living kategorisi için sub category bul
+  const evYasamCategory = mainCategories.find(c => c.name === 'Home & Living')!
   const evYasamSubCategory = await prisma.subCategory.findFirst({
     where: { mainCategoryId: evYasamCategory.id }
   }) || await prisma.subCategory.create({
@@ -4385,7 +4469,7 @@ async function main() {
     await prisma.subCategory.update({
       where: { id: evYasamSubCategory.id },
       data: {
-        imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null
+        imageUrl: getSeedMediaPath('product-catalog.main-category.appliances', true) || null
       }
     });
   }
@@ -4403,7 +4487,7 @@ async function main() {
   await prisma.productGroup.update({
     where: { id: productGroup.id },
     data: {
-      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null
+      imageUrl: getSeedMediaPath('product-catalog.main-category.appliances', true) || null
     }
   });
 
@@ -4421,7 +4505,7 @@ async function main() {
   await prisma.product.update({
     where: { id: product1.id },
     data: {
-      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null
+      imageUrl: getSeedMediaPath('product-catalog.main-category.appliances', true) || null
     }
   });
 
@@ -4439,7 +4523,7 @@ async function main() {
   await prisma.product.update({
     where: { id: product2.id },
     data: {
-      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null
+      imageUrl: getSeedMediaPath('product-catalog.main-category.appliances', true) || null
     }
   });
 
@@ -4706,7 +4790,7 @@ async function main() {
   const redmiGroup = phoneProductGroups.find((group) => group.name === 'Redmi Serisi');
 
   if (!akilliTelefonlarSubCategory || !laptoplarSubCategory || !kulakliklarSubCategory) {
-    throw new Error('Teknoloji alt kategorileri bulunamadı (Akıllı Telefonlar, Laptoplar, Kulaklıklar)');
+    throw new Error('Electronics alt kategorileri bulunamadı (Akıllı Telefonlar, Laptoplar, Kulaklıklar)');
   }
 
   if (!samsungGroup || !iphoneGroup || !redmiGroup) {
@@ -4974,7 +5058,7 @@ async function main() {
     {
       subCategory: evYasamSubCategory,
       mainCategoryId: evYasamCategory.id,
-      title: 'Ev & Yaşam kategorisinde bakım rutini #{index}',
+      title: 'Home & Living kategorisinde bakım rutini #{index}',
       body: 'Kombine temizlik gündeminde robot + manuel süpürge kullanımını anlattım. #{index}. güncellemede deterjan dozajı önerilerini ekledim.',
       tag: 'HomeCare',
     },
@@ -7957,8 +8041,8 @@ async function main() {
 
   // 4. Yeni product'lar ve inventory media'ları ekle (explore/products/new için)
   console.log('📦 Creating new products with inventory media for explore...')
-  const exploreTechCategory = await prisma.mainCategory.findFirst({ where: { name: 'Teknoloji' } })
-  const exploreEvYasamCategory = await prisma.mainCategory.findFirst({ where: { name: 'Ev & Yaşam' } })
+  const exploreTechCategory = await prisma.mainCategory.findFirst({ where: { name: 'Electronics' } })
+  const exploreEvYasamCategory = await prisma.mainCategory.findFirst({ where: { name: 'Home & Living' } })
   
   if (exploreTechCategory && exploreEvYasamCategory) {
     const exploreTechSubCategory = await prisma.subCategory.findFirst({ where: { mainCategoryId: exploreTechCategory.id } })
@@ -8085,35 +8169,35 @@ async function main() {
       name: 'TechVision',
       description: 'Yenilikçi teknoloji ürünleri ve çözümleri sunan global marka',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.computers-tablets', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.laptops-groups', true) || null,
       category: 'Technology',
     },
     {
       name: 'SmartHome Pro',
       description: 'Akıllı ev sistemleri ve IoT cihazları konusunda uzman',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.main-category.appliances', true) || null,
       category: 'Home & Living',
     },
     {
       name: 'CoffeeDelight',
       description: 'Premium kahve makineleri ve barista ekipmanları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.main-category.appliances', true) || null,
       category: 'Kitchen',
     },
     {
       name: 'FitnessTech',
       description: 'Akıllı spor ekipmanları ve sağlık takip cihazları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.cameras', true) || null,
       category: 'Health & Fitness',
     },
     {
       name: 'StyleHub',
       description: 'Modern ve şık yaşam ürünleri markası',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.smartphone-group', true) || null,
       category: 'Fashion',
     },
     {
@@ -8128,63 +8212,63 @@ async function main() {
       name: 'EcoLife',
       description: 'Sürdürülebilir ve çevre dostu ürünler',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.air-conditioner', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.smarthome', true) || null,
       category: 'Sustainability',
     },
     {
       name: 'GameZone',
       description: 'Oyun konsolları ve aksesuarları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.games', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.game-consoles', true) || null,
       category: 'Gaming',
     },
     {
       name: 'BeautyCare',
       description: 'Kişisel bakım ve güzellik ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.smartphone-group', true) || null,
       category: 'Beauty',
     },
     {
       name: 'OutdoorGear',
       description: 'Açık hava ve kamp ekipmanları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.drone', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.drones', true) || null,
       category: 'Outdoor',
     },
     {
       name: 'PetCare Plus',
       description: 'Evcil hayvan bakım ürünleri ve aksesuarları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.cameras', true) || null,
       category: 'Pets',
     },
     {
       name: 'KitchenMaster',
       description: 'Profesyonel mutfak ekipmanları ve aletleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.main-category.appliances', true) || null,
       category: 'Kitchen',
     },
     {
       name: 'TravelEssentials',
       description: 'Seyahat ve gezi ekipmanları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.smartphone-group', true) || null,
       category: 'Travel',
     },
     {
       name: 'BabyCare',
       description: 'Bebek bakım ürünleri ve oyuncakları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.cameras', true) || null,
       category: 'Baby',
     },
     {
       name: 'AutoParts Pro',
       description: 'Otomotiv yedek parça ve aksesuarları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.otomotiv', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.main-category.automotive-motorcycle', true) || null,
       category: 'Automotive',
     },
     // Additional brands for better distribution
@@ -8192,7 +8276,7 @@ async function main() {
       name: 'TechNova',
       description: 'Yeni nesil teknoloji çözümleri ve akıllı cihazlar',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.computers-tablets', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.laptops-groups', true) || null,
       category: 'Technology',
     },
     {
@@ -8206,84 +8290,84 @@ async function main() {
       name: 'FashionForward',
       description: 'Trend moda ve aksesuar koleksiyonları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.smartphone-group', true) || null,
       category: 'Fashion',
     },
     {
       name: 'PlayStation Pro',
       description: 'Gaming konsolları ve oyun aksesuarları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.games', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.game-consoles', true) || null,
       category: 'Gaming',
     },
     {
       name: 'GlowBeauty',
       description: 'Premium kozmetik ve cilt bakım ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.smartphone-group', true) || null,
       category: 'Beauty',
     },
     {
       name: 'AdventureGear',
       description: 'Doğa sporları ve macera ekipmanları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.drone', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.drones', true) || null,
       category: 'Outdoor',
     },
     {
       name: 'PetParadise',
       description: 'Evcil hayvan oyuncakları ve bakım ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.cameras', true) || null,
       category: 'Pets',
     },
     {
       name: 'GreenLife',
       description: 'Organik ve sürdürülebilir yaşam ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.air-conditioner', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.smarthome', true) || null,
       category: 'Sustainability',
     },
     {
       name: 'Wanderlust',
       description: 'Seyahat çantaları ve gezi aksesuarları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.smartphone-group', true) || null,
       category: 'Travel',
     },
     {
       name: 'CarMax',
       description: 'Otomotiv bakım ürünleri ve aksesuarları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.otomotiv', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.main-category.automotive-motorcycle', true) || null,
       category: 'Automotive',
     },
     {
       name: 'BabyBloom',
       description: 'Bebek giyim ve bakım ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.cameras', true) || null,
       category: 'Baby',
     },
     {
       name: 'FitLife',
       description: 'Spor giyim ve fitness ekipmanları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.cameras', true) || null,
       category: 'Health & Fitness',
     },
     {
       name: 'HomeStyle',
       description: 'Ev dekorasyon ve mobilya ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.main-category.appliances', true) || null,
       category: 'Home & Living',
     },
     {
       name: 'ChefPro',
       description: 'Profesyonel aşçı ekipmanları ve mutfak aletleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.main-category.appliances', true) || null,
       category: 'Kitchen',
     },
     // --- Additional brands to ensure 5 per category ---
@@ -8292,21 +8376,21 @@ async function main() {
       name: 'FutureTech',
       description: 'Geleceğin akıllı cihazları ve inovatif çözümler',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.computers-tablets', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.laptops-groups', true) || null,
       category: 'Technology',
     },
     {
       name: 'NanoWorks',
       description: 'Kompakt ve verimli teknoloji ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.computers-tablets', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.laptops-groups', true) || null,
       category: 'Technology',
     },
     {
       name: 'SmartCore',
       description: 'Akıllı ekosistem ve bağlantılı cihazlar',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.computers-tablets', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.laptops-groups', true) || null,
       category: 'Technology',
     },
     // Home & Living (need 3 more)
@@ -8314,21 +8398,21 @@ async function main() {
       name: 'CozyNest',
       description: 'Rahat ve şık ev yaşam ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.main-category.appliances', true) || null,
       category: 'Home & Living',
     },
     {
       name: 'LivingPlus',
       description: 'Akıllı ev konfor çözümleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.main-category.appliances', true) || null,
       category: 'Home & Living',
     },
     {
       name: 'CasaPrime',
       description: 'Dekorasyon ve fonksiyonel ev aksesuarları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.main-category.appliances', true) || null,
       category: 'Home & Living',
     },
     // Kitchen (need 2 more)
@@ -8336,21 +8420,21 @@ async function main() {
       name: 'CookMasters',
       description: 'Mutfak şefleri için premium ekipmanlar',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.main-category.appliances', true) || null,
       category: 'Kitchen',
     },
     {
       name: 'KitchenCraft',
       description: 'Yaratıcı mutfak gereçleri ve aletleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.main-category.appliances', true) || null,
       category: 'Kitchen',
     },
     {
       name: 'GourmetHub',
       description: 'Gurmelere özel pişirme çözümleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.main-category.appliances', true) || null,
       category: 'Kitchen',
     },
     // Health & Fitness (need 3 more)
@@ -8358,21 +8442,21 @@ async function main() {
       name: 'WellnessPro',
       description: 'Sağlık ve wellness teknoloji ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.cameras', true) || null,
       category: 'Health & Fitness',
     },
     {
       name: 'FitTrack',
       description: 'Akıllı takip cihazları ve fitness ekipmanları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.cameras', true) || null,
       category: 'Health & Fitness',
     },
     {
       name: 'HealthGear',
       description: 'Evde spor ve sağlık destek ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.cameras', true) || null,
       category: 'Health & Fitness',
     },
     // Fashion (need 3 more)
@@ -8380,21 +8464,21 @@ async function main() {
       name: 'UrbanStyle',
       description: 'Şehirli ve modern stil koleksiyonları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.smartphone-group', true) || null,
       category: 'Fashion',
     },
     {
       name: 'ChicLane',
       description: 'Zarif ve trend moda ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.smartphone-group', true) || null,
       category: 'Fashion',
     },
     {
       name: 'TrendLine',
       description: 'Sezonun öne çıkan aksesuar ve giyim ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.smartphone-group', true) || null,
       category: 'Fashion',
     },
     // Electronics (need 3 more)
@@ -8424,21 +8508,21 @@ async function main() {
       name: 'EcoWave',
       description: 'Enerji verimli ve çevre dostu ürünler',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.air-conditioner', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.smarthome', true) || null,
       category: 'Sustainability',
     },
     {
       name: 'GreenNest',
       description: 'Geri dönüştürülebilir ve sürdürülebilir çözümler',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.air-conditioner', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.smarthome', true) || null,
       category: 'Sustainability',
     },
     {
       name: 'PureEarth',
       description: 'Doğa dostu yaşam ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.air-conditioner', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.smarthome', true) || null,
       category: 'Sustainability',
     },
     // Gaming (need 3 more)
@@ -8446,21 +8530,21 @@ async function main() {
       name: 'ProGamer',
       description: 'E-spor ekipmanları ve performans aksesuarları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.games', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.game-consoles', true) || null,
       category: 'Gaming',
     },
     {
       name: 'ArcadeHub',
       description: 'Retro ve arcade oyun çözümleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.games', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.game-consoles', true) || null,
       category: 'Gaming',
     },
     {
       name: 'NextLevel',
       description: 'Gaming donanımı ve çevre birimleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.games', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.game-consoles', true) || null,
       category: 'Gaming',
     },
     // Beauty (need 3 more)
@@ -8468,21 +8552,21 @@ async function main() {
       name: 'LuxeGlow',
       description: 'Lüks cilt bakım ve güzellik ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.smartphone-group', true) || null,
       category: 'Beauty',
     },
     {
       name: 'PureBeauty',
       description: 'Doğal içerikli kozmetik ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.smartphone-group', true) || null,
       category: 'Beauty',
     },
     {
       name: 'SkinEssence',
       description: 'Dermatolojik olarak test edilmiş bakım ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.smartphone-group', true) || null,
       category: 'Beauty',
     },
     // Outdoor (need 3 more)
@@ -8490,21 +8574,21 @@ async function main() {
       name: 'TrailBlaze',
       description: 'Doğa yürüyüşü ve kamp ekipmanları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.drone', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.drones', true) || null,
       category: 'Outdoor',
     },
     {
       name: 'CampPro',
       description: 'Profesyonel kampçılık çözümleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.drone', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.drones', true) || null,
       category: 'Outdoor',
     },
     {
       name: 'HikeMate',
       description: 'Trekking ve tırmanış ekipmanları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.drone', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.drones', true) || null,
       category: 'Outdoor',
     },
     // Pets (need 3 more)
@@ -8512,21 +8596,21 @@ async function main() {
       name: 'PawPlanet',
       description: 'Evcil hayvan yaşam ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.cameras', true) || null,
       category: 'Pets',
     },
     {
       name: 'PetJoy',
       description: 'Pet oyuncak ve bakım ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.cameras', true) || null,
       category: 'Pets',
     },
     {
       name: 'FurryCare',
       description: 'Evcil dostlar için sağlık ve bakım çözümleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.cameras', true) || null,
       category: 'Pets',
     },
     // Travel (need 3 more)
@@ -8534,21 +8618,21 @@ async function main() {
       name: 'GlobeTrot',
       description: 'Seyahat aksesuarları ve bavullar',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.smartphone-group', true) || null,
       category: 'Travel',
     },
     {
       name: 'TripMate',
       description: 'Konforlu seyahat çözümleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.smartphone-group', true) || null,
       category: 'Travel',
     },
     {
       name: 'VoyagePro',
       description: 'Dayanıklı seyahat ekipmanları',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.phones', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.smartphone-group', true) || null,
       category: 'Travel',
     },
     // Baby (need 3 more)
@@ -8556,21 +8640,21 @@ async function main() {
       name: 'TinySteps',
       description: 'Bebek giyim ve bakım çözümleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.cameras', true) || null,
       category: 'Baby',
     },
     {
       name: 'BabyNest',
       description: 'Konforlu bebek uyku ve bakım ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.cameras', true) || null,
       category: 'Baby',
     },
     {
       name: 'LittleJoy',
       description: 'Bebek oyuncakları ve gelişim ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.cameras', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.cameras', true) || null,
       category: 'Baby',
     },
     // Automotive (need 3 more)
@@ -8578,21 +8662,21 @@ async function main() {
       name: 'DriveMax',
       description: 'Otomotiv performans ve bakım ürünleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.otomotiv', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.main-category.automotive-motorcycle', true) || null,
       category: 'Automotive',
     },
     {
       name: 'AutoGear',
       description: 'Araç içi aksesuar ve teknolojiler',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.otomotiv', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.main-category.automotive-motorcycle', true) || null,
       category: 'Automotive',
     },
     {
       name: 'MotoPro',
       description: 'Araç bakım ve güvenlik çözümleri',
       logoUrl: getSeedMediaPath('explore.event.primary', true) || null,
-      imageUrl: getSeedMediaPath('catalog.otomotiv', true) || null,
+      imageUrl: getSeedMediaPath('product-catalog.main-category.automotive-motorcycle', true) || null,
       category: 'Automotive',
     },
   ]
@@ -10029,7 +10113,7 @@ async function main() {
         name: 'Klima & İklimlendirme',
         mainCategoryName: 'Ev & Yaşam',
         subCategoryName: 'Klima & İklimlendirme',
-        imageKey: 'catalog.air-conditioner',
+        imageKey: 'product-catalog.sub-category.electronics.smarthome',
         products: [
           { name: 'BreezeCool 9K', description: 'Sessiz inverter klima', imageKey: 'product.vacuum.dyson' },
           { name: 'BreezeCool 12K', description: 'Geniş alan için inverter', imageKey: 'product.phone.samsung' },
@@ -10042,7 +10126,7 @@ async function main() {
         name: 'Kamera & Lens',
         mainCategoryName: 'Technology',
         subCategoryName: 'Kamera & Lens',
-        imageKey: 'catalog.cameras',
+        imageKey: 'product-catalog.sub-category.electronics.cameras',
         products: [
           { name: 'ShotPro Mirrorless', description: '4K aynasız kamera', imageKey: 'product.phone.phone1' },
           { name: 'LensKit 50mm Prime', description: 'Portre için hızlı lens', imageKey: 'product.phone.phone2' },
@@ -10055,7 +10139,7 @@ async function main() {
         name: 'Bilgisayar & Tablet',
         mainCategoryName: 'Technology',
         subCategoryName: 'Bilgisayar & Tablet',
-        imageKey: 'catalog.computers-tablets',
+        imageKey: 'product-catalog.sub-category.electronics.laptops-groups',
         products: [
           { name: 'UltraBook Air', description: 'İnce ve hafif dizüstü', imageKey: 'product.laptop.macbook' },
           { name: 'Creator Station', description: 'Yaratıcılar için performans', imageKey: 'product.laptop.macbook' },
@@ -10068,7 +10152,7 @@ async function main() {
         name: 'Drone & Aksiyon',
         mainCategoryName: 'Technology',
         subCategoryName: 'Drone & Aksiyon',
-        imageKey: 'catalog.drone',
+        imageKey: 'product-catalog.sub-category.electronics.drones',
         products: [
           { name: 'SkyScout Mini', description: 'Kompakt drone', imageKey: 'product.phone.phone1' },
           { name: 'AirRide 4K', description: '4K çekim için stabilizasyon', imageKey: 'product.phone.phone2' },
@@ -10081,7 +10165,7 @@ async function main() {
         name: 'Oyun & Konsol',
         mainCategoryName: 'Hobi & Eğlence',
         subCategoryName: 'Oyun & Konsol',
-        imageKey: 'catalog.games',
+        imageKey: 'product-catalog.sub-category.electronics.game-consoles',
         products: [
           { name: 'PlayWave Konsol', description: 'Yeni nesil oyun konsolu', imageKey: 'product.headphone.secondary' },
           { name: 'GamePad Elite', description: 'Hassas tetik ve titreşim', imageKey: 'product.headphone.primary' },
@@ -10094,7 +10178,7 @@ async function main() {
         name: 'Beyaz Eşya',
         mainCategoryName: 'Home & Living',
         subCategoryName: 'Beyaz Eşya',
-        imageKey: 'catalog.home-appliances',
+        imageKey: 'product-catalog.sub-category.cosmetics.skin-care',
         products: [
           { name: 'PureWash X', description: 'Hijyen modlu çamaşır makinesi', imageKey: 'product.vacuum.dyson' },
           { name: 'DryCare Heat Pump', description: 'Isı pompalı kurutma', imageKey: 'product.vacuum.dyson' },
@@ -10107,7 +10191,7 @@ async function main() {
         name: 'Küçük Ev Aletleri',
         mainCategoryName: 'Home & Living',
         subCategoryName: 'Küçük Ev Aletleri',
-        imageKey: 'catalog.kucukev',
+        imageKey: 'product-catalog.main-category.baby-kids',
         products: [
           { name: 'ChefMix Pro', description: 'Çok amaçlı mutfak robotu', imageKey: 'product.vacuum.dyson' },
           { name: 'BrewMaster Duo', description: 'Filtre + Türk kahvesi makinesi', imageKey: 'product.laptop.macbook' },
@@ -10120,7 +10204,7 @@ async function main() {
         name: 'Telefon & Aksesuar',
         mainCategoryName: 'Technology',
         subCategoryName: 'Telefon & Aksesuar',
-        imageKey: 'catalog.phones',
+        imageKey: 'product-catalog.sub-category.electronics.smartphone-group',
         products: [
           { name: 'Pulse Phone X', description: 'AMOLED ekranlı akıllı telefon', imageKey: 'product.phone.phone1' },
           { name: 'Pulse Phone S', description: 'Uzun pil ömürlü model', imageKey: 'product.phone.phone2' },
@@ -10133,7 +10217,7 @@ async function main() {
         name: 'TV & Görüntü',
         mainCategoryName: 'Technology',
         subCategoryName: 'TV & Görüntü',
-        imageKey: 'catalog.tv',
+        imageKey: 'product-catalog.sub-category.electronics.televisions',
         products: [
           { name: 'VisionMax 55', description: '55 inç 4K QLED', imageKey: 'product.laptop.macbook' },
           { name: 'VisionMax 65', description: '65 inç geniş ekran', imageKey: 'product.phone.samsung' },
@@ -10146,7 +10230,7 @@ async function main() {
         name: 'Akıllı Ev & Güvenlik',
         mainCategoryName: 'Technology',
         subCategoryName: 'Akıllı Ev & Güvenlik',
-        imageKey: 'catalog.smart-home-devices',
+        imageKey: 'product-catalog.sub-category.electronics.smarthome',
         products: [
           { name: 'SmartHub Core', description: 'Merkezi otomasyon beyni', imageKey: 'product.phone.phone1' },
           { name: 'SmartCam 360', description: '360° güvenlik kamerası', imageKey: 'product.phone.phone2' },
@@ -10248,14 +10332,14 @@ async function main() {
           name: 'AudioMax Ekstra',
           description: 'AudioMax ek ürün grupları',
           mainCategoryId: TECH_MAIN_CATEGORY_ID,
-          imageUrl: getSeedMediaPath('catalog.headphones', true) || null,
+          imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.headphones-group', true) || null,
         },
       })
     }
     const extraGroups = [
       {
         name: 'Aksesuar Setleri',
-        imageKey: 'catalog.phones',
+        imageKey: 'product-catalog.sub-category.electronics.smartphone-group',
         products: [
           { name: 'AudioMax Case Pro', description: 'Koruyucu kılıf', imageKey: 'product.phone.phone3' },
           { name: 'AudioMax Power Dock', description: 'Şarj standı', imageKey: 'product.phone.phone4' },
@@ -10266,7 +10350,7 @@ async function main() {
       },
       {
         name: 'Stüdyo Çevre Birimleri',
-        imageKey: 'catalog.computers-tablets',
+        imageKey: 'product-catalog.sub-category.electronics.laptops-groups',
         products: [
           { name: 'AudioMax Monitor Stand', description: 'Ergonomik stand', imageKey: 'product.laptop.macbook' },
           { name: 'AudioMax Desk Lamp', description: 'Ayarlanabilir ışık', imageKey: 'product.headphone.primary' },
@@ -10277,7 +10361,7 @@ async function main() {
       },
       {
         name: 'Taşınabilir Ses',
-        imageKey: 'catalog.headphones',
+        imageKey: 'product-catalog.sub-category.electronics.headphones-group',
         products: [
           { name: 'AudioMax Pocket DAC', description: 'Kompakt DAC', imageKey: 'product.headphone.secondary' },
           { name: 'AudioMax Clip Amp', description: 'Taşınabilir amfi', imageKey: 'product.headphone.primary' },
@@ -10288,7 +10372,7 @@ async function main() {
       },
       {
         name: 'Ev Eğlence',
-        imageKey: 'catalog.games',
+        imageKey: 'product-catalog.sub-category.electronics.game-consoles',
         products: [
           { name: 'AudioMax Mini Soundbar', description: 'Kompakt soundbar', imageKey: 'product.headphone.primary' },
           { name: 'AudioMax BT Receiver', description: 'Bluetooth alıcı', imageKey: 'product.headphone.secondary' },
@@ -10518,7 +10602,7 @@ async function main() {
               name: 'Kulaklıklar',
               description: 'Kulaklık ve ses ekipmanları',
               mainCategoryId: techCategory.id,
-              imageUrl: getSeedMediaPath('catalog.headphones', true) || null,
+              imageUrl: getSeedMediaPath('product-catalog.sub-category.electronics.headphones-group', true) || null,
             }
           })
         }
@@ -10643,7 +10727,7 @@ async function main() {
               name: 'Otomotiv Ürünleri',
               description: 'Otomotiv yedek parça ve aksesuarları',
               mainCategoryId: automotiveMainCategory.id,
-              imageUrl: getSeedMediaPath('catalog.otomotiv', true) || null,
+              imageUrl: getSeedMediaPath('product-catalog.main-category.automotive-motorcycle', true) || null,
             }
           })
         }
@@ -10661,7 +10745,7 @@ async function main() {
                 name: 'Temizlik Ürünleri',
                 description: 'Süpürge, temizlik robotu vb.',
                 mainCategoryId: evYasamCategory.id,
-                imageUrl: getSeedMediaPath('catalog.home-appliances', true) || null,
+                imageUrl: getSeedMediaPath('product-catalog.main-category.appliances', true) || null,
               }
             })
           }
@@ -10683,7 +10767,7 @@ async function main() {
               name: 'AutoParts Pro Ürünleri',
               description: 'AutoParts Pro markasına ait otomotiv ürünleri',
               subCategoryId: subCategory.id,
-              imageUrl: autopartsBrand.imageUrl || getSeedMediaPath('catalog.otomotiv', true) || null,
+              imageUrl: autopartsBrand.imageUrl || getSeedMediaPath('product-catalog.main-category.automotive-motorcycle', true) || null,
             }
           })
         }
@@ -12715,6 +12799,13 @@ async function main() {
     console.log('✅ Brand category görselleri güncellendi')
   } catch (error) {
     console.error('❌ Brand category görselleri güncelleme hatası:', error)
+  }
+
+  // Main Category görsellerini Product Catalog'dan güncelle
+  try {
+    await updateMainCategoryImagesFromProductCatalog()
+  } catch (error) {
+    console.error('❌ Main category görselleri güncelleme hatası:', error)
     // Hata olsa bile devam et
   }
 

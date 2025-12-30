@@ -67,7 +67,6 @@ export class FeedService {
     options?: { cursor?: string; limit?: number }
   ): Promise<FeedResponse> {
     const limit = options?.limit || 20;
-    const cacheKey = `feed:${userId}:${options?.cursor || 'first'}:${limit}`;
 
     // Cursor olarak item (post) ID bekleniyor. Repository ise feed.id ile paginate ediyor.
     // Bu nedenle gelen cursor'ı feed.id'ye çeviriyoruz.
@@ -77,17 +76,7 @@ export class FeedService {
       feedCursor = cursorFeed?.id;
     }
 
-    try {
-      // Cache check (otomatik olarak cache hit/miss işaretler)
-      const cached = await this.cacheService.get<FeedResponse>(cacheKey);
-      if (cached) {
-        logger.info({ message: 'Feed served from cache', userId, cacheKey });
-        return cached;
-      }
-    } catch (error) {
-      // Cache error - continue without cache
-      logger.warn({ message: 'Cache error', error: error instanceof Error ? error.message : String(error) });
-    }
+    // Cache disabled - always fetch fresh data from database for real-time feed
 
     // Fetch feeds from database
     const { feeds, nextCursor } = await this.feedRepo.findByUserId(userId, {
@@ -278,12 +267,7 @@ export class FeedService {
         },
       };
 
-      // Cache for 1 minute
-      try {
-        await this.cacheService.set(cacheKey, response, 60);
-      } catch (error) {
-        // Cache error - continue without caching
-      }
+      // Cache disabled - return fresh data from database
 
       return response;
     }
@@ -419,7 +403,11 @@ export class FeedService {
       orderedPosts.map(async (post) => {
         const userBase = userBaseMap.get(String(post.userId)) || (await this.getUserBase(String(post.userId)));
         const stats = statsMap.get(post.id) || { likes: 0, comments: 0, shares: 0, bookmarks: 0 };
-        const feedSource = feedSourceMap.get(post.id);
+        let feedSource = feedSourceMap.get(post.id);
+        // ENGAGEMENT_HIGH aslında TRENDING olarak gösterilmeli
+        if (feedSource === FeedSource.ENGAGEMENT_HIGH) {
+          feedSource = FeedSource.TRENDING;
+        }
         const basePost = {
           id: post.id,
           user: userBase,
@@ -461,12 +449,7 @@ export class FeedService {
       },
     };
 
-    // Cache for 1 minute (feed is dynamic)
-    try {
-      await this.cacheService.set(cacheKey, response, 60);
-    } catch (error) {
-      // Cache error - continue without caching
-    }
+    // Cache disabled - return fresh data from database
 
     return response;
   }
@@ -484,21 +467,39 @@ export class FeedService {
     // Build filter query
     const postWhere: any = {};
 
-    // Merge category + interests into a single category filter
-    const mergedCategoryIds = new Set<string>();
+    // Category filter (separate from interests)
     if (filters.category) {
-      mergedCategoryIds.add(filters.category);
-    }
-    if (filters.interests && filters.interests.length > 0) {
-      filters.interests.forEach((id) => mergedCategoryIds.add(id));
+      postWhere.OR = [
+        { mainCategoryId: filters.category },
+        { subCategoryId: filters.category },
+      ];
     }
 
-    if (mergedCategoryIds.size > 0) {
-      const categoryArray = Array.from(mergedCategoryIds);
-      postWhere.OR = [
-        { mainCategoryId: { in: categoryArray } },
-        { subCategoryId: { in: categoryArray } },
-      ];
+    // Interests filter - now uses FeedSource instead of category IDs
+    // interests parametresi artık feed source'larını alıyor (TRUSTER, TRENDING, MUTUAL_TRUST, BOOSTED, etc.)
+    // ENGAGEMENT_HIGH → TRENDING mapping (kullanıcı ENGAGEMENT_HIGH yerine TRENDING kullanabilir)
+    const feedWhere: any = {};
+    if (filters.interests && filters.interests.length > 0) {
+      // Feed source'larını validate et ve filtrele
+      const validSources = filters.interests
+        .map((source) => {
+          // ENGAGEMENT_HIGH → TRENDING mapping
+          if (source === 'ENGAGEMENT_HIGH') {
+            return FeedSource.TRENDING;
+          }
+          return source;
+        })
+        .filter((source) => {
+          return Object.values(FeedSource).includes(source as FeedSource);
+        });
+      
+      if (validSources.length > 0) {
+        // ENGAGEMENT_HIGH ve TRENDING'i birlikte filtrele (ENGAGEMENT_HIGH database'de TRENDING olarak gösterilir)
+        const sourceArray = validSources.includes(FeedSource.TRENDING)
+          ? [...validSources, FeedSource.ENGAGEMENT_HIGH]
+          : validSources;
+        feedWhere.source = { in: sourceArray };
+      }
     }
 
     if (filters.productIds && filters.productIds.length > 0) {
@@ -509,14 +510,52 @@ export class FeedService {
       postWhere.userId = { in: filters.userIds };
     }
 
-    // Tag-based filtering (contentPostTags or tags relations)
+    // Tag-based filtering (contentPostTags, tags relations, or post type mapping)
     if (filters.tags && filters.tags.length > 0) {
-      (postWhere.AND ||= []).push({
-        OR: [
-          { contentPostTags: { some: { tag: { in: filters.tags } } } },
-          { tags: { some: { tag: { in: filters.tags } } } },
-        ],
+      // Map tag names to post types
+      const tagToTypeMap: Record<string, ContentPostType> = {
+        'Review': ContentPostType.FREE,
+        'Benchmark': ContentPostType.COMPARE,
+        'Tips': ContentPostType.TIPS,
+        'Question': ContentPostType.QUESTION,
+        'Experience': ContentPostType.EXPERIENCE,
+        'Update': ContentPostType.UPDATE,
+      };
+      
+      const typeFilters: ContentPostType[] = [];
+      const tagFilters: string[] = [];
+      
+      filters.tags.forEach((tag) => {
+        const mappedType = tagToTypeMap[tag];
+        if (mappedType) {
+          typeFilters.push(mappedType);
+        } else {
+          tagFilters.push(tag);
+        }
       });
+      
+      const tagConditions: any[] = [];
+      
+      // Add type-based filtering
+      if (typeFilters.length > 0) {
+        tagConditions.push({ type: { in: typeFilters } });
+      }
+      
+      // Add tag-based filtering (contentPostTags or post_tags)
+      if (tagFilters.length > 0) {
+        tagConditions.push({
+          OR: [
+            { contentPostTags: { some: { tag: { in: tagFilters } } } },
+            { tags: { some: { tag: { in: tagFilters } } } },
+          ],
+        });
+      }
+      
+      if (tagConditions.length > 0) {
+        (postWhere.AND ||= []).push({
+          OR: tagConditions,
+        });
+      }
     }
 
     if (filters.dateRange) {
@@ -545,13 +584,23 @@ export class FeedService {
             { post: { createdAt: 'desc' as const } },
           ];
 
+    // Exclude user's own posts (same as normal feed)
+    const finalPostWhere = {
+      ...postWhere,
+      userId: { not: userId }, // Kendi postlarını gösterme
+    };
+
+    // Combine feed filters (source) with post filters
+    const finalFeedWhere: any = {
+      userId,
+      ...feedWhere, // Feed source filters (interests)
+      ...(Object.keys(finalPostWhere).length > 0 && {
+        post: finalPostWhere,
+      }),
+    };
+
     const feeds = await this.prisma.feed.findMany({
-      where: {
-        userId,
-        ...(Object.keys(postWhere).length > 0 && {
-          post: postWhere,
-        }),
-      },
+      where: finalFeedWhere,
       include: {
         post: {
           include: {
@@ -670,6 +719,12 @@ export class FeedService {
     // Update posts and postIds after filtering
     posts = filteredFeeds.map((feed) => feed.post);
 
+    // Create feed source map (postId -> source) for filtered feeds
+    const feedSourceMap = new Map<string, string>();
+    filteredFeeds.forEach((feed) => {
+      feedSourceMap.set(feed.postId, feed.source);
+    });
+
     // Batch fetch images from PostMedia (orderIndex'e göre sıralı)
     const postIds = posts.map((p) => p.id);
     const postMediaMap = new Map<string, string[]>();
@@ -708,12 +763,18 @@ export class FeedService {
       posts.map(async (post) => {
         const userBase = userBaseMap.get(String(post.userId)) || (await this.getUserBase(String(post.userId)));
         const stats = statsMap.get(post.id) || { likes: 0, comments: 0, shares: 0, bookmarks: 0 };
+        let feedSource = feedSourceMap.get(post.id);
+        // ENGAGEMENT_HIGH aslında TRENDING olarak gösterilmeli
+        if (feedSource === FeedSource.ENGAGEMENT_HIGH) {
+          feedSource = FeedSource.TRENDING;
+        }
         const basePost = {
           id: post.id,
           user: userBase,
           stats,
           createdAt: post.createdAt.toISOString(),
           contextType: this.mapContextType(post),
+          ...(feedSource && { source: feedSource }),
         };
 
         // Get images for this post from PostMedia (orderIndex'e göre sıralı)
@@ -745,14 +806,71 @@ export class FeedService {
     const limitedItems = feedItems.slice(0, limit);
     const finalHasMore = hasMoreFromDb || feedItems.length > limit;
 
+    // Calculate total count for filtered feed (using the same where clause as the query)
+    const totalCount = await this.prisma.feed.count({
+      where: {
+        userId,
+        ...feedWhere, // Feed source filters (interests)
+        ...(Object.keys(finalPostWhere).length > 0 && {
+          post: finalPostWhere,
+        }),
+      },
+    });
+
     return {
       items: limitedItems,
       pagination: {
         cursor: finalHasMore ? nextCursor : undefined,
         hasMore: finalHasMore,
         limit,
+        total: totalCount,
       },
     };
+  }
+
+  /**
+   * Get feed source counts (excluding user's own posts)
+   */
+  async getFeedSourceCounts(userId: string): Promise<Record<string, number>> {
+    const counts = await this.prisma.feed.groupBy({
+      by: ['source'],
+      where: {
+        userId,
+        post: {
+          userId: { not: userId }, // Exclude user's own posts
+        },
+      },
+      _count: {
+        id: true,
+      },
+    });
+
+    const result: Record<string, number> = {};
+    counts.forEach((item) => {
+      // ENGAGEMENT_HIGH should be shown as TRENDING
+      const source = item.source === 'ENGAGEMENT_HIGH' ? 'TRENDING' : item.source;
+      result[source] = (result[source] || 0) + item._count.id;
+    });
+
+    // Ensure all sources are present (even if 0)
+    const allSources = [
+      'TRUSTER',
+      'CATEGORY_MATCH',
+      'TRENDING',
+      'NEW_USER',
+      'BOOSTED',
+      'TRUSTER_NETWORK',
+      'MUTUAL_TRUST',
+      'INVENTORY_MATCH',
+      'PRODUCT_GROUP_MATCH',
+    ];
+    allSources.forEach((source) => {
+      if (!(source in result)) {
+        result[source] = 0;
+      }
+    });
+
+    return result;
   }
 
   // ===== Private Helper Methods =====
@@ -1027,18 +1145,24 @@ export class FeedService {
     const tags = post.tags?.map((t: any) => t.tag) || post.contentPostTags?.map((t: any) => t.tag) || [];
 
     if (type === FeedItemType.UPDATE) {
+      // Convert experienceContent array to string for mobile compatibility
+      const relatedPostContentString = experienceContent.length > 0
+        ? experienceContent.map((item) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`).join('\n\n')
+        : post.body || '';
+
       const relatedPost = {
         id: post.id,
         product,
-        content: experienceContent,
+        content: relatedPostContentString, // String for mobile compatibility
+        experienceContent, // Keep array for structured data
         tags,
         images,
-      };
+      } as any; // Type assertion needed because RelatedPostData interface expects content: ExperienceContent[]
 
       const updateData = {
         ...basePost,
         relatedPost,
-        content: post.body,
+        content: post.body || '', // Ensure content is always a string
         images,
       };
 
@@ -1048,13 +1172,20 @@ export class FeedService {
       };
     }
 
+    // Convert experienceContent array to string for mobile compatibility
+    // Mobile expects content to be a string (for substring operations)
+    const contentString = experienceContent.length > 0
+      ? experienceContent.map((item) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`).join('\n\n')
+      : post.body || '';
+
     const experienceData: ExperiencePost = {
       ...basePost,
       product,
-      content: experienceContent,
+      content: contentString, // String for mobile compatibility
+      experienceContent, // Keep array for structured data
       tags,
       images,
-    };
+    } as any; // Type assertion needed because ExperiencePost interface expects content: ExperienceContent[]
 
     return {
       type,

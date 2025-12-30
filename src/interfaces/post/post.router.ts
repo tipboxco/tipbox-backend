@@ -441,13 +441,53 @@ router.post(
     // Process images (from files or URLs)
     const images = await processPostImages(req, String(userId));
 
+    // Parse products if it's a JSON string (from multipart/form-data)
+    let products: any = req.body.products;
+    
+    // Handle different input formats
+    if (typeof products === 'string') {
+      try {
+        products = JSON.parse(products);
+      } catch (e) {
+        logger.warn('Failed to parse products JSON', { products, error: e });
+        return res.status(400).json({
+          message: 'products field must be a valid JSON array',
+        });
+      }
+    }
+    
+    // If products is already an array, use it directly
+    // If it's an object, try to convert to array
+    if (!Array.isArray(products)) {
+      if (typeof products === 'object' && products !== null) {
+        // Try to convert object to array
+        products = [products];
+      } else {
+        logger.error('Products is not an array or object', { 
+          type: typeof products, 
+          products,
+          bodyKeys: Object.keys(req.body),
+        });
+        return res.status(400).json({
+          message: `products must be an array, got: ${typeof products}`,
+        });
+      }
+    }
+
+    // Validate products array structure
+    if (!Array.isArray(products) || products.length === 0) {
+      return res.status(400).json({
+        message: 'products must be a non-empty array',
+      });
+    }
+
     const request: CreateBenchmarkPostRequest = {
       contextType: req.body.contextType as ContextType,
       contextId: req.body.contextId,
-      products: req.body.products,
+      products: products as Array<{ productId: string; isSelected: boolean }>,
       description: req.body.description,
-      images: images, // Images support for benchmark posts
-      eventId: req.body.eventId, // Optional event ID
+      images: images,
+      eventId: req.body.eventId,
     };
 
     if (
@@ -513,33 +553,71 @@ router.post(
     // Process images (from files or URLs)
     const images = await processPostImages(req, String(userId));
 
+    // Parse experience if it's a JSON string
+    let experience = req.body.experience;
+    if (typeof experience === 'string') {
+      try {
+        experience = JSON.parse(experience);
+      } catch (e) {
+        return res.status(400).json({
+          message: 'experience field must be a valid JSON array or object',
+        });
+      }
+    }
+
+    // Support both new field names (selectedDurationId) and old field names (step1Duration)
+    const rawDurationId = req.body.selectedDurationId || req.body.step1Duration || req.body.selectedDuration || null;
+    const rawLocationId = req.body.selectedLocationId || req.body.selectedCondition || req.body.selectedLocation || null;
+    const rawPurposeId = req.body.selectedPurposeId || req.body.selectedFrequency || req.body.selectedPurpose || null;
+
+    // Resolve option IDs (name to UUID conversion handled in service layer)
+    const resolvedIds = await postService.resolveExperienceOptionIds({
+      durationId: rawDurationId,
+      locationId: rawLocationId,
+      purposeId: rawPurposeId,
+    });
+
+    const selectedDurationId = resolvedIds.durationId;
+    const selectedLocationId = resolvedIds.locationId;
+    const selectedPurposeId = resolvedIds.purposeId;
+
     const request: CreateExperiencePostRequest = {
       contextType: req.body.contextType as ContextType,
       contextId: req.body.contextId,
-      selectedDurationId: req.body.selectedDurationId,
-      selectedLocationId: req.body.selectedLocationId,
-      selectedPurposeId: req.body.selectedPurposeId,
-      content: req.body.content,
-      experience: req.body.experience,
+      selectedDurationId: selectedDurationId as string | null,
+      selectedLocationId: selectedLocationId as string | null,
+      selectedPurposeId: selectedPurposeId as string | null,
+      content: req.body.content || req.body.experienceText || '',
+      experience: Array.isArray(experience) ? experience : [],
       status: req.body.status as ExperienceStatus,
       images: images,
       experienceSnippetId: req.body.experienceSnippetId,
       eventId: req.body.eventId, // Optional event ID
     };
 
+    // Validate required fields
     if (
       !request.contextType ||
       !request.contextId ||
-      !request.selectedDurationId ||
-      !request.selectedLocationId ||
-      !request.selectedPurposeId ||
       !request.content ||
-      !request.experience ||
+      (typeof request.content === 'string' && request.content.trim() === '') ||
+      !Array.isArray(request.experience) ||
+      request.experience.length === 0 ||
       !request.status
     ) {
       return res.status(400).json({
         message:
-          'All fields are required: contextType, contextId, selectedDurationId, selectedLocationId, selectedPurposeId, content, experience, status',
+          'Required fields: contextType, contextId, content, experience (array), status',
+        received: {
+          contextType: request.contextType,
+          contextId: request.contextId,
+          selectedDurationId: request.selectedDurationId || null,
+          selectedLocationId: request.selectedLocationId || null,
+          selectedPurposeId: request.selectedPurposeId || null,
+          content: request.content ? 'provided' : 'missing',
+          experience: Array.isArray(request.experience) ? `array(${request.experience.length})` : typeof request.experience,
+          status: request.status,
+        },
       });
     }
 

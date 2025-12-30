@@ -88,7 +88,8 @@ export interface ReviewProduct extends BaseProduct {
 }
 
 export interface ExperiencePost extends BasePost {
-  content: ExperienceContent[];
+  content: ExperienceContent[] | string; // Support both array (legacy) and string (mobile compatibility)
+  experienceContent?: ExperienceContent[]; // Structured data (optional, for backward compatibility)
   tags: string[];
   images?: any[];
 }
@@ -97,7 +98,8 @@ export interface ExperiencePost extends BasePost {
 export interface RelatedPostData {
   id: string;
   product: BaseProduct | null;
-  content: ExperienceContent[];
+  content: ExperienceContent[] | string; // Support both array (legacy) and string (mobile compatibility)
+  experienceContent?: ExperienceContent[]; // Structured data (optional, for backward compatibility)
   tags: string[];
   images: string[];
 }
@@ -144,7 +146,8 @@ export interface FeedResponse {
 // Feed Filter Options
 export interface FeedFilterOptions {
   /**
-   * User interests (e.g. category or topic IDs)
+   * User interests - Feed source filters (e.g. TRUSTER, TRENDING, MUTUAL_TRUST, BOOSTED, etc.)
+   * Artık kategori ID'leri yerine feed source'ları kullanılıyor
    */
   interests?: string[];
   /**

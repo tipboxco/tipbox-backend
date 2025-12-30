@@ -412,5 +412,41 @@
   },
   "product.apple.watchultra3": {
     "targetKey": "products/apple/watchultra3.png"
+  },
+  "product-catalog.main-category.electronic": {
+    "targetKey": "product-catalog/main-categories/electronic.png"
+  },
+  "product-catalog.main-category.cosmetic": {
+    "targetKey": "product-catalog/main-categories/cosmetic.png"
+  },
+  "product-catalog.main-category.appliances": {
+    "targetKey": "product-catalog/main-categories/Appliances.png"
+  },
+  "product-catalog.main-category.automotive-motorcycle": {
+    "targetKey": "product-catalog/main-categories/Automotive-Motorcycle.png"
+  },
+  "product-catalog.main-category.baby-kids": {
+    "targetKey": "product-catalog/main-categories/baby-kids.png"
+  },
+  "product-catalog.main-category.fashion": {
+    "targetKey": "product-catalog/main-categories/fashion.png"
+  },
+  "product-catalog.main-category.garden-hardware": {
+    "targetKey": "product-catalog/main-categories/Garden-Hardware.png"
+  },
+  "product-catalog.main-category.hobbies-music-art": {
+    "targetKey": "product-catalog/main-categories/Hobbies-Music-Art.png"
+  },
+  "product-catalog.main-category.home-living": {
+    "targetKey": "product-catalog/main-categories/home-living.png"
+  },
+  "product-catalog.main-category.office-stationery": {
+    "targetKey": "product-catalog/main-categories/Office-Stationery.png"
+  },
+  "product-catalog.main-category.pet-supplies": {
+    "targetKey": "product-catalog/main-categories/Pet-Supplies.png"
+  },
+  "product-catalog.main-category.sports-outdoors": {
+    "targetKey": "product-catalog/main-categories/sports-outdoors.png"
   }
 }

@@ -129,9 +129,13 @@ router.get('/me/profile', asyncHandler(async (req: Request, res: Response) => {
 router.put('/me/profile', asyncHandler(async (req: Request<{}, {}, UpdateUserProfileRequest>, res: Response) => {
   const userPayload = (req as any).user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+  if (!userId) {
+    logger.warn('[updateProfile] Unauthorized request - no userId found');
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
 
   const body = req.body || {};
+  logger.info('[updateProfile] Request received', { userId, bodyKeys: Object.keys(body) });
 
   if (body.name && body.name.trim().length < 2) {
     return res.status(400).json({ message: 'İsim en az 2 karakter olmalıdır' });
@@ -145,20 +149,39 @@ router.put('/me/profile', asyncHandler(async (req: Request<{}, {}, UpdateUserPro
     return res.status(400).json({ message: 'badge alanı bir dizi olmalıdır' });
   }
 
-  await userService.updateProfileDetails(String(userId), {
-    name: body.name,
-    biography: body.biography,
-    banner: typeof body.banner !== 'undefined' ? body.banner : undefined,
-    avatar: body.avatar ?? undefined,
-    cosmeticId: typeof body.cosmetic !== 'undefined' ? body.cosmetic : undefined,
-    badges: body.badge?.map(badge => ({ id: badge })) ?? undefined,
-  });
+  try {
+    await userService.updateProfileDetails(String(userId), {
+      name: body.name,
+      biography: body.biography,
+      banner: typeof body.banner !== 'undefined' ? body.banner : undefined,
+      avatar: body.avatar ?? undefined,
+      cosmeticId: typeof body.cosmetic !== 'undefined' ? body.cosmetic : undefined,
+      badges: body.badge?.map(badge => ({ id: badge })) ?? undefined,
+    });
 
-  const profile = await userService.getSelfUserProfile(String(userId));
-  return res.json({
-    success: true,
-    profile,
-  });
+    logger.info('[updateProfile] Profile updated successfully', { userId });
+
+    const profile = await userService.getSelfUserProfile(String(userId));
+    if (!profile) {
+      logger.error('[updateProfile] Profile not found after update', { userId });
+      return res.status(404).json({ 
+        success: false,
+        message: 'Profil bulunamadı' 
+      });
+    }
+
+    return res.json({
+      success: true,
+      profile,
+    });
+  } catch (error) {
+    logger.error('[updateProfile] Error updating profile', { 
+      userId, 
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
+    throw error; // asyncHandler'a bırak
+  }
 }));
 
 /**

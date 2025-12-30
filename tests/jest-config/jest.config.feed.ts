@@ -4,7 +4,7 @@ const config: Config = {
   testEnvironment: 'node',
   rootDir: '../..',
   roots: ['<rootDir>/tests'],
-  testMatch: ['**/e2e/feed.test.ts'],
+  testMatch: ['**/e2e/feed*.test.ts'],
   moduleFileExtensions: ['ts', 'js', 'json'],
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   maxWorkers: 1,
@@ -22,7 +22,7 @@ const config: Config = {
     ],
   },
   reporters: ['default'],
-  testTimeout: 30000,
+  testTimeout: 600000, // 10 dakika (feed distribution için uzun bekleme süreleri var)
 };
 
 export default config;

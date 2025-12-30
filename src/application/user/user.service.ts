@@ -1,5 +1,6 @@
 import { User } from '../../domain/user/user.entity';
 import { ContextType } from '../../domain/content/context-type.enum';
+import { ContentPostType } from '../../domain/content/content-post-type.enum';
 import { UserPrismaRepository } from '../../infrastructure/repositories/user-prisma.repository';
 import { ProfilePrismaRepository } from '../../infrastructure/repositories/profile-prisma.repository';
 import { UserSettingsPrismaRepository } from '../../infrastructure/repositories/user-settings-prisma.repository';
@@ -1473,10 +1474,12 @@ export class UserService {
     options?: { cursor?: string; limit?: number }
   ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
-    const cursor =
-      options?.cursor && /^[0-9a-fA-F-]{36}$/.test(options.cursor) ? options.cursor : undefined;
+    const cursor = options?.cursor;
 
-    // Cursor dış ID = inventory.id (en son dönen item)
+    const userBase = await this.getUserBase(userId);
+    const results: any[] = [];
+
+    // 1. Inventory'den experience'ları çek (eski sistem)
     const inventories = await this.prisma.inventory.findMany({
       where: { userId },
       include: {
@@ -1498,15 +1501,7 @@ export class UserService {
       } as any,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
-      ...(cursor && {
-        cursor: { id: cursor },
-        skip: 1,
-      }),
     });
-
-    const userBase = await this.getUserBase(userId);
-
-    const results: any[] = [];
 
     for (const inv of inventories) {
       const experiences = this.buildExperienceSections(
@@ -1521,7 +1516,6 @@ export class UserService {
       const images = ((inv as any).media || [])
         .map((m: any) => {
           const mediaUrl = m.mediaUrl;
-          // Eğer zaten tam URL ise olduğu gibi kullan, değilse prefix ekle
           if (mediaUrl && (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://'))) {
             return mediaUrl;
           } else if (mediaUrl) {
@@ -1529,14 +1523,14 @@ export class UserService {
           }
           return null;
         })
-        .filter((url: string | null) => url !== null); // null değerleri filtrele
+        .filter((url: string | null) => url !== null);
 
       const contextData = this.buildContextDataFromInventory(inv as any);
 
       results.push({
         id: String(inv.id),
         type: 'experience' as const,
-          user: userBase,
+        user: userBase,
         stats: this.buildExperienceStats(String(inv.id)),
         createdAt: inv.createdAt.toISOString(),
         contextType: ContextType.PRODUCT,
@@ -1547,9 +1541,133 @@ export class UserService {
       });
     }
 
-    const hasMore = results.length > limit;
-    const paginatedResults = hasMore ? results.slice(0, limit) : results;
-    const nextCursor = hasMore && paginatedResults.length > 0 ? paginatedResults[paginatedResults.length - 1].id : undefined;
+    // 2. ContentPost tablosundan EXPERIENCE tipindeki gönderileri çek
+    const experiencePosts = await this.prisma.contentPost.findMany({
+      where: {
+        userId,
+        type: ContentPostType.EXPERIENCE,
+      },
+      include: {
+        product: {
+          include: {
+            group: {
+              include: {
+                subCategory: {
+                  include: {
+                    mainCategory: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        contentPostTags: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit + 1,
+    });
+
+    // Batch fetch images from PostMedia (orderIndex'e göre sıralı)
+    const postIds = experiencePosts.map((p) => p.id);
+    const postMediaMap = new Map<string, string[]>();
+    if (postIds.length > 0) {
+      const allPostMedia = await this.prisma.postMedia.findMany({
+        where: {
+          postId: { in: postIds },
+        },
+        orderBy: { orderIndex: 'asc' },
+        select: { postId: true, mediaUrl: true },
+      });
+
+      // Map'e dönüştür (postId -> mediaUrl array)
+      allPostMedia.forEach((media) => {
+        if (!postMediaMap.has(media.postId)) {
+          postMediaMap.set(media.postId, []);
+        }
+        const resolvedUrl = resolveMediaUrl(media.mediaUrl);
+        if (resolvedUrl) {
+          postMediaMap.get(media.postId)!.push(resolvedUrl);
+        }
+      });
+    }
+
+    for (const post of experiencePosts) {
+      // Experience content'i parse et
+      const experienceContent = this.parseExperienceContentFromPost(post.body);
+      
+      // Images
+      const images = postMediaMap.get(post.id) || [];
+
+      // Tags
+      const tags = (post.contentPostTags || [])
+        .map((cpt: any) => cpt.tag)
+        .filter((tag: string | null | undefined) => tag);
+
+      // Context data
+      const contextData = post.product ? {
+        product: {
+          id: post.product.id,
+          name: post.product.name,
+          image: resolveMediaUrl(post.product.imageUrl),
+          group: post.product.group ? {
+            id: post.product.group.id,
+            name: post.product.group.name,
+          } : null,
+          subCategory: post.product.group?.subCategory ? {
+            id: post.product.group.subCategory.id,
+            name: post.product.group.subCategory.name,
+            mainCategory: post.product.group.subCategory.mainCategory ? {
+              id: post.product.group.subCategory.mainCategory.id,
+              name: post.product.group.subCategory.mainCategory.name,
+            } : null,
+          } : null,
+        },
+      } : null;
+
+      // Stats
+      const stats = {
+        likes: post.likesCount || 0,
+        comments: post.commentsCount || 0,
+        shares: post.sharesCount || 0,
+        bookmarks: post.favoritesCount || 0,
+      };
+
+      results.push({
+        id: post.id,
+        type: 'experience' as const,
+        user: userBase,
+        stats,
+        createdAt: post.createdAt.toISOString(),
+        contextType: ContextType.PRODUCT,
+        contextData,
+        content: experienceContent,
+        tags,
+        images,
+      });
+    }
+
+    // Tüm sonuçları tarihe göre sırala
+    results.sort((a, b) => {
+      const timeA = new Date(a.createdAt).getTime();
+      const timeB = new Date(b.createdAt).getTime();
+      if (timeB !== timeA) return timeB - timeA;
+      return String(a.id).localeCompare(String(b.id));
+    });
+
+    // Cursor ve pagination
+    let filteredResults = results;
+    if (cursor) {
+      const cursorIndex = results.findIndex((r) => r.id === cursor);
+      if (cursorIndex >= 0) {
+        filteredResults = results.slice(cursorIndex + 1);
+      }
+    }
+
+    const hasMore = filteredResults.length > limit;
+    const paginatedResults = hasMore ? filteredResults.slice(0, limit) : filteredResults;
+    const nextCursor = hasMore && paginatedResults.length > 0 
+      ? paginatedResults[paginatedResults.length - 1].id 
+      : undefined;
 
     return {
       items: paginatedResults,
@@ -1559,6 +1677,55 @@ export class UserService {
         limit,
       },
     };
+  }
+
+  private parseExperienceContentFromPost(body: string): ExperienceContent[] {
+    const content: ExperienceContent[] = [];
+    
+    if (!body) {
+      return [
+        {
+          title: 'Product and Usage Experience',
+          content: '',
+          rating: 0,
+        },
+      ];
+    }
+
+    // Parse experience content from body
+    // Format: [type] content (Rating: X/5)
+    const priceRegex = /\[price_and_shopping\]\s*(.+?)\s*\(Rating:\s*(\d+)\/5\)/is;
+    const usageRegex = /\[product_and_usage\]\s*(.+?)\s*\(Rating:\s*(\d+)\/5\)/is;
+
+    const priceMatch = body.match(priceRegex);
+    const usageMatch = body.match(usageRegex);
+
+    if (priceMatch) {
+      content.push({
+        title: 'Price and Shopping Experience',
+        content: priceMatch[1].trim(),
+        rating: parseInt(priceMatch[2], 10),
+      });
+    }
+
+    if (usageMatch) {
+      content.push({
+        title: 'Product and Usage Experience',
+        content: usageMatch[1].trim(),
+        rating: parseInt(usageMatch[2], 10),
+      });
+    }
+
+    // Eğer hiçbir match yoksa, body'yi genel content olarak kullan
+    if (content.length === 0) {
+      content.push({
+        title: 'Product and Usage Experience',
+        content: body.trim(),
+        rating: 0,
+      });
+    }
+
+    return content;
   }
 
   private buildExperienceSections(

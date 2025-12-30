@@ -26,6 +26,8 @@ import { FeedService } from '../feed/feed.service';
 import logger from '../../infrastructure/logger/logger';
 import { GeminiService } from '../../infrastructure/ai/gemini.service';
 import { AiExperienceSplitPrismaRepository } from '../../infrastructure/repositories/ai-experience-split-prisma.repository';
+import { withCache } from '../../infrastructure/cache/cache-wrapper.helper';
+import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
 
 export class PostService {
   private postRepo: ContentPostPrismaRepository;
@@ -512,6 +514,16 @@ export class PostService {
         throw new Error('Benchmark posts can only be created for products');
       }
 
+      // Validate that products is an array
+      if (!Array.isArray(request.products)) {
+        logger.error('Products is not an array in createBenchmarkPost', {
+          type: typeof request.products,
+          products: request.products,
+          requestKeys: Object.keys(request),
+        });
+        throw new Error(`products must be an array, got: ${typeof request.products}`);
+      }
+
       // Validate that at least 2 products are selected
       const selectedProducts = request.products.filter((p) => p.isSelected);
       if (selectedProducts.length < 2) {
@@ -636,6 +648,7 @@ export class PostService {
       );
 
       // AI Split ID ve Taxonomy ID'leri kaydet
+      // Router'da zaten resolve edilmiş UUID'ler geliyor
       await this.prisma.contentPost.update({
         where: { id: post.id },
         data: { 
@@ -643,7 +656,7 @@ export class PostService {
           experienceDurationId: request.selectedDurationId || null,
           experienceLocationId: request.selectedLocationId || null,
           experiencePurposeId: request.selectedPurposeId || null,
-          eventId: request.eventId || null, // eventId'yi de güncelle (eğer create'de set edilmediyse)
+          eventId: request.eventId || null,
         }
       });
 
@@ -870,6 +883,102 @@ export class PostService {
       );
       throw error;
     }
+  }
+
+  /**
+   * Experience option name'lerini UUID'lere çevir
+   * UUID formatında olmayan değerler için database'de lookup yapar
+   */
+  async resolveExperienceOptionIds(params: {
+    durationId?: string | null;
+    locationId?: string | null;
+    purposeId?: string | null;
+  }): Promise<{
+    durationId: string | null;
+    locationId: string | null;
+    purposeId: string | null;
+  }> {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    
+    // Eğer tüm değerler UUID formatındaysa, direkt döndür
+    if (
+      (!params.durationId || uuidRegex.test(params.durationId)) &&
+      (!params.locationId || uuidRegex.test(params.locationId)) &&
+      (!params.purposeId || uuidRegex.test(params.purposeId))
+    ) {
+      return {
+        durationId: params.durationId || null,
+        locationId: params.locationId || null,
+        purposeId: params.purposeId || null,
+      };
+    }
+
+    // Lookup gerekiyor
+    const options = await this.getExperienceOptions();
+    
+    const resolveOption = <T extends { id: string; name: string }>(
+      value: string | null | undefined,
+      options: T[],
+      type: 'duration' | 'location' | 'purpose'
+    ): string | null => {
+      if (!value) return null;
+      
+      // UUID formatındaysa direkt döndür
+      if (uuidRegex.test(value)) {
+        return value;
+      }
+
+      // Name-based lookup
+      const normalizedInput = value.trim().toLowerCase();
+      
+      // Exact match
+      let found = options.find(opt => {
+        const normalizedName = opt.name.trim().toLowerCase();
+        return normalizedName === normalizedInput || opt.id === value;
+      });
+
+      // Partial match (sadece duration için sayı eşleşmesi)
+      if (!found && type === 'duration') {
+        found = options.find(opt => {
+          const normalizedName = opt.name.trim().toLowerCase();
+          const inputNumber = normalizedInput.match(/\d+/)?.[0];
+          const nameNumber = normalizedName.match(/\d+/)?.[0];
+          
+          return normalizedName.includes(normalizedInput) ||
+                 normalizedInput.includes(normalizedName) ||
+                 (inputNumber && nameNumber && inputNumber === nameNumber);
+        });
+      } else if (!found) {
+        // Location ve Purpose için partial match
+        found = options.find(opt => {
+          const normalizedName = opt.name.trim().toLowerCase();
+          return normalizedName.includes(normalizedInput) ||
+                 normalizedInput.includes(normalizedName);
+        });
+      }
+
+      if (found) {
+        logger.info(`Experience ${type} resolved`, {
+          provided: value,
+          resolved: found.name,
+          id: found.id,
+        });
+        return found.id;
+      }
+
+      logger.warn(`Experience ${type} not found`, {
+        provided: value,
+        available: options.map(opt => opt.name),
+      });
+      
+      return null;
+    };
+
+    return {
+      durationId: resolveOption(params.durationId, options.durations, 'duration'),
+      locationId: resolveOption(params.locationId, options.locations, 'location'),
+      purposeId: resolveOption(params.purposeId, options.purposes, 'purpose'),
+    };
   }
 
   /**

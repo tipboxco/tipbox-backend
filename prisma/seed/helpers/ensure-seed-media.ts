@@ -170,6 +170,75 @@ function buildAssetMapping(): Map<string, string> {
     // Klasör yoksa atla
   }
   
+  // 6b. PRODUCT CATALOG → product-catalog/ (hierarchical structure)
+  try {
+    const productCatalogPath = path.join(assetsBasePath, 'Product Catalog', 'Main Category');
+    if (existsSync(productCatalogPath)) {
+      // Recursive function to scan Product Catalog directory
+      const scanProductCatalog = (dirPath: string, relativePath: string = ''): void => {
+        try {
+          const items = fs.readdirSync(dirPath);
+          for (const item of items) {
+            if (item.startsWith('.')) continue;
+            
+            const itemPath = path.join(dirPath, item);
+            const itemStat = fs.statSync(itemPath);
+            
+            if (itemStat.isFile() && /\.(png|jpg|jpeg)$/i.test(item)) {
+              // File found - create mapping
+              const nameWithoutExt = item.replace(/\.[^/.]+$/, '');
+              const currentPath = relativePath ? `${relativePath}/${item}` : item;
+              
+              // Determine key type based on path depth
+              const pathParts = currentPath.split('/').filter(p => p);
+              
+              if (pathParts.length === 1) {
+                // Main category level: Main Category/electronic.png
+                // Dosya ismini slugify et ama özel durumları handle et
+                let slug = slugify(nameWithoutExt);
+                // Özel durumlar: Appliances.png -> appliances, Automotive-Motorcycle.png -> automotive-motorcycle
+                // Dosya ismi zaten doğru formatta olabilir
+                const key = `product-catalog.main-category.${slug}`;
+                mapping.set(key, itemPath);
+              } else if (pathParts.length === 2) {
+                // Sub-category level: Main Category/Cosmetics/hair-care.png
+                const categorySlug = slugify(pathParts[0]);
+                const fileSlug = slugify(nameWithoutExt);
+                const key = `product-catalog.sub-category.${categorySlug}.${fileSlug}`;
+                mapping.set(key, itemPath);
+              } else if (pathParts.length === 3) {
+                // Product group level: Main Category/Cosmetics/Hair Styling Group/hair-sprays.png
+                const categorySlug = slugify(pathParts[0]);
+                const groupSlug = slugify(pathParts[1].replace(/\s+Group$/, ''));
+                const fileSlug = slugify(nameWithoutExt);
+                const key = `product-catalog.product-group.${categorySlug}.${groupSlug}.${fileSlug}`;
+                mapping.set(key, itemPath);
+              } else if (pathParts.length >= 4) {
+                // Product level: Main Category/Cosmetics/Hair Styling Group/Hair Sprays/product-name.png
+                const categorySlug = slugify(pathParts[0]);
+                const groupSlug = slugify(pathParts[1].replace(/\s+Group$/, ''));
+                const subGroupSlug = slugify(pathParts[2]);
+                const productSlug = slugify(nameWithoutExt);
+                const key = `product-catalog.product.${categorySlug}.${groupSlug}.${subGroupSlug}.${productSlug}`;
+                mapping.set(key, itemPath);
+              }
+            } else if (itemStat.isDirectory()) {
+              // Recursively scan subdirectories
+              const newRelativePath = relativePath ? `${relativePath}/${item}` : item;
+              scanProductCatalog(itemPath, newRelativePath);
+            }
+          }
+        } catch (error) {
+          // Skip if error reading directory
+        }
+      };
+      
+      scanProductCatalog(productCatalogPath);
+    }
+  } catch (error) {
+    // Klasör yoksa atla
+  }
+  
   // 7. EVENT/EVENTS → event/
   try {
     const eventPath = path.join(assetsBasePath, 'event');
@@ -452,6 +521,8 @@ function getLocalPathForKey(key: string): string | null {
           path.join(assetsBasePath, 'WhatsNews', fileName),
           path.join(assetsBasePath, 'Apple_Products', fileName),
           path.join(assetsBasePath, 'Apple', fileName),
+          // Product Catalog klasörü
+          path.join(assetsBasePath, 'Product Catalog', 'Main Category', fileName),
         ];
         
         // Dosyayı ara
@@ -459,6 +530,39 @@ function getLocalPathForKey(key: string): string | null {
           if (existsSync(searchPath)) {
             localPath = searchPath;
             break;
+          }
+        }
+        
+        // Product Catalog için recursive arama
+        if (!localPath && key.startsWith('product-catalog.')) {
+          const productCatalogBasePath = path.join(assetsBasePath, 'Product Catalog', 'Main Category');
+          if (existsSync(productCatalogBasePath)) {
+            // Recursive search function
+            const findInProductCatalog = (dirPath: string): string | null => {
+              try {
+                const items = fs.readdirSync(dirPath);
+                for (const item of items) {
+                  if (item.startsWith('.')) continue;
+                  const itemPath = path.join(dirPath, item);
+                  const itemStat = fs.statSync(itemPath);
+                  
+                  if (itemStat.isFile() && (item === fileName || item === nameWithoutExt + ext)) {
+                    return itemPath;
+                  } else if (itemStat.isDirectory()) {
+                    const found = findInProductCatalog(itemPath);
+                    if (found) return found;
+                  }
+                }
+              } catch (error) {
+                // Skip on error
+              }
+              return null;
+            };
+            
+            const foundPath = findInProductCatalog(productCatalogBasePath);
+            if (foundPath) {
+              localPath = foundPath;
+            }
           }
         }
       }

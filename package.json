@@ -16,6 +16,8 @@
     "db:upload-media": "docker-compose exec backend npx ts-node scripts/upload-seed-media.ts",
     "db:seed": "docker-compose exec backend npx ts-node scripts/clear-and-seed.ts",
     "db:seed:all": "docker-compose exec backend npx ts-node scripts/clear-and-seed.ts --all",
+    "db:update-category-images": "docker-compose exec backend npx ts-node scripts/update-main-category-images.ts",
+    "db:update-trust-user-1-avatar": "docker-compose exec backend npx ts-node scripts/update-trust-user-1-avatar.ts",
     "db:reset": "docker-compose exec backend npx ts-node prisma/seed/clear-user-content-data.ts",
     "db:reset:all": "docker-compose exec backend npx ts-node prisma/seed/clear-seed-data.ts --force",
     "db:reset:force": "docker-compose exec backend npx prisma migrate reset --force --skip-seed",

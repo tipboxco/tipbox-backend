@@ -318,9 +318,9 @@ export interface Experience {
 export interface CreateExperiencePostRequest {
   contextType: ContextType;
   contextId: string;
-  selectedDurationId: string;
-  selectedLocationId: string;
-  selectedPurposeId: string;
+  selectedDurationId: string | null; // Resolved UUID or null if lookup fails
+  selectedLocationId: string | null; // Resolved UUID or null if lookup fails
+  selectedPurposeId: string | null; // Resolved UUID or null if lookup fails
   content: string;
   experience: Experience[];
   status: ExperienceStatus;

@@ -85,6 +85,9 @@ const feedService = new FeedService();
  *                       type: boolean
  *                     limit:
  *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                       description: Toplam feed sayısı
  */
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = (req as any).user;
@@ -113,7 +116,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  * /feed/filtered:
  *   get:
  *     summary: Filtrelenmiş feed getir
- *     description: Kullanıcının feed'ini filtrelerle getirir
+ *     description: Kullanıcının feed'ini filtrelerle getirir. Kendi postları otomatik olarak filtrelenir.
  *     tags: [Feed]
  *     security:
  *       - bearerAuth: []
@@ -124,7 +127,9 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  *           type: array
  *           items:
  *             type: string
- *         description: Kullanıcının ilgi alanlarını temsil eden kategori / konu ID'leri
+ *             enum: [TRUSTER, CATEGORY_MATCH, TRENDING, NEW_USER, BOOSTED, TRUSTER_NETWORK, MUTUAL_TRUST, INVENTORY_MATCH, PRODUCT_GROUP_MATCH, ENGAGEMENT_HIGH]
+ *         description: Feed source filtreleri. ENGAGEMENT_HIGH otomatik olarak TRENDING olarak gösterilir.
+ *         example: [TRUSTER, BOOSTED, MUTUAL_TRUST]
  *       - in: query
  *         name: tags
  *         schema:
@@ -132,24 +137,35 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  *           items:
  *             type: string
  *             enum: [Review, Benchmark, Tips, Question, Experience, Update]
- *         description: İçerik etiketleri (ör. Review, Benchmark, Tips)
+ *         description: İçerik etiketleri veya post type'ları. Review=FREE, Benchmark=COMPARE, Tips=TIPS, Question=QUESTION, Experience=EXPERIENCE, Update=UPDATE
+ *         example: [Question, Review]
  *       - in: query
  *         name: category
  *         schema:
  *           type: string
- *         description: Birincil kategori ID'si
+ *           format: uuid
+ *         description: Birincil kategori ID'si (mainCategoryId veya subCategoryId)
  *       - in: query
  *         name: sort
  *         schema:
  *           type: string
  *           enum: [recent, top]
  *           default: recent
- *         description: Sıralama tipi (recent = en yeni, top = etkileşime göre)
+ *         description: Sıralama tipi (recent = en yeni, top = etkileşime göre relevance score)
+ *       - in: query
+ *         name: types
+ *         schema:
+ *           type: array
+ *           items:
+ *             type: string
+ *             enum: [feed, benchmark, post, question, tipsAndTricks, experience, update]
+ *         description: Feed item type'larına göre filtrele
+ *         example: [post, question]
  *       - in: query
  *         name: cursor
  *         schema:
  *           type: string
- *         description: Pagination cursor
+ *         description: Pagination cursor (son item'ın id'si)
  *       - in: query
  *         name: limit
  *         schema:
@@ -161,6 +177,76 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  *     responses:
  *       200:
  *         description: Filtrelenmiş feed başarıyla getirildi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     oneOf:
+ *                       - type: object
+ *                         properties:
+ *                           type:
+ *                             type: string
+ *                             enum: [feed]
+ *                           data:
+ *                             $ref: '#/components/schemas/Post'
+ *                       - type: object
+ *                         properties:
+ *                           type:
+ *                             type: string
+ *                             enum: [benchmark]
+ *                           data:
+ *                             $ref: '#/components/schemas/BenchmarkPost'
+ *                       - type: object
+ *                         properties:
+ *                           type:
+ *                             type: string
+ *                             enum: [post]
+ *                           data:
+ *                             $ref: '#/components/schemas/Post'
+ *                       - type: object
+ *                         properties:
+ *                           type:
+ *                             type: string
+ *                             enum: [question]
+ *                           data:
+ *                             $ref: '#/components/schemas/Post'
+ *                       - type: object
+ *                         properties:
+ *                           type:
+ *                             type: string
+ *                             enum: [tipsAndTricks]
+ *                           data:
+ *                             $ref: '#/components/schemas/TipsAndTricksPost'
+ *                       - type: object
+ *                         properties:
+ *                           type:
+ *                             type: string
+ *                             enum: [experience]
+ *                           data:
+ *                             $ref: '#/components/schemas/ExperiencePost'
+ *                       - type: object
+ *                         properties:
+ *                           type:
+ *                             type: string
+ *                             enum: [update]
+ *                           data:
+ *                             $ref: '#/components/schemas/UpdatePost'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                       description: Toplam filtreli feed sayısı (kendi postları hariç)
  */
 router.get('/filtered', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = (req as any).user;
@@ -404,6 +490,49 @@ router.post('/:feedId/report', asyncHandler(async (req: Request, res: Response) 
   await feedService.handleUserFeedback(feedId, userId, 'report');
 
   res.status(200).json({ message: 'Feed reported' });
+}));
+
+/**
+ * @openapi
+ * /feed/source-counts:
+ *   get:
+ *     summary: Feed source sayılarını getir
+ *     description: Her feed source için toplam sayıyı döndürür (kendi postları hariç)
+ *     tags: [Feed]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Feed source sayıları başarıyla getirildi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 counts:
+ *                   type: object
+ *                   additionalProperties:
+ *                     type: integer
+ *                   description: Feed source'lara göre sayılar (TRUSTER, BOOSTED, MUTUAL_TRUST, vb.)
+ *                   example:
+ *                     TRUSTER: 1
+ *                     MUTUAL_TRUST: 17
+ *                     BOOSTED: 3
+ *                     INVENTORY_MATCH: 1
+ *                     CATEGORY_MATCH: 52
+ *                     TRENDING: 0
+ *                     NEW_USER: 6
+ */
+router.get('/source-counts', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = (req as any).user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const counts = await feedService.getFeedSourceCounts(String(userId));
+  res.json({ counts });
 }));
 
 export default router;
