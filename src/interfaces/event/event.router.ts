@@ -79,7 +79,7 @@ router.get(
       status,
     });
 
-    res.json(result);
+    return res.json(result);
   })
 );
 
@@ -120,7 +120,7 @@ router.get(
       return res.status(204).send();
     }
 
-    res.json(event);
+    return res.json(event);
   })
 );
 
@@ -194,7 +194,7 @@ router.get(
       ...(typeof limitParam === 'number' ? { limit: limitParam } : {}),
     });
 
-    res.json(activeEvents);
+    return res.json(activeEvents);
   })
 );
 
@@ -268,7 +268,7 @@ router.get(
       ...(typeof limitParam === 'number' ? { limit: limitParam } : {}),
     });
 
-    res.json(upcomingEvents);
+    return res.json(upcomingEvents);
   })
 );
 
@@ -318,7 +318,7 @@ router.get(
     }
 
     const eventDetail = await eventService.getEventDetail(eventId, userId);
-    res.json(eventDetail);
+    return res.json(eventDetail);
   })
 );
 
@@ -441,7 +441,7 @@ router.get(
       ...(typeof limitParam === 'number' ? { limit: limitParam } : {}),
     });
 
-    res.json(eventPosts);
+    return res.json(eventPosts);
   })
 );
 
@@ -529,7 +529,7 @@ router.get(
       ...(typeof limitParam === 'number' ? { limit: limitParam } : {}),
     });
 
-    res.json(eventBadges);
+    return res.json(eventBadges);
   })
 );
 

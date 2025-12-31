@@ -103,7 +103,7 @@ router.get('/listings', asyncHandler(async (req: Request, res: Response) => {
   };
 
   const listings = await marketplaceService.listActiveListings(query);
-  res.json(listings);
+  return res.json(listings);
 }));
 
 /**
@@ -186,10 +186,10 @@ router.get('/my-nfts', authMiddleware, asyncHandler(async (req: Request, res: Re
   logger.info({
     message: 'my-nfts response',
     userId: userId,
-    nftCount: nfts.length
+    nftCount: nfts.items.length
   });
   
-  res.json(nfts);
+  return res.json(nfts);
 }));
 
 /**
@@ -270,7 +270,7 @@ router.post('/listings', authMiddleware, asyncHandler(async (req: Request, res: 
   }
 
   const listing = await marketplaceService.createListing(userId, request);
-  res.json(listing);
+  return res.json(listing);
 }));
 
 /**
@@ -356,7 +356,7 @@ router.put('/listings/:listingId/price', authMiddleware, asyncHandler(async (req
   }
 
   const listing = await marketplaceService.updateListingPrice(userId, listingId, request);
-  res.json(listing);
+  return res.json(listing);
 }));
 
 /**
@@ -395,7 +395,7 @@ router.delete('/listings/:listingId', authMiddleware, asyncHandler(async (req: R
 
   const listingId = req.params.listingId;
   await marketplaceService.cancelListing(userId, listingId);
-  res.json({ message: 'Listing başarıyla iptal edildi' });
+  return res.json({ message: 'Listing başarıyla iptal edildi' });
 }));
 
 /**
@@ -454,7 +454,7 @@ router.get('/sell/:nftId', authMiddleware, asyncHandler(async (req: Request, res
 
   const nftId = req.params.nftId;
   const sellInfo = await marketplaceService.getSellNFTInfo(userId, nftId);
-  res.json(sellInfo);
+  return res.json(sellInfo);
 }));
 
 /**
@@ -521,7 +521,7 @@ router.get('/sell/:nftId/detail', authMiddleware, asyncHandler(async (req: Reque
 
   const nftId = req.params.nftId;
   const sellDetail = await marketplaceService.getSellNFTDetail(userId, nftId);
-  res.json(sellDetail);
+  return res.json(sellDetail);
 }));
 
 export default router;

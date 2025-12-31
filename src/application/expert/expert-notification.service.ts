@@ -1,15 +1,18 @@
 import { PrismaClient } from '@prisma/client';
 import { ExpertMatchingService } from './expert-matching.service';
-import SocketManager from '../../infrastructure/realtime/socket-manager';
+import { NotificationService } from '../notification/notification.service';
+import { NotificationType } from '../../domain/notification/notification-type.enum';
 import logger from '../../infrastructure/logger/logger';
 
 export class ExpertNotificationService {
   private readonly prisma: PrismaClient;
   private readonly matchingService: ExpertMatchingService;
+  private readonly notificationService: NotificationService;
 
   constructor() {
     this.prisma = new PrismaClient();
     this.matchingService = new ExpertMatchingService();
+    this.notificationService = new NotificationService();
   }
 
   /**
@@ -54,38 +57,17 @@ export class ExpertNotificationService {
       // Her expert için bildirim gönder
       const notificationPromises = potentialExpertIds.map(async (expertUserId) => {
         try {
-          // Socket.IO ile anlık bildirim
-          const socketHandler = SocketManager.getInstance().getSocketHandler();
-          socketHandler.sendMessageToUser(expertUserId, 'expert_request_available', {
-            type: 'EXPERT_REQUEST_AVAILABLE',
+          await this.notificationService.sendNotification(
+            expertUserId,
+            NotificationType.EXPERT_REQUEST_AVAILABLE,
+            {
             requestId,
             category,
             description: description.substring(0, 100) + (description.length > 100 ? '...' : ''),
             tipsAmount,
             createdAt: request.createdAt.toISOString(),
-            message: `Yeni bir expert sorusu var! ${tipsAmount} TIPS ödülü.`,
-          });
-
-          // Queue'ya da ekle (email, push notification için) - Opsiyonel
-          try {
-            const QueueProvider = (await import('../../infrastructure/queue/queue.provider')).default;
-            const queueProvider = QueueProvider.getInstance();
-            await queueProvider.addNotificationJob({
-              type: 'EXPERT_REQUEST_AVAILABLE',
-              userId: expertUserId,
-              requestId,
-              category,
-              description,
-              tipsAmount,
-            });
-          } catch (queueError) {
-            // Queue hatası kritik değil, sadece log'la
-            logger.warn({
-              message: 'Failed to add notification to queue',
-              expertUserId,
-              error: queueError instanceof Error ? queueError.message : String(queueError),
-            });
-          }
+            }
+          );
 
           logger.debug({
             message: 'Expert notification sent',
@@ -169,6 +151,7 @@ export class ExpertNotificationService {
       }
 
       // Request sahibine Socket.IO bildirimi
+      const { default: SocketManager } = await import('../../infrastructure/realtime/socket-manager');
       const socketHandler = SocketManager.getInstance().getSocketHandler();
       socketHandler.sendMessageToUser(request.userId, 'expert_found', {
         type: 'EXPERT_FOUND',

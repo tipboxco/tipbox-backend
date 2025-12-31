@@ -14,7 +14,7 @@ export function requestTimingMiddleware(req: Request, res: Response, next: NextF
 
   // Response header'ı hemen ekle (finish'den önce)
   const originalSend = res.send;
-  res.send = function(data: any) {
+  res.send = function(this: Response, data: any) {
     const endTime = Date.now();
     const durationMs = endTime - startTime;
     

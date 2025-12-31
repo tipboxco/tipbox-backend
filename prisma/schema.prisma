@@ -82,6 +82,9 @@ model User {
   wallets                 Wallet[]
   wishboxRewards          WishboxReward[]
   wishboxStats            WishboxStats[]
+  aiExperienceSplits      AiExperienceSplit[]     @relation("UserAiExperienceSplits")
+  notifications           Notification[]
+  pushTokens              PushToken[]
 
   @@map("users")
 }
@@ -109,15 +112,28 @@ model Profile {
 }
 
 model UserSettings {
-  id                   String          @id @default(uuid()) @db.Uuid
-  userId               String          @unique @map("user_id") @db.Uuid
-  themeId              String?         @map("theme_id") @db.Uuid
-  receiveNotifications Boolean?        @map("receive_notifications")
-  visibility           UserVisibility?
-  createdAt            DateTime        @default(now()) @map("created_at")
-  updatedAt            DateTime        @updatedAt @map("updated_at")
-  theme                UserTheme?      @relation(fields: [themeId], references: [id])
-  user                 User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                       String          @id @default(uuid()) @db.Uuid
+  userId                   String          @unique @map("user_id") @db.Uuid
+  themeId                  String?         @map("theme_id") @db.Uuid
+  receiveNotifications     Boolean?        @map("receive_notifications")
+  visibility               UserVisibility?
+  
+  // Notification Channel Preferences
+  notificationEmailEnabled Boolean?        @default(true) @map("notification_email_enabled")
+  notificationPushEnabled  Boolean?        @default(true) @map("notification_push_enabled")
+  notificationInAppEnabled Boolean?        @default(true) @map("notification_in_app_enabled")
+  
+  // Notification Type Preferences
+  trustNotifications       Boolean         @default(true) @map("trust_notifications")
+  supportNotifications     Boolean         @default(true) @map("support_notifications")
+  messageNotifications     Boolean         @default(true) @map("message_notifications")
+  collectionNotifications  Boolean         @default(true) @map("collection_notifications")
+  postNotifications        Boolean         @default(true) @map("post_notifications")
+  
+  createdAt                DateTime        @default(now()) @map("created_at")
+  updatedAt                DateTime        @updatedAt @map("updated_at")
+  theme                    UserTheme?      @relation(fields: [themeId], references: [id])
+  user                     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_settings")
 }
@@ -1928,4 +1944,138 @@ enum ExpertRequestStatus {
   CLOSED
 
   @@map("expert_request_status")
+}
+
+model BoostOption {
+  id          String   @id @default(uuid()) @db.Uuid
+  image       String?
+  title       String
+  description String?
+  amount      Float
+  isPopular   Boolean  @default(false) @map("is_popular")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("boost_options")
+}
+
+model ExperienceDuration {
+  id           String        @id @default(uuid()) @db.Uuid
+  name         String        @unique
+  isActive     Boolean       @default(true) @map("is_active")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  inventories  Inventory[]
+  contentPosts ContentPost[]
+
+  @@map("experience_durations")
+}
+
+model ExperienceLocation {
+  id           String        @id @default(uuid()) @db.Uuid
+  name         String        @unique
+  isActive     Boolean       @default(true) @map("is_active")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  inventories  Inventory[]
+  contentPosts ContentPost[]
+
+  @@map("experience_locations")
+}
+
+model ExperiencePurpose {
+  id           String        @id @default(uuid()) @db.Uuid
+  name         String        @unique
+  isActive     Boolean       @default(true) @map("is_active")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  inventories  Inventory[]
+  contentPosts ContentPost[]
+
+  @@map("experience_purposes")
+}
+
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  type      NotificationType
+  title     String
+  message   String
+  data      Json?
+  read      Boolean          @default(false)
+  readAt    DateTime?        @map("read_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, read])
+  @@index([userId, createdAt])
+  @@index([type])
+  @@map("notifications")
+}
+
+model PushToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  token      String   @unique
+  deviceType String   @map("device_type")
+  isActive   Boolean  @default(true) @map("is_active")
+  lastUsedAt DateTime @default(now()) @map("last_used_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([token, isActive])
+  @@map("push_tokens")
+}
+
+enum NotificationType {
+  // Interaction Notifications
+  POST_LIKED
+  POST_COMMENTED
+  POST_SHARED
+  POST_FAVORITED
+  COMMENT_LIKED
+  COMMENT_REPLIED
+  
+  // Trust & Follow Notifications
+  NEW_TRUSTER
+  NEW_TRUSTED_BY
+  
+  // Messaging Notifications
+  NEW_MESSAGE
+  DM_REQUEST_RECEIVED
+  DM_REQUEST_ACCEPTED
+  SUPPORT_REQUEST_ACCEPTED
+  
+  // Collection Notifications
+  COLLECTION_POST_ADDED
+  COLLECTION_SHARED
+  
+  // Gamification Notifications
+  NEW_BADGE
+  ACHIEVEMENT_UNLOCKED
+  LEVEL_UP
+  REWARD_EARNED
+  
+  // Expert Notifications
+  EXPERT_REQUEST_AVAILABLE
+  EXPERT_REQUEST_ANSWERED
+  
+  // Event Notifications
+  EVENT_STARTED
+  EVENT_ENDING_SOON
+  EVENT_REWARD_AVAILABLE
+  
+  // System Notifications
+  SYSTEM_ANNOUNCEMENT
+  ACCOUNT_SECURITY
+  TIPS_RECEIVED
+  TIPS_SENT
+  
+  @@map("notification_type")
 }

@@ -169,7 +169,7 @@ export class NFTPrismaRepository {
       where,
       orderBy: { createdAt: 'desc' },
       take: filter.limit || 100,
-      skip: filter.offset || 0,
+      // Note: Using cursor-based pagination, skip/offset not needed
     });
 
     return nfts.map((nft) => this.toDomain(nft));

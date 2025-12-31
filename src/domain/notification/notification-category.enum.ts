@@ -1,0 +1,12 @@
+export enum NotificationCategory {
+  POST = 'POST',
+  TRUST = 'TRUST',
+  MESSAGE = 'MESSAGE',
+  SUPPORT = 'SUPPORT',
+  COLLECTION = 'COLLECTION',
+  GAMIFICATION = 'GAMIFICATION',
+  EXPERT = 'EXPERT',
+  EVENT = 'EVENT',
+  SYSTEM = 'SYSTEM',
+}
+

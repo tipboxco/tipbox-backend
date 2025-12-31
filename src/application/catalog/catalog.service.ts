@@ -103,6 +103,7 @@ export class CatalogService {
 
         return {
           subCategoryId: subCategory.id,
+          categoryId: categoryId,
           name: subCategory.name,
           image: imageUrl,
         };

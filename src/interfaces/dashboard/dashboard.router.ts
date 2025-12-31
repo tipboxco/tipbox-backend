@@ -2064,13 +2064,13 @@ router.post('/clear-test-data', async (req: Request, res: Response) => {
       console.error('Clear test data stderr:', stderr);
     }
 
-    res.json({ 
+    return res.json({ 
       message: 'Test data cleared successfully',
       output: stdout 
     });
   } catch (error: any) {
     console.error('Clear test data error:', error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: error.message || 'Error occurred while clearing test data',
       details: error.stderr || error.stdout
     });
@@ -2093,13 +2093,13 @@ router.post('/clear-seed-data', async (req: Request, res: Response) => {
       console.error('Clear seed data stderr:', stderr);
     }
 
-    res.json({ 
+    return res.json({ 
       message: 'Seed data cleared successfully',
       output: stdout 
     });
   } catch (error: any) {
     console.error('Clear seed data error:', error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: error.message || 'Error occurred while clearing seed data',
       details: error.stderr || error.stdout
     });
@@ -2122,13 +2122,13 @@ router.post('/generate-client', async (req: Request, res: Response) => {
       console.error('Prisma generate stderr:', stderr);
     }
 
-    res.json({ 
+    return res.json({ 
       message: 'Prisma Client generated successfully',
       output: stdout 
     });
   } catch (error: any) {
     console.error('Prisma generate error:', error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: error.message || 'Error occurred while generating Prisma Client',
       details: error.stderr || error.stdout
     });
@@ -2158,10 +2158,10 @@ router.get('/check-generate', async (req: Request, res: Response) => {
       needsGenerate = true;
     }
     
-    res.json({ needsGenerate });
+    return res.json({ needsGenerate });
   } catch (error: any) {
     console.error('Check generate error:', error);
-    res.json({ needsGenerate: false });
+    return res.json({ needsGenerate: false });
   }
 });
 
@@ -2203,13 +2203,13 @@ router.post('/docker/stop', async (req: Request, res: Response) => {
       console.warn('Some containers could not be stopped:', errors);
     }
 
-    res.json({ 
+    return res.json({ 
       message: `${stoppedCount} container(s) stopped`,
       output: `Stopped ${stoppedCount} containers`
     });
   } catch (error: any) {
     console.error('Docker stop error:', error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: error.message || 'Error occurred while stopping containers',
       details: error.stderr || error.stdout
     });
@@ -2250,13 +2250,13 @@ router.post('/docker/down', async (req: Request, res: Response) => {
       console.error('Docker down stderr:', stderr);
     }
 
-    res.json({ 
+    return res.json({ 
       message: 'Containers removed',
       output: stdout 
     });
   } catch (error: any) {
     console.error('Docker down error:', error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: error.message || 'Error occurred while removing containers',
       details: error.stderr || error.stdout
     });
@@ -2297,13 +2297,13 @@ router.post('/docker/start', async (req: Request, res: Response) => {
       console.error('Docker start stderr:', stderr);
     }
 
-    res.json({ 
+    return res.json({ 
       message: 'Containers started',
       output: stdout 
     });
   } catch (error: any) {
     console.error('Docker start error:', error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: error.message || 'Error occurred while starting containers',
       details: error.stderr || error.stdout
     });
@@ -2333,12 +2333,12 @@ router.post('/docker/container/stop', async (req: Request, res: Response) => {
       encoding: 'utf8'
     });
 
-    res.json({
+    return res.json({
       message: `${containerName} stopped`
     });
   } catch (error: any) {
     console.error('Docker single container stop error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: error.message || 'Error occurred while stopping container',
       details: error.stderr || error.stdout
     });
@@ -2367,12 +2367,12 @@ router.post('/docker/container/start', async (req: Request, res: Response) => {
       encoding: 'utf8'
     });
 
-    res.json({
+    return res.json({
       message: `${containerName} started`
     });
   } catch (error: any) {
     console.error('Docker single container start error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       error: error.message || 'Error occurred while starting container',
       details: error.stderr || error.stdout
     });
@@ -2434,13 +2434,13 @@ router.get('/docker/status', async (req: Request, res: Response) => {
       }
     }
 
-    res.json({
+    return res.json({
       allRunning,
       statuses
     });
   } catch (error: any) {
     console.error('Docker status error:', error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: error.message || 'Error occurred while checking container status'
     });
   }
@@ -2607,9 +2607,11 @@ router.post('/data-management', async (req: Request, res: Response) => {
       res.end();
     });
     
+    // Note: Response is handled by event handlers above, no explicit return needed
+    return;
   } catch (error: any) {
     console.error('Data management error:', error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: error.message || 'Error occurred while executing command',
       details: error.stderr || error.stdout,
       progress: 0

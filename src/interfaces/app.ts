@@ -25,6 +25,7 @@ import dashboardRouter from './dashboard/dashboard.router';
 import postRouter from './post/post.router';
 import eventRouter from './event/event.router';
 import cacheRouter from './cache/cache.router';
+import notificationRouter from './notification/notification.router';
 import { getMetricsService } from '../infrastructure/metrics/metrics.service';
 import { metricsMiddleware } from '../infrastructure/metrics/metrics.middleware';
 import config from '../infrastructure/config';
@@ -451,6 +452,64 @@ const swaggerOptions = {
             },
           },
         },
+        Notification: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            userId: { type: 'string', format: 'uuid' },
+            type: {
+              type: 'string',
+              enum: [
+                'POST_LIKED',
+                'POST_COMMENTED',
+                'POST_SHARED',
+                'COMMENT_LIKED',
+                'COMMENT_REPLIED',
+                'NEW_FOLLOWER',
+                'NEW_MESSAGE',
+                'EXPERT_REQUEST_AVAILABLE',
+                'EXPERT_REQUEST_ANSWERED',
+                'EXPERT_ANSWER_RECEIVED',
+                'NEW_BADGE',
+                'ACHIEVEMENT_UNLOCKED',
+                'SYSTEM_ANNOUNCEMENT',
+              ],
+            },
+            title: { type: 'string' },
+            message: { type: 'string' },
+            data: { type: 'object', nullable: true },
+            read: { type: 'boolean' },
+            readAt: { type: 'string', format: 'date-time', nullable: true },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        NotificationSettings: {
+          type: 'object',
+          properties: {
+            trustNotifications: { type: 'boolean' },
+            supportNotifications: { type: 'boolean' },
+            messageNotifications: { type: 'boolean' },
+            collectionNotifications: { type: 'boolean' },
+            postNotifications: { type: 'boolean' },
+            notificationEmailEnabled: { type: 'boolean' },
+            notificationPushEnabled: { type: 'boolean' },
+            notificationInAppEnabled: { type: 'boolean' },
+          },
+        },
+        UpdateNotificationSettings: {
+          type: 'object',
+          properties: {
+            trustNotifications: { type: 'boolean' },
+            supportNotifications: { type: 'boolean' },
+            messageNotifications: { type: 'boolean' },
+            collectionNotifications: { type: 'boolean' },
+            postNotifications: { type: 'boolean' },
+            notificationEmailEnabled: { type: 'boolean' },
+            notificationPushEnabled: { type: 'boolean' },
+            notificationInAppEnabled: { type: 'boolean' },
+          },
+        },
       },
     },
     security: [{ bearerAuth: [] }],
@@ -769,6 +828,7 @@ app.use('/search', searchRouter);
 app.use('/posts', postRouter);
 app.use('/events', eventRouter);
 app.use('/interactions', interactionRouter);
+app.use('/notifications', authMiddleware, notificationRouter);
 
 // Dashboard endpoint - en sona eklenmeli ki diğer route'lar çalışabilsin
 // Dashboard hem root'ta hem de /dashboard'da çalışabilir

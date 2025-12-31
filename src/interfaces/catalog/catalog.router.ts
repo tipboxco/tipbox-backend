@@ -39,7 +39,7 @@ router.get(
   '/categories',
   asyncHandler(async (req: Request, res: Response) => {
     const categories = await catalogService.getAllCategories();
-    res.json(categories);
+    return res.json(categories);
   }),
 );
 
@@ -91,7 +91,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const { categoryId } = req.params;
     const subCategories = await catalogService.getSubCategoriesByCategoryId(categoryId);
-    res.json(subCategories);
+    return res.json(subCategories);
   }),
 );
 
@@ -143,7 +143,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const { subCategoryId } = req.params;
     const productGroups = await catalogService.getProductGroupsBySubCategoryId(subCategoryId);
-    res.json(productGroups);
+    return res.json(productGroups);
   }),
 );
 
@@ -195,7 +195,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const { productGroupId } = req.params;
     const products = await catalogService.getProductsByProductGroupId(productGroupId);
-    res.json(products);
+    return res.json(products);
   }),
 );
 

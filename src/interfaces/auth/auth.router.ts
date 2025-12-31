@@ -167,7 +167,7 @@ router.post('/login', validateBody(LoginSchema), asyncHandler(async (req: Reques
   });
 
   // Response
-  res.json({
+  return res.json({
     id: user.id,
     fullName,
     email: user.email || '',
@@ -296,7 +296,7 @@ router.post('/register', asyncHandler(async (req: Request, res: Response) => {
     return res.status(statusCode).json(result);
   }
 
-  res.json(result);
+  return res.json(result);
 }));
 
 /**
@@ -407,7 +407,7 @@ router.post('/verify-email', asyncHandler(async (req: Request, res: Response) =>
     return res.status(404).json(result);
   }
 
-  res.json(result);
+  return res.json(result);
 }));
 
 /**
@@ -497,7 +497,7 @@ router.get('/me', asyncHandler(async (req: Request, res: Response) => {
   const token = authHeader.split(' ')[1];
   const user = await authService.getUserFromToken(token);
   if (!user) return res.status(401).json({ message: 'Invalid token' });
-  res.json({
+  return res.json({
     id: user.id,
     email: user.email,
     name: user.name,
@@ -589,7 +589,7 @@ router.post('/forgot-password', asyncHandler(async (req: Request, res: Response)
     return res.status(statusCode).json(result);
   }
 
-  res.json(result);
+  return res.json(result);
 }));
 
 /**
@@ -696,7 +696,7 @@ router.post('/verify-reset-code', asyncHandler(async (req: Request, res: Respons
     return res.status(404).json(result);
   }
 
-  res.json(result);
+  return res.json(result);
 }));
 
 /**
@@ -804,7 +804,7 @@ router.post('/reset-password', asyncHandler(async (req: Request, res: Response) 
     return res.status(statusCode).json(result);
   }
 
-  res.json(result);
+  return res.json(result);
 }));
 
 /**
@@ -853,7 +853,7 @@ router.post('/logout', asyncHandler(async (req: Request, res: Response) => {
   const { blacklistToken } = await import('../../infrastructure/auth/token-blacklist');
   await blacklistToken(token);
   
-  res.json({
+  return res.json({
     success: true,
     message: 'Çıkış yapıldı'
   });

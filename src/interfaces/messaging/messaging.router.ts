@@ -123,7 +123,7 @@ router.get(
     }
 
     const feed = await messagingService.getUserMessageFeed(String(userId), limit);
-    res.json(feed);
+    return res.json(feed);
   }),
 );
 
@@ -157,7 +157,7 @@ router.get(
       limit,
     });
 
-    res.json(inbox);
+    return res.json(inbox);
   }),
 );
 
@@ -406,7 +406,7 @@ router.get(
       console.log('[Support Requests] Search results count:', supportRequests.length);
     }
 
-    res.json(supportRequests);
+    return res.json(supportRequests);
   }),
 );
 

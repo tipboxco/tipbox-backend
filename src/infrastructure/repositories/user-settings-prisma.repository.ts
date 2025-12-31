@@ -41,6 +41,11 @@ export class UserSettingsPrismaRepository {
       notificationEmailEnabled?: boolean;
       notificationPushEnabled?: boolean;
       notificationInAppEnabled?: boolean;
+      trustNotifications?: boolean;
+      supportNotifications?: boolean;
+      messageNotifications?: boolean;
+      collectionNotifications?: boolean;
+      postNotifications?: boolean;
       supportSessionPrice?: number | null;
       supportSessionPriceUpdatedAt?: Date | null;
     }
@@ -61,6 +66,11 @@ export class UserSettingsPrismaRepository {
       notificationEmailEnabled?: boolean;
       notificationPushEnabled?: boolean;
       notificationInAppEnabled?: boolean;
+      trustNotifications?: boolean;
+      supportNotifications?: boolean;
+      messageNotifications?: boolean;
+      collectionNotifications?: boolean;
+      postNotifications?: boolean;
       supportSessionPrice?: number | null;
       supportSessionPriceUpdatedAt?: Date | null;
     }
@@ -96,6 +106,11 @@ export class UserSettingsPrismaRepository {
       prismaSettings.notificationEmailEnabled ?? true,
       prismaSettings.notificationPushEnabled ?? true,
       prismaSettings.notificationInAppEnabled ?? true,
+      prismaSettings.trustNotifications ?? true,
+      prismaSettings.supportNotifications ?? true,
+      prismaSettings.messageNotifications ?? true,
+      prismaSettings.collectionNotifications ?? true,
+      prismaSettings.postNotifications ?? true,
       prismaSettings.supportSessionPrice,
       prismaSettings.supportSessionPriceUpdatedAt,
       prismaSettings.createdAt,
