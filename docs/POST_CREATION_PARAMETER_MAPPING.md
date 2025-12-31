@@ -498,3 +498,4 @@ Backend'de 6/7 post tipi için endpoint mevcut. Event post'ları için özel end
 
 
 
+

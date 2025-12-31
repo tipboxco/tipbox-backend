@@ -16,6 +16,7 @@ model User {
   createdAt               DateTime                @default(now()) @map("created_at")
   updatedAt               DateTime                @updatedAt @map("updated_at")
   adminLogs               AdminLog[]
+  aiExperienceSplits      AiExperienceSplit[]     @relation("UserAiExperienceSplits")
   brandSurveyAnswers      BrandSurveyAnswer[]
   bridgeFollowers         BridgeFollower[]
   bridgeLeaderboards      BridgeLeaderboard[]
@@ -28,17 +29,16 @@ model User {
   contentComments         ContentComment[]
   contentFavorites        ContentFavorite[]
   contentLikes            ContentLike[]
-  contentShares           ContentShare[]
   contentPostViews        ContentPostView[]
   contentPosts            ContentPost[]
   contentRatings          ContentRating[]
+  contentShares           ContentShare[]
   dmMessages              DMMessage[]
   dmRequestsSent          DMRequest[]             @relation("DMRequestSender")
   dmRequestsReceived      DMRequest[]             @relation("DMRequestReceiver")
   dmSupportSessions       DMSupportSession[]
   dmThreadsAsUserOne      DMThread[]              @relation("DMThreadUserOne")
   dmThreadsAsUserTwo      DMThread[]              @relation("DMThreadUserTwo")
-  supportRequestReports   SupportRequestReport[]  @relation("SupportRequestReportReporter")
   emailVerificationCodes  EmailVerificationCode[]
   expertAnswers           ExpertAnswer[]
   expertRequests          ExpertRequest[]
@@ -60,6 +60,7 @@ model User {
   profile                 Profile?
   rewardClaims            RewardClaim[]
   scenarioChoices         ScenarioChoice[]
+  supportRequestReports   SupportRequestReport[]  @relation("SupportRequestReportReporter")
   sentTips                TipsTokenTransfer[]     @relation("SentTips")
   receivedTips            TipsTokenTransfer[]     @relation("ReceivedTips")
   trustRelationsAsTrusted TrustRelation[]         @relation("TrustedUserRelation")
@@ -81,7 +82,6 @@ model User {
   wallets                 Wallet[]
   wishboxRewards          WishboxReward[]
   wishboxStats            WishboxStats[]
-  aiExperienceSplits      AiExperienceSplit[]     @relation("UserAiExperienceSplits")
 
   @@map("users")
 }
@@ -93,17 +93,17 @@ model Profile {
   userName        String?   @unique @map("user_name")
   bio             String?
   bannerUrl       String?   @map("banner_url")
-  cosmeticBadgeId String?   @map("cosmetic_badge_id") @db.Uuid
   country         String?
   birthDate       DateTime? @map("birth_date") @db.Date
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
   postsCount      Int       @default(0) @map("posts_count")
   trustCount      Int       @default(0) @map("trust_count")
   trusterCount    Int       @default(0) @map("truster_count")
   unseenFeedCount Int       @default(0) @map("unseen_feed_count")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cosmeticBadgeId String?   @map("cosmetic_badge_id") @db.Uuid
   cosmeticBadge   Badge?    @relation("ProfileCosmeticBadge", fields: [cosmeticBadgeId], references: [id])
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("profiles")
 }
@@ -318,9 +318,9 @@ model MainCategory {
   id            String        @id @default(uuid()) @db.Uuid
   name          String
   description   String?
-  imageUrl      String?       @map("image_url")
   createdAt     DateTime      @default(now()) @map("created_at")
   updatedAt     DateTime      @updatedAt @map("updated_at")
+  imageUrl      String?       @map("image_url")
   contentPosts  ContentPost[]
   subCategories SubCategory[]
 
@@ -332,9 +332,9 @@ model SubCategory {
   mainCategoryId String         @map("main_category_id") @db.Uuid
   name           String
   description    String?
-  imageUrl       String?        @map("image_url")
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
+  imageUrl       String?        @map("image_url")
   contentPosts   ContentPost[]
   productGroups  ProductGroup[]
   mainCategory   MainCategory   @relation(fields: [mainCategoryId], references: [id], onDelete: Cascade)
@@ -347,9 +347,9 @@ model ProductGroup {
   subCategoryId String        @map("sub_category_id") @db.Uuid
   name          String
   description   String?
-  imageUrl      String?       @map("image_url")
   createdAt     DateTime      @default(now()) @map("created_at")
   updatedAt     DateTime      @updatedAt @map("updated_at")
+  imageUrl      String?       @map("image_url")
   contentPosts  ContentPost[]
   subCategory   SubCategory   @relation(fields: [subCategoryId], references: [id], onDelete: Cascade)
   products      Product[]
@@ -362,18 +362,18 @@ model Product {
   name               String
   brand              String?
   description        String?
-  imageUrl           String?             @map("image_url")
-  subName            String?             @map("sub_name")
   groupId            String?             @map("group_id") @db.Uuid
   createdAt          DateTime            @default(now()) @map("created_at")
   updatedAt          DateTime            @updatedAt @map("updated_at")
+  imageUrl           String?             @map("image_url")
+  subName            String?             @map("sub_name")
+  aiExperienceSplits AiExperienceSplit[] @relation("ProductAiExperienceSplits")
   contentPosts       ContentPost[]
   inventories        Inventory[]
   comparisonProduct1 PostComparison[]    @relation("ComparisonProduct1")
   comparisonProduct2 PostComparison[]    @relation("ComparisonProduct2")
   questionPosts      PostQuestion[]
   group              ProductGroup?       @relation(fields: [groupId], references: [id])
-  aiExperienceSplits AiExperienceSplit[] @relation("ProductAiExperienceSplits")
 
   @@map("products")
 }
@@ -402,18 +402,18 @@ model Inventory {
   productId            String              @map("product_id") @db.Uuid
   hasOwned             Boolean             @map("has_owned")
   experienceSummary    String?             @map("experience_summary")
-  experienceSnippetId  String?             @map("experience_snippet_id") @db.Uuid
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @updatedAt @map("updated_at")
   experienceDurationId String?             @map("experience_duration_id") @db.Uuid
   experienceLocationId String?             @map("experience_location_id") @db.Uuid
   experiencePurposeId  String?             @map("experience_purpose_id") @db.Uuid
-  createdAt            DateTime            @default(now()) @map("created_at")
-  updatedAt            DateTime            @updatedAt @map("updated_at")
+  experienceSnippetId  String?             @map("experience_snippet_id") @db.Uuid
+  experienceDuration   ExperienceDuration? @relation(fields: [experienceDurationId], references: [id])
+  experienceLocation   ExperienceLocation? @relation(fields: [experienceLocationId], references: [id])
+  experiencePurpose    ExperiencePurpose?  @relation(fields: [experiencePurposeId], references: [id])
+  experienceSnippet    AiExperienceSplit?  @relation(fields: [experienceSnippetId], references: [id])
   product              Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
   user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  experienceSnippet    AiExperienceSplit?  @relation(fields: [experienceSnippetId], references: [id], onDelete: SetNull)
-  experienceDuration   ExperienceDuration? @relation(fields: [experienceDurationId], references: [id], onDelete: SetNull)
-  experienceLocation   ExperienceLocation? @relation(fields: [experienceLocationId], references: [id], onDelete: SetNull)
-  experiencePurpose    ExperiencePurpose?  @relation(fields: [experiencePurposeId], references: [id], onDelete: SetNull)
   media                InventoryMedia[]
   productExperiences   ProductExperience[]
 
@@ -467,43 +467,43 @@ model ContentPost {
   inventoryRequired    Boolean              @map("inventory_required")
   isBoosted            Boolean              @map("is_boosted")
   boostedUntil         DateTime?            @map("boosted_until")
-  experienceSnippetId  String?              @map("experience_snippet_id") @db.Uuid
+  createdAt            DateTime             @default(now()) @map("created_at")
+  updatedAt            DateTime             @updatedAt @map("updated_at")
+  commentsCount        Int                  @default(0) @map("comments_count")
+  favoritesCount       Int                  @default(0) @map("favorites_count")
+  likesCount           Int                  @default(0) @map("likes_count")
+  sharesCount          Int                  @default(0) @map("shares_count")
+  viewsCount           Int                  @default(0) @map("views_count")
   experienceDurationId String?              @map("experience_duration_id") @db.Uuid
   experienceLocationId String?              @map("experience_location_id") @db.Uuid
   experiencePurposeId  String?              @map("experience_purpose_id") @db.Uuid
-  eventId             String?              @map("event_id") @db.VarChar(26)
-  likesCount           Int                  @default(0) @map("likes_count")
-  commentsCount        Int                  @default(0) @map("comments_count")
-  favoritesCount       Int                  @default(0) @map("favorites_count")
-  viewsCount           Int                  @default(0) @map("views_count")
-  sharesCount          Int                  @default(0) @map("shares_count")
-  createdAt            DateTime             @default(now()) @map("created_at")
-  updatedAt            DateTime             @updatedAt @map("updated_at")
+  experienceSnippetId  String?              @map("experience_snippet_id") @db.Uuid
+  eventId              String?              @map("event_id") @db.VarChar(26)
   comments             ContentComment[]
   favorites            ContentFavorite[]
   likes                ContentLike[]
-  shares               ContentShare[]
   contentPostTags      ContentPostTag[]
   views                ContentPostView[]
+  event                WishboxEvent?        @relation(fields: [eventId], references: [id])
+  experienceDuration   ExperienceDuration?  @relation(fields: [experienceDurationId], references: [id])
+  experienceLocation   ExperienceLocation?  @relation(fields: [experienceLocationId], references: [id])
+  experiencePurpose    ExperiencePurpose?   @relation(fields: [experiencePurposeId], references: [id])
+  experienceSnippet    AiExperienceSplit?   @relation(fields: [experienceSnippetId], references: [id])
   mainCategory         MainCategory?        @relation(fields: [mainCategoryId], references: [id])
   productGroup         ProductGroup?        @relation(fields: [productGroupId], references: [id])
   product              Product?             @relation(fields: [productId], references: [id])
   subCategory          SubCategory?         @relation(fields: [subCategoryId], references: [id])
   user                 User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  experienceSnippet    AiExperienceSplit?   @relation(fields: [experienceSnippetId], references: [id], onDelete: SetNull)
-  experienceDuration   ExperienceDuration?  @relation(fields: [experienceDurationId], references: [id], onDelete: SetNull)
-  experienceLocation   ExperienceLocation?  @relation(fields: [experienceLocationId], references: [id], onDelete: SetNull)
-  experiencePurpose    ExperiencePurpose?   @relation(fields: [experiencePurposeId], references: [id], onDelete: SetNull)
-  event                WishboxEvent?        @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  shares               ContentShare[]
   feedHighlights       FeedHighlight[]
   feeds                Feed[]
   comparison           PostComparison?
+  media                PostMedia[]
   question             PostQuestion?
   tags                 PostTag[]
   tip                  PostTip?
   topCommunityChoices  TopCommunityChoice[]
   trendingPosts        TrendingPost[]
-  media                PostMedia[]
 
   @@index([userId])
   @@index([userId, createdAt])
@@ -637,9 +637,9 @@ model ContentComment {
   parentId   String?              @map("parent_id") @db.VarChar(26)
   comment    String
   isAnswer   Boolean              @map("is_answer")
-  likesCount Int                  @default(0) @map("likes_count")
   createdAt  DateTime             @default(now()) @map("created_at")
   updatedAt  DateTime             @updatedAt @map("updated_at")
+  likesCount Int                  @default(0) @map("likes_count")
   votes      ContentCommentVote[]
   parent     ContentComment?      @relation("CommentReplies", fields: [parentId], references: [id])
   replies    ContentComment[]     @relation("CommentReplies")
@@ -792,9 +792,9 @@ model Badge {
   achievementGoals AchievementGoal[]
   category         BadgeCategory     @relation(fields: [categoryId], references: [id])
   bridgeRewards    BridgeReward[]
+  cosmeticProfiles Profile[]         @relation("ProfileCosmeticBadge")
   rewardClaims     RewardClaim[]
   userBadges       UserBadge[]
-  cosmeticProfiles Profile[]         @relation("ProfileCosmeticBadge")
 
   @@map("badges")
 }
@@ -894,18 +894,18 @@ model Brand {
   name          String
   description   String?
   logoUrl       String?             @map("logo_url")
-  imageUrl      String?             @map("image_url")
   category      String?
-  categoryId    String?             @map("category_id") @db.Uuid
   createdAt     DateTime            @default(now()) @map("created_at")
   updatedAt     DateTime            @updatedAt @map("updated_at")
+  imageUrl      String?             @map("image_url")
+  categoryId    String?             @map("category_id") @db.Uuid
   surveys       BrandSurvey[]
+  brandCategory BrandCategory?      @relation(fields: [categoryId], references: [id])
   followers     BridgeFollower[]
   leaderboards  BridgeLeaderboard[]
   bridgePosts   BridgePost[]
   rewards       BridgeReward[]
   userStats     BridgeUserStats[]
-  brandCategory BrandCategory?      @relation(fields: [categoryId], references: [id])
   wishboxEvents WishboxEvent[]
 
   @@map("brands")
@@ -1170,19 +1170,19 @@ model WishboxEvent {
   id          String             @id @db.VarChar(26)
   title       String
   description String?
-  imageUrl    String?            @map("image_url")
   startDate   DateTime           @map("start_date")
   endDate     DateTime           @map("end_date")
   status      WishboxEventStatus @default(DRAFT)
-  eventType   WishboxEventType   @default(SURVEY) @map("event_type")
-  brandId     String?            @map("brand_id") @db.Uuid
   createdAt   DateTime           @default(now()) @map("created_at")
   updatedAt   DateTime           @updatedAt @map("updated_at")
+  eventType   WishboxEventType   @default(SURVEY) @map("event_type")
+  imageUrl    String?            @map("image_url")
+  brandId     String?            @map("brand_id") @db.Uuid
+  posts       ContentPost[]
+  brand       Brand?             @relation(fields: [brandId], references: [id], onDelete: Cascade)
   rewards     WishboxReward[]
   scenarios   WishboxScenario[]
   stats       WishboxStats[]
-  posts       ContentPost[]
-  brand       Brand?             @relation(fields: [brandId], references: [id], onDelete: Cascade)
 
   @@index([brandId])
   @@map("wishbox_events")
@@ -1272,20 +1272,18 @@ model DMThread {
   userOneId          String             @map("user_one_id") @db.Uuid
   userTwoId          String             @map("user_two_id") @db.Uuid
   isActive           Boolean            @map("is_active")
-  isSupportThread    Boolean            @default(false) @map("is_support_thread")
-  unreadCountUserOne Int                @default(0) @map("unread_count_user_one")
-  unreadCountUserTwo Int                @default(0) @map("unread_count_user_two")
   startedAt          DateTime           @default(now()) @map("started_at")
   createdAt          DateTime           @default(now()) @map("created_at")
   updatedAt          DateTime           @updatedAt @map("updated_at")
+  unreadCountUserOne Int                @default(0) @map("unread_count_user_one")
+  unreadCountUserTwo Int                @default(0) @map("unread_count_user_two")
+  isSupportThread    Boolean            @default(false) @map("is_support_thread")
   messages           DMMessage[]
-  supportSessions    DMSupportSession[]
   supportRequests    DMRequest[]        @relation("DMRequestThread")
+  supportSessions    DMSupportSession[]
   userOne            User               @relation("DMThreadUserOne", fields: [userOneId], references: [id], onDelete: Cascade)
   userTwo            User               @relation("DMThreadUserTwo", fields: [userTwoId], references: [id], onDelete: Cascade)
 
-  // Unique constraint kaldırıldı: Her support request için yeni bir thread oluşturulabilir
-  // Normal DM thread'ler için uygulama seviyesinde kontrol yapılacak
   @@index([userOneId])
   @@index([userTwoId])
   @@index([isSupportThread])
@@ -1299,9 +1297,9 @@ model DMMessage {
   message   String
   sentAt    DateTime         @default(now()) @map("sent_at")
   isRead    Boolean          @map("is_read")
-  context   DMMessageContext @default(DM)
   createdAt DateTime         @default(now()) @map("created_at")
   updatedAt DateTime         @updatedAt @map("updated_at")
+  context   DMMessageContext @default(DM)
   sender    User             @relation(fields: [senderId], references: [id], onDelete: Cascade)
   thread    DMThread         @relation(fields: [threadId], references: [id], onDelete: Cascade)
 
@@ -1311,31 +1309,26 @@ model DMMessage {
   @@map("dm_messages")
 }
 
-enum DMMessageContext {
-  DM
-  SUPPORT
-}
-
 model DMRequest {
   id                 String                 @id @default(uuid()) @db.Uuid
   fromUserId         String                 @map("from_user_id") @db.Uuid
   toUserId           String                 @map("to_user_id") @db.Uuid
   status             DMRequestStatus        @default(PENDING)
-  type               SupportType            @default(GENERAL)
+  sentAt             DateTime               @default(now()) @map("sent_at")
+  respondedAt        DateTime?              @map("responded_at")
+  createdAt          DateTime               @default(now()) @map("created_at")
+  updatedAt          DateTime               @updatedAt @map("updated_at")
   amount             Float                  @default(0)
-  description        String?                @db.Text
+  description        String?
+  type               SupportType            @default(GENERAL)
   threadId           String?                @map("thread_id") @db.Uuid
   fromUserRating     Int?                   @map("from_user_rating")
   toUserRating       Int?                   @map("to_user_rating")
   closedByFromUserAt DateTime?              @map("closed_by_from_user_at")
   closedByToUserAt   DateTime?              @map("closed_by_to_user_at")
-  sentAt             DateTime               @default(now()) @map("sent_at")
-  respondedAt        DateTime?              @map("responded_at")
-  createdAt          DateTime               @default(now()) @map("created_at")
-  updatedAt          DateTime               @updatedAt @map("updated_at")
   fromUser           User                   @relation("DMRequestSender", fields: [fromUserId], references: [id], onDelete: Cascade)
+  thread             DMThread?              @relation("DMRequestThread", fields: [threadId], references: [id])
   toUser             User                   @relation("DMRequestReceiver", fields: [toUserId], references: [id], onDelete: Cascade)
-  thread             DMThread?              @relation("DMRequestThread", fields: [threadId], references: [id], onDelete: SetNull)
   reports            SupportRequestReport[]
 
   @@index([fromUserId, toUserId])
@@ -1347,15 +1340,14 @@ model DMRequest {
 }
 
 model SupportRequestReport {
-  id          String   @id @default(uuid()) @db.Uuid
-  requestId   String   @map("request_id") @db.Uuid
-  reporterId  String   @map("reporter_id") @db.Uuid
+  id          String    @id @default(uuid()) @db.Uuid
+  requestId   String    @map("request_id") @db.Uuid
+  reporterId  String    @map("reporter_id") @db.Uuid
   category    String
-  description String?  @db.Text
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  request  DMRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  reporter User      @relation("SupportRequestReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  description String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  reporter    User      @relation("SupportRequestReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  request     DMRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
   @@index([requestId])
   @@index([reporterId])
@@ -1398,9 +1390,9 @@ model Feed {
   postId         String      @map("post_id") @db.VarChar(26)
   source         FeedSource
   seen           Boolean     @default(false)
-  relevanceScore Float       @default(0) @map("relevance_score") @db.DoublePrecision
   createdAt      DateTime    @default(now()) @map("created_at")
   updatedAt      DateTime    @updatedAt @map("updated_at")
+  relevanceScore Float       @default(0) @map("relevance_score")
   post           ContentPost @relation(fields: [postId], references: [id], onDelete: Cascade)
   user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1554,34 +1546,89 @@ model ExpertAnswer {
 }
 
 model AiExperienceSplit {
-  id                     String        @id @default(uuid()) @db.Uuid
-  userId                 String        @map("user_id") @db.Uuid
-  productId              String?       @map("product_id") @db.Uuid
-  originalExperience     String        @map("original_experience") @db.Text
-  priceAndShopping       String?       @map("price_and_shopping") @db.Text
-  productAndUsage        String?       @map("product_and_usage") @db.Text
+  id                          String        @id @default(uuid()) @db.Uuid
+  userId                      String        @map("user_id") @db.Uuid
+  productId                   String?       @map("product_id") @db.Uuid
+  originalExperience          String        @map("original_experience")
+  priceAndShopping            String?       @map("price_and_shopping")
+  productAndUsage             String?       @map("product_and_usage")
   priceAndShoppingRating      Int?          @map("price_and_shopping_rating")
   productAndUsageRating       Int?          @map("product_and_usage_rating")
-  priceAndShoppingPlaceholder String?       @map("price_and_shopping_placeholder") @db.Text
-  productAndUsagePlaceholder  String?       @map("product_and_usage_placeholder") @db.Text
-  priceAndShoppingIsEnhanced  Boolean?      @map("price_and_shopping_is_enhanced")
-  productAndUsageIsEnhanced    Boolean?      @map("product_and_usage_is_enhanced")
   isEdited                    Boolean       @default(false) @map("is_edited")
-  model                  String        @default("gemini-2.5-pro")
-  promptVersion          String        @default("v1.0") @map("prompt_version")
-  tokensUsed             Int?          @map("tokens_used")
-  processingTimeMs       Int?          @map("processing_time_ms")
-  createdAt              DateTime      @default(now()) @map("created_at")
-  updatedAt              DateTime      @updatedAt @map("updated_at")
-  user                   User          @relation("UserAiExperienceSplits", fields: [userId], references: [id], onDelete: Cascade)
-  product                Product?      @relation("ProductAiExperienceSplits", fields: [productId], references: [id], onDelete: SetNull)
-  inventories            Inventory[]
-  contentPosts           ContentPost[]
+  model                       String        @default("gemini-2.5-pro")
+  promptVersion               String        @default("v1.0") @map("prompt_version")
+  tokensUsed                  Int?          @map("tokens_used")
+  processingTimeMs            Int?          @map("processing_time_ms")
+  createdAt                   DateTime      @default(now()) @map("created_at")
+  updatedAt                   DateTime      @updatedAt @map("updated_at")
+  priceAndShoppingIsEnhanced  Boolean?      @map("price_and_shopping_is_enhanced")
+  priceAndShoppingPlaceholder String?       @map("price_and_shopping_placeholder")
+  productAndUsageIsEnhanced   Boolean?      @map("product_and_usage_is_enhanced")
+  productAndUsagePlaceholder  String?       @map("product_and_usage_placeholder")
+  product                     Product?      @relation("ProductAiExperienceSplits", fields: [productId], references: [id])
+  user                        User          @relation("UserAiExperienceSplits", fields: [userId], references: [id], onDelete: Cascade)
+  contentPosts                ContentPost[]
+  inventories                 Inventory[]
 
   @@index([userId])
   @@index([productId])
   @@index([createdAt])
   @@map("ai_experience_splits")
+}
+
+model BoostOption {
+  id          String   @id @default(uuid()) @db.Uuid
+  image       String?
+  title       String
+  description String?
+  amount      Float
+  isPopular   Boolean  @default(false) @map("is_popular")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("boost_options")
+}
+
+model ExperienceDuration {
+  id           String        @id @default(uuid()) @db.Uuid
+  name         String        @unique
+  isActive     Boolean       @default(true) @map("is_active")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  contentPosts ContentPost[]
+  inventories  Inventory[]
+
+  @@map("experience_durations")
+}
+
+model ExperienceLocation {
+  id           String        @id @default(uuid()) @db.Uuid
+  name         String        @unique
+  isActive     Boolean       @default(true) @map("is_active")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  contentPosts ContentPost[]
+  inventories  Inventory[]
+
+  @@map("experience_locations")
+}
+
+model ExperiencePurpose {
+  id           String        @id @default(uuid()) @db.Uuid
+  name         String        @unique
+  isActive     Boolean       @default(true) @map("is_active")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  contentPosts ContentPost[]
+  inventories  Inventory[]
+
+  @@map("experience_purposes")
+}
+
+enum DMMessageContext {
+  DM
+  SUPPORT
 }
 
 enum KycReviewStatus {
@@ -1881,54 +1928,4 @@ enum ExpertRequestStatus {
   CLOSED
 
   @@map("expert_request_status")
-}
-
-model BoostOption {
-  id          String   @id @default(uuid()) @db.Uuid
-  image       String?
-  title       String
-  description String?
-  amount      Float
-  isPopular   Boolean  @default(false) @map("is_popular")
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  @@map("boost_options")
-}
-
-model ExperienceDuration {
-  id           String        @id @default(uuid()) @db.Uuid
-  name         String        @unique
-  isActive     Boolean       @default(true) @map("is_active")
-  createdAt    DateTime      @default(now()) @map("created_at")
-  updatedAt    DateTime      @updatedAt @map("updated_at")
-  inventories  Inventory[]
-  contentPosts ContentPost[]
-
-  @@map("experience_durations")
-}
-
-model ExperienceLocation {
-  id           String        @id @default(uuid()) @db.Uuid
-  name         String        @unique
-  isActive     Boolean       @default(true) @map("is_active")
-  createdAt    DateTime      @default(now()) @map("created_at")
-  updatedAt    DateTime      @updatedAt @map("updated_at")
-  inventories  Inventory[]
-  contentPosts ContentPost[]
-
-  @@map("experience_locations")
-}
-
-model ExperiencePurpose {
-  id           String        @id @default(uuid()) @db.Uuid
-  name         String        @unique
-  isActive     Boolean       @default(true) @map("is_active")
-  createdAt    DateTime      @default(now()) @map("created_at")
-  updatedAt    DateTime      @updatedAt @map("updated_at")
-  inventories  Inventory[]
-  contentPosts ContentPost[]
-
-  @@map("experience_purposes")
 }
