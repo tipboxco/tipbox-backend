@@ -40,10 +40,21 @@ function getSwaggerServers() {
   const baseUrl = process.env.SWAGGER_SERVER_URL || process.env.API_BASE_URL;
   
   switch (nodeEnv) {
-    case 'development':
-      return [
-        { url: `http://localhost:${PORT}`, description: 'Local Development' }
-      ];
+    case 'development': {
+      // Development'ta cihaz IP adresi kullan (localhost YOK!)
+      const deviceIp = process.env.DEVICE_IP;
+      if (deviceIp) {
+        const cleanIp = deviceIp.replace(/^https?:\/\//, '').replace(/\/$/, '').split(':')[0];
+        return [
+          { url: `http://${cleanIp}:${PORT}`, description: 'Development (Device IP)' }
+        ];
+      }
+      // DEVICE_IP yoksa hata ver
+      throw new Error(
+        'Development modunda DEVICE_IP environment variable set edilmelidir! ' +
+        'Örnek: DEVICE_IP=192.168.1.195'
+      );
+    }
     case 'test':
       // Test ortamı için domain
       const testUrl = baseUrl || 'https://api-test.tipbox.co';
@@ -56,10 +67,17 @@ function getSwaggerServers() {
       return [
         { url: prodUrl, description: 'Production' }
       ];
-    default:
-      return [
-        { url: `http://localhost:${PORT}`, description: 'Local' }
-      ];
+    default: {
+      // Fallback - DEVICE_IP kullan
+      const deviceIp = process.env.DEVICE_IP;
+      if (deviceIp) {
+        const cleanIp = deviceIp.replace(/^https?:\/\//, '').replace(/\/$/, '').split(':')[0];
+        return [
+          { url: `http://${cleanIp}:${PORT}`, description: 'Development (Device IP)' }
+        ];
+      }
+      throw new Error('DEVICE_IP environment variable set edilmelidir!');
+    }
   }
 }
 

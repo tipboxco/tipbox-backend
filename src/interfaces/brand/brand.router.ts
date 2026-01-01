@@ -109,25 +109,29 @@ router.get(
  *           format: uuid
  *         description: Brand ID'si
  *     responses:
- *       200:
- *         description: Brand catalog başarıyla getirildi.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 brandId:
- *                   type: string
- *                   format: uuid
- *                 name:
- *                   type: string
- *                 description:
- *                   type: string
- *                   nullable: true
- *                 followers:
- *                   type: integer
- *                 isJoined:
- *                   type: boolean
+     *       200:
+     *         description: Brand catalog başarıyla getirildi.
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 brandId:
+     *                   type: string
+     *                   format: uuid
+     *                 name:
+     *                   type: string
+     *                 description:
+     *                   type: string
+     *                   nullable: true
+     *                 bannerImage:
+     *                   type: string
+     *                   format: uri
+     *                   nullable: true
+     *                 followers:
+     *                   type: integer
+     *                 isJoined:
+     *                   type: boolean
  *       401:
  *         description: Kimlik doğrulaması başarısız.
  *       404:

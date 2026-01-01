@@ -9,6 +9,7 @@ import { UserPrivacySettingPrismaRepository } from '../../infrastructure/reposit
 import { TrustRelationPrismaRepository } from '../../infrastructure/repositories/trust-relation-prisma.repository';
 import { NotificationCode } from '../../domain/user/notification-code.enum';
 import { PrivacyCode } from '../../domain/user/privacy-code.enum';
+import { NotificationType } from '../../domain/notification/notification-type.enum';
 import { S3Service } from '../../infrastructure/s3/s3.service';
 import { CacheService } from '../../infrastructure/cache/cache.service';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
@@ -610,6 +611,29 @@ export class UserService {
     // 2. Profile count'ları günceller
     // 3. Backfill job'ı kuyruğa ekler
     await this.trustRelationRepo.create(userId, targetUserId);
+    
+    // Send notification to the trusted user (targetUserId)
+    try {
+      const { NotificationService } = await import('../notification/notification.service');
+      const notificationService = new NotificationService();
+      
+      // Get truster user info for notification
+      const truster = await this.userRepo.findById(userId);
+      if (truster) {
+        await notificationService.sendNotification(
+          targetUserId,
+          NotificationType.NEW_TRUSTER,
+          {
+            trusterName: truster.name || truster.email,
+            trusterId: truster.id,
+          }
+        );
+        logger.info({ message: 'Trust notification sent', userId, targetUserId });
+      }
+    } catch (error) {
+      logger.error({ message: 'Failed to send trust notification', userId, targetUserId, error });
+      // Don't throw - notification failure shouldn't break trust operation
+    }
     
     logger.info({ message: 'Trust relation created successfully', userId, targetUserId });
   }

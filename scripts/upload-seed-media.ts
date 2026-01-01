@@ -505,13 +505,43 @@ async function buildSeedAssets(): Promise<void> {
   const userProfilePath = path.join(assetsBasePath, 'userprofile');
   try {
     const profileFiles = await fs.readdir(userProfilePath);
+    
+    // Kullanıcı ID'leri
+    const JULIA_USER_ID = '99999999-9999-4999-9999-999999999999';
+    const TRUST_USER_IDS = [
+      '11111111-1111-4111-a111-111111111111',
+      '22222222-2222-4222-a222-222222222222',
+      '33333333-3333-4333-a333-333333333333',
+      '44444444-4444-4444-a444-444444444444',
+      '55555555-5555-4555-a555-555555555555',
+    ];
+    const TRUSTER_USER_IDS = [
+      'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa',
+      'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb',
+      'cccccccc-cccc-4ccc-cccc-cccccccccccc',
+    ];
+    const COMMUNITY_COACH_USER_ID = '66666666-6666-4666-a666-666666666666';
+    
+    // Avatar eşleştirmesi
+    const avatarMapping: Record<string, { key: string; userId: string }> = {
+      'ozan.jpg': { key: 'user.avatar.primary', userId: TEST_USER_ID },
+      'man-user.jpg': { key: 'user.avatar.market', userId: TARGET_USER_ID },
+      'woman-user.jpg': { key: 'user.avatar.julia', userId: JULIA_USER_ID },
+      'man-user-2.png': { key: 'user.avatar.trust1', userId: TRUST_USER_IDS[0] },
+      'man-user-3.jpg': { key: 'user.avatar.trust2', userId: TRUST_USER_IDS[1] },
+      'man-user-4.jpg': { key: 'user.avatar.trust3', userId: TRUST_USER_IDS[2] },
+      'man-user-5.jpg': { key: 'user.avatar.trust4', userId: TRUST_USER_IDS[3] },
+      'woman-user-2.jpg': { key: 'user.avatar.truster1', userId: TRUSTER_USER_IDS[0] },
+      'woman-user-3.jpg': { key: 'user.avatar.truster2', userId: TRUSTER_USER_IDS[1] },
+      'woman-user-4.jpg': { key: 'user.avatar.truster3', userId: TRUSTER_USER_IDS[2] },
+      'woman-user-5.jpg': { key: 'user.avatar.coach', userId: COMMUNITY_COACH_USER_ID },
+    };
+    
     for (const file of profileFiles) {
       if (file.startsWith('.')) continue;
       const filePath = path.join(userProfilePath, file);
       const stat = await fs.stat(filePath);
       if (stat.isFile()) {
-        const nameWithoutExt = file.replace(/\.[^/.]+$/, '');
-        
         if (file === 'banner.png') {
           seedAssets.push({
             key: 'user.banner.primary',
@@ -520,23 +550,20 @@ async function buildSeedAssets(): Promise<void> {
             contentType: inferContentType(filePath),
             description: `User banner: ${file}`,
           });
-        } else if (file === 'ozan.jpg') {
+        } else if (avatarMapping[file]) {
+          // Eşleştirilmiş avatar dosyası
+          const mapping = avatarMapping[file];
+          const fileExt = path.extname(file).toLowerCase().replace('.', '');
           seedAssets.push({
-            key: 'user.avatar.primary',
+            key: mapping.key,
             localPath: filePath,
-            targetKey: `profile-pictures/${TEST_USER_ID}/seed-avatar.jpg`,
+            targetKey: `profile-pictures/${mapping.userId}/seed-avatar.${fileExt}`,
             contentType: inferContentType(filePath),
-            description: `User avatar: ${file}`,
-          });
-          seedAssets.push({
-            key: 'user.avatar.market',
-            localPath: filePath,
-            targetKey: `profile-pictures/${TARGET_USER_ID}/seed-avatar.jpg`,
-            contentType: inferContentType(filePath),
-            description: `Market user avatar: ${file}`,
+            description: `User avatar: ${file} (${mapping.userId})`,
           });
         } else {
-          // Diğer user avatar'ları
+          // Diğer user avatar'ları (eski format için geriye dönük uyumluluk)
+          const nameWithoutExt = file.replace(/\.[^/.]+$/, '');
           const key = `user.avatar.${slugify(nameWithoutExt)}`;
           seedAssets.push({
             key,

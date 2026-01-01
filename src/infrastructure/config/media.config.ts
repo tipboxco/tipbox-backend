@@ -4,49 +4,71 @@ import { s3Config } from './s3.config';
  * Ortak public media base URL
  * - Tüm görsel URL'leri için TEK kontrol noktası
  * - Seed ve runtime aynı env önceliğini kullanır
+ * - HİÇBİR ZAMAN localhost kullanılmaz!
  *
  * Öncelik sırası:
  * 1) SEED_MEDIA_BASE_URL    -> Seed & frontend için önerilen tek base URL
  * 2) MINIO_PUBLIC_ENDPOINT  -> Frontend'in doğrudan eriştiği host
- * 3) S3_ENDPOINT            -> Container içi endpoint (minio:9000 → localhost:9000'a normalize edilir)
- * 4) s3Config.endpoint      -> S3 config'ten gelen endpoint
- * 5) Varsayılan: http://localhost:9000
+ * 3) DEVICE_IP              -> Development modunda cihaz IP adresi (env'den)
+ * 4) Test ortamında: api-test.tipbox.co:9000
+ * 5) Production'da: SEED_MEDIA_BASE_URL veya MINIO_PUBLIC_ENDPOINT zorunlu
  */
 export function getPublicMediaBaseUrl(): string {
+  const nodeEnv = process.env.NODE_ENV || 'development';
+  
   /**
    * Öncelik sırası:
    * 1) SEED_MEDIA_BASE_URL    -> Seed & frontend için önerilen tek base URL
    * 2) MINIO_PUBLIC_ENDPOINT  -> Frontend'in doğrudan eriştiği host
-   * 3) S3_ENDPOINT            -> Container içi endpoint (production'da kullanmayın!)
-   * 4) s3Config.endpoint      -> S3 config'ten gelen endpoint
-   * 5) Varsayılan: http://localhost:9000
-   * 
-   * ÖNEMLİ: Production'da SEED_MEDIA_BASE_URL veya MINIO_PUBLIC_ENDPOINT set edilmelidir!
+   * 3) Test ortamında: api-test.tipbox.co:9000
+   * 4) Development'ta: DEVICE_IP env değişkeni (örn: http://192.168.1.195:9000)
+   * 5) Production'da: SEED_MEDIA_BASE_URL veya MINIO_PUBLIC_ENDPOINT zorunlu!
    */
   const hasPublicEndpoint = Boolean(
     process.env.SEED_MEDIA_BASE_URL || 
     process.env.MINIO_PUBLIC_ENDPOINT
   );
 
-  const raw =
-    process.env.SEED_MEDIA_BASE_URL ||
-    process.env.MINIO_PUBLIC_ENDPOINT ||
-    process.env.S3_ENDPOINT ||
-    s3Config.endpoint ||
-    'http://localhost:9000';
-
-  // Eğer SEED_MEDIA_BASE_URL veya MINIO_PUBLIC_ENDPOINT set edilmişse direkt kullan
-  // (Bu production endpoint'i olmalı, değiştirme)
+  // Public endpoint varsa direkt kullan
   if (hasPublicEndpoint) {
+    const raw = process.env.SEED_MEDIA_BASE_URL || process.env.MINIO_PUBLIC_ENDPOINT || '';
     return raw.replace(/\/$/, '');
   }
 
-  // Sadece development'ta container içi "minio:9000" adresini localhost'a çevir
-  // Production'da bu durum olmamalı (SEED_MEDIA_BASE_URL set edilmeli)
-  const normalized = raw.replace('minio:9000', 'localhost:9000');
+  // Test ortamında api-test.tipbox.co kullan
+  if (nodeEnv === 'test') {
+    return 'http://api-test.tipbox.co:9000';
+  }
 
-  // Trailing slash'i temizle
-  return normalized.replace(/\/$/, '');
+  // Development ortamında DEVICE_IP kullan (localhost YOK!)
+  if (nodeEnv === 'development') {
+    const deviceIp = process.env.DEVICE_IP;
+    if (deviceIp) {
+      // DEVICE_IP formatı: 192.168.1.195 veya http://192.168.1.195:9000
+      const cleanIp = deviceIp.replace(/^https?:\/\//, '').replace(/\/$/, '');
+      const hasPort = cleanIp.includes(':');
+      return hasPort ? `http://${cleanIp}` : `http://${cleanIp}:9000`;
+    }
+    
+    // DEVICE_IP yoksa hata ver (localhost kullanma!)
+    throw new Error(
+      'Development modunda DEVICE_IP environment variable set edilmelidir! ' +
+      'Örnek: DEVICE_IP=192.168.1.195 veya DEVICE_IP=http://192.168.1.195:9000'
+    );
+  }
+
+  // Production'da public endpoint zorunlu
+  if (nodeEnv === 'production') {
+    throw new Error(
+      'Production modunda SEED_MEDIA_BASE_URL veya MINIO_PUBLIC_ENDPOINT environment variable set edilmelidir!'
+    );
+  }
+
+  // Fallback (olmamalı)
+  throw new Error(
+    `Media base URL belirlenemedi! NODE_ENV: ${nodeEnv}. ` +
+    'Lütfen SEED_MEDIA_BASE_URL, MINIO_PUBLIC_ENDPOINT veya DEVICE_IP environment variable\'ını set edin.'
+  );
 }
 
 /**
@@ -54,11 +76,13 @@ export function getPublicMediaBaseUrl(): string {
  * DB'de sadece bucket path tutulur (örn: users/profile/9f2a1c/avatar.jpg)
  * Bu fonksiyon PUBLIC_BASE_URL ile birleştirerek tam URL oluşturur.
  * 
- * MinIO için doğru format: http://localhost:9000/tipbox-media/path/to/file.jpg
+ * MinIO için doğru format: http://[endpoint]:9000/tipbox-media/path/to/file.jpg
+ * - Development: http://192.168.1.195:9000/tipbox-media/...
+ * - Test: http://api-test.tipbox.co:9000/tipbox-media/...
  * 
  * Örn: 
  * - Input:  'profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg'
- * - Output: 'http://localhost:9000/tipbox-media/profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg'
+ * - Output: 'http://192.168.1.195:9000/tipbox-media/profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg'
  * 
  * @param relativePath - MinIO bucket path (örn: profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg)
  * @returns Tam media URL
@@ -74,17 +98,17 @@ export function buildMediaUrl(relativePath: string): string {
 }
 
 /**
- * Database'deki media URL'ini production endpoint'ine dönüştürür.
+ * Database'deki media URL'ini ortama uygun endpoint'e dönüştürür.
  * 
- * Eğer URL localhost veya minio:9000 içeriyorsa, production endpoint'ine çevirir.
+ * Eğer URL eski format içeriyorsa (localhost, minio:9000), mevcut ortama uygun endpoint'e çevirir.
  * Bu sayede frontend her zaman doğru URL'yi alır.
  * 
- * @param dbUrl - Database'den gelen URL (örn: http://localhost:9000/tipbox-media/products/phone5.png)
- * @returns Production endpoint'ine dönüştürülmüş URL
+ * @param dbUrl - Database'den gelen URL (örn: http://192.168.1.195:9000/tipbox-media/products/phone5.png)
+ * @returns Ortama uygun endpoint'e dönüştürülmüş URL
  * 
  * Örnek:
- * - Input:  http://localhost:9000/tipbox-media/products/phone5.png
- * - Output: http://api-test.tipbox.co:9000/tipbox-media/products/phone5.png
+ * - Input:  http://192.168.1.195:9000/tipbox-media/products/phone5.png (development)
+ * - Output: http://api-test.tipbox.co:9000/tipbox-media/products/phone5.png (test ortamında)
  */
 export function normalizeMediaUrl(dbUrl: string | null | undefined): string | null {
   if (!dbUrl) return null;
@@ -110,7 +134,7 @@ export function normalizeMediaUrl(dbUrl: string | null | undefined): string | nu
 /**
  * Database'den gelen media path veya URL'ini tam URL'ye çevirir.
  * 
- * Eğer değer zaten bir URL ise (http:// veya https:// ile başlıyorsa), olduğu gibi döndürür.
+ * Eğer değer zaten bir URL ise (http:// veya https:// ile başlıyorsa), normalizeMediaUrl ile ortama uygun hale getirir.
  * Eğer değer bir path ise (örn: profile-pictures/... veya tipbox-media/profile-pictures/...), buildMediaUrl ile tam URL'ye çevirir.
  * 
  * Bu fonksiyon hem eski URL formatını hem de yeni path formatını destekler.
@@ -118,15 +142,13 @@ export function normalizeMediaUrl(dbUrl: string | null | undefined): string | nu
  * @param mediaPathOrUrl - Database'den gelen path veya URL
  * @returns Tam media URL veya null
  * 
- * Örnekler:
+ * Örnekler (Development):
  * - Input:  'profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg'
- * - Output: 'http://localhost:9000/tipbox-media/profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg'
+ * - Output: 'http://192.168.1.195:9000/tipbox-media/profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg'
  * 
- * - Input:  'tipbox-media/profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg'
- * - Output: 'http://localhost:9000/tipbox-media/profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg'
- * 
- * - Input:  'http://localhost:9000/tipbox-media/profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg'
- * - Output: 'http://localhost:9000/tipbox-media/profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg'
+ * Örnekler (Test):
+ * - Input:  'profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg'
+ * - Output: 'http://api-test.tipbox.co:9000/tipbox-media/profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg'
  */
 export function resolveMediaUrl(mediaPathOrUrl: string | null | undefined): string | null {
   if (!mediaPathOrUrl) return null;
