@@ -1,53 +1,34 @@
 import config from './index';
+import { getCorsOptions } from './cors.config';
 
 export interface SocketConfig {
   cors: {
-    origin: string[];
+    origin: string[] | string | ((origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => void);
     methods: string[];
     credentials: boolean;
   };
   transports: string[];
   allowEIO3: boolean;
+  path: string;
+  connectTimeout: number;
+  pingTimeout: number;
+  pingInterval: number;
 }
 
-class SocketConfigManager {
-  private static instance: SocketConfigManager;
-  private config: SocketConfig | null = null;
-
-  private constructor() {}
-
-  public static getInstance(): SocketConfigManager {
-    if (!SocketConfigManager.instance) {
-      SocketConfigManager.instance = new SocketConfigManager();
-    }
-    return SocketConfigManager.instance;
-  }
-
-  public initialize(): SocketConfig {
-    if (this.config) {
-      return this.config;
-    }
-
-    // Config modülünden ortam bazlı CORS ayarlarını al
-    this.config = {
-      cors: {
-        origin: config.corsOrigins,
-        methods: config.corsMethods,
-        credentials: true,
-      },
-      transports: ['websocket', 'polling'] as const,
-      allowEIO3: false,
-    };
-
-    return this.config;
-  }
-
-  public getConfig(): SocketConfig {
-    if (!this.config) {
-      return this.initialize();
-    }
-    return this.config;
-  }
+export function getSocketConfig(): SocketConfig {
+  const corsOptions = getCorsOptions();
+  
+  return {
+    cors: {
+      origin: corsOptions.origin as any,
+      methods: config.corsMethods,
+      credentials: true,
+    },
+    transports: ['websocket', 'polling'],
+    allowEIO3: false,
+    path: '/socket.io/',
+    connectTimeout: 20000,
+    pingTimeout: 5000,
+    pingInterval: 25000,
+  };
 }
-
-export default SocketConfigManager;

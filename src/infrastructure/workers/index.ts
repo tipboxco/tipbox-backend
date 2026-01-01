@@ -1,11 +1,26 @@
 import { NotificationWorker } from './notification.worker';
+import { FeedCleanupWorker } from './feed-cleanup.worker';
+import { FeedDistributionWorker } from './feed-distribution.worker';
+import { TrustBackfillWorker } from './trust-backfill.worker';
+import { FeedCleanupScheduler } from '../scheduler/feed-cleanup.scheduler';
+import { TrustBackfillScheduler } from '../scheduler/trust-backfill.scheduler';
 import logger from '../logger/logger';
 
 class WorkerManager {
   private notificationWorker: NotificationWorker;
+  private feedCleanupWorker: FeedCleanupWorker;
+  private feedDistributionWorker: FeedDistributionWorker;
+  private trustBackfillWorker: TrustBackfillWorker;
+  private feedCleanupScheduler: FeedCleanupScheduler;
+  private trustBackfillScheduler: TrustBackfillScheduler;
 
   constructor() {
     this.notificationWorker = new NotificationWorker();
+    this.feedCleanupWorker = new FeedCleanupWorker();
+    this.feedDistributionWorker = new FeedDistributionWorker();
+    this.trustBackfillWorker = new TrustBackfillWorker();
+    this.feedCleanupScheduler = new FeedCleanupScheduler();
+    this.trustBackfillScheduler = new TrustBackfillScheduler();
   }
 
   /**
@@ -17,6 +32,21 @@ class WorkerManager {
 
       // Notification worker'ı başlat
       await this.notificationWorker.start();
+
+      // Feed cleanup worker'ı başlat (zaten constructor'da aktif)
+      logger.info('FeedCleanupWorker started');
+
+      // Feed distribution worker'ı başlat
+      await this.feedDistributionWorker.start();
+      logger.info('FeedDistributionWorker started');
+
+      // Trust backfill worker'ı başlat
+      await this.trustBackfillWorker.start();
+      logger.info('TrustBackfillWorker started');
+
+      // Feed cleanup scheduler'ı başlat (günlük job schedule et)
+      await this.feedCleanupScheduler.scheduleDaily();
+      logger.info('FeedCleanupScheduler started');
 
       logger.info('All workers started successfully');
 
@@ -36,6 +66,11 @@ class WorkerManager {
       logger.info('Stopping all workers...');
 
       await this.notificationWorker.stop();
+      await this.feedCleanupWorker.stop();
+      await this.feedDistributionWorker.stop();
+      await this.trustBackfillWorker.stop();
+      await this.feedCleanupScheduler.close();
+      await this.trustBackfillScheduler.close();
 
       logger.info('All workers stopped successfully');
     } catch (error) {

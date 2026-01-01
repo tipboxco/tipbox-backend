@@ -149,6 +149,32 @@ export class DmMessagePrismaRepository {
     });
   }
 
+  async markAsRead(messageId: string): Promise<void> {
+    await this.prisma.dMMessage.update({
+      where: { id: messageId },
+      data: {
+        isRead: true,
+        updatedAt: new Date(),
+      },
+    });
+  }
+
+  async findUnreadByThreadAndRecipient(threadId: string, recipientId: string): Promise<DMMessage[]> {
+    const messages = await this.prisma.dMMessage.findMany({
+      where: {
+        threadId,
+        senderId: { not: recipientId },
+        isRead: false,
+      },
+      include: {
+        sender: true,
+        thread: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    return messages.map(message => this.toDomain(message));
+  }
+
   async markAllAsReadInThread(threadId: string, userId: string): Promise<void> {
     const threadIdStr = threadId;
     const userIdStr = userId;

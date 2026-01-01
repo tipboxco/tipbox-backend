@@ -16,13 +16,17 @@ import {
   LimitedTimeEventUser,
 } from '../../interfaces/event/event.dto';
 import { FeedItem, FeedItemType } from '../../interfaces/feed/feed.dto';
-import { buildMediaUrl } from '../../infrastructure/config/media.config';
+import { buildMediaUrl, resolveMediaUrl } from '../../infrastructure/config/media.config';
+import { CacheService } from '../../infrastructure/cache/cache.service';
+import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
 
 export class EventService {
   private prisma: PrismaClient;
+  private cacheService: CacheService;
 
   constructor() {
     this.prisma = new PrismaClient();
+    this.cacheService = CacheService.getInstance();
   }
 
   /**
@@ -32,6 +36,19 @@ export class EventService {
     userId?: string,
     options?: { cursor?: string; limit?: number }
   ): Promise<ActiveEvent> {
+    const cacheKey = `events:active:${userId || 'guest'}:${options?.cursor || 'first'}:${options?.limit || 20}`;
+
+    // Cache check (otomatik hit/miss işaretler)
+    try {
+      const cached = await this.cacheService.get<ActiveEvent>(cacheKey);
+      if (cached) {
+        logger.info({ message: 'Active events served from cache', userId, cacheKey });
+        return cached;
+      }
+    } catch (error) {
+      logger.warn({ message: 'Cache error', error: error instanceof Error ? error.message : String(error) });
+    }
+
     try {
       const limit = options?.limit || 20;
       const now = new Date();
@@ -63,9 +80,14 @@ export class EventService {
           const interaction = await this.getEventInteraction(event.id);
           const participants = await this.getEventParticipants(event.id, 2);
 
+          let imageUrl: string | null = null;
+          if (event.imageUrl) {
+            imageUrl = resolveMediaUrl(event.imageUrl);
+          }
+
           return {
             eventId: event.id,
-            image: event.imageUrl,
+            image: imageUrl,
             title: event.title,
             description: event.description,
             startDate: event.startDate.toISOString(),
@@ -77,7 +99,7 @@ export class EventService {
         })
       );
 
-      return {
+      const result = {
         items: eventCards,
         pagination: {
           cursor: nextCursor,
@@ -85,6 +107,15 @@ export class EventService {
           limit,
         },
       };
+
+      // Cache'e kaydet
+      try {
+        await this.cacheService.set(cacheKey, result, CACHE_TTL.SHORT); // 5 dakika (events sık değişir)
+      } catch (error) {
+        logger.warn({ message: 'Cache set failed', error: error instanceof Error ? error.message : String(error) });
+      }
+
+      return result;
     } catch (error) {
       logger.error('Failed to get active events:', error);
       throw error;
@@ -128,9 +159,14 @@ export class EventService {
           const interaction = await this.getEventInteraction(event.id);
           const participants = await this.getEventParticipants(event.id, 2); // Get first 2 participants
 
+          let imageUrl: string | null = null;
+          if (event.imageUrl) {
+            imageUrl = resolveMediaUrl(event.imageUrl);
+          }
+
           return {
             eventId: event.id,
-            image: event.imageUrl,
+            image: imageUrl,
             title: event.title,
             description: event.description,
             startDate: event.startDate.toISOString(),
@@ -208,7 +244,7 @@ export class EventService {
 
       const rewardBadges: RewardBadge[] = eventBadges.map((badge) => ({
         id: badge.id,
-        image: badge.imageUrl,
+        image: resolveMediaUrl(badge.imageUrl || null),
         title: badge.name,
       }));
 
@@ -221,7 +257,7 @@ export class EventService {
 
       return {
         eventId: event.id,
-        banner: event.imageUrl,
+        banner: resolveMediaUrl(event.imageUrl || null),
         title: event.title,
         description: event.description,
         startDate: event.startDate.toISOString(),
@@ -297,11 +333,11 @@ export class EventService {
         };
       }
 
-      // Get posts from participants (limited approach)
-      // In production, you'd want a more sophisticated way to link events to posts
+      // Get posts directly linked to event
+      // Fallback mekanizması kaldırıldı - event'e bağlı post yoksa boş döner
       const posts = await this.prisma.contentPost.findMany({
         where: {
-          userId: { in: Array.from(participantUserIds) },
+          eventId: eventId,
         },
         include: {
           user: {
@@ -359,6 +395,9 @@ export class EventService {
           likes: true,
           comments: true,
           favorites: true,
+          media: {
+            orderBy: { orderIndex: 'asc' },
+          },
         },
         orderBy: { createdAt: 'desc' },
         take: limit + 1,
@@ -375,6 +414,13 @@ export class EventService {
       // Convert posts to a loosely-typed FeedItem array compatible with the frontend FeedItem union
       const feedItems: FeedItem[] = resultPosts.map((post) => {
         const baseType = this.mapContentPostTypeToFeedItemType(post.type);
+        
+        // Product image için fallback chain: product -> group -> subCategory -> mainCategory
+        const product = post.product as any;
+        const group = product?.group;
+        const subCategory = group?.subCategory;
+        const mainCategory = subCategory?.mainCategory;
+        const imagePath = product?.imageUrl || group?.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
 
         return {
           type: baseType as any,
@@ -385,7 +431,7 @@ export class EventService {
               id: post.user.id,
               name: post.user.profile?.displayName || post.user.email || 'Anonymous',
               title: post.user.titles?.[0]?.title || '',
-              avatar: post.user.avatars?.[0]?.imageUrl || '',
+              avatar: resolveMediaUrl(post.user.avatars?.[0]?.imageUrl || null) || '',
             },
             stats: {
               likes: post.likesCount,
@@ -399,10 +445,10 @@ export class EventService {
               id: post.productId || '',
               name: post.product?.name || '',
               subName: post.productGroup?.name || '',
-              image: post.product?.imageUrl || null,
+              image: resolveMediaUrl(imagePath),
             },
             content: post.body,
-            images: [] as any[],
+            images: (post.media || []).map((m: any) => resolveMediaUrl(m.mediaUrl)).filter((url: string | null): url is string => url !== null),
           } as any,
         } as any;
       });
@@ -504,7 +550,7 @@ export class EventService {
             id: badge.id,
             title: badge.name,
             description: badge.description || null,
-            image: badge.imageUrl || null,
+            image: resolveMediaUrl(badge.imageUrl || null),
             current,
             total,
           };
@@ -577,7 +623,7 @@ export class EventService {
 
     const leaderboardUsers: LimitedTimeEventLeaderboardUser[] = topUsers.map((s, index) => ({
       id: s.userId,
-      avatar: s.user.avatars?.[0]?.imageUrl || null,
+      avatar: resolveMediaUrl(s.user.avatars?.[0]?.imageUrl || null),
       rank: index + 1,
     }));
 
@@ -600,9 +646,10 @@ export class EventService {
       const rankIndex = sortedByScore.findIndex((s) => s.userId === userStat.userId);
       const rank = rankIndex >= 0 ? rankIndex + 1 : 0;
 
-      const avatarUrl =
+      const avatarUrl = resolveMediaUrl(
         statAny.user?.avatars?.[0]?.imageUrl ||
-        null;
+        null
+      );
 
       userScore = {
         id: userStat.userId,
@@ -612,8 +659,8 @@ export class EventService {
       };
     }
 
-    const backgroundImage = buildMediaUrl('tipbox-media/event/eventcardbg.png');
-    const eventImage = buildMediaUrl('tipbox-media/event/event.png');
+    const backgroundImage = buildMediaUrl('event/eventcardbg.png');
+    const eventImage = buildMediaUrl('event/event.png');
 
     return {
       id: event.id,
@@ -674,7 +721,7 @@ export class EventService {
 
     return stats.map((stat) => ({
       userId: stat.user.id,
-      avatar: stat.user.avatars?.[0]?.imageUrl || null,
+      avatar: resolveMediaUrl(stat.user.avatars?.[0]?.imageUrl || null),
       userName: stat.user.profile?.displayName || stat.user.email || 'Anonymous',
     }));
   }

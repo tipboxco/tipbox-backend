@@ -100,6 +100,40 @@ class RedisConfigManager {
       logger.info('Redis clients disconnected');
     }
   }
+
+  /**
+   * Redis URL'den host'u parse eder
+   * Örnek: redis://redis:6379 -> redis
+   */
+  public static parseRedisHost(redisUrl?: string): string {
+    const url = redisUrl || process.env.REDIS_URL || 'redis://localhost:6379';
+    
+    if (url.includes('://')) {
+      const urlWithoutProtocol = url.split('://')[1];
+      const parts = urlWithoutProtocol.split(':');
+      return parts[0];
+    }
+    
+    return 'localhost';
+  }
+
+  /**
+   * Redis URL'den port'u parse eder
+   * Örnek: redis://redis:6379 -> 6379
+   */
+  public static parseRedisPort(redisUrl?: string): number {
+    const url = redisUrl || process.env.REDIS_URL || 'redis://localhost:6379';
+    
+    if (url.includes('://')) {
+      const urlWithoutProtocol = url.split('://')[1];
+      const parts = urlWithoutProtocol.split(':');
+      if (parts.length > 1) {
+        return parseInt(parts[1], 10) || 6379;
+      }
+    }
+    
+    return 6379;
+  }
 }
 
 export default RedisConfigManager;

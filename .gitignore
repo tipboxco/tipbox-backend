@@ -56,3 +56,10 @@ tipbox-docs/
 
 # Test results (ana dizindeki - sadece tests/test-results kullanılıyor)
 /test-results/
+
+# SSL sertifikaları ve sunucu-spesifik dosyalar
+ssl/
+certbot/
+backups/
+*.pem
+*.key

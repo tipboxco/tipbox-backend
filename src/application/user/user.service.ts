@@ -1,14 +1,18 @@
 import { User } from '../../domain/user/user.entity';
 import { ContextType } from '../../domain/content/context-type.enum';
+import { ContentPostType } from '../../domain/content/content-post-type.enum';
 import { UserPrismaRepository } from '../../infrastructure/repositories/user-prisma.repository';
 import { ProfilePrismaRepository } from '../../infrastructure/repositories/profile-prisma.repository';
 import { UserSettingsPrismaRepository } from '../../infrastructure/repositories/user-settings-prisma.repository';
 import { UserDevicePrismaRepository } from '../../infrastructure/repositories/user-device-prisma.repository';
 import { UserPrivacySettingPrismaRepository } from '../../infrastructure/repositories/user-privacy-setting-prisma.repository';
+import { TrustRelationPrismaRepository } from '../../infrastructure/repositories/trust-relation-prisma.repository';
 import { NotificationCode } from '../../domain/user/notification-code.enum';
 import { PrivacyCode } from '../../domain/user/privacy-code.enum';
+import { NotificationType } from '../../domain/notification/notification-type.enum';
 import { S3Service } from '../../infrastructure/s3/s3.service';
 import { CacheService } from '../../infrastructure/cache/cache.service';
+import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import logger from '../../infrastructure/logger/logger';
@@ -74,9 +78,8 @@ const EXPERIENCE_SECTION_TITLES = {
   USAGE: 'Product and Usage Experience',
 } as const;
 
-const BADGE_PLACEHOLDER_URL =
-  process.env.DEFAULT_BADGE_IMAGE_URL ||
-  'https://cdn.tipbox.co/assets/badges/default.png';
+// Default badge image path (bucket path format)
+const DEFAULT_BADGE_IMAGE_PATH = 'badges/custom/HardwareExpert.png'; // Fallback badge görseli
 
 const COLLECTION_RARITY_MAP: Record<string, RarityType> = {
   COMMON: 'Usual',
@@ -108,6 +111,7 @@ export class UserService {
   private readonly settingsRepo: UserSettingsPrismaRepository;
   private readonly deviceRepo: UserDevicePrismaRepository;
   private readonly privacySettingRepo: UserPrivacySettingPrismaRepository;
+  private readonly trustRelationRepo: TrustRelationPrismaRepository;
   private readonly prisma: PrismaClient;
 
   constructor(private readonly userRepo = new UserPrismaRepository()) {
@@ -117,6 +121,7 @@ export class UserService {
     this.settingsRepo = new UserSettingsPrismaRepository();
     this.deviceRepo = new UserDevicePrismaRepository();
     this.privacySettingRepo = new UserPrivacySettingPrismaRepository();
+    this.trustRelationRepo = new TrustRelationPrismaRepository();
     this.prisma = new PrismaClient();
   }
 
@@ -132,25 +137,38 @@ export class UserService {
   async getUserProfile(userId: string): Promise<User | null> {
     const cacheKey = `user:${userId}:profile`;
     
+    // Önce cache'ten kontrol et (graceful degradation)
+    // CacheService otomatik olarak cache hit/miss işaretler
     try {
-      // Önce cache'ten kontrol et
       const cachedUser = await this.cacheService.get<User>(cacheKey);
       if (cachedUser) {
+        logger.debug(`Cache hit for user profile: ${userId}`);
         return cachedUser;
       }
-
-      // Cache miss - veritabanından çek
-      const user = await this.userRepo.findById(userId);
-      if (user) {
-        // Cache'e kaydet (1 saat TTL)
-        await this.cacheService.set(cacheKey, user, 3600);
-      }
-      
-      return user;
     } catch (error) {
-      // Cache hatası durumunda doğrudan veritabanından çek
-      return this.userRepo.findById(userId);
+      logger.warn('Cache error while getting user profile, falling back to database', { 
+        error, 
+        userId,
+        operation: 'getUserProfile'
+      });
     }
+
+    // Cache miss veya cache error - veritabanından çek
+    const user = await this.userRepo.findById(userId);
+    if (user) {
+      // Cache'e kaydet (best effort - hata olsa bile devam et)
+      try {
+        await this.cacheService.set(cacheKey, user, 3600);
+      } catch (error) {
+        logger.warn('Cache set failed for user profile', { 
+          error, 
+          userId,
+          operation: 'getUserProfile'
+        });
+      }
+    }
+    
+    return user;
   }
 
   async getUserByEmail(email: string): Promise<User | null> {
@@ -228,8 +246,8 @@ export class UserService {
     return {
       id: user.id,
       name: profile?.displayName || user.name || 'Anonymous User',
-      avatar: activeAvatar?.imageUrl ?? null,
-      bannerUrl: profile?.bannerUrl ?? DEFAULT_PROFILE_BANNER_URL,
+      avatar: resolveMediaUrl(activeAvatar?.imageUrl ?? null),
+      bannerUrl: resolveMediaUrl(profile?.bannerUrl ?? DEFAULT_PROFILE_BANNER_URL),
       description: profile?.bio ?? null,
       titles: titles.map(t => t.title),
       stats: {
@@ -237,7 +255,7 @@ export class UserService {
         trust: profile?.trustCount ?? 0,
         truster: profile?.trusterCount ?? 0,
       },
-      badges: userBadges.map(ub => ({ imageUrl: ub.badge.imageUrl ?? null, title: ub.badge.name })),
+      badges: userBadges.map(ub => ({ imageUrl: resolveMediaUrl(ub.badge.imageUrl ?? null), title: ub.badge.name })),
     };
   }
 
@@ -269,7 +287,7 @@ export class UserService {
       ? {
           id: cosmeticBadge.id,
           title: cosmeticBadge.name,
-          image: cosmeticBadge.imageUrl ?? null,
+          image: resolveMediaUrl(cosmeticBadge.imageUrl ?? null),
         }
       : null;
 
@@ -286,7 +304,7 @@ export class UserService {
       badges: userBadges.map((ub) => ({
         id: String(ub.badgeId),
         title: ub.badge.name,
-        image: ub.badge.imageUrl ?? null,
+        image: resolveMediaUrl(ub.badge.imageUrl ?? null),
       })),
     };
   }
@@ -405,8 +423,61 @@ export class UserService {
 
         for (const [index, badge] of badges.entries()) {
           if (!badge?.id) continue;
+          
+          // Badge ID'si UUID formatında mı kontrol et
+          // Eğer değilse, name'e göre badge'i bul
+          let badgeId = badge.id;
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          
+          if (!uuidRegex.test(badgeId)) {
+            // UUID değilse, name'e göre badge'i bul
+            // Önce direkt name ile dene
+            let foundBadge = await tx.badge.findFirst({
+              where: {
+                name: { equals: badgeId, mode: 'insensitive' },
+              },
+              select: { id: true },
+            });
+            
+            // Bulunamazsa, slug formatını normal formata çevirip dene
+            // Örn: "home_appliance" -> "Home Appliance"
+            if (!foundBadge) {
+              const normalizedName = badgeId
+                .split('_')
+                .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                .join(' ');
+              
+              foundBadge = await tx.badge.findFirst({
+                where: {
+                  name: { equals: normalizedName, mode: 'insensitive' },
+                },
+                select: { id: true },
+              });
+            }
+            
+            // Hala bulunamazsa, contains ile dene (kısmi eşleşme)
+            if (!foundBadge) {
+              foundBadge = await tx.badge.findFirst({
+                where: {
+                  OR: [
+                    { name: { contains: badgeId, mode: 'insensitive' } },
+                    { name: { contains: badgeId.replace(/_/g, ' '), mode: 'insensitive' } },
+                  ],
+                },
+                select: { id: true },
+              });
+            }
+            
+            if (!foundBadge) {
+              logger.warn(`Badge not found by name: ${badgeId}`);
+              continue;
+            }
+            
+            badgeId = foundBadge.id;
+          }
+          
           await tx.userBadge.upsert({
-            where: { userId_badgeId: { userId, badgeId: badge.id } },
+            where: { userId_badgeId: { userId, badgeId } },
             update: {
               isVisible: true,
               displayOrder: index,
@@ -414,7 +485,7 @@ export class UserService {
             },
             create: {
               userId,
-              badgeId: badge.id,
+              badgeId,
               isVisible: true,
               displayOrder: index,
               visibility: 'PUBLIC',
@@ -477,13 +548,20 @@ export class UserService {
       if (!avatarMap.has(a.userId)) avatarMap.set(a.userId, a.imageUrl);
     });
 
-    return profiles.map(p => ({
-      id: String(p.userId),
-      userName: p.userName ?? null,
-      titles: (titleMap.get(String(p.userId)) || []).slice(0, 3),
-      avatar: avatarMap.get(String(p.userId)) ?? null,
-      name: p.displayName,
-    }));
+    // Default avatar path'ini resolve et
+    const defaultAvatarPath = 'avatars/default/default-useravatar.png';
+    const defaultAvatarUrl = resolveMediaUrl(defaultAvatarPath);
+
+    return profiles.map(p => {
+      const avatarUrl = resolveMediaUrl(avatarMap.get(String(p.userId)) ?? null);
+      return {
+        id: String(p.userId),
+        userName: p.userName ?? null,
+        titles: (titleMap.get(String(p.userId)) || []).slice(0, 3),
+        avatar: avatarUrl || defaultAvatarUrl || '',
+        name: p.displayName,
+      };
+    });
   }
 
   async removeTrust(userId: string, targetUserId: string): Promise<boolean> {
@@ -520,25 +598,44 @@ export class UserService {
 
   async addTrust(userId: string, targetUserId: string): Promise<void> {
     // Check if relation already exists
-    const existing = await this.prisma.trustRelation.findUnique({
-      where: { trusterId_trustedUserId: { trusterId: userId, trustedUserId: targetUserId } }
-    });
+    const existing = await this.trustRelationRepo.findByUsers(userId, targetUserId);
 
     if (existing) {
-      // Even if exists, recalculate counts to ensure accuracy
-      await this.recalculateTrustCounts(userId, targetUserId);
+      logger.info({ message: 'Trust relation already exists', userId, targetUserId });
       return;
     }
 
-    // idempotent create
-    await this.prisma.trustRelation.upsert({
-      where: { trusterId_trustedUserId: { trusterId: userId, trustedUserId: targetUserId } },
-      update: {},
-      create: { trusterId: userId, trustedUserId: targetUserId },
-    });
-
-    // Recalculate trust/truster counts for both users to ensure accuracy
-    await this.recalculateTrustCounts(userId, targetUserId);
+    // Create trust relation using repository
+    // Bu metod otomatik olarak:
+    // 1. Trust relation oluşturur
+    // 2. Profile count'ları günceller
+    // 3. Backfill job'ı kuyruğa ekler
+    await this.trustRelationRepo.create(userId, targetUserId);
+    
+    // Send notification to the trusted user (targetUserId)
+    try {
+      const { NotificationService } = await import('../notification/notification.service');
+      const notificationService = new NotificationService();
+      
+      // Get truster user info for notification
+      const truster = await this.userRepo.findById(userId);
+      if (truster) {
+        await notificationService.sendNotification(
+          targetUserId,
+          NotificationType.NEW_TRUSTER,
+          {
+            trusterName: truster.name || truster.email,
+            trusterId: truster.id,
+          }
+        );
+        logger.info({ message: 'Trust notification sent', userId, targetUserId });
+      }
+    } catch (error) {
+      logger.error({ message: 'Failed to send trust notification', userId, targetUserId, error });
+      // Don't throw - notification failure shouldn't break trust operation
+    }
+    
+    logger.info({ message: 'Trust relation created successfully', userId, targetUserId });
   }
 
   /**
@@ -646,14 +743,21 @@ export class UserService {
       if (!avatarMap.has(a.userId)) avatarMap.set(a.userId, a.imageUrl);
     });
 
-    return profiles.map(p => ({
-      id: String(p.userId),
-      userName: p.userName ?? null,
-      titles: (titleMap.get(String(p.userId)) || []).slice(0, 3),
-      avatar: avatarMap.get(String(p.userId)) ?? null,
-      name: p.displayName,
-      isTrusted: myTrustedSet.has(String(p.userId)),
-    }));
+    // Default avatar path'ini resolve et
+    const defaultAvatarPath = 'avatars/default/default-useravatar.png';
+    const defaultAvatarUrl = resolveMediaUrl(defaultAvatarPath);
+
+    return profiles.map(p => {
+      const avatarUrl = resolveMediaUrl(avatarMap.get(String(p.userId)) ?? null);
+      return {
+        id: String(p.userId),
+        userName: p.userName ?? null,
+        titles: (titleMap.get(String(p.userId)) || []).slice(0, 3),
+        avatar: avatarUrl || defaultAvatarUrl || '',
+        name: p.displayName,
+        isTrusted: myTrustedSet.has(String(p.userId)),
+      };
+    });
   }
 
   async blockUser(userId: string, targetUserId: string): Promise<void> {
@@ -761,7 +865,7 @@ export class UserService {
         id: String(badge?.id || ''),
         title: badge?.name || '',
         rarity: COLLECTION_RARITY_MAP[badge?.rarity || 'COMMON'] || 'Usual',
-        image: badge?.imageUrl ?? BADGE_PLACEHOLDER_URL,
+        image: this.resolveBadgeImage(badge),
         isClaimed: !!ub.claimed,
         nftAddress: badge?.nftAddress ?? null,
         earnedDate: ub.claimedAt ? ub.claimedAt.toISOString() : null,
@@ -849,7 +953,7 @@ export class UserService {
       return {
         id: String(badge.id),
         title: badge.name || '',
-        image: badge.imageUrl || BADGE_PLACEHOLDER_URL,
+        image: this.resolveBadgeImage(badge),
         description: badge.description || '',
         current,
         total: total || 1,
@@ -947,7 +1051,7 @@ export class UserService {
         id: String(badge?.id || ''),
         title: badge?.name || '',
         rarity: COLLECTION_RARITY_MAP[badge?.rarity || 'COMMON'] || 'Usual',
-        image: badge?.imageUrl ?? BADGE_PLACEHOLDER_URL,
+        image: this.resolveBadgeImage(badge),
         isClaimed: true,
         nftAddress: rw.nftAddress ?? null,
         earnedDate: rw.awardedAt ? rw.awardedAt.toISOString() : null,
@@ -1029,19 +1133,40 @@ export class UserService {
       id: userId,
       name: profile?.displayName || 'Anonymous',
       title: title?.title || '',
-      avatar: avatar?.imageUrl ?? '',
+      avatar: resolveMediaUrl(avatar?.imageUrl ?? null) || '',
     };
   }
 
   private async getProductBase(productId: string | null) {
     if (!productId) return null;
-    const product = await this.prisma.product.findUnique({ where: { id: productId } as any, include: { group: true } as any });
+    const product = await this.prisma.product.findUnique({ 
+      where: { id: productId } as any, 
+      include: { 
+        group: {
+          include: {
+            subCategory: {
+              include: {
+                mainCategory: true,
+              },
+            },
+          },
+        },
+      } as any 
+    });
     if (!product) return null;
+    
+    const group = (product as any).group;
+    const subCategory = group?.subCategory;
+    const mainCategory = subCategory?.mainCategory;
+    
+    // Image URL'ini bul ve prefix ekle (fallback chain: product -> group -> subCategory -> mainCategory)
+    const imagePath = (product as any).imageUrl || group?.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
+    
     return {
       id: String(product.id),
       name: product.name,
-      subName: product.brand || (product as any).group?.name || '',
-      image: (product as any).imageUrl || null,
+      subName: product.brand || group?.name || subCategory?.name || mainCategory?.name || '',
+      image: resolveMediaUrl(imagePath),
     };
   }
 
@@ -1075,11 +1200,12 @@ export class UserService {
       const group = product.group;
       const subCategory = group?.subCategory;
       const mainCategory = subCategory?.mainCategory || post.subCategory?.mainCategory || post.mainCategory;
+      const imagePath = product.imageUrl || group?.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
       return {
         id: String(product.id),
         name: product.name,
         subName: group?.name || subCategory?.name || mainCategory?.name || '',
-        image: product.imageUrl || group?.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null,
+        image: resolveMediaUrl(imagePath),
         isOwned: ownedProductIds ? ownedProductIds.has(String(product.id)) : undefined,
       };
     }
@@ -1088,21 +1214,23 @@ export class UserService {
       const group = post.productGroup;
       const subCategory = group.subCategory;
       const mainCategory = subCategory?.mainCategory || post.mainCategory;
+      const imagePath = group.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
       return {
         id: String(group.id),
         name: group.name,
         subName: subCategory?.name || mainCategory?.name || '',
-        image: group.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null,
+        image: resolveMediaUrl(imagePath),
       };
     }
 
     if (contextType === ContextType.SUB_CATEGORY && post.subCategory) {
       const subCategory = post.subCategory;
+      const imagePath = subCategory.imageUrl || subCategory.mainCategory?.imageUrl || null;
       return {
         id: String(subCategory.id),
         name: subCategory.name,
         subName: subCategory.mainCategory?.name || '',
-        image: subCategory.imageUrl || subCategory.mainCategory?.imageUrl || null,
+        image: resolveMediaUrl(imagePath),
       };
     }
 
@@ -1111,7 +1239,7 @@ export class UserService {
         id: String(post.mainCategory.id),
         name: post.mainCategory.name,
         subName: '',
-        image: post.mainCategory.imageUrl || null,
+        image: resolveMediaUrl(post.mainCategory.imageUrl || null),
       };
     }
 
@@ -1159,32 +1287,45 @@ export class UserService {
 
     const userBase = await this.getUserBase(userId);
     
-    // Batch fetch images from InventoryMedia for posts with products
-    const postProductIds = posts.map((p) => p.productId).filter(Boolean) as string[];
-    const inventoryMediaMap = new Map<string, string[]>();
+    // Batch fetch images from PostMedia (orderIndex'e göre sıralı)
+    const postIds = posts.map((p) => p.id);
+    const postMediaMap = new Map<string, string[]>();
     const ownedProductIds = new Set<string>();
     
+    if (postIds.length > 0) {
+      const allPostMedia = await this.prisma.postMedia.findMany({
+        where: {
+          postId: { in: postIds },
+        },
+        orderBy: { orderIndex: 'asc' }, // Kullanıcının yüklediği sırada
+        select: { postId: true, mediaUrl: true },
+      });
+
+      // Map'e dönüştür (postId -> mediaUrl array)
+      allPostMedia.forEach((media) => {
+        if (!postMediaMap.has(media.postId)) {
+          postMediaMap.set(media.postId, []);
+        }
+        const resolvedUrl = resolveMediaUrl(media.mediaUrl);
+        if (resolvedUrl) {
+          postMediaMap.get(media.postId)!.push(resolvedUrl);
+        }
+      });
+    }
+    
+    // Owned products için inventory kontrolü (başka bir yerde kullanılıyor olabilir)
+    const postProductIds = posts.map((p) => p.productId).filter(Boolean) as string[];
     if (postProductIds.length > 0) {
-      const inventoriesWithMedia = await this.prisma.inventory.findMany({
+      const inventories = await this.prisma.inventory.findMany({
         where: {
           userId,
           productId: { in: postProductIds },
         },
-        include: {
-          media: {
-            where: { type: 'IMAGE' },
-            orderBy: { createdAt: 'asc' },
-          },
-        },
+        select: { productId: true },
       });
-
-      for (const inventory of inventoriesWithMedia) {
-        ownedProductIds.add(String(inventory.productId));
-        const imageUrls = inventory.media.map((m) => m.mediaUrl);
-        if (imageUrls.length > 0) {
-          inventoryMediaMap.set(inventory.productId, imageUrls);
-        }
-      }
+      inventories.forEach((inv) => {
+        ownedProductIds.add(String(inv.productId));
+      });
     }
     
     const results = await Promise.all(
@@ -1192,7 +1333,8 @@ export class UserService {
         const stats = await this.getPostStats(post.id);
         const contextType = this.mapContextType(post);
         const contextData = this.buildContextDataFromPost(post, ownedProductIds);
-        const images = post.productId ? (inventoryMediaMap.get(post.productId) || []) : [];
+        // Get images for this post from PostMedia (orderIndex'e göre sıralı)
+        const images = postMediaMap.get(post.id) || [];
         return {
           id: String(post.id),
           type: 'post' as const,
@@ -1256,40 +1398,54 @@ export class UserService {
 
     const userBase = await this.getUserBase(userId);
 
-    // Batch fetch images from InventoryMedia for posts with products
-    const postProductIds = posts.map((p) => p.productId).filter(Boolean) as string[];
-    const inventoryMediaMap = new Map<string, string[]>();
+    // Batch fetch images from PostMedia (orderIndex'e göre sıralı)
+    const postIds = posts.map((p) => p.id);
+    const postMediaMap = new Map<string, string[]>();
     const ownedProductIds = new Set<string>();
+    
+    if (postIds.length > 0) {
+      const allPostMedia = await this.prisma.postMedia.findMany({
+        where: {
+          postId: { in: postIds },
+        },
+        orderBy: { orderIndex: 'asc' }, // Kullanıcının yüklediği sırada
+        select: { postId: true, mediaUrl: true },
+      });
 
+      // Map'e dönüştür (postId -> mediaUrl array)
+      allPostMedia.forEach((media) => {
+        if (!postMediaMap.has(media.postId)) {
+          postMediaMap.set(media.postId, []);
+        }
+        const resolvedUrl = resolveMediaUrl(media.mediaUrl);
+        if (resolvedUrl) {
+          postMediaMap.get(media.postId)!.push(resolvedUrl);
+        }
+      });
+    }
+
+    // Owned products için inventory kontrolü
+    const postProductIds = posts.map((p) => p.productId).filter(Boolean) as string[];
     if (postProductIds.length > 0) {
-      const inventoriesWithMedia = await this.prisma.inventory.findMany({
+      const inventories = await this.prisma.inventory.findMany({
         where: {
           userId,
           productId: { in: postProductIds },
         },
-        include: {
-          media: {
-            where: { type: 'IMAGE' },
-            orderBy: { createdAt: 'asc' },
-          },
-        },
+        select: { productId: true },
       });
-
-      for (const inventory of inventoriesWithMedia) {
-        ownedProductIds.add(String(inventory.productId));
-        const imageUrls = inventory.media.map((m) => m.mediaUrl);
-        if (imageUrls.length > 0) {
-          inventoryMediaMap.set(inventory.productId, imageUrls);
-        }
-      }
+      inventories.forEach((inv) => {
+        ownedProductIds.add(String(inv.productId));
+      });
     }
-
+    
     const results = await Promise.all(
       posts.map(async (post) => {
         const stats = await this.getPostStats(post.id);
         const contextType = this.mapContextType(post);
         const contextData = this.buildContextDataFromPost(post, ownedProductIds);
-        const images = post.productId ? (inventoryMediaMap.get(post.productId) || []) : [];
+        // Get images for this post from PostMedia (orderIndex'e göre sıralı)
+        const images = postMediaMap.get(post.id) || [];
         const productBase = contextData
           ? {
               id: contextData.id,
@@ -1342,10 +1498,12 @@ export class UserService {
     options?: { cursor?: string; limit?: number }
   ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
-    const cursor =
-      options?.cursor && /^[0-9a-fA-F-]{36}$/.test(options.cursor) ? options.cursor : undefined;
+    const cursor = options?.cursor;
 
-    // Cursor dış ID = inventory.id (en son dönen item)
+    const userBase = await this.getUserBase(userId);
+    const results: any[] = [];
+
+    // 1. Inventory'den experience'ları çek (eski sistem)
     const inventories = await this.prisma.inventory.findMany({
       where: { userId },
       include: {
@@ -1367,15 +1525,7 @@ export class UserService {
       } as any,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
-      ...(cursor && {
-        cursor: { id: cursor },
-        skip: 1,
-      }),
     });
-
-    const userBase = await this.getUserBase(userId);
-
-    const results: any[] = [];
 
     for (const inv of inventories) {
       const experiences = this.buildExperienceSections(
@@ -1388,15 +1538,23 @@ export class UserService {
 
       const tags = await this.collectProductTags(String(inv.productId));
       const images = ((inv as any).media || [])
-        .filter((m: any) => m.type === 'IMAGE')
-        .map((m: any) => m.mediaUrl);
+        .map((m: any) => {
+          const mediaUrl = m.mediaUrl;
+          if (mediaUrl && (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://'))) {
+            return mediaUrl;
+          } else if (mediaUrl) {
+            return resolveMediaUrl(mediaUrl);
+          }
+          return null;
+        })
+        .filter((url: string | null) => url !== null);
 
       const contextData = this.buildContextDataFromInventory(inv as any);
 
       results.push({
         id: String(inv.id),
         type: 'experience' as const,
-          user: userBase,
+        user: userBase,
         stats: this.buildExperienceStats(String(inv.id)),
         createdAt: inv.createdAt.toISOString(),
         contextType: ContextType.PRODUCT,
@@ -1407,9 +1565,133 @@ export class UserService {
       });
     }
 
-    const hasMore = results.length > limit;
-    const paginatedResults = hasMore ? results.slice(0, limit) : results;
-    const nextCursor = hasMore && paginatedResults.length > 0 ? paginatedResults[paginatedResults.length - 1].id : undefined;
+    // 2. ContentPost tablosundan EXPERIENCE tipindeki gönderileri çek
+    const experiencePosts = await this.prisma.contentPost.findMany({
+      where: {
+        userId,
+        type: ContentPostType.EXPERIENCE,
+      },
+      include: {
+        product: {
+          include: {
+            group: {
+              include: {
+                subCategory: {
+                  include: {
+                    mainCategory: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        contentPostTags: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit + 1,
+    });
+
+    // Batch fetch images from PostMedia (orderIndex'e göre sıralı)
+    const postIds = experiencePosts.map((p) => p.id);
+    const postMediaMap = new Map<string, string[]>();
+    if (postIds.length > 0) {
+      const allPostMedia = await this.prisma.postMedia.findMany({
+        where: {
+          postId: { in: postIds },
+        },
+        orderBy: { orderIndex: 'asc' },
+        select: { postId: true, mediaUrl: true },
+      });
+
+      // Map'e dönüştür (postId -> mediaUrl array)
+      allPostMedia.forEach((media) => {
+        if (!postMediaMap.has(media.postId)) {
+          postMediaMap.set(media.postId, []);
+        }
+        const resolvedUrl = resolveMediaUrl(media.mediaUrl);
+        if (resolvedUrl) {
+          postMediaMap.get(media.postId)!.push(resolvedUrl);
+        }
+      });
+    }
+
+    for (const post of experiencePosts) {
+      // Experience content'i parse et
+      const experienceContent = this.parseExperienceContentFromPost(post.body);
+      
+      // Images
+      const images = postMediaMap.get(post.id) || [];
+
+      // Tags
+      const tags = (post.contentPostTags || [])
+        .map((cpt: any) => cpt.tag)
+        .filter((tag: string | null | undefined) => tag);
+
+      // Context data
+      const contextData = post.product ? {
+        product: {
+          id: post.product.id,
+          name: post.product.name,
+          image: resolveMediaUrl(post.product.imageUrl),
+          group: post.product.group ? {
+            id: post.product.group.id,
+            name: post.product.group.name,
+          } : null,
+          subCategory: post.product.group?.subCategory ? {
+            id: post.product.group.subCategory.id,
+            name: post.product.group.subCategory.name,
+            mainCategory: post.product.group.subCategory.mainCategory ? {
+              id: post.product.group.subCategory.mainCategory.id,
+              name: post.product.group.subCategory.mainCategory.name,
+            } : null,
+          } : null,
+        },
+      } : null;
+
+      // Stats
+      const stats = {
+        likes: post.likesCount || 0,
+        comments: post.commentsCount || 0,
+        shares: post.sharesCount || 0,
+        bookmarks: post.favoritesCount || 0,
+      };
+
+      results.push({
+        id: post.id,
+        type: 'experience' as const,
+        user: userBase,
+        stats,
+        createdAt: post.createdAt.toISOString(),
+        contextType: ContextType.PRODUCT,
+        contextData,
+        content: experienceContent,
+        tags,
+        images,
+      });
+    }
+
+    // Tüm sonuçları tarihe göre sırala
+    results.sort((a, b) => {
+      const timeA = new Date(a.createdAt).getTime();
+      const timeB = new Date(b.createdAt).getTime();
+      if (timeB !== timeA) return timeB - timeA;
+      return String(a.id).localeCompare(String(b.id));
+    });
+
+    // Cursor ve pagination
+    let filteredResults = results;
+    if (cursor) {
+      const cursorIndex = results.findIndex((r) => r.id === cursor);
+      if (cursorIndex >= 0) {
+        filteredResults = results.slice(cursorIndex + 1);
+      }
+    }
+
+    const hasMore = filteredResults.length > limit;
+    const paginatedResults = hasMore ? filteredResults.slice(0, limit) : filteredResults;
+    const nextCursor = hasMore && paginatedResults.length > 0 
+      ? paginatedResults[paginatedResults.length - 1].id 
+      : undefined;
 
     return {
       items: paginatedResults,
@@ -1419,6 +1701,55 @@ export class UserService {
         limit,
       },
     };
+  }
+
+  private parseExperienceContentFromPost(body: string): ExperienceContent[] {
+    const content: ExperienceContent[] = [];
+    
+    if (!body) {
+      return [
+        {
+          title: 'Product and Usage Experience',
+          content: '',
+          rating: 0,
+        },
+      ];
+    }
+
+    // Parse experience content from body
+    // Format: [type] content (Rating: X/5)
+    const priceRegex = /\[price_and_shopping\]\s*(.+?)\s*\(Rating:\s*(\d+)\/5\)/is;
+    const usageRegex = /\[product_and_usage\]\s*(.+?)\s*\(Rating:\s*(\d+)\/5\)/is;
+
+    const priceMatch = body.match(priceRegex);
+    const usageMatch = body.match(usageRegex);
+
+    if (priceMatch) {
+      content.push({
+        title: 'Price and Shopping Experience',
+        content: priceMatch[1].trim(),
+        rating: parseInt(priceMatch[2], 10),
+      });
+    }
+
+    if (usageMatch) {
+      content.push({
+        title: 'Product and Usage Experience',
+        content: usageMatch[1].trim(),
+        rating: parseInt(usageMatch[2], 10),
+      });
+    }
+
+    // Eğer hiçbir match yoksa, body'yi genel content olarak kullan
+    if (content.length === 0) {
+      content.push({
+        title: 'Product and Usage Experience',
+        content: body.trim(),
+        rating: 0,
+      });
+    }
+
+    return content;
   }
 
   private buildExperienceSections(
@@ -1988,7 +2319,7 @@ export class UserService {
             id: uid,
             name: profile?.displayName || 'Anonymous',
             title: title?.title || '',
-            avatar: avatar?.imageUrl ?? '',
+            avatar: resolveMediaUrl(avatar?.imageUrl ?? null) || '',
           },
         };
       })
@@ -2171,7 +2502,13 @@ export class UserService {
   }
 
   private resolveBadgeImage(badge?: { imageUrl?: string | null }): string {
-    return badge?.imageUrl || BADGE_PLACEHOLDER_URL;
+    if (!badge?.imageUrl) {
+      // Default badge görseli için resolveMediaUrl kullan
+      return resolveMediaUrl(DEFAULT_BADGE_IMAGE_PATH) || DEFAULT_BADGE_IMAGE_PATH;
+    }
+
+    // resolveMediaUrl kullanarak prefix ekle
+    return resolveMediaUrl(badge.imageUrl) || DEFAULT_BADGE_IMAGE_PATH;
   }
 
   private buildNftAddress(badgeId?: string | null, userBadgeId?: string): string {
@@ -2194,11 +2531,23 @@ export class UserService {
     const subCategory = group?.subCategory;
     const mainCategory = subCategory?.mainCategory;
 
+    // Image URL'ini bul ve prefix ekle
+    const imagePath = product.imageUrl || group?.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
+    let imageUrl: string | null = null;
+    
+    if (imagePath) {
+      if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+        imageUrl = imagePath;
+      } else {
+        imageUrl = resolveMediaUrl(imagePath);
+      }
+    }
+
     return {
       id: String(product.id),
       name: product.name,
       subName: product.brand || group?.name || subCategory?.name || mainCategory?.name || '',
-      image: product.imageUrl || group?.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null,
+      image: imageUrl,
       isOwned: !!inventory.hasOwned,
     };
   }

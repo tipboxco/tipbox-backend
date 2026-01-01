@@ -55,5 +55,6 @@ export interface CreateInventoryRequest {
   status: ExperienceStatus;
   images?: string[];
   userId?: string;
+  experienceSnippetId?: string; // Experience snippet ID (optional)
 }
 

@@ -1,5 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 import logger from '../../infrastructure/logger/logger';
+import { resolveMediaUrl } from '../../infrastructure/config/media.config';
+import { withCache } from '../../infrastructure/cache/cache-wrapper.helper';
+import { CACHE_KEYS } from '../../infrastructure/cache/cache-keys';
+import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
 
 const prisma = new PrismaClient();
 
@@ -35,33 +39,50 @@ export class CatalogService {
    * Tüm kategorileri listele
    */
   async getAllCategories(): Promise<CategoryItem[]> {
-    try {
-      const categories = await prisma.mainCategory.findMany({
-        select: {
-          id: true,
-          name: true,
-          imageUrl: true,
-        },
-        orderBy: {
-          name: 'asc',
-        },
-      });
+    return withCache(
+      CACHE_KEYS.STATIC_CATEGORIES(),
+      async () => {
+        const categories = await prisma.mainCategory.findMany({
+          select: {
+            id: true,
+            name: true,
+            imageUrl: true,
+          },
+          orderBy: {
+            name: 'asc',
+          },
+        });
 
-      return categories.map((category) => ({
-        categoryId: category.id,
-        name: category.name,
-        image: category.imageUrl,
-      }));
-    } catch (error) {
-      logger.error('Failed to get all categories:', error);
-      throw error;
-    }
+        const { resolveMediaUrl } = await import('../../infrastructure/config/media.config');
+
+        return categories.map((category) => {
+          const imageUrl = resolveMediaUrl(category.imageUrl);
+
+          return {
+            categoryId: category.id,
+            name: category.name,
+            image: imageUrl,
+          };
+        });
+      },
+      CACHE_TTL.STATIC_CATEGORIES, // 24 saat - kategoriler çok nadir değişir
+      { logPrefix: 'CatalogService' }
+    );
   }
 
   /**
    * Kategoriye göre sub-kategorileri listele
    */
   async getSubCategoriesByCategoryId(categoryId: string): Promise<SubCategoryItem[]> {
+    return withCache(
+      CACHE_KEYS.CATEGORY(categoryId),
+      async () => this.fetchSubCategories(categoryId),
+      CACHE_TTL.CATEGORY, // 2 saat
+      { logPrefix: 'CatalogService' }
+    );
+  }
+
+  private async fetchSubCategories(categoryId: string): Promise<SubCategoryItem[]> {
     try {
       const subCategories = await prisma.subCategory.findMany({
         where: {
@@ -77,11 +98,16 @@ export class CatalogService {
         },
       });
 
-      return subCategories.map((subCategory) => ({
-        subCategoryId: subCategory.id,
-        name: subCategory.name,
-        image: subCategory.imageUrl,
-      }));
+      return subCategories.map((subCategory) => {
+        const imageUrl = resolveMediaUrl(subCategory.imageUrl);
+
+        return {
+          subCategoryId: subCategory.id,
+          categoryId: categoryId,
+          name: subCategory.name,
+          image: imageUrl,
+        };
+      });
     } catch (error) {
       logger.error(`Failed to get sub-categories for category ${categoryId}:`, error);
       throw error;
@@ -92,6 +118,15 @@ export class CatalogService {
    * Sub-kategoriye göre product group'ları listele
    */
   async getProductGroupsBySubCategoryId(subCategoryId: string): Promise<ProductGroupItem[]> {
+    return withCache(
+      CACHE_KEYS.SUB_CATEGORY(subCategoryId),
+      async () => this.fetchProductGroups(subCategoryId),
+      CACHE_TTL.SUB_CATEGORY, // 2 saat
+      { logPrefix: 'CatalogService' }
+    );
+  }
+
+  private async fetchProductGroups(subCategoryId: string): Promise<ProductGroupItem[]> {
     try {
       const productGroups = await prisma.productGroup.findMany({
         where: {
@@ -108,12 +143,16 @@ export class CatalogService {
         },
       });
 
-      return productGroups.map((group) => ({
-        productGroupId: group.id,
-        name: group.name,
-        image: group.imageUrl,
-        subCategoryId: group.subCategoryId,
-      }));
+      return productGroups.map((group) => {
+        const imageUrl = resolveMediaUrl(group.imageUrl);
+
+        return {
+          productGroupId: group.id,
+          name: group.name,
+          image: imageUrl,
+          subCategoryId: group.subCategoryId,
+        };
+      });
     } catch (error) {
       logger.error(`Failed to get product groups for sub-category ${subCategoryId}:`, error);
       throw error;
@@ -124,6 +163,15 @@ export class CatalogService {
    * Product group'a göre ürünleri listele
    */
   async getProductsByProductGroupId(productGroupId: string): Promise<ProductItem[]> {
+    return withCache(
+      `product-group:${productGroupId}:products`,
+      async () => this.fetchProducts(productGroupId),
+      CACHE_TTL.CATEGORY_PRODUCTS, // 1 saat
+      { logPrefix: 'CatalogService' }
+    );
+  }
+
+  private async fetchProducts(productGroupId: string): Promise<ProductItem[]> {
     try {
       const products = await prisma.product.findMany({
         where: {
@@ -140,12 +188,16 @@ export class CatalogService {
         },
       });
 
-      return products.map((product) => ({
-        productId: product.id,
-        name: product.name,
-        image: product.imageUrl,
-        productGroupId: product.groupId || '',
-      }));
+      return products.map((product) => {
+        const imageUrl = resolveMediaUrl(product.imageUrl);
+
+        return {
+          productId: product.id,
+          name: product.name,
+          image: imageUrl,
+          productGroupId: product.groupId || '',
+        };
+      });
     } catch (error) {
       logger.error(`Failed to get products for product group ${productGroupId}:`, error);
       throw error;

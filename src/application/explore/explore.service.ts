@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { CacheService } from '../../infrastructure/cache/cache.service';
+import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import { MarketplaceBannerPrismaRepository } from '../../infrastructure/repositories/marketplace-banner-prisma.repository';
 import logger from '../../infrastructure/logger/logger';
 import {
@@ -148,25 +149,24 @@ export class ExploreService {
         bookmarks: (post as any).favoritesCount || 0,
       });
     });
-    const postProductIds = posts.map((p) => p.productId).filter(Boolean) as string[];
-    const inventoryMediaMap = new Map<string, string[]>();
-    if (postProductIds.length > 0) {
-      const inventoriesWithMedia = await this.prisma.inventory.findMany({
+    // Batch fetch images from PostMedia (orderIndex'e göre sıralı)
+    const postIds = posts.map((p) => p.id);
+    const postMediaMap = new Map<string, string[]>();
+    if (postIds.length > 0) {
+      const allPostMedia = await this.prisma.postMedia.findMany({
         where: {
-          userId: { in: posts.map((p) => p.userId) },
-          productId: { in: postProductIds },
+          postId: { in: postIds },
         },
-        include: {
-          media: {
-            where: { type: 'IMAGE' },
-            select: { mediaUrl: true },
-          },
-        },
+        orderBy: { orderIndex: 'asc' }, // Kullanıcının yüklediği sırada
+        select: { postId: true, mediaUrl: true },
       });
 
-      inventoriesWithMedia.forEach((inv) => {
-        const key = `${inv.userId}-${inv.productId}`;
-        inventoryMediaMap.set(key, inv.media.map((m) => m.mediaUrl));
+      // Map'e dönüştür (postId -> mediaUrl array)
+      allPostMedia.forEach((media) => {
+        if (!postMediaMap.has(media.postId)) {
+          postMediaMap.set(media.postId, []);
+        }
+        postMediaMap.get(media.postId)!.push(media.mediaUrl);
       });
     }
 
@@ -193,8 +193,9 @@ export class ExploreService {
           contextType: this.mapContextType(post),
         };
 
-        const postKey = `${post.userId}-${post.productId || ''}`;
-        const images = inventoryMediaMap.get(postKey) || [];
+        // Get images for this post from PostMedia (orderIndex'e göre sıralı)
+        const rawImages = postMediaMap.get(post.id) || [];
+        const images = rawImages.map((img: string) => resolveMediaUrl(img) || img);
 
         switch (post.type) {
           case ContentPostType.FREE:
@@ -244,7 +245,20 @@ export class ExploreService {
       const cached = await this.cacheService.get<MarketplaceBannerResponse[]>(cacheKey);
       if (cached) {
         logger.info({ message: 'Marketplace banners served from cache', cacheKey });
-        return cached;
+        // Cache'den gelen verileri de resolveMediaUrl ile işle (cache'deki path'ler güncellenmiş olabilir)
+        return cached.map((banner) => {
+          // Eğer imageUrl zaten tam URL ise (http:// ile başlıyorsa) olduğu gibi döndür
+          if (banner.imageUrl && (banner.imageUrl.startsWith('http://') || banner.imageUrl.startsWith('https://'))) {
+            return banner;
+          }
+          // Path ise resolveMediaUrl ile tam URL'ye çevir
+          const imagePath = banner.imageUrl && banner.imageUrl.trim() !== '' ? banner.imageUrl : null;
+          const resolvedImageUrl = imagePath ? resolveMediaUrl(imagePath) : null;
+          return {
+            ...banner,
+            imageUrl: resolvedImageUrl || '',
+          };
+        });
       }
     } catch (error) {
       logger.warn({ message: 'Cache error', error: error instanceof Error ? error.message : String(error) });
@@ -252,13 +266,19 @@ export class ExploreService {
 
     const banners = await this.bannerRepo.findActive();
 
-    const response: MarketplaceBannerResponse[] = banners.map((banner) => ({
-      id: banner.id,
-      title: banner.title,
-      description: banner.description || undefined,
-      imageUrl: banner.imageUrl,
-      linkUrl: banner.linkUrl || undefined,
-    }));
+    const response: MarketplaceBannerResponse[] = banners.map((banner) => {
+      // imageUrl boş string ise null'a çevir
+      const imagePath = banner.imageUrl && banner.imageUrl.trim() !== '' ? banner.imageUrl : null;
+      // resolveMediaUrl ile path'i tam URL'ye çevir, null ise boş string döndür
+      const resolvedImageUrl = imagePath ? resolveMediaUrl(imagePath) : null;
+      return {
+        id: banner.id,
+        title: banner.title,
+        description: banner.description || undefined,
+        imageUrl: resolvedImageUrl || '',
+        linkUrl: banner.linkUrl || undefined,
+      };
+    });
 
     // Cache for 30 minutes
     try {
@@ -340,7 +360,7 @@ export class ExploreService {
         return {
           eventId: event.id,
           eventType: event.eventType || 'SURVEY',
-          image: (event as any).imageUrl || null,
+          image: resolveMediaUrl((event as any).imageUrl) || null,
           title: event.title,
           description: event.description || '',
           startDate: event.startDate.toISOString(),
@@ -348,7 +368,7 @@ export class ExploreService {
           interaction: totalParticipants,
           participants: participantData.map((pd) => ({
             userId: pd.userId,
-            avatar: pd.user.avatars[0]?.imageUrl || null,
+            avatar: resolveMediaUrl(pd.user.avatars[0]?.imageUrl || null),
             userName: pd.user.profile?.userName || pd.user.profile?.displayName || 'Anonymous',
           })),
         };
@@ -415,7 +435,7 @@ export class ExploreService {
     const response = {
       items: resultBrands.map((brand) => ({
         brandId: brand.id,
-        images: brand.logoUrl || null,
+        images: resolveMediaUrl(brand.logoUrl) || null,
         title: brand.name,
         description: brand.description || '',
       })),
@@ -482,7 +502,6 @@ export class ExploreService {
       },
       include: {
         media: {
-          where: { type: 'IMAGE' },
           take: 1,
           orderBy: { uploadedAt: 'desc' },
         },
@@ -500,7 +519,7 @@ export class ExploreService {
     const response = {
       items: resultProducts.map((product) => ({
         productId: product.id,
-        images: productImageMap.get(product.id) || product.imageUrl || null,
+        images: resolveMediaUrl(productImageMap.get(product.id) || product.imageUrl) || null,
         title: product.name,
       })),
       pagination: {
@@ -533,7 +552,7 @@ export class ExploreService {
       id: userId,
       name: profile?.displayName || 'Anonymous',
       title: title?.title || '',
-      avatar: avatar?.imageUrl || '',
+      avatar: resolveMediaUrl(avatar?.imageUrl || null) || '',
     };
   }
 
@@ -543,7 +562,7 @@ export class ExploreService {
       id: String(product.id),
       name: product.name,
       subName: product.brand || product.group?.name || '',
-      image: product.imageUrl || null,
+      image: resolveMediaUrl(product.imageUrl) || null,
     };
   }
 
@@ -569,7 +588,7 @@ export class ExploreService {
         id: String(product.id),
         name: product.name,
         subName: group?.name || subCategory?.name || '',
-        image: product.imageUrl || null,
+        image: resolveMediaUrl(product.imageUrl) || null,
       };
     }
 
@@ -577,11 +596,12 @@ export class ExploreService {
       const group = post.productGroup;
       if (group) {
         const subCategory = group.subCategory;
+        const imageUrl = group.imageUrl || subCategory?.imageUrl || subCategory?.mainCategory?.imageUrl || null;
         return {
           id: String(group.id),
           name: group.name,
           subName: subCategory?.name || '',
-          image: group.imageUrl || subCategory?.imageUrl || subCategory?.mainCategory?.imageUrl || null,
+          image: resolveMediaUrl(imageUrl) || null,
         };
       }
 
@@ -596,11 +616,12 @@ export class ExploreService {
     // SUB_CATEGORY (fallback olarak mainCategory bilgisini de kullan)
     if (post.subCategory) {
       const subCategory = post.subCategory;
+      const imageUrl = subCategory.imageUrl || subCategory.mainCategory?.imageUrl || null;
       return {
         id: String(subCategory.id),
         name: subCategory.name,
         subName: subCategory.mainCategory?.name || '',
-        image: subCategory.imageUrl || subCategory.mainCategory?.imageUrl || null,
+        image: resolveMediaUrl(imageUrl) || null,
       };
     }
 
@@ -609,7 +630,7 @@ export class ExploreService {
         id: String(post.mainCategory.id),
         name: post.mainCategory.name,
         subName: '',
-        image: post.mainCategory.imageUrl || null,
+        image: resolveMediaUrl(post.mainCategory.imageUrl) || null,
       };
     }
 
@@ -708,7 +729,7 @@ export class ExploreService {
           id: post.productId || '',
           name: post.product?.name || '',
           subName: post.productGroup?.name || '',
-          image: post.product?.imageUrl || null,
+          image: resolveMediaUrl(post.product?.imageUrl) || null,
           isOwned: false,
         };
 

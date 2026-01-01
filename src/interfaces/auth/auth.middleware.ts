@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyAuth0Jwt } from '../../infrastructure/auth/auth0.helper';
 import { verifyJwt } from '../../infrastructure/auth/jwt.helper';
+import { isTokenBlacklisted } from '../../infrastructure/auth/token-blacklist';
 
 export async function authMiddleware(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
@@ -9,11 +10,21 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
   }
   const token = authHeader.split(' ')[1];
   
+  // Token blacklist kontrolü (logout sonrası)
+  const isBlacklisted = await isTokenBlacklisted(token);
+  if (isBlacklisted) {
+    return res.status(401).json({ 
+      message: 'Token has been revoked',
+      code: 'TOKEN_REVOKED'
+    });
+  }
+  
   // Önce backend JWT'yi dene
   const backendPayload = verifyJwt(token);
   if (backendPayload) {
     // Backend JWT geçerli
     (req as any).user = backendPayload;
+    (req as any).token = token; // Token'ı request'e ekle (logout için gerekli)
     return next();
   }
   
@@ -22,6 +33,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
   if (auth0Payload) {
     // Auth0 JWT geçerli
     (req as any).user = auth0Payload;
+    (req as any).token = token; // Token'ı request'e ekle
     return next();
   }
   

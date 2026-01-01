@@ -157,7 +157,7 @@ router.post(
       images: body.images || [],
     });
 
-    res.status(201).json(created);
+    return res.status(201).json(created);
   })
 );
 
@@ -194,7 +194,7 @@ router.get(
     }
 
     const result = await inventoryService.getUserInventoryList(userId);
-    res.json(result);
+    return res.json(result);
   })
 );
 
@@ -267,7 +267,7 @@ router.patch(
         hasOwned,
         experienceSummary,
       });
-      res.json(result);
+      return res.json(result);
     } catch (error) {
       if (error instanceof Error) {
         if (error.message.includes('not found')) {
@@ -338,9 +338,9 @@ router.delete(
     try {
       const success = await inventoryService.deleteInventoryItem(userId, inventoryId);
       if (success) {
-        res.json({ success: true, message: 'Inventory item deleted successfully' });
+        return res.json({ success: true, message: 'Inventory item deleted successfully' });
       } else {
-        res.status(500).json({ success: false, message: 'Failed to delete inventory item' });
+        return res.status(500).json({ success: false, message: 'Failed to delete inventory item' });
       }
     } catch (error) {
       if (error instanceof Error) {
@@ -353,6 +353,159 @@ router.delete(
       }
       throw error;
     }
+  })
+);
+
+/**
+ * @openapi
+ * /inventory/experience/options:
+ *   get:
+ *     summary: Deneyim seçeneklerini getir
+ *     description: Duration, Location ve Purpose seçeneklerini getirir.
+ *     tags: [Inventory]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Deneyim seçenekleri
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 durations:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       name:
+ *                         type: string
+ *                 locations:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       name:
+ *                         type: string
+ *                 purposes:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       name:
+ *                         type: string
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ */
+router.get(
+  '/experience/options',
+  authMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const result = await inventoryService.getExperienceOptions();
+    return res.json(result);
+  })
+);
+
+/**
+ * @openapi
+ * /inventory/split-experience:
+ *   post:
+ *     summary: Deneyim metnini AI ile kategorilere ayır
+ *     description: Kullanıcının yazdığı deneyim metnini Gemini AI kullanarak "Price and Shopping Experience" ve "Product and Usage Experience" kategorilerine ayırır.
+ *     tags: [Inventory]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - productId
+ *               - experienceText
+ *             properties:
+ *               productId:
+ *                 type: string
+ *                 description: Ürün ID
+ *               experienceText:
+ *                 type: string
+ *                 description: Kullanıcının yazdığı deneyim metni
+ *     responses:
+ *       200:
+ *         description: Deneyim başarıyla ayrıştırıldı
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 priceAndShopping:
+ *                   type: object
+ *                   nullable: true
+ *                   properties:
+ *                     content:
+ *                       type: string
+ *                     rating:
+ *                       type: number
+ *                       minimum: 1
+ *                       maximum: 5
+ *                 productAndUsage:
+ *                   type: object
+ *                   nullable: true
+ *                   properties:
+ *                     content:
+ *                       type: string
+ *                     rating:
+ *                       type: number
+ *                       minimum: 1
+ *                       maximum: 5
+ *       400:
+ *         description: Geçersiz istek
+ *       401:
+ *         description: Unauthorized
+ *       503:
+ *         description: AI servisi hatası
+ */
+router.post(
+  '/split-experience',
+  authMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { productId, experienceText } = req.body;
+
+    if (!productId || typeof productId !== 'string') {
+      return res.status(400).json({ message: 'productId is required' });
+    }
+
+    if (!experienceText || typeof experienceText !== 'string') {
+      return res.status(400).json({ message: 'experienceText is required' });
+    }
+
+    if (experienceText.trim().length < 10) {
+      return res.status(400).json({ message: 'experienceText must be at least 10 characters' });
+    }
+
+    const result = await inventoryService.splitExperienceWithAI(userId, productId, experienceText);
+    return res.json(result);
   })
 );
 

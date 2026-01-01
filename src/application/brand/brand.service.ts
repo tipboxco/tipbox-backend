@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { FeedItem, FeedItemType, FeedResponse, ContextData, ExperiencePost, ExperienceContent } from '../../interfaces/feed/feed.dto';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
-import { buildMediaUrl } from '../../infrastructure/config/media.config';
+import { buildMediaUrl, resolveMediaUrl } from '../../infrastructure/config/media.config';
 import logger from '../../infrastructure/logger/logger';
 import { NotFoundError } from '../../infrastructure/errors/custom-errors';
 
@@ -244,6 +244,14 @@ export class BrandService {
   }
 
   /**
+   * Media path'ini tam URL'ye çevirir
+   * resolveMediaUrl kullanarak doğru formatı garanti eder
+   */
+  private buildFullMediaUrl(path: string | null | undefined): string | null {
+    return resolveMediaUrl(path);
+  }
+
+  /**
    * Tüm brand kategorilerini listele
    */
   async getAllBrandCategories(): Promise<BrandCategoryItem[]> {
@@ -254,11 +262,15 @@ export class BrandService {
         },
       });
 
-      return categories.map((category) => ({
-        categoryId: category.id,
-        name: category.name,
-        image: category.imageUrl,
-      }));
+      return categories.map((category) => {
+        const imageUrl = resolveMediaUrl(category.imageUrl);
+
+        return {
+          categoryId: category.id,
+          name: category.name,
+          image: imageUrl,
+        };
+      });
     } catch (error) {
       logger.error('Failed to get all brand categories:', error);
       throw error;
@@ -299,11 +311,15 @@ export class BrandService {
         },
       });
 
-      return brands.map((brand) => ({
-        brandId: brand.id,
-        name: brand.name,
-        image: brand.imageUrl,
-      }));
+      return brands.map((brand) => {
+        const imageUrl = resolveMediaUrl(brand.imageUrl);
+
+        return {
+          brandId: brand.id,
+          name: brand.name,
+          image: imageUrl,
+        };
+      });
     } catch (error) {
       logger.error(`Failed to get brands for category ${categoryId}:`, error);
       throw error;
@@ -438,11 +454,17 @@ export class BrandService {
         isJoined = !!follow;
       }
 
+      let bannerImageUrl: string | null = null;
+      
+      if (brand.imageUrl) {
+        bannerImageUrl = resolveMediaUrl(brand.imageUrl);
+      }
+
       return {
         brandId: brand.id,
         name: brand.name,
         description: brand.description,
-        bannerImage: brand.imageUrl || null,
+        bannerImage: bannerImageUrl,
         followers: followersCount,
         isJoined,
       };
@@ -561,9 +583,7 @@ export class BrandService {
           },
           include: {
             productExperiences: true,
-            media: {
-              where: { type: 'IMAGE' },
-            },
+            media: true, // type field'ı kaldırıldı, tüm media'ları getir
           },
         });
 
@@ -689,7 +709,7 @@ export class BrandService {
       },
     });
 
-    const badgeImageUrl = buildMediaUrl('tipbox-media/brandbadge/badge1.png');
+    const badgeImageUrl = buildMediaUrl('brandbadge/badge1.png');
     const rewards: EventRewards = {
       title: reward ? `Badge Reward #${reward.rewardId}` : 'Participation Badge',
       badgeImage: badgeImageUrl,
@@ -896,7 +916,7 @@ export class BrandService {
 
     // Distinct badge'leri map'le
     const uniqueBadgesMap = new Map<string, BrandHistoryBadge>();
-    const defaultBadgeImage = buildMediaUrl('tipbox-media/badge/badge1.png');
+    const defaultBadgeImage = buildMediaUrl('badge/badge1.png');
     
     for (const br of allRewards) {
       if (!uniqueBadgesMap.has(br.badgeId)) {
@@ -1019,7 +1039,7 @@ export class BrandService {
     const hasMore = rewards.length > limit;
     const resultRewards = hasMore ? rewards.slice(0, limit) : rewards;
 
-    const defaultBadgeImage = buildMediaUrl('tipbox-media/badge/badge1.png');
+    const defaultBadgeImage = buildMediaUrl('badge/badge1.png');
     const items: BrandHistoryPointsItem[] = resultRewards.map((r) => ({
       id: r.id,
       title: r.badge.name,
@@ -1225,10 +1245,11 @@ export class BrandService {
 
         const products = limitedProducts.map<BrandProduct>((product) => {
           const stats = this.calculateProductStats(product.contentPosts || []);
+          const imageUrl = resolveMediaUrl(product.imageUrl);
           return {
             productId: product.id,
             name: product.name,
-            image: product.imageUrl,
+            image: imageUrl,
             stats,
           };
         });
@@ -1313,7 +1334,7 @@ export class BrandService {
       return {
         productId: product.id,
         name: product.name,
-        image: product.imageUrl,
+        image: this.buildFullMediaUrl(product.imageUrl),
         stats,
       };
     });
@@ -1379,7 +1400,7 @@ export class BrandService {
       return {
         productId: product.id,
         name: product.name,
-        image: product.imageUrl,
+        image: this.buildFullMediaUrl(product.imageUrl),
         stats,
       };
     });
@@ -1479,7 +1500,7 @@ export class BrandService {
         groupData.products.push({
           productId: product.id,
           name: product.name,
-          image: product.imageUrl,
+          image: this.buildFullMediaUrl(product.imageUrl),
           stats,
         });
       }
@@ -1850,26 +1871,24 @@ export class BrandService {
       : [];
     const ownedProductIds = new Set(inventories.map((inv) => String(inv.productId)));
 
-    // Batch fetch images
-    const postProductIds = posts.map((p) => p.productId).filter(Boolean) as string[];
-    const inventoryMediaMap = new Map<string, string[]>();
-    if (postProductIds.length > 0 && userId) {
-      const inventoriesWithMedia = await this.prisma.inventory.findMany({
+    // Batch fetch images from PostMedia (orderIndex'e göre sıralı)
+    const postIds = posts.map((p) => p.id);
+    const postMediaMap = new Map<string, string[]>();
+    if (postIds.length > 0) {
+      const allPostMedia = await this.prisma.postMedia.findMany({
         where: {
-          userId: userId,
-          productId: { in: postProductIds },
+          postId: { in: postIds },
         },
-        include: {
-          media: {
-            where: { type: 'IMAGE' },
-            select: { mediaUrl: true },
-          },
-        },
+        orderBy: { orderIndex: 'asc' }, // Kullanıcının yüklediği sırada
+        select: { postId: true, mediaUrl: true },
       });
 
-      inventoriesWithMedia.forEach((inv) => {
-        const key = `${inv.userId}-${inv.productId}`;
-        inventoryMediaMap.set(key, inv.media.map((m) => m.mediaUrl));
+      // Map'e dönüştür (postId -> mediaUrl array)
+      allPostMedia.forEach((media) => {
+        if (!postMediaMap.has(media.postId)) {
+          postMediaMap.set(media.postId, []);
+        }
+        postMediaMap.get(media.postId)!.push(media.mediaUrl);
       });
     }
 
@@ -1879,7 +1898,7 @@ export class BrandService {
         id: post.user.id,
         name: post.user.profile?.displayName || post.user.email || 'Anonymous',
         title: post.user.titles?.[0]?.title || '',
-        avatar: post.user.avatars?.[0]?.imageUrl || '',
+        avatar: resolveMediaUrl(post.user.avatars?.[0]?.imageUrl || null) || '',
       };
 
       const stats = {
@@ -1906,12 +1925,14 @@ export class BrandService {
         contextData,
       };
 
-      // Get images for this post
-      const postKey = `${post.userId}-${post.productId || ''}`;
-      let images = inventoryMediaMap.get(postKey) || [];
-      // Inventory'de media yoksa, ürün görselini fallback olarak kullan
+      // Get images for this post from PostMedia (orderIndex'e göre sıralı)
+      let images = (postMediaMap.get(post.id) || []).map((mediaUrl: string) => resolveMediaUrl(mediaUrl)).filter((url: string | null): url is string => url !== null);
+      // PostMedia'da görsel yoksa, ürün görselini fallback olarak kullan
       if ((!images || images.length === 0) && post.product?.imageUrl) {
-        images = [post.product.imageUrl];
+        const productImageUrl = this.buildFullMediaUrl(post.product.imageUrl);
+        if (productImageUrl) {
+          images = [productImageUrl];
+        }
       }
 
       // Map based on post type
@@ -1962,7 +1983,7 @@ export class BrandService {
         id: String(product.id),
         name: product.name,
         subName: group?.name || subCategory?.name || '',
-        image: product.imageUrl || null,
+        image: this.buildFullMediaUrl(product.imageUrl),
         isOwned: ownedProductIds ? ownedProductIds.has(String(product.id)) : undefined,
       };
     }
@@ -2021,7 +2042,7 @@ export class BrandService {
       id: String(product.id),
       name: product.name,
       subName: product.subName || product.brand || product.group?.name || '',
-      image: product.imageUrl || null,
+      image: this.buildFullMediaUrl(product.imageUrl),
     };
   }
 
@@ -2073,7 +2094,7 @@ export class BrandService {
         
         // Inventory'den gelen görselleri de kullan
         if (inventory.media && inventory.media.length > 0) {
-          images = inventory.media.map((m: any) => m.mediaUrl);
+          images = inventory.media.map((m: any) => resolveMediaUrl(m.mediaUrl)).filter((url: string | null): url is string => url !== null);
         }
       }
     }

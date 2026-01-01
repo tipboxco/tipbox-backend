@@ -129,9 +129,13 @@ router.get('/me/profile', asyncHandler(async (req: Request, res: Response) => {
 router.put('/me/profile', asyncHandler(async (req: Request<{}, {}, UpdateUserProfileRequest>, res: Response) => {
   const userPayload = (req as any).user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+  if (!userId) {
+    logger.warn('[updateProfile] Unauthorized request - no userId found');
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
 
   const body = req.body || {};
+  logger.info('[updateProfile] Request received', { userId, bodyKeys: Object.keys(body) });
 
   if (body.name && body.name.trim().length < 2) {
     return res.status(400).json({ message: 'İsim en az 2 karakter olmalıdır' });
@@ -145,20 +149,39 @@ router.put('/me/profile', asyncHandler(async (req: Request<{}, {}, UpdateUserPro
     return res.status(400).json({ message: 'badge alanı bir dizi olmalıdır' });
   }
 
-  await userService.updateProfileDetails(String(userId), {
-    name: body.name,
-    biography: body.biography,
-    banner: typeof body.banner !== 'undefined' ? body.banner : undefined,
-    avatar: body.avatar ?? undefined,
-    cosmeticId: typeof body.cosmetic !== 'undefined' ? body.cosmetic : undefined,
-    badges: body.badge?.map(badge => ({ id: badge })) ?? undefined,
-  });
+  try {
+    await userService.updateProfileDetails(String(userId), {
+      name: body.name,
+      biography: body.biography,
+      banner: typeof body.banner !== 'undefined' ? body.banner : undefined,
+      avatar: body.avatar ?? undefined,
+      cosmeticId: typeof body.cosmetic !== 'undefined' ? body.cosmetic : undefined,
+      badges: body.badge?.map(badge => ({ id: badge })) ?? undefined,
+    });
 
-  const profile = await userService.getSelfUserProfile(String(userId));
-  return res.json({
-    success: true,
-    profile,
-  });
+    logger.info('[updateProfile] Profile updated successfully', { userId });
+
+    const profile = await userService.getSelfUserProfile(String(userId));
+    if (!profile) {
+      logger.error('[updateProfile] Profile not found after update', { userId });
+      return res.status(404).json({ 
+        success: false,
+        message: 'Profil bulunamadı' 
+      });
+    }
+
+    return res.json({
+      success: true,
+      profile,
+    });
+  } catch (error) {
+    logger.error('[updateProfile] Error updating profile', { 
+      userId, 
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
+    throw error; // asyncHandler'a bırak
+  }
 }));
 
 /**
@@ -1113,7 +1136,7 @@ router.post('/setup-profile', upload.fields([{ name: 'Avatar', maxCount: 1 }, { 
       updatedAt: user.updatedAt.toISOString(),
     };
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: 'Profil başarıyla tamamlandı',
       user: response,
@@ -1135,7 +1158,7 @@ router.post('/setup-profile', upload.fields([{ name: 'Avatar', maxCount: 1 }, { 
       });
     }
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: `Profil tamamlanırken bir hata oluştu: ${errorMessage}`,
     });
@@ -1254,7 +1277,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString()
   };
-  res.json(response);
+  return res.json(response);
 }));
 
 
@@ -1339,7 +1362,7 @@ router.get('/:id/profile-card', asyncHandler(async (req: Request, res: Response)
   if (!card) {
     return res.status(404).json({ message: 'Kullanıcı bulunamadı' });
   }
-  res.json(card);
+  return res.json(card);
 }));
 
 
@@ -1368,7 +1391,7 @@ router.delete('/:id/trusts/:targetUserId', asyncHandler(async (req: Request, res
   const { id, targetUserId } = req.params;
   const ok = await userService.removeTrust(id, targetUserId);
   if (!ok) return res.status(404).json({ message: 'Kayıt bulunamadı' });
-  res.status(204).send();
+  return res.status(204).send();
 }));
 
 /**
@@ -1404,7 +1427,7 @@ router.post('/:id/block/:targetUserId', asyncHandler(async (req: Request, res: R
   if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
   const targetUserId = String(req.params.targetUserId);
   await userService.blockUser(id, targetUserId);
-  res.status(204).send();
+  return res.status(204).send();
 }));
 
 /**
@@ -1441,7 +1464,7 @@ router.delete('/:id/block/:targetUserId', asyncHandler(async (req: Request, res:
   const targetUserId = String(req.params.targetUserId);
   const ok = await userService.unblockUser(id, targetUserId);
   if (!ok) return res.status(404).json({ message: 'Engelleme kaydı bulunamadı' });
-  res.status(204).send();
+  return res.status(204).send();
 }));
 
 /**
@@ -1477,7 +1500,7 @@ router.post('/:id/mute/:targetUserId', asyncHandler(async (req: Request, res: Re
   if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
   const targetUserId = String(req.params.targetUserId);
   await userService.muteUser(id, targetUserId);
-  res.status(204).send();
+  return res.status(204).send();
 }));
 
 /**
@@ -1514,7 +1537,7 @@ router.delete('/:id/mute/:targetUserId', asyncHandler(async (req: Request, res: 
   const targetUserId = String(req.params.targetUserId);
   const ok = await userService.unmuteUser(id, targetUserId);
   if (!ok) return res.status(404).json({ message: 'Susturma kaydı bulunamadı' });
-  res.status(204).send();
+  return res.status(204).send();
 }));
 
 /**
@@ -1630,7 +1653,7 @@ router.get('/:id/collections/achievements', asyncHandler(async (req: Request, re
   const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
   const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
   const badges = await userService.listAchievementBadges(id, queryQ || querySearch || undefined, { cursor, limit });
-  res.json(badges);
+  return res.json(badges);
 }));
 
 /**
@@ -1682,7 +1705,7 @@ router.get('/:id/feed', asyncHandler(async (req: Request, res: Response) => {
   const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
   const types = parseProfileFeedTypes(req.query.types);
   const feed = await userService.getUserProfileFeed(id, { limit, types, cursor });
-  res.json(feed);
+  return res.json(feed);
 }));
 
 /**
@@ -1740,7 +1763,7 @@ router.get('/:id/reviews', asyncHandler(async (req: Request, res: Response) => {
   const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
   const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
   const reviews = await userService.getUserReviews(id, { cursor, limit });
-  res.json(reviews);
+  return res.json(reviews);
 }));
 
 /**
@@ -1798,7 +1821,7 @@ router.get('/:id/benchmarks', asyncHandler(async (req: Request, res: Response) =
   const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
   const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
   const benchmarks = await userService.getUserBenchmarks(id, { cursor, limit });
-  res.json(benchmarks);
+  return res.json(benchmarks);
 }));
 
 /**
@@ -1856,7 +1879,7 @@ router.get('/:id/tips', asyncHandler(async (req: Request, res: Response) => {
   const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
   const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
   const tips = await userService.getUserTips(id, { cursor, limit });
-  res.json(tips);
+  return res.json(tips);
 }));
 
 /**
@@ -1914,7 +1937,7 @@ router.get('/:id/questions', asyncHandler(async (req: Request, res: Response) =>
   const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
   const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
   const replies = await userService.getUserReplies(id, { cursor, limit });
-  res.json(replies);
+  return res.json(replies);
 }));
 
 /**
@@ -1972,7 +1995,7 @@ router.get('/:id/ladder/badges', asyncHandler(async (req: Request, res: Response
   const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
   const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
   const badges = await userService.getUserLadderBadges(id, { cursor, limit });
-  res.json(badges);
+  return res.json(badges);
 }));
 
 /**
@@ -2171,7 +2194,7 @@ router.get('/:id/bookmarks', asyncHandler(async (req: Request, res: Response) =>
   const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
   const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
   const bookmarks = await userService.getUserBookmarks(id, { cursor, limit });
-  res.json(bookmarks);
+  return res.json(bookmarks);
 }));
 
 
@@ -2229,7 +2252,7 @@ router.post('/settings/change-password', asyncHandler(async (req: Request, res: 
     return res.status(400).json({ error: { message: result.message || 'Password change failed' } });
   }
 
-  res.json(result);
+  return res.json(result);
 }));
 
 /**
@@ -2267,7 +2290,7 @@ router.get('/settings/notifications', asyncHandler(async (req: Request, res: Res
   }
 
   const settings = await userService.getNotificationSettings(String(userId));
-  res.json(settings);
+  return res.json(settings);
 }));
 
 /**
@@ -2316,7 +2339,7 @@ router.put('/settings/notifications', asyncHandler(async (req: Request, res: Res
     return res.status(400).json(result);
   }
 
-  res.json(result);
+  return res.json(result);
 }));
 
 /**
@@ -2354,7 +2377,7 @@ router.get('/settings/privacy', asyncHandler(async (req: Request, res: Response)
   }
 
   const settings = await userService.getPrivacySettings(String(userId));
-  res.json(settings);
+  return res.json(settings);
 }));
 
 /**
@@ -2403,7 +2426,7 @@ router.put('/settings/privacy', asyncHandler(async (req: Request, res: Response)
     return res.status(400).json(result);
   }
 
-  res.json(result);
+  return res.json(result);
 }));
 
 /**
@@ -2437,7 +2460,7 @@ router.get('/settings/support-session-price', asyncHandler(async (req: Request, 
   }
 
   const price = await userService.getSupportSessionPrice(String(userId));
-  res.json({ price });
+  return res.json({ price });
 }));
 
 /**
@@ -2486,7 +2509,7 @@ router.put('/settings/support-session-price', asyncHandler(async (req: Request, 
     return res.status(400).json({ error: { message: result.message || 'Notification settings update failed' } } );
   }
 
-  res.json(result);
+  return res.json(result);
 }));
 
 /**
@@ -2529,7 +2552,7 @@ router.get('/settings/devices', asyncHandler(async (req: Request, res: Response)
   }
 
   const devices = await userService.getConnectedDevices(String(userId));
-  res.json(devices);
+  return res.json(devices);
 }));
 
 /**
@@ -2567,7 +2590,7 @@ router.delete('/settings/devices/:deviceId', asyncHandler(async (req: Request, r
     return res.status(404).json(result);
   }
 
-  res.json(result);
+  return res.json(result);
 }));
 
 /**
@@ -2603,7 +2626,7 @@ router.delete('/settings/devices', asyncHandler(async (req: Request, res: Respon
   }
 
   const result = await userService.removeAllDevices(String(userId));
-  res.json(result);
+  return res.json(result);
 }));
 
 export default router; 

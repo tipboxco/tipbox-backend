@@ -136,7 +136,6 @@ export async function seedBrandProducts(): Promise<void> {
           data: {
             inventoryId: inventory.id,
             mediaUrl: getSeedMediaUrl(productConfig.imageKey as any),
-            type: 'IMAGE',
           },
         }).catch(() => {});
       }
@@ -198,13 +197,11 @@ export async function seedBrandProducts(): Promise<void> {
             },
           });
 
-          // Post tag'leri ekle
+          // Post tag'leri ekle (maksimum 2 tag)
           await prisma.contentPostTag.createMany({
             data: [
               { postId: experiencePostId, tag: brand.name },
-              { postId: experiencePostId, tag: product.name },
               { postId: experiencePostId, tag: 'Deneyim' },
-              { postId: experiencePostId, tag: 'Kullanıcı Deneyimi' },
             ],
             skipDuplicates: true,
           });
@@ -237,21 +234,21 @@ export async function seedBrandProducts(): Promise<void> {
 
       // event.jpg görselini MinIO'ya yükle (10 adet news post için)
       const eventImagePath = path.join(__dirname, '../../tests/assets/WhatsNews/event.jpg');
-      let eventImageUrls: string[] = [];
+      let eventImagePaths: string[] = []; // Artık path'ler tutulacak (tam URL değil)
       
       try {
         const s3Service = new S3Service();
         const eventImageBuffer = readFileSync(eventImagePath);
         
-        // 10 adet farklı URL için görseli yükle
+        // 10 adet farklı path için görseli yükle
         for (let i = 0; i < 10; i++) {
           const objectKey = `news/${brand.name.toLowerCase().replace(/\s+/g, '-')}/${product.id}/${Date.now()}-${i}-event.jpg`;
-          const uploadedUrl = await s3Service.uploadFile(objectKey, eventImageBuffer, 'image/jpeg');
-          // Localhost uyumlu URL oluştur
-          const localhostUrl = uploadedUrl.replace('minio:9000', 'localhost:9000');
-          eventImageUrls.push(localhostUrl);
+          // uploadFile() artık sadece path döndürür (tam URL değil)
+          // DB'de sadece path tutulacak, response'larda resolveMediaUrl ile tam URL'ye çevrilecek
+          const mediaPath = await s3Service.uploadFile(objectKey, eventImageBuffer, 'image/jpeg');
+          eventImagePaths.push(mediaPath);
         }
-        console.log(`✅ ${eventImageUrls.length} adet event.jpg görseli MinIO'ya yüklendi`);
+        console.log(`✅ ${eventImagePaths.length} adet event.jpg görseli MinIO'ya yüklendi`);
       } catch (error) {
         console.warn('⚠️ event.jpg yüklenemedi, görsel olmadan devam ediliyor:', error);
         // Görsel yüklenemezse boş array ile devam et
@@ -313,12 +310,11 @@ export async function seedBrandProducts(): Promise<void> {
             });
 
             // event.jpg görselini inventory media olarak ekle
-            if (inventory && eventImageUrls.length > 0 && eventImageIndex < eventImageUrls.length) {
+            if (inventory && eventImagePaths.length > 0 && eventImageIndex < eventImagePaths.length) {
               await prisma.inventoryMedia.create({
                 data: {
                   inventoryId: inventory.id,
-                  mediaUrl: eventImageUrls[eventImageIndex],
-                  type: 'IMAGE',
+                  mediaUrl: eventImagePaths[eventImageIndex], // Path olarak kaydedilir
                 },
               }).catch(() => {});
               eventImageIndex++;
@@ -348,20 +344,17 @@ export async function seedBrandProducts(): Promise<void> {
           await prisma.contentPostTag.createMany({
             data: [
               { postId: experiencePostId, tag: brand.name },
-              { postId: experiencePostId, tag: product.name },
               { postId: experiencePostId, tag: 'Deneyim' },
-              { postId: experiencePostId, tag: 'Haber' },
             ],
             skipDuplicates: true,
           });
 
           // event.jpg görselini inventory media olarak ekle
-          if (inventory && eventImageUrls.length > 0 && eventImageIndex < eventImageUrls.length) {
+          if (inventory && eventImagePaths.length > 0 && eventImageIndex < eventImagePaths.length) {
             await prisma.inventoryMedia.create({
               data: {
                 inventoryId: inventory.id,
-                mediaUrl: eventImageUrls[eventImageIndex],
-                type: 'IMAGE',
+                mediaUrl: eventImagePaths[eventImageIndex],
               },
             }).catch(() => {});
             eventImageIndex++;
@@ -401,12 +394,11 @@ export async function seedBrandProducts(): Promise<void> {
           });
 
           // event.jpg görselini inventory media olarak ekle
-          if (inventory && eventImageUrls.length > 0 && eventImageIndex < eventImageUrls.length) {
+          if (inventory && eventImagePaths.length > 0 && eventImageIndex < eventImagePaths.length) {
             await prisma.inventoryMedia.create({
               data: {
                 inventoryId: inventory.id,
-                mediaUrl: eventImageUrls[eventImageIndex],
-                type: 'IMAGE',
+                mediaUrl: eventImagePaths[eventImageIndex],
               },
             }).catch(() => {});
             eventImageIndex++;
@@ -450,12 +442,11 @@ export async function seedBrandProducts(): Promise<void> {
           });
 
           // event.jpg görselini inventory media olarak ekle
-          if (inventory && eventImageUrls.length > 0 && eventImageIndex < eventImageUrls.length) {
+          if (inventory && eventImagePaths.length > 0 && eventImageIndex < eventImagePaths.length) {
             await prisma.inventoryMedia.create({
               data: {
                 inventoryId: inventory.id,
-                mediaUrl: eventImageUrls[eventImageIndex],
-                type: 'IMAGE',
+                mediaUrl: eventImagePaths[eventImageIndex],
               },
             }).catch(() => {});
             eventImageIndex++;
@@ -537,12 +528,11 @@ export async function seedBrandProducts(): Promise<void> {
             });
 
             // event.jpg görselini inventory media olarak ekle
-            if (inventory && eventImageUrls.length > 0 && eventImageIndex < eventImageUrls.length) {
+            if (inventory && eventImagePaths.length > 0 && eventImageIndex < eventImagePaths.length) {
               await prisma.inventoryMedia.create({
                 data: {
                   inventoryId: inventory.id,
-                  mediaUrl: eventImageUrls[eventImageIndex],
-                  type: 'IMAGE',
+                  mediaUrl: eventImagePaths[eventImageIndex], // Path olarak kaydedilir
                 },
               }).catch(() => {});
               eventImageIndex++;
@@ -574,20 +564,17 @@ export async function seedBrandProducts(): Promise<void> {
           await prisma.contentPostTag.createMany({
             data: [
               { postId: updatePostId, tag: brand.name },
-              { postId: updatePostId, tag: product.name },
-              { postId: updatePostId, tag: 'Haber' },
               { postId: updatePostId, tag: 'Güncelleme' },
             ],
             skipDuplicates: true,
           });
 
           // event.jpg görselini inventory media olarak ekle
-          if (inventory && eventImageUrls.length > 0 && eventImageIndex < eventImageUrls.length) {
+          if (inventory && eventImagePaths.length > 0 && eventImageIndex < eventImagePaths.length) {
             await prisma.inventoryMedia.create({
               data: {
                 inventoryId: inventory.id,
-                mediaUrl: eventImageUrls[eventImageIndex],
-                type: 'IMAGE',
+                mediaUrl: eventImagePaths[eventImageIndex],
               },
             }).catch(() => {});
             eventImageIndex++;

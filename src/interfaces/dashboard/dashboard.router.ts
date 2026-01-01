@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import fs from 'fs';
@@ -10,6 +10,7 @@ const execAsync = promisify(exec);
 const router = Router();
 
 // Container'lar için fallback port kontrolü (docker ps çalışmazsa)
+// Not: Container içinden erişim için service isimlerini kullanıyoruz (docker-compose.yml'deki service isimleri)
 const containerPortMap: Record<
   string,
   { host: string; port: number; type: 'http' | 'tcp'; path?: string }
@@ -21,6 +22,20 @@ const containerPortMap: Record<
   tipbox_pgadmin: { host: 'pgadmin', port: 80, type: 'http' },
   tipbox_prisma_studio: { host: 'prisma-studio', port: 5555, type: 'http' },
 };
+
+// Ortam değişkenine göre container isim suffix'ini belirle
+function getContainerNameSuffix(): string {
+  const env = process.env.NODE_ENV || 'development';
+  if (env === 'test') return '_test';
+  if (env === 'production') return '_prod';
+  return ''; // development için suffix yok
+}
+
+// Base container isimlerini ortam suffix'i ile birleştir
+function getContainerName(baseName: string): string {
+  const suffix = getContainerNameSuffix();
+  return baseName + suffix;
+}
 
 async function checkContainerByPort(containerName: string): Promise<boolean> {
   const cfg = containerPortMap[containerName];
@@ -70,37 +85,39 @@ async function checkContainerByPort(containerName: string): Promise<boolean> {
   });
 }
 
-// Container port bilgileri
-const services = [
+// Main services (displayed on top)
+const mainServices = [
   {
-    name: 'Backend API',
+    name: 'Backend',
     port: 3000,
     path: '/',
-    description: 'Ana backend servisi',
+    description: 'Main backend service',
     icon: 'fa-server',
     containerName: 'tipbox_backend',
     canControlContainer: true,
   },
   {
-    name: 'Swagger Docs',
+    name: 'Swagger',
     port: 3000,
     path: '/api-docs',
-    description: 'API dokümantasyonu',
-    path: '/api-docs',
+    description: 'API documentation',
     icon: 'fa-book',
     containerName: 'tipbox_backend',
     canControlContainer: false,
   },
   {
-    name: 'Socket Messaging UI',
+    name: 'Socket',
     port: 3000,
     path: '/Socket',
-    description: 'Socket.IO tabanlı Messaging demo arayüzü',
-    path: '/Socket',
+    description: 'Socket.IO based messaging demo interface',
     icon: 'fa-comments',
     containerName: 'tipbox_backend',
     canControlContainer: false,
   },
+];
+
+// Interface services (displayed at bottom)
+const interfaceServices = [
   {
     name: 'Prisma Studio',
     port: 5555,
@@ -108,71 +125,82 @@ const services = [
     description: 'Database GUI',
     icon: 'fa-table',
     containerName: 'tipbox_prisma_studio',
-    canControlContainer: true,
+    canControlContainer: false,
   },
   {
     name: 'pgAdmin',
     port: 5050,
     path: '',
-    description: 'PostgreSQL yönetim arayüzü',
+    description: 'PostgreSQL management interface',
     icon: 'fa-database',
     containerName: 'tipbox_pgadmin',
-    canControlContainer: true,
+    canControlContainer: false,
   },
   {
     name: 'MinIO Console',
     port: 9001,
     path: '',
-    description: 'MinIO object storage konsolu',
+    description: 'MinIO object storage console',
     icon: 'fa-cloud',
     containerName: 'tipbox_minio',
-    canControlContainer: true,
-  },
-  {
-    name: 'MinIO API',
-    port: 9000,
-    path: '',
-    description: 'MinIO API endpoint',
-    icon: 'fa-cloud-upload-alt',
-    containerName: 'tipbox_minio',
-    canControlContainer: true,
-  },
-  {
-    name: 'PostgreSQL',
-    port: 5432,
-    url: 'localhost:5432',
-    description: 'PostgreSQL veritabanı',
-    icon: 'fa-database',
-    containerName: 'tipbox_postgres',
-    canControlContainer: true,
-  },
-  {
-    name: 'Redis',
-    port: 6379,
-    url: 'localhost:6379',
-    description: 'Redis cache servisi',
-    icon: 'fa-bolt',
-    containerName: 'tipbox_redis',
-    canControlContainer: true,
+    canControlContainer: false,
   },
 ];
 
-// Seed bilgileri
+// Seed information
 const seedCommands = [
-  { name: 'Tüm Seed Verileri', command: 'db:seed', description: 'Tüm seed verilerini ekle (prisma/seed.ts)', icon: 'fa-database' },
-  { name: 'Tümü (Ayrı Seed)', command: 'db:seed:all', description: 'Tüm seed verilerini ekle (ayrı dosyalar)', icon: 'fa-seedling' },
-  { name: 'User Seed', command: 'db:seed:user', description: 'Kullanıcı ve profil verileri', icon: 'fa-users' },
-  { name: 'Content Seed', command: 'db:seed:content', description: 'Ürün ve içerik verileri', icon: 'fa-box' },
-  { name: 'Feed Seed', command: 'db:seed:feed', description: 'Feed ve trending verileri', icon: 'fa-stream' },
-  { name: 'Taxonomy Seed', command: 'db:seed:taxonomy', description: 'Kategori ve taksonomi verileri', icon: 'fa-tags' },
-  { name: 'Marketplace Seed', command: 'db:seed:marketplace', description: 'Marketplace verileri', icon: 'fa-store' },
-  { name: 'Explore Seed', command: 'db:seed:explore', description: 'Explore ve brand verileri', icon: 'fa-compass' },
+  { name: 'All Seed Data', command: 'db:seed', description: 'Add all seed data (prisma/seed.ts)', icon: 'fa-database' },
+  { name: 'All (Separate Seeds)', command: 'db:seed:all', description: 'Add all seed data (separate files)', icon: 'fa-seedling' },
+  { name: 'User Seed', command: 'db:seed:user', description: 'User and profile data', icon: 'fa-users' },
+  { name: 'Content Seed', command: 'db:seed:content', description: 'Product and content data', icon: 'fa-box' },
+  { name: 'Feed Seed', command: 'db:seed:feed', description: 'Feed and trending data', icon: 'fa-stream' },
+  { name: 'Taxonomy Seed', command: 'db:seed:taxonomy', description: 'Category and taxonomy data', icon: 'fa-tags' },
+  { name: 'Marketplace Seed', command: 'db:seed:marketplace', description: 'Marketplace data', icon: 'fa-store' },
+  { name: 'Explore Seed', command: 'db:seed:explore', description: 'Explore and brand data', icon: 'fa-compass' },
 ];
 
 // JavaScript kodunu ayrı bir değişkene al (template literal sorunlarını önlemek için)
 const dashboardScript = `
+    // CRITICAL: Placeholder fonksiyonları EN BAŞTA tanımla - onclick handler'ları için gerekli
+    // Bu fonksiyonlar script parse edilir edilmez kullanılabilir olmalı
+    (function() {
+      // Placeholder fonksiyonlar - hemen tanımla, sonra gerçek implementasyonu ekle
+      window.executeDataCommand = window.executeDataCommand || function(command) {
+        console.warn('executeDataCommand not yet initialized, command:', command);
+        alert('Sayfa yükleniyor, lütfen birkaç saniye bekleyip tekrar deneyin.');
+      };
+      
+      window.confirmClearTestData = window.confirmClearTestData || function() {
+        console.warn('confirmClearTestData not yet initialized');
+        alert('Sayfa yükleniyor, lütfen birkaç saniye bekleyip tekrar deneyin.');
+      };
+      
+      window.confirmClearSeedData = window.confirmClearSeedData || function() {
+        console.warn('confirmClearSeedData not yet initialized');
+        alert('Sayfa yükleniyor, lütfen birkaç saniye bekleyip tekrar deneyin.');
+      };
+      
+      window.executeConfirmedAction = window.executeConfirmedAction || function() {
+        console.warn('executeConfirmedAction not yet initialized');
+      };
+      
+      window.closeModal = window.closeModal || function() {
+        console.warn('closeModal not yet initialized');
+      };
+      
+      window.dockerContainerStop = window.dockerContainerStop || function(containerName) {
+        console.warn('dockerContainerStop not yet initialized');
+      };
+      
+      window.dockerContainerStart = window.dockerContainerStart || function(containerName) {
+        console.warn('dockerContainerStart not yet initialized');
+      };
+    })();
+    
     console.log('Dashboard script loaded');
     
+    // Fonksiyonları hemen tanımla ve window'a ekle (onclick için)
+    // Bu sayede script yüklenir yüklenmez fonksiyonlar kullanılabilir olur
     let pendingAction = null;
     let currentStepIndex = 0;
     let actionSteps = [];
@@ -185,7 +213,7 @@ const dashboardScript = `
         stepsDiv.style.display = 'block';
         stepsDiv.innerHTML = steps.map((step, idx) => 
           '<div class="modal-step">' +
-            '<div class="modal-step-title">Adım ' + (idx + 1) + ': ' + step.title + '</div>' +
+            '<div class="modal-step-title">Step ' + (idx + 1) + ': ' + step.title + '</div>' +
             '<div class="modal-step-desc">' + step.description + '</div>' +
           '</div>'
         ).join('');
@@ -205,27 +233,31 @@ const dashboardScript = `
       currentStepIndex = 0;
       actionSteps = [];
     }
+    // Hemen window'a ata
+    window.closeModal = closeModal;
 
     function confirmClearTestData() {
       console.log('confirmClearTestData called');
       showModal(
-        'Test Verilerini Kaldır',
-        '<p><strong>UYARI:</strong> Bu işlem test kullanıcıları ve onların tüm verilerini kalıcı olarak silecektir.</p><p>Bu işlem geri alınamaz!</p>'
+        'Remove Test Data',
+        '<p><strong>WARNING:</strong> This operation will permanently delete test users and all their data.</p><p>This action cannot be undone!</p>'
       );
       pendingAction = 'clear-test';
       console.log('pendingAction set to:', pendingAction);
     }
+    // Hemen window'a ata
+    window.confirmClearTestData = confirmClearTestData;
 
     function confirmClearSeedData() {
       console.log('confirmClearSeedData called');
       const steps = [
-        { title: 'Prisma Client Generate', description: 'Prisma client\\'ı yeniden oluşturulacak (gerekirse)' },
-        { title: 'Seed Verilerini Temizle', description: 'Tüm seed verileri veritabanından kaldırılacak' }
+        { title: 'Prisma Client Generate', description: 'Prisma client will be regenerated (if needed)' },
+        { title: 'Clear Seed Data', description: 'All seed data will be removed from database' }
       ];
       
       showModal(
-        'Seed Verilerini Kaldır',
-        '<p><strong>UYARI:</strong> Bu işlem tüm seed verilerini kalıcı olarak silecektir.</p><p>Bu işlem geri alınamaz!</p><p>Bu işlem aşağıdaki adımları içerir:</p>',
+        'Remove Seed Data',
+        '<p><strong>WARNING:</strong> This operation will permanently delete all seed data.</p><p>This action cannot be undone!</p><p>This process includes the following steps:</p>',
         steps
       );
       pendingAction = 'clear-seed';
@@ -233,6 +265,8 @@ const dashboardScript = `
       currentStepIndex = 0;
       console.log('pendingAction set to:', pendingAction);
     }
+    // Hemen window'a ata
+    window.confirmClearSeedData = confirmClearSeedData;
 
     async function executeConfirmedAction() {
       console.log('executeConfirmedAction called, pendingAction:', pendingAction);
@@ -264,7 +298,7 @@ const dashboardScript = `
         
         if (!button || !status) {
           console.error('Button or status element not found for clear-test');
-          alert('Buton veya status elementi bulunamadı');
+          alert('Button or status element not found');
           return;
         }
         
@@ -276,7 +310,7 @@ const dashboardScript = `
         
         if (!button || !status) {
           console.error('Button or status element not found for clear-seed');
-          alert('Buton veya status elementi bulunamadı');
+          alert('Button or status element not found');
           return;
         }
         
@@ -285,11 +319,13 @@ const dashboardScript = `
         console.error('Unknown action:', action);
       }
     }
+    // Hemen window'a ata
+    window.executeConfirmedAction = executeConfirmedAction;
 
     async function executeClearTestData(button, status) {
       console.log('executeClearTestData called');
       button.disabled = true;
-      status.innerHTML = '<div class="status loading">Test verileri temizleniyor...</div>';
+      status.innerHTML = '<div class="status loading">Clearing test data...</div>';
       
       try {
         console.log('Fetching /clear-test-data');
@@ -305,12 +341,12 @@ const dashboardScript = `
         if (response.ok) {
           status.innerHTML = '<div class="status success">✓ ' + data.message + '</div>';
         } else {
-          status.innerHTML = '<div class="status error">✗ ' + (data.error || 'Bilinmeyen hata') + '</div>';
+          status.innerHTML = '<div class="status error">✗ ' + (data.error || 'Unknown error') + '</div>';
         }
       } catch (error) {
         console.error('Clear test data error:', error);
-        status.innerHTML = '<div class="status error">✗ Hata: ' + error.message + '</div>';
-        alert('Hata: ' + error.message);
+        status.innerHTML = '<div class="status error">✗ Error: ' + error.message + '</div>';
+        alert('Error: ' + error.message);
       } finally {
         button.disabled = false;
         setTimeout(function() {
@@ -322,7 +358,7 @@ const dashboardScript = `
     async function executeClearSeedData(button, status) {
       console.log('executeClearSeedData called');
       button.disabled = true;
-      status.innerHTML = '<div class="status loading">Seed verileri temizleniyor...</div>';
+      status.innerHTML = '<div class="status loading">Clearing seed data...</div>';
       
       try {
         console.log('Checking if Prisma generate is needed');
@@ -330,14 +366,14 @@ const dashboardScript = `
         console.log('Needs generate:', needsGenerate);
         
         if (needsGenerate) {
-          const confirmGenerate = confirm('Prisma Client güncellenmesi gerekiyor. Devam etmek istiyor musunuz?');
+          const confirmGenerate = confirm('Prisma Client needs to be updated. Do you want to continue?');
           if (!confirmGenerate) {
-            status.innerHTML = '<div class="status error">✗ İşlem iptal edildi</div>';
+            status.innerHTML = '<div class="status error">✗ Operation cancelled</div>';
             button.disabled = false;
             return;
           }
           
-          status.innerHTML = '<div class="status loading">Prisma Client generate ediliyor...</div>';
+          status.innerHTML = '<div class="status loading">Generating Prisma Client...</div>';
           console.log('Fetching /generate-client');
           const generateResponse = await fetch('/generate-client', {
             method: 'POST',
@@ -348,13 +384,13 @@ const dashboardScript = `
           
           if (!generateResponse.ok) {
             const errorData = await generateResponse.json();
-            status.innerHTML = '<div class="status error">✗ Prisma Generate hatası: ' + (errorData.error || 'Bilinmeyen hata') + '</div>';
+            status.innerHTML = '<div class="status error">✗ Prisma Generate error: ' + (errorData.error || 'Unknown error') + '</div>';
             button.disabled = false;
             return;
           }
         }
         
-        status.innerHTML = '<div class="status loading">Seed verileri temizleniyor...</div>';
+        status.innerHTML = '<div class="status loading">Clearing seed data...</div>';
         console.log('Fetching /clear-seed-data');
         const response = await fetch('/clear-seed-data', {
           method: 'POST',
@@ -368,12 +404,12 @@ const dashboardScript = `
         if (response.ok) {
           status.innerHTML = '<div class="status success">✓ ' + data.message + '</div>';
         } else {
-          status.innerHTML = '<div class="status error">✗ ' + (data.error || 'Bilinmeyen hata') + '</div>';
+          status.innerHTML = '<div class="status error">✗ ' + (data.error || 'Unknown error') + '</div>';
         }
       } catch (error) {
         console.error('Clear seed data error:', error);
-        status.innerHTML = '<div class="status error">✗ Hata: ' + error.message + '</div>';
-        alert('Hata: ' + error.message);
+        status.innerHTML = '<div class="status error">✗ Error: ' + error.message + '</div>';
+        alert('Error: ' + error.message);
       } finally {
         button.disabled = false;
         setTimeout(function() {
@@ -394,59 +430,162 @@ const dashboardScript = `
       }
     }
 
-    async function runAllSeeds() {
-      console.log('runAllSeeds called');
+    // Data Management komutlarını çalıştır
+    async function executeDataCommand(command) {
+      console.log('executeDataCommand called:', command);
       
-      const button = document.getElementById('btn-seed-all');
-      const status = document.getElementById('status-seed-all');
+      const commandMap = {
+        'db:seed': { buttonId: 'btn-db-seed', statusId: 'status-db-seed', progressId: 'progress-db-seed', progressFillId: 'progress-fill-db-seed', progressTextId: 'progress-text-db-seed' },
+        'db:seed:all': { buttonId: 'btn-db-seed-all', statusId: 'status-db-seed-all', progressId: 'progress-db-seed-all', progressFillId: 'progress-fill-db-seed-all', progressTextId: 'progress-text-db-seed-all' },
+        'db:reset': { buttonId: 'btn-db-reset', statusId: 'status-db-reset', progressId: 'progress-db-reset', progressFillId: 'progress-fill-db-reset', progressTextId: 'progress-text-db-reset' },
+        'db:reset:all': { buttonId: 'btn-db-reset-all', statusId: 'status-db-reset-all', progressId: 'progress-db-reset-all', progressFillId: 'progress-fill-db-reset-all', progressTextId: 'progress-text-db-reset-all' },
+        'db:reset:force': { buttonId: 'btn-db-reset-force', statusId: 'status-db-reset-force', progressId: 'progress-db-reset-force', progressFillId: 'progress-fill-db-reset-force', progressTextId: 'progress-text-db-reset-force' }
+      };
       
-      if (!button || !status) {
-        console.error('Button or status element not found for runAllSeeds');
-        alert('Buton veya status elementi bulunamadı');
+      const config = commandMap[command];
+      if (!config) {
+        console.error('Unknown command:', command);
+        alert('Unknown command: ' + command);
         return;
       }
       
-      button.disabled = true;
-      status.innerHTML = '<div class="status loading">Tüm seedler yükleniyor...</div>';
+      const button = document.getElementById(config.buttonId);
+      const status = document.getElementById(config.statusId);
+      const progressContainer = document.getElementById(config.progressId);
+      const progressFill = document.getElementById(config.progressFillId);
+      const progressText = document.getElementById(config.progressTextId);
       
-      let response = null;
+      if (!button || !status || !progressContainer || !progressFill || !progressText) {
+        console.error('Elements not found for command:', command);
+        alert('UI elements not found');
+        return;
+      }
+      
+      // Tehlikeli komutlar için onay iste
+      const dangerousCommands = ['db:reset:all', 'db:reset:force'];
+      if (dangerousCommands.includes(command)) {
+        const confirmMessage = command === 'db:reset:force' 
+          ? 'Bu işlem tüm tabloları silecek ve migration\'ları baştan oluşturacak. Devam etmek istediğinize emin misiniz?'
+          : 'Bu işlem tüm verileri (taxonomy dahil) silecek. Devam etmek istediğinize emin misiniz?';
+        if (!confirm(confirmMessage)) {
+          return;
+        }
+      }
+      
+      button.disabled = true;
+      status.innerHTML = '<div class="status loading">İşlem başlatılıyor...</div>';
+      progressContainer.style.display = 'block';
+      updateProgress(progressFill, progressText, 0);
+      
       try {
-        console.log('Fetching /seed with command: db:seed');
-        response = await fetch('/seed', {
+        console.log('Fetching /data-management with command:', command);
+        const response = await fetch('/data-management', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ command: 'db:seed' })
+          body: JSON.stringify({ command: command })
         });
         
         console.log('Response status:', response.status);
-        const data = await response.json();
-        console.log('Response data:', data);
         
-        if (response.ok) {
-          status.innerHTML = '<div class="status success">✓ ' + data.message + '</div>';
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Unknown error');
+        }
+        
+        // Stream response'u oku (progress için)
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let finalData = null;
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          
+          for (const line of lines) {
+            if (line.trim()) {
+              try {
+                const data = JSON.parse(line);
+                
+                // Progress bilgisi varsa güncelle
+                if (data.progress !== undefined) {
+                  updateProgress(progressFill, progressText, data.progress);
+                }
+                
+                // Status mesajı varsa güncelle
+                if (data.message) {
+                  if (data.type === 'progress') {
+                    status.innerHTML = '<div class="status loading">' + data.message + '</div>';
+                  } else {
+                    // Final message
+                    finalData = data;
+                  }
+                }
+                
+                // Error varsa
+                if (data.error) {
+                  throw new Error(data.error);
+                }
+              } catch (parseError) {
+                // JSON parse hatası, devam et
+                console.warn('Failed to parse line:', line);
+              }
+            }
+          }
+        }
+        
+        // Kalan buffer'ı parse et
+        if (buffer.trim()) {
+          try {
+            const data = JSON.parse(buffer);
+            if (data.message) finalData = data;
+            if (data.progress !== undefined) {
+              updateProgress(progressFill, progressText, data.progress);
+            }
+          } catch (e) {
+            // Ignore
+          }
+        }
+        
+        // Final durumu göster
+        updateProgress(progressFill, progressText, 100);
+        
+        if (finalData && finalData.message) {
+          status.innerHTML = '<div class="status success">✓ ' + finalData.message + '</div>';
         } else {
-          status.innerHTML = '<div class="status error">✗ ' + (data.error || 'Bilinmeyen hata') + '</div>';
+          status.innerHTML = '<div class="status success">✓ İşlem tamamlandı</div>';
         }
       } catch (error) {
-        console.error('Seed error:', error);
-        status.innerHTML = '<div class="status error">✗ Hata: ' + error.message + '</div>';
-        alert('Hata: ' + error.message);
+        console.error('Data management error:', error);
+        updateProgress(progressFill, progressText, 0);
+        status.innerHTML = '<div class="status error">✗ Error: ' + error.message + '</div>';
+        alert('Error: ' + error.message);
       } finally {
         button.disabled = false;
-          setTimeout(function() {
-            status.innerHTML = '';
-          }, 5000);
+        setTimeout(function() {
+          status.innerHTML = '';
+          progressContainer.style.display = 'none';
+          updateProgress(progressFill, progressText, 0);
+        }, 10000);
       }
     }
+    // Hemen window'a ata - fonksiyon tanımlanır tanımlanmaz
+    window.executeDataCommand = executeDataCommand;
     
-    // Global scope'a fonksiyonları ekle (onclick için)
-    window.runAllSeeds = runAllSeeds;
-    window.confirmClearTestData = confirmClearTestData;
-    window.confirmClearSeedData = confirmClearSeedData;
-    window.executeConfirmedAction = executeConfirmedAction;
-    window.closeModal = closeModal;
+    function updateProgress(progressFill, progressText, percentage) {
+      if (progressFill) progressFill.style.width = percentage + '%';
+      if (progressText) progressText.textContent = percentage + '%';
+    }
+    
+    // Tüm fonksiyonlar zaten window'a atandı (yukarıda)
+    // Burada sadece log yazdır
+    console.log('All functions initialized and added to window object');
 
     // Modal dışına tıklandığında kapat
     window.onclick = function(event) {
@@ -570,7 +709,7 @@ const dashboardScript = `
     }
     
     async function dockerContainerStop(containerName) {
-      if (!confirm(containerName + ' container\\'ını durdurmak istediğinize emin misiniz?')) {
+      if (!confirm('Are you sure you want to stop the ' + containerName + ' container?')) {
         return;
       }
       
@@ -586,17 +725,19 @@ const dashboardScript = `
         const data = await response.json().catch(function() { return {}; });
         
         if (!response.ok) {
-          alert('Hata: ' + (data.error || 'Container durdurulamadı'));
+          alert('Error: ' + (data.error || 'Failed to stop container'));
         }
         
         await updateDockerStatusUI();
       } catch (e) {
-        alert('Hata: ' + (e && e.message ? e.message : e));
+        alert('Error: ' + (e && e.message ? e.message : e));
       } finally {
         const buttons = document.querySelectorAll('.container-actions [onclick*="' + containerName + '"]');
         buttons.forEach(function(btn) { btn.disabled = false; });
       }
     }
+    // Hemen window'a ata
+    window.dockerContainerStop = dockerContainerStop;
     
     async function dockerContainerStart(containerName) {
       try {
@@ -611,17 +752,19 @@ const dashboardScript = `
         const data = await response.json().catch(function() { return {}; });
         
         if (!response.ok) {
-          alert('Hata: ' + (data.error || 'Container başlatılamadı'));
+          alert('Error: ' + (data.error || 'Failed to start container'));
         }
         
         await updateDockerStatusUI();
       } catch (e) {
-        alert('Hata: ' + (e && e.message ? e.message : e));
+        alert('Error: ' + (e && e.message ? e.message : e));
       } finally {
         const buttons = document.querySelectorAll('.container-actions [onclick*="' + containerName + '"]');
         buttons.forEach(function(btn) { btn.disabled = false; });
       }
     }
+    // Hemen window'a ata
+    window.dockerContainerStart = dockerContainerStart;
     
     // DOM yüklendikten sonra veya hemen çalıştır
     if (document.readyState === 'loading') {
@@ -666,12 +809,12 @@ const dashboardScript = `
     async function dockerStop() {
       console.log('dockerStop called');
       
-      if (!confirm('Tüm container\\'ları durdurmak istediğinize emin misiniz?')) {
+      if (!confirm('Are you sure you want to stop all containers?')) {
         return;
       }
 
       disableDockerButtons();
-      showLoading('Container\\'lar durduruluyor...');
+      showLoading('Stopping containers...');
 
       try {
         console.log('Fetching /docker/stop');
@@ -687,11 +830,11 @@ const dashboardScript = `
         if (response.ok) {
           alert('✓ ' + data.message);
         } else {
-          alert('✗ Hata: ' + (data.error || 'Bilinmeyen hata'));
+          alert('✗ Error: ' + (data.error || 'Unknown error'));
         }
       } catch (error) {
         console.error('Docker stop error:', error);
-        alert('✗ Hata: ' + error.message);
+        alert('✗ Error: ' + error.message);
       } finally {
         enableDockerButtons();
         hideLoading();
@@ -703,12 +846,12 @@ const dashboardScript = `
     async function dockerDown() {
       console.log('dockerDown called');
       
-      if (!confirm('Tüm container\\'ları durdurup kaldırmak istediğinize emin misiniz?')) {
+      if (!confirm('Are you sure you want to stop and remove all containers?')) {
         return;
       }
 
       disableDockerButtons();
-      showLoading('Container\\'lar kaldırılıyor...');
+      showLoading('Removing containers...');
 
       try {
         console.log('Fetching /docker/down');
@@ -724,11 +867,11 @@ const dashboardScript = `
         if (response.ok) {
           alert('✓ ' + data.message);
         } else {
-          alert('✗ Hata: ' + (data.error || 'Bilinmeyen hata'));
+          alert('✗ Error: ' + (data.error || 'Unknown error'));
         }
       } catch (error) {
         console.error('Docker down error:', error);
-        alert('✗ Hata: ' + error.message);
+        alert('✗ Error: ' + error.message);
       } finally {
         enableDockerButtons();
         hideLoading();
@@ -741,7 +884,7 @@ const dashboardScript = `
       console.log('dockerStart called');
       
       disableDockerButtons();
-      showLoading('Container\\'lar başlatılıyor...');
+      showLoading('Starting containers...');
 
       try {
         console.log('Fetching /docker/start');
@@ -755,19 +898,19 @@ const dashboardScript = `
         console.log('Response data:', data);
         
         if (!response.ok) {
-          alert('✗ Hata: ' + (data.error || 'Bilinmeyen hata'));
+          alert('✗ Error: ' + (data.error || 'Unknown error'));
           enableDockerButtons();
           hideLoading();
           return;
         }
 
-        showLoading('Container\\'lar hazırlanıyor...');
+        showLoading('Preparing containers...');
         await waitForContainers();
 
-        showLoading('Backend hazırlanıyor...');
+        showLoading('Preparing backend...');
         await waitForBackend();
 
-        showLoading('Son kontroller yapılıyor...');
+        showLoading('Final checks...');
         await new Promise(function(resolve) { setTimeout(resolve, 3000); });
 
         hideLoading();
@@ -776,7 +919,7 @@ const dashboardScript = `
         window.location.reload();
       } catch (error) {
         console.error('Docker start error:', error);
-        alert('✗ Hata: ' + error.message);
+        alert('✗ Error: ' + error.message);
         enableDockerButtons();
         hideLoading();
       }
@@ -797,14 +940,14 @@ const dashboardScript = `
             return true;
           }
         } catch (error) {
-          // Devam et
+          // Continue
         }
 
         await new Promise(function(resolve) { setTimeout(resolve, 1000); });
         attempts++;
       }
 
-      throw new Error('Container\\'lar başlatılamadı (timeout)');
+      throw new Error('Failed to start containers (timeout)');
     }
 
     async function waitForBackend() {
@@ -842,17 +985,93 @@ const dashboardScript = `
 
 // Dashboard HTML - sadece root path
 router.get('/', (req: Request, res: Response) => {
+  // Ortam bilgisini al
+  const environment = process.env.NODE_ENV || 'development';
+  const envLabel = environment === 'production' ? 'Prod' : environment === 'test' ? 'Test' : 'Dev';
+  const envColor = environment === 'production' ? '#ef4444' : environment === 'test' ? '#f59e0b' : '#10b981';
+  
+  // API hostname'lerini ortam değişkenlerinden al
+  const testApiHostname = process.env.TEST_API_HOSTNAME || 'api-test.tipbox.co';
+  const prodApiHostname = process.env.PROD_API_HOSTNAME || 'api.tipbox.co';
+  
+  // VPN IP adreslerini ortam değişkenlerinden al (Interfaces için)
+  const testVpnIp = process.env.TEST_VPN_IP || '100.77.184.78';
+  const prodVpnIp = process.env.PROD_VPN_IP || '';
+  
+  // Ortama göre Main Services için base URL belirle (Backend, Swagger, Socket)
+  let apiBaseUrl: string;
+  if (environment === 'test') {
+    apiBaseUrl = `https://${testApiHostname}`;
+  } else if (environment === 'production') {
+    apiBaseUrl = `https://${prodApiHostname}`;
+  } else {
+    // Development ortamı - local
+    const host = req.headers.host || 'localhost:3000';
+    const protocol = req.protocol || 'http';
+    apiBaseUrl = `${protocol}://${host}`;
+  }
+  
+  // Interfaces için base URL belirle (Prisma Studio, pgAdmin, MinIO)
+  let interfacesBaseUrl: string;
+  if (environment === 'test') {
+    interfacesBaseUrl = `http://${testVpnIp}`;
+  } else if (environment === 'production' && prodVpnIp) {
+    interfacesBaseUrl = `http://${prodVpnIp}`;
+  } else {
+    // Development ortamı - local
+    const host = req.headers.host || 'localhost:3000';
+    const protocol = req.protocol || 'http';
+    interfacesBaseUrl = `${protocol}://${host.split(':')[0]}`;
+  }
+  
   res.send(`
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tipbox Developer Console</title>
+  <title>${envLabel} -Tipbox Developer Console</title>
+  <link rel="icon" type="image/x-icon" href="https://tipbox.co/images/favicon.ico">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Jura:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <script>
+    // CRITICAL: Placeholder fonksiyonları head'de hemen tanımla
+    // Bu sayede onclick handler'ları çalışmadan önce fonksiyonlar tanımlı olur
+    (function() {
+      window.executeDataCommand = window.executeDataCommand || function(command) {
+        console.warn('executeDataCommand not yet initialized, command:', command);
+        alert('Sayfa yükleniyor, lütfen birkaç saniye bekleyip tekrar deneyin.');
+      };
+      
+      window.confirmClearTestData = window.confirmClearTestData || function() {
+        console.warn('confirmClearTestData not yet initialized');
+        alert('Sayfa yükleniyor, lütfen birkaç saniye bekleyip tekrar deneyin.');
+      };
+      
+      window.confirmClearSeedData = window.confirmClearSeedData || function() {
+        console.warn('confirmClearSeedData not yet initialized');
+        alert('Sayfa yükleniyor, lütfen birkaç saniye bekleyip tekrar deneyin.');
+      };
+      
+      window.executeConfirmedAction = window.executeConfirmedAction || function() {
+        console.warn('executeConfirmedAction not yet initialized');
+      };
+      
+      window.closeModal = window.closeModal || function() {
+        console.warn('closeModal not yet initialized');
+      };
+      
+      window.dockerContainerStop = window.dockerContainerStop || function(containerName) {
+        console.warn('dockerContainerStop not yet initialized');
+      };
+      
+      window.dockerContainerStart = window.dockerContainerStart || function(containerName) {
+        console.warn('dockerContainerStart not yet initialized');
+      };
+    })();
+  </script>
   <style>
     * {
       margin: 0;
@@ -899,6 +1118,30 @@ router.get('/', (req: Request, res: Response) => {
       font-weight: 700;
       letter-spacing: -0.02em;
     }
+    .env-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 24px;
+      border-radius: 24px;
+      font-size: 1rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      border: none;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    }
+    .env-badge-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: white;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.7; transform: scale(0.85); }
+    }
     @keyframes fadeInSlide {
       0% {
         opacity: 0;
@@ -925,6 +1168,9 @@ router.get('/', (req: Request, res: Response) => {
       }
       h1 {
         font-size: 2rem;
+      }
+      .env-badge {
+        align-self: flex-start;
       }
     }
     .section {
@@ -969,8 +1215,23 @@ router.get('/', (req: Request, res: Response) => {
     }
     .ports-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      grid-template-columns: repeat(4, 1fr);
       gap: 20px;
+    }
+    @media (max-width: 1400px) {
+      .ports-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+    @media (max-width: 1024px) {
+      .ports-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+    @media (max-width: 640px) {
+      .ports-grid {
+        grid-template-columns: 1fr;
+      }
     }
     .port-card {
       background: rgba(255, 255, 255, 0.05);
@@ -1096,8 +1357,23 @@ router.get('/', (req: Request, res: Response) => {
     }
     .seed-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      grid-template-columns: repeat(4, 1fr);
       gap: 20px;
+    }
+    @media (max-width: 1400px) {
+      .seed-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+    @media (max-width: 1024px) {
+      .seed-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+    @media (max-width: 640px) {
+      .seed-grid {
+        grid-template-columns: 1fr;
+      }
     }
     .seed-card {
       background: rgba(255, 255, 255, 0.05);
@@ -1309,6 +1585,58 @@ router.get('/', (req: Request, res: Response) => {
       color: #FAFAFA;
       font-size: 0.9375rem;
     }
+    .command-description {
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 16px;
+      font-size: 0.8125rem;
+    }
+    .command-description ul {
+      margin: 0;
+      padding-left: 20px;
+      color: #A3A3A3;
+      line-height: 1.6;
+    }
+    .command-description li {
+      margin-bottom: 4px;
+    }
+    .command-description code {
+      background: rgba(208, 242, 5, 0.1);
+      color: #D0F205;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-family: 'Courier New', monospace;
+    }
+    .progress-container {
+      margin-top: 12px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 8px;
+      border: 1px solid rgba(163, 163, 163, 0.1);
+    }
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #D0F205 0%, #B8D904 100%);
+      border-radius: 4px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+    .progress-text {
+      text-align: center;
+      font-size: 0.75rem;
+      color: #A3A3A3;
+      font-weight: 500;
+    }
     .modal-step-desc {
       font-size: 0.875rem;
       color: #A3A3A3;
@@ -1408,22 +1736,20 @@ router.get('/', (req: Request, res: Response) => {
              alt="Tipbox Logo" 
              class="dashboard-header-logo" 
              onerror="this.style.display='none'">
-        <h1>Tipbox Developer Dashboard</h1>
+        <h1>Developer Console</h1>
+      </div>
+      <div class="env-badge" style="background-color: ${envColor}; color: #FFFFFF;">
+        <span class="env-badge-dot"></span>
+        ${envLabel}
       </div>
     </div>
     
     <div class="section">
-      <h2 class="section-title">Portlar</h2>
+      <h2 class="section-title">Main Services</h2>
       <div class="ports-grid">
-        ${services.map(service => {
-          const host = req.headers.host || 'localhost:3000';
-          const [hostName] = host.split(':');
-          const protocol = req.protocol || 'http';
-          const baseForBackend = `${protocol}://${host}`;
-          const baseForOthers = `${protocol}://${hostName}`;
-          const url = service.port === 3000
-            ? `${baseForBackend}${service.path || ''}`
-            : `${baseForOthers}:${service.port}${service.path || ''}`;
+        ${mainServices.map(service => {
+          // Main Services için hostname kullan (Backend, Swagger, Socket)
+          const url = `${apiBaseUrl}${service.path || ''}`;
           return `
           <div class="port-card" onclick="window.open('${url}', '_blank')">
             <div class="service-header">
@@ -1434,7 +1760,7 @@ router.get('/', (req: Request, res: Response) => {
               ${service.containerName ? `
                 <div class="status-indicator" data-container="${service.containerName}">
                   <span class="status-dot"></span>
-                  <span class="status-label">Kontrol ediliyor...</span>
+                  <span class="status-label">Checking...</span>
                 </div>
               ` : ''}
             </div>
@@ -1445,7 +1771,7 @@ router.get('/', (req: Request, res: Response) => {
                 <button
                   class="container-button stop"
                   onclick="dockerContainerStop('${service.containerName}'); event.stopPropagation();"
-                  title="${service.containerName} container\\'ını durdur"
+                  title="Stop ${service.containerName} container"
                 >
                   <i class="fas fa-stop"></i>
                   Stop
@@ -1453,7 +1779,7 @@ router.get('/', (req: Request, res: Response) => {
                 <button
                   class="container-button start"
                   onclick="dockerContainerStart('${service.containerName}'); event.stopPropagation();"
-                  title="${service.containerName} container\\'ını başlat"
+                  title="Start ${service.containerName} container"
                 >
                   <i class="fas fa-play"></i>
                   Start
@@ -1467,30 +1793,166 @@ router.get('/', (req: Request, res: Response) => {
     </div>
 
     <div class="section">
-      <h2 class="section-title">Database: Seed Yönetimi</h2>
-      <div class="seed-grid">
-          <div class="seed-card">
+      <h2 class="section-title">Interfaces</h2>
+      <div class="ports-grid">
+        ${interfaceServices.map(service => {
+          // Interfaces için VPN IP veya localhost:port kullan
+          const url = `${interfacesBaseUrl}:${service.port}${service.path || ''}`;
+          return `
+          <div class="port-card" onclick="window.open('${url}', '_blank')">
+            <div class="service-header">
             <h3>
-            <i class="fas fa-database icon"></i>
-            Tüm Seedleri Oluştur
+              <i class="fas ${service.icon} icon"></i>
+              ${service.name}
             </h3>
-          <p><code>prisma/seed.ts</code> dosyasındaki tüm seed verilerini veritabanına yazar.</p>
-          <button class="seed-button" onclick="runAllSeeds()" id="btn-seed-all">
-            Seedleri Yükle
-            </button>
-          <div id="status-seed-all"></div>
+              ${service.containerName ? `
+                <div class="status-indicator" data-container="${service.containerName}">
+                  <span class="status-dot"></span>
+                  <span class="status-label">Checking...</span>
+                </div>
+              ` : ''}
+            </div>
+            <p>${service.description}</p>
+            <div class="url">${url}</div>
+          </div>
+          `;
+        }).join('')}
+      </div>
     </div>
 
+    <div class="section">
+      <h2 class="section-title">Database: Data Management</h2>
+      <div class="seed-grid">
+        <!-- db:seed -->
+        <div class="seed-card">
+          <h3>
+            <i class="fas fa-seedling icon"></i>
+            Seed Data (Taxonomy Preserved)
+          </h3>
+          <p><code>npm run db:seed</code></p>
+          <div class="command-description">
+            <ul>
+              <li>Prisma schema validation</li>
+              <li>Prisma client generate</li>
+              <li>Taxonomy korunur</li>
+              <li>User/content verileri temizlenir</li>
+              <li>Seed verileri eklenir</li>
+            </ul>
+          </div>
+          <button class="seed-button" onclick="executeDataCommand('db:seed')" id="btn-db-seed">
+            Run Seed
+          </button>
+          <div id="status-db-seed"></div>
+          <div id="progress-db-seed" class="progress-container" style="display: none;">
+            <div class="progress-bar">
+              <div class="progress-fill" id="progress-fill-db-seed"></div>
+            </div>
+            <div class="progress-text" id="progress-text-db-seed">0%</div>
+          </div>
+        </div>
+
+        <!-- db:seed:all -->
+        <div class="seed-card">
+          <h3>
+            <i class="fas fa-database icon"></i>
+            Seed All (Full Reset)
+          </h3>
+          <p><code>npm run db:seed:all</code></p>
+          <div class="command-description">
+            <ul>
+              <li>Prisma schema validation</li>
+              <li>Prisma client generate</li>
+              <li>Tüm veriler temizlenir (taxonomy dahil)</li>
+              <li>Seed verileri eklenir</li>
+            </ul>
+          </div>
+          <button class="seed-button" onclick="executeDataCommand('db:seed:all')" id="btn-db-seed-all">
+            Run Seed All
+          </button>
+          <div id="status-db-seed-all"></div>
+          <div id="progress-db-seed-all" class="progress-container" style="display: none;">
+            <div class="progress-bar">
+              <div class="progress-fill" id="progress-fill-db-seed-all"></div>
+            </div>
+            <div class="progress-text" id="progress-text-db-seed-all">0%</div>
+          </div>
+        </div>
+
+        <!-- db:reset -->
+        <div class="seed-card">
+          <h3>
+            <i class="fas fa-broom icon"></i>
+            Reset User/Content
+          </h3>
+          <p><code>npm run db:reset</code></p>
+          <div class="command-description">
+            <ul>
+              <li>Sadece user/content verileri temizlenir</li>
+              <li>Taxonomy/core veriler korunur</li>
+              <li>Seed çalıştırılmaz</li>
+            </ul>
+          </div>
+          <button class="seed-button" onclick="executeDataCommand('db:reset')" id="btn-db-reset">
+            Reset Data
+          </button>
+          <div id="status-db-reset"></div>
+          <div id="progress-db-reset" class="progress-container" style="display: none;">
+            <div class="progress-bar">
+              <div class="progress-fill" id="progress-fill-db-reset"></div>
+            </div>
+            <div class="progress-text" id="progress-text-db-reset">0%</div>
+          </div>
+        </div>
+
+        <!-- db:reset:all -->
         <div class="seed-card danger-card">
           <h3>
             <i class="fas fa-trash-alt icon"></i>
-            Tüm Seedleri Temizle
+            Reset All Data
           </h3>
-          <p>Veritabanındaki tüm seed verilerini temizler.</p>
-          <button class="danger-button" id="btn-clear-seed">
-            Seedleri Temizle
+          <p><code>npm run db:reset:all</code></p>
+          <div class="command-description">
+            <ul>
+              <li>Tüm veriler temizlenir (taxonomy dahil)</li>
+              <li>Seed çalıştırılmaz</li>
+            </ul>
+          </div>
+          <button class="danger-button" onclick="executeDataCommand('db:reset:all')" id="btn-db-reset-all">
+            Reset All
           </button>
-          <div id="status-clear-seed"></div>
+          <div id="status-db-reset-all"></div>
+          <div id="progress-db-reset-all" class="progress-container" style="display: none;">
+            <div class="progress-bar">
+              <div class="progress-fill" id="progress-fill-db-reset-all"></div>
+            </div>
+            <div class="progress-text" id="progress-text-db-reset-all">0%</div>
+          </div>
+        </div>
+
+        <!-- db:reset:force -->
+        <div class="seed-card danger-card">
+          <h3>
+            <i class="fas fa-exclamation-triangle icon"></i>
+            Force Reset (Migration)
+          </h3>
+          <p><code>npm run db:reset:force</code></p>
+          <div class="command-description">
+            <ul>
+              <li>Tabloları siler</li>
+              <li>Migrations baştan oluşturur</li>
+              <li>Verisiz tablo (seed çalıştırılmaz)</li>
+            </ul>
+          </div>
+          <button class="danger-button" onclick="executeDataCommand('db:reset:force')" id="btn-db-reset-force">
+            Force Reset
+          </button>
+          <div id="status-db-reset-force"></div>
+          <div id="progress-db-reset-force" class="progress-container" style="display: none;">
+            <div class="progress-bar">
+              <div class="progress-fill" id="progress-fill-db-reset-force"></div>
+            </div>
+            <div class="progress-text" id="progress-text-db-reset-force">0%</div>
+          </div>
         </div>
       </div>
     </div>
@@ -1514,7 +1976,7 @@ router.get('/', (req: Request, res: Response) => {
   <!-- Loading Overlay -->
   <div class="loading-overlay" id="loadingOverlay">
     <div class="loading-spinner"></div>
-    <div class="loading-text" id="loadingText">Container'lar hazırlanıyor...</div>
+    <div class="loading-text" id="loadingText">Preparing containers...</div>
   </div>
 
   <!-- Modal Dialog -->
@@ -1524,8 +1986,8 @@ router.get('/', (req: Request, res: Response) => {
       <div class="modal-body" id="modalBody"></div>
       <div id="modalSteps" class="modal-steps" style="display: none;"></div>
       <div class="modal-actions">
-        <button class="modal-button cancel" id="cancelButton">İptal</button>
-        <button class="modal-button confirm" id="confirmButton">Onayla</button>
+        <button class="modal-button cancel" id="cancelButton">Cancel</button>
+        <button class="modal-button confirm" id="confirmButton">Confirm</button>
       </div>
     </div>
   </div>
@@ -1602,14 +2064,14 @@ router.post('/clear-test-data', async (req: Request, res: Response) => {
       console.error('Clear test data stderr:', stderr);
     }
 
-    res.json({ 
-      message: 'Test verileri başarıyla temizlendi',
+    return res.json({ 
+      message: 'Test data cleared successfully',
       output: stdout 
     });
   } catch (error: any) {
     console.error('Clear test data error:', error);
-    res.status(500).json({ 
-      error: error.message || 'Test verileri temizlenirken hata oluştu',
+    return res.status(500).json({ 
+      error: error.message || 'Error occurred while clearing test data',
       details: error.stderr || error.stdout
     });
   }
@@ -1631,14 +2093,14 @@ router.post('/clear-seed-data', async (req: Request, res: Response) => {
       console.error('Clear seed data stderr:', stderr);
     }
 
-    res.json({ 
-      message: 'Seed verileri başarıyla temizlendi',
+    return res.json({ 
+      message: 'Seed data cleared successfully',
       output: stdout 
     });
   } catch (error: any) {
     console.error('Clear seed data error:', error);
-    res.status(500).json({ 
-      error: error.message || 'Seed verileri temizlenirken hata oluştu',
+    return res.status(500).json({ 
+      error: error.message || 'Error occurred while clearing seed data',
       details: error.stderr || error.stdout
     });
   }
@@ -1660,14 +2122,14 @@ router.post('/generate-client', async (req: Request, res: Response) => {
       console.error('Prisma generate stderr:', stderr);
     }
 
-    res.json({ 
-      message: 'Prisma Client başarıyla generate edildi',
+    return res.json({ 
+      message: 'Prisma Client generated successfully',
       output: stdout 
     });
   } catch (error: any) {
     console.error('Prisma generate error:', error);
-    res.status(500).json({ 
-      error: error.message || 'Prisma Client generate edilirken hata oluştu',
+    return res.status(500).json({ 
+      error: error.message || 'Error occurred while generating Prisma Client',
       details: error.stderr || error.stdout
     });
   }
@@ -1696,10 +2158,10 @@ router.get('/check-generate', async (req: Request, res: Response) => {
       needsGenerate = true;
     }
     
-    res.json({ needsGenerate });
+    return res.json({ needsGenerate });
   } catch (error: any) {
     console.error('Check generate error:', error);
-    res.json({ needsGenerate: false });
+    return res.json({ needsGenerate: false });
   }
 });
 
@@ -1708,11 +2170,9 @@ router.post('/docker/stop', async (req: Request, res: Response) => {
   try {
     const projectRoot = getProjectRoot();
     
-    // Tipbox container'larını durdur
-    const containerNames = [
+    // Tipbox container'larını durdur (base isimler)
+    const baseContainerNames = [
       'tipbox_backend',
-      'tipbox_postgres',
-      'tipbox_redis',
       'tipbox_minio',
       'tipbox_pgadmin',
       'tipbox_prisma_studio'
@@ -1721,7 +2181,9 @@ router.post('/docker/stop', async (req: Request, res: Response) => {
     let stoppedCount = 0;
     const errors: string[] = [];
     
-    for (const containerName of containerNames) {
+    for (const baseName of baseContainerNames) {
+      // Ortam suffix'i ile container ismini oluştur
+      const containerName = getContainerName(baseName);
       try {
         await execAsync(`docker stop ${containerName}`, {
           cwd: projectRoot,
@@ -1741,14 +2203,14 @@ router.post('/docker/stop', async (req: Request, res: Response) => {
       console.warn('Some containers could not be stopped:', errors);
     }
 
-    res.json({ 
-      message: `${stoppedCount} container durduruldu`,
+    return res.json({ 
+      message: `${stoppedCount} container(s) stopped`,
       output: `Stopped ${stoppedCount} containers`
     });
   } catch (error: any) {
     console.error('Docker stop error:', error);
-    res.status(500).json({ 
-      error: error.message || 'Container\'lar durdurulurken hata oluştu',
+    return res.status(500).json({ 
+      error: error.message || 'Error occurred while stopping containers',
       details: error.stderr || error.stdout
     });
   }
@@ -1774,7 +2236,7 @@ router.post('/docker/down', async (req: Request, res: Response) => {
           encoding: 'utf8'
         });
       } catch {
-        throw new Error('Docker Compose bulunamadı');
+        throw new Error('Docker Compose not found');
       }
     }
     
@@ -1788,14 +2250,14 @@ router.post('/docker/down', async (req: Request, res: Response) => {
       console.error('Docker down stderr:', stderr);
     }
 
-    res.json({ 
-      message: 'Container\'lar kaldırıldı',
+    return res.json({ 
+      message: 'Containers removed',
       output: stdout 
     });
   } catch (error: any) {
     console.error('Docker down error:', error);
-    res.status(500).json({ 
-      error: error.message || 'Container\'lar kaldırılırken hata oluştu',
+    return res.status(500).json({ 
+      error: error.message || 'Error occurred while removing containers',
       details: error.stderr || error.stdout
     });
   }
@@ -1821,7 +2283,7 @@ router.post('/docker/start', async (req: Request, res: Response) => {
           encoding: 'utf8'
         });
       } catch {
-        throw new Error('Docker Compose bulunamadı');
+        throw new Error('Docker Compose not found');
       }
     }
     
@@ -1835,14 +2297,14 @@ router.post('/docker/start', async (req: Request, res: Response) => {
       console.error('Docker start stderr:', stderr);
     }
 
-    res.json({ 
-      message: 'Container\'lar başlatıldı',
+    return res.json({ 
+      message: 'Containers started',
       output: stdout 
     });
   } catch (error: any) {
     console.error('Docker start error:', error);
-    res.status(500).json({ 
-      error: error.message || 'Container\'lar başlatılırken hata oluştu',
+    return res.status(500).json({ 
+      error: error.message || 'Error occurred while starting containers',
       details: error.stderr || error.stdout
     });
   }
@@ -1854,29 +2316,30 @@ router.post('/docker/container/stop', async (req: Request, res: Response) => {
     const { containerName } = req.body;
     const allowedContainers = [
       'tipbox_backend',
-      'tipbox_postgres',
-      'tipbox_redis',
       'tipbox_minio',
       'tipbox_pgadmin',
       'tipbox_prisma_studio'
     ];
 
     if (!containerName || !allowedContainers.includes(containerName)) {
-      return res.status(400).json({ error: 'Geçersiz container adı' });
+      return res.status(400).json({ error: 'Invalid container name' });
     }
 
-    await execAsync(`docker stop ${containerName}`, {
+    // Ortam suffix'i ile container ismini oluştur
+    const fullContainerName = getContainerName(containerName);
+
+    await execAsync(`docker stop ${fullContainerName}`, {
       maxBuffer: 1024 * 1024,
       encoding: 'utf8'
     });
 
-    res.json({
-      message: `${containerName} durduruldu`
+    return res.json({
+      message: `${containerName} stopped`
     });
   } catch (error: any) {
     console.error('Docker single container stop error:', error);
-    res.status(500).json({
-      error: error.message || 'Container durdurulurken hata oluştu',
+    return res.status(500).json({
+      error: error.message || 'Error occurred while stopping container',
       details: error.stderr || error.stdout
     });
   }
@@ -1887,29 +2350,30 @@ router.post('/docker/container/start', async (req: Request, res: Response) => {
     const { containerName } = req.body;
     const allowedContainers = [
       'tipbox_backend',
-      'tipbox_postgres',
-      'tipbox_redis',
       'tipbox_minio',
       'tipbox_pgadmin',
       'tipbox_prisma_studio'
     ];
 
     if (!containerName || !allowedContainers.includes(containerName)) {
-      return res.status(400).json({ error: 'Geçersiz container adı' });
+      return res.status(400).json({ error: 'Invalid container name' });
     }
 
-    await execAsync(`docker start ${containerName}`, {
+    // Ortam suffix'i ile container ismini oluştur
+    const fullContainerName = getContainerName(containerName);
+
+    await execAsync(`docker start ${fullContainerName}`, {
       maxBuffer: 1024 * 1024,
       encoding: 'utf8'
     });
 
-    res.json({
-      message: `${containerName} başlatıldı`
+    return res.json({
+      message: `${containerName} started`
     });
   } catch (error: any) {
     console.error('Docker single container start error:', error);
-    res.status(500).json({
-      error: error.message || 'Container başlatılırken hata oluştu',
+    return res.status(500).json({
+      error: error.message || 'Error occurred while starting container',
       details: error.stderr || error.stdout
     });
   }
@@ -1917,10 +2381,9 @@ router.post('/docker/container/start', async (req: Request, res: Response) => {
 
 router.get('/docker/status', async (req: Request, res: Response) => {
   try {
-    const containerNames = [
+    // Base container isimleri (ortam suffix'i olmadan)
+    const baseContainerNames = [
       'tipbox_backend',
-      'tipbox_postgres',
-      'tipbox_redis',
       'tipbox_minio',
       'tipbox_pgadmin',
       'tipbox_prisma_studio'
@@ -1929,96 +2392,229 @@ router.get('/docker/status', async (req: Request, res: Response) => {
     const statuses: Record<string, boolean> = {};
     let allRunning = true;
 
-    for (const containerName of containerNames) {
+    for (const baseName of baseContainerNames) {
+      // Ortam suffix'i ile container ismini oluştur
+      const containerName = getContainerName(baseName);
       let isRunning = false;
 
       // 1) Önce docker CLI ile kontrol etmeyi dene (varsa)
+      // Önceki commit'teki gibi: base name ile partial match yap (Docker filter zaten partial match yapıyor)
+      // Bu sayede hem tipbox_backend hem de tipbox_backend_test bulunur
       try {
-        const result = await execAsync(`docker ps --filter "name=${containerName}" --format "{{.Names}}"`, {
+        const result = await execAsync(`docker ps --filter "name=${baseName}" --format "{{.Names}}"`, {
           maxBuffer: 1024 * 1024,
           encoding: 'utf8'
         });
-        isRunning = result.stdout.trim().length > 0;
+        const output = result.stdout.trim();
+        // Container isminin base name ile başladığını ve tam olarak eşleştiğini kontrol et
+        isRunning = output.split('\n').some(line => {
+          const trimmed = line.trim();
+          return trimmed === containerName;
+        });
       } catch (error: any) {
         // docker yoksa veya erişilemiyorsa logla ama akışı bozma
-        console.warn(`docker ps kontrolü başarısız (${containerName}):`, error?.message || error);
+        console.warn(`docker ps kontrolü başarısız (${baseName}):`, error?.message || error);
       }
 
       // 2) CLI başarısızsa veya isim eşleşmiyorsa, port/health-check fallback kullan
+      // Not: checkContainerByPort base name kullanır çünkü port map'te base name'ler var
       if (!isRunning) {
         try {
-          isRunning = await checkContainerByPort(containerName);
-        } catch {
+          isRunning = await checkContainerByPort(baseName);
+        } catch (error: any) {
+          console.warn(`Port kontrolü başarısız (${baseName}):`, error?.message || error);
           isRunning = false;
         }
       }
 
-        statuses[containerName] = isRunning;
-        if (!isRunning) {
+      // Response'ta base name kullan (frontend'e gönderirken)
+      statuses[baseName] = isRunning;
+      if (!isRunning) {
         allRunning = false;
       }
     }
 
-    res.json({
+    return res.json({
       allRunning,
       statuses
     });
   } catch (error: any) {
     console.error('Docker status error:', error);
-    res.status(500).json({ 
-      error: error.message || 'Container durumu kontrol edilirken hata oluştu'
+    return res.status(500).json({ 
+      error: error.message || 'Error occurred while checking container status'
     });
   }
 });
 
-// Seed çalıştırma endpoint'i (sadece izin verilen komutlar)
-router.post('/seed', async (req: Request, res: Response) => {
+// Data Management endpoint (5 komut için)
+router.post('/data-management', async (req: Request, res: Response) => {
   const { command } = req.body;
 
   if (!command) {
-    return res.status(400).json({ error: 'Command gerekli' });
+    return res.status(400).json({ error: 'Command is required' });
   }
 
-  // Sadece tanımlı script'lerin çalışmasına izin ver
-  const validCommands = ['db:seed'];
+  // Only allow defined scripts to run
+  const validCommands = ['db:seed', 'db:seed:all', 'db:reset', 'db:reset:all', 'db:reset:force'];
   if (!validCommands.includes(command)) {
-    return res.status(400).json({ error: 'Geçersiz command' });
+    return res.status(400).json({ error: 'Invalid command' });
   }
 
   try {
     const projectRoot = getProjectRoot();
-    console.log('Seed command - Project root:', projectRoot);
-    console.log('Seed command - Command:', command);
-    console.log('Seed command - package.json exists:', fs.existsSync(path.join(projectRoot, 'package.json')));
+    console.log('Data management command - Project root:', projectRoot);
+    console.log('Data management command - Command:', command);
     
     const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
     
     // Önce package.json'ın varlığını kontrol et
     const packageJsonPath = path.join(projectRoot, 'package.json');
     if (!fs.existsSync(packageJsonPath)) {
-      throw new Error(`package.json not found in ${projectRoot}. __dirname: ${__dirname}, process.cwd(): ${process.cwd()}`);
+      throw new Error(`package.json not found in ${projectRoot}`);
     }
     
-    const { stdout, stderr } = await execAsync(`"${npmCommand}" run ${command}`, {
+    // Stream response için headers ayarla
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Transfer-Encoding', 'chunked');
+    
+    // Progress callback fonksiyonu
+    const sendProgress = (progress: number, message: string) => {
+      try {
+        res.write(JSON.stringify({ progress, message, type: 'progress' }) + '\n');
+      } catch (e) {
+        // Client bağlantısı kapandıysa sessizce devam et
+      }
+    };
+    
+    // Komut çalıştır (spawn ile stream için)
+    const isWindows = process.platform === 'win32';
+    const shellCommand = isWindows 
+      ? `"${npmCommand}" run ${command}`
+      : `npm run ${command}`;
+    
+    const childProcess = spawn(shellCommand, [], {
       cwd: projectRoot,
-      maxBuffer: 10 * 1024 * 1024, // 10MB
-      env: { ...process.env, NODE_ENV: process.env.NODE_ENV || 'development' }
+      env: { ...process.env, NODE_ENV: process.env.NODE_ENV || 'development' },
+      shell: true,
+      stdio: ['ignore', 'pipe', 'pipe']
     });
-
-    if (stderr && !stderr.includes('warning')) {
-      console.error('Seed stderr:', stderr);
-    }
-
-    const seedName = seedCommands.find(s => s.command === command)?.name || command;
-    res.json({ 
-      message: `${seedName} başarıyla çalıştırıldı`,
-      output: stdout 
+    
+    let stdout = '';
+    let stderr = '';
+    
+    // Progress tracking için komut bazlı aşamalar
+    const progressSteps: Record<string, number[]> = {
+      'db:seed': [20, 40, 60, 80, 100], // Schema, Generate, Clear, Seed, Complete
+      'db:seed:all': [20, 40, 60, 80, 100],
+      'db:reset': [50, 100], // Clear, Complete
+      'db:reset:all': [50, 100],
+      'db:reset:force': [33, 66, 100] // Drop, Migrate, Complete
+    };
+    
+    const steps = progressSteps[command] || [100];
+    let currentStepIndex = 0;
+    const stepKeywords: Record<string, string[][]> = {
+      'db:seed': [
+        ['Schema', 'schema', 'geçerli', 'validation'],
+        ['generate', 'Generate', 'Prisma client', 'client generate'],
+        ['temizleniyor', 'Clearing', 'Kullanıcı/içerik'],
+        ['Seed.ts', 'seed.ts', 'Seed işlemi', 'Seed verileri']
+      ],
+      'db:seed:all': [
+        ['Schema', 'schema', 'geçerli', 'validation'],
+        ['generate', 'Generate', 'Prisma client'],
+        ['TÜM seed', 'tüm veriler', 'Clearing'],
+        ['Seed.ts', 'seed.ts', 'Seed işlemi']
+      ],
+      'db:reset': [
+        ['Kullanıcı/içerik', 'temizleniyor', 'Clearing']
+      ],
+      'db:reset:all': [
+        ['TÜM', 'tüm veriler', 'Clearing', 'temizleniyor']
+      ],
+      'db:reset:force': [
+        ['migrate reset', 'Resetting', 'Dropping'],
+        ['migrations', 'Applying', 'Creating']
+      ]
+    };
+    
+    const keywords = stepKeywords[command] || [];
+    const progressMessages: Record<string, string[]> = {
+      'db:seed': ['Schema kontrol ediliyor...', 'Prisma client generate ediliyor...', 'Veriler temizleniyor...', 'Seed verileri ekleniyor...'],
+      'db:seed:all': ['Schema kontrol ediliyor...', 'Prisma client generate ediliyor...', 'Tüm veriler temizleniyor...', 'Seed verileri ekleniyor...'],
+      'db:reset': ['Kullanıcı/içerik verileri temizleniyor...'],
+      'db:reset:all': ['Tüm veriler temizleniyor...'],
+      'db:reset:force': ['Tablolar siliniyor...', 'Migrations uygulanıyor...']
+    };
+    
+    // İlk progress gönder
+    sendProgress(5, 'İşlem başlatılıyor...');
+    
+    // Stdout stream
+    childProcess.stdout?.on('data', (data: Buffer) => {
+      const output = data.toString();
+      stdout += output;
+      
+      // Progress güncellemeleri (output'a göre)
+      for (let i = 0; i < keywords.length && i < steps.length; i++) {
+        if (keywords[i].some(keyword => output.includes(keyword))) {
+          if (currentStepIndex <= i) {
+            const messages = progressMessages[command] || ['İşleniyor...'];
+            sendProgress(steps[i], messages[i] || 'İşleniyor...');
+            currentStepIndex = i + 1;
+            break;
+          }
+        }
+      }
     });
+    
+    // Stderr stream
+    childProcess.stderr?.on('data', (data: Buffer) => {
+      const output = data.toString();
+      stderr += output;
+      // Warning'ler hariç hataları logla
+      if (!output.includes('warning') && !output.includes('Warning')) {
+        console.error('Command stderr:', output);
+      }
+    });
+    
+    // Process tamamlandığında
+    childProcess.on('close', (code) => {
+      if (code === 0) {
+        sendProgress(100, 'İşlem tamamlandı');
+        res.write(JSON.stringify({ 
+          message: `Command "${command}" executed successfully`,
+          output: stdout,
+          progress: 100
+        }) + '\n');
+        res.end();
+      } else {
+        res.write(JSON.stringify({ 
+          error: `Command failed with exit code ${code}`,
+          details: stderr || stdout,
+          progress: 0
+        }) + '\n');
+        res.end();
+      }
+    });
+    
+    childProcess.on('error', (error) => {
+      console.error('Command execution error:', error);
+      res.write(JSON.stringify({ 
+        error: error.message || 'Error occurred while executing command',
+        progress: 0
+      }) + '\n');
+      res.end();
+    });
+    
+    // Note: Response is handled by event handlers above, no explicit return needed
+    return;
   } catch (error: any) {
-    console.error('Seed error:', error);
-    res.status(500).json({ 
-      error: error.message || 'Seed çalıştırılırken hata oluştu',
-      details: error.stderr || error.stdout
+    console.error('Data management error:', error);
+    return res.status(500).json({ 
+      error: error.message || 'Error occurred while executing command',
+      details: error.stderr || error.stdout,
+      progress: 0
     });
   }
 });

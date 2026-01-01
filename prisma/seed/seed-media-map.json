@@ -1,171 +1,333 @@
 {
-  "user.avatar.primary": {
-    "targetKey": "profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg"
+  "badge.earlyadapter": {
+    "targetKey": "badges/custom/EarlyAdapter.png"
   },
-  "user.banner.primary": {
-    "targetKey": "profile-banners/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-banner.png"
+  "badge.hardwareexpert": {
+    "targetKey": "badges/custom/HardwareExpert.png"
   },
-  "user.avatar.market": {
-    "targetKey": "profile-pictures/248cc91f-b551-4ecc-a885-db1163571330/seed-avatar.jpg"
+  "badge.premiumshoper": {
+    "targetKey": "badges/custom/PremiumShoper.png"
   },
-  "user.avatar.trust1": {
-    "targetKey": "userprofile/useravatar.jpg"
+  "badge.wishmarker": {
+    "targetKey": "badges/custom/WishMarker.png"
   },
-  "user.avatar.trust2": {
-    "targetKey": "userprofile/useravatar2.jpg"
+  "badge.brand.brandbadge1": {
+    "targetKey": "badges/brand/brandbadge1.png"
   },
-  "user.avatar.trust3": {
-    "targetKey": "userprofile/useravatar3.jpg"
+  "badge.brand.brandbadge2": {
+    "targetKey": "badges/brand/brandbadge2.png"
   },
-  "user.avatar.trust4": {
-    "targetKey": "userprofile/useravatar4.png"
+  "badge.brand.brandbadge3": {
+    "targetKey": "badges/brand/brandbadge3.png"
   },
-  "user.avatar.trust5": {
-    "targetKey": "userprofile/ozan.jpg"
+  "badge.brand.brandbadge4": {
+    "targetKey": "badges/brand/brandbadge4.png"
   },
-  "user.avatar.truster1": {
-    "targetKey": "userprofile/useravatar2.jpg"
+  "badge.brand.brandbadge5": {
+    "targetKey": "badges/brand/brandbadge5.png"
   },
-  "user.avatar.truster2": {
-    "targetKey": "userprofile/useravatar3.jpg"
+  "badge.brand.brandbadge6": {
+    "targetKey": "badges/brand/brandbadge6.png"
   },
-  "user.avatar.truster3": {
-    "targetKey": "userprofile/useravatar4.png"
+  "brand.banner.electronic-apple": {
+    "targetKey": "brands/banners/brandpage-electronic-apple.jpg"
   },
-  "inventory.dyson-media": {
-    "targetKey": "inventory/dyson-default.png"
+  "brand.banner.electronic-asus": {
+    "targetKey": "brands/banners/brandpage-electronic-asus.jpg"
   },
-  "catalog.air-conditioner": {
-    "targetKey": "catalog/air-conditioner.png"
+  "brand.banner.electronic-canon": {
+    "targetKey": "brands/banners/brandpage-electronic-canon.jpg"
   },
-  "catalog.cameras": {
-    "targetKey": "catalog/cameras.png"
+  "brand.banner.electronic-dyson": {
+    "targetKey": "brands/banners/brandpage-electronic-dyson.jpg"
   },
-  "catalog.computers-tablets": {
-    "targetKey": "catalog/computers-tablets.png"
+  "brand.banner.electronic-jbl": {
+    "targetKey": "brands/banners/brandpage-electronic-jbl.jpg"
   },
-  "catalog.drone": {
-    "targetKey": "catalog/drone.png"
+  "brand.banner.electronic-msi": {
+    "targetKey": "brands/banners/brandpage-electronic-msi.jpg"
   },
-  "catalog.games": {
-    "targetKey": "catalog/games.png"
+  "brand.banner.electronic-nvidia": {
+    "targetKey": "brands/banners/brandpage-electronic-nvidia.jpg"
   },
-  "catalog.headphones": {
-    "targetKey": "catalog/headphones.png"
+  "brand.banner.electronic-samsung": {
+    "targetKey": "brands/banners/brandpage-electronic-samsung.jpg"
   },
-  "catalog.home-appliances": {
-    "targetKey": "catalog/home-appliances.png"
+  "brand.banner.electronic-shark": {
+    "targetKey": "brands/banners/brandpage-electronic-shark.jpg"
   },
-  "catalog.kucukev": {
-    "targetKey": "catalog/kucukev.png"
+  "brand.banner.electronic-steelseries": {
+    "targetKey": "brands/banners/brandpage-electronic-steelseries.jpg"
   },
-  "catalog.phones": {
-    "targetKey": "catalog/phones.png"
+  "brand.banner.electronic-xiaomi": {
+    "targetKey": "brands/banners/brandpage-electronic-xiaomi.jpg"
   },
-  "catalog.printers": {
-    "targetKey": "catalog/printers.png"
+  "brand.banner.marshall": {
+    "targetKey": "brands/banners/marshall.jpg"
   },
-  "catalog.smart-home-devices": {
-    "targetKey": "catalog/smart-home-devices.png"
+  "brand.catalog.electronic-apple": {
+    "targetKey": "brands/catalog/brandcatalog-electronic-apple.png"
+  },
+  "brand.catalog.electronic-asus": {
+    "targetKey": "brands/catalog/brandcatalog-electronic-asus.png"
+  },
+  "brand.catalog.electronic-canon": {
+    "targetKey": "brands/catalog/brandcatalog-electronic-canon.png"
+  },
+  "brand.catalog.electronic-dyson": {
+    "targetKey": "brands/catalog/brandcatalog-electronic-dyson.png"
+  },
+  "brand.catalog.electronic-jbl": {
+    "targetKey": "brands/catalog/brandcatalog-electronic-jbl.png"
+  },
+  "brand.catalog.electronic-marshall": {
+    "targetKey": "brands/catalog/brandcatalog-electronic-marshall.png"
+  },
+  "brand.catalog.electronic-msi": {
+    "targetKey": "brands/catalog/brandcatalog-electronic-msi.png"
+  },
+  "brand.catalog.electronic-nvidia": {
+    "targetKey": "brands/catalog/brandcatalog-electronic-nvidia.png"
+  },
+  "brand.catalog.electronic-samsung": {
+    "targetKey": "brands/catalog/brandcatalog-electronic-samsung.png"
+  },
+  "brand.catalog.electronic-shark": {
+    "targetKey": "brands/catalog/brandcatalog-electronic-shark.png"
+  },
+  "brand.catalog.electronic-steelseries": {
+    "targetKey": "brands/catalog/brandcatalog-electronic-steelseries.png"
+  },
+  "brand.catalog.electronic-xiaomi": {
+    "targetKey": "brands/catalog/brandcatalog-electronic-xiaomi.png"
+  },
+  "brand.catalog.cosmetic-bioderma": {
+    "targetKey": "brands/catalog/brandcatalog-cosmetic-bioderma.png"
+  },
+  "brand.catalog.cosmetic-chanel": {
+    "targetKey": "brands/catalog/brandcatalog-cosmetic-chanel.png"
+  },
+  "brand.catalog.cosmetic-dior": {
+    "targetKey": "brands/catalog/brandcatalog-cosmetic-dior.png"
+  },
+  "brand.catalog.cosmetic-esteelauder": {
+    "targetKey": "brands/catalog/brandcatalog-cosmetic-esteelauder.png"
+  },
+  "brand.catalog.cosmetic-farmasi": {
+    "targetKey": "brands/catalog/brandcatalog-cosmetic-farmasi.png"
+  },
+  "brand.catalog.cosmetic-flormar": {
+    "targetKey": "brands/catalog/brandcatalog-cosmetic-flormar.png"
+  },
+  "brand.catalog.cosmetic-lorealparis": {
+    "targetKey": "brands/catalog/brandcatalog-cosmetic-lorealparis.png"
+  },
+  "brand.catalog.cosmetic-mac": {
+    "targetKey": "brands/catalog/brandcatalog-cosmetic-mac.png"
+  },
+  "brand.catalog.cosmetic-maybelline": {
+    "targetKey": "brands/catalog/brandcatalog-cosmetic-maybelline.png"
+  },
+  "brand.catalog.cosmetic-nars": {
+    "targetKey": "brands/catalog/brandcatalog-cosmetic-nars.png"
+  },
+  "brand.catalog.cosmetic-neutrogena": {
+    "targetKey": "brands/catalog/brandcatalog-cosmetic-neutrogena.png"
+  },
+  "brand.catalog.cosmetic-sephora": {
+    "targetKey": "brands/catalog/brandcatalog-cosmetic-sephora.png"
   },
   "catalog.tv": {
     "targetKey": "catalog/tv.png"
   },
+  "brand.category.tv": {
+    "targetKey": "brand-categories/TV.png"
+  },
+  "catalog.air-conditioner": {
+    "targetKey": "catalog/air-conditioner.png"
+  },
+  "brand.category.air-conditioner": {
+    "targetKey": "brand-categories/air conditioner.png"
+  },
+  "catalog.cameras": {
+    "targetKey": "catalog/cameras.png"
+  },
+  "brand.category.cameras": {
+    "targetKey": "brand-categories/cameras.png"
+  },
+  "catalog.computers-tablets": {
+    "targetKey": "catalog/computers-tablets.png"
+  },
+  "brand.category.computers-tablets": {
+    "targetKey": "brand-categories/computers-tablets.png"
+  },
+  "catalog.drone": {
+    "targetKey": "catalog/drone.png"
+  },
+  "brand.category.drone": {
+    "targetKey": "brand-categories/drone.png"
+  },
+  "catalog.games": {
+    "targetKey": "catalog/games.png"
+  },
+  "brand.category.games": {
+    "targetKey": "brand-categories/games.png"
+  },
+  "catalog.headphones": {
+    "targetKey": "catalog/headphones.png"
+  },
+  "brand.category.headphones": {
+    "targetKey": "brand-categories/headphones.png"
+  },
+  "catalog.home-appliances": {
+    "targetKey": "catalog/home-appliances.png"
+  },
+  "brand.category.home-appliances": {
+    "targetKey": "brand-categories/home appliances.png"
+  },
+  "catalog.kucukev": {
+    "targetKey": "catalog/kucukev.png"
+  },
+  "brand.category.kucukev": {
+    "targetKey": "brand-categories/kucukev.png"
+  },
   "catalog.otomotiv": {
     "targetKey": "catalog/otomotiv.png"
   },
-  "badge.early-bird": {
-    "targetKey": "badges/custom/EarlyAdapter.png"
+  "brand.category.otomotiv": {
+    "targetKey": "brand-categories/otomotiv.png"
   },
-  "badge.early-adapter": {
-    "targetKey": "badges/custom/EarlyAdapter.png"
+  "catalog.phones": {
+    "targetKey": "catalog/phones.png"
   },
-  "badge.welcome": {
-    "targetKey": "badges/custom/HardwareExpert.png"
+  "brand.category.phones": {
+    "targetKey": "brand-categories/phones.png"
   },
-  "badge.hardware-expert": {
-    "targetKey": "badges/custom/HardwareExpert.png"
+  "catalog.printers": {
+    "targetKey": "catalog/printers.png"
   },
-  "badge.tip-master": {
-    "targetKey": "badges/custom/PremiumShoper.png"
+  "brand.category.printers": {
+    "targetKey": "brand-categories/printers.png"
   },
-  "badge.premium-shoper": {
-    "targetKey": "badges/custom/PremiumShoper.png"
+  "catalog.smart-home-devices": {
+    "targetKey": "catalog/smart-home-devices.png"
   },
-  "badge.first-post": {
-    "targetKey": "badges/custom/WishMarker.png"
+  "brand.category.smart-home-devices": {
+    "targetKey": "brand-categories/smart home devices.png"
   },
-  "badge.wish-marker": {
-    "targetKey": "badges/custom/WishMarker.png"
+  "event.communityevents-the-content-creator": {
+    "targetKey": "events/communityevents-the-content-creator.jpg"
   },
-  "badge.community-hero": {
-    "targetKey": "badges/custom/HardwareExpert.png"
+  "event.communityevents-the-digital-nomad-day": {
+    "targetKey": "events/communityevents-the-digital-nomad-day.jpg"
   },
-  "badge.beta-tester": {
-    "targetKey": "badges/custom/PremiumShoper.png"
+  "event.communityevents-the-gaming-night": {
+    "targetKey": "events/communityevents-the-gaming-night.jpg"
   },
-  "badge.benchmark-sage": {
-    "targetKey": "badges/custom/HardwareExpert.png"
+  "event.communityevents-the-hikers-summit": {
+    "targetKey": "events/communityevents-the-hikers-summit.jpg"
   },
-  "badge.experience-curator": {
-    "targetKey": "badges/custom/PremiumShoper.png"
+  "event.communityevents-the-masterchef-weekend": {
+    "targetKey": "events/communityevents-the-masterchef-weekend.jpg"
   },
-  "badge.bridge-ambassador": {
-    "targetKey": "badges/custom/WishMarker.png"
+  "event.communityevents-the-rainy-day-sanctuary": {
+    "targetKey": "events/communityevents-the-rainy-day-sanctuary.jpg"
   },
-  "badge.brand-visionary": {
-    "targetKey": "badges/custom/EarlyAdapter.png"
+  "event.communityevents-the-road-trip-ready": {
+    "targetKey": "events/communityevents-the-road-trip-ready.jpg"
   },
-  "marketplace.rainbow-border": {
-    "targetKey": "marketplace/rainbow-border.jpg"
+  "event.communityevents-the-skincare-ritual": {
+    "targetKey": "events/communityevents-the-skincare-ritual.jpg"
   },
-  "post.image.primary": {
+  "event.communityevents-the-smart-home-geek": {
+    "targetKey": "events/communityevents-the-smart-home-geek.jpg"
+  },
+  "event.communityevents-the-urban-commuter": {
+    "targetKey": "events/communityevents-the-urban-commuter.jpg"
+  },
+  "event.event": {
+    "targetKey": "events/event.png"
+  },
+  "event.eventcardbg": {
+    "targetKey": "events/eventcardbg.png"
+  },
+  "marketplace.marketplace": {
+    "targetKey": "marketplace/marketplace.jpg"
+  },
+  "post.post": {
     "targetKey": "post-media/480f5de9-b691-4d70-a6a8-2789226f4e07/post.jpg"
   },
-  "explore.event.primary": {
-    "targetKey": "explore/events/event.jpg"
+  "product.vacuum.dyson": {
+    "targetKey": "products/dyson.png"
   },
-  "brand.category.technology": {
-    "targetKey": "brand-categories/computers-tablets.png"
+  "product.post.electronic-post-1": {
+    "targetKey": "products/posts/electronic-post-1.jpg"
   },
-  "brand.category.home-living": {
-    "targetKey": "brand-categories/home appliances.png"
+  "product.post.electronic-post-10": {
+    "targetKey": "products/posts/electronic-post-10.jpg"
   },
-  "brand.category.kitchen": {
-    "targetKey": "brand-categories/home appliances.png"
+  "product.post.electronic-post-2": {
+    "targetKey": "products/posts/electronic-post-2.jpg"
   },
-  "brand.category.health-fitness": {
-    "targetKey": "brand-categories/cameras.png"
+  "product.post.electronic-post-3": {
+    "targetKey": "products/posts/electronic-post-3.jpg"
   },
-  "brand.category.fashion": {
-    "targetKey": "brand-categories/phones.png"
+  "product.post.electronic-post-4": {
+    "targetKey": "products/posts/electronic-post-4.jpg"
   },
-  "brand.category.electronics": {
-    "targetKey": "brand-categories/headphones.png"
+  "product.post.electronic-post-5": {
+    "targetKey": "products/posts/electronic-post-5.jpg"
   },
-  "brand.category.sustainability": {
-    "targetKey": "brand-categories/air conditioner.png"
+  "product.post.electronic-post-6": {
+    "targetKey": "products/posts/electronic-post-6.jpg"
   },
-  "brand.category.gaming": {
-    "targetKey": "brand-categories/games.png"
+  "product.post.electronic-post-7": {
+    "targetKey": "products/posts/electronic-post-7.jpg"
   },
-  "brand.category.beauty": {
-    "targetKey": "brand-categories/phones.png"
+  "product.post.electronic-post-8": {
+    "targetKey": "products/posts/electronic-post-8.jpg"
   },
-  "brand.category.outdoor": {
-    "targetKey": "brand-categories/drone.png"
+  "product.post.electronic-post-9": {
+    "targetKey": "products/posts/electronic-post-9.jpg"
   },
-  "brand.category.pets": {
-    "targetKey": "brand-categories/cameras.png"
+  "product.headphone.primary": {
+    "targetKey": "products/headphone.png"
   },
-  "brand.category.travel": {
-    "targetKey": "brand-categories/phones.png"
+  "product.headphone.secondary": {
+    "targetKey": "products/headphone2.png"
   },
-  "brand.category.baby": {
-    "targetKey": "brand-categories/cameras.png"
+  "product.laptop.macbook": {
+    "targetKey": "products/macbook.png"
   },
-  "brand.category.automotive": {
-    "targetKey": "brand-categories/otomotiv.png"
+  "product.post.makeup-post-1": {
+    "targetKey": "products/posts/makeup-post-1.jpg"
+  },
+  "product.post.makeup-post-10": {
+    "targetKey": "products/posts/makeup-post-10.jpg"
+  },
+  "product.post.makeup-post-2": {
+    "targetKey": "products/posts/makeup-post-2.jpg"
+  },
+  "product.post.makeup-post-3": {
+    "targetKey": "products/posts/makeup-post-3.jpg"
+  },
+  "product.post.makeup-post-4": {
+    "targetKey": "products/posts/makeup-post-4.jpg"
+  },
+  "product.post.makeup-post-5": {
+    "targetKey": "products/posts/makeup-post-5.jpg"
+  },
+  "product.post.makeup-post-6": {
+    "targetKey": "products/posts/makeup-post-6.jpg"
+  },
+  "product.post.makeup-post-7": {
+    "targetKey": "products/posts/makeup-post-7.jpg"
+  },
+  "product.post.makeup-post-8": {
+    "targetKey": "products/posts/makeup-post-8.jpg"
+  },
+  "product.post.makeup-post-9": {
+    "targetKey": "products/posts/makeup-post-9.jpg"
   },
   "product.phone.phone1": {
     "targetKey": "products/phones/phone1.png"
@@ -185,106 +347,106 @@
   "product.phone.phone6": {
     "targetKey": "products/phones/phone6.png"
   },
-  "product.vacuum.dyson": {
-    "targetKey": "products/dyson.png"
-  },
-  "product.laptop.macbook": {
-    "targetKey": "products/macbook.png"
-  },
-  "product.headphone.primary": {
-    "targetKey": "products/headphone.png"
-  },
-  "product.headphone.secondary": {
-    "targetKey": "products/headphone2.png"
-  },
   "product.phone.samsung": {
     "targetKey": "products/samsun.png"
   },
-  "product.explore.1": {
-    "targetKey": "products/dyson.png"
+  "product.smartwatch": {
+    "targetKey": "products/smartwatch.png"
   },
-  "product.explore.2": {
-    "targetKey": "products/macbook.png"
+  "user.banner.primary": {
+    "targetKey": "profile-banners/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-banner.png"
   },
-  "product.explore.3": {
-    "targetKey": "products/headphone.png"
+  "user.avatar.primary": {
+    "targetKey": "profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg"
   },
-  "product.explore.4": {
-    "targetKey": "products/headphone2.png"
+  "user.avatar.market": {
+    "targetKey": "profile-pictures/248cc91f-b551-4ecc-a885-db1163571330/seed-avatar.jpg"
   },
-  "product.explore.5": {
-    "targetKey": "products/samsun.png"
+  "user.avatar.useravatar": {
+    "targetKey": "userprofile/useravatar.jpg"
   },
-  "product.explore.6": {
-    "targetKey": "products/phone1.png"
+  "user.avatar.useravatar2": {
+    "targetKey": "userprofile/useravatar2.jpg"
   },
-  "product.explore.7": {
-    "targetKey": "products/phone2.png"
+  "user.avatar.useravatar3": {
+    "targetKey": "userprofile/useravatar3.jpg"
   },
-  "product.explore.8": {
-    "targetKey": "products/phone3.png"
+  "user.avatar.useravatar4": {
+    "targetKey": "userprofile/useravatar4.png"
   },
-  "product.explore.9": {
-    "targetKey": "products/phone4.png"
+  "user.avatar.default": {
+    "targetKey": "avatars/default/default-useravatar.png"
   },
-  "product.explore.10": {
-    "targetKey": "products/phone5.png"
+  "news.event": {
+    "targetKey": "news/event.jpg"
   },
-  "product.generic.1": {
-    "targetKey": "products/phone1.png"
+  "product.apple.airpods4": {
+    "targetKey": "products/apple/airpods4.png"
   },
-  "product.generic.2": {
-    "targetKey": "products/phone2.png"
+  "product.apple.airpods4anc": {
+    "targetKey": "products/apple/airpods4ANC.png"
   },
-  "product.generic.3": {
-    "targetKey": "products/phone3.png"
+  "product.apple.airpodsmax": {
+    "targetKey": "products/apple/airpodsmax.png"
   },
-  "product.generic.4": {
-    "targetKey": "products/phone4.png"
+  "product.apple.airpodspro3": {
+    "targetKey": "products/apple/airpodspro3.png"
   },
-  "product.generic.5": {
-    "targetKey": "products/phone5.png"
+  "product.apple.iphone16e": {
+    "targetKey": "products/apple/iphone16e.png"
   },
-  "product.generic.6": {
-    "targetKey": "products/phone6.png"
+  "product.apple.iphone17": {
+    "targetKey": "products/apple/iphone17.png"
   },
-  "product.generic.7": {
-    "targetKey": "products/macbook.png"
+  "product.apple.iphone17pro": {
+    "targetKey": "products/apple/iphone17pro.png"
   },
-  "product.generic.8": {
-    "targetKey": "products/headphone.png"
+  "product.apple.iphoneair": {
+    "targetKey": "products/apple/iphoneair.png"
   },
-  "product.generic.9": {
-    "targetKey": "products/headphone2.png"
+  "product.apple.watchse3": {
+    "targetKey": "products/apple/watchse3.png"
   },
-  "product.generic.10": {
-    "targetKey": "products/dyson.png"
+  "product.apple.watchseries11": {
+    "targetKey": "products/apple/watchseries11.png"
   },
-  "product.generic.11": {
-    "targetKey": "products/samsun.png"
+  "product.apple.watchultra3": {
+    "targetKey": "products/apple/watchultra3.png"
   },
-  "event.primary": {
-    "targetKey": "event/event.png"
+  "product-catalog.main-category.electronic": {
+    "targetKey": "product-catalog/main-categories/electronic.png"
   },
-  "event.cardbg": {
-    "targetKey": "event/eventcardbg.png"
+  "product-catalog.main-category.cosmetic": {
+    "targetKey": "product-catalog/main-categories/cosmetic.png"
   },
-  "badge.brandbadge1": {
-    "targetKey": "brandbadge/brandbadge1.png"
+  "product-catalog.main-category.appliances": {
+    "targetKey": "product-catalog/main-categories/Appliances.png"
   },
-  "badge.brandbadge2": {
-    "targetKey": "brandbadge/brandbadge2.png"
+  "product-catalog.main-category.automotive-motorcycle": {
+    "targetKey": "product-catalog/main-categories/Automotive-Motorcycle.png"
   },
-  "badge.brandbadge3": {
-    "targetKey": "brandbadge/brandbadge3.png"
+  "product-catalog.main-category.baby-kids": {
+    "targetKey": "product-catalog/main-categories/baby-kids.png"
   },
-  "badge.brandbadge4": {
-    "targetKey": "brandbadge/brandbadge4.png"
+  "product-catalog.main-category.fashion": {
+    "targetKey": "product-catalog/main-categories/fashion.png"
   },
-  "badge.brandbadge5": {
-    "targetKey": "brandbadge/brandbadge5.png"
+  "product-catalog.main-category.garden-hardware": {
+    "targetKey": "product-catalog/main-categories/Garden-Hardware.png"
   },
-  "badge.brandbadge6": {
-    "targetKey": "brandbadge/brandbadge6.png"
+  "product-catalog.main-category.hobbies-music-art": {
+    "targetKey": "product-catalog/main-categories/Hobbies-Music-Art.png"
+  },
+  "product-catalog.main-category.home-living": {
+    "targetKey": "product-catalog/main-categories/home-living.png"
+  },
+  "product-catalog.main-category.office-stationery": {
+    "targetKey": "product-catalog/main-categories/Office-Stationery.png"
+  },
+  "product-catalog.main-category.pet-supplies": {
+    "targetKey": "product-catalog/main-categories/Pet-Supplies.png"
+  },
+  "product-catalog.main-category.sports-outdoors": {
+    "targetKey": "product-catalog/main-categories/sports-outdoors.png"
   }
 }

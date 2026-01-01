@@ -36,6 +36,10 @@ import { ExperienceStatus } from '../../domain/content/experience-status.enum';
  *           type: array
  *           items:
  *             type: string
+ *         eventId:
+ *           type: string
+ *           description: Optional event ID to link post to event
+ *           example: "01ARZ3NDEKTSV4RRFFQ69G5FAV"
  *     CreateTipsAndTricksPostRequest:
  *       type: object
  *       required:
@@ -56,6 +60,9 @@ import { ExperienceStatus } from '../../domain/content/experience-status.enum';
  *           type: array
  *           items:
  *             type: string
+ *         eventId:
+ *           type: string
+ *           description: Optional event ID to link post to event
  *     BoostOption:
  *       type: object
  *       properties:
@@ -91,6 +98,9 @@ import { ExperienceStatus } from '../../domain/content/experience-status.enum';
  *             type: string
  *         selectedBoostOptionId:
  *           type: string
+ *         eventId:
+ *           type: string
+ *           description: Optional event ID to link post to event
  *     Product:
  *       type: object
  *       required:
@@ -119,6 +129,13 @@ import { ExperienceStatus } from '../../domain/content/experience-status.enum';
  *             $ref: '#/components/schemas/Product'
  *         description:
  *           type: string
+ *         images:
+ *           type: array
+ *           items:
+ *             type: string
+ *         eventId:
+ *           type: string
+ *           description: Optional event ID to link post to event
  *     Experience:
  *       type: object
  *       required:
@@ -168,6 +185,9 @@ import { ExperienceStatus } from '../../domain/content/experience-status.enum';
  *           type: array
  *           items:
  *             type: string
+ *         eventId:
+ *           type: string
+ *           description: Optional event ID to link post to event
  *     CreateUpdatePostRequest:
  *       type: object
  *       required:
@@ -185,6 +205,59 @@ import { ExperienceStatus } from '../../domain/content/experience-status.enum';
  *           type: array
  *           items:
  *             type: string
+ *         eventId:
+ *           type: string
+ *           description: Optional event ID to link post to event
+ *     SplitExperienceRequest:
+ *       type: object
+ *       required:
+ *         - productId
+ *         - content
+ *       properties:
+ *         productId:
+ *           type: string
+ *         content:
+ *           type: string
+ *     ExperienceCategory:
+ *       type: object
+ *       properties:
+ *         content:
+ *           type: string
+ *           description: Kategori içeriği (AI tarafından standartlaştırılmış)
+ *         rating:
+ *           type: number
+ *           minimum: 0
+ *           maximum: 5
+ *           description: Deneyim puanı (0-5 arası)
+ *         placeholder:
+ *           type: string
+ *           description: Kategori boş veya eksikse, kullanıcıya gösterilecek ipucu metni (AI tarafından dinamik üretilir)
+ *         isEnhanced:
+ *           type: boolean
+ *           description: İçeriğin AI tarafından iyileştirilip iyileştirilmediği
+ *     SplitExperienceResponse:
+ *       type: object
+ *       properties:
+ *         priceAndShopping:
+ *           oneOf:
+ *             - $ref: '#/components/schemas/ExperienceCategory'
+ *             - type: 'null'
+ *         productAndUsage:
+ *           oneOf:
+ *             - $ref: '#/components/schemas/ExperienceCategory'
+ *             - type: 'null'
+ *         metadata:
+ *           type: object
+ *           properties:
+ *             tokensUsed:
+ *               type: number
+ *               nullable: true
+ *             processingTimeMs:
+ *               type: number
+ *             model:
+ *               type: string
+ *             promptVersion:
+ *               type: string
  */
 
 export interface CreatePostRequest {
@@ -192,6 +265,7 @@ export interface CreatePostRequest {
   contextId: string;
   description: string;
   images?: string[];
+  eventId?: string; // Optional event ID to link post to event
 }
 
 export interface CreateTipsAndTricksPostRequest {
@@ -200,6 +274,7 @@ export interface CreateTipsAndTricksPostRequest {
   description: string;
   benefitCategory: TipsAndTricksBenefitCategory;
   images?: string[];
+  eventId?: string; // Optional event ID to link post to event
 }
 
 export interface BoostOption {
@@ -217,6 +292,7 @@ export interface CreateQuestionPostRequest {
   description: string;
   images?: string[];
   selectedBoostOptionId: string;
+  eventId?: string; // Optional event ID to link post to event
 }
 
 export interface Product {
@@ -229,6 +305,8 @@ export interface CreateBenchmarkPostRequest {
   contextId: string;
   products: Product[];
   description: string;
+  images?: string[]; // Images support for benchmark posts
+  eventId?: string; // Optional event ID to link post to event
 }
 
 export interface Experience {
@@ -240,13 +318,15 @@ export interface Experience {
 export interface CreateExperiencePostRequest {
   contextType: ContextType;
   contextId: string;
-  selectedDurationId: string;
-  selectedLocationId: string;
-  selectedPurposeId: string;
+  selectedDurationId: string | null; // Resolved UUID or null if lookup fails
+  selectedLocationId: string | null; // Resolved UUID or null if lookup fails
+  selectedPurposeId: string | null; // Resolved UUID or null if lookup fails
   content: string;
   experience: Experience[];
   status: ExperienceStatus;
   images?: string[];
+  experienceSnippetId?: string; // Experience snippet ID (optional)
+  eventId?: string; // Optional event ID to link post to event
 }
 
 export interface CreateUpdatePostRequest {
@@ -254,13 +334,31 @@ export interface CreateUpdatePostRequest {
   contextId: string;
   content: string;
   images?: string[];
+  eventId?: string; // Optional event ID to link post to event
 }
 
 export interface SplitExperienceRequest {
+  userId: string;
+  productId: string;
   content: string;
 }
 
+export interface ExperienceCategory {
+  content: string;
+  rating: number;
+  placeholder?: string | null;
+  isEnhanced?: boolean;
+}
+
 export interface SplitExperienceResponse {
-  experiences: Experience[];
+  experienceSnippetId: string;
+  priceAndShopping: ExperienceCategory | null;
+  productAndUsage: ExperienceCategory | null;
+  metadata: {
+    tokensUsed: number | null;
+    processingTimeMs: number;
+    model: string;
+    promptVersion: string;
+  };
 }
 

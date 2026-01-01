@@ -18,7 +18,7 @@ import {
   RarityType,
 } from '../../interfaces/marketplace/marketplace.dto';
 import { NFTMarketListingStatus } from '../../domain/crypto/nft-market-listing-status.enum';
-
+import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import logger from '../../infrastructure/logger/logger';
 
 export class MarketplaceService {
@@ -90,14 +90,14 @@ export class MarketplaceService {
         const username = profile?.userName || 'Unknown';
 
         const avatar = avatarMap.get(listing.listedByUserId);
-        const userAvatar = avatar?.imageUrl;
+        const userAvatar = resolveMediaUrl(avatar?.imageUrl || null);
 
         results.push({
           id: listing.id,
           title: nft.name,
           username,
           price: listing.price.toString(),
-          image: nft.imageUrl,
+          image: resolveMediaUrl(nft.imageUrl || null) || '',
           userAvatar: userAvatar || undefined,
         });
       }
@@ -195,7 +195,7 @@ export class MarketplaceService {
       
       // Kullanıcı avatarını al
       const avatar = await this.avatarRepo.findActiveByUserId(userId);
-      const userAvatar = avatar?.imageUrl;
+      const userAvatar = resolveMediaUrl(avatar?.imageUrl || null);
 
       return {
         id: listing.id,
@@ -257,7 +257,7 @@ export class MarketplaceService {
       const profile = await this.profileRepo.findByUserId(userId);
       const username = profile?.userName || 'Unknown';
       const avatar = await this.avatarRepo.findActiveByUserId(userId);
-      const userAvatar = avatar?.imageUrl;
+      const userAvatar = resolveMediaUrl(avatar?.imageUrl || null);
 
       return {
         id: updatedListing.id,

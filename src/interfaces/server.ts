@@ -7,12 +7,14 @@ import { createAdapter } from '@socket.io/redis-adapter';
 import app from './app';
 import logger from '../infrastructure/logger/logger';
 import RedisConfigManager from '../infrastructure/config/redis.config';
-import SocketConfigManager from '../infrastructure/config/socket.config';
+import { getSocketConfig } from '../infrastructure/config/socket.config';
 import SocketManager from '../infrastructure/realtime/socket-manager';
 import { CacheService } from '../infrastructure/cache/cache.service';
 import QueueProvider from '../infrastructure/queue/queue.provider';
 import { getPrisma } from '../infrastructure/repositories/prisma.client';
-const PORT = process.env.PORT || 3000;
+import WorkerManager from '../infrastructure/workers';
+
+const PORT = Number(process.env.PORT) || 3000;
 
 async function startServer() {
   try {
@@ -34,13 +36,17 @@ async function startServer() {
     await queueProvider.initialize();
     
     // Socket.IO konfigürasyonunu al
-    const socketConfig = SocketConfigManager.getInstance().getConfig();
+    const socketConfig = getSocketConfig();
 
     // Socket.IO server'ı oluştur
     const io = new Server(httpServer, {
       cors: socketConfig.cors,
-      transports: socketConfig.transports as any,
+      transports: socketConfig.transports,
       allowEIO3: socketConfig.allowEIO3,
+      path: socketConfig.path,
+      connectTimeout: socketConfig.connectTimeout,
+      pingTimeout: socketConfig.pingTimeout,
+      pingInterval: socketConfig.pingInterval,
     });
 
     // Redis adapter'ı kur
@@ -48,6 +54,10 @@ async function startServer() {
 
     // Socket handler'ı başlat
     SocketManager.getInstance().initialize(io);
+
+    // Worker'ları başlat
+    const workerManager = new WorkerManager();
+    await workerManager.startAll();
 
     // HTTP server'ı başlat - 0.0.0.0 tüm ağ arayüzlerinde dinler (local network erişimi için)
     httpServer.listen(PORT, '0.0.0.0', () => {
@@ -58,6 +68,10 @@ async function startServer() {
     // Graceful shutdown
     process.on('SIGTERM', async () => {
       logger.info('SIGTERM received, shutting down gracefully');
+      
+      // Worker'ları durdur
+      await workerManager.stopAll();
+      
       httpServer.close(() => {
         logger.info('HTTP server closed');
       });
@@ -71,6 +85,10 @@ async function startServer() {
 
     process.on('SIGINT', async () => {
       logger.info('SIGINT received, shutting down gracefully');
+      
+      // Worker'ları durdur
+      await workerManager.stopAll();
+      
       httpServer.close(() => {
         logger.info('HTTP server closed');
       });

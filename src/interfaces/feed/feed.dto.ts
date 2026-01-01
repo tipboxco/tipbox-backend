@@ -1,6 +1,215 @@
 import { FeedItemType } from '../../domain/feed/feed-item-type.enum';
 import { ContextType as DomainContextType } from '../../domain/content/context-type.enum';
 
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *     BaseUser:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *         name:
+ *           type: string
+ *         title:
+ *           type: string
+ *         avatar:
+ *           type: string
+ *           nullable: true
+ *     BaseStats:
+ *       type: object
+ *       properties:
+ *         likes:
+ *           type: integer
+ *         comments:
+ *           type: integer
+ *         shares:
+ *           type: integer
+ *         bookmarks:
+ *           type: integer
+ *     ContextData:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *         name:
+ *           type: string
+ *         subName:
+ *           type: string
+ *           nullable: true
+ *         image:
+ *           type: string
+ *           nullable: true
+ *         isOwned:
+ *           type: boolean
+ *           nullable: true
+ *     BasePost:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *         user:
+ *           $ref: '#/components/schemas/BaseUser'
+ *         stats:
+ *           $ref: '#/components/schemas/BaseStats'
+ *         createdAt:
+ *           type: string
+ *           format: date-time
+ *         contextType:
+ *           type: string
+ *           enum: [product_group, product, sub_category]
+ *         source:
+ *           type: string
+ *           nullable: true
+ *           description: Feed source (TRUSTER, BOOSTED, CATEGORY_MATCH, TRENDING, NEW_USER, etc.)
+ *     Post:
+ *       type: object
+ *       allOf:
+ *         - $ref: '#/components/schemas/BasePost'
+ *         - type: object
+ *           properties:
+ *             contextData:
+ *               $ref: '#/components/schemas/ContextData'
+ *             content:
+ *               type: string
+ *             images:
+ *               type: array
+ *               items:
+ *                 type: string
+ *               nullable: true
+ *     BenchmarkPost:
+ *       type: object
+ *       allOf:
+ *         - $ref: '#/components/schemas/BasePost'
+ *         - type: object
+ *           properties:
+ *             contextData:
+ *               $ref: '#/components/schemas/ContextData'
+ *             content:
+ *               type: string
+ *             products:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                   name:
+ *                     type: string
+ *                   subName:
+ *                     type: string
+ *                   image:
+ *                     type: string
+ *                     nullable: true
+ *                   isOwned:
+ *                     type: boolean
+ *                   choice:
+ *                     type: boolean
+ *     TipsAndTricksPost:
+ *       type: object
+ *       allOf:
+ *         - $ref: '#/components/schemas/BasePost'
+ *         - type: object
+ *           properties:
+ *             contextData:
+ *               $ref: '#/components/schemas/ContextData'
+ *             content:
+ *               type: string
+ *             tag:
+ *               type: string
+ *             images:
+ *               type: array
+ *               items:
+ *                 type: string
+ *               nullable: true
+ *     ExperiencePost:
+ *       type: object
+ *       allOf:
+ *         - $ref: '#/components/schemas/BasePost'
+ *         - type: object
+ *           properties:
+ *             content:
+ *               oneOf:
+ *                 - type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       title:
+ *                         type: string
+ *                       content:
+ *                         type: string
+ *                       rating:
+ *                         type: number
+ *                 - type: string
+ *             experienceContent:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   title:
+ *                     type: string
+ *                   content:
+ *                     type: string
+ *                   rating:
+ *                     type: number
+ *               nullable: true
+ *             tags:
+ *               type: array
+ *               items:
+ *                 type: string
+ *             images:
+ *               type: array
+ *               items:
+ *                 type: string
+ *               nullable: true
+ *     UpdatePost:
+ *       type: object
+ *       allOf:
+ *         - $ref: '#/components/schemas/BasePost'
+ *         - type: object
+ *           properties:
+ *             relatedPost:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                 product:
+ *                   type: object
+ *                   nullable: true
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     name:
+ *                       type: string
+ *                     subName:
+ *                       type: string
+ *                     image:
+ *                       type: string
+ *                       nullable: true
+ *                 content:
+ *                   oneOf:
+ *                     - type: array
+ *                       items:
+ *                         type: object
+ *                     - type: string
+ *                 tags:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                 images:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *             content:
+ *               type: string
+ *             images:
+ *               type: array
+ *               items:
+ *                 type: string
+ *               nullable: true
+ */
+
 // Re-export FeedItemType for convenience
 export { FeedItemType };
 
@@ -43,7 +252,9 @@ export interface BasePost {
   stats: BaseStats;
   createdAt: string;
   contextType: ContextType;
+  source?: string; // Feed source: TRUSTER, BOOSTED, CATEGORY_MATCH, TRENDING, NEW_USER
 }
+
 
 export interface BaseProduct {
   id: string;
@@ -52,6 +263,7 @@ export interface BaseProduct {
   image: any; // URL or image object
   isOwned?: boolean;
 }
+
 
 // Post Item Types
 export interface Post extends BasePost {
@@ -85,7 +297,8 @@ export interface ReviewProduct extends BaseProduct {
 }
 
 export interface ExperiencePost extends BasePost {
-  content: ExperienceContent[];
+  content: ExperienceContent[] | string; // Support both array (legacy) and string (mobile compatibility)
+  experienceContent?: ExperienceContent[]; // Structured data (optional, for backward compatibility)
   tags: string[];
   images?: any[];
 }
@@ -94,7 +307,8 @@ export interface ExperiencePost extends BasePost {
 export interface RelatedPostData {
   id: string;
   product: BaseProduct | null;
-  content: ExperienceContent[];
+  content: ExperienceContent[] | string; // Support both array (legacy) and string (mobile compatibility)
+  experienceContent?: ExperienceContent[]; // Structured data (optional, for backward compatibility)
   tags: string[];
   images: string[];
 }
@@ -135,13 +349,15 @@ export interface FeedResponse {
     cursor?: string;
     hasMore: boolean;
     limit: number;
+    total?: number;
   };
 }
 
 // Feed Filter Options
 export interface FeedFilterOptions {
   /**
-   * User interests (e.g. category or topic IDs)
+   * User interests - Feed source filters (e.g. TRUSTER, TRENDING, MUTUAL_TRUST, BOOSTED, etc.)
+   * Artık kategori ID'leri yerine feed source'ları kullanılıyor
    */
   interests?: string[];
   /**

@@ -4,6 +4,8 @@ import { PostQuestionPrismaRepository } from '../../infrastructure/repositories/
 import { PostComparisonPrismaRepository } from '../../infrastructure/repositories/post-comparison-prisma.repository';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
 import { ContextType } from '../../domain/content/context-type.enum';
+import { withCache } from '../../infrastructure/cache/cache-wrapper.helper';
+import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
 import { TipsAndTricksBenefitCategory } from '../../domain/content/tips-and-tricks-benefit-category.enum';
 import { TipCategory } from '../../domain/content/tip-category.enum';
 import { QuestionAnswerFormat } from '../../domain/content/question-answer-format.enum';
@@ -22,21 +24,57 @@ import {
   Experience,
 } from '../../interfaces/post/post.dto';
 import { PrismaClient } from '@prisma/client';
+import { FeedService } from '../feed/feed.service';
 import logger from '../../infrastructure/logger/logger';
+import { GeminiService } from '../../infrastructure/ai/gemini.service';
+import { AiExperienceSplitPrismaRepository } from '../../infrastructure/repositories/ai-experience-split-prisma.repository';
+import { resolveMediaUrl } from '../../infrastructure/config/media.config';
+import { withCache } from '../../infrastructure/cache/cache-wrapper.helper';
+import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
 
 export class PostService {
   private postRepo: ContentPostPrismaRepository;
   private tipRepo: PostTipPrismaRepository;
   private questionRepo: PostQuestionPrismaRepository;
   private comparisonRepo: PostComparisonPrismaRepository;
+  private feedService: FeedService;
   private prisma: PrismaClient;
+  private geminiService: GeminiService;
+  private experienceSnippetRepo: AiExperienceSplitPrismaRepository;
 
   constructor() {
     this.postRepo = new ContentPostPrismaRepository();
     this.tipRepo = new PostTipPrismaRepository();
     this.questionRepo = new PostQuestionPrismaRepository();
     this.comparisonRepo = new PostComparisonPrismaRepository();
+    this.feedService = new FeedService();
     this.prisma = new PrismaClient();
+    this.geminiService = GeminiService.getInstance();
+    this.experienceSnippetRepo = new AiExperienceSplitPrismaRepository();
+  }
+
+  /**
+   * Event validation - event mevcut ve aktif mi kontrol eder
+   */
+  private async validateEvent(eventId: string): Promise<void> {
+    const event = await this.prisma.wishboxEvent.findUnique({
+      where: { id: eventId },
+    });
+
+    if (!event) {
+      throw new Error(`Event not found: ${eventId}`);
+    }
+
+    // Event'in aktif olup olmadığını kontrol et
+    const now = new Date();
+    if (event.startDate > now || event.endDate < now) {
+      throw new Error('Event is not active');
+    }
+
+    // Event status'u PUBLISHED olmalı
+    if (event.status !== 'PUBLISHED') {
+      throw new Error('Event is not published');
+    }
   }
 
   /**
@@ -123,7 +161,7 @@ export class PostService {
   async createFreePost(
     userId: string,
     request: CreatePostRequest
-  ): Promise<{ id: string }> {
+  ): Promise<{ id: string; message: string; success: boolean }> {
     try {
       // Context validation
       if (
@@ -134,6 +172,11 @@ export class PostService {
         throw new Error(
           'Free posts can only be created for sub_category, product_group, or product'
         );
+      }
+
+      // Event validation (if eventId is provided)
+      if (request.eventId) {
+        await this.validateEvent(request.eventId);
       }
 
       const contextIds = await this.resolveContextIds(
@@ -156,11 +199,34 @@ export class PostService {
         contextIds.productGroupId,
         contextIds.productId,
         false, // inventoryRequired
-        false // isBoosted
+        false, // isBoosted
+        request.eventId // eventId
       );
 
+      // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
+      if (request.images && request.images.length > 0) {
+        await this.prisma.postMedia.createMany({
+          data: request.images.map((imageUrl, index) => ({
+            postId: post.id,
+            userId: userId,
+            mediaUrl: imageUrl,
+            orderIndex: index, // Kullanıcının yüklediği sırada
+          })),
+        });
+      }
+
       logger.info(`Free post created: ${post.id} by user ${userId}`);
-      return { id: post.id };
+      
+      // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
+      this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
+        logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
+      });
+      
+      return { 
+        id: post.id,
+        message: 'Post başarıyla oluşturuldu',
+        success: true
+      };
     } catch (error) {
       logger.error(`Failed to create free post:`, error);
       throw error;
@@ -173,7 +239,7 @@ export class PostService {
   async createTipsAndTricksPost(
     userId: string,
     request: CreateTipsAndTricksPostRequest
-  ): Promise<{ id: string }> {
+  ): Promise<{ id: string; message: string; success: boolean }> {
     try {
       // Context validation
       if (
@@ -184,6 +250,11 @@ export class PostService {
         throw new Error(
           'Tips and tricks posts can only be created for sub_category, product_group, or product'
         );
+      }
+
+      // Event validation (if eventId is provided)
+      if (request.eventId) {
+        await this.validateEvent(request.eventId);
       }
 
       const contextIds = await this.resolveContextIds(
@@ -211,7 +282,8 @@ export class PostService {
         contextIds.productGroupId,
         contextIds.productId,
         false,
-        false
+        false,
+        request.eventId // eventId
       );
 
       // Create PostTip
@@ -221,10 +293,32 @@ export class PostService {
         false // isVerified - can be verified later
       );
 
+      // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
+      if (request.images && request.images.length > 0) {
+        await this.prisma.postMedia.createMany({
+          data: request.images.map((imageUrl, index) => ({
+            postId: post.id,
+            userId: userId,
+            mediaUrl: imageUrl,
+            orderIndex: index, // Kullanıcının yüklediği sırada
+          })),
+        });
+      }
+
       logger.info(
         `Tips and tricks post created: ${post.id} by user ${userId}`
       );
-      return { id: post.id };
+      
+      // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
+      this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
+        logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
+      });
+      
+      return { 
+        id: post.id,
+        message: 'Tips & tricks post başarıyla oluşturuldu',
+        success: true
+      };
     } catch (error) {
       logger.error(`Failed to create tips and tricks post:`, error);
       throw error;
@@ -257,7 +351,7 @@ export class PostService {
   async createQuestionPost(
     userId: string,
     request: CreateQuestionPostRequest
-  ): Promise<{ id: string }> {
+  ): Promise<{ id: string; message: string; success: boolean }> {
     try {
       // Context validation
       if (
@@ -268,6 +362,11 @@ export class PostService {
         throw new Error(
           'Question posts can only be created for sub_category, product_group, or product'
         );
+      }
+
+      // Event validation (if eventId is provided)
+      if (request.eventId) {
+        await this.validateEvent(request.eventId);
       }
 
       const contextIds = await this.resolveContextIds(
@@ -298,7 +397,8 @@ export class PostService {
         contextIds.productGroupId,
         contextIds.productId,
         false,
-        true // isBoosted - question posts are boosted
+        true, // isBoosted - question posts are boosted
+        request.eventId // eventId
       );
 
       // Set boosted until date (e.g., 7 days from now)
@@ -315,8 +415,30 @@ export class PostService {
         undefined // relatedProductId
       );
 
+      // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
+      if (request.images && request.images.length > 0) {
+        await this.prisma.postMedia.createMany({
+          data: request.images.map((imageUrl, index) => ({
+            postId: post.id,
+            userId: userId,
+            mediaUrl: imageUrl,
+            orderIndex: index, // Kullanıcının yüklediği sırada
+          })),
+        });
+      }
+
       logger.info(`Question post created: ${post.id} by user ${userId}`);
-      return { id: post.id };
+      
+      // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
+      this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
+        logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
+      });
+      
+      return { 
+        id: post.id,
+        message: 'Question post başarıyla oluşturuldu',
+        success: true
+      };
     } catch (error) {
       logger.error(`Failed to create question post:`, error);
       throw error;
@@ -357,27 +479,29 @@ export class PostService {
    * Boost option listesi getir
    */
   async getBoostOptions(): Promise<BoostOption[]> {
-    try {
-      const boostOptions = await this.prisma.boostOption.findMany({
-        where: { isActive: true },
-        orderBy: [
-          { isPopular: 'desc' },
-          { amount: 'asc' },
-        ],
-      });
+    return withCache(
+      'post:boost-options:all',
+      async () => {
+        const boostOptions = await this.prisma.boostOption.findMany({
+          where: { isActive: true },
+          orderBy: [
+            { isPopular: 'desc' },
+            { amount: 'asc' },
+          ],
+        });
 
-      return boostOptions.map((option) => ({
-        id: option.id,
-        image: option.image || '',
-        title: option.title,
-        description: option.description || '',
-        amount: option.amount,
-        isPopular: option.isPopular,
-      }));
-    } catch (error) {
-      logger.error('Failed to get boost options', error);
-      throw error;
-    }
+        return boostOptions.map((option) => ({
+          id: option.id,
+          image: option.image || '',
+          title: option.title,
+          description: option.description || '',
+          amount: option.amount,
+          isPopular: option.isPopular,
+        }));
+      },
+      CACHE_TTL.LONG, // 1 saat - boost options nadiren değişir
+      { logPrefix: 'PostService' }
+    );
   }
 
   /**
@@ -386,11 +510,21 @@ export class PostService {
   async createBenchmarkPost(
     userId: string,
     request: CreateBenchmarkPostRequest
-  ): Promise<{ id: string }> {
+  ): Promise<{ id: string; message: string; success: boolean }> {
     try {
       // Benchmark posts can only be created for products
       if (request.contextType !== ContextType.PRODUCT) {
         throw new Error('Benchmark posts can only be created for products');
+      }
+
+      // Validate that products is an array
+      if (!Array.isArray(request.products)) {
+        logger.error('Products is not an array in createBenchmarkPost', {
+          type: typeof request.products,
+          products: request.products,
+          requestKeys: Object.keys(request),
+        });
+        throw new Error(`products must be an array, got: ${typeof request.products}`);
       }
 
       // Validate that at least 2 products are selected
@@ -402,6 +536,11 @@ export class PostService {
       // For now, we'll compare the first 2 selected products
       const product1 = selectedProducts[0];
       const product2 = selectedProducts[1];
+
+      // Event validation (if eventId is provided)
+      if (request.eventId) {
+        await this.validateEvent(request.eventId);
+      }
 
       const contextIds = await this.resolveContextIds(
         request.contextType,
@@ -418,7 +557,8 @@ export class PostService {
         contextIds.productGroupId,
         contextIds.productId,
         false,
-        false
+        false,
+        request.eventId // eventId
       );
 
       // Create PostComparison
@@ -428,8 +568,30 @@ export class PostService {
         product2.productId // productId is already a string (UUID)
       );
 
+      // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
+      if (request.images && request.images.length > 0) {
+        await this.prisma.postMedia.createMany({
+          data: request.images.map((imageUrl, index) => ({
+            postId: post.id,
+            userId: userId,
+            mediaUrl: imageUrl,
+            orderIndex: index, // Kullanıcının yüklediği sırada
+          })),
+        });
+      }
+
       logger.info(`Benchmark post created: ${post.id} by user ${userId}`);
-      return { id: post.id };
+      
+      // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
+      this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
+        logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
+      });
+      
+      return { 
+        id: post.id,
+        message: 'Benchmark post başarıyla oluşturuldu',
+        success: true
+      };
     } catch (error) {
       logger.error(`Failed to create benchmark post:`, error);
       throw error;
@@ -442,11 +604,16 @@ export class PostService {
   async createExperiencePost(
     userId: string,
     request: CreateExperiencePostRequest
-  ): Promise<{ id: string }> {
+  ): Promise<{ id: string; message: string; success: boolean }> {
     try {
       // Experience posts can only be created for products
       if (request.contextType !== ContextType.PRODUCT) {
         throw new Error('Experience posts can only be created for products');
+      }
+
+      // Event validation (if eventId is provided)
+      if (request.eventId) {
+        await this.validateEvent(request.eventId);
       }
 
       const contextIds = await this.resolveContextIds(
@@ -479,11 +646,49 @@ export class PostService {
         contextIds.productGroupId,
         contextIds.productId,
         true, // inventoryRequired - experience posts require inventory
-        false
+        false,
+        request.eventId // eventId
       );
 
-      logger.info(`Experience post created: ${post.id} by user ${userId}`);
-      return { id: post.id };
+      // AI Split ID ve Taxonomy ID'leri kaydet
+      // Router'da zaten resolve edilmiş UUID'ler geliyor
+      await this.prisma.contentPost.update({
+        where: { id: post.id },
+        data: { 
+          experienceSnippetId: request.experienceSnippetId || null,
+          experienceDurationId: request.selectedDurationId || null,
+          experienceLocationId: request.selectedLocationId || null,
+          experiencePurposeId: request.selectedPurposeId || null,
+          eventId: request.eventId || null,
+        }
+      });
+
+      // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
+      if (request.images && request.images.length > 0) {
+        await this.prisma.postMedia.createMany({
+          data: request.images.map((imageUrl, index) => ({
+            postId: post.id,
+            userId: userId,
+            mediaUrl: imageUrl,
+            orderIndex: index, // Kullanıcının yüklediği sırada
+          })),
+        });
+      }
+
+      logger.info(`Experience post created: ${post.id} by user ${userId}`, {
+        experienceSnippetId: request.experienceSnippetId || null
+      });
+      
+      // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
+      this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
+        logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
+      });
+      
+      return { 
+        id: post.id,
+        message: 'Experience post başarıyla oluşturuldu',
+        success: true
+      };
     } catch (error) {
       logger.error(`Failed to create experience post:`, error);
       throw error;
@@ -491,57 +696,67 @@ export class PostService {
   }
 
   /**
-   * AI ile deneyimi ayır
+   * AI ile deneyimi ayır ve database'e kaydet
    */
   async splitExperience(
     request: SplitExperienceRequest
   ): Promise<SplitExperienceResponse> {
     try {
-      // TODO: Implement AI service to split experience
-      // For now, returning a mock implementation
-      // This should call an AI service to categorize the experience
+      // Ürün bilgilerini al
+      const product = await this.prisma.product.findUnique({
+        where: { id: request.productId },
+      });
 
-      // Mock implementation - split by keywords
-      const content = request.content.toLowerCase();
-      const experiences: Experience[] = [];
-
-      // Simple keyword-based categorization
-      const priceKeywords = ['price', 'cost', 'buy', 'purchase', 'shop', 'money', 'affordable', 'expensive'];
-      const usageKeywords = ['use', 'usage', 'experience', 'quality', 'performance', 'result', 'effect'];
-
-      const hasPriceContent = priceKeywords.some((keyword) =>
-        content.includes(keyword)
-      );
-      const hasUsageContent = usageKeywords.some((keyword) =>
-        content.includes(keyword)
-      );
-
-      if (hasPriceContent) {
-        experiences.push({
-          type: ExperienceType.PRICE_AND_SHOPPING,
-          content: request.content,
-          rating: 4, // Default rating
-        });
+      if (!product) {
+        throw new Error('Product not found');
       }
 
-      if (hasUsageContent) {
-        experiences.push({
-          type: ExperienceType.PRODUCT_AND_USAGE,
-          content: request.content,
-          rating: 4, // Default rating
-        });
-      }
+      // Gemini AI ile deneyimi ayır
+      const splitResult = await this.geminiService.splitExperience({
+        productId: request.productId,
+        productName: product.name,
+        productBrand: product.brand || undefined,
+        productDescription: product.description || undefined,
+        experienceText: request.content,
+      });
 
-      // If no keywords found, default to product and usage
-      if (experiences.length === 0) {
-        experiences.push({
-          type: ExperienceType.PRODUCT_AND_USAGE,
-          content: request.content,
-          rating: 4,
-        });
-      }
+      // AI split sonucunu database'e kaydet
+      const experienceSnippet = await this.experienceSnippetRepo.create({
+        userId: request.userId,
+        productId: request.productId,
+        originalExperience: request.content,
+        priceAndShopping: splitResult.priceAndShopping?.content ?? null,
+        productAndUsage: splitResult.productAndUsage?.content ?? null,
+        priceAndShoppingRating: splitResult.priceAndShopping?.rating ?? null,
+        productAndUsageRating: splitResult.productAndUsage?.rating ?? null,
+        priceAndShoppingPlaceholder: splitResult.priceAndShopping?.placeholder ?? null,
+        productAndUsagePlaceholder: splitResult.productAndUsage?.placeholder ?? null,
+        priceAndShoppingIsEnhanced: splitResult.priceAndShopping?.isEnhanced ?? null,
+        productAndUsageIsEnhanced: splitResult.productAndUsage?.isEnhanced ?? null,
+        isEdited: false,
+        model: splitResult.metadata.model,
+        promptVersion: splitResult.metadata.promptVersion,
+        tokensUsed: splitResult.metadata.tokensUsed,
+        processingTimeMs: splitResult.metadata.processingTimeMs,
+      });
 
-      return { experiences };
+      logger.info({
+        message: 'Experience split with AI and saved',
+        userId: request.userId,
+        productId: request.productId,
+        experienceSnippetId: experienceSnippet.id,
+        tokensUsed: splitResult.metadata.tokensUsed,
+        processingTimeMs: splitResult.metadata.processingTimeMs,
+        hasPriceAndShopping: !!splitResult.priceAndShopping?.content,
+        hasProductAndUsage: !!splitResult.productAndUsage?.content,
+      });
+
+      return {
+        experienceSnippetId: experienceSnippet.id,
+        priceAndShopping: splitResult.priceAndShopping,
+        productAndUsage: splitResult.productAndUsage,
+        metadata: splitResult.metadata,
+      };
     } catch (error) {
       logger.error(`Failed to split experience:`, error);
       throw error;
@@ -554,11 +769,16 @@ export class PostService {
   async createUpdatePost(
     userId: string,
     request: CreateUpdatePostRequest
-  ): Promise<{ id: string }> {
+  ): Promise<{ id: string; message: string; success: boolean }> {
     try {
       // Update posts can only be created for products
       if (request.contextType !== ContextType.PRODUCT) {
         throw new Error('Update posts can only be created for products');
+      }
+
+      // Event validation (if eventId is provided)
+      if (request.eventId) {
+        await this.validateEvent(request.eventId);
       }
 
       const contextIds = await this.resolveContextIds(
@@ -581,11 +801,34 @@ export class PostService {
         contextIds.productGroupId,
         contextIds.productId,
         true, // inventoryRequired - update posts require inventory
-        false
+        false,
+        request.eventId // eventId
       );
 
+      // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
+      if (request.images && request.images.length > 0) {
+        await this.prisma.postMedia.createMany({
+          data: request.images.map((imageUrl, index) => ({
+            postId: post.id,
+            userId: userId,
+            mediaUrl: imageUrl,
+            orderIndex: index, // Kullanıcının yüklediği sırada
+          })),
+        });
+      }
+
       logger.info(`Update post created: ${post.id} by user ${userId}`);
-      return { id: post.id };
+      
+      // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
+      this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
+        logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
+      });
+      
+      return { 
+        id: post.id,
+        message: 'Update post başarıyla oluşturuldu',
+        success: true
+      };
     } catch (error) {
       logger.error(`Failed to create update post:`, error);
       throw error;
@@ -633,7 +876,6 @@ export class PostService {
           media: inventory.media.map((m) => ({
             id: m.id,
             mediaUrl: m.mediaUrl,
-            type: m.type,
           })),
         },
       ];
@@ -644,6 +886,102 @@ export class PostService {
       );
       throw error;
     }
+  }
+
+  /**
+   * Experience option name'lerini UUID'lere çevir
+   * UUID formatında olmayan değerler için database'de lookup yapar
+   */
+  async resolveExperienceOptionIds(params: {
+    durationId?: string | null;
+    locationId?: string | null;
+    purposeId?: string | null;
+  }): Promise<{
+    durationId: string | null;
+    locationId: string | null;
+    purposeId: string | null;
+  }> {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    
+    // Eğer tüm değerler UUID formatındaysa, direkt döndür
+    if (
+      (!params.durationId || uuidRegex.test(params.durationId)) &&
+      (!params.locationId || uuidRegex.test(params.locationId)) &&
+      (!params.purposeId || uuidRegex.test(params.purposeId))
+    ) {
+      return {
+        durationId: params.durationId || null,
+        locationId: params.locationId || null,
+        purposeId: params.purposeId || null,
+      };
+    }
+
+    // Lookup gerekiyor
+    const options = await this.getExperienceOptions();
+    
+    const resolveOption = <T extends { id: string; name: string }>(
+      value: string | null | undefined,
+      options: T[],
+      type: 'duration' | 'location' | 'purpose'
+    ): string | null => {
+      if (!value) return null;
+      
+      // UUID formatındaysa direkt döndür
+      if (uuidRegex.test(value)) {
+        return value;
+      }
+
+      // Name-based lookup
+      const normalizedInput = value.trim().toLowerCase();
+      
+      // Exact match
+      let found = options.find(opt => {
+        const normalizedName = opt.name.trim().toLowerCase();
+        return normalizedName === normalizedInput || opt.id === value;
+      });
+
+      // Partial match (sadece duration için sayı eşleşmesi)
+      if (!found && type === 'duration') {
+        found = options.find(opt => {
+          const normalizedName = opt.name.trim().toLowerCase();
+          const inputNumber = normalizedInput.match(/\d+/)?.[0];
+          const nameNumber = normalizedName.match(/\d+/)?.[0];
+          
+          return normalizedName.includes(normalizedInput) ||
+                 normalizedInput.includes(normalizedName) ||
+                 (inputNumber && nameNumber && inputNumber === nameNumber);
+        });
+      } else if (!found) {
+        // Location ve Purpose için partial match
+        found = options.find(opt => {
+          const normalizedName = opt.name.trim().toLowerCase();
+          return normalizedName.includes(normalizedInput) ||
+                 normalizedInput.includes(normalizedName);
+        });
+      }
+
+      if (found) {
+        logger.info(`Experience ${type} resolved`, {
+          provided: value,
+          resolved: found.name,
+          id: found.id,
+        });
+        return found.id;
+      }
+
+      logger.warn(`Experience ${type} not found`, {
+        provided: value,
+        available: options.map(opt => opt.name),
+      });
+      
+      return null;
+    };
+
+    return {
+      durationId: resolveOption(params.durationId, options.durations, 'duration'),
+      locationId: resolveOption(params.locationId, options.locations, 'location'),
+      purposeId: resolveOption(params.purposeId, options.purposes, 'purpose'),
+    };
   }
 
   /**
@@ -686,6 +1024,106 @@ export class PostService {
    * - Sadece gönderi sahibi silebilir
    * - İlişkili kayıtlar FK ile otomatik temizlenir (post_tips, post_questions, post_comparisons vb.)
    */
+  /**
+   * Post ID'sine göre post detayını getirir
+   */
+  async getPostById(postId: string): Promise<any> {
+    const post = await this.prisma.contentPost.findUnique({
+      where: { id: postId },
+      include: {
+        user: {
+          include: {
+            profile: true,
+            avatars: {
+              where: { isActive: true },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+            titles: {
+              orderBy: { earnedAt: 'desc' },
+              take: 1,
+            },
+          },
+        },
+        product: {
+          include: {
+            group: {
+              include: {
+                subCategory: {
+                  include: {
+                    mainCategory: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        productGroup: {
+          include: {
+            subCategory: {
+              include: {
+                mainCategory: true,
+              },
+            },
+          },
+        },
+        subCategory: {
+          include: {
+            mainCategory: true,
+          },
+        },
+        mainCategory: true,
+        comparison: {
+          include: {
+            product1: {
+              include: {
+                group: true,
+              },
+            },
+            product2: {
+              include: {
+                group: true,
+              },
+            },
+            scores: true,
+          },
+        },
+        question: true,
+        tip: true,
+        tags: true,
+        likes: true,
+        comments: {
+          include: {
+            user: {
+              include: {
+                profile: true,
+                avatars: {
+                  where: { isActive: true },
+                  orderBy: { createdAt: 'desc' },
+                  take: 1,
+                },
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+        favorites: true,
+        contentPostTags: true,
+        media: {
+          orderBy: { orderIndex: 'asc' },
+        },
+      },
+    });
+
+    if (!post) {
+      return null;
+    }
+
+    // FeedService kullanarak post'u feed formatına çevir
+    const feedItem = await this.feedService.getPostAsFeedItem(post);
+    return feedItem?.data || null;
+  }
+
   async deletePost(userId: string, postId: string): Promise<boolean> {
     try {
       const post = await this.postRepo.findById(postId);

@@ -3,6 +3,8 @@ import { DmMessagePrismaRepository } from '../../infrastructure/repositories/dm-
 import { DMThreadPrismaRepository } from '../../infrastructure/repositories/dm-thread-prisma.repository';
 import { UserPrismaRepository } from '../../infrastructure/repositories/user-prisma.repository';
 import SocketManager from '../../infrastructure/realtime/socket-manager';
+import { NotificationService } from '../notification/notification.service';
+import { NotificationType } from '../../domain/notification/notification-type.enum';
 import logger from '../../infrastructure/logger/logger';
 import { PrismaClient } from '@prisma/client';
 import {
@@ -18,6 +20,7 @@ import {
 } from '../../interfaces/messaging/messaging.dto';
 import { SupportRequestService } from './support-request.service';
 import { DMRequestStatus } from '../../domain/messaging/dm-request-status.enum';
+import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 
 export interface InboxMessageItem {
   id: string;
@@ -41,6 +44,7 @@ export class MessagingService {
   private dmThreadRepo = new DMThreadPrismaRepository();
   private userRepo = new UserPrismaRepository();
   private supportRequestService = new SupportRequestService();
+  private notificationService = new NotificationService();
   private prisma = new PrismaClient();
   async createThreadIfNotExists(senderId: string, recipientId: string) {
     // Sadece normal DM thread'leri kontrol et (support thread'leri hariç)
@@ -112,6 +116,20 @@ export class MessagingService {
 
     // Göndericiye message_sent event'i gönder
     socketHandler.sendMessageToUser(senderId, 'message_sent', newMessageEvent);
+
+    // Notification servisine bildir
+    if (sender) {
+      await this.notificationService.sendNotification(
+        recipientId,
+        NotificationType.NEW_MESSAGE,
+        {
+          senderName: sender.name || sender.email,
+          senderId: sender.id,
+          messagePreview: message.substring(0, 50),
+          threadId: thread.id,
+        }
+      );
+    }
 
     logger.info(`Direct message sent from ${senderId} to ${recipientId}, socket events emitted`);
   }
@@ -379,7 +397,7 @@ export class MessagingService {
             id: message.senderId,
             senderName,
             senderTitle: sender.titles?.[0]?.title ?? '',
-            senderAvatar: sender.avatars?.[0]?.imageUrl ?? '',
+            senderAvatar: resolveMediaUrl(sender.avatars?.[0]?.imageUrl) || resolveMediaUrl('avatars/default/default-useravatar.png') || '',
           };
 
           const messageData: Message = {
@@ -445,7 +463,7 @@ export class MessagingService {
           id: message.senderId,
           senderName,
           senderTitle: sender.titles?.[0]?.title ?? '',
-          senderAvatar: sender.avatars?.[0]?.imageUrl ?? '',
+          senderAvatar: resolveMediaUrl(sender.avatars?.[0]?.imageUrl) || resolveMediaUrl('avatars/default/default-useravatar.png') || '',
         };
 
         // TIPS mesajı kontrolü - message içeriğine göre
@@ -505,7 +523,7 @@ export class MessagingService {
           id: transfer.fromUserId,
           senderName,
           senderTitle: sender.titles?.[0]?.title ?? '',
-          senderAvatar: sender.avatars?.[0]?.imageUrl ?? '',
+          senderAvatar: resolveMediaUrl(sender.avatars?.[0]?.imageUrl) || resolveMediaUrl('avatars/default/default-useravatar.png') || '',
         };
 
         const tipsInfo: TipsInfo = {
@@ -570,7 +588,7 @@ export class MessagingService {
             id: request.fromUserId,
             senderName,
             senderTitle: senderUser.titles?.[0]?.title ?? '',
-            senderAvatar: senderUser.avatars?.[0]?.imageUrl ?? '',
+            senderAvatar: resolveMediaUrl(senderUser.avatars?.[0]?.imageUrl) || resolveMediaUrl('avatars/default/default-useravatar.png') || '',
           };
 
         // Map DMRequestStatus to SupportRequestStatus
@@ -708,7 +726,9 @@ export class MessagingService {
           || 'Unknown';
 
         const senderTitle = counterpart?.titles?.[0]?.title ?? null;
-        const senderAvatar = counterpart?.avatars?.[0]?.imageUrl ?? null;
+        const senderAvatarUrl = counterpart?.avatars?.[0]?.imageUrl ?? null;
+        const defaultAvatarPath = 'avatars/default/default-useravatar.png';
+        const senderAvatar = resolveMediaUrl(senderAvatarUrl) || resolveMediaUrl(defaultAvatarPath) || '';
 
         return {
           id: thread.id,
@@ -750,7 +770,9 @@ export class MessagingService {
           || 'Unknown';
 
         const senderTitle = counterpart?.titles?.[0]?.title ?? '';
-        const senderAvatar = counterpart?.avatars?.[0]?.imageUrl ?? '';
+        const senderAvatarUrl = counterpart?.avatars?.[0]?.imageUrl ?? '';
+        const defaultAvatarPath = 'avatars/default/default-useravatar.png';
+        const senderAvatar = resolveMediaUrl(senderAvatarUrl) || resolveMediaUrl(defaultAvatarPath) || '';
 
         const sender: SenderUser = {
           id: isUserOne ? thread.userTwoId : thread.userOneId,
@@ -826,7 +848,7 @@ export class MessagingService {
           id: dmRequest.fromUserId,
           senderName,
           senderTitle: requestCreator.titles?.[0]?.title ?? '',
-          senderAvatar: requestCreator.avatars?.[0]?.imageUrl ?? '',
+          senderAvatar: resolveMediaUrl(requestCreator.avatars?.[0]?.imageUrl) || resolveMediaUrl('avatars/default/default-useravatar.png') || '',
         };
 
         // Map DMRequestStatus to SupportRequestStatus
@@ -929,7 +951,7 @@ export class MessagingService {
           id: transfer.fromUserId,
           senderName,
           senderTitle: sender.titles?.[0]?.title ?? '',
-          senderAvatar: sender.avatars?.[0]?.imageUrl ?? '',
+          senderAvatar: resolveMediaUrl(sender.avatars?.[0]?.imageUrl) || resolveMediaUrl('avatars/default/default-useravatar.png') || '',
         };
 
         const tipsInfo: TipsInfo = {

@@ -1,6 +1,7 @@
 import { FeedPrismaRepository } from '../../infrastructure/repositories/feed-prisma.repository';
 import { ProfilePrismaRepository } from '../../infrastructure/repositories/profile-prisma.repository';
 import { CacheService } from '../../infrastructure/cache/cache.service';
+import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import { PrismaClient } from '@prisma/client';
 import {
   FeedResponse,
@@ -21,19 +22,41 @@ import {
 } from '../../interfaces/feed/feed.dto';
 import { ContextType } from '../../domain/content/context-type.enum';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
+import { FeedSource } from '../../domain/admin/feed-source.enum';
+import { generateIdForModel } from '../../infrastructure/ids/id.strategy';
 import logger from '../../infrastructure/logger/logger';
+import { FeedScoringService } from './feed-scoring.service';
+import { FeedCleanupScheduler } from '../../infrastructure/scheduler/feed-cleanup.scheduler';
+import { FeedDistributionScheduler } from '../../infrastructure/scheduler/feed-distribution.scheduler';
 
 export class FeedService {
   private readonly feedRepo: FeedPrismaRepository;
   private readonly profileRepo: ProfilePrismaRepository;
   private readonly cacheService: CacheService;
   private readonly prisma: PrismaClient;
+  private readonly scoringService: FeedScoringService;
+  private readonly cleanupScheduler: FeedCleanupScheduler;
+  private readonly distributionScheduler: FeedDistributionScheduler;
+  
+  // Post counter for batch scoring
+  private postCounter: number = 0;
 
   constructor() {
     this.feedRepo = new FeedPrismaRepository();
     this.profileRepo = new ProfilePrismaRepository();
     this.cacheService = CacheService.getInstance();
     this.prisma = new PrismaClient();
+    this.scoringService = new FeedScoringService();
+    this.cleanupScheduler = new FeedCleanupScheduler();
+    this.distributionScheduler = new FeedDistributionScheduler();
+  }
+
+  /**
+   * Media path'ini tam URL'ye çevirir
+   * resolveMediaUrl kullanarak doğru formatı garanti eder
+   */
+  private buildFullMediaUrl(path: string | null | undefined): string | null {
+    return resolveMediaUrl(path);
   }
 
   /**
@@ -44,7 +67,6 @@ export class FeedService {
     options?: { cursor?: string; limit?: number }
   ): Promise<FeedResponse> {
     const limit = options?.limit || 20;
-    const cacheKey = `feed:${userId}:${options?.cursor || 'first'}:${limit}`;
 
     // Cursor olarak item (post) ID bekleniyor. Repository ise feed.id ile paginate ediyor.
     // Bu nedenle gelen cursor'ı feed.id'ye çeviriyoruz.
@@ -54,17 +76,7 @@ export class FeedService {
       feedCursor = cursorFeed?.id;
     }
 
-    try {
-      // Cache check
-      const cached = await this.cacheService.get<FeedResponse>(cacheKey);
-      if (cached) {
-        logger.info({ message: 'Feed served from cache', userId, cacheKey });
-        return cached;
-      }
-    } catch (error) {
-      // Cache error - continue without cache
-      logger.warn({ message: 'Cache error', error: error instanceof Error ? error.message : String(error) });
-    }
+    // Cache disabled - always fetch fresh data from database for real-time feed
 
     // Fetch feeds from database
     const { feeds, nextCursor } = await this.feedRepo.findByUserId(userId, {
@@ -72,15 +84,23 @@ export class FeedService {
       cursor: feedCursor,
     });
 
+    // Feed tablosu boşsa boş feed döndür (fallback mekanizması kaldırıldı)
+    // Production'da feed tablosu her zaman dolu olmalı (FeedDistributionWorker tarafından doldurulur)
     if (feeds.length === 0) {
-      const emptyResponse: FeedResponse = {
+      logger.warn({
+        message: 'Feed table is empty for user - feed distribution may not be working',
+        userId,
+        suggestion: 'Check FeedDistributionWorker is running and processing jobs',
+      });
+
+      return {
         items: [],
         pagination: {
+          cursor: undefined,
           hasMore: false,
           limit,
         },
       };
-      return emptyResponse;
     }
 
     // Batch fetch posts with all relations
@@ -157,6 +177,12 @@ export class FeedService {
     });
 
     // Order posts according to feed pagination order (avoid resort that breaks cursor)
+    // Create feed source map (postId -> source)
+    const feedSourceMap = new Map<string, string>();
+    feeds.forEach((feed) => {
+      feedSourceMap.set(feed.postId, feed.source);
+    });
+
     const postMap = new Map(posts.map((p) => [p.id, p]));
     const orderedPosts = feeds
       .map((feed) => postMap.get(feed.postId))
@@ -169,26 +195,27 @@ export class FeedService {
     });
     const ownedProductIds = new Set(inventories.map((inv) => String(inv.productId)));
 
-    // Batch fetch images for posts (from InventoryMedia)
-    const postProductIds = posts.map((p) => p.productId).filter(Boolean) as string[];
-    const inventoryMediaMap = new Map<string, string[]>();
-    if (postProductIds.length > 0) {
-      const inventoriesWithMedia = await this.prisma.inventory.findMany({
+    // Batch fetch images from PostMedia (orderIndex'e göre sıralı)
+    const postIds = orderedPosts.map((p) => p.id);
+    const postMediaMap = new Map<string, string[]>();
+    if (postIds.length > 0) {
+      const allPostMedia = await this.prisma.postMedia.findMany({
         where: {
-          userId: { in: posts.map((p) => p.userId) },
-          productId: { in: postProductIds },
+          postId: { in: postIds },
         },
-        include: {
-          media: {
-            where: { type: 'IMAGE' },
-            select: { mediaUrl: true },
-          },
-        },
+        orderBy: { orderIndex: 'asc' }, // Kullanıcının yüklediği sırada
+        select: { postId: true, mediaUrl: true },
       });
 
-      inventoriesWithMedia.forEach((inv) => {
-        const key = `${inv.userId}-${inv.productId}`;
-        inventoryMediaMap.set(key, inv.media.map((m) => m.mediaUrl));
+      // Map'e dönüştür (postId -> mediaUrl array)
+      allPostMedia.forEach((media) => {
+        if (!postMediaMap.has(media.postId)) {
+          postMediaMap.set(media.postId, []);
+        }
+        const fullUrl = this.buildFullMediaUrl(media.mediaUrl);
+        if (fullUrl) {
+          postMediaMap.get(media.postId)!.push(fullUrl);
+        }
       });
     }
 
@@ -207,17 +234,22 @@ export class FeedService {
       orderedPosts.map(async (post) => {
         const userBase = userBaseMap.get(String(post.userId)) || (await this.getUserBase(String(post.userId)));
         const stats = statsMap.get(post.id) || { likes: 0, comments: 0, shares: 0, bookmarks: 0 };
+        let feedSource = feedSourceMap.get(post.id);
+        // ENGAGEMENT_HIGH aslında TRENDING olarak gösterilmeli
+        if (feedSource === FeedSource.ENGAGEMENT_HIGH) {
+          feedSource = FeedSource.TRENDING;
+        }
         const basePost = {
           id: post.id,
           user: userBase,
           stats,
           createdAt: post.createdAt.toISOString(),
           contextType: this.mapContextType(post),
+          ...(feedSource && { source: feedSource }),
         };
 
-        // Get images for this post
-        const postKey = `${post.userId}-${post.productId || ''}`;
-        const images = inventoryMediaMap.get(postKey) || [];
+        // Get images for this post from PostMedia (orderIndex'e göre sıralı)
+        const images = postMediaMap.get(post.id) || [];
 
         switch (post.type) {
           case ContentPostType.FREE:
@@ -248,12 +280,7 @@ export class FeedService {
       },
     };
 
-    // Cache for 1 minute (feed is dynamic)
-    try {
-      await this.cacheService.set(cacheKey, response, 60);
-    } catch (error) {
-      // Cache error - continue without caching
-    }
+    // Cache disabled - return fresh data from database
 
     return response;
   }
@@ -271,21 +298,39 @@ export class FeedService {
     // Build filter query
     const postWhere: any = {};
 
-    // Merge category + interests into a single category filter
-    const mergedCategoryIds = new Set<string>();
+    // Category filter (separate from interests)
     if (filters.category) {
-      mergedCategoryIds.add(filters.category);
-    }
-    if (filters.interests && filters.interests.length > 0) {
-      filters.interests.forEach((id) => mergedCategoryIds.add(id));
+      postWhere.OR = [
+        { mainCategoryId: filters.category },
+        { subCategoryId: filters.category },
+      ];
     }
 
-    if (mergedCategoryIds.size > 0) {
-      const categoryArray = Array.from(mergedCategoryIds);
-      postWhere.OR = [
-        { mainCategoryId: { in: categoryArray } },
-        { subCategoryId: { in: categoryArray } },
-      ];
+    // Interests filter - now uses FeedSource instead of category IDs
+    // interests parametresi artık feed source'larını alıyor (TRUSTER, TRENDING, MUTUAL_TRUST, BOOSTED, etc.)
+    // ENGAGEMENT_HIGH → TRENDING mapping (kullanıcı ENGAGEMENT_HIGH yerine TRENDING kullanabilir)
+    const feedWhere: any = {};
+    if (filters.interests && filters.interests.length > 0) {
+      // Feed source'larını validate et ve filtrele
+      const validSources = filters.interests
+        .map((source) => {
+          // ENGAGEMENT_HIGH → TRENDING mapping
+          if (source === 'ENGAGEMENT_HIGH') {
+            return FeedSource.TRENDING;
+          }
+          return source;
+        })
+        .filter((source) => {
+          return Object.values(FeedSource).includes(source as FeedSource);
+        });
+      
+      if (validSources.length > 0) {
+        // ENGAGEMENT_HIGH ve TRENDING'i birlikte filtrele (ENGAGEMENT_HIGH database'de TRENDING olarak gösterilir)
+        const sourceArray = validSources.includes(FeedSource.TRENDING)
+          ? [...validSources, FeedSource.ENGAGEMENT_HIGH]
+          : validSources;
+        feedWhere.source = { in: sourceArray };
+      }
     }
 
     if (filters.productIds && filters.productIds.length > 0) {
@@ -296,14 +341,52 @@ export class FeedService {
       postWhere.userId = { in: filters.userIds };
     }
 
-    // Tag-based filtering (contentPostTags or tags relations)
+    // Tag-based filtering (contentPostTags, tags relations, or post type mapping)
     if (filters.tags && filters.tags.length > 0) {
-      (postWhere.AND ||= []).push({
-        OR: [
-          { contentPostTags: { some: { tag: { in: filters.tags } } } },
-          { tags: { some: { tag: { in: filters.tags } } } },
-        ],
+      // Map tag names to post types
+      const tagToTypeMap: Record<string, ContentPostType> = {
+        'Review': ContentPostType.FREE,
+        'Benchmark': ContentPostType.COMPARE,
+        'Tips': ContentPostType.TIPS,
+        'Question': ContentPostType.QUESTION,
+        'Experience': ContentPostType.EXPERIENCE,
+        'Update': ContentPostType.UPDATE,
+      };
+      
+      const typeFilters: ContentPostType[] = [];
+      const tagFilters: string[] = [];
+      
+      filters.tags.forEach((tag) => {
+        const mappedType = tagToTypeMap[tag];
+        if (mappedType) {
+          typeFilters.push(mappedType);
+        } else {
+          tagFilters.push(tag);
+        }
       });
+      
+      const tagConditions: any[] = [];
+      
+      // Add type-based filtering
+      if (typeFilters.length > 0) {
+        tagConditions.push({ type: { in: typeFilters } });
+      }
+      
+      // Add tag-based filtering (contentPostTags or post_tags)
+      if (tagFilters.length > 0) {
+        tagConditions.push({
+          OR: [
+            { contentPostTags: { some: { tag: { in: tagFilters } } } },
+            { tags: { some: { tag: { in: tagFilters } } } },
+          ],
+        });
+      }
+      
+      if (tagConditions.length > 0) {
+        (postWhere.AND ||= []).push({
+          OR: tagConditions,
+        });
+      }
     }
 
     if (filters.dateRange) {
@@ -319,25 +402,36 @@ export class FeedService {
     // Note: minLikes and minComments filtering will be done after fetching stats
 
     // Fetch feeds with post filters
+    // Post'un gerçek oluşturulma zamanına göre sırala (gönderim zamanı)
     const orderBy =
       filters.sort === 'top'
         ? [
             { post: { likesCount: 'desc' as const } },
             { post: { viewsCount: 'desc' as const } },
-            { createdAt: 'desc' as const },
+            { post: { createdAt: 'desc' as const } },
           ]
         : [
             { post: { isBoosted: 'desc' as const } },
-            { createdAt: 'desc' as const },
+            { post: { createdAt: 'desc' as const } },
           ];
 
+    // Exclude user's own posts (same as normal feed)
+    const finalPostWhere = {
+      ...postWhere,
+      userId: { not: userId }, // Kendi postlarını gösterme
+    };
+
+    // Combine feed filters (source) with post filters
+    const finalFeedWhere: any = {
+      userId,
+      ...feedWhere, // Feed source filters (interests)
+      ...(Object.keys(finalPostWhere).length > 0 && {
+        post: finalPostWhere,
+      }),
+    };
+
     const feeds = await this.prisma.feed.findMany({
-      where: {
-        userId,
-        ...(Object.keys(postWhere).length > 0 && {
-          post: postWhere,
-        }),
-      },
+      where: finalFeedWhere,
       include: {
         post: {
           include: {
@@ -456,26 +550,33 @@ export class FeedService {
     // Update posts and postIds after filtering
     posts = filteredFeeds.map((feed) => feed.post);
 
-    // Batch fetch images
-    const postProductIds = posts.map((p) => p.productId).filter(Boolean) as string[];
-    const inventoryMediaMap = new Map<string, string[]>();
-    if (postProductIds.length > 0) {
-      const inventoriesWithMedia = await this.prisma.inventory.findMany({
+    // Create feed source map (postId -> source) for filtered feeds
+    const feedSourceMap = new Map<string, string>();
+    filteredFeeds.forEach((feed) => {
+      feedSourceMap.set(feed.postId, feed.source);
+    });
+
+    // Batch fetch images from PostMedia (orderIndex'e göre sıralı)
+    const postIds = posts.map((p) => p.id);
+    const postMediaMap = new Map<string, string[]>();
+    if (postIds.length > 0) {
+      const allPostMedia = await this.prisma.postMedia.findMany({
         where: {
-          userId: { in: posts.map((p) => p.userId) },
-          productId: { in: postProductIds },
+          postId: { in: postIds },
         },
-        include: {
-          media: {
-            where: { type: 'IMAGE' },
-            select: { mediaUrl: true },
-          },
-        },
+        orderBy: { orderIndex: 'asc' }, // Kullanıcının yüklediği sırada
+        select: { postId: true, mediaUrl: true },
       });
 
-      inventoriesWithMedia.forEach((inv) => {
-        const key = `${inv.userId}-${inv.productId}`;
-        inventoryMediaMap.set(key, inv.media.map((m) => m.mediaUrl));
+      // Map'e dönüştür (postId -> mediaUrl array)
+      allPostMedia.forEach((media) => {
+        if (!postMediaMap.has(media.postId)) {
+          postMediaMap.set(media.postId, []);
+        }
+        const fullUrl = this.buildFullMediaUrl(media.mediaUrl);
+        if (fullUrl) {
+          postMediaMap.get(media.postId)!.push(fullUrl);
+        }
       });
     }
 
@@ -493,17 +594,22 @@ export class FeedService {
       posts.map(async (post) => {
         const userBase = userBaseMap.get(String(post.userId)) || (await this.getUserBase(String(post.userId)));
         const stats = statsMap.get(post.id) || { likes: 0, comments: 0, shares: 0, bookmarks: 0 };
+        let feedSource = feedSourceMap.get(post.id);
+        // ENGAGEMENT_HIGH aslında TRENDING olarak gösterilmeli
+        if (feedSource === FeedSource.ENGAGEMENT_HIGH) {
+          feedSource = FeedSource.TRENDING;
+        }
         const basePost = {
           id: post.id,
           user: userBase,
           stats,
           createdAt: post.createdAt.toISOString(),
           contextType: this.mapContextType(post),
+          ...(feedSource && { source: feedSource }),
         };
 
-        // Get images for this post
-        const postKey = `${post.userId}-${post.productId || ''}`;
-        const images = inventoryMediaMap.get(postKey) || [];
+        // Get images for this post from PostMedia (orderIndex'e göre sıralı)
+        const images = postMediaMap.get(post.id) || [];
 
         switch (post.type) {
           case ContentPostType.FREE:
@@ -531,14 +637,71 @@ export class FeedService {
     const limitedItems = feedItems.slice(0, limit);
     const finalHasMore = hasMoreFromDb || feedItems.length > limit;
 
+    // Calculate total count for filtered feed (using the same where clause as the query)
+    const totalCount = await this.prisma.feed.count({
+      where: {
+        userId,
+        ...feedWhere, // Feed source filters (interests)
+        ...(Object.keys(finalPostWhere).length > 0 && {
+          post: finalPostWhere,
+        }),
+      },
+    });
+
     return {
       items: limitedItems,
       pagination: {
         cursor: finalHasMore ? nextCursor : undefined,
         hasMore: finalHasMore,
         limit,
+        total: totalCount,
       },
     };
+  }
+
+  /**
+   * Get feed source counts (excluding user's own posts)
+   */
+  async getFeedSourceCounts(userId: string): Promise<Record<string, number>> {
+    const counts = await this.prisma.feed.groupBy({
+      by: ['source'],
+      where: {
+        userId,
+        post: {
+          userId: { not: userId }, // Exclude user's own posts
+        },
+      },
+      _count: {
+        id: true,
+      },
+    });
+
+    const result: Record<string, number> = {};
+    counts.forEach((item) => {
+      // ENGAGEMENT_HIGH should be shown as TRENDING
+      const source = item.source === 'ENGAGEMENT_HIGH' ? 'TRENDING' : item.source;
+      result[source] = (result[source] || 0) + item._count.id;
+    });
+
+    // Ensure all sources are present (even if 0)
+    const allSources = [
+      'TRUSTER',
+      'CATEGORY_MATCH',
+      'TRENDING',
+      'NEW_USER',
+      'BOOSTED',
+      'TRUSTER_NETWORK',
+      'MUTUAL_TRUST',
+      'INVENTORY_MATCH',
+      'PRODUCT_GROUP_MATCH',
+    ];
+    allSources.forEach((source) => {
+      if (!(source in result)) {
+        result[source] = 0;
+      }
+    });
+
+    return result;
   }
 
   // ===== Private Helper Methods =====
@@ -554,7 +717,7 @@ export class FeedService {
       id: userId,
       name: profile?.displayName || 'Anonymous',
       title: title?.title || '',
-      avatar: avatar?.imageUrl || '',
+      avatar: resolveMediaUrl(avatar?.imageUrl || null) || '',
     };
   }
 
@@ -564,7 +727,7 @@ export class FeedService {
       id: String(product.id),
       name: product.name,
       subName: product.brand || product.group?.name || '',
-      image: product.imageUrl || null,
+      image: this.buildFullMediaUrl(product.imageUrl),
     };
   }
 
@@ -593,7 +756,7 @@ export class FeedService {
         id: String(product.id),
         name: product.name,
         subName: group?.name || subCategory?.name || '',
-        image: product.imageUrl || null,
+        image: this.buildFullMediaUrl(product.imageUrl),
         isOwned: ownedProductIds ? ownedProductIds.has(String(product.id)) : undefined,
       };
 
@@ -606,11 +769,12 @@ export class FeedService {
       const group = post.productGroup;
       if (group) {
         const subCategory = group.subCategory;
+        const imagePath = group.imageUrl || subCategory?.imageUrl || subCategory?.mainCategory?.imageUrl || null;
         return {
           id: String(group.id),
           name: group.name,
           subName: subCategory?.name || '',
-          image: group.imageUrl || subCategory?.imageUrl || subCategory?.mainCategory?.imageUrl || null,
+          image: this.buildFullMediaUrl(imagePath),
         };
       }
 
@@ -625,11 +789,12 @@ export class FeedService {
     // SUB_CATEGORIES (fallback olarak mainCategory bilgisini de kullan)
     if (post.subCategory) {
       const subCategory = post.subCategory;
+      const imagePath = subCategory.imageUrl || subCategory.mainCategory?.imageUrl || null;
       return {
         id: String(subCategory.id),
         name: subCategory.name,
         subName: subCategory.mainCategory?.name || '',
-        image: subCategory.imageUrl || subCategory.mainCategory?.imageUrl || null,
+        image: this.buildFullMediaUrl(imagePath),
       };
     }
 
@@ -638,7 +803,7 @@ export class FeedService {
         id: String(post.mainCategory.id),
         name: post.mainCategory.name,
         subName: '',
-        image: post.mainCategory.imageUrl || null,
+        image: this.buildFullMediaUrl(post.mainCategory.imageUrl),
       };
     }
 
@@ -672,6 +837,68 @@ export class FeedService {
     }
 
     return this.sortFeedItemsByTimestamp([...prioritized, ...leftovers]);
+  }
+
+  /**
+   * Tek bir post'u feed item formatına çevirir (public metod)
+   */
+  async getPostAsFeedItem(post: any, userId?: string): Promise<FeedItem | null> {
+    if (!post) return null;
+
+    // Get user inventories for benchmark isOwned check
+    const ownedProductIds = userId 
+      ? new Set(
+          (await this.prisma.inventory.findMany({
+            where: { userId },
+            select: { productId: true },
+          })).map((inv) => String(inv.productId))
+        )
+      : new Set<string>();
+
+    // Get images from PostMedia
+    const postMedia = await this.prisma.postMedia.findMany({
+      where: { postId: post.id },
+      orderBy: { orderIndex: 'asc' },
+      select: { mediaUrl: true },
+    });
+    const images = postMedia.map((media) => this.buildFullMediaUrl(media.mediaUrl)).filter(Boolean) as string[];
+
+    // Get user base
+    const userBase = await this.getUserBase(String(post.userId));
+
+    // Get stats
+    const stats: BaseStats = {
+      likes: (post as any).likesCount || post.likes?.length || 0,
+      comments: (post as any).commentsCount || post.comments?.length || 0,
+      shares: (post as any).sharesCount || 0,
+      bookmarks: (post as any).favoritesCount || post.favorites?.length || 0,
+    };
+
+    const basePost = {
+      id: post.id,
+      user: userBase,
+      stats,
+      createdAt: post.createdAt.toISOString(),
+      contextType: this.mapContextType(post),
+    };
+
+    // Map post based on type
+    switch (post.type) {
+      case ContentPostType.FREE:
+        return this.mapToPostItem(post, basePost, FeedItemType.POST, images, ownedProductIds);
+      case ContentPostType.COMPARE:
+        return this.mapToBenchmarkItem(post, basePost, ownedProductIds, images);
+      case ContentPostType.QUESTION:
+        return this.mapToPostItem(post, basePost, FeedItemType.QUESTION, images, ownedProductIds);
+      case ContentPostType.TIPS:
+        return this.mapToTipsAndTricksItem(post, basePost, images, ownedProductIds);
+      case ContentPostType.EXPERIENCE:
+        return this.mapToExperienceItem(post, basePost, FeedItemType.EXPERIENCE, images, ownedProductIds);
+      case ContentPostType.UPDATE:
+        return this.mapToExperienceItem(post, basePost, FeedItemType.UPDATE, images, ownedProductIds);
+      default:
+        return this.mapToPostItem(post, basePost, FeedItemType.POST, images, ownedProductIds);
+    }
   }
 
   private sortFeedItemsByTimestamp(items: FeedItem[]): FeedItem[] {
@@ -799,7 +1026,7 @@ export class FeedService {
           id: post.productId || '',
           name: post.product?.name || '',
           subName: post.productGroup?.name || '',
-          image: post.product?.imageUrl || null,
+          image: this.buildFullMediaUrl(post.product?.imageUrl),
           isOwned: false,
         };
 
@@ -811,18 +1038,24 @@ export class FeedService {
     const tags = post.tags?.map((t: any) => t.tag) || post.contentPostTags?.map((t: any) => t.tag) || [];
 
     if (type === FeedItemType.UPDATE) {
+      // Convert experienceContent array to string for mobile compatibility
+      const relatedPostContentString = experienceContent.length > 0
+        ? experienceContent.map((item) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`).join('\n\n')
+        : post.body || '';
+
       const relatedPost = {
         id: post.id,
         product,
-        content: experienceContent,
+        content: relatedPostContentString, // String for mobile compatibility
+        experienceContent, // Keep array for structured data
         tags,
         images,
-      };
+      } as any; // Type assertion needed because RelatedPostData interface expects content: ExperienceContent[]
 
       const updateData = {
         ...basePost,
         relatedPost,
-        content: post.body,
+        content: post.body || '', // Ensure content is always a string
         images,
       };
 
@@ -832,13 +1065,20 @@ export class FeedService {
       };
     }
 
+    // Convert experienceContent array to string for mobile compatibility
+    // Mobile expects content to be a string (for substring operations)
+    const contentString = experienceContent.length > 0
+      ? experienceContent.map((item) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`).join('\n\n')
+      : post.body || '';
+
     const experienceData: ExperiencePost = {
       ...basePost,
       product,
-      content: experienceContent,
+      content: contentString, // String for mobile compatibility
+      experienceContent, // Keep array for structured data
       tags,
       images,
-    };
+    } as any; // Type assertion needed because ExperiencePost interface expects content: ExperienceContent[]
 
     return {
       type,
@@ -1033,6 +1273,385 @@ export class FeedService {
     return product1Score > product2Score
       ? (comparison.product1Id ? String(comparison.product1Id) : null)
       : (comparison.product2Id ? String(comparison.product2Id) : null);
+  }
+
+  /**
+   * Post'u feed'lere ekle (Asynchronous with BullMQ)
+   * 
+   * Fan-out on Write stratejisi ile çalışır:
+   * - Post oluşturulduğunda bu metod çağrılır
+   * - Feed distribution job'ı queue'ya eklenir (non-blocking)
+   * - Worker arka planda hedef kullanıcılara feed dağıtır
+   * 
+   * Performance optimizations:
+   * - Asynchronous processing (ana thread bloklanmaz)
+   * - Batch scoring (100'er kullanıcı)
+   * - Chunked inserts (500'er kayıt)
+   * - Controlled concurrency (max 3 chunk paralel)
+   * - Retry mechanism (max 3 attempt per chunk)
+   * - Score threshold filtering (minimum 5 puan)
+   * 
+   * @param postId - Post ID
+   * @param postAuthorId - Post yazarının ID'si
+   */
+  async addPostToFeeds(postId: string, postAuthorId: string): Promise<void> {
+    try {
+      // Post counter artır (batch scoring için)
+      this.postCounter++;
+      const isFullScoring = this.postCounter % 10 === 0;
+
+      // Post bilgilerini al
+      const post = await this.prisma.contentPost.findUnique({
+        where: { id: postId },
+        include: {
+          user: {
+            include: {
+              profile: true,
+            },
+          },
+        },
+      });
+
+      if (!post) {
+        logger.warn({ message: 'Post not found for feed addition', postId });
+        return;
+      }
+
+      // Time window kontrolü (14 günden eski postlar feed'e eklenmez)
+      const postAge = Date.now() - post.createdAt.getTime();
+      const maxAge = 14 * 24 * 60 * 60 * 1000; // 14 gün
+      if (postAge > maxAge) {
+        logger.info({
+          message: 'Post too old for feed addition',
+          postId,
+          postAge: Math.floor(postAge / (24 * 60 * 60 * 1000)) + ' days',
+        });
+        return;
+      }
+
+      // Feed distribution job'ı queue'ya ekle (non-blocking)
+      await this.distributionScheduler.queueFeedDistribution(
+        postId,
+        postAuthorId,
+        {
+          mainCategoryId: post.mainCategoryId,
+          subCategoryId: post.subCategoryId,
+          productGroupId: post.productGroupId,
+          productId: post.productId,
+          likesCount: (post as any).likesCount || 0,
+          commentsCount: (post as any).commentsCount || 0,
+          viewsCount: (post as any).viewsCount || 0,
+          sharesCount: (post as any).sharesCount || 0,
+          isBoosted: post.isBoosted,
+          boostedUntil: post.boostedUntil,
+          createdAt: post.createdAt,
+        },
+        isFullScoring ? 'full' : 'fast'
+      );
+
+      logger.info({
+        message: 'Feed distribution job queued successfully',
+        postId,
+        scoringType: isFullScoring ? 'FULL' : 'FAST',
+        postCounter: this.postCounter,
+      });
+    } catch (error) {
+      logger.error({
+        message: 'Failed to queue feed distribution',
+        postId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      // Hata olsa bile devam et - post oluşturma başarısız sayılmamalı
+    }
+  }
+
+  /**
+   * Feed item'ları seen olarak işaretle ve seen penalty uygula
+   * Seen penalty: Mevcut score'un %50'sine düş
+   * 
+   * Frontend'den viewport tracking ile tetiklenir:
+   * - Feed item viewport'a 2 saniye + görünür olunca çağrılır
+   * - Batch update: Birden fazla feed item tek request'te
+   */
+  async markFeedAsSeen(feedIds: string[]): Promise<void> {
+    try {
+      if (feedIds.length === 0) return;
+
+      // Batch seen marking + score penalty
+      const updatedCount = await this.feedRepo.markMultipleAsSeen(feedIds);
+
+      logger.info({
+        message: 'Feeds marked as seen with penalty',
+        count: updatedCount,
+        feedIds: feedIds.slice(0, 5), // İlk 5 ID log'la
+      });
+
+      // Feed sahibi kullanıcıları bul ve cache invalidate et
+      const feeds = await this.prisma.feed.findMany({
+        where: { id: { in: feedIds } },
+        select: { userId: true },
+        distinct: ['userId'],
+      });
+
+      for (const feed of feeds) {
+        try {
+          const cachePattern = `feed:${feed.userId}:*`;
+          await this.cacheService.delPattern(cachePattern).catch(() => {});
+        } catch (error) {
+          // Cache error - continue
+        }
+      }
+    } catch (error) {
+      logger.error({
+        message: 'Failed to mark feeds as seen',
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /**
+   * Kullanıcı feedback'i ile feed score'unu güncelle
+   * 
+   * Feedback Tipleri:
+   * - hide: Feed'i gizle (score * 0.3)
+   * - not_interested: İlgilenmiyorum (score * 0.3)
+   * - save: Kaydet (score + 10)
+   * - report: Şikayet et (feed sil, post moderate)
+   */
+  async handleUserFeedback(
+    feedId: string,
+    userId: string,
+    feedbackType: 'hide' | 'not_interested' | 'save' | 'report'
+  ): Promise<void> {
+    try {
+      switch (feedbackType) {
+        case 'hide':
+        case 'not_interested':
+          // Score'u %30'a düşür
+          await this.feedRepo.updateScoreByFeedback(feedId, 0.3);
+          logger.info({
+            message: 'Feed hidden by user',
+            feedId,
+            userId,
+            feedbackType,
+          });
+          break;
+
+        case 'save':
+          // Score'u +10 artır
+          await this.feedRepo.updateScoreByFeedback(feedId, null, 10);
+          logger.info({
+            message: 'Feed saved by user',
+            feedId,
+            userId,
+          });
+          break;
+
+        case 'report':
+          // Feed'i sil ve post'u moderate'e gönder
+          const feed = await this.prisma.feed.findUnique({
+            where: { id: feedId },
+            select: { postId: true },
+          });
+
+          if (feed) {
+            // Post'u moderate durumuna al
+            // TODO: status field is not in ContentPost schema, needs to be added to prisma schema
+            // await this.prisma.contentPost.update({
+            //   where: { id: feed.postId },
+            //   data: { status: 'PENDING_MODERATION' as any },
+            // });
+
+            // Feed'i sil
+            await this.feedRepo.delete(feedId);
+
+            logger.warn({
+              message: 'Feed reported and removed',
+              feedId,
+              postId: feed.postId,
+              userId,
+            });
+          }
+          break;
+      }
+
+      // Cache invalidate
+      try {
+        const cachePattern = `feed:${userId}:*`;
+        await this.cacheService.delPattern(cachePattern).catch(() => {});
+      } catch (error) {
+        // Cache error - continue
+      }
+    } catch (error) {
+      logger.error({
+        message: 'Failed to handle user feedback',
+        feedId,
+        userId,
+        feedbackType,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Mevcut tüm postları tüm aktif kullanıcıların feed'ine ekler
+   * Bu metod bir kez çalıştırılarak mevcut postları feed tablosuna ekler
+   */
+  async addAllExistingPostsToFeeds(): Promise<void> {
+    try {
+      logger.info({ message: 'Starting to add all existing posts to feeds' });
+
+      // Tüm aktif kullanıcıları al
+      const allActiveUsers = await this.prisma.user.findMany({
+        where: { status: 'ACTIVE' },
+        select: { id: true },
+      });
+
+      if (allActiveUsers.length === 0) {
+        logger.warn({ message: 'No active users found' });
+        return;
+      }
+
+      // Tüm postları al (kendi postları hariç değil, hepsini al)
+      const allPosts = await this.prisma.contentPost.findMany({
+        select: { id: true, userId: true, isBoosted: true },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (allPosts.length === 0) {
+        logger.warn({ message: 'No posts found' });
+        return;
+      }
+
+      logger.info({
+        message: 'Processing posts for feed addition',
+        postCount: allPosts.length,
+        userCount: allActiveUsers.length,
+      });
+
+      // Post sahiplerini trust edenler için trust relation'ları al
+      const allTrustRelations = await this.prisma.trustRelation.findMany({
+        select: { trusterId: true, trustedUserId: true },
+      });
+      const trusterMap = new Map<string, Set<string>>();
+      allTrustRelations.forEach((rel) => {
+        if (!trusterMap.has(rel.trustedUserId)) {
+          trusterMap.set(rel.trustedUserId, new Set());
+        }
+        trusterMap.get(rel.trustedUserId)!.add(rel.trusterId);
+      });
+
+      // Kullanıcı feed preferences'larını batch olarak al
+      const userIds = allActiveUsers.map((u) => u.id);
+      const userPreferences = await this.prisma.userFeedPreferences.findMany({
+        where: { userId: { in: userIds } },
+        select: { userId: true, preferredCategories: true },
+      });
+      const preferencesMap = new Map(
+        userPreferences.map((pref) => [pref.userId, pref.preferredCategories])
+      );
+
+      // Post detaylarını al (kategori bilgileri için)
+      const postsWithDetails = await this.prisma.contentPost.findMany({
+        where: { id: { in: allPosts.map((p) => p.id) } },
+        select: { id: true, userId: true, isBoosted: true, mainCategoryId: true, subCategoryId: true },
+      });
+      const postDetailsMap = new Map(postsWithDetails.map((p) => [p.id, p]));
+
+      // Her post için tüm kullanıcılara ekle (source öncelik sırasına göre)
+      let totalAdded = 0;
+      for (const post of allPosts) {
+        const postDetails = postDetailsMap.get(post.id);
+        if (!postDetails) continue;
+
+        const postCategoryId = postDetails.mainCategoryId || postDetails.subCategoryId;
+        const trusters = trusterMap.get(post.userId) || new Set<string>();
+
+        const feedRecords: Array<{
+          id: string;
+          userId: string;
+          postId: string;
+          source: FeedSource;
+          seen: boolean;
+        }> = [];
+
+        for (const user of allActiveUsers) {
+          if (user.id === post.userId) continue; // Post sahibini hariç tut
+
+          let source: FeedSource | null = null;
+
+          // 1. Truster ise TRUSTER source
+          if (trusters.has(user.id)) {
+            source = FeedSource.TRUSTER;
+          }
+          // 2. Boosted post ise BOOSTED source
+          else if (postDetails.isBoosted) {
+            source = FeedSource.BOOSTED;
+          }
+          // 3. Kategori eşleşmesi varsa CATEGORY_MATCH
+          else if (postCategoryId) {
+            const userPrefs = preferencesMap.get(user.id);
+            if (userPrefs) {
+              const preferredCategories = userPrefs.split(',').filter(Boolean);
+              if (preferredCategories.includes(postCategoryId)) {
+                source = FeedSource.CATEGORY_MATCH;
+              }
+            }
+          }
+          // 4. TRENDING (gelecekte)
+          // 5. Fallback: NEW_USER
+          if (!source) {
+            source = FeedSource.NEW_USER;
+          }
+
+          feedRecords.push({
+            id: generateIdForModel('Feed'),
+            userId: user.id,
+            postId: post.id,
+            source,
+            seen: false,
+          });
+        }
+
+        if (feedRecords.length > 0) {
+          await this.prisma.feed.createMany({
+            data: feedRecords,
+            skipDuplicates: true,
+          });
+          totalAdded += feedRecords.length;
+        }
+      }
+
+      // Tüm kullanıcılar için unseenFeedCount'u güncelle
+      for (const user of allActiveUsers) {
+        const unseenCount = await this.prisma.feed.count({
+          where: {
+            userId: user.id,
+            seen: false,
+          },
+        });
+
+        await this.prisma.profile.updateMany({
+          where: { userId: user.id },
+          data: {
+            unseenFeedCount: unseenCount,
+          } as any,
+        });
+      }
+
+      logger.info({
+        message: 'All existing posts added to feeds',
+        totalPosts: allPosts.length,
+        totalFeedRecords: totalAdded,
+      });
+    } catch (error) {
+      logger.error({
+        message: 'Failed to add all existing posts to feeds',
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
   }
 }
 

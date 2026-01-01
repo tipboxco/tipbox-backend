@@ -12,25 +12,47 @@ import {
 import logger from '../../infrastructure/logger/logger';
 import { ExperienceType } from '../../domain/content/experience-type.enum';
 import { ExperienceStatus } from '../../domain/content/experience-status.enum';
-import { InventoryMediaType } from '../../domain/inventory/inventory-media-type.enum';
+import { CacheService } from '../../infrastructure/cache/cache.service';
+import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
+import { GeminiService } from '../../infrastructure/ai/gemini.service';
+import { AiExperienceSplitPrismaRepository } from '../../infrastructure/repositories/ai-experience-split-prisma.repository';
 
 export class InventoryService {
   private readonly prisma: PrismaClient;
   private readonly inventoryRepo: InventoryPrismaRepository;
   private readonly experienceRepo: ProductExperiencePrismaRepository;
   private readonly mediaRepo: InventoryMediaPrismaRepository;
+  private readonly cacheService: CacheService;
+  private readonly geminiService: GeminiService;
+  private readonly experienceSnippetRepo: AiExperienceSplitPrismaRepository;
 
   constructor() {
     this.prisma = new PrismaClient();
     this.inventoryRepo = new InventoryPrismaRepository();
     this.experienceRepo = new ProductExperiencePrismaRepository();
     this.mediaRepo = new InventoryMediaPrismaRepository();
+    this.cacheService = CacheService.getInstance();
+    this.geminiService = GeminiService.getInstance();
+    this.experienceSnippetRepo = new AiExperienceSplitPrismaRepository();
   }
 
   /**
    * Kullanıcının sahip olduğu ürünlerin listesini getir
    */
   async getUserInventoryList(userId: string): Promise<InventoryListItemResponse[]> {
+    const cacheKey = `inventory:user:${userId}:list`;
+
+    // Cache check (otomatik hit/miss işaretler)
+    try {
+      const cached = await this.cacheService.get<InventoryListItemResponse[]>(cacheKey);
+      if (cached) {
+        logger.info({ message: 'Inventory list served from cache', userId, cacheKey });
+        return cached;
+      }
+    } catch (error) {
+      logger.warn({ message: 'Cache error', error: error instanceof Error ? error.message : String(error) });
+    }
+
     try {
       const inventories = await this.inventoryRepo.findCurrentlyOwned(userId);
 
@@ -59,8 +81,18 @@ export class InventoryService {
         const experiences = await this.experienceRepo.findByInventoryId(inventory.id);
 
         // Media'dan ilk resmi al
-        const images = await this.mediaRepo.findImagesByInventoryId(inventory.id);
-        const image = images.length > 0 ? images[0].getMediaUrl() : null;
+        const images = await this.mediaRepo.findByInventoryId(inventory.id);
+        let image: string | null = null;
+        if (images.length > 0) {
+          const mediaUrl = images[0].getMediaUrl();
+          // Eğer zaten tam URL ise olduğu gibi kullan, değilse prefix ekle
+          if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) {
+            image = mediaUrl;
+          } else {
+            const { resolveMediaUrl } = await import('../../infrastructure/config/media.config');
+            image = resolveMediaUrl(mediaUrl);
+          }
+        }
 
         // Tags: Content post tags'lerinden al veya product group'dan
         const tags: string[] = [];
@@ -124,11 +156,151 @@ export class InventoryService {
         count: result.length,
       });
 
+      // Cache'e kaydet
+      try {
+        await this.cacheService.set(cacheKey, result, CACHE_TTL.MEDIUM); // 30 dakika
+      } catch (error) {
+        logger.warn({ message: 'Cache set failed', error: error instanceof Error ? error.message : String(error) });
+      }
+
       return result;
     } catch (error) {
       logger.error({
         message: 'Error getting user inventory list',
         userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Duration, Location, Purpose seçeneklerini getir
+   */
+  async getExperienceOptions(): Promise<{
+    durations: Array<{ id: string; name: string }>;
+    locations: Array<{ id: string; name: string }>;
+    purposes: Array<{ id: string; name: string }>;
+  }> {
+    try {
+      const [durations, locations, purposes] = await Promise.all([
+        this.prisma.experienceDuration.findMany({
+          where: { isActive: true },
+          orderBy: { name: 'asc' },
+        }),
+        this.prisma.experienceLocation.findMany({
+          where: { isActive: true },
+          orderBy: { name: 'asc' },
+        }),
+        this.prisma.experiencePurpose.findMany({
+          where: { isActive: true },
+          orderBy: { name: 'asc' },
+        }),
+      ]);
+
+      return {
+        durations: durations.map((d) => ({ id: d.id, name: d.name })),
+        locations: locations.map((l) => ({ id: l.id, name: l.name })),
+        purposes: purposes.map((p) => ({ id: p.id, name: p.name })),
+      };
+    } catch (error) {
+      logger.error({
+        message: 'Error getting experience options',
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Kullanıcının deneyim metnini AI ile ayır ve database'e kaydet
+   */
+  async splitExperienceWithAI(
+    userId: string,
+    productId: string,
+    experienceText: string
+  ): Promise<{
+    experienceSnippetId: string;
+    priceAndShopping: { 
+      content: string; 
+      rating: number; 
+      placeholder?: string | null; 
+      isEnhanced?: boolean;
+    } | null;
+    productAndUsage: { 
+      content: string; 
+      rating: number; 
+      placeholder?: string | null; 
+      isEnhanced?: boolean;
+    } | null;
+    metadata: {
+      tokensUsed: number | null;
+      processingTimeMs: number;
+      model: string;
+      promptVersion: string;
+    };
+  }> {
+    try {
+      // Ürün bilgilerini al
+      const product = await this.prisma.product.findUnique({
+        where: { id: productId },
+      });
+
+      if (!product) {
+        throw new Error('Product not found');
+      }
+
+      // Gemini AI ile deneyimi ayır
+      const splitResult = await this.geminiService.splitExperience({
+        productId,
+        productName: product.name,
+        productBrand: product.brand || undefined,
+        productDescription: product.description || undefined,
+        experienceText,
+      });
+
+      // AI split sonucunu database'e kaydet
+      const experienceSnippet = await this.experienceSnippetRepo.create({
+        userId,
+        productId,
+        originalExperience: experienceText,
+        priceAndShopping: splitResult.priceAndShopping?.content ?? null,
+        productAndUsage: splitResult.productAndUsage?.content ?? null,
+        priceAndShoppingRating: splitResult.priceAndShopping?.rating ?? null,
+        productAndUsageRating: splitResult.productAndUsage?.rating ?? null,
+        priceAndShoppingPlaceholder: splitResult.priceAndShopping?.placeholder ?? null,
+        productAndUsagePlaceholder: splitResult.productAndUsage?.placeholder ?? null,
+        priceAndShoppingIsEnhanced: splitResult.priceAndShopping?.isEnhanced ?? null,
+        productAndUsageIsEnhanced: splitResult.productAndUsage?.isEnhanced ?? null,
+        isEdited: false,
+        model: splitResult.metadata.model,
+        promptVersion: splitResult.metadata.promptVersion,
+        tokensUsed: splitResult.metadata.tokensUsed,
+        processingTimeMs: splitResult.metadata.processingTimeMs,
+      });
+
+      logger.info({
+        message: 'Experience split with AI and saved',
+        userId,
+        productId,
+        experienceSnippetId: experienceSnippet.id,
+        tokensUsed: splitResult.metadata.tokensUsed,
+        processingTimeMs: splitResult.metadata.processingTimeMs,
+        hasPriceAndShopping: !!splitResult.priceAndShopping?.content,
+        hasProductAndUsage: !!splitResult.productAndUsage?.content,
+      });
+
+      return {
+        experienceSnippetId: experienceSnippet.id,
+        priceAndShopping: splitResult.priceAndShopping,
+        productAndUsage: splitResult.productAndUsage,
+        metadata: splitResult.metadata,
+      };
+    } catch (error) {
+      logger.error({
+        message: 'Error splitting experience with AI',
+        userId,
+        productId,
         error: error instanceof Error ? error.message : String(error),
       });
       throw error;
@@ -160,6 +332,10 @@ export class InventoryService {
             productId: dto.productId,
             hasOwned,
             experienceSummary: dto.content,
+            experienceSnippetId: dto.experienceSnippetId || null,
+            experienceDurationId: dto.selectedDurationId || null,
+            experienceLocationId: dto.selectedLocationId || null,
+            experiencePurposeId: dto.selectedPurposeId || null,
           },
         });
 
@@ -178,7 +354,6 @@ export class InventoryService {
             data: dto.images.map((imageUrl) => ({
               inventoryId: createdInventory.id,
               mediaUrl: imageUrl,
-              type: InventoryMediaType.IMAGE,
             })),
           });
         }

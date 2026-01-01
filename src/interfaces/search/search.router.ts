@@ -9,16 +9,18 @@ const searchService = new SearchService();
  * @openapi
  * /search:
  *   get:
- *     summary: Anahtar kelimeye göre kullanıcı, ürün ve marka araması (Top-N)
- *     description: Verilen keyword'e göre User, Product ve Brand sonuçlarını döndürür. Varsayılan olarak her tip için top-10 sonuç gelir.
+ *     summary: Kullanıcı, ürün ve marka araması veya default veriler
+ *     description: |
+ *       - Keyword verilirse: Verilen keyword'e göre User, Product ve Brand sonuçlarını döndürür
+ *       - Keyword verilmezse veya boşsa: Default olarak her tip için 4'er adet veri döndürür
  *     tags: [Search]
  *     parameters:
  *       - in: query
  *         name: keyword
- *         required: true
+ *         required: false
  *         schema:
  *           type: string
- *         description: Aranacak anahtar kelime
+ *         description: Aranacak anahtar kelime. Boş/atlandığında default veriler döner (4'er adet user, brand, product)
  *       - in: query
  *         name: types
  *         schema:
@@ -32,10 +34,10 @@ const searchService = new SearchService();
  *           minimum: 1
  *           maximum: 50
  *           default: 10
- *         description: Her tip için döndürülecek maksimum sonuç sayısı.
+ *         description: Her tip için döndürülecek maksimum sonuç sayısı (sadece keyword verildiğinde geçerli). Default mode'da her zaman 4 döner.
  *     responses:
  *       200:
- *         description: Arama sonuçları
+ *         description: Arama sonuçları veya default veriler
  *         content:
  *           application/json:
  *             schema:
@@ -78,14 +80,8 @@ router.get(
     let { keyword } = req.query as { keyword?: string };
     const { types, limit } = req.query as { types?: string; limit?: string };
 
-    if (typeof keyword !== 'string') {
-      return res.status(400).json({ message: 'keyword is required' });
-    }
-
-    keyword = keyword.trim();
-    if (keyword.length === 0) {
-      return res.status(400).json({ message: 'keyword cannot be empty' });
-    }
+    // Keyword optional - eğer yoksa veya boşsa default veriler döner
+    keyword = keyword?.trim();
 
     let limitPerType = 10;
     if (typeof limit === 'string') {

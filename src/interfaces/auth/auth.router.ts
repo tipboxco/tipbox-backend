@@ -3,7 +3,17 @@ import { AuthService } from '../../application/auth/auth.service';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { UserAvatarPrismaRepository } from '../../infrastructure/repositories/user-avatar-prisma.repository';
 import { ProfilePrismaRepository } from '../../infrastructure/repositories/profile-prisma.repository';
+import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import logger from '../../infrastructure/logger/logger';
+import { validateBody } from '../../infrastructure/middleware/validation.middleware';
+import { 
+  LoginSchema, 
+  RegisterSchema, 
+  ForgotPasswordSchema,
+  ResetPasswordSchema,
+  VerifyEmailSchema,
+  ResendVerificationSchema
+} from './auth.schemas';
 
 const router = Router();
 const authService = new AuthService();
@@ -108,16 +118,8 @@ const profileRepo = new ProfilePrismaRepository();
  *                   type: string
  *                   example: Giriş yapılırken bir hata oluştu
  */
-router.post('/login', asyncHandler(async (req: Request, res: Response) => {
+router.post('/login', validateBody(LoginSchema), asyncHandler(async (req: Request, res: Response) => {
   const { email, password } = req.body;
-
-  // Validasyon
-  if (!email || !password) {
-    return res.status(400).json({
-      success: false,
-      message: 'Email ve şifre alanları zorunludur',
-    });
-  }
 
   // Authentication
   const user = await authService.authenticate(email, password);
@@ -142,7 +144,7 @@ router.post('/login', asyncHandler(async (req: Request, res: Response) => {
 
   // Aktif avatar'ı çek
   const activeAvatar = await avatarRepo.findActiveByUserId(user.id);
-  const avatarUrl = activeAvatar?.imageUrl || null;
+  const avatarUrl = resolveMediaUrl(activeAvatar?.imageUrl || null);
 
   // Token oluştur
   const token = authService.generateToken(user);
@@ -165,7 +167,7 @@ router.post('/login', asyncHandler(async (req: Request, res: Response) => {
   });
 
   // Response
-  res.json({
+  return res.json({
     id: user.id,
     fullName,
     email: user.email || '',
@@ -294,7 +296,7 @@ router.post('/register', asyncHandler(async (req: Request, res: Response) => {
     return res.status(statusCode).json(result);
   }
 
-  res.json(result);
+  return res.json(result);
 }));
 
 /**
@@ -405,7 +407,7 @@ router.post('/verify-email', asyncHandler(async (req: Request, res: Response) =>
     return res.status(404).json(result);
   }
 
-  res.json(result);
+  return res.json(result);
 }));
 
 /**
@@ -495,7 +497,7 @@ router.get('/me', asyncHandler(async (req: Request, res: Response) => {
   const token = authHeader.split(' ')[1];
   const user = await authService.getUserFromToken(token);
   if (!user) return res.status(401).json({ message: 'Invalid token' });
-  res.json({
+  return res.json({
     id: user.id,
     email: user.email,
     name: user.name,
@@ -587,7 +589,7 @@ router.post('/forgot-password', asyncHandler(async (req: Request, res: Response)
     return res.status(statusCode).json(result);
   }
 
-  res.json(result);
+  return res.json(result);
 }));
 
 /**
@@ -694,7 +696,7 @@ router.post('/verify-reset-code', asyncHandler(async (req: Request, res: Respons
     return res.status(404).json(result);
   }
 
-  res.json(result);
+  return res.json(result);
 }));
 
 /**
@@ -802,7 +804,59 @@ router.post('/reset-password', asyncHandler(async (req: Request, res: Response) 
     return res.status(statusCode).json(result);
   }
 
-  res.json(result);
+  return res.json(result);
+}));
+
+/**
+ * @openapi
+ * /auth/logout:
+ *   post:
+ *     summary: Kullanıcı çıkışı
+ *     description: Mevcut JWT token'ı blacklist'e ekler ve geçersiz kılar
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Çıkış başarılı
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Çıkış yapıldı
+ *       401:
+ *         description: Yetkisiz erişim
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Unauthorized
+ */
+router.post('/logout', asyncHandler(async (req: Request, res: Response) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+  
+  const token = authHeader.split(' ')[1];
+  
+  // Token'ı blacklist'e ekle
+  const { blacklistToken } = await import('../../infrastructure/auth/token-blacklist');
+  await blacklistToken(token);
+  
+  return res.json({
+    success: true,
+    message: 'Çıkış yapıldı'
+  });
 }));
 
 export default router; 

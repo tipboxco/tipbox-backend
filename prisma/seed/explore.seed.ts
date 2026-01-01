@@ -222,7 +222,6 @@ export async function seedExplore(): Promise<void> {
                 data: {
                   inventoryId: inventory.id,
                   mediaUrl,
-                  type: 'IMAGE',
                 },
               });
             }

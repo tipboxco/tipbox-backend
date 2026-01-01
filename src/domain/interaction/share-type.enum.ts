@@ -1,0 +1,5 @@
+export enum ShareType {
+  INTERNAL_REPOST = 'INTERNAL_REPOST',
+  EXTERNAL_SHARE = 'EXTERNAL_SHARE',
+}
+

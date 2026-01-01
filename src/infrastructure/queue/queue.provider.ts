@@ -58,14 +58,27 @@ class QueueProvider {
     }
 
     const redisConfig = this.redisConfig.getConfig();
+    
+    // Redis URL'ini parse et: redis://host:port formatından host ve port'u çıkar
+    let redisHost = 'localhost';
+    let redisPort = 6379;
+    
+    if (redisConfig.url.includes('://')) {
+      const urlWithoutProtocol = redisConfig.url.split('://')[1];
+      const parts = urlWithoutProtocol.split(':');
+      redisHost = parts[0];
+      if (parts.length > 1) {
+        redisPort = parseInt(parts[1], 10) || 6379;
+      }
+    } else {
+      // Eğer URL formatı yoksa, direkt host olarak kabul et
+      redisHost = redisConfig.url;
+    }
+    
     const queueOptions: QueueOptions = {
       connection: {
-        host: redisConfig.url.includes('://') 
-          ? redisConfig.url.split('://')[1].split(':')[0]
-          : 'localhost',
-        port: redisConfig.url.includes(':') 
-          ? parseInt(redisConfig.url.split(':').pop() || '6379')
-          : 6379,
+        host: redisHost,
+        port: redisPort,
       },
       defaultJobOptions: {
         removeOnComplete: 100, // Tamamlanan işleri 100 adet tut

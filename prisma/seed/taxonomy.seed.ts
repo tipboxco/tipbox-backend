@@ -3,11 +3,19 @@ import { getSeedMediaUrl } from './helpers/media.helper';
 
 export async function seedTaxonomy(): Promise<void> {
   console.log('📱 [seed] user themes');
-  await Promise.all([
-    prisma.userTheme.create({ data: { name: 'Light', description: 'Açık tema - günün her saati için ideal' } }),
-    prisma.userTheme.create({ data: { name: 'Dark', description: 'Koyu tema - gözleri yormaz, modern görünüm' } }),
-    prisma.userTheme.create({ data: { name: 'Auto', description: 'Otomatik - sistem temasını takip eder' } }),
-  ]).catch(() => {});
+  const themeConfigs = [
+    { name: 'Light', description: 'Açık tema - günün her saati için ideal' },
+    { name: 'Dark', description: 'Koyu tema - gözleri yormaz, modern görünüm' },
+    { name: 'Auto', description: 'Otomatik - sistem temasını takip eder' },
+  ];
+  
+  await Promise.all(
+    themeConfigs.map(async (config) => {
+      const existing = await prisma.userTheme.findFirst({ where: { name: config.name } });
+      if (existing) return existing;
+      return prisma.userTheme.create({ data: config });
+    })
+  );
 
   console.log('📂 [seed] main categories');
   // Görsel eşleştirmeleri: kategori isimlerine göre seed media key'leri
@@ -22,64 +30,29 @@ export async function seedTaxonomy(): Promise<void> {
     'Otomotiv': 'catalog.otomotiv',
   };
 
-  const mainCategories = await Promise.all([
-    prisma.mainCategory.create({ 
-      data: { 
-        name: 'Teknoloji', 
-        description: 'Elektronik cihazlar, yazılım, mobil uygulamalar',
-        imageUrl: null // ID oluşturulduktan sonra güncellenecek
-      } 
-    }),
-    prisma.mainCategory.create({ 
-      data: { 
-        name: 'Ev & Yaşam', 
-        description: 'Ev eşyaları, dekorasyon, temizlik ürünleri',
-        imageUrl: null // ID oluşturulduktan sonra güncellenecek
-      } 
-    }),
-    prisma.mainCategory.create({ 
-      data: { 
-        name: 'Gıda & İçecek', 
-        description: 'Yiyecek, içecek, gıda takviyesi ürünleri',
-        imageUrl: null // ID oluşturulduktan sonra güncellenecek
-      } 
-    }),
-    prisma.mainCategory.create({ 
-      data: { 
-        name: 'Moda & Aksesuar', 
-        description: 'Giyim, ayakkabı, çanta, takı ve aksesuarlar',
-        imageUrl: null // ID oluşturulduktan sonra güncellenecek
-      } 
-    }),
-    prisma.mainCategory.create({ 
-      data: { 
-        name: 'Sağlık & Güzellik', 
-        description: 'Kişisel bakım, kozmetik, sağlık ürünleri',
-        imageUrl: null // ID oluşturulduktan sonra güncellenecek
-      } 
-    }),
-    prisma.mainCategory.create({ 
-      data: { 
-        name: 'Spor & Outdoor', 
-        description: 'Spor ekipmanları, outdoor aktiviteler, fitness',
-        imageUrl: null // ID oluşturulduktan sonra güncellenecek
-      } 
-    }),
-    prisma.mainCategory.create({ 
-      data: { 
-        name: 'Hobi & Eğlence', 
-        description: 'Kitap, oyun, müzik, sanat malzemeleri',
-        imageUrl: null // ID oluşturulduktan sonra güncellenecek
-      } 
-    }),
-    prisma.mainCategory.create({ 
-      data: { 
-        name: 'Otomotiv', 
-        description: 'Araç aksesuarları, bakım ürünleri, parçalar',
-        imageUrl: null // ID oluşturulduktan sonra güncellenecek
-      } 
-    }),
-  ]).catch(() => []);
+  const mainCategoryConfigs = [
+    { name: 'Teknoloji', description: 'Elektronik cihazlar, yazılım, mobil uygulamalar' },
+    { name: 'Ev & Yaşam', description: 'Ev eşyaları, dekorasyon, temizlik ürünleri' },
+    { name: 'Gıda & İçecek', description: 'Yiyecek, içecek, gıda takviyesi ürünleri' },
+    { name: 'Moda & Aksesuar', description: 'Giyim, ayakkabı, çanta, takı ve aksesuarlar' },
+    { name: 'Sağlık & Güzellik', description: 'Kişisel bakım, kozmetik, sağlık ürünleri' },
+    { name: 'Spor & Outdoor', description: 'Spor ekipmanları, outdoor aktiviteler, fitness' },
+    { name: 'Hobi & Eğlence', description: 'Kitap, oyun, müzik, sanat malzemeleri' },
+    { name: 'Otomotiv', description: 'Araç aksesuarları, bakım ürünleri, parçalar' },
+  ];
+
+  const mainCategories = await Promise.all(
+    mainCategoryConfigs.map(async (config) => {
+      const existing = await prisma.mainCategory.findFirst({ where: { name: config.name } });
+      if (existing) return existing;
+      return prisma.mainCategory.create({ 
+        data: { 
+          ...config,
+          imageUrl: null // ID oluşturulduktan sonra güncellenecek
+        } 
+      });
+    })
+  );
 
   // Kategoriler oluşturulduktan sonra imageUrl'leri seed media üzerinden güncelle
   for (const category of mainCategories) {
@@ -95,87 +68,91 @@ export async function seedTaxonomy(): Promise<void> {
   }
 
   console.log('🏆 [seed] badge categories');
-  await Promise.all([
-    prisma.badgeCategory.create({ data: { name: 'Achievement', description: 'Başarı rozetleri - belirli hedeflere ulaşma' } }),
-    prisma.badgeCategory.create({ data: { name: 'Event', description: 'Etkinlik rozetleri - özel günler ve kampanyalar' } }),
-    prisma.badgeCategory.create({ data: { name: 'Cosmetic', description: 'Kozmetik rozetler - görsel özelleştirme' } }),
-    prisma.badgeCategory.create({ data: { name: 'Community', description: 'Topluluk rozetleri - sosyal aktiviteler' } }),
-  ]).catch(() => {});
+  const badgeCategoryConfigs = [
+    { name: 'Achievement', description: 'Başarı rozetleri - belirli hedeflere ulaşma' },
+    { name: 'Event', description: 'Etkinlik rozetleri - özel günler ve kampanyalar' },
+    { name: 'Cosmetic', description: 'Kozmetik rozetler - görsel özelleştirme' },
+    { name: 'Community', description: 'Topluluk rozetleri - sosyal aktiviteler' },
+  ];
+
+  await Promise.all(
+    badgeCategoryConfigs.map(async (config) => {
+      const existing = await prisma.badgeCategory.findFirst({ where: { name: config.name } });
+      if (existing) return existing;
+      return prisma.badgeCategory.create({ data: config });
+    })
+  );
 
   // Default badges
   const achievementCategory = await prisma.badgeCategory.findFirst({ where: { name: 'Achievement' } });
   const communityCategory = await prisma.badgeCategory.findFirst({ where: { name: 'Community' } });
   const eventCategory = await prisma.badgeCategory.findFirst({ where: { name: 'Event' } });
+  
   if (achievementCategory && communityCategory && eventCategory) {
-    await Promise.all([
-      prisma.badge.create({
-        data: {
-          name: 'Welcome',
-          description: "Tipbox'a hoş geldin! İlk kayıt rozetin.",
-          type: 'ACHIEVEMENT',
-          rarity: 'COMMON',
-          boostMultiplier: 1.0,
-          rewardMultiplier: 1.0,
-          categoryId: achievementCategory.id,
-        },
-      }),
-      prisma.badge.create({
-        data: {
-          name: 'First Post',
-          description: 'İlk gönderini paylaştın! İyi başlangıç.',
-          type: 'ACHIEVEMENT',
-          rarity: 'COMMON',
-          boostMultiplier: 1.1,
-          rewardMultiplier: 1.1,
-          categoryId: achievementCategory.id,
-        },
-      }),
-      prisma.badge.create({
-        data: {
-          name: 'Tip Master',
-          description: '10 faydalı ipucu paylaştın. Sen bir uzman!',
-          type: 'ACHIEVEMENT',
-          rarity: 'RARE',
-          boostMultiplier: 1.3,
-          rewardMultiplier: 1.3,
-          categoryId: achievementCategory.id,
-        },
-      }),
-      prisma.badge.create({
-        data: {
-          name: 'Community Hero',
-          description: '100 faydalı yorum yaptın. Topluluk kahramanı!',
-          type: 'ACHIEVEMENT',
-          rarity: 'EPIC',
-          boostMultiplier: 1.5,
-          rewardMultiplier: 1.5,
-          categoryId: communityCategory.id,
-        },
-      }),
-      prisma.badge.create({
-        data: {
-          name: 'Early Bird',
-          description: 
-            "Tipbox'un ilk kullanıcılarından birisin!",
-          type: 'EVENT',
-          rarity: 'RARE',
-          boostMultiplier: 1.2,
-          rewardMultiplier: 1.4,
-          categoryId: eventCategory.id,
-        },
-      }),
-      prisma.badge.create({
-        data: {
-          name: 'Beta Tester',
-          description: 'Beta sürecinde bize yardım ettin. Teşekkürler!',
-          type: 'EVENT',
-          rarity: 'EPIC',
-          boostMultiplier: 1.4,
-          rewardMultiplier: 1.6,
-          categoryId: eventCategory.id,
-        },
-      }),
-    ]).catch(() => {});
+    const badgeConfigs = [
+      {
+        name: 'Welcome',
+        description: "Tipbox'a hoş geldin! İlk kayıt rozetin.",
+        type: 'ACHIEVEMENT' as const,
+        rarity: 'COMMON' as const,
+        boostMultiplier: 1.0,
+        rewardMultiplier: 1.0,
+        categoryId: achievementCategory.id,
+      },
+      {
+        name: 'First Post',
+        description: 'İlk gönderini paylaştın! İyi başlangıç.',
+        type: 'ACHIEVEMENT' as const,
+        rarity: 'COMMON' as const,
+        boostMultiplier: 1.1,
+        rewardMultiplier: 1.1,
+        categoryId: achievementCategory.id,
+      },
+      {
+        name: 'Tip Master',
+        description: '10 faydalı ipucu paylaştın. Sen bir uzman!',
+        type: 'ACHIEVEMENT' as const,
+        rarity: 'RARE' as const,
+        boostMultiplier: 1.3,
+        rewardMultiplier: 1.3,
+        categoryId: achievementCategory.id,
+      },
+      {
+        name: 'Community Hero',
+        description: '100 faydalı yorum yaptın. Topluluk kahramanı!',
+        type: 'ACHIEVEMENT' as const,
+        rarity: 'EPIC' as const,
+        boostMultiplier: 1.5,
+        rewardMultiplier: 1.5,
+        categoryId: communityCategory.id,
+      },
+      {
+        name: 'Early Bird',
+        description: "Tipbox'un ilk kullanıcılarından birisin!",
+        type: 'EVENT' as const,
+        rarity: 'RARE' as const,
+        boostMultiplier: 1.2,
+        rewardMultiplier: 1.4,
+        categoryId: eventCategory.id,
+      },
+      {
+        name: 'Beta Tester',
+        description: 'Beta sürecinde bize yardım ettin. Teşekkürler!',
+        type: 'EVENT' as const,
+        rarity: 'EPIC' as const,
+        boostMultiplier: 1.4,
+        rewardMultiplier: 1.6,
+        categoryId: eventCategory.id,
+      },
+    ];
+
+    await Promise.all(
+      badgeConfigs.map(async (config) => {
+        const existing = await prisma.badge.findFirst({ where: { name: config.name } });
+        if (existing) return existing;
+        return prisma.badge.create({ data: config });
+      })
+    );
   }
 
   console.log('📊 [seed] comparison metrics');
@@ -191,60 +168,68 @@ export async function seedTaxonomy(): Promise<void> {
   ]).catch(() => {});
 
   console.log('🚀 [seed] boost options');
-  await Promise.all([
-    (prisma as any).boostOption.create({
-      data: {
-        title: 'Standard Boost',
-        description: 'Standart görünürlük artışı',
-        amount: 0,
-        isPopular: false,
-        isActive: true,
-      },
-    }),
-    (prisma as any).boostOption.create({
-      data: {
-        title: 'Popular Boost',
-        description: 'Popüler gönderiler için özel boost',
-        amount: 10,
-        isPopular: true,
-        isActive: true,
-      },
-    }),
-    (prisma as any).boostOption.create({
-      data: {
-        title: 'Premium Boost',
-        description: 'Maksimum görünürlük için premium boost',
-        amount: 25,
-        isPopular: true,
-        isActive: true,
-      },
-    }),
-  ]).catch(() => {});
+  const boostOptionConfigs = [
+    { title: 'Standard Boost', description: 'Standart görünürlük artışı', amount: 0, isPopular: false, isActive: true },
+    { title: 'Popular Boost', description: 'Popüler gönderiler için özel boost', amount: 10, isPopular: true, isActive: true },
+    { title: 'Premium Boost', description: 'Maksimum görünürlük için premium boost', amount: 25, isPopular: true, isActive: true },
+  ];
+
+  await Promise.all(
+    boostOptionConfigs.map(async (config) => {
+      const existing = await (prisma as any).boostOption.findFirst({ where: { title: config.title } });
+      if (existing) return existing;
+      return (prisma as any).boostOption.create({ data: config });
+    })
+  );
 
   console.log('⏱️ [seed] experience durations');
-  await Promise.all([
-    (prisma as any).experienceDuration.create({ data: { name: 'Less than 1 month', isActive: true } }),
-    (prisma as any).experienceDuration.create({ data: { name: '1-3 months', isActive: true } }),
-    (prisma as any).experienceDuration.create({ data: { name: '3-6 months', isActive: true } }),
-    (prisma as any).experienceDuration.create({ data: { name: '6-12 months', isActive: true } }),
-    (prisma as any).experienceDuration.create({ data: { name: 'More than 1 year', isActive: true } }),
-  ]).catch(() => {});
+  const experienceDurationConfigs = [
+    { name: 'Less than 1 month', isActive: true },
+    { name: '1-3 months', isActive: true },
+    { name: '3-6 months', isActive: true },
+    { name: '6-12 months', isActive: true },
+    { name: 'More than 1 year', isActive: true },
+  ];
+
+  await Promise.all(
+    experienceDurationConfigs.map(async (config) => {
+      const existing = await (prisma as any).experienceDuration.findFirst({ where: { name: config.name } });
+      if (existing) return existing;
+      return (prisma as any).experienceDuration.create({ data: config });
+    })
+  );
 
   console.log('📍 [seed] experience locations');
-  await Promise.all([
-    (prisma as any).experienceLocation.create({ data: { name: 'Home', isActive: true } }),
-    (prisma as any).experienceLocation.create({ data: { name: 'Office', isActive: true } }),
-    (prisma as any).experienceLocation.create({ data: { name: 'Outdoor', isActive: true } }),
-    (prisma as any).experienceLocation.create({ data: { name: 'Other', isActive: true } }),
-  ]).catch(() => {});
+  const experienceLocationConfigs = [
+    { name: 'Home', isActive: true },
+    { name: 'Office', isActive: true },
+    { name: 'Outdoor', isActive: true },
+    { name: 'Other', isActive: true },
+  ];
+
+  await Promise.all(
+    experienceLocationConfigs.map(async (config) => {
+      const existing = await (prisma as any).experienceLocation.findFirst({ where: { name: config.name } });
+      if (existing) return existing;
+      return (prisma as any).experienceLocation.create({ data: config });
+    })
+  );
 
   console.log('🎯 [seed] experience purposes');
-  await Promise.all([
-    (prisma as any).experiencePurpose.create({ data: { name: 'Personal use', isActive: true } }),
-    (prisma as any).experiencePurpose.create({ data: { name: 'Professional use', isActive: true } }),
-    (prisma as any).experiencePurpose.create({ data: { name: 'Gift', isActive: true } }),
-    (prisma as any).experiencePurpose.create({ data: { name: 'Other', isActive: true } }),
-  ]).catch(() => {});
+  const experiencePurposeConfigs = [
+    { name: 'Personal use', isActive: true },
+    { name: 'Professional use', isActive: true },
+    { name: 'Gift', isActive: true },
+    { name: 'Other', isActive: true },
+  ];
+
+  await Promise.all(
+    experiencePurposeConfigs.map(async (config) => {
+      const existing = await (prisma as any).experiencePurpose.findFirst({ where: { name: config.name } });
+      if (existing) return existing;
+      return (prisma as any).experiencePurpose.create({ data: config });
+    })
+  );
 
   console.log('🎉 Taxonomy seeding completed');
 }

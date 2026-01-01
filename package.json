@@ -13,24 +13,24 @@
     "worker": "ts-node src/infrastructure/workers/index.ts",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
-    "test": "jest",
-    "seed": "npx ts-node prisma/seed.ts",
-    "seed:all": "npx ts-node prisma/seed.ts",
-    "db:seed": "docker-compose exec backend npm run seed",
-    "db:seed:all": "docker-compose exec backend npm run seed:all",
-    "db:clear:seed": "docker-compose exec backend npx ts-node prisma/seed/clear-seed-data.ts",
+    "db:upload-media": "docker-compose exec backend npx ts-node scripts/upload-seed-media.ts",
+    "db:seed": "docker-compose exec backend npx ts-node scripts/clear-and-seed.ts",
+    "db:seed:all": "docker-compose exec backend npx ts-node scripts/clear-and-seed.ts --all",
+    "db:update-category-images": "docker-compose exec backend npx ts-node scripts/update-main-category-images.ts",
+    "db:update-trust-user-1-avatar": "docker-compose exec backend npx ts-node scripts/update-trust-user-1-avatar.ts",
+    "db:reset": "docker-compose exec backend npx ts-node prisma/seed/clear-user-content-data.ts",
+    "db:reset:all": "docker-compose exec backend npx ts-node prisma/seed/clear-seed-data.ts --force",
+    "db:reset:force": "docker-compose exec backend npx prisma migrate reset --force --skip-seed",
     "db:migrate": "docker-compose exec backend npx prisma migrate dev",
+    "db:migrate:deploy": "docker-compose exec backend npx prisma migrate deploy",
     "db:generate": "docker-compose exec backend npx prisma generate",
-    "db:reset": "docker-compose exec backend npx prisma migrate reset --force --skip-seed",
     "db:push": "docker-compose exec backend npx prisma db push",
-    "db:studio": "docker-compose exec backend npx prisma studio --port 5555 --browser none",
+    "db:status": "docker-compose exec backend npx prisma migrate status",
     "docker:up": "node scripts/docker-up.js --detached",
     "docker:start": "node scripts/docker-up.js --start",
     "docker:restart": "node scripts/docker-up.js --restart",
-    "docker:down": "node scripts/docker-up.js --down",
-    "db:seed:update": "docker-compose exec backend npx ts-node prisma/seedUpdate.ts",
-    "db:status": "docker-compose exec backend npx prisma migrate status",
-    "dev:reset": "bash scripts/reset-dev.sh"
+    "dev:reset": "bash scripts/reset-dev.sh",
+    "test:socket-chat": "ts-node scripts/test-socket-chat.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
@@ -71,7 +71,7 @@
     "lint-staged": "^16.1.2",
     "nodemon": "^3.1.10",
     "prettier": "^3.6.2",
-    "prisma": "^6.11.1",
+    "prisma": "^6.19.1",
     "socket.io-client": "^4.8.1",
     "supertest": "^7.1.4",
     "ts-jest": "^29.2.5",
@@ -82,6 +82,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.658.1",
     "@aws-sdk/s3-request-presigner": "^3.658.1",
+    "@google/generative-ai": "^0.24.1",
     "@prisma/client": "^6.19.0",
     "@socket.io/redis-adapter": "^8.2.1",
     "@types/multer": "^2.0.0",
@@ -90,6 +91,7 @@
     "bullmq": "^5.62.0",
     "cors": "^2.8.5",
     "dotenv": "^17.1.0",
+    "expo-server-sdk": "^4.0.0",
     "express": "^4.21.2",
     "express-async-errors": "^3.1.1",
     "google-auth-library": "^10.4.2",
@@ -109,7 +111,8 @@
     "ulid": "^3.0.1",
     "uuid": "^11.1.0",
     "winston": "^3.17.0",
-    "winston-daily-rotate-file": "^5.0.0"
+    "winston-daily-rotate-file": "^5.0.0",
+    "zod": "^4.2.1"
   },
   "lint-staged": {
     "*.{ts,tsx}": [

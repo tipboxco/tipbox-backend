@@ -120,7 +120,8 @@ export class ContentPostPrismaRepository {
     productGroupId?: string,
     productId?: string,
     inventoryRequired: boolean = false,
-    isBoosted: boolean = false
+    isBoosted: boolean = false,
+    eventId?: string
   ): Promise<ContentPost> {
     const post = await this.prisma.contentPost.create({
       data: {
@@ -134,7 +135,8 @@ export class ContentPostPrismaRepository {
         productGroupId: productGroupId || null,
         productId: productId || null,
         inventoryRequired,
-        isBoosted
+        isBoosted,
+        eventId: eventId || null
       },
       include: {
         user: true,
@@ -300,6 +302,28 @@ export class ContentPostPrismaRepository {
     });
   }
 
+  async incrementFavoriteCount(postId: string): Promise<void> {
+    await this.prisma.contentPost.update({
+      where: { id: postId },
+      data: {
+        favoritesCount: {
+          increment: 1
+        }
+      } as any
+    });
+  }
+
+  async decrementFavoriteCount(postId: string): Promise<void> {
+    await this.prisma.contentPost.update({
+      where: { id: postId },
+      data: {
+        favoritesCount: {
+          increment: -1
+        }
+      } as any
+    });
+  }
+
   async incrementCommentCount(postId: string): Promise<void> {
     await this.prisma.contentPost.update({
       where: { id: postId },
@@ -322,23 +346,12 @@ export class ContentPostPrismaRepository {
     });
   }
 
-  async incrementFavoriteCount(postId: string): Promise<void> {
+  async incrementShareCount(postId: string): Promise<void> {
     await this.prisma.contentPost.update({
       where: { id: postId },
       data: {
-        favoritesCount: {
+        sharesCount: {
           increment: 1
-        }
-      } as any
-    });
-  }
-
-  async decrementFavoriteCount(postId: string): Promise<void> {
-    await this.prisma.contentPost.update({
-      where: { id: postId },
-      data: {
-        favoritesCount: {
-          increment: -1
         }
       } as any
     });

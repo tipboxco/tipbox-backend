@@ -41,7 +41,7 @@ router.get(
   '/categories',
   asyncHandler(async (_req: Request, res: Response) => {
     const categories = await brandService.getAllBrandCategories();
-    res.json(categories);
+    return res.json(categories);
   }),
 );
 
@@ -87,7 +87,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const { categoryId } = req.params;
     const brands = await brandService.getBrandsByCategoryId(categoryId);
-    res.json(brands);
+    return res.json(brands);
   }),
 );
 
@@ -109,25 +109,29 @@ router.get(
  *           format: uuid
  *         description: Brand ID'si
  *     responses:
- *       200:
- *         description: Brand catalog başarıyla getirildi.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 brandId:
- *                   type: string
- *                   format: uuid
- *                 name:
- *                   type: string
- *                 description:
- *                   type: string
- *                   nullable: true
- *                 followers:
- *                   type: integer
- *                 isJoined:
- *                   type: boolean
+     *       200:
+     *         description: Brand catalog başarıyla getirildi.
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 brandId:
+     *                   type: string
+     *                   format: uuid
+     *                 name:
+     *                   type: string
+     *                 description:
+     *                   type: string
+     *                   nullable: true
+     *                 bannerImage:
+     *                   type: string
+     *                   format: uri
+     *                   nullable: true
+     *                 followers:
+     *                   type: integer
+     *                 isJoined:
+     *                   type: boolean
  *       401:
  *         description: Kimlik doğrulaması başarısız.
  *       404:
@@ -140,7 +144,7 @@ router.get(
     const userPayload = (req as any).user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     const catalog = await brandService.getBrandCatalog(brandId, userId);
-    res.json(catalog);
+    return res.json(catalog);
   }),
 );
 
@@ -228,7 +232,7 @@ router.get(
       limit,
       userId,
     });
-    res.json(feed);
+    return res.json(feed);
   }),
 );
 
@@ -343,7 +347,7 @@ router.get(
       limit,
       productLimit,
     });
-    res.json(result);
+    return res.json(result);
   }),
 );
 
@@ -435,7 +439,7 @@ router.get(
       cursor,
       limit,
     });
-    res.json(result);
+    return res.json(result);
   }),
 );
 
@@ -527,7 +531,7 @@ router.get(
       cursor,
       limit,
     });
-    res.json(result);
+    return res.json(result);
   }),
 );
 
@@ -621,7 +625,7 @@ router.get(
       cursor,
       limit,
     });
-    res.json(result);
+    return res.json(result);
   }),
 );
 
@@ -656,7 +660,7 @@ router.get(
     const userPayload = (req as any).user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     const result = await brandService.getBrandEventDetail(eventId, userId);
-    res.json(result);
+    return res.json(result);
   }),
 );
 
@@ -735,7 +739,7 @@ router.get(
       cursor,
       limit,
     });
-    res.json(result);
+    return res.json(result);
   }),
 );
 
@@ -835,7 +839,7 @@ router.get(
       cursor,
       limit,
     });
-    res.json(result);
+    return res.json(result);
   }),
 );
 
@@ -920,7 +924,7 @@ router.get(
       cursor,
       limit,
     });
-    res.json(result);
+    return res.json(result);
   }),
 );
 
@@ -1011,7 +1015,7 @@ router.get(
       cursor,
       limit,
     });
-    res.json(result);
+    return res.json(result);
   }),
 );
 
@@ -1090,7 +1094,7 @@ router.get(
       cursor,
       limit,
     });
-    res.json(result);
+    return res.json(result);
   }),
 );
 
@@ -1183,7 +1187,7 @@ router.get(
       cursor,
       limit,
     });
-    res.json(result);
+    return res.json(result);
   }),
 );
 
@@ -1271,7 +1275,7 @@ router.get(
       cursor,
       limit,
     });
-    res.json(experiences);
+    return res.json(experiences);
   }),
 );
 
@@ -1363,7 +1367,7 @@ router.get(
     const page = req.query.page ? Number(req.query.page) : 1;
     const limit = req.query.limit ? Number(req.query.limit) : 12;
     const comparisons = await brandService.getBrandProductComparisons(brandId, productId, userId, page, limit);
-    res.json(comparisons);
+    return res.json(comparisons);
   }),
 );
 
@@ -1435,7 +1439,7 @@ router.get(
     const page = req.query.page ? Number(req.query.page) : 1;
     const limit = req.query.limit ? Number(req.query.limit) : 12;
     const news = await brandService.getBrandProductNews(brandId, productId, userId, page, limit);
-    res.json(news);
+    return res.json(news);
   }),
 );
 
