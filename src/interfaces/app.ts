@@ -606,6 +606,27 @@ app.use(helmet({
   },
 }));
 
+// Swagger UI için CSP'yi gevşetiyoruz (inline script'ler ve eval kullanıyor)
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api-docs')) {
+    // Swagger UI için daha gevşek CSP header'ları
+    res.setHeader('Content-Security-Policy', 
+      "default-src 'self'; " +
+      "style-src 'self' 'unsafe-inline'; " +
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
+      "img-src 'self' data: https:; " +
+      "connect-src 'self' http: https:; " +
+      "font-src 'self' data: https:; " +
+      "object-src 'none'; " +
+      "media-src 'self'; " +
+      "frame-src 'self';"
+    );
+    // Swagger UI için frame guard'ı gevşetiyoruz
+    res.removeHeader('X-Frame-Options');
+  }
+  next();
+});
+
 // Additional security headers
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
