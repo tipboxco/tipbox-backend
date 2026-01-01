@@ -9,14 +9,14 @@ type Config = {
   databaseUrl: string;
   port: number;
   nodeEnv: string;
-  corsOrigins: string[];
+  corsOrigins: (string | RegExp)[];
   corsMethods: string[];
   logLevel: string;
   logRetentionDays: number;
 };
 
 // Ortam bazlı default değerler
-function getDefaultCorsOrigins(env: string): string[] {
+function getDefaultCorsOrigins(env: string): (string | RegExp)[] {
   switch (env) {
     case 'development':
       // Development'ta React Native ve Android Studio için esnek CORS

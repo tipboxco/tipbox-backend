@@ -6,7 +6,6 @@ export interface NotificationTemplate {
   category: NotificationCategory;
   getTitle: (data: any) => string;
   getMessage: (data: any) => string;
-  getNavigationData: (data: any) => any;
 }
 
 export class NotificationFactory {
@@ -23,7 +22,6 @@ export class NotificationFactory {
       category: NotificationCategory.POST,
       getTitle: () => 'Postunuz Beğenildi! ❤️',
       getMessage: (data) => `${data.likerName} postunuzu beğendi`,
-      getNavigationData: (data) => ({ screen: 'PostDetail', postId: data.postId }),
     });
 
     this.registerTemplate({
@@ -31,7 +29,6 @@ export class NotificationFactory {
       category: NotificationCategory.POST,
       getTitle: () => 'Yeni Yorum! 💬',
       getMessage: (data) => `${data.commenterName} postunuza yorum yaptı`,
-      getNavigationData: (data) => ({ screen: 'PostDetail', postId: data.postId }),
     });
 
     this.registerTemplate({
@@ -39,7 +36,6 @@ export class NotificationFactory {
       category: NotificationCategory.POST,
       getTitle: () => 'Postunuz Paylaşıldı! 🔄',
       getMessage: (data) => `${data.sharerName} postunuzu paylaştı`,
-      getNavigationData: (data) => ({ screen: 'PostDetail', postId: data.postId }),
     });
 
     this.registerTemplate({
@@ -47,7 +43,6 @@ export class NotificationFactory {
       category: NotificationCategory.POST,
       getTitle: () => 'Favorilere Eklendi! ⭐',
       getMessage: (data) => `${data.userName} postunuzu favorilere ekledi`,
-      getNavigationData: (data) => ({ screen: 'PostDetail', postId: data.postId }),
     });
 
     this.registerTemplate({
@@ -55,7 +50,6 @@ export class NotificationFactory {
       category: NotificationCategory.POST,
       getTitle: () => 'Yorumunuz Beğenildi! 💙',
       getMessage: (data) => `${data.likerName} yorumunuzu beğendi`,
-      getNavigationData: (data) => ({ screen: 'PostDetail', postId: data.postId }),
     });
 
     this.registerTemplate({
@@ -63,7 +57,6 @@ export class NotificationFactory {
       category: NotificationCategory.POST,
       getTitle: () => 'Yorumunuza Yanıt Verildi! 💬',
       getMessage: (data) => `${data.replierName} yorumunuza yanıt verdi`,
-      getNavigationData: (data) => ({ screen: 'PostDetail', postId: data.postId }),
     });
 
     // Trust & Follow
@@ -72,7 +65,6 @@ export class NotificationFactory {
       category: NotificationCategory.TRUST,
       getTitle: () => 'Yeni Takipçi! 👥',
       getMessage: (data) => `${data.trusterName} seni takip etmeye başladı`,
-      getNavigationData: (data) => ({ screen: 'Profile', userId: data.trusterId }),
     });
 
     this.registerTemplate({
@@ -80,7 +72,6 @@ export class NotificationFactory {
       category: NotificationCategory.TRUST,
       getTitle: () => 'Seni Takip Ediyor! 🤝',
       getMessage: (data) => `${data.trustedName} artık seni takip ediyor`,
-      getNavigationData: (data) => ({ screen: 'Profile', userId: data.trustedUserId }),
     });
 
     // Messaging
@@ -89,7 +80,6 @@ export class NotificationFactory {
       category: NotificationCategory.MESSAGE,
       getTitle: () => 'Yeni Mesaj! 💬',
       getMessage: (data) => `${data.senderName}: ${data.messagePreview}`,
-      getNavigationData: (data) => ({ screen: 'Chat', threadId: data.threadId }),
     });
 
     this.registerTemplate({
@@ -97,7 +87,6 @@ export class NotificationFactory {
       category: NotificationCategory.SUPPORT,
       getTitle: () => 'Yeni Destek Talebi! 🆘',
       getMessage: (data) => `${data.requesterName} seninle iletişime geçmek istiyor`,
-      getNavigationData: (data) => ({ screen: 'SupportRequests', requestId: data.requestId }),
     });
 
     this.registerTemplate({
@@ -105,7 +94,6 @@ export class NotificationFactory {
       category: NotificationCategory.SUPPORT,
       getTitle: () => 'Talep Kabul Edildi! ✅',
       getMessage: (data) => `${data.accepterName} desteğini kabul etti`,
-      getNavigationData: (data) => ({ screen: 'Chat', threadId: data.threadId }),
     });
 
     // Gamification
@@ -114,7 +102,6 @@ export class NotificationFactory {
       category: NotificationCategory.GAMIFICATION,
       getTitle: () => 'Yeni Rozet Kazandınız! 🏆',
       getMessage: (data) => `${data.badgeName} rozetini kazandınız!`,
-      getNavigationData: (data) => ({ screen: 'Badges', badgeId: data.badgeId }),
     });
 
     this.registerTemplate({
@@ -122,7 +109,6 @@ export class NotificationFactory {
       category: NotificationCategory.GAMIFICATION,
       getTitle: () => 'Başarı Açıldı! 🎯',
       getMessage: (data) => `${data.achievementName} başarısını tamamladınız!`,
-      getNavigationData: (data) => ({ screen: 'Achievements', achievementId: data.achievementId }),
     });
 
     this.registerTemplate({
@@ -130,7 +116,6 @@ export class NotificationFactory {
       category: NotificationCategory.GAMIFICATION,
       getTitle: () => 'Ödül Kazandınız! 🎁',
       getMessage: (data) => `${data.amount} TIPS kazandınız!`,
-      getNavigationData: (data) => ({ screen: 'Wallet' }),
     });
 
     // Expert
@@ -139,7 +124,6 @@ export class NotificationFactory {
       category: NotificationCategory.EXPERT,
       getTitle: () => 'Yeni Expert Sorusu! 💡',
       getMessage: (data) => `${data.tipsAmount} TIPS ödüllü yeni soru`,
-      getNavigationData: (data) => ({ screen: 'ExpertRequests', requestId: data.requestId }),
     });
 
     this.registerTemplate({
@@ -147,7 +131,6 @@ export class NotificationFactory {
       category: NotificationCategory.EXPERT,
       getTitle: () => 'Sorunuz Yanıtlandı! 💡',
       getMessage: (data) => `${data.expertName} sorunuzu yanıtladı`,
-      getNavigationData: (data) => ({ screen: 'ExpertRequests', requestId: data.requestId }),
     });
 
     // System
@@ -156,7 +139,6 @@ export class NotificationFactory {
       category: NotificationCategory.SYSTEM,
       getTitle: (data) => data.title || 'Sistem Duyurusu',
       getMessage: (data) => data.message,
-      getNavigationData: () => ({}),
     });
 
     this.registerTemplate({
@@ -164,7 +146,6 @@ export class NotificationFactory {
       category: NotificationCategory.SYSTEM,
       getTitle: () => 'TIPS Aldınız! 💰',
       getMessage: (data) => `${data.senderName} size ${data.amount} TIPS gönderdi`,
-      getNavigationData: () => ({ screen: 'Wallet' }),
     });
   }
 
@@ -186,7 +167,8 @@ export class NotificationFactory {
       message: template.getMessage(data),
       data: {
         ...data,
-        navigation: template.getNavigationData(data),
+        // Navigation objesi kaldırıldı - mobil taraf kendi navigation logic'ini yönetecek
+        // Gerekli ID'ler (postId, userId, threadId, vb.) data objesi içinde mevcut
       },
     };
   }

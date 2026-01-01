@@ -84,192 +84,23 @@ export class FeedService {
       cursor: feedCursor,
     });
 
-    // Eğer feed tablosu boşsa, direkt contentPost tablosundan en yeni postları çek (fallback)
+    // Feed tablosu boşsa boş feed döndür (fallback mekanizması kaldırıldı)
+    // Production'da feed tablosu her zaman dolu olmalı (FeedDistributionWorker tarafından doldurulur)
     if (feeds.length === 0) {
-      logger.info({ message: 'Feed table empty, falling back to contentPost table', userId });
-      
-      // Cursor varsa post ID'ye çevir
-      let postCursor: string | undefined = undefined;
-      if (options?.cursor) {
-        postCursor = options.cursor;
-      }
-
-      // En yeni postları çek (kullanıcının kendi postları hariç)
-      const postsFromDb = await this.prisma.contentPost.findMany({
-        where: {
-          userId: { not: userId }, // Kendi postlarını gösterme
-        },
-        include: {
-          user: {
-            include: {
-              profile: true,
-            },
-          },
-          product: {
-            include: {
-              group: {
-                include: {
-                  subCategory: {
-                    include: {
-                      mainCategory: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
-          productGroup: {
-            include: {
-              subCategory: {
-                include: {
-                  mainCategory: true,
-                },
-              },
-            },
-          },
-          subCategory: {
-            include: {
-              mainCategory: true,
-            },
-          },
-          mainCategory: true,
-          comparison: {
-            include: {
-              product1: {
-                include: {
-                  group: true,
-                },
-              },
-              product2: {
-                include: {
-                  group: true,
-                },
-              },
-              scores: true,
-            },
-          },
-          question: true,
-          tip: true,
-          tags: true,
-          likes: true,
-          comments: true,
-          favorites: true,
-          contentPostTags: true,
-        },
-        orderBy: [
-          { isBoosted: 'desc' },
-          { createdAt: 'desc' },
-          { id: 'desc' },
-        ],
-        take: limit + 1,
-        ...(postCursor && {
-          cursor: { id: postCursor },
-          skip: 1,
-        }),
+      logger.warn({
+        message: 'Feed table is empty for user - feed distribution may not be working',
+        userId,
+        suggestion: 'Check FeedDistributionWorker is running and processing jobs',
       });
 
-      const hasMore = postsFromDb.length > limit;
-      const posts = hasMore ? postsFromDb.slice(0, limit) : postsFromDb;
-      const actualNextCursor = hasMore && posts.length > 0 ? posts[posts.length - 1].id : undefined;
-
-      // Feed tablosundan gelmediği için direkt posts'u kullan
-      // Get user inventories for benchmark isOwned check
-      const inventories = await this.prisma.inventory.findMany({
-        where: { userId },
-        select: { productId: true },
-      });
-      const ownedProductIds = new Set(inventories.map((inv) => String(inv.productId)));
-
-      // Batch fetch images from PostMedia (orderIndex'e göre sıralı)
-      const postIds = posts.map((p) => p.id);
-      const postMediaMap = new Map<string, string[]>();
-      if (postIds.length > 0) {
-        const allPostMedia = await this.prisma.postMedia.findMany({
-          where: {
-            postId: { in: postIds },
-          },
-          orderBy: { orderIndex: 'asc' },
-          select: { postId: true, mediaUrl: true },
-        });
-
-        allPostMedia.forEach((media) => {
-          if (!postMediaMap.has(media.postId)) {
-            postMediaMap.set(media.postId, []);
-          }
-          const fullUrl = this.buildFullMediaUrl(media.mediaUrl);
-        if (fullUrl) {
-          postMediaMap.get(media.postId)!.push(fullUrl);
-        }
-        });
-      }
-
-      // Batch fetch user bases
-      const userIds = Array.from(new Set(posts.map((p) => p.userId)));
-      const userBaseMap = new Map<string, BaseUser>();
-      await Promise.all(
-        userIds.map(async (uid) => {
-          const userBase = await this.getUserBase(String(uid));
-          userBaseMap.set(String(uid), userBase);
-        })
-      );
-
-      // Create stats map
-      const statsMap = new Map<string, BaseStats>();
-      posts.forEach((post) => {
-        statsMap.set(post.id, {
-          likes: (post as any).likesCount || 0,
-          comments: (post as any).commentsCount || 0,
-          shares: (post as any).sharesCount || 0,
-          bookmarks: (post as any).favoritesCount || 0,
-        });
-      });
-
-      // Convert posts to feed items
-      const feedItems = await Promise.all(
-        posts.map(async (post) => {
-          const userBase = userBaseMap.get(String(post.userId)) || (await this.getUserBase(String(post.userId)));
-          const stats = statsMap.get(post.id) || { likes: 0, comments: 0, shares: 0, bookmarks: 0 };
-          const basePost = {
-            id: post.id,
-            user: userBase,
-            stats,
-            createdAt: post.createdAt.toISOString(),
-            contextType: this.mapContextType(post),
-          };
-
-          const images = postMediaMap.get(post.id) || [];
-
-          switch (post.type) {
-            case ContentPostType.FREE:
-              return this.mapToPostItem(post, basePost, FeedItemType.POST, images, ownedProductIds);
-            case ContentPostType.COMPARE:
-              return this.mapToBenchmarkItem(post, basePost, ownedProductIds, images);
-            case ContentPostType.QUESTION:
-              return this.mapToPostItem(post, basePost, FeedItemType.QUESTION, images, ownedProductIds);
-            case ContentPostType.TIPS:
-              return this.mapToTipsAndTricksItem(post, basePost, images, ownedProductIds);
-            case ContentPostType.EXPERIENCE:
-              return this.mapToExperienceItem(post, basePost, FeedItemType.EXPERIENCE, images, ownedProductIds);
-            case ContentPostType.UPDATE:
-              return this.mapToExperienceItem(post, basePost, FeedItemType.UPDATE, images, ownedProductIds);
-            default:
-              return this.mapToPostItem(post, basePost, FeedItemType.POST, images, ownedProductIds);
-          }
-        })
-      );
-
-      const response: FeedResponse = {
-        items: feedItems,
+      return {
+        items: [],
         pagination: {
-          cursor: feedItems.length > 0 ? feedItems[feedItems.length - 1].data.id : actualNextCursor,
-          hasMore: hasMore,
+          cursor: undefined,
+          hasMore: false,
           limit,
         },
       };
-
-      // Cache disabled - return fresh data from database
-
-      return response;
     }
 
     // Batch fetch posts with all relations
@@ -1006,6 +837,68 @@ export class FeedService {
     }
 
     return this.sortFeedItemsByTimestamp([...prioritized, ...leftovers]);
+  }
+
+  /**
+   * Tek bir post'u feed item formatına çevirir (public metod)
+   */
+  async getPostAsFeedItem(post: any, userId?: string): Promise<FeedItem | null> {
+    if (!post) return null;
+
+    // Get user inventories for benchmark isOwned check
+    const ownedProductIds = userId 
+      ? new Set(
+          (await this.prisma.inventory.findMany({
+            where: { userId },
+            select: { productId: true },
+          })).map((inv) => String(inv.productId))
+        )
+      : new Set<string>();
+
+    // Get images from PostMedia
+    const postMedia = await this.prisma.postMedia.findMany({
+      where: { postId: post.id },
+      orderBy: { orderIndex: 'asc' },
+      select: { mediaUrl: true },
+    });
+    const images = postMedia.map((media) => this.buildFullMediaUrl(media.mediaUrl)).filter(Boolean) as string[];
+
+    // Get user base
+    const userBase = await this.getUserBase(String(post.userId));
+
+    // Get stats
+    const stats: BaseStats = {
+      likes: (post as any).likesCount || post.likes?.length || 0,
+      comments: (post as any).commentsCount || post.comments?.length || 0,
+      shares: (post as any).sharesCount || 0,
+      bookmarks: (post as any).favoritesCount || post.favorites?.length || 0,
+    };
+
+    const basePost = {
+      id: post.id,
+      user: userBase,
+      stats,
+      createdAt: post.createdAt.toISOString(),
+      contextType: this.mapContextType(post),
+    };
+
+    // Map post based on type
+    switch (post.type) {
+      case ContentPostType.FREE:
+        return this.mapToPostItem(post, basePost, FeedItemType.POST, images, ownedProductIds);
+      case ContentPostType.COMPARE:
+        return this.mapToBenchmarkItem(post, basePost, ownedProductIds, images);
+      case ContentPostType.QUESTION:
+        return this.mapToPostItem(post, basePost, FeedItemType.QUESTION, images, ownedProductIds);
+      case ContentPostType.TIPS:
+        return this.mapToTipsAndTricksItem(post, basePost, images, ownedProductIds);
+      case ContentPostType.EXPERIENCE:
+        return this.mapToExperienceItem(post, basePost, FeedItemType.EXPERIENCE, images, ownedProductIds);
+      case ContentPostType.UPDATE:
+        return this.mapToExperienceItem(post, basePost, FeedItemType.UPDATE, images, ownedProductIds);
+      default:
+        return this.mapToPostItem(post, basePost, FeedItemType.POST, images, ownedProductIds);
+    }
   }
 
   private sortFeedItemsByTimestamp(items: FeedItem[]): FeedItem[] {

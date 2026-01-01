@@ -100,13 +100,13 @@ async function testNotification() {
 
     // Kullanıcının bildirimlerini kontrol et
     console.log('🔍 Kullanıcının son bildirimleri kontrol ediliyor...');
-    const notifications = await notificationService.getUserNotifications(user.id, {
+    const result = await notificationService.getUserNotifications(user.id, {
       limit: 5,
     });
 
-    if (notifications.length > 0) {
-      console.log(`\n📬 Son ${notifications.length} bildirim:`);
-      notifications.forEach((notif, index) => {
+    if (result.notifications.length > 0) {
+      console.log(`\n📬 Son ${result.notifications.length} bildirim (Toplam: ${result.pagination.total}):`);
+      result.notifications.forEach((notif, index) => {
         console.log(`\n${index + 1}. ${notif.title}`);
         console.log(`   Mesaj: ${notif.message}`);
         console.log(`   Tip: ${notif.type}`);

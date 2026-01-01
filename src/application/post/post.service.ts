@@ -28,6 +28,7 @@ import { FeedService } from '../feed/feed.service';
 import logger from '../../infrastructure/logger/logger';
 import { GeminiService } from '../../infrastructure/ai/gemini.service';
 import { AiExperienceSplitPrismaRepository } from '../../infrastructure/repositories/ai-experience-split-prisma.repository';
+import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import { withCache } from '../../infrastructure/cache/cache-wrapper.helper';
 import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
 
@@ -1023,6 +1024,106 @@ export class PostService {
    * - Sadece gönderi sahibi silebilir
    * - İlişkili kayıtlar FK ile otomatik temizlenir (post_tips, post_questions, post_comparisons vb.)
    */
+  /**
+   * Post ID'sine göre post detayını getirir
+   */
+  async getPostById(postId: string): Promise<any> {
+    const post = await this.prisma.contentPost.findUnique({
+      where: { id: postId },
+      include: {
+        user: {
+          include: {
+            profile: true,
+            avatars: {
+              where: { isActive: true },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+            titles: {
+              orderBy: { earnedAt: 'desc' },
+              take: 1,
+            },
+          },
+        },
+        product: {
+          include: {
+            group: {
+              include: {
+                subCategory: {
+                  include: {
+                    mainCategory: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        productGroup: {
+          include: {
+            subCategory: {
+              include: {
+                mainCategory: true,
+              },
+            },
+          },
+        },
+        subCategory: {
+          include: {
+            mainCategory: true,
+          },
+        },
+        mainCategory: true,
+        comparison: {
+          include: {
+            product1: {
+              include: {
+                group: true,
+              },
+            },
+            product2: {
+              include: {
+                group: true,
+              },
+            },
+            scores: true,
+          },
+        },
+        question: true,
+        tip: true,
+        tags: true,
+        likes: true,
+        comments: {
+          include: {
+            user: {
+              include: {
+                profile: true,
+                avatars: {
+                  where: { isActive: true },
+                  orderBy: { createdAt: 'desc' },
+                  take: 1,
+                },
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+        favorites: true,
+        contentPostTags: true,
+        media: {
+          orderBy: { orderIndex: 'asc' },
+        },
+      },
+    });
+
+    if (!post) {
+      return null;
+    }
+
+    // FeedService kullanarak post'u feed formatına çevir
+    const feedItem = await this.feedService.getPostAsFeedItem(post);
+    return feedItem?.data || null;
+  }
+
   async deletePost(userId: string, postId: string): Promise<boolean> {
     try {
       const post = await this.postRepo.findById(postId);

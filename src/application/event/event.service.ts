@@ -333,9 +333,9 @@ export class EventService {
         };
       }
 
-      // Get posts directly linked to event (preferred) or from participants (fallback)
-      // First try to get posts directly linked to the event
-      const eventPosts = await this.prisma.contentPost.findMany({
+      // Get posts directly linked to event
+      // Fallback mekanizması kaldırıldı - event'e bağlı post yoksa boş döner
+      const posts = await this.prisma.contentPost.findMany({
         where: {
           eventId: eventId,
         },
@@ -406,82 +406,6 @@ export class EventService {
           skip: 1,
         }),
       });
-
-      // If we have event posts, use them; otherwise fall back to participant posts
-      let posts = eventPosts;
-      if (posts.length === 0 && participantUserIds.size > 0) {
-        posts = await this.prisma.contentPost.findMany({
-          where: {
-            userId: { in: Array.from(participantUserIds) },
-          },
-          include: {
-            user: {
-              include: {
-                profile: true,
-                titles: {
-                  orderBy: { earnedAt: 'desc' },
-                  take: 1,
-                },
-                avatars: {
-                  where: { isActive: true },
-                  orderBy: { createdAt: 'desc' },
-                  take: 1,
-                },
-              },
-            },
-            product: {
-              include: {
-                group: {
-                  include: {
-                    subCategory: {
-                      include: {
-                        mainCategory: true,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-            productGroup: {
-              include: {
-                subCategory: {
-                  include: {
-                    mainCategory: true,
-                  },
-                },
-              },
-            },
-            subCategory: {
-              include: {
-                mainCategory: true,
-              },
-            },
-            mainCategory: true,
-            comparison: {
-              include: {
-                product1: true,
-                product2: true,
-                scores: true,
-              },
-            },
-            question: true,
-            tip: true,
-            tags: true,
-            likes: true,
-            comments: true,
-            favorites: true,
-            media: {
-              orderBy: { orderIndex: 'asc' },
-            },
-          },
-          orderBy: { createdAt: 'desc' },
-          take: limit + 1,
-          ...(options?.cursor && {
-            cursor: { id: options.cursor },
-            skip: 1,
-          }),
-        });
-      }
 
       const hasMore = posts.length > limit;
       const resultPosts = hasMore ? posts.slice(0, limit) : posts;

@@ -91,7 +91,7 @@ export class NotificationPrismaRepository {
           ...(options?.unreadOnly && { read: false }),
         },
         orderBy: { createdAt: 'desc' },
-        take: options?.limit || 50,
+        take: options?.limit || 20,
         skip: options?.offset || 0,
       });
 
@@ -112,6 +112,25 @@ export class NotificationPrismaRepository {
       );
     } catch (error) {
       logger.error('Error finding notifications by userId:', error);
+      throw error;
+    }
+  }
+
+  async getTotalCount(
+    userId: string,
+    options?: {
+      unreadOnly?: boolean;
+    }
+  ): Promise<number> {
+    try {
+      return await this.prisma.notification.count({
+        where: {
+          userId,
+          ...(options?.unreadOnly && { read: false }),
+        },
+      });
+    } catch (error) {
+      logger.error('Error getting total notification count:', error);
       throw error;
     }
   }

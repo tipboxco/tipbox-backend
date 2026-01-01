@@ -7,7 +7,7 @@ import { createAdapter } from '@socket.io/redis-adapter';
 import app from './app';
 import logger from '../infrastructure/logger/logger';
 import RedisConfigManager from '../infrastructure/config/redis.config';
-import SocketConfigManager from '../infrastructure/config/socket.config';
+import { getSocketConfig } from '../infrastructure/config/socket.config';
 import SocketManager from '../infrastructure/realtime/socket-manager';
 import { CacheService } from '../infrastructure/cache/cache.service';
 import QueueProvider from '../infrastructure/queue/queue.provider';
@@ -36,17 +36,17 @@ async function startServer() {
     await queueProvider.initialize();
     
     // Socket.IO konfigürasyonunu al
-    const socketConfig = SocketConfigManager.getInstance().getConfig();
+    const socketConfig = getSocketConfig();
 
     // Socket.IO server'ı oluştur
     const io = new Server(httpServer, {
       cors: socketConfig.cors,
-      transports: socketConfig.transports as any,
+      transports: socketConfig.transports,
       allowEIO3: socketConfig.allowEIO3,
-      path: socketConfig.path || '/socket.io/',
-      connectTimeout: socketConfig.connectTimeout || 20000,
-      pingTimeout: socketConfig.pingTimeout || 5000,
-      pingInterval: socketConfig.pingInterval || 25000,
+      path: socketConfig.path,
+      connectTimeout: socketConfig.connectTimeout,
+      pingTimeout: socketConfig.pingTimeout,
+      pingInterval: socketConfig.pingInterval,
     });
 
     // Redis adapter'ı kur

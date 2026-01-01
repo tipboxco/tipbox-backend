@@ -54,6 +54,21 @@ const settingsRepo = new UserSettingsPrismaRepository();
  *                   type: array
  *                   items:
  *                     $ref: '#/components/schemas/Notification'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: integer
+ *                       description: Total number of notifications
+ *                     limit:
+ *                       type: integer
+ *                       description: Number of notifications per page
+ *                     offset:
+ *                       type: integer
+ *                       description: Number of notifications skipped
+ *                     hasMore:
+ *                       type: boolean
+ *                       description: Whether there are more notifications available
  *       500:
  *         description: Server error
  */
@@ -68,7 +83,7 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
 
     const { limit, offset, unreadOnly } = req.query as unknown as GetNotificationsQuery;
 
-    const notifications = await notificationService.getUserNotifications(userId, {
+    const result = await notificationService.getUserNotifications(userId, {
       limit: limit ? parseInt(limit as any) : 20,
       offset: offset ? parseInt(offset as any) : 0,
       unreadOnly: (typeof unreadOnly === 'string' && unreadOnly === 'true') || unreadOnly === true,
@@ -76,7 +91,8 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
 
     return res.json({
       success: true,
-      data: notifications.map((n) => n.toJSON()),
+      data: result.notifications.map((n) => n.toJSON()),
+      pagination: result.pagination,
     });
   } catch (error) {
     logger.error('Error getting notifications:', error);

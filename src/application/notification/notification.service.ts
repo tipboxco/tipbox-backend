@@ -91,7 +91,7 @@ export class NotificationService {
   }
 
   /**
-   * Get user's notifications
+   * Get user's notifications with pagination
    */
   async getUserNotifications(
     userId: string,
@@ -100,8 +100,32 @@ export class NotificationService {
       offset?: number;
       unreadOnly?: boolean;
     }
-  ): Promise<Notification[]> {
-    return await this.notificationRepo.findByUserId(userId, options);
+  ): Promise<{
+    notifications: Notification[];
+    pagination: {
+      total: number;
+      limit: number;
+      offset: number;
+      hasMore: boolean;
+    };
+  }> {
+    const limit = options?.limit || 20;
+    const offset = options?.offset || 0;
+
+    const [notifications, total] = await Promise.all([
+      this.notificationRepo.findByUserId(userId, options),
+      this.notificationRepo.getTotalCount(userId, { unreadOnly: options?.unreadOnly }),
+    ]);
+
+    return {
+      notifications,
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasMore: offset + notifications.length < total,
+      },
+    };
   }
 
   /**

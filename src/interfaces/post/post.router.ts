@@ -758,6 +758,56 @@ router.get(
 /**
  * @openapi
  * /posts/{id}:
+ *   get:
+ *     summary: Gönderi detayını getir
+ *     description: Post ID'sine göre gönderi detayını getirir.
+ *     tags: [Posts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Post ID'si
+ *     responses:
+ *       200:
+ *         description: Gönderi detayı
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Post'
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ *       404:
+ *         description: Gönderi bulunamadı
+ */
+router.get(
+  '/:id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = (req as any).user;
+    if (!userPayload?.id && !userPayload?.userId && !userPayload?.sub) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: 'id is required' });
+    }
+
+    const post = await postService.getPostById(id);
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    return res.json(post);
+  })
+);
+
+/**
+ * @openapi
+ * /posts/{id}:
  *   delete:
  *     summary: Gönderi sil
  *     description: Sadece gönderinin sahibi kendi gönderisini silebilir.
