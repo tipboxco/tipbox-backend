@@ -27,9 +27,28 @@ export class PushTokenPrismaRepository {
         },
       });
 
-      // Create new token
-      const pushToken = await this.prisma.pushToken.create({
+      // Deactivate any existing tokens with the same token value (different user or device)
+      await this.prisma.pushToken.updateMany({
+        where: {
+          token: data.token,
+        },
         data: {
+          isActive: false,
+        },
+      });
+
+      // Use upsert to handle existing token: update if exists, create if not
+      const pushToken = await this.prisma.pushToken.upsert({
+        where: {
+          token: data.token,
+        },
+        update: {
+          userId: data.userId,
+          deviceType: data.deviceType,
+          isActive: true,
+          lastUsedAt: new Date(),
+        },
+        create: {
           userId: data.userId,
           token: data.token,
           deviceType: data.deviceType,

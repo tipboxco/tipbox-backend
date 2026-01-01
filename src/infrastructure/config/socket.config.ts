@@ -1,4 +1,5 @@
 import config from './index';
+import logger from '../logger/logger';
 
 export interface SocketConfig {
   cors: {
@@ -33,10 +34,20 @@ class SocketConfigManager {
     }
 
     // Config modülünden ortam bazlı CORS ayarlarını al
-    // Development ortamında tüm origin'lere izin ver (geliştirme kolaylığı için)
-    const corsOrigin = process.env.NODE_ENV === 'development' 
+    // Development ve test ortamlarında TÜM origin'lere izin ver (*)
+    // Production ortamında config'deki origin'leri kullan
+    const corsOrigin = (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test')
       ? (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-          // Development'ta tüm origin'lere izin ver
+          // Development ve test ortamlarında HER YERDEN erişime izin ver
+          // Not: credentials: true ile birlikte origin: '*' kullanılamaz,
+          // bu yüzden function-based kontrol ile her zaman true döndürüyoruz
+          
+          // Debug logging (development ortamında)
+          if (process.env.NODE_ENV === 'development') {
+            logger.debug(`Socket CORS check - Origin: ${origin || 'undefined/null'} - ALLOWING (development mode)`);
+          }
+          
+          // Tüm origin'lere izin ver
           callback(null, true);
         }
       : config.corsOrigins;
@@ -47,6 +58,8 @@ class SocketConfigManager {
         methods: config.corsMethods,
         credentials: true,
       },
+      // React Native/Expo için websocket öncelikli
+      // Docker ortamında polling bazen takılabilir, websocket daha güvenilir
       transports: ['websocket', 'polling'] as const,
       allowEIO3: false,
       // Socket.IO pathname (default: /socket.io/)

@@ -617,8 +617,11 @@ app.use((req, res, next) => {
 });
 
 // CORS configuration - Config modülünden ortam bazlı değerleri al
+// Development ve test ortamlarında TÜM origin'lere izin ver (*)
 const corsOptions = {
-  origin: config.corsOrigins,
+  origin: (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test')
+    ? true // Tüm origin'lere izin ver (development/test)
+    : config.corsOrigins, // Production'da config'deki origin'leri kullan
   credentials: true,
   methods: config.corsMethods,
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With']
