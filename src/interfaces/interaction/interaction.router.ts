@@ -36,7 +36,7 @@ router.use(authMiddleware);
 router.post(
   '/posts/:postId/like',
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req as any).user?.id;
+    const userId = req.user?.id;
     const { postId } = req.params;
 
     await interactionService.likePost(userId, postId);
@@ -69,7 +69,7 @@ router.post(
 router.delete(
   '/posts/:postId/like',
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req as any).user?.id;
+    const userId = req.user?.id;
     const { postId } = req.params;
 
     await interactionService.unlikePost(userId, postId);
@@ -104,7 +104,7 @@ router.delete(
 router.post(
   '/posts/:postId/bookmark',
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req as any).user?.id;
+    const userId = req.user?.id;
     const { postId } = req.params;
 
     const favorite = await interactionService.favoritePost(userId, postId);
@@ -138,7 +138,7 @@ router.post(
 router.delete(
   '/posts/:postId/bookmark',
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req as any).user?.id;
+    const userId = req.user?.id;
     const { postId } = req.params;
 
     await interactionService.unfavoritePost(userId, postId);
@@ -171,7 +171,7 @@ router.delete(
 router.get(
   '/bookmarks',
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req as any).user?.id;
+    const userId = req.user?.id;
     const limit = parseInt(req.query.limit as string) || 50;
 
     const favorites = await interactionService.getUserFavorites(userId, limit);
@@ -232,7 +232,7 @@ router.get(
 router.post(
   '/posts/:postId/comments',
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req as any).user?.id;
+    const userId = req.user?.id;
     const { postId } = req.params;
     const { comment, parentId } = req.body;
 
@@ -311,7 +311,7 @@ router.get(
 router.delete(
   '/comments/:commentId',
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req as any).user?.id;
+    const userId = req.user?.id;
     const { commentId } = req.params;
 
     await interactionService.deleteComment(userId, commentId);
@@ -344,7 +344,7 @@ router.delete(
 router.post(
   '/comments/:commentId/like',
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req as any).user?.id;
+    const userId = req.user?.id;
     const { commentId } = req.params;
 
     await interactionService.likeComment(userId, commentId);
@@ -377,7 +377,7 @@ router.post(
 router.delete(
   '/comments/:commentId/like',
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req as any).user?.id;
+    const userId = req.user?.id;
     const { commentId } = req.params;
 
     await interactionService.unlikeComment(userId, commentId);
@@ -427,7 +427,7 @@ router.delete(
 router.post(
   '/posts/:postId/share',
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req as any).user?.id;
+    const userId = req.user?.id;
     const { postId } = req.params;
     const { shareType, platform } = req.body;
 
@@ -485,7 +485,7 @@ router.post(
 router.get(
   '/posts/:postId/status',
   asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req as any).user?.id;
+    const userId = req.user?.id;
     const { postId } = req.params;
 
     const status = await interactionService.getUserInteractionStatus(userId, postId);

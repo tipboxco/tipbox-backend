@@ -99,7 +99,7 @@ const parseProfileFeedTypes = (value: unknown): ProfileFeedCardType[] | undefine
  *         description: Unauthorized
  */
 router.get('/me/profile', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   if (!userId) return res.status(401).json({ message: 'Unauthorized' });
 
@@ -127,7 +127,7 @@ router.get('/me/profile', asyncHandler(async (req: Request, res: Response) => {
  *         description: Güncellenmiş profil
  */
 router.put('/me/profile', asyncHandler(async (req: Request<{}, {}, UpdateUserProfileRequest>, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   if (!userId) {
     logger.warn('[updateProfile] Unauthorized request - no userId found');
@@ -237,7 +237,7 @@ router.put('/me/profile', asyncHandler(async (req: Request<{}, {}, UpdateUserPro
  *         description: User not found
  */
 router.get('/:id/profile', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const viewerId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   if (!viewerId) return res.status(401).json({ message: 'Unauthorized' });
 
@@ -329,7 +329,7 @@ router.get('/:id/trusters', asyncHandler(async (req: Request, res: Response) => 
  *         description: Unauthorized
  */
 router.delete('/:id/trusts/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
   const id = String(req.params.id);
@@ -369,7 +369,7 @@ router.delete('/:id/trusts/:targetUserId', asyncHandler(async (req: Request, res
  *         description: Unauthorized
  */
 router.post('/trust', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
   
@@ -403,7 +403,7 @@ router.post('/trust', asyncHandler(async (req: Request, res: Response) => {
  *               targetUserId: { type: string }
  */
 router.post('/:id/block', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
   const id = String(req.params.id);
@@ -436,7 +436,7 @@ router.post('/:id/block', asyncHandler(async (req: Request, res: Response) => {
  *         description: Blok kaldırıldı
  */
 router.post('/:id/unblock', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
   const id = String(req.params.id);
@@ -469,7 +469,7 @@ router.post('/:id/unblock', asyncHandler(async (req: Request, res: Response) => 
  *         description: Susturma ayarlandı
  */
 router.post('/:id/mute', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
   const id = String(req.params.id);
@@ -502,7 +502,7 @@ router.post('/:id/mute', asyncHandler(async (req: Request, res: Response) => {
  *         description: Susturma kaldırıldı
  */
 router.post('/:id/unmute', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
   const id = String(req.params.id);
@@ -626,7 +626,7 @@ router.get('/:id/collections/bridges', asyncHandler(async (req: Request, res: Re
  *       - bearerAuth: []
  */
 router.post('/collections/achievements/:badgeId/claim', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   if (!userId) return res.status(401).json({ message: 'Unauthorized' });
   const badgeId = String(req.params.badgeId);
@@ -635,7 +635,7 @@ router.post('/collections/achievements/:badgeId/claim', asyncHandler(async (req:
 }));
 
 router.post('/collections/bridges/:badgeId/claim', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   if (!userId) return res.status(401).json({ message: 'Unauthorized' });
   const badgeId = String(req.params.badgeId);
@@ -854,8 +854,16 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       updatedAt: user.updatedAt.toISOString()
     };
     return res.status(201).json(response);
-  } catch (error: any) {
-    if (error?.code === 'P2002' && error?.meta?.target?.includes('email')) {
+  } catch (error: unknown) {
+    const code = getErrorCode(error);
+    if (code === 'P2002' && 
+        typeof error === 'object' && 
+        error !== null && 
+        'meta' in error &&
+        typeof (error as { meta: unknown }).meta === 'object' &&
+        (error as { meta: { target?: unknown } }).meta?.target &&
+        Array.isArray((error as { meta: { target: unknown[] } }).meta.target) &&
+        (error as { meta: { target: string[] } }).meta.target.includes('email')) {
       return res.status(409).json({ error: { message: 'Bu email adresi zaten kullanılıyor.' } });
     }
     throw error;
@@ -979,7 +987,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
  *                   example: Profil tamamlanırken bir hata oluştu
  */
 router.post('/setup-profile', upload.fields([{ name: 'Avatar', maxCount: 1 }, { name: 'Banner', maxCount: 1 }]), asyncHandler(async (req: Request & { files?: { [fieldname: string]: Express.Multer.File[] } }, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
@@ -1420,7 +1428,7 @@ router.delete('/:id/trusts/:targetUserId', asyncHandler(async (req: Request, res
  *         description: Geçersiz istek
  */
 router.post('/:id/block/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
   const id = String(req.params.id);
@@ -1456,7 +1464,7 @@ router.post('/:id/block/:targetUserId', asyncHandler(async (req: Request, res: R
  *         description: Engelleme kaydı bulunamadı
  */
 router.delete('/:id/block/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
   const id = String(req.params.id);
@@ -1493,7 +1501,7 @@ router.delete('/:id/block/:targetUserId', asyncHandler(async (req: Request, res:
  *         description: Geçersiz istek
  */
 router.post('/:id/mute/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
   const id = String(req.params.id);
@@ -1529,7 +1537,7 @@ router.post('/:id/mute/:targetUserId', asyncHandler(async (req: Request, res: Re
  *         description: Susturma kaydı bulunamadı
  */
 router.delete('/:id/mute/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
   const id = String(req.params.id);
@@ -2235,7 +2243,7 @@ router.get('/:id/bookmarks', asyncHandler(async (req: Request, res: Response) =>
  *         description: Geçersiz istek
  */
 router.post('/settings/change-password', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
@@ -2282,7 +2290,7 @@ router.post('/settings/change-password', asyncHandler(async (req: Request, res: 
  *                     example: true
  */
 router.get('/settings/notifications', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
@@ -2322,7 +2330,7 @@ router.get('/settings/notifications', asyncHandler(async (req: Request, res: Res
  *         description: Bildirim ayarları güncellendi
  */
 router.put('/settings/notifications', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
@@ -2369,7 +2377,7 @@ router.put('/settings/notifications', asyncHandler(async (req: Request, res: Res
  *                     example: "trust-only"
  */
 router.get('/settings/privacy', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
@@ -2409,7 +2417,7 @@ router.get('/settings/privacy', asyncHandler(async (req: Request, res: Response)
  *         description: Gizlilik ayarları güncellendi
  */
 router.put('/settings/privacy', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
@@ -2452,7 +2460,7 @@ router.put('/settings/privacy', asyncHandler(async (req: Request, res: Response)
  *                   example: 50
  */
 router.get('/settings/support-session-price', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
@@ -2492,7 +2500,7 @@ router.get('/settings/support-session-price', asyncHandler(async (req: Request, 
  *         description: Geçersiz istek veya 10 gün beklemeden değiştirme denemesi
  */
 router.put('/settings/support-session-price', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
@@ -2544,7 +2552,7 @@ router.put('/settings/support-session-price', asyncHandler(async (req: Request, 
  *                     type: boolean
  */
 router.get('/settings/devices', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
@@ -2577,7 +2585,7 @@ router.get('/settings/devices', asyncHandler(async (req: Request, res: Response)
  *         description: Cihaz bulunamadı
  */
 router.delete('/settings/devices/:deviceId', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
@@ -2618,7 +2626,7 @@ router.delete('/settings/devices/:deviceId', asyncHandler(async (req: Request, r
  *                   type: integer
  */
 router.delete('/settings/devices', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {

@@ -90,7 +90,7 @@ const feedService = new FeedService();
  *                       description: Toplam feed sayısı
  */
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
@@ -249,7 +249,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  *                       description: Toplam filtreli feed sayısı (kendi postları hariç)
  */
 router.get('/filtered', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
@@ -330,7 +330,7 @@ router.get('/filtered', asyncHandler(async (req: Request, res: Response) => {
  *         description: Unauthorized
  */
 router.post('/seen', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
@@ -376,7 +376,7 @@ router.post('/seen', asyncHandler(async (req: Request, res: Response) => {
  *         description: Feed gizlendi
  */
 router.post('/:feedId/hide', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
@@ -410,7 +410,7 @@ router.post('/:feedId/hide', asyncHandler(async (req: Request, res: Response) =>
  *         description: Feedback kaydedildi
  */
 router.post('/:feedId/not-interested', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
@@ -444,7 +444,7 @@ router.post('/:feedId/not-interested', asyncHandler(async (req: Request, res: Re
  *         description: Feed kaydedildi
  */
 router.post('/:feedId/save', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
@@ -478,7 +478,7 @@ router.post('/:feedId/save', asyncHandler(async (req: Request, res: Response) =>
  *         description: Feed rapor edildi
  */
 router.post('/:feedId/report', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
@@ -524,7 +524,7 @@ router.post('/:feedId/report', asyncHandler(async (req: Request, res: Response) 
  *                     NEW_USER: 6
  */
 router.get('/source-counts', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {

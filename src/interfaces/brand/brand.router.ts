@@ -141,7 +141,7 @@ router.get(
   '/:brandId/catalog',
   asyncHandler(async (req: Request, res: Response) => {
     const { brandId } = req.params;
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     const catalog = await brandService.getBrandCatalog(brandId, userId);
     return res.json(catalog);
@@ -221,7 +221,7 @@ router.get(
   '/:brandId/feed',
   asyncHandler(async (req: Request, res: Response) => {
     const { brandId } = req.params;
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
     const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
@@ -521,7 +521,7 @@ router.get(
   '/:brandId/surveys',
   asyncHandler(async (req: Request, res: Response) => {
     const { brandId } = req.params;
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
     const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
@@ -615,7 +615,7 @@ router.get(
   '/:brandId/events',
   asyncHandler(async (req: Request, res: Response) => {
     const { brandId } = req.params;
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
     const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
@@ -657,7 +657,7 @@ router.get(
   '/events/:eventId',
   asyncHandler(async (req: Request, res: Response) => {
     const { eventId } = req.params;
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     const result = await brandService.getBrandEventDetail(eventId, userId);
     return res.json(result);
@@ -729,7 +729,7 @@ router.get(
   '/:brandId/trends',
   asyncHandler(async (req: Request, res: Response) => {
     const { brandId } = req.params;
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
     const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
@@ -829,7 +829,7 @@ router.get(
   '/:brandId/history',
   asyncHandler(async (req: Request, res: Response) => {
     const { brandId } = req.params;
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
     const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
@@ -914,7 +914,7 @@ router.get(
   '/:brandId/history/points',
   asyncHandler(async (req: Request, res: Response) => {
     const { brandId } = req.params;
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
     const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
@@ -1005,7 +1005,7 @@ router.get(
   '/:brandId/history/surveys',
   asyncHandler(async (req: Request, res: Response) => {
     const { brandId } = req.params;
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
     const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
@@ -1084,7 +1084,7 @@ router.get(
   '/:brandId/history/feed',
   asyncHandler(async (req: Request, res: Response) => {
     const { brandId } = req.params;
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
     const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
@@ -1177,7 +1177,7 @@ router.get(
   '/:brandId/history/events',
   asyncHandler(async (req: Request, res: Response) => {
     const { brandId } = req.params;
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
     const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
@@ -1266,7 +1266,7 @@ router.get(
   '/:brandId/products/:productId/experiences',
   asyncHandler(async (req: Request, res: Response) => {
     const { brandId, productId } = req.params;
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
     const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
@@ -1362,7 +1362,7 @@ router.get(
   '/:brandId/products/:productId/comparisons',
   asyncHandler(async (req: Request, res: Response) => {
     const { brandId, productId } = req.params;
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     const page = req.query.page ? Number(req.query.page) : 1;
     const limit = req.query.limit ? Number(req.query.limit) : 12;
@@ -1434,7 +1434,7 @@ router.get(
   '/:brandId/products/:productId/news',
   asyncHandler(async (req: Request, res: Response) => {
     const { brandId, productId } = req.params;
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     const page = req.query.page ? Number(req.query.page) : 1;
     const limit = req.query.limit ? Number(req.query.limit) : 12;
@@ -1485,7 +1485,7 @@ router.get(
   '/:brandId/stats',
   asyncHandler(async (req: Request, res: Response) => {
     const { brandId } = req.params;
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {

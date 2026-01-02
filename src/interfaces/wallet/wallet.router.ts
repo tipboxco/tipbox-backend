@@ -13,7 +13,7 @@ const tipsBalanceService = new TipsBalanceService();
 router.use(authMiddleware);
 
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
@@ -37,7 +37,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 router.get('/active', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
@@ -65,7 +65,7 @@ router.get('/active', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 router.post('/connect', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
@@ -250,7 +250,7 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
  *         description: Unauthorized
  */
 router.get('/transactions', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {
@@ -323,7 +323,7 @@ router.get('/transactions', asyncHandler(async (req: Request, res: Response) => 
  *         description: Unauthorized
  */
 router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = (req as any).user;
+  const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
   if (!userId) {

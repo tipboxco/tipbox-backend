@@ -23,8 +23,8 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
   const backendPayload = verifyJwt(token);
   if (backendPayload) {
     // Backend JWT geçerli
-    (req as any).user = backendPayload;
-    (req as any).token = token; // Token'ı request'e ekle (logout için gerekli)
+    req.user = backendPayload;
+    req.token = token; // Token'ı request'e ekle (logout için gerekli)
     return next();
   }
   
@@ -32,8 +32,8 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
   const auth0Payload = await verifyAuth0Jwt(token);
   if (auth0Payload) {
     // Auth0 JWT geçerli
-    (req as any).user = auth0Payload;
-    (req as any).token = token; // Token'ı request'e ekle
+    req.user = auth0Payload;
+    req.token = token; // Token'ı request'e ekle
     return next();
   }
   

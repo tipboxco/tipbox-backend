@@ -209,8 +209,8 @@ export interface SupportRequest {
   timestamp: string;
   threadId?: string | null; // Accept edilmişse thread ID, yoksa null. Support chat açılırken GET /messages/{threadId} ile mesajlar yüklenir.
   requestId?: string;
-  fromUserId?: string;
-  toUserId?: string;
+  fromUserId: string; // Request'i oluşturan kullanıcı ID'si (required)
+  toUserId: string; // Request'in gönderildiği kullanıcı ID'si (required)
 }
 
 export interface TipsInfo {

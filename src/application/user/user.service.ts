@@ -14,10 +14,18 @@ import { S3Service } from '../../infrastructure/s3/s3.service';
 import { CacheService } from '../../infrastructure/cache/cache.service';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
+import { Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import logger from '../../infrastructure/logger/logger';
 import { DEFAULT_PROFILE_BANNER_URL } from '../../domain/user/profile.constants';
 import { ExperienceContent } from '../../interfaces/feed/feed.dto';
+import { 
+  asProfileUpdate, 
+  asProfileUpdateMany,
+  asProfileWhere, 
+  getPrismaModel,
+  getPostCounts 
+} from '../../infrastructure/repositories/prisma-types.helper';
 
 type CosmeticSummary = {
   id: string;
@@ -267,7 +275,9 @@ export class UserService {
     if (!card) return null;
 
     const profileRecord = await this.prisma.profile.findUnique({ where: { userId } });
-    const cosmeticBadgeId = profileRecord ? ((profileRecord as any).cosmeticBadgeId ?? null) : null;
+    const cosmeticBadgeId = profileRecord && 'cosmeticBadgeId' in profileRecord 
+      ? (profileRecord as { cosmeticBadgeId?: string | null }).cosmeticBadgeId ?? null 
+      : null;
     const [cosmeticBadge, userBadges] = await Promise.all([
       cosmeticBadgeId
         ? this.prisma.badge.findUnique({
@@ -362,7 +372,12 @@ export class UserService {
         }
       }
 
-      const profileData: any = {};
+      const profileData: {
+        displayName?: string;
+        bio?: string | null;
+        bannerUrl?: string;
+        cosmeticBadgeId?: string | null;
+      } = {};
       if (typeof name === 'string') {
         const trimmed = name.trim();
         if (!trimmed) {
@@ -385,7 +400,7 @@ export class UserService {
         if (existingProfile) {
           await tx.profile.update({
             where: { userId },
-            data: profileData,
+            data: asProfileUpdate(profileData),
           });
         } else {
           await tx.profile.create({
@@ -396,7 +411,7 @@ export class UserService {
               bio: typeof biography !== 'undefined' ? biography : null,
               bannerUrl: typeof banner !== 'undefined' ? (banner || DEFAULT_PROFILE_BANNER_URL) : DEFAULT_PROFILE_BANNER_URL,
               cosmeticBadgeId: typeof validatedCosmeticId !== 'undefined' ? validatedCosmeticId : undefined,
-            } as any,
+            } as Parameters<typeof tx.profile.create>[0]['data'],
           });
         }
       }
@@ -491,7 +506,7 @@ export class UserService {
               visibility: 'PUBLIC',
               claimed: true,
               claimedAt: new Date(),
-            } as any,
+            },
           });
         }
       }
@@ -514,19 +529,25 @@ export class UserService {
     const trustedIds = trustedRelations.map(r => r.trustedUserId);
     if (trustedIds.length === 0) return [];
 
+    const whereClause = {
+      userId: { in: trustedIds },
+      ...(query
+        ? {
+            OR: [
+              { displayName: { contains: query, mode: 'insensitive' as const } },
+              { userName: { contains: query, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+    };
+
     const profiles = await this.prisma.profile.findMany({
-      where: {
-        userId: { in: trustedIds } as any,
-        ...(query
-          ? {
-              OR: [
-                { displayName: { contains: query, mode: 'insensitive' } },
-                { userName: { contains: query, mode: 'insensitive' } },
-              ] as any,
-            }
-          : {}),
+      where: asProfileWhere(whereClause),
+      select: {
+        userId: true,
+        displayName: true,
+        userName: true,
       },
-      select: { userId: true, displayName: true, userName: true } as any,
     });
     const titles = await this.prisma.userTitle.findMany({
       where: { userId: { in: profiles.map(p => p.userId) } },
@@ -573,21 +594,21 @@ export class UserService {
       // Decrement truster's trustCount
       await this.prisma.profile.updateMany({
         where: { userId },
-        data: {
+        data: asProfileUpdateMany({
           trustCount: {
             increment: -1
           }
-        } as any
+        })
       });
 
       // Decrement trusted user's trusterCount
       await this.prisma.profile.updateMany({
         where: { userId: targetUserId },
-        data: {
+        data: asProfileUpdateMany({
           trusterCount: {
             increment: -1
           }
-        } as any
+        })
       });
 
       return true;
@@ -673,18 +694,18 @@ export class UserService {
       // Update truster's profile
       this.prisma.profile.updateMany({
         where: { userId: trusterId },
-        data: {
+        data: asProfileUpdateMany({
           trustCount: trusterTrustCount,
           trusterCount: trusterTrusterCount
-        } as any
+        })
       }),
       // Update trusted user's profile
       this.prisma.profile.updateMany({
         where: { userId: trustedUserId },
-        data: {
+        data: asProfileUpdateMany({
           trustCount: trustedTrustCount,
           trusterCount: trustedTrusterCount
-        } as any
+        })
       })
     ]);
   }
@@ -704,19 +725,25 @@ export class UserService {
     const trusterIds = trusterRelations.map(r => r.trusterId);
     if (trusterIds.length === 0) return [];
 
+    const whereClause = {
+      userId: { in: trusterIds },
+      ...(query
+        ? {
+            OR: [
+              { displayName: { contains: query, mode: 'insensitive' as const } },
+              { userName: { contains: query, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+    };
+
     const profiles = await this.prisma.profile.findMany({
-      where: {
-        userId: { in: trusterIds } as any,
-        ...(query
-          ? {
-              OR: [
-                { displayName: { contains: query, mode: 'insensitive' } },
-                { userName: { contains: query, mode: 'insensitive' } },
-              ] as any,
-            }
-          : {}),
+      where: asProfileWhere(whereClause),
+      select: {
+        userId: true,
+        displayName: true,
+        userName: true,
       },
-      select: { userId: true, displayName: true, userName: true } as any,
     });
 
     const titles = await this.prisma.userTitle.findMany({
@@ -762,7 +789,15 @@ export class UserService {
 
   async blockUser(userId: string, targetUserId: string): Promise<void> {
     // idempotent create - Prisma model name is UserBlock
-    await (this.prisma as any).userBlock.upsert({
+    const userBlock = getPrismaModel<{
+      upsert: (args: {
+        where: { blockerId_blockedUserId: { blockerId: string; blockedUserId: string } };
+        update: Record<string, never>;
+        create: { blockerId: string; blockedUserId: string };
+      }) => Promise<unknown>;
+    }>(this.prisma, 'userBlock');
+    
+    await userBlock.upsert({
       where: { blockerId_blockedUserId: { blockerId: userId, blockedUserId: targetUserId } },
       update: {},
       create: { blockerId: userId, blockedUserId: targetUserId },
@@ -771,7 +806,13 @@ export class UserService {
 
   async unblockUser(userId: string, targetUserId: string): Promise<boolean> {
     try {
-      await (this.prisma as any).userBlock.delete({
+      const userBlock = getPrismaModel<{
+        delete: (args: {
+          where: { blockerId_blockedUserId: { blockerId: string; blockedUserId: string } };
+        }) => Promise<unknown>;
+      }>(this.prisma, 'userBlock');
+      
+      await userBlock.delete({
         where: { blockerId_blockedUserId: { blockerId: userId, blockedUserId: targetUserId } },
       });
       return true;
@@ -782,7 +823,15 @@ export class UserService {
 
   async muteUser(userId: string, targetUserId: string): Promise<void> {
     // idempotent create - Prisma model name is UserMute
-    await (this.prisma as any).userMute.upsert({
+    const userMute = getPrismaModel<{
+      upsert: (args: {
+        where: { muterId_mutedUserId: { muterId: string; mutedUserId: string } };
+        update: Record<string, never>;
+        create: { muterId: string; mutedUserId: string };
+      }) => Promise<unknown>;
+    }>(this.prisma, 'userMute');
+    
+    await userMute.upsert({
       where: { muterId_mutedUserId: { muterId: userId, mutedUserId: targetUserId } },
       update: {},
       create: { muterId: userId, mutedUserId: targetUserId },
@@ -791,7 +840,13 @@ export class UserService {
 
   async unmuteUser(userId: string, targetUserId: string): Promise<boolean> {
     try {
-      await (this.prisma as any).userMute.delete({
+      const userMute = getPrismaModel<{
+        delete: (args: {
+          where: { muterId_mutedUserId: { muterId: string; mutedUserId: string } };
+        }) => Promise<unknown>;
+      }>(this.prisma, 'userMute');
+      
+      await userMute.delete({
         where: { muterId_mutedUserId: { muterId: userId, mutedUserId: targetUserId } },
       });
       return true;
@@ -815,8 +870,8 @@ export class UserService {
         type: 'ACHIEVEMENT',
         ...(query ? {
           OR: [
-            { name: { contains: query, mode: 'insensitive' } },
-            { description: { contains: query, mode: 'insensitive' } },
+            { name: { contains: query, mode: 'insensitive' as const } },
+            { description: { contains: query, mode: 'insensitive' as const } },
           ],
         } : {}),
       },
@@ -853,8 +908,13 @@ export class UserService {
     const paginatedBadges = hasMore ? userBadges.slice(0, limit) : userBadges;
 
     const items = paginatedBadges.map((ub) => {
-      const badge = (ub as any).badge;
-      const goals = (badge?.achievementGoals || []) as any[];
+      const badge = ub.badge;
+      type AchievementGoalType = {
+        id: string;
+        title: string;
+        requirement: string;
+      };
+      const goals: AchievementGoalType[] = (badge?.achievementGoals || []) as AchievementGoalType[];
       const tasks: CollectionTask[] = goals.map((goal) => ({
           id: String(goal.id),
           title: goal.title,
@@ -867,7 +927,7 @@ export class UserService {
         rarity: COLLECTION_RARITY_MAP[badge?.rarity || 'COMMON'] || 'Usual',
         image: this.resolveBadgeImage(badge),
         isClaimed: !!ub.claimed,
-        nftAddress: badge?.nftAddress ?? null,
+        nftAddress: (badge as { nftAddress?: string | null })?.nftAddress ?? null,
         earnedDate: ub.claimedAt ? ub.claimedAt.toISOString() : null,
         totalEarned: badge?._count?.userBadges ?? 0,
         tasks,
@@ -929,7 +989,7 @@ export class UserService {
         },
       },
       orderBy: { createdAt: 'asc' },
-    } as any);
+    });
 
     const mapStatus = (current: number, total: number): 'not-started' | 'in_progress' | 'completed' => {
       if (current <= 0) return 'not-started';
@@ -998,24 +1058,38 @@ export class UserService {
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
     const cursor = options?.cursor;
 
-    const whereClause: any = {
+    const whereClause: {
+      userId: string;
+      badge?: {
+        OR: Array<{
+          name?: { contains: string; mode: 'insensitive' };
+          description?: { contains: string; mode: 'insensitive' };
+        }>;
+      };
+      badgeId?: { lt: string };
+    } = {
       userId,
-      badge: query
+      ...(query
         ? {
-            OR: [
-              { name: { contains: query, mode: 'insensitive' } },
-              { description: { contains: query, mode: 'insensitive' } },
-            ] as any,
+            badge: {
+              OR: [
+                { name: { contains: query, mode: 'insensitive' as const } },
+                { description: { contains: query, mode: 'insensitive' as const } },
+              ],
+            },
           }
-        : undefined,
+        : {}),
     };
 
     if (cursor) {
       whereClause.badgeId = { lt: cursor };
     }
+    
+    // Type assertion for Prisma where clause
+    const prismaWhere = whereClause as unknown as Prisma.BridgeRewardWhereInput;
 
     const rewards = await this.prisma.bridgeReward.findMany({
-      where: whereClause,
+      where: prismaWhere,
       include: {
         badge: {
           include: {
@@ -1033,14 +1107,39 @@ export class UserService {
       },
       orderBy: { awardedAt: 'desc' },
       take: limit + 1,
-    } as any);
+    });
 
     const hasMore = rewards.length > limit;
     const paginatedRewards = hasMore ? rewards.slice(0, limit) : rewards;
 
-    const items = paginatedRewards.map((rw: any) => {
+    type RewardWithBadge = {
+      id: string;
+      nftAddress?: string | null;
+      awardedAt: Date;
+      badge?: {
+        id: string;
+        name: string;
+        rarity: string;
+        imageUrl?: string | null;
+        achievementGoals?: Array<{
+          id: string;
+          title: string;
+          requirement: string;
+        }>;
+        _count?: {
+          bridgeRewards: number;
+        };
+      };
+    };
+    
+    const items = (paginatedRewards as RewardWithBadge[]).map((rw) => {
       const badge = rw.badge;
-      const goals = (badge?.achievementGoals || []) as any[];
+      type AchievementGoalType = {
+        id: string;
+        title: string;
+        requirement: string;
+      };
+      const goals: AchievementGoalType[] = (badge?.achievementGoals || []) as AchievementGoalType[];
       const tasks: CollectionTask[] = goals.map((goal) => ({
         id: String(goal.id),
         title: goal.title,
@@ -1083,7 +1182,7 @@ export class UserService {
         visibility: 'PUBLIC',
         claimed: true,
         claimedAt: new Date(),
-      } as any,
+      },
     });
     return { success: true };
   }
@@ -1095,8 +1194,8 @@ export class UserService {
         userId,
         badgeId,
         amount: 0,
-        vestingStatus: 'VESTED',
-      } as any,
+        vestingStatus: 'COMPLETED',
+      },
     });
     return { success: true };
   }
@@ -1112,7 +1211,7 @@ export class UserService {
         favoritesCount: true,
         viewsCount: true,
         sharesCount: true,
-      } as any
+      } as Parameters<typeof this.prisma.contentPost.findUnique>[0]['select'],
     });
 
     return {
@@ -1140,7 +1239,7 @@ export class UserService {
   private async getProductBase(productId: string | null) {
     if (!productId) return null;
     const product = await this.prisma.product.findUnique({ 
-      where: { id: productId } as any, 
+      where: { id: productId }, 
       include: { 
         group: {
           include: {
@@ -1151,16 +1250,16 @@ export class UserService {
             },
           },
         },
-      } as any 
+      }
     });
     if (!product) return null;
     
-    const group = (product as any).group;
+    const group = product.group;
     const subCategory = group?.subCategory;
     const mainCategory = subCategory?.mainCategory;
     
     // Image URL'ini bul ve prefix ekle (fallback chain: product -> group -> subCategory -> mainCategory)
-    const imagePath = (product as any).imageUrl || group?.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
+    const imagePath = product.imageUrl || group?.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
     
     return {
       id: String(product.id),
@@ -1281,7 +1380,7 @@ export class UserService {
         likes: true,
         comments: true,
         favorites: true,
-      } as any,
+      },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -1391,7 +1490,7 @@ export class UserService {
         likes: true,
         comments: true,
         favorites: true,
-      } as any,
+      },
       orderBy: { createdAt: 'desc' },
       take: limit + 1,
     });
@@ -1522,7 +1621,7 @@ export class UserService {
         },
         productExperiences: true,
         media: true,
-      } as any,
+      },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
     });
@@ -1830,7 +1929,11 @@ export class UserService {
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
     const cursor = options?.cursor;
 
-    const whereClause: any = { userId, type: 'COMPARE' };
+    const whereClause: {
+      userId: string;
+      type: 'COMPARE';
+      id?: { lt: string };
+    } = { userId, type: 'COMPARE' };
     if (cursor) {
       whereClause.id = { lt: cursor };
     }
@@ -1845,7 +1948,7 @@ export class UserService {
             scores: true,
           },
         },
-      } as any,
+      },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
       ...(cursor && {
@@ -1856,18 +1959,22 @@ export class UserService {
 
     const userBase = await this.getUserBase(userId);
     const inventories = await this.prisma.inventory.findMany({
-      where: { userId } as any,
+      where: { userId },
       select: { productId: true },
     });
     const ownedSet = new Set(inventories.map((i) => String(i.productId)));
 
-    const filteredPosts = posts.filter((p) => (p as any).comparison);
+    type PostWithComparison = typeof posts[0] & { comparison: unknown };
+    const filteredPosts = posts.filter((p): p is PostWithComparison => 'comparison' in p && p.comparison !== null);
     const hasMore = filteredPosts.length > limit;
     const paginatedPosts = hasMore ? filteredPosts.slice(0, limit) : filteredPosts;
 
     const results = await Promise.all(
       paginatedPosts.map(async (post) => {
-        const comp = (post as any).comparison!;
+        const comp = (post as PostWithComparison).comparison;
+        if (!comp || typeof comp !== 'object') {
+          throw new Error('Comparison not found');
+        }
         const stats = await this.getPostStats(String(post.id));
         const choiceProductId = this.selectComparisonWinner(comp);
         return {
@@ -1982,7 +2089,7 @@ export class UserService {
           },
         },
         mainCategory: true,
-      } as any,
+      },
       orderBy: { createdAt: 'desc' },
       take: limit + 1,
     });
@@ -2076,7 +2183,7 @@ export class UserService {
             mainCategory: true,
           },
         },
-      } as any,
+      },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
       ...(cursor && {
@@ -2293,7 +2400,7 @@ export class UserService {
             question: true,
           },
         },
-      } as any,
+      },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
       ...(favoriteCursorId && {
@@ -2376,7 +2483,8 @@ export class UserService {
 
         case 'COMPARE': {
           // COMPARE -> "benchmark" tipi
-          const comp = (post as any).comparison;
+          type PostWithComparison = typeof post & { comparison?: unknown };
+          const comp = (post as PostWithComparison).comparison;
           if (!comp) break;
 
           results.push({

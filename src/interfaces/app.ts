@@ -151,7 +151,7 @@ function getDynamicSwaggerOptions(req: express.Request) {
 /**
  * Swagger spec'inde hardcoded localhost:9000 örneklerini SEED_MEDIA_BASE_URL ile değiştirir
  */
-function replaceLocalhostExamplesInSwaggerSpec(spec: any): any {
+function replaceLocalhostExamplesInSwaggerSpec(spec: Record<string, unknown>): Record<string, unknown> {
   try {
     const mediaBaseUrl = getPublicMediaBaseUrl();
     const specString = JSON.stringify(spec);

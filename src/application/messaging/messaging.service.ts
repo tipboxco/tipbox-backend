@@ -24,6 +24,7 @@ import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 
 export interface InboxMessageItem {
   id: string;
+  recipientUserId: string; // Karşı tarafın (diğer kullanıcının) ID'si
   senderName: string;
   senderTitle: string | null;
   senderAvatar: string | null;
@@ -31,6 +32,7 @@ export interface InboxMessageItem {
   timestamp: string;
   isUnread: boolean;
   unreadCount: number;
+  threadType?: 'DM' | 'SUPPORT'; // Thread tipi bilgisi (opsiyonel)
 }
 
 export interface InboxQueryOptions {
@@ -730,6 +732,7 @@ export class MessagingService {
       return threads.map((thread) => {
         const isUserOne = thread.userOneId === userIdStr;
         const counterpart = isUserOne ? thread.userTwo : thread.userOne;
+        const recipientUserId = isUserOne ? thread.userTwoId : thread.userOneId; // Karşı tarafın ID'si
         const unreadCount = isUserOne ? thread.unreadCountUserOne : thread.unreadCountUserTwo;
         const lastMessage = thread.messages?.[0];
         const timestamp = (lastMessage?.sentAt ?? thread.updatedAt).toISOString();
@@ -746,6 +749,7 @@ export class MessagingService {
 
         return {
           id: thread.id,
+          recipientUserId, // Karşı tarafın ID'si
           senderName,
           senderTitle,
           senderAvatar,
@@ -753,6 +757,7 @@ export class MessagingService {
           timestamp,
           isUnread: unreadCount > 0,
           unreadCount,
+          threadType: thread.isSupportThread ? 'SUPPORT' : 'DM', // Thread tipi bilgisi
         } satisfies InboxMessageItem;
       });
     } catch (error) {

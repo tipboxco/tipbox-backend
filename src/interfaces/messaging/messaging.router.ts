@@ -6,6 +6,7 @@ import { SupportRequestService } from '../../application/messaging/support-reque
 import { SupportRequestStatus } from '../../domain/messaging/support-request-status.enum';
 import { SendTipsCreate, SupportRequestCreate, SupportType } from './messaging.dto';
 import { UserPrismaRepository } from '../../infrastructure/repositories/user-prisma.repository';
+import { getErrorMessage, hasErrorMessage, errorMessageIncludes } from '../../infrastructure/errors/error-helper';
 
 const router = Router();
 const messagingService = new MessagingService();
@@ -55,6 +56,11 @@ router.use(authMiddleware);
  *                   id:
  *                     type: string
  *                     format: uuid
+ *                     description: Thread ID
+ *                   recipientUserId:
+ *                     type: string
+ *                     format: uuid
+ *                     description: Karşı tarafın (diğer kullanıcının) ID'si - MessageDetail'e navigate etmek için kullanılır
  *                   senderName:
  *                     type: string
  *                   senderTitle:
@@ -73,6 +79,11 @@ router.use(authMiddleware);
  *                     type: boolean
  *                   unreadCount:
  *                     type: integer
+ *                   threadType:
+ *                     type: string
+ *                     enum: [DM, SUPPORT]
+ *                     nullable: true
+ *                     description: Thread tipi bilgisi (DM veya SUPPORT)
  *       401:
  *         description: Kimlik doğrulaması başarısız.
  */
@@ -107,7 +118,7 @@ router.use(authMiddleware);
 router.get(
   '/feed',
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
@@ -130,7 +141,7 @@ router.get(
 router.get(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
@@ -187,7 +198,7 @@ router.get(
 router.post(
   '/',
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const senderId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!senderId) {
       return res.status(401).json({ message: 'Unauthorized' });
@@ -258,7 +269,7 @@ router.post(
 router.post(
   '/threads',
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const senderId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!senderId) {
       return res.status(401).json({ message: 'Unauthorized' });
@@ -283,7 +294,104 @@ router.post(
       userTwoId: thread.userTwoId,
       isActive: thread.isActive,
       startedAt: thread.startedAt,
+      isSupportThread: thread.isSupportThread, // Prisma objesi, property kullan
     });
+  }),
+);
+
+/**
+ * @openapi
+ * /messages/threads/{threadId}:
+ *   get:
+ *     summary: Thread detay bilgisini getir
+ *     description: |
+ *       Belirtilen thread'in detay bilgilerini döner (userOneId, userTwoId, isSupportThread vb.).
+ *       Mobil taraf thread'den diğer kullanıcıyı bulmak için bu endpoint'i kullanabilir.
+ *     tags: [Inbox]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: threadId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Thread ID
+ *     responses:
+ *       200:
+ *         description: Thread detay bilgisi başarıyla getirildi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                   format: uuid
+ *                 userOneId:
+ *                   type: string
+ *                   format: uuid
+ *                 userTwoId:
+ *                   type: string
+ *                   format: uuid
+ *                 isActive:
+ *                   type: boolean
+ *                 startedAt:
+ *                   type: string
+ *                   format: date-time
+ *                 isSupportThread:
+ *                   type: boolean
+ *                   description: Support thread mi, normal DM thread mi?
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ *       403:
+ *         description: Thread'e erişim yetkisi yok
+ *       404:
+ *         description: Thread bulunamadı
+ */
+router.get(
+  '/threads/:threadId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { threadId } = req.params;
+    if (!threadId) {
+      return res.status(400).json({ message: 'threadId is required' });
+    }
+
+    try {
+      // Thread erişim kontrolü
+      const hasAccess = await messagingService.validateThreadAccess(threadId, String(userId));
+      if (!hasAccess) {
+        return res.status(403).json({ message: 'User is not a participant of this thread' });
+      }
+
+      // Thread'i getir
+      const thread = await messagingService.getThreadById(threadId);
+      if (!thread) {
+        return res.status(404).json({ message: 'Thread not found' });
+      }
+
+      return res.status(200).json({
+        id: thread.id,
+        userOneId: thread.userOneId,
+        userTwoId: thread.userTwoId,
+        isActive: thread.isActive,
+        startedAt: thread.startedAt.toISOString(),
+        isSupportThread: thread.isSupportContext(),
+      });
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      if (message === 'Thread not found') {
+        return res.status(404).json({ message });
+      }
+      throw error;
+    }
   }),
 );
 
@@ -359,7 +467,7 @@ router.post(
 router.get(
   '/support-requests',
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
@@ -512,7 +620,7 @@ router.get(
 router.post(
   '/support-requests',
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const senderId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!senderId) {
       return res.status(401).json({ message: 'Unauthorized' });
@@ -648,7 +756,7 @@ router.post(
 router.post(
   '/support-requests/:requestId/accept',
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const expertUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!expertUserId) {
       return res.status(401).json({ message: 'Unauthorized' });
@@ -662,15 +770,15 @@ router.post(
     try {
       const result = await supportRequestService.acceptSupportRequest(requestId, String(expertUserId));
       return res.status(200).json(result);
-    } catch (error: any) {
-      if (error.message === 'Support request not found') {
-        return res.status(404).json({ message: error.message });
+    } catch (error: unknown) {
+      if (hasErrorMessage(error, 'Support request not found')) {
+        return res.status(404).json({ message: getErrorMessage(error) });
       }
-      if (error.message.includes('Only the recipient')) {
-        return res.status(403).json({ message: error.message });
+      if (errorMessageIncludes(error, 'Only the recipient')) {
+        return res.status(403).json({ message: getErrorMessage(error) });
       }
-      if (error.message.includes('Only pending')) {
-        return res.status(400).json({ message: error.message });
+      if (errorMessageIncludes(error, 'Only pending')) {
+        return res.status(400).json({ message: getErrorMessage(error) });
       }
       throw error;
     }
@@ -708,7 +816,7 @@ router.post(
 router.post(
   '/support-requests/:requestId/reject',
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const expertUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!expertUserId) {
       return res.status(401).json({ message: 'Unauthorized' });
@@ -722,12 +830,12 @@ router.post(
     try {
       await supportRequestService.rejectSupportRequest(requestId, String(expertUserId));
       return res.status(200).json({ message: 'Support request rejected' });
-    } catch (error: any) {
-      if (error.message === 'Support request not found') {
-        return res.status(404).json({ message: error.message });
+    } catch (error: unknown) {
+      if (hasErrorMessage(error, 'Support request not found')) {
+        return res.status(404).json({ message: getErrorMessage(error) });
       }
-      if (error.message.includes('Only the recipient')) {
-        return res.status(403).json({ message: error.message });
+      if (errorMessageIncludes(error, 'Only the recipient')) {
+        return res.status(403).json({ message: getErrorMessage(error) });
       }
       if (error.message.includes('Only pending')) {
         return res.status(400).json({ message: error.message });
@@ -768,7 +876,7 @@ router.post(
 router.post(
   '/support-requests/:requestId/cancel',
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const senderId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!senderId) {
       return res.status(401).json({ message: 'Unauthorized' });
@@ -782,12 +890,12 @@ router.post(
     try {
       await supportRequestService.cancelSupportRequest(requestId, String(senderId));
       return res.status(200).json({ message: 'Support request cancelled' });
-    } catch (error: any) {
-      if (error.message === 'Support request not found') {
-        return res.status(404).json({ message: error.message });
+    } catch (error: unknown) {
+      if (hasErrorMessage(error, 'Support request not found')) {
+        return res.status(404).json({ message: getErrorMessage(error) });
       }
-      if (error.message.includes('Only the sender')) {
-        return res.status(403).json({ message: error.message });
+      if (errorMessageIncludes(error, 'Only the sender')) {
+        return res.status(403).json({ message: getErrorMessage(error) });
       }
       if (error.message.includes('Only pending')) {
         return res.status(400).json({ message: error.message });
@@ -888,7 +996,7 @@ router.post(
 router.post(
   '/tips',
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const senderId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!senderId) {
       return res.status(401).json({ message: 'Unauthorized' });
@@ -938,14 +1046,14 @@ router.post(
       );
 
       return res.status(201).end();
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Handle user not found errors
-      if (error.message?.includes('not found')) {
+      if (errorMessageIncludes(error, 'not found')) {
         return res.status(404).json({
           success: false,
           error: {
             code: 'NOT_FOUND',
-            message: error.message,
+            message: getErrorMessage(error),
             path: '/messages/tips',
             timestamp: new Date().toISOString(),
           },
@@ -1001,7 +1109,7 @@ router.post(
 router.post(
   '/:messageId/read',
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
       return res.status(401).json({ message: 'Unauthorized' });
@@ -1015,12 +1123,13 @@ router.post(
     try {
       await messagingService.markMessageAsRead(messageId, String(userId));
       return res.status(200).json({ message: 'Message marked as read' });
-    } catch (error: any) {
-      if (error.message === 'Message not found' || error.message === 'Thread not found') {
-        return res.status(404).json({ message: error.message });
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      if (message === 'Message not found' || message === 'Thread not found') {
+        return res.status(404).json({ message });
       }
-      if (error.message === 'User is not a participant of this thread') {
-        return res.status(403).json({ message: error.message });
+      if (message === 'User is not a participant of this thread') {
+        return res.status(403).json({ message });
       }
       throw error;
     }
@@ -1183,7 +1292,7 @@ router.post(
 router.get(
   '/:threadId',
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
       return res.status(401).json({ message: 'Unauthorized' });
@@ -1218,12 +1327,13 @@ router.get(
         offset || 0
       );
       return res.status(200).json(feedItems);
-    } catch (error: any) {
-      if (error.message === 'Thread not found') {
-        return res.status(404).json({ message: error.message });
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      if (message === 'Thread not found') {
+        return res.status(404).json({ message });
       }
-      if (error.message === 'User is not a participant of this thread') {
-        return res.status(403).json({ message: error.message });
+      if (message === 'User is not a participant of this thread') {
+        return res.status(403).json({ message });
       }
       throw error;
     }

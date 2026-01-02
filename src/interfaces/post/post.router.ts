@@ -19,6 +19,7 @@ import { ExperienceStatus } from '../../domain/content/experience-status.enum';
 import { S3Service } from '../../infrastructure/s3/s3.service';
 import { v4 as uuidv4 } from 'uuid';
 import logger from '../../infrastructure/logger/logger';
+import { getErrorMessage } from '../../infrastructure/errors/error-helper';
 
 const router = Router();
 const postService = new PostService();
@@ -64,10 +65,10 @@ async function processPostImages(
   req: Request,
   userId: string
 ): Promise<string[]> {
-  const multerReq = req as any;
-  const files: Express.Multer.File[] = Array.isArray(multerReq.files) 
-    ? multerReq.files 
-    : (multerReq.file ? [multerReq.file] : []);
+  // Multer files are now typed via type extension
+  const files: Express.Multer.File[] = Array.isArray(req.files) 
+    ? req.files 
+    : (req.file ? [req.file] : []);
 
   // If files are uploaded via multipart/form-data
   if (files && files.length > 0) {
@@ -192,7 +193,7 @@ router.post(
   '/free',
   upload.array('images', 10), // Support up to 10 images via multipart/form-data
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
       return res.status(401).json({ message: 'Unauthorized' });
@@ -254,7 +255,7 @@ router.post(
   '/tips-and-tricks',
   upload.array('images', 10), // Support up to 10 images via multipart/form-data
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
       return res.status(401).json({ message: 'Unauthorized' });
@@ -326,7 +327,7 @@ router.post(
   '/question',
   upload.array('images', 10), // Support up to 10 images via multipart/form-data
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
       return res.status(401).json({ message: 'Unauthorized' });
@@ -388,7 +389,7 @@ router.post(
 router.get(
   '/boost-options',
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     if (!userPayload?.id && !userPayload?.userId && !userPayload?.sub) {
       return res.status(401).json({ message: 'Unauthorized' });
     }
@@ -432,7 +433,7 @@ router.post(
   '/benchmark',
   upload.array('images', 10), // Support up to 10 images via multipart/form-data
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
       return res.status(401).json({ message: 'Unauthorized' });
@@ -442,7 +443,8 @@ router.post(
     const images = await processPostImages(req, String(userId));
 
     // Parse products if it's a JSON string (from multipart/form-data)
-    let products: any = req.body.products;
+    type ProductInput = Array<{ productId: string; isSelected: boolean }> | string | { productId: string; isSelected: boolean } | null | undefined;
+    let products: ProductInput = req.body.products as ProductInput;
     
     // Handle different input formats
     if (typeof products === 'string') {
@@ -544,7 +546,7 @@ router.post(
   '/experience',
   upload.array('images', 10), // Support up to 10 images via multipart/form-data
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
       return res.status(401).json({ message: 'Unauthorized' });
@@ -669,7 +671,7 @@ router.post(
 router.post(
   '/experience/split',
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     if (!userPayload?.id && !userPayload?.userId && !userPayload?.sub) {
       return res.status(401).json({ message: 'Unauthorized' });
     }
@@ -745,7 +747,7 @@ router.post(
 router.get(
   '/experience/options',
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     if (!userPayload?.id && !userPayload?.userId && !userPayload?.sub) {
       return res.status(401).json({ message: 'Unauthorized' });
     }
@@ -786,7 +788,7 @@ router.get(
 router.get(
   '/:id',
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     if (!userPayload?.id && !userPayload?.userId && !userPayload?.sub) {
       return res.status(401).json({ message: 'Unauthorized' });
     }
@@ -834,7 +836,7 @@ router.get(
 router.delete(
   '/:id',
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
       return res.status(401).json({ message: 'Unauthorized' });
@@ -851,8 +853,9 @@ router.delete(
         return res.status(404).json({ message: 'Post not found' });
       }
       return res.status(204).send();
-    } catch (error: any) {
-      if (error instanceof Error && error.message.startsWith('Forbidden')) {
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      if (error instanceof Error && message.startsWith('Forbidden')) {
         return res.status(403).json({ message: 'You are not allowed to delete this post' });
       }
       throw error;
@@ -894,7 +897,7 @@ router.post(
   '/update',
   upload.array('images', 10), // Support up to 10 images via multipart/form-data
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
       return res.status(401).json({ message: 'Unauthorized' });
@@ -968,7 +971,7 @@ router.post(
 router.get(
   '/update/reviews/:productId',
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
       return res.status(401).json({ message: 'Unauthorized' });
@@ -1019,7 +1022,7 @@ router.get(
 router.post(
   '/split-experience',
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!userId) {
       return res.status(401).json({ message: 'Unauthorized' });

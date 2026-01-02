@@ -3,6 +3,7 @@ import { EventService } from '../../application/event/event.service';
 import { UserService } from '../../application/user/user.service';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { authMiddleware } from '../auth/auth.middleware';
+import { getErrorMessage, hasErrorMessage, errorMessageIncludes } from '../../infrastructure/errors/error-helper';
 
 const router = Router();
 const eventService = new EventService();
@@ -49,7 +50,7 @@ router.get(
   '/achievements',
   authMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
@@ -108,7 +109,7 @@ router.get(
   '/limited',
   authMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
@@ -175,7 +176,7 @@ router.get(
   '/active',
   authMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
@@ -249,7 +250,7 @@ router.get(
   '/upcoming',
   authMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
@@ -304,7 +305,7 @@ router.get(
   '/:eventId',
   authMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
@@ -416,7 +417,7 @@ router.get(
   '/:eventId/posts',
   authMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
@@ -504,7 +505,7 @@ router.get(
   '/:eventId/badges',
   authMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
@@ -567,7 +568,7 @@ router.post(
   '/:eventId/join',
   authMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
@@ -583,12 +584,13 @@ router.post(
     try {
       const eventDetail = await eventService.joinEvent(eventId, userId);
       return res.json(eventDetail);
-    } catch (error: any) {
-      if (error.message === 'Event not found') {
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      if (hasErrorMessage(error, 'Event not found')) {
         return res.status(404).json({ message: 'Event not found' });
       }
-      if (error.message.includes('already joined') || error.message.includes('not started') || error.message.includes('ended') || error.message.includes('not published')) {
-        return res.status(400).json({ message: error.message });
+      if (errorMessageIncludes(error, 'already joined') || errorMessageIncludes(error, 'not started') || errorMessageIncludes(error, 'ended') || errorMessageIncludes(error, 'not published')) {
+        return res.status(400).json({ message });
       }
       logger.error(`Error joining event ${eventId}:`, error);
       return res.status(500).json({ message: 'Internal server error' });
@@ -663,7 +665,7 @@ router.get(
   '/:eventId/requirements',
   authMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
@@ -679,8 +681,8 @@ router.get(
     try {
       const requirements = await eventService.getEventRequirements(eventId, userId);
       return res.json(requirements);
-    } catch (error: any) {
-      if (error.message === 'Event not found') {
+    } catch (error: unknown) {
+      if (hasErrorMessage(error, 'Event not found')) {
         return res.status(404).json({ message: 'Event not found' });
       }
       logger.error(`Error getting event requirements ${eventId}:`, error);

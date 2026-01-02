@@ -85,7 +85,7 @@ router.get(
   '/hottest',
   authMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {

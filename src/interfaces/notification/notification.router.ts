@@ -5,6 +5,7 @@ import { UserSettingsPrismaRepository } from '../../infrastructure/repositories/
 import { RegisterPushTokenDto, UpdateNotificationSettingsDto, GetNotificationsQuery } from './notification.dto';
 import { authMiddleware } from '../auth/auth.middleware';
 import logger from '../../infrastructure/logger/logger';
+import { parseQueryInt, parseQueryBoolean } from '../../infrastructure/utils/query-parser';
 
 const router = Router();
 const notificationService = new NotificationService();
@@ -74,7 +75,7 @@ const settingsRepo = new UserSettingsPrismaRepository();
  */
 router.get('/', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     
     if (!userId) {
@@ -84,9 +85,9 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
     const { limit, offset, unreadOnly } = req.query as unknown as GetNotificationsQuery;
 
     const result = await notificationService.getUserNotifications(userId, {
-      limit: limit ? parseInt(limit as any) : 20,
-      offset: offset ? parseInt(offset as any) : 0,
-      unreadOnly: (typeof unreadOnly === 'string' && unreadOnly === 'true') || unreadOnly === true,
+      limit: parseQueryInt(limit, 20),
+      offset: parseQueryInt(offset, 0),
+      unreadOnly: parseQueryBoolean(unreadOnly),
     });
 
     return res.json({
@@ -133,7 +134,7 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
  */
 router.get('/unread-count', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     
     if (!userId) {
@@ -229,7 +230,7 @@ router.put('/:id/read', authMiddleware, async (req: Request, res: Response) => {
  */
 router.put('/mark-all-read', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     
     if (!userId) {
@@ -321,7 +322,7 @@ router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
  */
 router.get('/settings', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     
     if (!userId) {
@@ -392,7 +393,7 @@ router.get('/settings', authMiddleware, async (req: Request, res: Response) => {
  */
 router.put('/settings', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     
     if (!userId) {
@@ -459,7 +460,7 @@ router.put('/settings', authMiddleware, async (req: Request, res: Response) => {
  */
 router.post('/push-token', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     
     if (!userId) {

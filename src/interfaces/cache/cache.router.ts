@@ -67,7 +67,7 @@ router.post(
     
     logger.info({
       message: 'Cache metrics reset',
-      adminId: (req as any).user?.id,
+      adminId: req.user?.id,
     });
     
     return res.json({
@@ -107,7 +107,7 @@ router.delete(
     logger.info({
       message: 'User cache invalidated by admin',
       userId,
-      adminId: (req as any).user?.id,
+      adminId: req.user?.id,
     });
     
     return res.json({
@@ -147,7 +147,7 @@ router.delete(
     logger.info({
       message: 'Post cache invalidated by admin',
       postId,
-      adminId: (req as any).user?.id,
+      adminId: req.user?.id,
     });
     
     return res.json({
@@ -187,7 +187,7 @@ router.delete(
     logger.info({
       message: 'Feed cache invalidated by admin',
       userId,
-      adminId: (req as any).user?.id,
+      adminId: req.user?.id,
     });
     
     return res.json({
@@ -218,7 +218,7 @@ router.delete(
     
     logger.info({
       message: 'Trending cache invalidated by admin',
-      adminId: (req as any).user?.id,
+      adminId: req.user?.id,
     });
     
     return res.json({

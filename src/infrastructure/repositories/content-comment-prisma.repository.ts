@@ -1,6 +1,7 @@
 import { ContentComment } from '../../domain/interaction/content-comment.entity';
 import { getPrisma } from './prisma.client';
 import { generateIdForModel } from '../ids/id.strategy';
+import { asContentCommentUpdate } from './prisma-types.helper';
 
 export class ContentCommentPrismaRepository {
   private prisma = getPrisma();
@@ -65,14 +66,14 @@ export class ContentCommentPrismaRepository {
   async incrementLikeCount(commentId: string): Promise<void> {
     await this.prisma.contentComment.update({
       where: { id: commentId },
-      data: { likesCount: { increment: 1 } } as any,
+      data: asContentCommentUpdate({ likesCount: { increment: 1 } }),
     });
   }
 
   async decrementLikeCount(commentId: string): Promise<void> {
     await this.prisma.contentComment.update({
       where: { id: commentId },
-      data: { likesCount: { decrement: 1 } } as any,
+      data: asContentCommentUpdate({ likesCount: { decrement: 1 } }),
     });
   }
 

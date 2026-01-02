@@ -61,7 +61,7 @@ router.use(authMiddleware);
 router.get(
   '/:newsId',
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     if (!userPayload?.id && !userPayload?.userId && !userPayload?.sub) {
       return res.status(401).json({ message: 'Unauthorized' });
     }
@@ -87,7 +87,16 @@ router.get(
       date: post.createdAt || new Date().toISOString(),
       image: post.images?.[0] || post.contextData?.image || null,
       author: post.user?.name || null,
-      tags: post.tags?.map((tag: any) => (typeof tag === 'string' ? tag : tag.tag || tag.name || tag)) || [],
+      tags: post.tags?.map((tag: unknown) => {
+        if (typeof tag === 'string') {
+          return tag;
+        }
+        if (typeof tag === 'object' && tag !== null) {
+          const tagObj = tag as { tag?: string; name?: string };
+          return tagObj.tag || tagObj.name || String(tag);
+        }
+        return String(tag);
+      }) || [],
     };
 
     return res.json(news);

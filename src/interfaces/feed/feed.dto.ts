@@ -224,7 +224,7 @@ export interface ContextData {
   id: string;        // contextType'e göre: productId / productGroupId / subCategoryId
   name: string;      // kart başlığı: ürün / grup / subcategory adı
   subName?: string;  // bir üst seviye adı (örn. product -> product group)
-  image?: any;       // görsel URL'si
+  image?: string | null;       // görsel URL'si
   isOwned?: boolean; // sadece PRODUCT context'inde anlamlı
 }
 
@@ -260,7 +260,7 @@ export interface BaseProduct {
   id: string;
   name: string;
   subName: string;
-  image: any; // URL or image object
+  image: string | null; // URL or image object
   isOwned?: boolean;
 }
 
@@ -269,7 +269,7 @@ export interface BaseProduct {
 export interface Post extends BasePost {
   contextData: ContextData;
   content: string;
-  images?: any[];
+  images?: string[];
 }
 
 // Benchmark Post Item Types
@@ -300,7 +300,7 @@ export interface ExperiencePost extends BasePost {
   content: ExperienceContent[] | string; // Support both array (legacy) and string (mobile compatibility)
   experienceContent?: ExperienceContent[]; // Structured data (optional, for backward compatibility)
   tags: string[];
-  images?: any[];
+  images?: string[];
 }
 
 // Update Post Item Types
@@ -316,21 +316,21 @@ export interface RelatedPostData {
 export interface UpdatePost extends BasePost {
   relatedPost: RelatedPostData;
   content: string;
-  images?: any[];
+  images?: string[];
 }
 
 export interface TipsAndTricksPost extends BasePost {
   contextData: ContextData;
   content: string;
   tag: string;
-  images?: any[];
+  images?: string[];
 }
 
 export interface RepliesPost extends BasePost {
   contextData: ContextData;
   content: string;
   isBoosted: boolean;
-  images?: any[];
+  images?: string[];
 }
 
 // Feed Item Union Type

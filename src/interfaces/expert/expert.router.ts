@@ -68,7 +68,7 @@ router.get(
   '/balance',
   authMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
@@ -167,7 +167,7 @@ router.post(
   authMiddleware,
   upload.array('media', 10), // Maximum 10 media files
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
@@ -176,8 +176,8 @@ router.post(
 
     const { description, category, tipsAmount } = req.body;
     // Handle multer files array - upload.array() puts files in req.files as array
-    const multerReq = req as any;
-    const files: Express.Multer.File[] = Array.isArray(multerReq.files) ? multerReq.files : [];
+    // Multer files are now typed via type extension
+    const files: Express.Multer.File[] = Array.isArray(req.files) ? req.files : [];
 
     // Validation
     if (!description || typeof description !== 'string' || description.trim().length === 0) {
@@ -355,7 +355,7 @@ router.patch(
   '/request/:requestId/tips',
   authMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
@@ -447,7 +447,7 @@ router.get(
   '/answered',
   authMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
@@ -542,7 +542,7 @@ router.get(
   '/request/:requestId',
   authMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
@@ -597,7 +597,7 @@ router.get(
   '/my-requests',
   authMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
@@ -634,7 +634,7 @@ router.get(
   '/my-requests/answered',
   authMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
@@ -671,7 +671,7 @@ router.get(
   '/my-requests/pending',
   authMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
@@ -780,7 +780,7 @@ router.post(
   '/request/:requestId/answer',
   authMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const expertUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!expertUserId) {
@@ -891,7 +891,7 @@ router.get(
   '/my-answers',
   authMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const expertUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!expertUserId) {
@@ -951,7 +951,7 @@ router.post(
   '/request/:requestId/accept-answer',
   authMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
@@ -1118,7 +1118,7 @@ router.post(
   '/request/:requestId/accept',
   authMiddleware,
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const expertUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!expertUserId) {

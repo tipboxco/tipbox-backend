@@ -37,6 +37,9 @@ const TRUSTER_USER_IDS = [
   'cccccccc-cccc-4ccc-cccc-cccccccccccc', // truster-user-2@tipbox.co
 ]
 
+// Julia Havk user ID
+const JULIA_USER_ID = '99999999-9999-4999-9999-999999999999'
+
 // Hash the default password for all users
 const DEFAULT_PASSWORD = 'password123'
 let passwordHash: string
@@ -3716,7 +3719,6 @@ async function main() {
   }).catch(() => {})
 
   // Create Julia Havk user
-  const JULIA_USER_ID = '99999999-9999-4999-9999-999999999999'
   const juliaEmail = 'julia.havk@tipbox.co'
   
   let juliaUser = await prisma.user.findUnique({ where: { id: JULIA_USER_ID } })
@@ -11015,9 +11017,6 @@ async function main() {
 
   // 6. DM Threads (Normal DM conversations)
   console.log('💬 Creating DM threads...')
-  
-  // Julia user ID (from user.seed.ts)
-  const JULIA_USER_ID = '99999999-9999-4999-9999-999999999999';
 
   type ThreadSeed = {
     userOneId: string;

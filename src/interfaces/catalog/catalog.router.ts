@@ -344,7 +344,7 @@ router.get(
 router.get(
   '/products/:productId/posts',
   asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = (req as any).user;
+    const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     const { productId } = req.params;
     const type = req.query.type as string | undefined;

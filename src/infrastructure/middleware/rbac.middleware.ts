@@ -67,7 +67,7 @@ export const requireRole = (...roles: string[]) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
       // User bilgisini al (authMiddleware'den gelir)
-      const user = (req as any).user;
+      const user = req.user;
       
       if (!user || !user.id) {
         throw new UnauthorizedError('Authentication required');
@@ -125,7 +125,7 @@ export const requireRole = (...roles: string[]) => {
 export const requirePermission = (permission: string) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const user = (req as any).user;
+      const user = req.user;
       
       if (!user || !user.id) {
         throw new UnauthorizedError('Authentication required');
@@ -224,7 +224,7 @@ export const requireOwnership = (
 ) => {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const user = (req as any).user;
+      const user = req.user;
       
       if (!user || !user.id) {
         throw new UnauthorizedError('Authentication required');

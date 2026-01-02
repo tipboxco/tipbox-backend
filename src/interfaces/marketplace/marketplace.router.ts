@@ -151,7 +151,7 @@ router.get('/listings', asyncHandler(async (req: Request, res: Response) => {
  *         description: Sunucu hatası
  */
 router.get('/my-nfts', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
-  const user = (req as any).user;
+  const user = req.user;
   const userId = user?.sub || user?.userId || user?.id;
   
   // Debug logging
@@ -255,7 +255,7 @@ router.get('/my-nfts', authMiddleware, asyncHandler(async (req: Request, res: Re
  *         description: Sunucu hatası
  */
 router.post('/listings', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
-  const userId = (req as any).user?.sub || (req as any).user?.userId || (req as any).user?.id;
+  const userId = req.user?.sub || req.user?.userId || req.user?.id;
   if (!userId) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
@@ -341,7 +341,7 @@ router.post('/listings', authMiddleware, asyncHandler(async (req: Request, res: 
  *         description: Sunucu hatası
  */
 router.put('/listings/:listingId/price', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
-  const userId = (req as any).user?.sub || (req as any).user?.userId || (req as any).user?.id;
+  const userId = req.user?.sub || req.user?.userId || req.user?.id;
   if (!userId) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
@@ -388,7 +388,7 @@ router.put('/listings/:listingId/price', authMiddleware, asyncHandler(async (req
  *         description: Sunucu hatası
  */
 router.delete('/listings/:listingId', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
-  const userId = (req as any).user?.sub || (req as any).user?.userId || (req as any).user?.id;
+  const userId = req.user?.sub || req.user?.userId || req.user?.id;
   if (!userId) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
@@ -447,7 +447,7 @@ router.delete('/listings/:listingId', authMiddleware, asyncHandler(async (req: R
  *         description: Sunucu hatası
  */
 router.get('/sell/:nftId', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
-  const userId = (req as any).user?.sub || (req as any).user?.userId || (req as any).user?.id;
+  const userId = req.user?.sub || req.user?.userId || req.user?.id;
   if (!userId) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
@@ -514,7 +514,7 @@ router.get('/sell/:nftId', authMiddleware, asyncHandler(async (req: Request, res
  *         description: Sunucu hatası
  */
 router.get('/sell/:nftId/detail', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
-  const userId = (req as any).user?.sub || (req as any).user?.userId || (req as any).user?.id;
+  const userId = req.user?.sub || req.user?.userId || req.user?.id;
   if (!userId) {
     return res.status(401).json({ message: 'Unauthorized' });
   }

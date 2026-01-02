@@ -216,12 +216,12 @@ export interface UserWithProfileResponse extends UserResponse {
 }
 
 export interface UserWithWalletsResponse extends UserResponse {
-  wallets: any[]; // Import from wallet.dto when needed
+  wallets: Array<{ id: string; balance: number; currency: string }>; // Wallet information
 }
 
 export interface UserFullResponse extends UserResponse {
   profile?: ProfileResponse;
-  wallets: any[]; // Import from wallet.dto when needed
+  wallets: Array<{ id: string; balance: number; currency: string }>; // Wallet information
 } 
 
 export interface UpdateUserProfileRequest {

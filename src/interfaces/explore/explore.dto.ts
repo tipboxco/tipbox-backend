@@ -31,7 +31,7 @@ export type EventType = 'SURVEY' | 'POLL' | 'CONTEST' | 'CHALLENGE' | 'PROMOTION
 export interface EventResponse {
   eventId: string;
   eventType: EventType;
-  image: any;
+  image: string | null;
   title: string;
   description: string;
   startDate: string; // ISO DateTime
@@ -43,7 +43,7 @@ export interface EventResponse {
 // New Brand Response
 export interface NewBrandResponse {
   brandId: string;
-  images: any;
+  images: string[];
   title: string;
   description: string;
 }
@@ -51,7 +51,7 @@ export interface NewBrandResponse {
 // New Product Response
 export interface NewProductResponse {
   productId: string;
-  images: any;
+  images: string[];
   title: string;
 }
 

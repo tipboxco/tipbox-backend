@@ -5,6 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import http from 'http';
 import net from 'net';
+import { getErrorMessage } from '../../infrastructure/errors/error-helper';
 
 const execAsync = promisify(exec);
 const router = Router();
@@ -2102,11 +2103,13 @@ router.post('/clear-test-data', async (req: Request, res: Response) => {
       message: 'Test data cleared successfully',
       output: stdout 
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Clear test data error:', error);
+    const errorMessage = getErrorMessage(error);
+    const errorDetails = (error as { stderr?: string; stdout?: string }).stderr || (error as { stderr?: string; stdout?: string }).stdout;
     return res.status(500).json({ 
-      error: error.message || 'Error occurred while clearing test data',
-      details: error.stderr || error.stdout
+      error: errorMessage || 'Error occurred while clearing test data',
+      details: errorDetails
     });
   }
 });
@@ -2131,11 +2134,11 @@ router.post('/clear-seed-data', async (req: Request, res: Response) => {
       message: 'Seed data cleared successfully',
       output: stdout 
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Clear seed data error:', error);
     return res.status(500).json({ 
-      error: error.message || 'Error occurred while clearing seed data',
-      details: error.stderr || error.stdout
+      error: getErrorMessage(error) || 'Error occurred while clearing seed data',
+      details: (error as { stderr?: string; stdout?: string }).stderr || (error as { stderr?: string; stdout?: string }).stdout
     });
   }
 });
@@ -2160,11 +2163,11 @@ router.post('/generate-client', async (req: Request, res: Response) => {
       message: 'Prisma Client generated successfully',
       output: stdout 
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Prisma generate error:', error);
     return res.status(500).json({ 
-      error: error.message || 'Error occurred while generating Prisma Client',
-      details: error.stderr || error.stdout
+      error: getErrorMessage(error) || 'Error occurred while generating Prisma Client',
+      details: (error as { stderr?: string; stdout?: string }).stderr || (error as { stderr?: string; stdout?: string }).stdout
     });
   }
 });
@@ -2193,7 +2196,7 @@ router.get('/check-generate', async (req: Request, res: Response) => {
     }
     
     return res.json({ needsGenerate });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Check generate error:', error);
     return res.json({ needsGenerate: false });
   }
@@ -2225,7 +2228,7 @@ router.post('/docker/stop', async (req: Request, res: Response) => {
           encoding: 'utf8'
         });
         stoppedCount++;
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Container yoksa veya zaten durmuşsa hata verme
         if (!error.message.includes('No such container') && !error.stderr?.includes('No such container')) {
           errors.push(`${containerName}: ${error.message}`);
@@ -2241,11 +2244,11 @@ router.post('/docker/stop', async (req: Request, res: Response) => {
       message: `${stoppedCount} container(s) stopped`,
       output: `Stopped ${stoppedCount} containers`
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Docker stop error:', error);
     return res.status(500).json({ 
-      error: error.message || 'Error occurred while stopping containers',
-      details: error.stderr || error.stdout
+      error: getErrorMessage(error) || 'Error occurred while stopping containers',
+      details: (error as { stderr?: string; stdout?: string }).stderr || (error as { stderr?: string; stdout?: string }).stdout
     });
   }
 });
@@ -2288,11 +2291,11 @@ router.post('/docker/down', async (req: Request, res: Response) => {
       message: 'Containers removed',
       output: stdout 
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Docker down error:', error);
     return res.status(500).json({ 
-      error: error.message || 'Error occurred while removing containers',
-      details: error.stderr || error.stdout
+      error: getErrorMessage(error) || 'Error occurred while removing containers',
+      details: (error as { stderr?: string; stdout?: string }).stderr || (error as { stderr?: string; stdout?: string }).stdout
     });
   }
 });
@@ -2335,11 +2338,11 @@ router.post('/docker/start', async (req: Request, res: Response) => {
       message: 'Containers started',
       output: stdout 
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Docker start error:', error);
     return res.status(500).json({ 
-      error: error.message || 'Error occurred while starting containers',
-      details: error.stderr || error.stdout
+      error: getErrorMessage(error) || 'Error occurred while starting containers',
+      details: (error as { stderr?: string; stdout?: string }).stderr || (error as { stderr?: string; stdout?: string }).stdout
     });
   }
 });
@@ -2370,11 +2373,11 @@ router.post('/docker/container/stop', async (req: Request, res: Response) => {
     return res.json({
       message: `${containerName} stopped`
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Docker single container stop error:', error);
     return res.status(500).json({
-      error: error.message || 'Error occurred while stopping container',
-      details: error.stderr || error.stdout
+      error: getErrorMessage(error) || 'Error occurred while stopping container',
+      details: (error as { stderr?: string; stdout?: string }).stderr || (error as { stderr?: string; stdout?: string }).stdout
     });
   }
 });
@@ -2404,11 +2407,11 @@ router.post('/docker/container/start', async (req: Request, res: Response) => {
     return res.json({
       message: `${containerName} started`
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Docker single container start error:', error);
     return res.status(500).json({
-      error: error.message || 'Error occurred while starting container',
-      details: error.stderr || error.stdout
+      error: getErrorMessage(error) || 'Error occurred while starting container',
+      details: (error as { stderr?: string; stdout?: string }).stderr || (error as { stderr?: string; stdout?: string }).stdout
     });
   }
 });
@@ -2444,7 +2447,7 @@ router.get('/docker/status', async (req: Request, res: Response) => {
         const trimmed = line.trim();
         return trimmed === containerName;
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       // docker yoksa veya erişilemiyorsa logla ama akışı bozma
       console.warn(`docker ps kontrolü başarısız (${baseName}):`, error?.message || error);
     }
@@ -2454,7 +2457,7 @@ router.get('/docker/status', async (req: Request, res: Response) => {
     if (!isRunning) {
       try {
         isRunning = await checkContainerByPort(baseName);
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.warn(`Port kontrolü başarısız (${baseName}):`, error?.message || error);
         isRunning = false;
       }
@@ -2629,7 +2632,7 @@ router.post('/data-management', async (req: Request, res: Response) => {
     childProcess.on('error', (error) => {
       console.error('Command execution error:', error);
       res.write(JSON.stringify({ 
-        error: error.message || 'Error occurred while executing command',
+        error: getErrorMessage(error) || 'Error occurred while executing command',
         progress: 0
       }) + '\n');
       res.end();
@@ -2637,11 +2640,11 @@ router.post('/data-management', async (req: Request, res: Response) => {
     
     // Note: Response is handled by event handlers above, no explicit return needed
     return;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Data management error:', error);
     return res.status(500).json({ 
-      error: error.message || 'Error occurred while executing command',
-      details: error.stderr || error.stdout,
+      error: getErrorMessage(error) || 'Error occurred while executing command',
+      details: (error as { stderr?: string; stdout?: string }).stderr || (error as { stderr?: string; stdout?: string }).stdout,
       progress: 0
     });
   }

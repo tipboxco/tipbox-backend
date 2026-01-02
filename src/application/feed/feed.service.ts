@@ -28,6 +28,7 @@ import logger from '../../infrastructure/logger/logger';
 import { FeedScoringService } from './feed-scoring.service';
 import { FeedCleanupScheduler } from '../../infrastructure/scheduler/feed-cleanup.scheduler';
 import { FeedDistributionScheduler } from '../../infrastructure/scheduler/feed-distribution.scheduler';
+import { getPostCounts } from '../../infrastructure/repositories/prisma-types.helper';
 
 export class FeedService {
   private readonly feedRepo: FeedPrismaRepository;
@@ -168,11 +169,12 @@ export class FeedService {
     // Create stats map from denormalized counts in posts
     const statsMap = new Map<string, BaseStats>();
     posts.forEach((post) => {
+      const counts = getPostCounts(post);
       statsMap.set(post.id, {
-        likes: (post as any).likesCount || 0,
-        comments: (post as any).commentsCount || 0,
-        shares: (post as any).sharesCount || 0,
-        bookmarks: (post as any).favoritesCount || 0,
+        likes: counts.likesCount,
+        comments: counts.commentsCount,
+        shares: counts.sharesCount,
+        bookmarks: counts.favoritesCount,
       });
     });
 
@@ -521,11 +523,12 @@ export class FeedService {
     // Create stats map from denormalized counts in posts
     const statsMap = new Map<string, BaseStats>();
     posts.forEach((post) => {
+      const counts = getPostCounts(post);
       statsMap.set(post.id, {
-        likes: (post as any).likesCount || 0,
-        comments: (post as any).commentsCount || 0,
-        shares: (post as any).sharesCount || 0,
-        bookmarks: (post as any).favoritesCount || 0,
+        likes: counts.likesCount,
+        comments: counts.commentsCount,
+        shares: counts.sharesCount,
+        bookmarks: counts.favoritesCount,
       });
     });
 
@@ -867,11 +870,12 @@ export class FeedService {
     const userBase = await this.getUserBase(String(post.userId));
 
     // Get stats
+    const counts = getPostCounts(post);
     const stats: BaseStats = {
-      likes: (post as any).likesCount || post.likes?.length || 0,
-      comments: (post as any).commentsCount || post.comments?.length || 0,
-      shares: (post as any).sharesCount || 0,
-      bookmarks: (post as any).favoritesCount || post.favorites?.length || 0,
+      likes: counts.likesCount || post.likes?.length || 0,
+      comments: counts.commentsCount || post.comments?.length || 0,
+      shares: counts.sharesCount || 0,
+      bookmarks: counts.favoritesCount || post.favorites?.length || 0,
     };
 
     const basePost = {
@@ -1338,10 +1342,10 @@ export class FeedService {
           subCategoryId: post.subCategoryId,
           productGroupId: post.productGroupId,
           productId: post.productId,
-          likesCount: (post as any).likesCount || 0,
-          commentsCount: (post as any).commentsCount || 0,
-          viewsCount: (post as any).viewsCount || 0,
-          sharesCount: (post as any).sharesCount || 0,
+          likesCount: getPostCounts(post).likesCount,
+          commentsCount: getPostCounts(post).commentsCount,
+          viewsCount: getPostCounts(post).viewsCount,
+          sharesCount: getPostCounts(post).sharesCount,
           isBoosted: post.isBoosted,
           boostedUntil: post.boostedUntil,
           createdAt: post.createdAt,

@@ -32,7 +32,9 @@
     "docker:start": "node scripts/docker-up.js --start",
     "docker:restart": "node scripts/docker-up.js --restart",
     "dev:reset": "docker-compose exec backend bash scripts/reset-dev.sh",
-    "test:socket-chat": "docker-compose exec backend npx ts-node scripts/test-socket-chat.ts"
+    "test:socket-chat": "docker-compose exec backend npx ts-node scripts/test-socket-chat.ts",
+    "sim:julia": "docker-compose exec backend npx ts-node scripts/julia-omer-simulation.ts julia",
+    "sim:omer": "docker-compose exec backend npx ts-node scripts/julia-omer-simulation.ts omer"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

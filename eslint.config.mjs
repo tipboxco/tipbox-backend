@@ -37,4 +37,14 @@ export default defineConfig([
     },
   },
   tseslint.configs.recommended,
+  {
+    files: ["**/*.{ts,tsx}"],
+    rules: {
+      // TypeScript: any kullanımını yasakla
+      "@typescript-eslint/no-explicit-any": "error",
+      
+      // İsteğe bağlı: any kullanımına izin verilen yerler için uyarı ver
+      // "@typescript-eslint/no-explicit-any": "warn",
+    },
+  },
 ]);
