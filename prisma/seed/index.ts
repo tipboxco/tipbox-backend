@@ -9,6 +9,7 @@ import { seedExplore } from './explore.seed';
 import { seedMessaging } from './messaging.seed';
 import { seedBrandProducts } from './brand-products.seed';
 import { seedProductCatalog } from './product-catalog.seed';
+import { triggerFeedDistributionAfterSeed } from './trigger-feed-distribution';
 // Import from JS file (no ts-node issues)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { markSeedStart, markSeedEnd, addSeedUserId } = require('./seed-metadata');
@@ -47,6 +48,10 @@ export async function runAllSeeds(): Promise<void> {
     // Seed sonunu işaretle
     markSeedEnd();
     console.log('✨ Modular seed completed');
+    
+    // Seed sonrası feed distribution job'larını queue'ya ekle
+    // FeedDistributionWorker çalıştığında bu job'lar işlenecek
+    await triggerFeedDistributionAfterSeed();
   } catch (error) {
     console.error('❌ Seed hatası:', error);
     markSeedEnd(); // Hata olsa bile metadata'yı temizle

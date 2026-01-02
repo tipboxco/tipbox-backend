@@ -6950,23 +6950,35 @@ async function main() {
   const bannerConfigs: Array<{
     title: string;
     description: string;
-    imageUrl: string | null;
+    imageKey: string; // Seed media key
     linkUrl: string;
     isActive: boolean;
     displayOrder: number;
   }> = [
-    { title: 'Yeni Sezon NFT Koleksiyonu', description: 'Sınırlı sayıda özel avatar ve badge NFT\'leri şimdi satışta!', imageUrl: getSeedMediaPath('explore.event.primary', true), linkUrl: '/marketplace/listings?type=BADGE', isActive: true, displayOrder: 1 },
-    { title: 'Epic Rarity İndirimi', description: '%30 indirimli EPIC rarity NFT\'lere göz at', imageUrl: getSeedMediaPath('explore.event.primary', true), linkUrl: '/marketplace/listings?rarity=EPIC', isActive: true, displayOrder: 2 },
-    { title: 'Yeni Markalar Platformda', description: 'Ünlü markalar TipBox\'a katıldı! Hemen keşfet.', imageUrl: getSeedMediaPath('explore.event.primary', true), linkUrl: '/explore/brands/new', isActive: true, displayOrder: 3 }
+    { title: 'Yeni Sezon NFT Koleksiyonu', description: 'Sınırlı sayıda özel avatar ve badge NFT\'leri şimdi satışta!', imageKey: 'marketplace.marketplace', linkUrl: '/marketplace/listings?type=BADGE', isActive: true, displayOrder: 1 },
+    { title: 'Epic Rarity İndirimi', description: '%30 indirimli EPIC rarity NFT\'lere göz at', imageKey: 'marketplace.marketplace', linkUrl: '/marketplace/listings?rarity=EPIC', isActive: true, displayOrder: 2 },
+    { title: 'Yeni Markalar Platformda', description: 'Ünlü markalar TipBox\'a katıldı! Hemen keşfet.', imageKey: 'marketplace.marketplace', linkUrl: '/explore/brands/new', isActive: true, displayOrder: 3 }
   ]
   
   const banners = await Promise.all(
     bannerConfigs.map(async (config) => {
+      // Görsel path'ini al
+      const imagePath = getSeedMediaPath(config.imageKey as SeedMediaKey, true);
+      
       const existing = await prisma.marketplaceBanner.findFirst({
         where: { title: config.title }
       })
       
       if (existing) {
+        // Mevcut banner'ın imageUrl'si boş ise güncelle
+        if (!existing.imageUrl || existing.imageUrl.trim() === '') {
+          return prisma.marketplaceBanner.update({
+            where: { id: existing.id },
+            data: {
+              imageUrl: imagePath || '',
+            }
+          })
+        }
         return existing
       }
       
@@ -6974,7 +6986,7 @@ async function main() {
         data: {
           title: config.title,
           description: config.description,
-          imageUrl: config.imageUrl || '', // Boş string (Prisma için required)
+          imageUrl: imagePath || '', // Görsel path'i
           linkUrl: config.linkUrl,
           isActive: config.isActive,
           displayOrder: config.displayOrder,
@@ -12484,6 +12496,16 @@ async function main() {
   // Seed sonunu işaretle (metadata için)
   console.log('\n✅ Seed işlemi başarıyla tamamlandı!')
   markSeedEnd()
+  
+  // Seed sonrası feed distribution job'larını queue'ya ekle
+  // FeedDistributionWorker çalıştığında bu job'lar işlenecek
+  try {
+    const { triggerFeedDistributionAfterSeed } = require('./seed/trigger-feed-distribution')
+    await triggerFeedDistributionAfterSeed()
+  } catch (error) {
+    console.error('⚠️  Feed distribution tetikleme hatası (devam ediliyor):', error instanceof Error ? error.message : String(error))
+    // Hata olsa bile seed başarılı sayılır
+  }
 }
 
 // Unhandled promise rejection'ları yakala
