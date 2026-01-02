@@ -2,7 +2,7 @@ import { FeedPrismaRepository } from '../../infrastructure/repositories/feed-pri
 import { ProfilePrismaRepository } from '../../infrastructure/repositories/profile-prisma.repository';
 import { CacheService } from '../../infrastructure/cache/cache.service';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
-import { PrismaClient } from '@prisma/client';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import {
   FeedResponse,
   FeedItem,
@@ -33,7 +33,7 @@ export class FeedService {
   private readonly feedRepo: FeedPrismaRepository;
   private readonly profileRepo: ProfilePrismaRepository;
   private readonly cacheService: CacheService;
-  private readonly prisma: PrismaClient;
+  private readonly prisma: ReturnType<typeof getPrisma>;
   private readonly scoringService: FeedScoringService;
   private readonly cleanupScheduler: FeedCleanupScheduler;
   private readonly distributionScheduler: FeedDistributionScheduler;
@@ -45,7 +45,7 @@ export class FeedService {
     this.feedRepo = new FeedPrismaRepository();
     this.profileRepo = new ProfilePrismaRepository();
     this.cacheService = CacheService.getInstance();
-    this.prisma = new PrismaClient();
+    this.prisma = getPrisma();
     this.scoringService = new FeedScoringService();
     this.cleanupScheduler = new FeedCleanupScheduler();
     this.distributionScheduler = new FeedDistributionScheduler();

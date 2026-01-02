@@ -1,14 +1,14 @@
-import { PrismaClient } from '@prisma/client';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import { SearchData, SearchUserData, SearchBrandData, SearchProductData } from '../../interfaces/search/search.dto';
 import { buildMediaUrl, getPublicMediaBaseUrl } from '../../infrastructure/config/media.config';
 
 export type SearchTypes = Array<'user' | 'brand' | 'product'>;
 
 export class SearchService {
-  private prisma: PrismaClient;
+  private prisma: ReturnType<typeof getPrisma>;
 
   constructor() {
-    this.prisma = new PrismaClient();
+    this.prisma = getPrisma();
   }
 
   async searchAll(keyword: string | undefined, limitPerType: number = 10, types?: SearchTypes): Promise<SearchData> {

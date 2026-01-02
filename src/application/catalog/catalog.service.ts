@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import logger from '../../infrastructure/logger/logger';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import { withCache } from '../../infrastructure/cache/cache-wrapper.helper';
@@ -7,7 +7,7 @@ import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
 import { FeedItem, FeedItemType } from '../../interfaces/feed/feed.dto';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
 
-const prisma = new PrismaClient();
+const prisma = getPrisma();
 
 export interface CategoryItem {
   categoryId: string;

@@ -13,7 +13,7 @@ import { NotificationType } from '../../domain/notification/notification-type.en
 import { S3Service } from '../../infrastructure/s3/s3.service';
 import { CacheService } from '../../infrastructure/cache/cache.service';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
-import { PrismaClient } from '@prisma/client';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import bcrypt from 'bcryptjs';
 import logger from '../../infrastructure/logger/logger';
 import { DEFAULT_PROFILE_BANNER_URL } from '../../domain/user/profile.constants';
@@ -112,7 +112,7 @@ export class UserService {
   private readonly deviceRepo: UserDevicePrismaRepository;
   private readonly privacySettingRepo: UserPrivacySettingPrismaRepository;
   private readonly trustRelationRepo: TrustRelationPrismaRepository;
-  private readonly prisma: PrismaClient;
+  private readonly prisma: ReturnType<typeof getPrisma>;
 
   constructor(private readonly userRepo = new UserPrismaRepository()) {
     this.s3Service = new S3Service();
@@ -122,7 +122,7 @@ export class UserService {
     this.deviceRepo = new UserDevicePrismaRepository();
     this.privacySettingRepo = new UserPrivacySettingPrismaRepository();
     this.trustRelationRepo = new TrustRelationPrismaRepository();
-    this.prisma = new PrismaClient();
+    this.prisma = getPrisma();
   }
 
   async getUserById(id: string): Promise<User | null> {

@@ -23,14 +23,12 @@ import {
   SplitExperienceResponse,
   Experience,
 } from '../../interfaces/post/post.dto';
-import { PrismaClient } from '@prisma/client';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import { FeedService } from '../feed/feed.service';
 import logger from '../../infrastructure/logger/logger';
 import { GeminiService } from '../../infrastructure/ai/gemini.service';
 import { AiExperienceSplitPrismaRepository } from '../../infrastructure/repositories/ai-experience-split-prisma.repository';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
-import { withCache } from '../../infrastructure/cache/cache-wrapper.helper';
-import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
 
 export class PostService {
   private postRepo: ContentPostPrismaRepository;
@@ -38,7 +36,7 @@ export class PostService {
   private questionRepo: PostQuestionPrismaRepository;
   private comparisonRepo: PostComparisonPrismaRepository;
   private feedService: FeedService;
-  private prisma: PrismaClient;
+  private prisma: ReturnType<typeof getPrisma>;
   private geminiService: GeminiService;
   private experienceSnippetRepo: AiExperienceSplitPrismaRepository;
 
@@ -48,7 +46,7 @@ export class PostService {
     this.questionRepo = new PostQuestionPrismaRepository();
     this.comparisonRepo = new PostComparisonPrismaRepository();
     this.feedService = new FeedService();
-    this.prisma = new PrismaClient();
+    this.prisma = getPrisma();
     this.geminiService = GeminiService.getInstance();
     this.experienceSnippetRepo = new AiExperienceSplitPrismaRepository();
   }

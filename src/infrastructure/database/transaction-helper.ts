@@ -1,7 +1,8 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { getPrisma } from '../repositories/prisma.client';
 import logger from '../logger/logger';
 
-const prisma = new PrismaClient();
+const prisma = getPrisma();
 
 export interface TransactionOptions {
   /**

@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import { FeedSource } from '../../domain/admin/feed-source.enum';
 import logger from '../../infrastructure/logger/logger';
 
@@ -30,7 +30,7 @@ export interface InventoryMatchInfo {
 }
 
 export class FeedScoringService {
-  private readonly prisma: PrismaClient;
+  private readonly prisma: ReturnType<typeof getPrisma>;
   
   // Scoring weights (configurable)
   private readonly WEIGHTS = {
@@ -63,7 +63,7 @@ export class FeedScoringService {
   };
 
   constructor() {
-    this.prisma = new PrismaClient();
+    this.prisma = getPrisma();
   }
 
   /**

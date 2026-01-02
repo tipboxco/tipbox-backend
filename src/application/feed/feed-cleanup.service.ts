@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import logger from '../../infrastructure/logger/logger';
 
 export interface CleanupStats {
@@ -17,7 +17,7 @@ export interface CleanupStats {
 }
 
 export class FeedCleanupService {
-  private readonly prisma: PrismaClient;
+  private readonly prisma: ReturnType<typeof getPrisma>;
 
   // Configurable thresholds - MVP için optimize edildi
   private readonly CONFIG = {
@@ -29,7 +29,7 @@ export class FeedCleanupService {
   };
 
   constructor() {
-    this.prisma = new PrismaClient();
+    this.prisma = getPrisma();
   }
 
   /**

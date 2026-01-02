@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import { ExpertRequestPrismaRepository } from '../../infrastructure/repositories/expert-request-prisma.repository';
 import { ExpertAnswerPrismaRepository } from '../../infrastructure/repositories/expert-answer-prisma.repository';
 import { ExpertRequestMediaPrismaRepository } from '../../infrastructure/repositories/expert-request-media-prisma.repository';
@@ -20,7 +20,7 @@ import {
 import logger from '../../infrastructure/logger/logger';
 
 export class ExpertService {
-  private readonly prisma: PrismaClient;
+  private readonly prisma: ReturnType<typeof getPrisma>;
   private readonly expertRequestRepo: ExpertRequestPrismaRepository;
   private readonly expertAnswerRepo: ExpertAnswerPrismaRepository;
   private readonly expertMediaRepo: ExpertRequestMediaPrismaRepository;
@@ -30,7 +30,7 @@ export class ExpertService {
   private readonly avatarRepo: UserAvatarPrismaRepository;
 
   constructor() {
-    this.prisma = new PrismaClient();
+    this.prisma = getPrisma();
     this.expertRequestRepo = new ExpertRequestPrismaRepository();
     this.expertAnswerRepo = new ExpertAnswerPrismaRepository();
     this.expertMediaRepo = new ExpertRequestMediaPrismaRepository();

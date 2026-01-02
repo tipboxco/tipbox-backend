@@ -6,7 +6,7 @@ import SocketManager from '../../infrastructure/realtime/socket-manager';
 import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
 import logger from '../../infrastructure/logger/logger';
-import { PrismaClient } from '@prisma/client';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import {
   MessageFeed,
   MessageFeedItem,
@@ -45,7 +45,7 @@ export class MessagingService {
   private userRepo = new UserPrismaRepository();
   private supportRequestService = new SupportRequestService();
   private notificationService = new NotificationService();
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
   async createThreadIfNotExists(senderId: string, recipientId: string) {
     // Sadece normal DM thread'leri kontrol et (support thread'leri hariç)
     const existing = await this.prisma.dMThread.findFirst({

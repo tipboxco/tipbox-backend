@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
+import { getPrisma } from '../repositories/prisma.client';
 import CacheService from '../cache/cache.service';
 import logger from '../logger/logger';
 
-const prisma = new PrismaClient();
+const prisma = getPrisma();
 const cacheService = CacheService.getInstance();
 
 export interface HealthCheckResult {

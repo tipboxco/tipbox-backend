@@ -1,5 +1,5 @@
 import { Worker, Job } from 'bullmq';
-import { PrismaClient } from '@prisma/client';
+import { getPrisma } from '../repositories/prisma.client';
 import { FeedScoringService } from '../../application/feed/feed-scoring.service';
 import { FeedSource } from '../../domain/admin/feed-source.enum';
 import { generateIdForModel } from '../../infrastructure/ids/id.strategy';
@@ -36,7 +36,7 @@ export interface FeedRecord {
 
 export class FeedDistributionWorker {
   private worker: Worker;
-  private prisma: PrismaClient;
+  private prisma: ReturnType<typeof getPrisma>;
   private scoringService: FeedScoringService;
 
   // Konfigürasyon
@@ -47,7 +47,7 @@ export class FeedDistributionWorker {
   private readonly RETRY_DELAY = 5000; // Retry arası 5 saniye
 
   constructor() {
-    this.prisma = new PrismaClient();
+    this.prisma = getPrisma();
     this.scoringService = new FeedScoringService();
 
     const redisHost = RedisConfigManager.parseRedisHost();

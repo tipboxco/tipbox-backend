@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import { CacheService } from '../../infrastructure/cache/cache.service';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import { MarketplaceBannerPrismaRepository } from '../../infrastructure/repositories/marketplace-banner-prisma.repository';
@@ -16,12 +16,12 @@ import { ContextType } from '../../domain/content/context-type.enum';
 import { ContextData, ExperiencePost, ExperienceContent, ReviewProduct } from '../../interfaces/feed/feed.dto';
 
 export class ExploreService {
-  private readonly prisma: PrismaClient;
+  private readonly prisma: ReturnType<typeof getPrisma>;
   private readonly cacheService: CacheService;
   private readonly bannerRepo: MarketplaceBannerPrismaRepository;
 
   constructor() {
-    this.prisma = new PrismaClient();
+    this.prisma = getPrisma();
     this.cacheService = CacheService.getInstance();
     this.bannerRepo = new MarketplaceBannerPrismaRepository();
   }

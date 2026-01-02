@@ -8,7 +8,7 @@ import { EmailService } from '../../infrastructure/email/email.service';
 import { signJwt, verifyJwt } from '../../infrastructure/auth/jwt.helper';
 import { DeviceParser } from '../../infrastructure/utils/device-parser.util';
 import bcrypt from 'bcryptjs';
-import { PrismaClient } from '@prisma/client';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import logger from '../../infrastructure/logger/logger';
 
 export class AuthService implements IAuthService {
@@ -17,7 +17,7 @@ export class AuthService implements IAuthService {
   private passwordResetRepo = new PasswordResetCodePrismaRepository();
   private deviceRepo = new UserDevicePrismaRepository();
   private emailService = new EmailService();
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
 
   async authenticate(email: string, password: string): Promise<User | null> {
     const user = await this.userRepo.findByEmail(email);

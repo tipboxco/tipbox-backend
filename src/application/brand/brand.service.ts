@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import { FeedItem, FeedItemType, FeedResponse, ContextData, ExperiencePost, ExperienceContent } from '../../interfaces/feed/feed.dto';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
 import { buildMediaUrl, resolveMediaUrl } from '../../infrastructure/config/media.config';
@@ -237,10 +237,10 @@ export interface BrandHistoryEventsResponse {
 }
 
 export class BrandService {
-  private readonly prisma: PrismaClient;
+  private readonly prisma: ReturnType<typeof getPrisma>;
 
   constructor() {
-    this.prisma = new PrismaClient();
+    this.prisma = getPrisma();
   }
 
   /**

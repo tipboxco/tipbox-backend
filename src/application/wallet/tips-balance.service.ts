@@ -1,14 +1,14 @@
-import { PrismaClient } from '@prisma/client';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import { CacheService } from '../../infrastructure/cache/cache.service';
 import logger from '../../infrastructure/logger/logger';
 
 export class TipsBalanceService {
-  private readonly prisma: PrismaClient;
+  private readonly prisma: ReturnType<typeof getPrisma>;
   private readonly cacheService: CacheService;
   private readonly CACHE_TTL = 30; // 30 saniye cache
 
   constructor() {
-    this.prisma = new PrismaClient();
+    this.prisma = getPrisma();
     this.cacheService = CacheService.getInstance();
   }
 

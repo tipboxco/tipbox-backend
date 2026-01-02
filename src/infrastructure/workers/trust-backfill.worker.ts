@@ -1,5 +1,5 @@
 import { Worker, Job } from 'bullmq';
-import { PrismaClient } from '@prisma/client';
+import { getPrisma } from '../repositories/prisma.client';
 import { FeedScoringService } from '../../application/feed/feed-scoring.service';
 import { CacheService } from '../cache/cache.service';
 import { FeedSource } from '../../domain/admin/feed-source.enum';
@@ -10,7 +10,7 @@ import RedisConfigManager from '../config/redis.config';
 
 export class TrustBackfillWorker {
   private worker: Worker;
-  private prisma: PrismaClient;
+  private prisma: ReturnType<typeof getPrisma>;
   private scoringService: FeedScoringService;
   private cacheService: CacheService;
 
@@ -19,7 +19,7 @@ export class TrustBackfillWorker {
   private readonly SCORE_THRESHOLD = 5; // Minimum score to add to feed
 
   constructor() {
-    this.prisma = new PrismaClient();
+    this.prisma = getPrisma();
     this.scoringService = new FeedScoringService();
     this.cacheService = CacheService.getInstance();
 

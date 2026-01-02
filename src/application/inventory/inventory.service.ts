@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import { InventoryPrismaRepository } from '../../infrastructure/repositories/inventory-prisma.repository';
 import { ProductExperiencePrismaRepository } from '../../infrastructure/repositories/product-experience-prisma.repository';
 import { InventoryMediaPrismaRepository } from '../../infrastructure/repositories/inventory-media-prisma.repository';
@@ -18,7 +18,7 @@ import { GeminiService } from '../../infrastructure/ai/gemini.service';
 import { AiExperienceSplitPrismaRepository } from '../../infrastructure/repositories/ai-experience-split-prisma.repository';
 
 export class InventoryService {
-  private readonly prisma: PrismaClient;
+  private readonly prisma: ReturnType<typeof getPrisma>;
   private readonly inventoryRepo: InventoryPrismaRepository;
   private readonly experienceRepo: ProductExperiencePrismaRepository;
   private readonly mediaRepo: InventoryMediaPrismaRepository;
@@ -27,7 +27,7 @@ export class InventoryService {
   private readonly experienceSnippetRepo: AiExperienceSplitPrismaRepository;
 
   constructor() {
-    this.prisma = new PrismaClient();
+    this.prisma = getPrisma();
     this.inventoryRepo = new InventoryPrismaRepository();
     this.experienceRepo = new ProductExperiencePrismaRepository();
     this.mediaRepo = new InventoryMediaPrismaRepository();

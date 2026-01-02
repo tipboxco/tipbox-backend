@@ -5,7 +5,7 @@ import { DMRequestStatus } from '../../domain/messaging/dm-request-status.enum';
 import { SupportType } from '../../domain/messaging/support-type.enum';
 import SocketManager from '../../infrastructure/realtime/socket-manager';
 import logger from '../../infrastructure/logger/logger';
-import { PrismaClient } from '@prisma/client';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import { SupportRequestReportPrismaRepository } from '../../infrastructure/repositories/support-request-report-prisma.repository';
 import { SupportRequestReportCategory } from '../../domain/messaging/support-request-report-category.enum';
 import { NotificationService } from '../notification/notification.service';
@@ -33,7 +33,7 @@ export interface SupportRequestQueryOptions {
 export class SupportRequestService {
   private dmRequestRepo = new DMRequestPrismaRepository();
   private dmThreadRepo = new DMThreadPrismaRepository();
-  private prisma = new PrismaClient();
+  private prisma = getPrisma();
   private supportRequestReportRepo = new SupportRequestReportPrismaRepository();
   private notificationService = new NotificationService();
   private userRepo = new UserPrismaRepository();

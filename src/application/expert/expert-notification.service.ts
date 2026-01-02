@@ -1,16 +1,16 @@
-import { PrismaClient } from '@prisma/client';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import { ExpertMatchingService } from './expert-matching.service';
 import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
 import logger from '../../infrastructure/logger/logger';
 
 export class ExpertNotificationService {
-  private readonly prisma: PrismaClient;
+  private readonly prisma: ReturnType<typeof getPrisma>;
   private readonly matchingService: ExpertMatchingService;
   private readonly notificationService: NotificationService;
 
   constructor() {
-    this.prisma = new PrismaClient();
+    this.prisma = getPrisma();
     this.matchingService = new ExpertMatchingService();
     this.notificationService = new NotificationService();
   }

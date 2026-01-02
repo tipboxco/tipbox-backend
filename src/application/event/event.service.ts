@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import logger from '../../infrastructure/logger/logger';
 import {
   ActiveEvent,
@@ -21,11 +21,11 @@ import { CacheService } from '../../infrastructure/cache/cache.service';
 import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
 
 export class EventService {
-  private prisma: PrismaClient;
+  private prisma: ReturnType<typeof getPrisma>;
   private cacheService: CacheService;
 
   constructor() {
-    this.prisma = new PrismaClient();
+    this.prisma = getPrisma();
     this.cacheService = CacheService.getInstance();
   }
 

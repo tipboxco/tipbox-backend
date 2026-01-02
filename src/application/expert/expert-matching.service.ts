@@ -1,11 +1,11 @@
-import { PrismaClient } from '@prisma/client';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import logger from '../../infrastructure/logger/logger';
 
 export class ExpertMatchingService {
-  private readonly prisma: PrismaClient;
+  private readonly prisma: ReturnType<typeof getPrisma>;
 
   constructor() {
-    this.prisma = new PrismaClient();
+    this.prisma = getPrisma();
   }
 
   /**
