@@ -8,6 +8,9 @@ import logger from '../../infrastructure/logger/logger';
 import { PrismaClient } from '@prisma/client';
 import { SupportRequestReportPrismaRepository } from '../../infrastructure/repositories/support-request-report-prisma.repository';
 import { SupportRequestReportCategory } from '../../domain/messaging/support-request-report-category.enum';
+import { NotificationService } from '../notification/notification.service';
+import { NotificationType } from '../../domain/notification/notification-type.enum';
+import { UserPrismaRepository } from '../../infrastructure/repositories/user-prisma.repository';
 
 export interface SupportRequestListItem {
   id: string;
@@ -32,6 +35,8 @@ export class SupportRequestService {
   private dmThreadRepo = new DMThreadPrismaRepository();
   private prisma = new PrismaClient();
   private supportRequestReportRepo = new SupportRequestReportPrismaRepository();
+  private notificationService = new NotificationService();
+  private userRepo = new UserPrismaRepository();
 
   public static readonly REPORT_CATEGORIES: SupportRequestReportCategory[] = [
     SupportRequestReportCategory.SPAM,
@@ -302,6 +307,27 @@ export class SupportRequestService {
     socketHandler.sendMessageToUser(payload.recipientUserId, 'new_message', supportEvent);
     socketHandler.sendMessageToUser(senderId, 'message_sent', supportEvent);
 
+    // Alıcı kullanıcıya bildirim gönder (DM_REQUEST_RECEIVED)
+    try {
+      const sender = await this.userRepo.findById(senderId);
+      if (sender) {
+        await this.notificationService.sendNotification(
+          payload.recipientUserId,
+          NotificationType.DM_REQUEST_RECEIVED,
+          {
+            requesterName: sender.name || sender.email,
+            requesterId: sender.id,
+            requestId: request.id,
+            message: payload.message,
+            amount: payload.amount,
+          }
+        );
+      }
+    } catch (error) {
+      logger.error(`Failed to send DM_REQUEST_RECEIVED notification:`, error);
+      // Don't throw - notification failure shouldn't break the create flow
+    }
+
     logger.info(`Support request created from ${senderId} to ${payload.recipientUserId}, socket events emitted`);
   }
 
@@ -359,6 +385,26 @@ export class SupportRequestService {
     // Her iki kullanıcıya da bildir
     socketHandler.sendMessageToUser(request.fromUserId, 'support_request_accepted', acceptedEvent);
     socketHandler.sendMessageToUser(request.toUserId, 'support_request_accepted', acceptedEvent);
+
+    // Request gönderen kullanıcıya bildirim gönder (SUPPORT_REQUEST_ACCEPTED)
+    try {
+      const expert = await this.userRepo.findById(expertUserId);
+      if (expert) {
+        await this.notificationService.sendNotification(
+          request.fromUserId,
+          NotificationType.SUPPORT_REQUEST_ACCEPTED,
+          {
+            accepterName: expert.name || expert.email,
+            accepterId: expert.id,
+            requestId: request.id,
+            threadId: supportThread.id,
+          }
+        );
+      }
+    } catch (error) {
+      logger.error(`Failed to send SUPPORT_REQUEST_ACCEPTED notification:`, error);
+      // Don't throw - notification failure shouldn't break the accept flow
+    }
 
     logger.info(`Support request ${requestId} accepted by ${expertUserId}, thread ${supportThread.id} created`);
 

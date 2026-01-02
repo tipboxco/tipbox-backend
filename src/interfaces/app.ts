@@ -24,6 +24,7 @@ import postRouter from './post/post.router';
 import eventRouter from './event/event.router';
 import cacheRouter from './cache/cache.router';
 import notificationRouter from './notification/notification.router';
+import newsRouter from './news/news.router';
 
 // Middleware
 import { authMiddleware } from './auth/auth.middleware';
@@ -38,6 +39,7 @@ import { getMetricsService } from '../infrastructure/metrics/metrics.service';
 import { checkSystemHealth, checkReadiness, checkLiveness } from '../infrastructure/health/health-checks';
 import { getCorsOptions } from '../infrastructure/config/cors.config';
 import { getSwaggerOptions, getSwaggerServers, swaggerAuthHelperJs } from '../infrastructure/config/swagger.config';
+import { getPublicMediaBaseUrl } from '../infrastructure/config/media.config';
 import config from '../infrastructure/config';
 import logger from '../infrastructure/logger/logger';
 
@@ -146,19 +148,42 @@ function getDynamicSwaggerOptions(req: express.Request) {
   };
 }
 
+/**
+ * Swagger spec'inde hardcoded localhost:9000 örneklerini SEED_MEDIA_BASE_URL ile değiştirir
+ */
+function replaceLocalhostExamplesInSwaggerSpec(spec: any): any {
+  try {
+    const mediaBaseUrl = getPublicMediaBaseUrl();
+    const specString = JSON.stringify(spec);
+    
+    // localhost:9000 örneklerini SEED_MEDIA_BASE_URL ile değiştir
+    const updatedSpecString = specString.replace(
+      /http:\/\/localhost:9000/g,
+      mediaBaseUrl
+    );
+    
+    return JSON.parse(updatedSpecString);
+  } catch (error) {
+    logger.warn('Swagger spec post-processing failed, using original spec', { error });
+    return spec;
+  }
+}
+
 app.get('/api-docs/swagger.json', (req, res) => {
   const swaggerSpec = swaggerJSDoc(getDynamicSwaggerOptions(req));
+  const processedSpec = replaceLocalhostExamplesInSwaggerSpec(swaggerSpec);
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
-  res.send(swaggerSpec);
+  res.send(processedSpec);
 });
 
 app.use('/api-docs', swaggerUi.serve);
 app.get('/api-docs', (req, res, next) => {
   const swaggerSpec = swaggerJSDoc(getDynamicSwaggerOptions(req));
-  swaggerUi.setup(swaggerSpec, {
+  const processedSpec = replaceLocalhostExamplesInSwaggerSpec(swaggerSpec);
+  swaggerUi.setup(processedSpec, {
     customCss: '.swagger-ui .topbar { display: none }',
     customSiteTitle: 'Tipbox API Documentation',
     customJs: '/api-docs/custom-swagger.js',
@@ -197,10 +222,12 @@ app.use('/explore', exploreRouter);
 app.use('/expert', expertRouter);
 app.use('/inventory', inventoryRouter);
 app.use('/catalog', catalogRouter);
+app.use('/products', catalogRouter); // Product endpoints için
 app.use('/brands', brandRouter);
 app.use('/search', searchRouter);
 app.use('/posts', postRouter);
 app.use('/events', eventRouter);
+app.use('/news', newsRouter);
 app.use('/interactions', interactionRouter);
 app.use('/notifications', authMiddleware, notificationRouter);
 app.use('/api/cache', cacheRouter);

@@ -1443,5 +1443,59 @@ router.get(
   }),
 );
 
+/**
+ * @openapi
+ * /brands/{brandId}/stats:
+ *   get:
+ *     summary: Brand istatistiklerini getir
+ *     description: Kullanıcının brand için istatistiklerini getirir (surveys, shares, events, totalPoints).
+ *     tags: [Brand]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: brandId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Brand ID'si
+ *     responses:
+ *       200:
+ *         description: Brand istatistikleri başarıyla getirildi.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 surveys:
+ *                   type: integer
+ *                 shares:
+ *                   type: integer
+ *                 events:
+ *                   type: integer
+ *                 totalPoints:
+ *                   type: integer
+ *       401:
+ *         description: Kimlik doğrulaması başarısız.
+ *       404:
+ *         description: Brand bulunamadı.
+ */
+router.get(
+  '/:brandId/stats',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { brandId } = req.params;
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const stats = await brandService.getBrandStats(brandId, userId);
+    return res.json(stats);
+  }),
+);
+
 export default router;
 

@@ -533,6 +533,162 @@ router.get(
   })
 );
 
+/**
+ * @openapi
+ * /events/{eventId}/join:
+ *   post:
+ *     summary: Event'e katıl
+ *     description: Kullanıcının event'e katılmasını sağlar. Response formatı GET /events/{eventId} ile aynıdır.
+ *     tags: [Events]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: eventId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Event ID
+ *     responses:
+ *       200:
+ *         description: Event'e başarıyla katıldı
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/EventDetail'
+ *       400:
+ *         description: Event'e zaten katılmış veya event'e katılamaz durumda
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Event not found
+ */
+router.post(
+  '/:eventId/join',
+  authMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const eventId = req.params.eventId;
+
+    if (!eventId) {
+      return res.status(400).json({ message: 'Event ID is required' });
+    }
+
+    try {
+      const eventDetail = await eventService.joinEvent(eventId, userId);
+      return res.json(eventDetail);
+    } catch (error: any) {
+      if (error.message === 'Event not found') {
+        return res.status(404).json({ message: 'Event not found' });
+      }
+      if (error.message.includes('already joined') || error.message.includes('not started') || error.message.includes('ended') || error.message.includes('not published')) {
+        return res.status(400).json({ message: error.message });
+      }
+      logger.error(`Error joining event ${eventId}:`, error);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  })
+);
+
+/**
+ * @openapi
+ * /events/{eventId}/requirements:
+ *   get:
+ *     summary: Event gereksinimlerini ve ilerlemeyi getir
+ *     description: Event gereksinimlerini ve kullanıcının ilerlemesini getirir.
+ *     tags: [Events]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: eventId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Event ID
+ *     responses:
+ *       200:
+ *         description: Event gereksinimleri başarıyla getirildi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 eventId:
+ *                   type: string
+ *                 requirements:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       title:
+ *                         type: string
+ *                       description:
+ *                         type: string
+ *                       type:
+ *                         type: string
+ *                         enum: [survey, post, share, other]
+ *                       completed:
+ *                         type: boolean
+ *                       progress:
+ *                         type: object
+ *                         properties:
+ *                           current:
+ *                             type: integer
+ *                           total:
+ *                             type: integer
+ *                 overallProgress:
+ *                   type: object
+ *                   properties:
+ *                     completed:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                     percentage:
+ *                       type: number
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Event not found
+ */
+router.get(
+  '/:eventId/requirements',
+  authMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const eventId = req.params.eventId;
+
+    if (!eventId) {
+      return res.status(400).json({ message: 'Event ID is required' });
+    }
+
+    try {
+      const requirements = await eventService.getEventRequirements(eventId, userId);
+      return res.json(requirements);
+    } catch (error: any) {
+      if (error.message === 'Event not found') {
+        return res.status(404).json({ message: 'Event not found' });
+      }
+      logger.error(`Error getting event requirements ${eventId}:`, error);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  })
+);
+
 export default router;
 
 

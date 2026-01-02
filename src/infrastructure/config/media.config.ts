@@ -48,6 +48,8 @@ export function buildMediaUrl(relativePath: string): string {
  * Eğer URL zaten SEED_MEDIA_BASE_URL ile eşleşiyorsa değiştirmez.
  * Eğer farklı bir endpoint'e işaret ediyorsa (localhost, eski IP, vb.), SEED_MEDIA_BASE_URL'e çevirir.
  * 
+ * Özellikle localhost veya 127.0.0.1 içeren URL'ler her zaman SEED_MEDIA_BASE_URL'e çevrilir.
+ * 
  * @param dbUrl - Database'den gelen URL
  * @returns SEED_MEDIA_BASE_URL kullanılarak normalize edilmiş URL
  */
@@ -59,6 +61,11 @@ export function normalizeMediaUrl(dbUrl: string | null | undefined): string | nu
     const publicBase = getPublicMediaBaseUrl();
     const publicUrl = new URL(publicBase);
 
+    // localhost veya 127.0.0.1 içeren URL'leri her zaman SEED_MEDIA_BASE_URL'e çevir
+    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1' || dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1')) {
+      return `${publicBase}${url.pathname}${url.search}${url.hash}`;
+    }
+
     // Eğer URL zaten SEED_MEDIA_BASE_URL endpoint'ine işaret ediyorsa değiştirme
     if (url.hostname === publicUrl.hostname && url.port === publicUrl.port) {
       return dbUrl;
@@ -67,6 +74,19 @@ export function normalizeMediaUrl(dbUrl: string | null | undefined): string | nu
     // URL'yi SEED_MEDIA_BASE_URL endpoint'ine çevir
     return `${publicBase}${url.pathname}${url.search}${url.hash}`;
   } catch (error) {
+    // Geçersiz URL ise, string içinde localhost varsa yine de değiştirmeyi dene
+    if (dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1')) {
+      try {
+        const publicBase = getPublicMediaBaseUrl();
+        // URL formatını parse etmeye çalış, pathname'i çıkar
+        const match = dbUrl.match(/https?:\/\/[^\/]+(\/.*)/);
+        if (match) {
+          return `${publicBase}${match[1]}`;
+        }
+      } catch (e) {
+        // Parse edilemezse olduğu gibi döndür
+      }
+    }
     // Geçersiz URL ise olduğu gibi döndür
     return dbUrl;
   }

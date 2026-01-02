@@ -20,6 +20,11 @@ export async function seedTaxonomy(): Promise<void> {
   console.log('📂 [seed] main categories');
   // Görsel eşleştirmeleri: kategori isimlerine göre seed media key'leri
   const categoryImageKeyMap: Record<string, string | null> = {
+    // Product Catalog kategorileri (görselleri product-catalog.seed.ts'de ayarlanacak)
+    'Cosmetics': null, // product-catalog.seed.ts'de ayarlanacak
+    'Electronics': null, // product-catalog.seed.ts'de ayarlanacak
+    'Sports Outdoors': null, // product-catalog.seed.ts'de ayarlanacak
+    // Diğer kategoriler
     'Teknoloji': 'catalog.computers-tablets',
     'Ev & Yaşam': 'catalog.home-appliances',
     'Gıda & İçecek': 'catalog.air-conditioner', // Rastgele eşleştirme
@@ -31,6 +36,11 @@ export async function seedTaxonomy(): Promise<void> {
   };
 
   const mainCategoryConfigs = [
+    // Öncelikli kategoriler (Product Catalog'dan seed edilecek)
+    { name: 'Cosmetics', description: 'Kozmetik, kişisel bakım, güzellik ürünleri' },
+    { name: 'Electronics', description: 'Elektronik cihazlar, teknoloji ürünleri' },
+    { name: 'Sports Outdoors', description: 'Spor ekipmanları, outdoor aktiviteler, fitness' },
+    // Diğer kategoriler
     { name: 'Teknoloji', description: 'Elektronik cihazlar, yazılım, mobil uygulamalar' },
     { name: 'Ev & Yaşam', description: 'Ev eşyaları, dekorasyon, temizlik ürünleri' },
     { name: 'Gıda & İçecek', description: 'Yiyecek, içecek, gıda takviyesi ürünleri' },

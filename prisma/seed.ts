@@ -8,6 +8,7 @@ import { getSeedMediaPath, SeedMediaKey } from './seed/helpers/media.helper'
 import { S3Service } from '../src/infrastructure/s3/s3.service'
 import { ProgressBar } from './seed/helpers/progress-bar'
 import { seedTaxonomy } from './seed/taxonomy.seed'
+import { seedProductCatalog } from './seed/product-catalog.seed'
 // MinIO görsel yükleme artık ayrı bir script ile yapılıyor (upload-seed-media.ts)
 // import { ensureSeedMediaUploaded } from './seed/helpers/ensure-seed-media'
 // Import from JS file (no ts-node issues)
@@ -1392,11 +1393,10 @@ async function updateBrandBannerImages(): Promise<void> {
   console.log(`   ✅ ${uploaded} görsel yüklendi, ${updated} brand güncellendi`)
 }
 
-// ===== EVENT GÖRSELLERİNİ YÜKLE VE EVENT'LERE ATA =====
-async function uploadAndAssignEventImages(): Promise<void> {
-  const s3Service = new S3Service()
-  const eventsAssetsDir = path.join(__dirname, '../tests/assets/events')
-  
+// ===== EVENT GÖRSELLERİNİ EVENT'LERE ATA =====
+// NOT: Görsel yükleme artık upload-seed-media.ts script'i ile yapılıyor
+// Bu fonksiyon sadece mevcut görselleri event'lere atar
+async function assignEventImages(): Promise<void> {
   const communityEventImages = [
     'communityevents-the-gaming-night.jpg',
     'communityevents-the-urban-commuter.jpg',
@@ -1410,39 +1410,6 @@ async function uploadAndAssignEventImages(): Promise<void> {
     'communityevents-the-road-trip-ready.jpg',
   ]
 
-  const defaultEventImages = ['event.png', 'eventcardbg.png']
-
-  let uploaded = 0
-  let updated = 0
-
-  // Community event görsellerini yükle
-  for (const fileName of communityEventImages) {
-    const filePath = path.join(eventsAssetsDir, fileName)
-    if (!existsSync(filePath)) continue
-
-    const targetKey = `events/${fileName}`
-    const fileExists = await s3Service.fileExists(targetKey)
-    if (!fileExists) {
-      const fileBuffer = readFileSync(filePath)
-      await s3Service.uploadFile(targetKey, fileBuffer, 'image/jpeg')
-      uploaded++
-    }
-  }
-
-  // Default görselleri yükle
-  for (const fileName of defaultEventImages) {
-    const filePath = path.join(eventsAssetsDir, fileName)
-    if (!existsSync(filePath)) continue
-
-    const targetKey = `events/${fileName}`
-    const fileExists = await s3Service.fileExists(targetKey)
-    if (!fileExists) {
-      const fileBuffer = readFileSync(filePath)
-      await s3Service.uploadFile(targetKey, fileBuffer, fileName.endsWith('.png') ? 'image/png' : 'image/jpeg')
-      uploaded++
-    }
-  }
-
   // Event'lere görseller ata
   const events = await prisma.wishboxEvent.findMany({
     where: {
@@ -1455,6 +1422,7 @@ async function uploadAndAssignEventImages(): Promise<void> {
 
   const communityImageKeys = communityEventImages.map(f => `events/${f}`)
   let imageIndex = 0
+  let updated = 0
 
   for (const event of events) {
     const randomImageKey = communityImageKeys[imageIndex % communityImageKeys.length]
@@ -1467,7 +1435,7 @@ async function uploadAndAssignEventImages(): Promise<void> {
     updated++
   }
 
-  console.log(`   ✅ ${uploaded} görsel yüklendi, ${updated} event güncellendi`)
+  console.log(`   ✅ ${updated} event güncellendi (görseller upload-seed-media.ts ile yüklenmeli)`)
 }
 
 // ===== APPLE BRAND EVENTS EKLE =====
@@ -1549,10 +1517,10 @@ async function addAppleBrandEvents(): Promise<void> {
 }
 
 // ===== APPLE FEED IPHONE GÖRSELLERİNİ GÜNCELLE =====
-async function updateAppleFeedIphoneImages(): Promise<void> {
-  const s3Service = new S3Service()
+// NOT: Görsel yükleme artık upload-seed-media.ts script'i ile yapılıyor
+// Bu fonksiyon sadece mevcut görselleri post'lara atar
+async function assignAppleFeedIphoneImages(): Promise<void> {
   const APPLE_BRAND_ID = '081d5660-a6d6-412a-b0ae-1557acaaa028'
-  const APPLE_PRODUCTS_DIR = path.join(__dirname, '../tests/assets/Apple_Products')
   
   const IPHONE_IMAGES = [
     'apple-product-iphone17.png',
@@ -1606,22 +1574,10 @@ async function updateAppleFeedIphoneImages(): Promise<void> {
   }
 
   let updated = 0
-  let uploaded = 0
 
   for (const post of posts) {
     const randomImage = getRandomIphoneImage(post.id)
-    const imagePath = path.join(APPLE_PRODUCTS_DIR, randomImage)
     const targetKey = `products/apple/${randomImage}`
-
-    if (!existsSync(imagePath)) continue
-
-    // MinIO'ya yükle
-    const fileExists = await s3Service.fileExists(targetKey)
-    if (!fileExists) {
-      const fileBuffer = readFileSync(imagePath)
-      await s3Service.uploadFile(targetKey, fileBuffer, 'image/png')
-      uploaded++
-    }
 
     // PostMedia'yı güncelle veya oluştur
     const existingMedia = await prisma.postMedia.findFirst({
@@ -1646,7 +1602,7 @@ async function updateAppleFeedIphoneImages(): Promise<void> {
     updated++
   }
 
-  console.log(`   ✅ ${uploaded} görsel yüklendi, ${updated} post media güncellendi`)
+  console.log(`   ✅ ${updated} post media güncellendi (görseller upload-seed-media.ts ile yüklenmeli)`)
 }
 
 // ===== EVENT POST'LARINA PRODUCT EKLE =====
@@ -2391,6 +2347,11 @@ async function main() {
   console.log('\n📋 Creating taxonomy (Experience Durations, Locations, Purposes)...')
   await seedTaxonomy()
   progress.increment('Taxonomy oluşturuldu')
+
+  // 1.5. Product Catalog (Main Categories, Sub Categories, Product Groups, Products)
+  console.log('\n📦 Creating Product Catalog...')
+  await seedProductCatalog()
+  progress.increment('Product Catalog oluşturuldu')
 
   // 2. User Themes
   console.log('📱 Creating user themes...')
@@ -12470,14 +12431,17 @@ async function main() {
     // Hata olsa bile devam et
   }
 
-  // ===== EVENT GÖRSELLERİNİ YÜKLE VE EVENT'LERE ATA =====
+  // ===== EVENT GÖRSELLERİNİ EVENT'LERE ATA =====
+  // NOT: Görsel yükleme artık upload-seed-media.ts script'i ile yapılıyor
+  // Burada sadece mevcut görselleri event'lere atıyoruz
   try {
-    progress.increment('Event görselleri yükleniyor...')
-    console.log('\n🎉 Event görselleri yükleniyor ve event\'lere atanıyor...')
-    await uploadAndAssignEventImages()
-    console.log('✅ Event görselleri yüklendi ve atandı')
+    progress.increment('Event görselleri event\'lere atanıyor...')
+    console.log('\n🎉 Event görselleri event\'lere atanıyor...')
+    console.log('   ℹ️  Görsel yükleme upload-seed-media.ts script\'i ile yapılmalı')
+    await assignEventImages()
+    console.log('✅ Event görselleri atandı')
   } catch (error) {
-    console.error('❌ Event görselleri yükleme hatası:', error)
+    console.error('❌ Event görselleri atama hatası:', error)
     // Hata olsa bile devam et
   }
 
@@ -12493,10 +12457,13 @@ async function main() {
   }
 
   // ===== APPLE FEED IPHONE GÖRSELLERİNİ GÜNCELLE =====
+  // NOT: Görsel yükleme artık upload-seed-media.ts script'i ile yapılıyor
+  // Burada sadece mevcut görselleri post'lara atıyoruz
   try {
     progress.increment('Apple feed iPhone görselleri güncelleniyor...')
     console.log('\n📱 Apple feed iPhone görselleri güncelleniyor...')
-    await updateAppleFeedIphoneImages()
+    console.log('   ℹ️  Görsel yükleme upload-seed-media.ts script\'i ile yapılmalı')
+    await assignAppleFeedIphoneImages()
     console.log('✅ Apple feed iPhone görselleri güncellendi')
   } catch (error) {
     console.error('❌ Apple feed iPhone görselleri güncelleme hatası:', error)

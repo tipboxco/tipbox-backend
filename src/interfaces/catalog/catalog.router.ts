@@ -199,5 +199,262 @@ router.get(
   }),
 );
 
+/**
+ * @openapi
+ * /catalog/products/{productId}:
+ *   get:
+ *     summary: Product detay bilgilerini getir
+ *     description: Belirli bir product'ın detaylı bilgilerini getirir.
+ *     tags: [Catalog]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: productId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Product ID'si
+ *     responses:
+ *       200:
+ *         description: Product detayı başarıyla getirildi.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 productId:
+ *                   type: string
+ *                   format: uuid
+ *                 name:
+ *                   type: string
+ *                 subName:
+ *                   type: string
+ *                   nullable: true
+ *                 description:
+ *                   type: string
+ *                   nullable: true
+ *                 image:
+ *                   type: string
+ *                   nullable: true
+ *                 brand:
+ *                   type: object
+ *                   nullable: true
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     name:
+ *                       type: string
+ *                     image:
+ *                       type: string
+ *                       nullable: true
+ *                 specs:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                 price:
+ *                   type: number
+ *                   nullable: true
+ *                 currency:
+ *                   type: string
+ *                   nullable: true
+ *       401:
+ *         description: Kimlik doğrulaması başarısız.
+ *       404:
+ *         description: Product bulunamadı.
+ */
+router.get(
+  '/products/:productId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { productId } = req.params;
+    const product = await catalogService.getProductById(productId);
+    return res.json(product);
+  }),
+);
+
+/**
+ * @openapi
+ * /catalog/products/{productId}/posts:
+ *   get:
+ *     summary: Product'a ait post'ları getir
+ *     description: Belirli bir product'a ait post'ları getirir. Feed formatında döner.
+ *     tags: [Catalog]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: productId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Product ID'si
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [experience, comments, benchmark]
+ *         description: Post tipi filtresi (opsiyonel)
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 20
+ *         description: Sayfa başına item sayısı
+ *     responses:
+ *       200:
+ *         description: Product post'ları başarıyla getirildi.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       type:
+ *                         type: string
+ *                       data:
+ *                         type: object
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       nullable: true
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
+ *       401:
+ *         description: Kimlik doğrulaması başarısız.
+ *       404:
+ *         description: Product bulunamadı.
+ */
+router.get(
+  '/products/:productId/posts',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = (req as any).user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    const { productId } = req.params;
+    const type = req.query.type as string | undefined;
+    const cursor = req.query.cursor as string | undefined;
+    const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+
+    if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
+      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+    }
+
+    const posts = await catalogService.getProductPosts(productId, userId, {
+      type,
+      cursor,
+      ...(typeof limitParam === 'number' ? { limit: limitParam } : {}),
+    });
+
+    return res.json(posts);
+  }),
+);
+
+/**
+ * @openapi
+ * /catalog/products/{productId}/news:
+ *   get:
+ *     summary: Product'a ait haberleri getir
+ *     description: Belirli bir product'a ait haberleri getirir. Cursor-based pagination destekler.
+ *     tags: [Catalog]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: productId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Product ID'si
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 20
+ *         description: Sayfa başına item sayısı
+ *     responses:
+ *       200:
+ *         description: Product haberleri başarıyla getirildi.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       title:
+ *                         type: string
+ *                       description:
+ *                         type: string
+ *                       source:
+ *                         type: string
+ *                       date:
+ *                         type: string
+ *                         format: date-time
+ *                       image:
+ *                         type: string
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       nullable: true
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
+ *       401:
+ *         description: Kimlik doğrulaması başarısız.
+ *       404:
+ *         description: Product bulunamadı.
+ */
+router.get(
+  '/products/:productId/news',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { productId } = req.params;
+    const cursor = req.query.cursor as string | undefined;
+    const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+
+    if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
+      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+    }
+
+    const news = await catalogService.getProductNews(productId, {
+      cursor,
+      ...(typeof limitParam === 'number' ? { limit: limitParam } : {}),
+    });
+
+    return res.json(news);
+  }),
+);
+
 export default router;
 

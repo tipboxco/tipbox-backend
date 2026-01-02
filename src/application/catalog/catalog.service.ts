@@ -4,6 +4,8 @@ import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import { withCache } from '../../infrastructure/cache/cache-wrapper.helper';
 import { CACHE_KEYS } from '../../infrastructure/cache/cache-keys';
 import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
+import { FeedItem, FeedItemType } from '../../interfaces/feed/feed.dto';
+import { ContentPostType } from '../../domain/content/content-post-type.enum';
 
 const prisma = new PrismaClient();
 
@@ -32,6 +34,22 @@ export interface ProductItem {
   name: string;
   image: string | null;
   productGroupId: string;
+}
+
+export interface ProductDetail {
+  productId: string;
+  name: string;
+  subName: string | null;
+  description: string | null;
+  image: string | null;
+  brand: {
+    id: string;
+    name: string;
+    image: string | null;
+  } | null;
+  specs: string[];
+  price: number | null;
+  currency: string | null;
 }
 
 export class CatalogService {
@@ -200,6 +218,356 @@ export class CatalogService {
       });
     } catch (error) {
       logger.error(`Failed to get products for product group ${productGroupId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Product detay bilgilerini getir
+   */
+  async getProductById(productId: string): Promise<ProductDetail> {
+    try {
+      const product = await prisma.product.findUnique({
+        where: { id: productId },
+        include: {
+          group: {
+            include: {
+              subCategory: {
+                include: {
+                  mainCategory: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!product) {
+        throw new Error(`Product not found: ${productId}`);
+      }
+
+      // Brand bilgisini al (product.brand string olarak saklanıyor)
+      let brandData: { id: string; name: string; image: string | null } | null = null;
+      if (product.brand) {
+        const brand = await prisma.brand.findFirst({
+          where: { name: product.brand },
+          select: {
+            id: true,
+            name: true,
+            imageUrl: true,
+          },
+        });
+
+        if (brand) {
+          brandData = {
+            id: brand.id,
+            name: brand.name,
+            image: resolveMediaUrl(brand.imageUrl),
+          };
+        }
+      }
+
+      // Specs'i parse et (eğer description'da varsa veya ayrı bir alan varsa)
+      // Şimdilik boş array döndürüyoruz, ileride specs alanı eklenebilir
+      const specs: string[] = [];
+
+      // Price ve currency şimdilik null, ileride eklenebilir
+      const price: number | null = null;
+      const currency: string | null = null;
+
+      return {
+        productId: product.id,
+        name: product.name,
+        subName: product.subName,
+        description: product.description,
+        image: resolveMediaUrl(product.imageUrl),
+        brand: brandData,
+        specs,
+        price,
+        currency,
+      };
+    } catch (error) {
+      logger.error(`Failed to get product detail for ${productId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Product'a ait post'ları getir
+   */
+  async getProductPosts(
+    productId: string,
+    userId?: string,
+    options?: { cursor?: string; limit?: number; type?: string }
+  ): Promise<{
+    items: Array<{ type: string; data: any }>;
+    pagination: { cursor?: string; hasMore: boolean; limit: number };
+  }> {
+    try {
+      // Product'ın var olup olmadığını kontrol et
+      const product = await prisma.product.findUnique({
+        where: { id: productId },
+      });
+
+      if (!product) {
+        throw new Error(`Product not found: ${productId}`);
+      }
+
+      const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+      const cursor = options?.cursor;
+      const postType = options?.type; // experience, comments, benchmark
+
+      // Post type'a göre filtreleme
+      let typeFilter: ContentPostType[] | undefined;
+      if (postType === 'experience') {
+        typeFilter = [ContentPostType.EXPERIENCE, ContentPostType.UPDATE];
+      } else if (postType === 'comments') {
+        typeFilter = [ContentPostType.FREE, ContentPostType.QUESTION];
+      } else if (postType === 'benchmark') {
+        typeFilter = [ContentPostType.COMPARE];
+      }
+      // postType yoksa tüm post tipleri
+
+      const whereClause: any = {
+        productId: productId,
+      };
+
+      if (typeFilter) {
+        whereClause.type = { in: typeFilter };
+      }
+
+      const posts = await prisma.contentPost.findMany({
+        where: whereClause,
+        include: {
+          user: {
+            include: {
+              profile: true,
+              titles: {
+                orderBy: { earnedAt: 'desc' },
+                take: 1,
+              },
+              avatars: {
+                where: { isActive: true },
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+              },
+            },
+          },
+          product: {
+            include: {
+              group: {
+                include: {
+                  subCategory: {
+                    include: {
+                      mainCategory: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          productGroup: {
+            include: {
+              subCategory: {
+                include: {
+                  mainCategory: true,
+                },
+              },
+            },
+          },
+          comparison: {
+            include: {
+              product1: true,
+              product2: true,
+              scores: true,
+            },
+          },
+          question: true,
+          tip: true,
+          tags: true,
+          likes: true,
+          comments: true,
+          favorites: true,
+          media: {
+            orderBy: { orderIndex: 'asc' },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: limit + 1,
+        ...(cursor && {
+          cursor: { id: cursor },
+          skip: 1,
+        }),
+      });
+
+      const hasMore = posts.length > limit;
+      const resultPosts = hasMore ? posts.slice(0, limit) : posts;
+      const nextCursor = hasMore && resultPosts.length > 0 ? resultPosts[resultPosts.length - 1].id : undefined;
+
+      // Map ContentPostType to FeedItemType
+      const mapContentPostTypeToFeedItemType = (type: ContentPostType): FeedItemType => {
+        switch (type) {
+          case ContentPostType.EXPERIENCE:
+          case ContentPostType.UPDATE:
+            return FeedItemType.EXPERIENCE;
+          case ContentPostType.COMPARE:
+            return FeedItemType.BENCHMARK;
+          case ContentPostType.QUESTION:
+            return FeedItemType.QUESTION;
+          case ContentPostType.TIPS:
+            return FeedItemType.TIPS_AND_TRICKS;
+          default:
+            return FeedItemType.POST;
+        }
+      };
+
+      // Convert posts to feed items
+      const feedItems: Array<{ type: string; data: any }> = resultPosts.map((post) => {
+        const baseType = mapContentPostTypeToFeedItemType(post.type);
+
+        // Product image için fallback chain
+        const product = post.product as any;
+        const group = product?.group;
+        const subCategory = group?.subCategory;
+        const mainCategory = subCategory?.mainCategory;
+        const imagePath = product?.imageUrl || group?.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
+
+        const baseData = {
+          id: post.id,
+          type: baseType,
+          user: {
+            id: post.user.id,
+            name: post.user.profile?.displayName || post.user.email || 'Anonymous',
+            avatar: resolveMediaUrl(post.user.avatars?.[0]?.imageUrl || null) || '',
+          },
+          stats: {
+            likes: (post as any).likesCount ?? post.likes?.length ?? 0,
+            comments: (post as any).commentsCount ?? post.comments?.length ?? 0,
+            shares: (post as any).sharesCount ?? 0,
+            bookmarks: (post as any).favoritesCount ?? post.favorites?.length ?? 0,
+          },
+          createdAt: post.createdAt.toISOString(),
+          product: {
+            id: product?.id || '',
+            name: product?.name || '',
+            image: resolveMediaUrl(imagePath),
+          },
+          content: post.body,
+          images: (post.media || []).map((m: any) => resolveMediaUrl(m.mediaUrl)).filter((url: string | null): url is string => url !== null),
+        };
+
+        return {
+          type: baseType,
+          data: baseData,
+        };
+      });
+
+      return {
+        items: feedItems,
+        pagination: {
+          cursor: nextCursor,
+          hasMore,
+          limit,
+        },
+      };
+    } catch (error) {
+      logger.error(`Failed to get product posts for ${productId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Product'a ait haberleri getir
+   */
+  async getProductNews(
+    productId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{
+    items: Array<{
+      id: string;
+      title: string;
+      description: string;
+      source: string;
+      date: string;
+      image: string;
+    }>;
+    pagination: { cursor?: string; hasMore: boolean; limit: number };
+  }> {
+    try {
+      // Product'ın var olup olmadığını kontrol et
+      const product = await prisma.product.findUnique({
+        where: { id: productId },
+        select: { id: true, brand: true },
+      });
+
+      if (!product) {
+        throw new Error(`Product not found: ${productId}`);
+      }
+
+      const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+      const cursor = options?.cursor;
+
+      // Product'a ait post'ları haber olarak getir
+      const posts = await prisma.contentPost.findMany({
+        where: {
+          productId: productId,
+        },
+        include: {
+          user: {
+            include: {
+              profile: true,
+            },
+          },
+          product: {
+            include: {
+              group: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: limit + 1,
+        ...(cursor && {
+          cursor: { id: cursor },
+          skip: 1,
+        }),
+      });
+
+      const hasMore = posts.length > limit;
+      const resultPosts = hasMore ? posts.slice(0, limit) : posts;
+      const nextCursor = hasMore && resultPosts.length > 0 ? resultPosts[resultPosts.length - 1].id : undefined;
+
+      // Haber response formatına dönüştür
+      const newsItems = resultPosts.map((post) => {
+        const title = post.title || post.body?.slice(0, 80) || 'News';
+        const description = post.body || '';
+        const source = product.brand || 'tipbox';
+        const image =
+          (post as any).imageUrl ||
+          post.product?.imageUrl ||
+          post.product?.group?.imageUrl ||
+          (post as any).thumbnailUrl ||
+          '';
+
+        return {
+          id: post.id,
+          title,
+          description,
+          source,
+          date: post.createdAt.toISOString(),
+          image: resolveMediaUrl(image),
+        };
+      });
+
+      return {
+        items: newsItems,
+        pagination: {
+          cursor: nextCursor,
+          hasMore,
+          limit,
+        },
+      };
+    } catch (error) {
+      logger.error(`Failed to get product news for ${productId}:`, error);
       throw error;
     }
   }

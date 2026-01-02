@@ -15,6 +15,7 @@
  * - product/ → products/
  * - userprofile/ → profile-pictures/ ve profile-banners/
  * - WhatsNews/ → news/
+ * - Product Catalog/ → product-catalog/main-categories/
  * - Apple/ → products/apple/
  */
 
@@ -644,6 +645,86 @@ async function buildSeedAssets(): Promise<void> {
   }
 
   // 13. APPLE PRODUCTS → products/apple/
+  // 12. PRODUCT CATALOG → product-catalog/
+  console.log('📦 Product Catalog görselleri ekleniyor...');
+  const productCatalogPath = path.join(assetsBasePath, 'Product Catalog', 'Main Category');
+  try {
+    // Recursive olarak tüm PNG dosyalarını bul
+    const productCatalogFiles = await getAllFiles(productCatalogPath);
+    const pngFiles = productCatalogFiles.filter(file => 
+      path.extname(file).toLowerCase() === '.png'
+    );
+    
+    for (const filePath of pngFiles) {
+      const relativePath = path.relative(productCatalogPath, filePath);
+      const fileName = path.basename(filePath);
+      const nameWithoutExt = fileName.replace(/\.[^/.]+$/, '');
+      
+      // Key oluştur: product-catalog.main-category.filename
+      const key = `product-catalog.main-category.${slugify(nameWithoutExt)}`;
+      
+      // Target key: product-catalog/main-categories/filename.png
+      // Alt klasörlerdeki dosyalar için sadece dosya adını kullan
+      const targetKey = `product-catalog/main-categories/${fileName}`;
+      
+      seedAssets.push({
+        key,
+        localPath: filePath,
+        targetKey,
+        contentType: inferContentType(filePath),
+        description: `Product Catalog görseli: ${relativePath}`,
+      });
+    }
+    console.log(`   ✅ ${pngFiles.length} Product Catalog görseli eklendi`);
+  } catch (error) {
+    console.warn(`   ⚠️  Product Catalog klasörü okunamadı: ${error}`);
+  }
+
+  // 13. EVENTS → events/
+  console.log('🎉 Event görselleri ekleniyor...');
+  const eventPath = path.join(assetsBasePath, 'event');
+  const eventsPath = path.join(assetsBasePath, 'events');
+  let effectiveEventPath: string | null = null;
+  
+  try {
+    try {
+      await fs.access(eventPath);
+      effectiveEventPath = eventPath;
+    } catch {
+      try {
+        await fs.access(eventsPath);
+        effectiveEventPath = eventsPath;
+      } catch {
+        console.warn(`   ⚠️  Event klasörü bulunamadı (event veya events)`);
+      }
+    }
+    
+    if (effectiveEventPath) {
+      const eventFiles = await fs.readdir(effectiveEventPath);
+      for (const file of eventFiles) {
+        if (file.startsWith('.')) continue;
+        const filePath = path.join(effectiveEventPath, file);
+        const stat = await fs.stat(filePath);
+        if (stat.isFile()) {
+          const nameWithoutExt = file.replace(/\.[^/.]+$/, '');
+          const slug = slugify(nameWithoutExt);
+          
+          seedAssets.push({
+            key: `event.${slug}`,
+            localPath: filePath,
+            targetKey: `events/${file}`, // Orijinal dosya adını koru
+            contentType: inferContentType(filePath),
+            description: `Event görseli: ${file}`,
+          });
+        }
+      }
+      console.log(`   ✅ ${eventFiles.filter(f => !f.startsWith('.')).length} event görseli eklendi`);
+    }
+  } catch (error) {
+    console.warn(`   ⚠️  Event klasörü okunamadı: ${error}`);
+  }
+
+  // 14. APPLE/APPLE_PRODUCTS → products/apple/
   console.log('🍎 Apple product görselleri ekleniyor...');
   const applePath = path.join(assetsBasePath, 'Apple');
   const applePathUnderscore = path.join(assetsBasePath, 'Apple_Products');

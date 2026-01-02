@@ -29,8 +29,8 @@
     "docker:up": "node scripts/docker-up.js --detached",
     "docker:start": "node scripts/docker-up.js --start",
     "docker:restart": "node scripts/docker-up.js --restart",
-    "dev:reset": "bash scripts/reset-dev.sh",
-    "test:socket-chat": "ts-node scripts/test-socket-chat.ts"
+    "dev:reset": "docker-compose exec backend bash scripts/reset-dev.sh",
+    "test:socket-chat": "docker-compose exec backend npx ts-node scripts/test-socket-chat.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

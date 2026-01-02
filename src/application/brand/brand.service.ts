@@ -1005,6 +1005,78 @@ export class BrandService {
     };
   }
 
+  /**
+   * Brand istatistiklerini getir (hafif endpoint)
+   */
+  async getBrandStats(brandId: string, userId: string): Promise<{
+    surveys: number;
+    shares: number;
+    events: number;
+    totalPoints: number;
+  }> {
+    try {
+      // Brand'in var olup olmadığını kontrol et
+      const brand = await this.prisma.brand.findUnique({
+        where: { id: brandId },
+      });
+
+      if (!brand) {
+        throw new NotFoundError(`Brand not found: ${brandId}`);
+      }
+
+      // Kullanıcının bu marka için kazandığı rozetler
+      const allRewards = await this.prisma.bridgeReward.findMany({
+        where: {
+          userId,
+          brandId,
+        },
+      });
+
+      // Toplam puan
+      const totalPoints = allRewards.length * 50;
+
+      // Stats: kullanıcıya özel istatistikler
+      // Surveys: kullanıcının bu marka için katıldığı survey sayısı
+      const userSurveys = await this.prisma.brandSurveyAnswer.findMany({
+        where: {
+          userId,
+          question: {
+            survey: {
+              brandId,
+            },
+          },
+        },
+        distinct: ['questionId'],
+      });
+
+      // Shares: kullanıcının bu marka için yaptığı bridgePost sayısı
+      const userBridgePostsCount = await this.prisma.bridgePost.count({
+        where: {
+          userId,
+          brandId,
+        },
+      });
+
+      // Events: kullanıcının bu marka için katıldığı event sayısı
+      const userEvents = await this.prisma.wishboxStats.findMany({
+        where: {
+          userId,
+        },
+        distinct: ['eventId'],
+      });
+
+      return {
+        surveys: userSurveys.length,
+        shares: userBridgePostsCount,
+        events: userEvents.length,
+        totalPoints,
+      };
+    } catch (error) {
+      logger.error(`Failed to get brand stats for ${brandId}:`, error);
+      throw error;
+    }
+  }
+
   async getBrandHistoryPoints(
     brandId: string,
     userId: string,

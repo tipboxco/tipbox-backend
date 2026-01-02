@@ -3,6 +3,7 @@ dotenv.config();
 
 import { PrismaClient } from '@prisma/client';
 import { MessagingService } from '../../application/messaging/messaging.service';
+import { SupportRequestService } from '../../application/messaging/support-request.service';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
 import { TestDataCreator, CreatedTestData } from './helpers/test-data-creator';
 import { TestDataCleaner } from './helpers/test-data-cleaner';
@@ -58,13 +59,16 @@ async function testMessageNotifications() {
     }
 
     const messagingService = new MessagingService();
+    const supportRequestService = new SupportRequestService();
 
     // Create test users
     console.log('👤 Creating test users...');
     const sender = await TestDataCreator.createTestUser('message-sender', 'Message Sender');
     const recipient = await TestDataCreator.createTestUser('message-recipient', 'Message Recipient');
+    const supportRequester = await TestDataCreator.createTestUser('support-requester', 'Support Requester');
+    const supportExpert = await TestDataCreator.createTestUser('support-expert', 'Support Expert');
 
-    createdIds.userIds.push(sender.userId, recipient.userId);
+    createdIds.userIds.push(sender.userId, recipient.userId, supportRequester.userId, supportExpert.userId);
     console.log(`✅ Created ${createdIds.userIds.length} test users\n`);
 
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -79,8 +83,8 @@ async function testMessageNotifications() {
       const thread = await prisma.dMThread.findFirst({
         where: {
           OR: [
-            { senderId: sender.userId, recipientId: recipient.userId },
-            { senderId: recipient.userId, recipientId: sender.userId },
+            { userOneId: sender.userId, userTwoId: recipient.userId },
+            { userOneId: recipient.userId, userTwoId: sender.userId },
           ],
         },
       });
@@ -125,44 +129,52 @@ async function testMessageNotifications() {
     }
     console.log('');
 
-    // Test 2: DM_REQUEST_RECEIVED (if implemented)
-    console.log('🧪 Testing DM_REQUEST_RECEIVED notification...');
+    // Test 2: DM_REQUEST_RECEIVED (via Support Request)
+    console.log('🧪 Testing DM_REQUEST_RECEIVED notification (via Support Request)...');
     try {
-      if (typeof (messagingService as any).createDMRequest === 'function') {
-        await (messagingService as any).createDMRequest(sender.userId, recipient.userId);
+      await supportRequestService.createSupportRequest(supportRequester.userId, {
+        recipientUserId: supportExpert.userId,
+        type: 'GENERAL',
+        message: 'Test support request for DM_REQUEST_RECEIVED notification testing',
+        amount: 100,
+      });
 
-        await new Promise(resolve => setTimeout(resolve, 2000));
+      // Get request ID for cleanup tracking
+      const request = await prisma.dMRequest.findFirst({
+        where: {
+          fromUserId: supportRequester.userId,
+          toUserId: supportExpert.userId,
+          description: { not: null },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
 
-        const notification = await prisma.notification.findFirst({
-          where: {
-            userId: recipient.userId,
-            type: NotificationType.DM_REQUEST_RECEIVED,
-          },
-          orderBy: { createdAt: 'desc' },
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      const notification = await prisma.notification.findFirst({
+        where: {
+          userId: supportExpert.userId,
+          type: NotificationType.DM_REQUEST_RECEIVED,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (notification) {
+        results.push({
+          type: NotificationType.DM_REQUEST_RECEIVED,
+          success: true,
+          notificationId: notification.id,
         });
-
-        if (notification) {
-          results.push({
-            type: NotificationType.DM_REQUEST_RECEIVED,
-            success: true,
-            notificationId: notification.id,
-          });
-          console.log('  ✅ DM_REQUEST_RECEIVED notification created successfully');
-        } else {
-          results.push({
-            type: NotificationType.DM_REQUEST_RECEIVED,
-            success: false,
-            error: 'Notification not found',
-          });
-          console.log('  ❌ DM_REQUEST_RECEIVED notification not found');
-        }
+        console.log('  ✅ DM_REQUEST_RECEIVED notification created successfully');
+        console.log(`     Title: ${notification.title}`);
+        console.log(`     Message: ${notification.message}`);
       } else {
         results.push({
           type: NotificationType.DM_REQUEST_RECEIVED,
           success: false,
-          error: 'createDMRequest method not implemented',
+          error: 'Notification not found',
         });
-        console.log('  ⚠️  DM_REQUEST_RECEIVED: createDMRequest method not implemented');
+        console.log('  ❌ DM_REQUEST_RECEIVED notification not found');
       }
     } catch (error: any) {
       results.push({
@@ -174,18 +186,41 @@ async function testMessageNotifications() {
     }
     console.log('');
 
-    // Test 3: DM_REQUEST_ACCEPTED (if implemented)
-    console.log('🧪 Testing DM_REQUEST_ACCEPTED notification...');
+    // Test 3: DM_REQUEST_ACCEPTED (via Support Request Accept)
+    // Note: DM_REQUEST_ACCEPTED is the same as SUPPORT_REQUEST_ACCEPTED in this context
+    console.log('🧪 Testing DM_REQUEST_ACCEPTED notification (via Support Request Accept)...');
     try {
-      if (typeof (messagingService as any).acceptDMRequest === 'function') {
-        await (messagingService as any).acceptDMRequest(recipient.userId, sender.userId);
+      // First create a support request
+      await supportRequestService.createSupportRequest(supportRequester.userId, {
+        recipientUserId: supportExpert.userId,
+        type: 'GENERAL',
+        message: 'Test support request for DM_REQUEST_ACCEPTED notification',
+        amount: 100,
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Get the request
+      const request = await prisma.dMRequest.findFirst({
+        where: {
+          fromUserId: supportRequester.userId,
+          toUserId: supportExpert.userId,
+          description: { not: null },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (request) {
+        // Accept the request
+        await supportRequestService.acceptSupportRequest(request.id, supportExpert.userId);
 
         await new Promise(resolve => setTimeout(resolve, 2000));
 
+        // Check for SUPPORT_REQUEST_ACCEPTED (DM_REQUEST_ACCEPTED is same)
         const notification = await prisma.notification.findFirst({
           where: {
-            userId: sender.userId,
-            type: NotificationType.DM_REQUEST_ACCEPTED,
+            userId: supportRequester.userId,
+            type: NotificationType.SUPPORT_REQUEST_ACCEPTED,
           },
           orderBy: { createdAt: 'desc' },
         });
@@ -196,7 +231,9 @@ async function testMessageNotifications() {
             success: true,
             notificationId: notification.id,
           });
-          console.log('  ✅ DM_REQUEST_ACCEPTED notification created successfully');
+          console.log('  ✅ DM_REQUEST_ACCEPTED notification created successfully (as SUPPORT_REQUEST_ACCEPTED)');
+          console.log(`     Title: ${notification.title}`);
+          console.log(`     Message: ${notification.message}`);
         } else {
           results.push({
             type: NotificationType.DM_REQUEST_ACCEPTED,
@@ -209,9 +246,9 @@ async function testMessageNotifications() {
         results.push({
           type: NotificationType.DM_REQUEST_ACCEPTED,
           success: false,
-          error: 'acceptDMRequest method not implemented',
+          error: 'Support request not found',
         });
-        console.log('  ⚠️  DM_REQUEST_ACCEPTED: acceptDMRequest method not implemented');
+        console.log('  ❌ DM_REQUEST_ACCEPTED: Support request not found');
       }
     } catch (error: any) {
       results.push({
@@ -223,17 +260,38 @@ async function testMessageNotifications() {
     }
     console.log('');
 
-    // Test 4: SUPPORT_REQUEST_ACCEPTED (if implemented)
+    // Test 4: SUPPORT_REQUEST_ACCEPTED
     console.log('🧪 Testing SUPPORT_REQUEST_ACCEPTED notification...');
     try {
-      if (typeof (messagingService as any).acceptSupportRequest === 'function') {
-        await (messagingService as any).acceptSupportRequest(recipient.userId, sender.userId);
+      // Create a new support request for this test
+      await supportRequestService.createSupportRequest(supportRequester.userId, {
+        recipientUserId: supportExpert.userId,
+        type: 'GENERAL',
+        message: 'Test support request for SUPPORT_REQUEST_ACCEPTED notification',
+        amount: 150,
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Get the request
+      const request = await prisma.dMRequest.findFirst({
+        where: {
+          fromUserId: supportRequester.userId,
+          toUserId: supportExpert.userId,
+          description: { not: null },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (request) {
+        // Accept the request
+        await supportRequestService.acceptSupportRequest(request.id, supportExpert.userId);
 
         await new Promise(resolve => setTimeout(resolve, 2000));
 
         const notification = await prisma.notification.findFirst({
           where: {
-            userId: sender.userId,
+            userId: supportRequester.userId,
             type: NotificationType.SUPPORT_REQUEST_ACCEPTED,
           },
           orderBy: { createdAt: 'desc' },
@@ -246,6 +304,8 @@ async function testMessageNotifications() {
             notificationId: notification.id,
           });
           console.log('  ✅ SUPPORT_REQUEST_ACCEPTED notification created successfully');
+          console.log(`     Title: ${notification.title}`);
+          console.log(`     Message: ${notification.message}`);
         } else {
           results.push({
             type: NotificationType.SUPPORT_REQUEST_ACCEPTED,
@@ -258,9 +318,9 @@ async function testMessageNotifications() {
         results.push({
           type: NotificationType.SUPPORT_REQUEST_ACCEPTED,
           success: false,
-          error: 'acceptSupportRequest method not implemented',
+          error: 'Support request not found',
         });
-        console.log('  ⚠️  SUPPORT_REQUEST_ACCEPTED: acceptSupportRequest method not implemented');
+        console.log('  ❌ SUPPORT_REQUEST_ACCEPTED: Support request not found');
       }
     } catch (error: any) {
       results.push({

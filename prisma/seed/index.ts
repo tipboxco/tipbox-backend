@@ -8,6 +8,7 @@ import { seedMarketplace } from './marketplace.seed';
 import { seedExplore } from './explore.seed';
 import { seedMessaging } from './messaging.seed';
 import { seedBrandProducts } from './brand-products.seed';
+import { seedProductCatalog } from './product-catalog.seed';
 // Import from JS file (no ts-node issues)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { markSeedStart, markSeedEnd, addSeedUserId } = require('./seed-metadata');
@@ -34,6 +35,7 @@ export async function runAllSeeds(): Promise<void> {
   
   try {
     await seedTaxonomy();
+    await seedProductCatalog(); // Product Catalog seed (taxonomy'den sonra, çünkü main category'leri kullanıyor)
     await seedUsersAndProfiles();
     await seedProductsAndContent();
     await seedFeedAndTrending();

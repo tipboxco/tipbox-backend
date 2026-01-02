@@ -753,4 +753,175 @@ export class EventService {
 
     return mapping[postType] || FeedItemType.POST;
   }
+
+  /**
+   * Event'e katıl
+   */
+  async joinEvent(eventId: string, userId: string): Promise<EventDetail> {
+    try {
+      // Event'in var olup olmadığını kontrol et
+      const event = await this.prisma.wishboxEvent.findUnique({
+        where: { id: eventId },
+      });
+
+      if (!event) {
+        throw new Error('Event not found');
+      }
+
+      // Event'in aktif olup olmadığını kontrol et
+      const now = new Date();
+      if (event.startDate > now) {
+        throw new Error('Event has not started yet');
+      }
+      if (event.endDate < now) {
+        throw new Error('Event has ended');
+      }
+
+      // Event status'u PUBLISHED olmalı
+      if (event.status !== 'PUBLISHED') {
+        throw new Error('Event is not published');
+      }
+
+      // Kullanıcının zaten katılmış olup olmadığını kontrol et
+      const existingStats = await this.prisma.wishboxStats.findUnique({
+        where: {
+          userId_eventId: {
+            userId,
+            eventId: event.id,
+          },
+        },
+      });
+
+      if (existingStats) {
+        // Zaten katılmış, mevcut event detayını döndür
+        logger.info(`User ${userId} already joined event ${eventId}`);
+        return await this.getEventDetail(eventId, userId);
+      }
+
+      // wishboxStats'a kayıt ekle
+      await this.prisma.wishboxStats.create({
+        data: {
+          userId,
+          eventId: event.id,
+          participated: 0,
+          completed: false,
+        },
+      });
+
+      logger.info(`User ${userId} joined event ${eventId}`);
+
+      // Event detayını döndür (isJoined: true olacak)
+      return await this.getEventDetail(eventId, userId);
+    } catch (error) {
+      logger.error(`Failed to join event ${eventId} for user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Event gereksinimlerini ve kullanıcının ilerlemesini getir
+   */
+  async getEventRequirements(eventId: string, userId: string): Promise<{
+    eventId: string;
+    requirements: Array<{
+      id: string;
+      title: string;
+      description: string;
+      type: string;
+      completed: boolean;
+      progress?: {
+        current: number;
+        total: number;
+      };
+    }>;
+    overallProgress: {
+      completed: number;
+      total: number;
+      percentage: number;
+    };
+  }> {
+    try {
+      // Event'in var olup olmadığını kontrol et
+      const event = await this.prisma.wishboxEvent.findUnique({
+        where: { id: eventId },
+      });
+
+      if (!event) {
+        throw new Error('Event not found');
+      }
+
+      // Kullanıcının event stats'ını al
+      const userStats = await this.prisma.wishboxStats.findUnique({
+        where: {
+          userId_eventId: {
+            userId,
+            eventId: event.id,
+          },
+        },
+      });
+
+      // Event'e ait post sayısı (kullanıcının event ile ilgili post'ları)
+      const userEventPosts = await this.prisma.contentPost.count({
+        where: {
+          userId,
+          eventId: event.id,
+        },
+      });
+
+      // Event'e ait share sayısı (bridgePost veya başka bir tablo olabilir)
+      // Şimdilik basit bir hesaplama yapıyoruz
+      const userShares = 0; // TODO: Share sayısını hesapla
+
+      // Requirements listesi
+      const requirements = [
+        {
+          id: `${eventId}-survey`,
+          title: 'Anketi Tamamla',
+          description: 'Event anketini tamamlayarak puan kazan',
+          type: 'survey',
+          completed: userStats ? (userStats.totalParticipated || 0) >= 1 : false,
+          progress: {
+            current: userStats ? (userStats.totalParticipated || 0) : 0,
+            total: 1,
+          },
+        },
+        {
+          id: `${eventId}-post`,
+          title: 'Post Paylaş',
+          description: 'Event ile ilgili bir post paylaş',
+          type: 'post',
+          completed: userEventPosts >= 1,
+          progress: {
+            current: userEventPosts,
+            total: 1,
+          },
+        },
+        {
+          id: `${eventId}-share`,
+          title: 'Paylaşım Yap',
+          description: "Event'i sosyal medyada paylaş",
+          type: 'share',
+          completed: userShares >= 1,
+        },
+      ];
+
+      // Overall progress hesapla
+      const completedCount = requirements.filter((req) => req.completed).length;
+      const totalCount = requirements.length;
+      const percentage = totalCount > 0 ? Math.round((completedCount / totalCount) * 100 * 100) / 100 : 0;
+
+      return {
+        eventId: event.id,
+        requirements,
+        overallProgress: {
+          completed: completedCount,
+          total: totalCount,
+          percentage,
+        },
+      };
+    } catch (error) {
+      logger.error(`Failed to get event requirements for ${eventId}:`, error);
+      throw error;
+    }
+  }
 }

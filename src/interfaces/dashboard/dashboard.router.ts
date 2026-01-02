@@ -659,12 +659,21 @@ const dashboardScript = `
     async function updateDockerStatusUI() {
       try {
         const response = await fetch('/docker/status');
-        if (!response.ok) {
-          return;
-        }
-        const data = await response.json();
-        const statuses = data.statuses || {};
+        const statuses = {};
         
+        if (!response.ok) {
+          console.warn('Docker status endpoint returned error:', response.status);
+          // Hata durumunda tüm container'ları offline olarak işaretle
+          const allContainers = ['tipbox_backend', 'tipbox_minio', 'tipbox_pgadmin', 'tipbox_prisma_studio'];
+          allContainers.forEach(function(containerName) {
+            statuses[containerName] = false;
+          });
+        } else {
+          const data = await response.json();
+          Object.assign(statuses, data.statuses || {});
+        }
+        
+        // Tüm container'lar için durumu güncelle
         Object.keys(statuses).forEach(function(containerName) {
           const isRunning = !!statuses[containerName];
           const elements = document.querySelectorAll('[data-container="' + containerName + '"]');
@@ -704,7 +713,21 @@ const dashboardScript = `
           });
         });
       } catch (e) {
-        // Sessizce yut, dashboard çalışmaya devam etsin
+        console.error('Error updating docker status UI:', e);
+        // Hata durumunda tüm container'ları offline olarak işaretle
+        const allContainers = ['tipbox_backend', 'tipbox_minio', 'tipbox_pgadmin', 'tipbox_prisma_studio'];
+        allContainers.forEach(function(containerName) {
+          const elements = document.querySelectorAll('[data-container="' + containerName + '"]');
+          elements.forEach(function(el) {
+            const dot = el.querySelector('.status-dot');
+            const label = el.querySelector('.status-label');
+            if (!dot) return;
+            
+            dot.classList.remove('status-online', 'status-offline');
+            dot.classList.add('status-offline');
+            if (label) label.textContent = 'Offline';
+          });
+        });
       }
     }
     
@@ -1240,6 +1263,17 @@ router.get('/', (req: Request, res: Response) => {
       padding: 24px;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       cursor: pointer;
+      display: block;
+      text-decoration: none;
+      color: inherit;
+    }
+    a.port-card {
+      text-decoration: none;
+      color: inherit;
+    }
+    a.port-card:hover {
+      text-decoration: none;
+      color: inherit;
     }
     .port-card:hover {
       transform: translateY(-2px);
@@ -1751,7 +1785,7 @@ router.get('/', (req: Request, res: Response) => {
           // Main Services için hostname kullan (Backend, Swagger, Socket)
           const url = `${apiBaseUrl}${service.path || ''}`;
           return `
-          <div class="port-card" onclick="window.open('${url}', '_blank')">
+          <a href="${url}" target="_blank" rel="noopener noreferrer" class="port-card">
             <div class="service-header">
             <h3>
               <i class="fas ${service.icon} icon"></i>
@@ -1767,10 +1801,10 @@ router.get('/', (req: Request, res: Response) => {
             <p>${service.description}</p>
             <div class="url">${url}</div>
             ${service.canControlContainer ? `
-              <div class="container-actions" onclick="event.stopPropagation()">
+              <div class="container-actions" onclick="event.preventDefault(); event.stopPropagation();">
                 <button
                   class="container-button stop"
-                  onclick="dockerContainerStop('${service.containerName}'); event.stopPropagation();"
+                  onclick="dockerContainerStop('${service.containerName}'); event.preventDefault(); event.stopPropagation();"
                   title="Stop ${service.containerName} container"
                 >
                   <i class="fas fa-stop"></i>
@@ -1778,7 +1812,7 @@ router.get('/', (req: Request, res: Response) => {
                 </button>
                 <button
                   class="container-button start"
-                  onclick="dockerContainerStart('${service.containerName}'); event.stopPropagation();"
+                  onclick="dockerContainerStart('${service.containerName}'); event.preventDefault(); event.stopPropagation();"
                   title="Start ${service.containerName} container"
                 >
                   <i class="fas fa-play"></i>
@@ -1786,7 +1820,7 @@ router.get('/', (req: Request, res: Response) => {
                 </button>
           </div>
             ` : ''}
-          </div>
+          </a>
           `;
         }).join('')}
       </div>
@@ -1799,7 +1833,7 @@ router.get('/', (req: Request, res: Response) => {
           // Interfaces için VPN IP veya localhost:port kullan
           const url = `${interfacesBaseUrl}:${service.port}${service.path || ''}`;
           return `
-          <div class="port-card" onclick="window.open('${url}', '_blank')">
+          <a href="${url}" target="_blank" rel="noopener noreferrer" class="port-card">
             <div class="service-header">
             <h3>
               <i class="fas ${service.icon} icon"></i>
@@ -1814,7 +1848,7 @@ router.get('/', (req: Request, res: Response) => {
             </div>
             <p>${service.description}</p>
             <div class="url">${url}</div>
-          </div>
+          </a>
           `;
         }).join('')}
       </div>
@@ -2380,70 +2414,64 @@ router.post('/docker/container/start', async (req: Request, res: Response) => {
 });
 
 router.get('/docker/status', async (req: Request, res: Response) => {
-  try {
-    // Base container isimleri (ortam suffix'i olmadan)
-    const baseContainerNames = [
-      'tipbox_backend',
-      'tipbox_minio',
-      'tipbox_pgadmin',
-      'tipbox_prisma_studio'
-    ];
+  // Base container isimleri (ortam suffix'i olmadan)
+  const baseContainerNames = [
+    'tipbox_backend',
+    'tipbox_minio',
+    'tipbox_pgadmin',
+    'tipbox_prisma_studio'
+  ];
 
-    const statuses: Record<string, boolean> = {};
-    let allRunning = true;
+  const statuses: Record<string, boolean> = {};
+  let allRunning = true;
 
-    for (const baseName of baseContainerNames) {
-      // Ortam suffix'i ile container ismini oluştur
-      const containerName = getContainerName(baseName);
-      let isRunning = false;
+  for (const baseName of baseContainerNames) {
+    // Ortam suffix'i ile container ismini oluştur
+    const containerName = getContainerName(baseName);
+    let isRunning = false;
 
-      // 1) Önce docker CLI ile kontrol etmeyi dene (varsa)
-      // Önceki commit'teki gibi: base name ile partial match yap (Docker filter zaten partial match yapıyor)
-      // Bu sayede hem tipbox_backend hem de tipbox_backend_test bulunur
+    // 1) Önce docker CLI ile kontrol etmeyi dene (varsa)
+    // Önceki commit'teki gibi: base name ile partial match yap (Docker filter zaten partial match yapıyor)
+    // Bu sayede hem tipbox_backend hem de tipbox_backend_test bulunur
+    try {
+      const result = await execAsync(`docker ps --filter "name=${baseName}" --format "{{.Names}}"`, {
+        maxBuffer: 1024 * 1024,
+        encoding: 'utf8'
+      });
+      const output = result.stdout.trim();
+      // Container isminin base name ile başladığını ve tam olarak eşleştiğini kontrol et
+      isRunning = output.split('\n').some(line => {
+        const trimmed = line.trim();
+        return trimmed === containerName;
+      });
+    } catch (error: any) {
+      // docker yoksa veya erişilemiyorsa logla ama akışı bozma
+      console.warn(`docker ps kontrolü başarısız (${baseName}):`, error?.message || error);
+    }
+
+    // 2) CLI başarısızsa veya isim eşleşmiyorsa, port/health-check fallback kullan
+    // Not: checkContainerByPort base name kullanır çünkü port map'te base name'ler var
+    if (!isRunning) {
       try {
-        const result = await execAsync(`docker ps --filter "name=${baseName}" --format "{{.Names}}"`, {
-          maxBuffer: 1024 * 1024,
-          encoding: 'utf8'
-        });
-        const output = result.stdout.trim();
-        // Container isminin base name ile başladığını ve tam olarak eşleştiğini kontrol et
-        isRunning = output.split('\n').some(line => {
-          const trimmed = line.trim();
-          return trimmed === containerName;
-        });
+        isRunning = await checkContainerByPort(baseName);
       } catch (error: any) {
-        // docker yoksa veya erişilemiyorsa logla ama akışı bozma
-        console.warn(`docker ps kontrolü başarısız (${baseName}):`, error?.message || error);
-      }
-
-      // 2) CLI başarısızsa veya isim eşleşmiyorsa, port/health-check fallback kullan
-      // Not: checkContainerByPort base name kullanır çünkü port map'te base name'ler var
-      if (!isRunning) {
-        try {
-          isRunning = await checkContainerByPort(baseName);
-        } catch (error: any) {
-          console.warn(`Port kontrolü başarısız (${baseName}):`, error?.message || error);
-          isRunning = false;
-        }
-      }
-
-      // Response'ta base name kullan (frontend'e gönderirken)
-      statuses[baseName] = isRunning;
-      if (!isRunning) {
-        allRunning = false;
+        console.warn(`Port kontrolü başarısız (${baseName}):`, error?.message || error);
+        isRunning = false;
       }
     }
 
-    return res.json({
-      allRunning,
-      statuses
-    });
-  } catch (error: any) {
-    console.error('Docker status error:', error);
-    return res.status(500).json({ 
-      error: error.message || 'Error occurred while checking container status'
-    });
+    // Response'ta base name kullan (frontend'e gönderirken)
+    statuses[baseName] = isRunning;
+    if (!isRunning) {
+      allRunning = false;
+    }
   }
+
+  // Her zaman başarılı response döndür (hata olsa bile status bilgisi gönder)
+  return res.json({
+    allRunning,
+    statuses
+  });
 });
 
 // Data Management endpoint (5 komut için)
