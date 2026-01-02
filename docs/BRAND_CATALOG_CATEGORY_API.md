@@ -635,3 +635,4 @@ Bu endpoint'ler mobil uygulama için optimize edilmiştir:
 
 Mobil uygulamada yukarıdaki performans önerilerini uygulayarak kullanıcı deneyimini en üst seviyeye çıkarabilirsiniz.
 
+

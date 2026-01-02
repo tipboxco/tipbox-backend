@@ -11016,6 +11016,9 @@ async function main() {
   // 6. DM Threads (Normal DM conversations)
   console.log('💬 Creating DM threads...')
   
+  // Julia user ID (from user.seed.ts)
+  const JULIA_USER_ID = '99999999-9999-4999-9999-999999999999';
+
   type ThreadSeed = {
     userOneId: string;
     userTwoId: string;
@@ -11031,94 +11034,175 @@ async function main() {
     }>;
   };
 
-  const DM_PARTNER_IDS = [
-    TARGET_USER_ID,
-    ...TRUST_USER_IDS,
-    ...TRUSTER_USER_IDS,
-    COMMUNITY_COACH_USER_ID,
-  ];
-
-  const dmConversationTemplates = [
+  // Gerçek kullanıcılar arasında karşılıklı DM thread'leri
+  // Ömer (TEST_USER_ID) ile diğer gerçek kullanıcılar arasında konuşmalar
+  const NORMAL_DM_THREAD_SEEDS: ThreadSeed[] = [
+    // Ömer <-> Market Test User
     {
-      partnerOpening: 'Selam! Yeni Dyson karşılaştırmanı okudum.',
-      testReply: 'Çok sevindim, sorularını gönderebilirsin.',
-      partnerFollow: 'Boost modu bataryayı çok tüketiyor mu?',
-      testFollow: 'Yoğun kullanımda evet, eco modda daha dengeli.',
-    },
-    {
-      partnerOpening: 'Marketplace’deki yeni badge’i inceledim.',
-      testReply: 'Feedback gönderirsen geliştirme listesine eklerim.',
-      partnerFollow: 'Elbette, screenshot ile yollarım.',
-      testFollow: 'Harika, bekliyorum.',
-    },
-    {
-      partnerOpening: 'Smartwatch rehberini paylaştığın için teşekkürler!',
-      testReply: 'Rica ederim, hangi modeli düşünüyorsun?',
-      partnerFollow: 'Galaxy Watch 7 ile Pixel Watch arasında kaldım.',
-      testFollow: 'Android kullanıyorsan Galaxy öneririm.',
-    },
-    {
-      partnerOpening: 'Yeni kulaklık benchmark’ı efsane olmuş.',
-      testReply: 'Ses profillerini karşılaştırmak epey sürdü.',
-      partnerFollow: 'Noise-cancel testleri için metodun neydi?',
-      testFollow: 'Standart 70db fan + metro kaydı kullanıyorum.',
-    },
-    {
-      partnerOpening: 'Subcategory feed’deki yeni formatı beğendim.',
-      testReply: 'UI ekibi çok emek verdi, paylaştığın için sağ ol.',
-      partnerFollow: 'Belki dark mode varyantı da eklenebilir.',
-      testFollow: 'Çalışıyoruz, roadmap’te var.',
-    },
-  ];
-
-  const NORMAL_DM_THREAD_SEEDS: ThreadSeed[] = DM_PARTNER_IDS.slice(0, 10).map((partnerId, index) => {
-    const template = dmConversationTemplates[index % dmConversationTemplates.length];
-    const baseMinutes = 35 + index * 6;
-    const unreadForTestUser = index < 5;
-    const messages = [
-      {
-        senderId: partnerId,
-        message: template.partnerOpening,
-        minutesAgo: baseMinutes + 15,
-        isRead: true,
-        context: 'DM' as const,
-      },
-      {
-        senderId: TEST_USER_ID,
-        message: template.testReply,
-        minutesAgo: baseMinutes + 8,
-        isRead: true,
-        context: 'DM' as const,
-      },
-    ];
-
-    if (unreadForTestUser) {
-      messages.push({
-        senderId: partnerId,
-        message: template.partnerFollow,
-        minutesAgo: baseMinutes,
-        isRead: false,
-        context: 'DM' as const,
-      });
-    } else {
-      messages.push({
-        senderId: TEST_USER_ID,
-        message: template.testFollow,
-        minutesAgo: baseMinutes,
-        isRead: true,
-        context: 'DM' as const,
-      });
-    }
-
-    return {
       userOneId: TEST_USER_ID,
-      userTwoId: partnerId,
-      unreadCountUserOne: unreadForTestUser ? 2 : 0,
-      unreadCountUserTwo: unreadForTestUser ? 0 : 1,
+      userTwoId: TARGET_USER_ID,
+      unreadCountUserOne: 1,
+      unreadCountUserTwo: 0,
       isSupportThread: false,
-      messages,
-    };
-  });
+      messages: [
+        {
+          senderId: TEST_USER_ID,
+          message: 'Selam! Yeni ürün incelemesini gördün mü?',
+          minutesAgo: 30,
+          isRead: true,
+          context: 'DM',
+        },
+        {
+          senderId: TARGET_USER_ID,
+          message: 'Evet, mükemmel olmuş. Birkaç önerim olacak 👌',
+          minutesAgo: 10,
+          isRead: false,
+          context: 'DM',
+        },
+      ],
+    },
+    // Ömer <-> Trust User 1
+    {
+      userOneId: TRUST_USER_IDS[0],
+      userTwoId: TEST_USER_ID,
+      unreadCountUserOne: 0,
+      unreadCountUserTwo: 2,
+      isSupportThread: false,
+      messages: [
+        {
+          senderId: TRUST_USER_IDS[0],
+          message: 'Merhaba! Mini destek görüşmesi için uygun musun?',
+          minutesAgo: 45,
+          isRead: false,
+          context: 'DM',
+        },
+        {
+          senderId: TRUST_USER_IDS[0],
+          message: 'Bu arada geçen hafta gönderdiğim TIPS için teşekkür ederim.',
+          minutesAgo: 40,
+          isRead: false,
+          context: 'DM',
+        },
+        {
+          senderId: TEST_USER_ID,
+          message: 'Ben de teşekkür ederim, çok yardımcı oldun 🙏',
+          minutesAgo: 5,
+          isRead: true,
+          context: 'DM',
+        },
+      ],
+    },
+    // Ömer <-> Trust User 2
+    {
+      userOneId: TEST_USER_ID,
+      userTwoId: TRUST_USER_IDS[1],
+      unreadCountUserOne: 0,
+      unreadCountUserTwo: 1,
+      isSupportThread: false,
+      messages: [
+        {
+          senderId: TEST_USER_ID,
+          message: 'Merhaba! Ürün hakkında birkaç sorum var.',
+          minutesAgo: 20,
+          isRead: true,
+          context: 'DM',
+        },
+        {
+          senderId: TRUST_USER_IDS[1],
+          message: 'Tabii, nasıl yardımcı olabilirim?',
+          minutesAgo: 15,
+          isRead: false,
+          context: 'DM',
+        },
+      ],
+    },
+    // Ömer <-> Trust User 3
+    {
+      userOneId: TRUST_USER_IDS[2],
+      userTwoId: TEST_USER_ID,
+      unreadCountUserOne: 0,
+      unreadCountUserTwo: 0,
+      isSupportThread: false,
+      messages: [
+        {
+          senderId: TRUST_USER_IDS[2],
+          message: 'Yeni yazdığın post çok faydalı olmuş!',
+          minutesAgo: 60,
+          isRead: true,
+          context: 'DM',
+        },
+        {
+          senderId: TEST_USER_ID,
+          message: 'Teşekkür ederim, beğenmene sevindim 😊',
+          minutesAgo: 55,
+          isRead: true,
+          context: 'DM',
+        },
+      ],
+    },
+    // Ömer <-> Truster User 1
+    {
+      userOneId: TEST_USER_ID,
+      userTwoId: TRUSTER_USER_IDS[0],
+      unreadCountUserOne: 1,
+      unreadCountUserTwo: 0,
+      isSupportThread: false,
+      messages: [
+        {
+          senderId: TRUSTER_USER_IDS[0],
+          message: 'Selamlar! Bir konuda danışmak istiyorum.',
+          minutesAgo: 25,
+          isRead: true,
+          context: 'DM',
+        },
+        {
+          senderId: TEST_USER_ID,
+          message: 'Tabii, dinliyorum.',
+          minutesAgo: 20,
+          isRead: true,
+          context: 'DM',
+        },
+        {
+          senderId: TRUSTER_USER_IDS[0],
+          message: 'Yeni bir ürün almayı düşünüyorum, önerin var mı?',
+          minutesAgo: 5,
+          isRead: false,
+          context: 'DM',
+        },
+      ],
+    },
+    // Ömer <-> Julia Havk
+    {
+      userOneId: TEST_USER_ID,
+      userTwoId: JULIA_USER_ID,
+      unreadCountUserOne: 0,
+      unreadCountUserTwo: 1,
+      isSupportThread: false,
+      messages: [
+        {
+          senderId: JULIA_USER_ID,
+          message: 'Hi! I saw your latest review, great work!',
+          minutesAgo: 35,
+          isRead: true,
+          context: 'DM',
+        },
+        {
+          senderId: TEST_USER_ID,
+          message: 'Thank you! I appreciate your feedback.',
+          minutesAgo: 30,
+          isRead: true,
+          context: 'DM',
+        },
+        {
+          senderId: JULIA_USER_ID,
+          message: 'Would you like to collaborate on a product comparison?',
+          minutesAgo: 8,
+          isRead: false,
+          context: 'DM',
+        },
+      ],
+    },
+  ];
 
   function minutesAgoToDate(minutesAgo: number): Date {
     return new Date(Date.now() - minutesAgo * 60 * 1000);
@@ -11186,73 +11270,149 @@ async function main() {
     fromUserId: string;
     toUserId: string;
     description: string;
-    status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'CANCELED' | 'AWAITING_COMPLETION' | 'COMPLETED' | 'REPORTED';
+    status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'CANCELED' | 'AWAITING_COMPLETION' | 'COMPLETED';
     type: 'GENERAL' | 'TECHNICAL' | 'PRODUCT';
     amount: number;
     minutesAgo: number;
     threadId: null;
   };
 
-  const supportStatusCycle: SupportRequestSeed['status'][] = [
-    'PENDING',
-    'ACCEPTED',
-    'AWAITING_COMPLETION',
-    'COMPLETED',
-    'CANCELED',
-    'ACCEPTED',
-    'PENDING',
-    'AWAITING_COMPLETION',
-    'DECLINED',
-    'COMPLETED',
-  ];
-
-  const supportSecondaryStatusCycle: SupportRequestSeed['status'][] = [
-    'ACCEPTED',
-    'CANCELED',
-    'AWAITING_COMPLETION',
-    'COMPLETED',
-    'REPORTED',
-    'ACCEPTED',
-    'PENDING',
-    'COMPLETED',
-    'AWAITING_COMPLETION',
-    'CANCELED',
-  ];
-
-  const supportTypeCycle: SupportRequestSeed['type'][] = ['GENERAL', 'TECHNICAL', 'PRODUCT'];
-
-  const SUPPORT_REQUEST_SEEDS: SupportRequestSeed[] = [];
-
-  DM_PARTNER_IDS.slice(0, 10).forEach((partnerId, index) => {
-    const primaryStatus = supportStatusCycle[index % supportStatusCycle.length];
-    const secondaryStatus = supportSecondaryStatusCycle[index % supportSecondaryStatusCycle.length];
-    const primaryType = supportTypeCycle[index % supportTypeCycle.length];
-    const secondaryType = supportTypeCycle[(index + 1) % supportTypeCycle.length];
-
-    SUPPORT_REQUEST_SEEDS.push({
-      id: randomUUID(),
-      fromUserId: partnerId,
+  // Gerçek kullanıcılar arasında farklı status ve type'larda 1-on-1 request'ler
+  // Ömer (TEST_USER_ID) ile diğer gerçek kullanıcılar arasında
+  const SUPPORT_REQUEST_SEEDS: SupportRequestSeed[] = [
+    // PENDING - General type
+    {
+      id: '00000000-0000-4000-8000-000000000101',
+      fromUserId: TARGET_USER_ID,
       toUserId: TEST_USER_ID,
-      description: `(${index + 1}A) ${primaryType} desteği için hızlı görüşme talebi.`,
-      status: primaryStatus,
-      type: primaryType,
-      amount: 40 + index * 5,
-      minutesAgo: 70 + index * 9,
+      description: 'Beta paneldeki yeni metrikler için rehberlik rica ediyorum.',
+      status: 'PENDING',
+      type: 'GENERAL',
+      amount: 50,
+      minutesAgo: 60,
       threadId: null,
-    });
-
-    SUPPORT_REQUEST_SEEDS.push({
-      id: randomUUID(),
+    },
+    // ACCEPTED - Technical type (support thread oluşturulacak)
+    {
+      id: '00000000-0000-4000-8000-000000000102',
       fromUserId: TEST_USER_ID,
-      toUserId: partnerId,
-      description: `(${index + 1}B) Son seans sonrası geri bildirimin var mı?`,
-      status: secondaryStatus,
-      type: secondaryType,
-      amount: 55 + index * 6,
-      minutesAgo: 45 + index * 7,
+      toUserId: TARGET_USER_ID,
+      description: 'Smartwatch kurulumu için yardıma ihtiyacım var. Hangi modeli kullanıyorsunuz?',
+      status: 'ACCEPTED',
+      type: 'TECHNICAL',
+      amount: 100,
+      minutesAgo: 120,
       threadId: null,
-    });
-  });
+    },
+    // DECLINED - Product type
+    {
+      id: '00000000-0000-4000-8000-000000000103',
+      fromUserId: TRUST_USER_IDS[0],
+      toUserId: TEST_USER_ID,
+      description: 'Ürün önerisi için destek istiyorum.',
+      status: 'DECLINED',
+      type: 'PRODUCT',
+      amount: 75,
+      minutesAgo: 180,
+      threadId: null,
+    },
+    // ACCEPTED - General type (support thread oluşturulacak)
+    {
+      id: '00000000-0000-4000-8000-000000000104',
+      fromUserId: TRUST_USER_IDS[1],
+      toUserId: TEST_USER_ID,
+      description: 'Yazılım geliştirme konusunda danışmanlık almak istiyorum.',
+      status: 'ACCEPTED',
+      type: 'GENERAL',
+      amount: 150,
+      minutesAgo: 90,
+      threadId: null,
+    },
+    // CANCELED - Technical type
+    {
+      id: '00000000-0000-4000-8000-000000000105',
+      fromUserId: TEST_USER_ID,
+      toUserId: TRUST_USER_IDS[2],
+      description: 'Kamera ayarları konusunda yardım istiyordum ama artık gerek yok.',
+      status: 'CANCELED',
+      type: 'TECHNICAL',
+      amount: 80,
+      minutesAgo: 200,
+      threadId: null,
+    },
+    // AWAITING_COMPLETION - Product type (support thread oluşturulacak)
+    {
+      id: '00000000-0000-4000-8000-000000000106',
+      fromUserId: TRUST_USER_IDS[3],
+      toUserId: TEST_USER_ID,
+      description: 'Yeni telefon modeli hakkında detaylı bilgi almak istiyorum.',
+      status: 'AWAITING_COMPLETION',
+      type: 'PRODUCT',
+      amount: 120,
+      minutesAgo: 45,
+      threadId: null,
+    },
+    // COMPLETED - General type (support thread oluşturulacak)
+    {
+      id: '00000000-0000-4000-8000-000000000107',
+      fromUserId: TRUSTER_USER_IDS[0],
+      toUserId: TEST_USER_ID,
+      description: 'Ürün karşılaştırması konusunda danışmanlık aldım, çok faydalı oldu.',
+      status: 'COMPLETED',
+      type: 'GENERAL',
+      amount: 200,
+      minutesAgo: 300,
+      threadId: null,
+    },
+    // PENDING - Product type
+    {
+      id: '00000000-0000-4000-8000-000000000108',
+      fromUserId: TEST_USER_ID,
+      toUserId: TRUST_USER_IDS[4],
+      description: 'Yeni bir ürün almayı düşünüyorum, önerin var mı?',
+      status: 'PENDING',
+      type: 'PRODUCT',
+      amount: 60,
+      minutesAgo: 15,
+      threadId: null,
+    },
+    // ACCEPTED - Technical type (support thread oluşturulacak)
+    {
+      id: '00000000-0000-4000-8000-000000000109',
+      fromUserId: TRUSTER_USER_IDS[1],
+      toUserId: TEST_USER_ID,
+      description: 'Bilgisayar performans optimizasyonu konusunda yardıma ihtiyacım var.',
+      status: 'ACCEPTED',
+      type: 'TECHNICAL',
+      amount: 180,
+      minutesAgo: 70,
+      threadId: null,
+    },
+    // DECLINED - General type
+    {
+      id: '00000000-0000-4000-8000-000000000110',
+      fromUserId: TEST_USER_ID,
+      toUserId: TRUSTER_USER_IDS[2],
+      description: 'Genel bir soru sormak istiyordum.',
+      status: 'DECLINED',
+      type: 'GENERAL',
+      amount: 40,
+      minutesAgo: 250,
+      threadId: null,
+    },
+    // PENDING - Technical type
+    {
+      id: '00000000-0000-4000-8000-000000000111',
+      fromUserId: JULIA_USER_ID,
+      toUserId: TEST_USER_ID,
+      description: 'I need help with setting up a new device. Can you assist?',
+      status: 'PENDING',
+      type: 'TECHNICAL',
+      amount: 90,
+      minutesAgo: 30,
+      threadId: null,
+    },
+  ];
 
   let supportRequestsCount = 0;
   let supportThreadsCount = 0;
@@ -11264,8 +11424,12 @@ async function main() {
     
     let threadId: string | null = null;
     
-    // If status is ACCEPTED, create a support thread
-    const shouldCreateSupportThread = ['ACCEPTED', 'AWAITING_COMPLETION', 'COMPLETED'].includes(supportRequest.status);
+    // If status is ACCEPTED, AWAITING_COMPLETION, or COMPLETED, create a support thread
+    const shouldCreateSupportThread = 
+      supportRequest.status === 'ACCEPTED' || 
+      supportRequest.status === 'AWAITING_COMPLETION' || 
+      supportRequest.status === 'COMPLETED';
+    
     if (shouldCreateSupportThread) {
       const supportThread = await prisma.dMThread.create({
         data: {
@@ -11281,25 +11445,45 @@ async function main() {
       threadId = supportThread.id;
       supportThreadsCount++;
       
-      // Create some support chat messages in the support thread
-      const supportMessages = await prisma.dMMessage.createMany({
-        data: [
-          {
-            threadId: supportThread.id,
-            senderId: supportRequest.fromUserId,
-            message: supportRequest.description,
-            isRead: false,
-            context: 'SUPPORT',
-            sentAt: minutesAgoToDate(supportRequest.minutesAgo),
-          },
-          {
-            threadId: supportThread.id,
-            senderId: supportRequest.toUserId,
-            message: 'Merhaba! Size nasıl yardımcı olabilirim?',
-            isRead: true,
-            context: 'SUPPORT',
-            sentAt: minutesAgoToDate(supportRequest.minutesAgo - 5),
-          },
+      // Create support chat messages in the support thread
+      const messages: Array<{
+        threadId: string;
+        senderId: string;
+        message: string;
+        isRead: boolean;
+        context: 'SUPPORT';
+        sentAt: Date;
+      }> = [
+        {
+          threadId: supportThread.id,
+          senderId: supportRequest.fromUserId,
+          message: supportRequest.description,
+          isRead: false,
+          context: 'SUPPORT',
+          sentAt: minutesAgoToDate(supportRequest.minutesAgo),
+        },
+        {
+          threadId: supportThread.id,
+          senderId: supportRequest.toUserId,
+          message: 'Merhaba! Size nasıl yardımcı olabilirim?',
+          isRead: true,
+          context: 'SUPPORT',
+          sentAt: minutesAgoToDate(supportRequest.minutesAgo - 5),
+        },
+      ];
+
+      // Add more messages based on status
+      if (supportRequest.status === 'ACCEPTED') {
+        messages.push({
+          threadId: supportThread.id,
+          senderId: supportRequest.fromUserId,
+          message: 'Teşekkür ederim, detayları paylaşayım...',
+          isRead: true,
+          context: 'SUPPORT',
+          sentAt: minutesAgoToDate(supportRequest.minutesAgo - 3),
+        });
+      } else if (supportRequest.status === 'AWAITING_COMPLETION') {
+        messages.push(
           {
             threadId: supportThread.id,
             senderId: supportRequest.fromUserId,
@@ -11308,7 +11492,46 @@ async function main() {
             context: 'SUPPORT',
             sentAt: minutesAgoToDate(supportRequest.minutesAgo - 3),
           },
-        ] as any,
+          {
+            threadId: supportThread.id,
+            senderId: supportRequest.toUserId,
+            message: 'Anladım, şimdi çözümü uygulayalım.',
+            isRead: true,
+            context: 'SUPPORT',
+            sentAt: minutesAgoToDate(supportRequest.minutesAgo - 2),
+          }
+        );
+      } else if (supportRequest.status === 'COMPLETED') {
+        messages.push(
+          {
+            threadId: supportThread.id,
+            senderId: supportRequest.fromUserId,
+            message: 'Teşekkür ederim, detayları paylaşayım...',
+            isRead: true,
+            context: 'SUPPORT',
+            sentAt: minutesAgoToDate(supportRequest.minutesAgo - 3),
+          },
+          {
+            threadId: supportThread.id,
+            senderId: supportRequest.toUserId,
+            message: 'Rica ederim, başka bir konuda yardımcı olabilir miyim?',
+            isRead: true,
+            context: 'SUPPORT',
+            sentAt: minutesAgoToDate(supportRequest.minutesAgo - 2),
+          },
+          {
+            threadId: supportThread.id,
+            senderId: supportRequest.fromUserId,
+            message: 'Hayır teşekkürler, her şey tamamlandı!',
+            isRead: true,
+            context: 'SUPPORT',
+            sentAt: minutesAgoToDate(supportRequest.minutesAgo - 1),
+          }
+        );
+      }
+      
+      const supportMessages = await prisma.dMMessage.createMany({
+        data: messages as any,
       });
       supportMessagesCount += supportMessages.count;
     }
@@ -11325,7 +11548,9 @@ async function main() {
         amount: supportRequest.amount,
         threadId: threadId,
         sentAt: minutesAgoToDate(supportRequest.minutesAgo),
-        respondedAt: supportRequest.status !== 'PENDING' ? minutesAgoToDate(supportRequest.minutesAgo - 10) : null,
+        respondedAt: supportRequest.status !== 'PENDING' && supportRequest.status !== 'CANCELED' 
+          ? minutesAgoToDate(supportRequest.minutesAgo - 10) 
+          : null,
         createdAt: minutesAgoToDate(supportRequest.minutesAgo),
         updatedAt: minutesAgoToDate(supportRequest.minutesAgo),
       } as any,
@@ -11345,18 +11570,61 @@ async function main() {
     },
   })
 
-  const tipsTransferSeeds = DM_PARTNER_IDS.slice(0, 6).map((partnerId, index) => ({
-    fromUserId: partnerId,
-    toUserId: TEST_USER_ID,
-    amount: 25 + index * 8,
-    reason: `Teşekkürler, ${index + 1}. destek için`,
-    minutesAgo: 30 + index * 4,
-  }))
+  // Gerçek kullanıcılar arasında TIPS transfer'leri
+  const tipsTransferSeeds = [
+    {
+      id: '00000000-0000-4000-8000-000000000201',
+      fromUserId: TEST_USER_ID,
+      toUserId: TARGET_USER_ID,
+      amount: 25,
+      reason: 'Geçen destek oturumu için teşekkürler!',
+      minutesAgo: 15,
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000202',
+      fromUserId: TRUST_USER_IDS[0],
+      toUserId: TEST_USER_ID,
+      amount: 50,
+      reason: 'Yardımın için teşekkürler!',
+      minutesAgo: 20,
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000203',
+      fromUserId: TEST_USER_ID,
+      toUserId: TRUST_USER_IDS[1],
+      amount: 30,
+      reason: 'Ürün önerisi için teşekkürler',
+      minutesAgo: 40,
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000204',
+      fromUserId: TRUSTER_USER_IDS[0],
+      toUserId: TEST_USER_ID,
+      amount: 75,
+      reason: 'Danışmanlık için teşekkürler',
+      minutesAgo: 50,
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000205',
+      fromUserId: TEST_USER_ID,
+      toUserId: JULIA_USER_ID,
+      amount: 100,
+      reason: 'Great collaboration!',
+      minutesAgo: 25,
+    },
+  ]
 
   for (const tipsSeed of tipsTransferSeeds) {
     const createdAt = minutesAgoToDate(tipsSeed.minutesAgo)
-    await prisma.tipsTokenTransfer.create({
-      data: {
+    await prisma.tipsTokenTransfer.upsert({
+      where: { id: tipsSeed.id },
+      update: {
+        amount: tipsSeed.amount,
+        reason: tipsSeed.reason,
+        updatedAt: new Date(),
+      },
+      create: {
+        id: tipsSeed.id,
         fromUserId: tipsSeed.fromUserId,
         toUserId: tipsSeed.toUserId,
         amount: tipsSeed.amount,

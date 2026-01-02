@@ -77,3 +77,4 @@
 4. **Frontend Entegrasyonları** - Tüm özellikler için
 5. **Test Coverage** - Tüm özellikler için
 
+

@@ -278,3 +278,4 @@ Bu dokümantasyon, `docs/YENI_EKLENEN_ENDPOINTLER.md` dosyasında belirtilen end
 - Faz 3 (Düşük Öncelik): 1 gün
 - **Toplam:** 5-7 gün
 
+

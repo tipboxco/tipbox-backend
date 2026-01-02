@@ -1,8 +1,12 @@
 
-import { prisma, TEST_USER_ID, TARGET_USER_ID } from './types';
+import { prisma, TEST_USER_ID, TARGET_USER_ID, TRUST_USER_IDS, TRUSTER_USER_IDS } from './types';
 import { seedDMThreads } from './dmthread.seed';
 import { seedDMRequests } from './dmrequest.seed';
 
+// Julia user ID (from user.seed.ts)
+const JULIA_USER_ID = '99999999-9999-4999-9999-999999999999';
+
+// Gerçek kullanıcılar arasında TIPS transfer'leri
 const TIPS_TRANSFER_SEEDS = [
   {
     id: '00000000-0000-4000-8000-000000000201',
@@ -11,6 +15,38 @@ const TIPS_TRANSFER_SEEDS = [
     amount: 25,
     reason: 'Geçen destek oturumu için teşekkürler!',
     minutesAgo: 15,
+  },
+  {
+    id: '00000000-0000-4000-8000-000000000202',
+    fromUserId: TRUST_USER_IDS[0],
+    toUserId: TEST_USER_ID,
+    amount: 50,
+    reason: 'Yardımın için teşekkürler!',
+    minutesAgo: 20,
+  },
+  {
+    id: '00000000-0000-4000-8000-000000000203',
+    fromUserId: TEST_USER_ID,
+    toUserId: TRUST_USER_IDS[1],
+    amount: 30,
+    reason: 'Ürün önerisi için teşekkürler',
+    minutesAgo: 40,
+  },
+  {
+    id: '00000000-0000-4000-8000-000000000204',
+    fromUserId: TRUSTER_USER_IDS[0],
+    toUserId: TEST_USER_ID,
+    amount: 75,
+    reason: 'Danışmanlık için teşekkürler',
+    minutesAgo: 50,
+  },
+  {
+    id: '00000000-0000-4000-8000-000000000205',
+    fromUserId: TEST_USER_ID,
+    toUserId: JULIA_USER_ID,
+    amount: 100,
+    reason: 'Great collaboration!',
+    minutesAgo: 25,
   },
 ];
 

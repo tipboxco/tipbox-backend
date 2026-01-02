@@ -169,18 +169,15 @@ export class TestDataCleaner {
 
       await prisma.dMMessage.deleteMany({
         where: {
-          OR: [
-            { senderId: { in: userIds } },
-            { recipientId: { in: userIds } },
-          ],
+          senderId: { in: userIds },
         },
       });
 
       await prisma.dMThread.deleteMany({
         where: {
           OR: [
-            { senderId: { in: userIds } },
-            { recipientId: { in: userIds } },
+            { userOneId: { in: userIds } },
+            { userTwoId: { in: userIds } },
           ],
         },
       });
@@ -189,7 +186,7 @@ export class TestDataCleaner {
         where: {
           OR: [
             { trusterId: { in: userIds } },
-            { trustedId: { in: userIds } },
+            { trustedUserId: { in: userIds } },
           ],
         },
       });

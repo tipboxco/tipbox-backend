@@ -224,3 +224,4 @@ These tests can be integrated into CI/CD pipelines:
 - Test users have unique emails to avoid conflicts
 - Media paths use MinIO and respect environment configuration
 
+

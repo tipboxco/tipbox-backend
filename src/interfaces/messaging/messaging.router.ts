@@ -929,14 +929,31 @@ router.post(
       return res.status(400).json({ message: 'Invalid timestamp format. Expected ISO 8601 format (e.g., 2024-01-15T10:30:00Z)' });
     }
 
-    await messagingService.sendTips(
-      String(senderId),
-      recipientUserId,
-      numericAmount,
-      message,
-    );
+    try {
+      await messagingService.sendTips(
+        String(senderId),
+        recipientUserId,
+        numericAmount,
+        message,
+      );
 
-    return res.status(201).end();
+      return res.status(201).end();
+    } catch (error: any) {
+      // Handle user not found errors
+      if (error.message?.includes('not found')) {
+        return res.status(404).json({
+          success: false,
+          error: {
+            code: 'NOT_FOUND',
+            message: error.message,
+            path: '/messages/tips',
+            timestamp: new Date().toISOString(),
+          },
+        });
+      }
+      // Re-throw other errors to be handled by global error handler
+      throw error;
+    }
   }),
 );
 

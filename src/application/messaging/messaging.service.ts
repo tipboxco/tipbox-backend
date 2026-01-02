@@ -135,6 +135,20 @@ export class MessagingService {
   }
 
   async sendTips(senderId: string, recipientId: string, amount: number, tipsMessage?: string) {
+    // Validate that both sender and recipient users exist
+    const [sender, recipient] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: senderId } }),
+      this.prisma.user.findUnique({ where: { id: recipientId } }),
+    ]);
+
+    if (!sender) {
+      throw new Error(`Sender user not found: ${senderId}`);
+    }
+
+    if (!recipient) {
+      throw new Error(`Recipient user not found: ${recipientId}`);
+    }
+
     const tipsTransfer = await this.prisma.tipsTokenTransfer.create({
       data: {
         fromUserId: senderId,

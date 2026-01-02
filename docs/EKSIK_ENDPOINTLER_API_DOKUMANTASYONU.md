@@ -1218,3 +1218,4 @@ Bazı endpoint'ler mevcut endpoint'ler kullanılarak implement edilebilir:
 - `GET /wallet/balance` → `GET /expert/balance` (mevcut, format farklı)
 - `GET /search` → Mevcut (aynı format)
 
+

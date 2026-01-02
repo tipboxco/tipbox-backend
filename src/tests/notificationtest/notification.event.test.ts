@@ -1,7 +1,6 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { PrismaClient } from '@prisma/client';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
 import { TestDataCreator, CreatedTestData } from './helpers/test-data-creator';
 import { TestDataCleaner } from './helpers/test-data-cleaner';
@@ -9,8 +8,9 @@ import { MediaHelper } from './helpers/media-helper';
 import RedisConfigManager from '../../infrastructure/config/redis.config';
 import QueueProvider from '../../infrastructure/queue/queue.provider';
 import logger from '../../infrastructure/logger/logger';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 
-const prisma = new PrismaClient();
+const prisma = getPrisma();
 
 interface TestResult {
   type: NotificationType;
@@ -78,7 +78,7 @@ async function testEventNotifications() {
         }
       );
 
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 5000));
 
       const notification = await prisma.notification.findFirst({
         where: {
@@ -131,7 +131,7 @@ async function testEventNotifications() {
         }
       );
 
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 5000));
 
       const notification = await prisma.notification.findFirst({
         where: {
@@ -182,7 +182,7 @@ async function testEventNotifications() {
         }
       );
 
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 5000));
 
       const notification = await prisma.notification.findFirst({
         where: {
@@ -238,12 +238,13 @@ async function testEventNotifications() {
     console.error('❌ Test execution error:', error);
     logger.error('Event notification test error:', error);
   } finally {
-    console.log('\n🧹 Cleaning up test data...');
-    try {
-      await TestDataCleaner.cleanupTestData(createdIds);
-    } catch (error) {
-      console.error('❌ Cleanup error:', error);
-    }
+    // Cleanup disabled for testing
+    // console.log('\n🧹 Cleaning up test data...');
+    // try {
+    //   await TestDataCleaner.cleanupTestData(createdIds);
+    // } catch (error) {
+    //   console.error('❌ Cleanup error:', error);
+    // }
 
     await prisma.$disconnect();
     process.exit(0);

@@ -1,5 +1,8 @@
 
-import { prisma, TEST_USER_ID, TARGET_USER_ID, TRUST_USER_IDS } from './types';
+import { prisma, TEST_USER_ID, TARGET_USER_ID, TRUST_USER_IDS, TRUSTER_USER_IDS } from './types';
+
+// Julia user ID (from user.seed.ts)
+const JULIA_USER_ID = '99999999-9999-4999-9999-999999999999';
 
 type ThreadSeed = {
   userOneId: string;
@@ -16,7 +19,10 @@ type ThreadSeed = {
   }>;
 };
 
+// Gerçek kullanıcılar arasında karşılıklı DM thread'leri
+// Ömer (TEST_USER_ID) ile diğer gerçek kullanıcılar arasında konuşmalar
 const NORMAL_DM_THREAD_SEEDS: ThreadSeed[] = [
+  // Ömer <-> Market Test User
   {
     userOneId: TEST_USER_ID,
     userTwoId: TARGET_USER_ID,
@@ -40,6 +46,7 @@ const NORMAL_DM_THREAD_SEEDS: ThreadSeed[] = [
       },
     ],
   },
+  // Ömer <-> Trust User 1
   {
     userOneId: TRUST_USER_IDS[0],
     userTwoId: TEST_USER_ID,
@@ -66,6 +73,116 @@ const NORMAL_DM_THREAD_SEEDS: ThreadSeed[] = [
         message: 'Ben de teşekkür ederim, çok yardımcı oldun 🙏',
         minutesAgo: 5,
         isRead: true,
+        context: 'DM',
+      },
+    ],
+  },
+  // Ömer <-> Trust User 2
+  {
+    userOneId: TEST_USER_ID,
+    userTwoId: TRUST_USER_IDS[1],
+    unreadCountUserOne: 0,
+    unreadCountUserTwo: 1,
+    isSupportThread: false,
+    messages: [
+      {
+        senderId: TEST_USER_ID,
+        message: 'Merhaba! Ürün hakkında birkaç sorum var.',
+        minutesAgo: 20,
+        isRead: true,
+        context: 'DM',
+      },
+      {
+        senderId: TRUST_USER_IDS[1],
+        message: 'Tabii, nasıl yardımcı olabilirim?',
+        minutesAgo: 15,
+        isRead: false,
+        context: 'DM',
+      },
+    ],
+  },
+  // Ömer <-> Trust User 3
+  {
+    userOneId: TRUST_USER_IDS[2],
+    userTwoId: TEST_USER_ID,
+    unreadCountUserOne: 0,
+    unreadCountUserTwo: 0,
+    isSupportThread: false,
+    messages: [
+      {
+        senderId: TRUST_USER_IDS[2],
+        message: 'Yeni yazdığın post çok faydalı olmuş!',
+        minutesAgo: 60,
+        isRead: true,
+        context: 'DM',
+      },
+      {
+        senderId: TEST_USER_ID,
+        message: 'Teşekkür ederim, beğenmene sevindim 😊',
+        minutesAgo: 55,
+        isRead: true,
+        context: 'DM',
+      },
+    ],
+  },
+  // Ömer <-> Truster User 1
+  {
+    userOneId: TEST_USER_ID,
+    userTwoId: TRUSTER_USER_IDS[0],
+    unreadCountUserOne: 1,
+    unreadCountUserTwo: 0,
+    isSupportThread: false,
+    messages: [
+      {
+        senderId: TRUSTER_USER_IDS[0],
+        message: 'Selamlar! Bir konuda danışmak istiyorum.',
+        minutesAgo: 25,
+        isRead: true,
+        context: 'DM',
+      },
+      {
+        senderId: TEST_USER_ID,
+        message: 'Tabii, dinliyorum.',
+        minutesAgo: 20,
+        isRead: true,
+        context: 'DM',
+      },
+      {
+        senderId: TRUSTER_USER_IDS[0],
+        message: 'Yeni bir ürün almayı düşünüyorum, önerin var mı?',
+        minutesAgo: 5,
+        isRead: false,
+        context: 'DM',
+      },
+    ],
+  },
+  // Ömer <-> Julia Havk
+  {
+    userOneId: TEST_USER_ID,
+    userTwoId: JULIA_USER_ID,
+    unreadCountUserOne: 0,
+    unreadCountUserTwo: 1,
+    isSupportThread: false,
+    messages: [
+      {
+        senderId: JULIA_USER_ID,
+        message: 'Hi! I saw your latest review, great work!',
+        minutesAgo: 35,
+        isRead: true,
+        context: 'DM',
+      },
+      {
+        senderId: TEST_USER_ID,
+        message: 'Thank you! I appreciate your feedback.',
+        minutesAgo: 30,
+        isRead: true,
+        context: 'DM',
+      },
+      {
+        senderId: JULIA_USER_ID,
+        message: 'Would you like to collaborate on a product comparison?',
+        minutesAgo: 8,
+        isRead: false,
         context: 'DM',
       },
     ],

@@ -147,6 +147,28 @@ export class NotificationFactory {
       getTitle: () => 'TIPS Aldınız! 💰',
       getMessage: (data) => `${data.senderName} size ${data.amount} TIPS gönderdi`,
     });
+
+    // Event Notifications
+    this.registerTemplate({
+      type: NotificationType.EVENT_STARTED,
+      category: NotificationCategory.EVENT,
+      getTitle: () => 'Etkinlik Başladı! 🎉',
+      getMessage: (data) => `${data.eventName} etkinliği başladı!`,
+    });
+
+    this.registerTemplate({
+      type: NotificationType.EVENT_ENDING_SOON,
+      category: NotificationCategory.EVENT,
+      getTitle: () => 'Etkinlik Yakında Bitiyor! ⏰',
+      getMessage: (data) => `${data.eventName} etkinliği ${data.hoursRemaining} saat içinde bitiyor`,
+    });
+
+    this.registerTemplate({
+      type: NotificationType.EVENT_REWARD_AVAILABLE,
+      category: NotificationCategory.EVENT,
+      getTitle: () => 'Etkinlik Ödülü Hazır! 🎁',
+      getMessage: (data) => `${data.eventName} etkinliğinden ${data.rewardAmount} TIPS ödülü kazanabilirsiniz!`,
+    });
   }
 
   private registerTemplate(template: NotificationTemplate): void {

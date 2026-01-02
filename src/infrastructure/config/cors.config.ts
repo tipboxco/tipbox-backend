@@ -36,6 +36,10 @@ export function getCorsOptions(): CorsOptions {
     credentials: true,
     methods: config.corsMethods,
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
+    exposedHeaders: ['X-Total-Count', 'X-Page-Count'],
+    maxAge: 86400, // 24 saat pre-flight cache
+    optionsSuccessStatus: 204, // OPTIONS request için 204 No Content döndür
   };
 }
+
 

@@ -10,6 +10,7 @@ import { TestDataCleaner } from './helpers/test-data-cleaner';
 import { MediaHelper } from './helpers/media-helper';
 import RedisConfigManager from '../../infrastructure/config/redis.config';
 import QueueProvider from '../../infrastructure/queue/queue.provider';
+import { NotificationWorker } from '../../infrastructure/workers/notification.worker';
 import logger from '../../infrastructure/logger/logger';
 
 const prisma = new PrismaClient();
@@ -30,6 +31,7 @@ interface TestResult {
  */
 async function testPostNotifications() {
   const results: TestResult[] = [];
+  let notificationWorker: NotificationWorker | null = null;
   const createdIds: CreatedTestData = {
     userIds: [],
     postIds: [],
@@ -55,7 +57,11 @@ async function testPostNotifications() {
     try {
       await RedisConfigManager.getInstance().initialize();
       await QueueProvider.getInstance().initialize();
-      console.log('✅ Services initialized\n');
+      
+      // Start notification worker to process queued notifications
+      notificationWorker = new NotificationWorker();
+      await notificationWorker.start();
+      console.log('✅ Services initialized (including notification worker)\n');
     } catch (error: any) {
       console.log(`⚠️  Services initialization warning: ${error.message}`);
       console.log('⚠️  Continuing without Redis/Queue (notifications will still be created in DB)\n');
@@ -288,6 +294,16 @@ async function testPostNotifications() {
     console.error('❌ Test execution error:', error);
     logger.error('Post notification test error:', error);
   } finally {
+    // Stop notification worker
+    if (notificationWorker) {
+      try {
+        await notificationWorker.stop();
+        console.log('✅ Notification worker stopped\n');
+      } catch (error) {
+        console.error('⚠️  Error stopping notification worker:', error);
+      }
+    }
+
     // Cleanup
     console.log('\n🧹 Cleaning up test data...');
     try {

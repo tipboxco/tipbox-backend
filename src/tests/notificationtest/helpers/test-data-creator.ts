@@ -47,7 +47,6 @@ export class TestDataCreator {
     const user = await prisma.user.create({
       data: {
         email,
-        name: finalDisplayName,
         status: 'ACTIVE',
         profile: {
           create: {
@@ -80,12 +79,12 @@ export class TestDataCreator {
         data: {
           userId: user.id,
           imageUrl: avatarMediaPath, // Store relative path, URL will be resolved via media.config
-          isPrimary: true,
+          isActive: true,
         },
       });
     }
 
-    return { userId: user.id, email: user.email };
+    return { userId: user.id, email: user.email || '' };
   }
 
   /**
@@ -104,7 +103,8 @@ export class TestDataCreator {
       type,
       title: `Test Post ${Date.now()}`,
       body: `This is a test post created for notification testing at ${new Date().toISOString()}. It contains sample content to test notification triggers.`,
-      createdAt: new Date(),
+      inventoryRequired: false,
+      isBoosted: false,
     };
 
     if (productId) {
@@ -125,6 +125,7 @@ export class TestDataCreator {
         await prisma.postMedia.create({
           data: {
             postId: post.id,
+            userId: userId,
             mediaUrl: mediaPath,
             orderIndex: 0,
           },
@@ -153,8 +154,8 @@ export class TestDataCreator {
         id: commentId,
         userId,
         postId,
-        body: content || `Test comment created at ${new Date().toISOString()}`,
-        createdAt: new Date(),
+        comment: content || `Test comment created at ${new Date().toISOString()}`,
+        isAnswer: false,
       },
     });
 
@@ -170,10 +171,10 @@ export class TestDataCreator {
   ): Promise<string> {
     const thread = await prisma.dMThread.create({
       data: {
-        senderId,
-        recipientId,
-        context: 'DM',
-        startedAt: new Date(),
+        userOneId: senderId,
+        userTwoId: recipientId,
+        isActive: true,
+        isSupportThread: false,
       },
     });
 
@@ -218,7 +219,7 @@ export class TestDataCreator {
     const product = await prisma.product.create({
       data: {
         name: `Test Product ${Date.now()}`,
-        productGroupId: productGroup.id,
+        groupId: productGroup.id,
         brand: 'Test Brand',
       },
     });
@@ -237,6 +238,7 @@ export class TestDataCreator {
         data: {
           name: 'Test Achievement Chain',
           description: 'Test chain for notification testing',
+          category: 'GENERAL',
         },
       });
     }
@@ -250,9 +252,10 @@ export class TestDataCreator {
       goal = await prisma.achievementGoal.create({
         data: {
           chainId: chain.id,
-          name: 'Test Goal',
-          description: 'Test goal for notification testing',
-          targetValue: 1,
+          title: 'Test Goal',
+          requirement: 'Test goal for notification testing',
+          pointsRequired: 1,
+          difficulty: 'EASY',
         },
       });
     }
@@ -264,7 +267,6 @@ export class TestDataCreator {
         goalId: goal.id,
         progress: 100,
         completed: true,
-        completedAt: new Date(),
       },
     });
 
@@ -288,7 +290,9 @@ export class TestDataCreator {
           name: 'Test Badge',
           description: 'Test badge for notification testing',
           categoryId: category.id,
-          iconUrl: 'test-badge-icon.png',
+          imageUrl: 'test-badge-icon.png',
+          type: 'ACHIEVEMENT',
+          rarity: 'COMMON',
         },
       });
     }
@@ -298,7 +302,10 @@ export class TestDataCreator {
       data: {
         userId,
         badgeId: badge.id,
-        earnedAt: new Date(),
+        isVisible: true,
+        visibility: 'PUBLIC',
+        claimed: true,
+        claimedAt: new Date(),
       },
     });
 

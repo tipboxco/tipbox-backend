@@ -157,3 +157,4 @@ await RedisConfigManager.getInstance().disconnect();
 - Redis hatası normal - worker process'te çalışıyor
 - Bildirimler queue'ya ekleniyor, worker tarafından işleniyor
 
+
