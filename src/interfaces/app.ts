@@ -177,7 +177,7 @@ function replaceLocalhostExamplesInSwaggerSpec(spec: Record<string, unknown>): R
 
 app.get('/api-docs/swagger.json', (req, res) => {
   const swaggerSpec = swaggerJSDoc(getDynamicSwaggerOptions(req));
-  const processedSpec = replaceLocalhostExamplesInSwaggerSpec(swaggerSpec);
+  const processedSpec = replaceLocalhostExamplesInSwaggerSpec(swaggerSpec as Record<string, unknown>);
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.setHeader('Pragma', 'no-cache');
@@ -188,7 +188,7 @@ app.get('/api-docs/swagger.json', (req, res) => {
 app.use('/api-docs', swaggerUi.serve);
 app.get('/api-docs', (req, res, next) => {
   const swaggerSpec = swaggerJSDoc(getDynamicSwaggerOptions(req));
-  const processedSpec = replaceLocalhostExamplesInSwaggerSpec(swaggerSpec);
+  const processedSpec = replaceLocalhostExamplesInSwaggerSpec(swaggerSpec as Record<string, unknown>);
   swaggerUi.setup(processedSpec, {
     customCss: '.swagger-ui .topbar { display: none }',
     customSiteTitle: 'Tipbox API Documentation',

@@ -122,6 +122,35 @@ export class FeedDistributionWorker {
     const startTime = Date.now();
 
     try {
+      // 0. Post'un var olduğunu kontrol et
+      const postExists = await this.prisma.contentPost.findUnique({
+        where: { id: postId },
+        select: { id: true },
+      });
+
+      if (!postExists) {
+        logger.warn({
+          message: 'FeedDistributionWorker: Post not found, skipping',
+          jobId: job.id,
+          postId,
+          postAuthorId,
+        });
+        // Post'u tekrar kontrol et (belki transaction sırasında silinmiş)
+        const postCheck = await this.prisma.contentPost.findFirst({
+          where: { id: postId },
+          select: { id: true, userId: true },
+        });
+        if (!postCheck) {
+          logger.warn({
+            message: 'FeedDistributionWorker: Post confirmed missing',
+            jobId: job.id,
+            postId,
+          });
+          return; // Post gerçekten yoksa job'ı atla
+        }
+        // Post bulundu, devam et
+      }
+
       // 1. Tüm aktif kullanıcıları al
       const allActiveUsers = await this.prisma.user.findMany({
         where: {
@@ -250,6 +279,16 @@ export class FeedDistributionWorker {
             // Threshold kontrolü
             if (scoringResult.score < this.SCORE_THRESHOLD) {
               return null; // Threshold'u geçemedi
+            }
+
+            // Post'un hala var olduğunu kontrol et (paralel işlem sırasında silinmiş olabilir)
+            const postStillExists = await this.prisma.contentPost.findUnique({
+              where: { id: postId },
+              select: { id: true },
+            });
+
+            if (!postStillExists) {
+              return null; // Post artık yoksa feed oluşturma
             }
 
             return {

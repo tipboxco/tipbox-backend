@@ -225,3 +225,4 @@ These tests can be integrated into CI/CD pipelines:
 - Media paths use MinIO and respect environment configuration
 
 
+

@@ -133,22 +133,45 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
  *         description: Server error
  */
 router.get('/unread-count', authMiddleware, async (req: Request, res: Response) => {
+  // Timeout kontrolü için timer
+  const timeout = setTimeout(() => {
+    if (!res.headersSent) {
+      logger.warn('Unread count endpoint timeout - request taking too long');
+      res.status(504).json({
+        success: false,
+        message: 'Request timeout - please try again',
+      });
+    }
+  }, 8000); // 8 saniye timeout (mobil client 10 saniye bekliyor)
+
   try {
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     
     if (!userId) {
+      clearTimeout(timeout);
       return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
     const count = await notificationService.getUnreadCount(userId);
 
+    clearTimeout(timeout);
     return res.json({
       success: true,
       data: { count },
     });
-  } catch (error) {
+  } catch (error: any) {
+    clearTimeout(timeout);
     logger.error('Error getting unread count:', error);
+    
+    // Timeout hatası için özel mesaj
+    if (error.code === 'P2024' || error.message?.includes('timeout')) {
+      return res.status(504).json({
+        success: false,
+        message: 'Database query timeout - please try again',
+      });
+    }
+    
     return res.status(500).json({
       success: false,
       message: 'Failed to get unread count',

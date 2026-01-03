@@ -54,6 +54,9 @@ export const CACHE_KEYS = {
   DM_MESSAGES: (threadId: string, page: number) => `dm:thread:${threadId}:messages:${page}`,
   DM_UNREAD_COUNT: (userId: string) => `dm:${userId}:unread-count`,
   
+  // Notification related
+  NOTIFICATION_UNREAD_COUNT: (userId: string) => `notification:${userId}:unread-count`,
+  
   // Search related
   SEARCH_RESULTS: (query: string, type: string) => `search:${type}:${query}`,
   SEARCH_SUGGESTIONS: (query: string) => `search:suggestions:${query}`,

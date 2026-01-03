@@ -3,12 +3,17 @@ import { Notification } from '../../domain/notification/notification.entity';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
 import { getPrisma } from './prisma.client';
 import logger from '../logger/logger';
+import { CacheService } from '../cache/cache.service';
+import { CACHE_KEYS } from '../cache/cache-keys';
+import { CACHE_TTL } from '../cache/cache-ttl';
 
 export class NotificationPrismaRepository {
   private prisma;
+  private cacheService: CacheService;
 
   constructor() {
     this.prisma = getPrisma();
+    this.cacheService = CacheService.getInstance();
   }
 
   async create(data: {
@@ -29,6 +34,11 @@ export class NotificationPrismaRepository {
           read: false,
         },
       });
+
+      // Unread count cache'ini invalidate et (yeni bildirim eklendi)
+      const cacheKey = CACHE_KEYS.NOTIFICATION_UNREAD_COUNT(data.userId);
+      await this.cacheService.del(cacheKey);
+      logger.debug(`Invalidated unread count cache for user ${data.userId} (new notification created)`);
 
       return new Notification({
         id: notification.id,
@@ -137,13 +147,31 @@ export class NotificationPrismaRepository {
 
   async markAsRead(id: string): Promise<void> {
     try {
-      await this.prisma.notification.update({
+      // Önce notification'ı al (userId için cache invalidation)
+      const notification = await this.prisma.notification.findUnique({
         where: { id },
-        data: {
-          read: true,
-          readAt: new Date(),
-        },
+        select: { userId: true, read: true },
       });
+
+      if (!notification) {
+        throw new Error('Notification not found');
+      }
+
+      // Sadece okunmamışsa güncelle (cache invalidation için)
+      if (!notification.read) {
+        await this.prisma.notification.update({
+          where: { id },
+          data: {
+            read: true,
+            readAt: new Date(),
+          },
+        });
+
+        // Unread count cache'ini invalidate et
+        const cacheKey = CACHE_KEYS.NOTIFICATION_UNREAD_COUNT(notification.userId);
+        await this.cacheService.del(cacheKey);
+        logger.debug(`Invalidated unread count cache for user ${notification.userId} (notification marked as read)`);
+      }
     } catch (error) {
       logger.error('Error marking notification as read:', error);
       throw error;
@@ -163,6 +191,12 @@ export class NotificationPrismaRepository {
         },
       });
 
+      // Unread count cache'ini invalidate et ve 0 olarak set et
+      const cacheKey = CACHE_KEYS.NOTIFICATION_UNREAD_COUNT(userId);
+      await this.cacheService.del(cacheKey);
+      await this.cacheService.set(cacheKey, 0, CACHE_TTL.NOTIFICATION_UNREAD_COUNT);
+      logger.debug(`Invalidated and reset unread count cache for user ${userId} (all marked as read)`);
+
       return result.count;
     } catch (error) {
       logger.error('Error marking all notifications as read:', error);
@@ -172,12 +206,28 @@ export class NotificationPrismaRepository {
 
   async getUnreadCount(userId: string): Promise<number> {
     try {
-      return await this.prisma.notification.count({
+      const cacheKey = CACHE_KEYS.NOTIFICATION_UNREAD_COUNT(userId);
+      
+      // Cache'ten oku
+      const cachedCount = await this.cacheService.get<number>(cacheKey);
+      if (cachedCount !== null && cachedCount !== undefined) {
+        logger.debug(`Unread count cache hit for user ${userId}: ${cachedCount}`);
+        return cachedCount;
+      }
+
+      // Cache'te yoksa database'den oku
+      const count = await this.prisma.notification.count({
         where: {
           userId,
           read: false,
         },
       });
+
+      // Cache'e yaz
+      await this.cacheService.set(cacheKey, count, CACHE_TTL.NOTIFICATION_UNREAD_COUNT);
+      logger.debug(`Unread count cached for user ${userId}: ${count}`);
+
+      return count;
     } catch (error) {
       logger.error('Error getting unread count:', error);
       throw error;

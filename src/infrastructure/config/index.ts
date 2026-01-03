@@ -17,12 +17,33 @@ type Config = {
 
 // Ortam bazlı default değerler
 function getDefaultCorsOrigins(env: string): (string | RegExp)[] {
+  const origins: (string | RegExp)[] = [];
+  
+  // BASE_URL'den origin ekle (eğer set edilmişse)
+  if (process.env.BASE_URL) {
+    try {
+      let baseUrl = process.env.BASE_URL.replace(/\/$/, '');
+      // Eğer protocol yoksa http:// ekle
+      if (!baseUrl.match(/^https?:\/\//)) {
+        baseUrl = `http://${baseUrl}`;
+      }
+      const url = new URL(baseUrl);
+      const baseOrigin = `${url.protocol}//${url.host}`;
+      origins.push(baseOrigin);
+    } catch (error) {
+      // BASE_URL parse edilemezse devam et
+    }
+  }
+
   switch (env) {
     case 'development':
       // Development'ta React Native ve Android Studio için esnek CORS
       // Sürekli değişen local IP adresleri için otomatik izin
       // Reference: https://socket.io/how-to/use-with-react-native
+      // NOT: cors.config.ts'de development modunda tüm origin'lere izin veriliyor
+      // Bu pattern'ler sadece CORS_ORIGINS env variable set edilmişse kullanılır
       return [
+        ...origins,
         'http://localhost:3000',
         'http://localhost:3001',
         'http://localhost:5173',
@@ -30,12 +51,17 @@ function getDefaultCorsOrigins(env: string): (string | RegExp)[] {
         'http://10.0.2.2:3000',
         // Local network IP'leri için wildcard pattern (regex ile kontrol edilecek)
         // 10.x.x.x, 192.168.x.x, 172.16-31.x.x, 100.x.x.x
-        /^http:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|100\.|10\.0\.2\.2)/,
+        // Port numarası dahil: http://192.168.1.100:3000, http://10.0.0.5:5173 vb.
+        /^http:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+|100\.\d+\.\d+\.\d+|10\.0\.2\.2)(:\d+)?$/,
         // HTTPS local network (self-signed certificate için)
-        /^https:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|100\.|10\.0\.2\.2)/,
+        /^https:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+|100\.\d+\.\d+\.\d+|10\.0\.2\.2)(:\d+)?$/,
+        // Herhangi bir localhost (tüm portlar)
+        /^http:\/\/localhost(:\d+)?$/,
+        /^https:\/\/localhost(:\d+)?$/,
       ] as any; // TypeScript için any cast (cors kütüphanesi regex'i destekler)
     case 'test':
       return [
+        ...origins,
         'http://localhost:3000',
         'https://api-test.tipbox.co',
         'http://api-test.tipbox.co',
@@ -43,9 +69,9 @@ function getDefaultCorsOrigins(env: string): (string | RegExp)[] {
         'http://10.0.2.2:3000',
         // Local network IP'leri için wildcard pattern (regex ile kontrol edilecek)
         // React Native ve Android Studio için sürekli değişen IP'leri kabul et
-        /^http:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|100\.|10\.0\.2\.2)/,
+        /^http:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+|100\.\d+\.\d+\.\d+|10\.0\.2\.2)(:\d+)?$/,
         // HTTPS local network (self-signed certificate için)
-        /^https:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|100\.|10\.0\.2\.2)/,
+        /^https:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+|100\.\d+\.\d+\.\d+|10\.0\.2\.2)(:\d+)?$/,
       ] as any;
     case 'production':
       return ['https://api.tipbox.co', 'https://api.tipbox.co/v1', 'https://api.tipbox.co/v1/docs', 'https://app.tipbox.co'];

@@ -2280,6 +2280,19 @@ async function main() {
   console.log(`   MinIO Container: ${s3Endpoint.includes('minio:9000') ? 'tipbox_minio_' + nodeEnv : 'Harici MinIO'}`)
   console.log('═══════════════════════════════════════════════════════════\n')
 
+  // MinIO bucket kontrolü ve oluşturma (seed başlamadan önce)
+  console.log('📦 MinIO bucket kontrolü yapılıyor...\n')
+  try {
+    const s3Service = new S3Service()
+    await s3Service.checkAndCreateBucket()
+    console.log('✅ MinIO bucket hazır\n')
+  } catch (error: any) {
+    console.error('❌ MinIO bucket kontrolü başarısız!')
+    console.error('   Hata:', error instanceof Error ? error.message : String(error))
+    console.error('   ⚠️  Seed işlemi bucket olmadan devam edemez!')
+    process.exit(1)
+  }
+
   // Veri temizleme: Mevcut post ve PostMedia kayıtlarını sil
   console.log('🧹 Mevcut post ve PostMedia kayıtları temizleniyor...')
   try {
@@ -12183,16 +12196,40 @@ async function main() {
                 createdAt: daysAgo(randomBetween(1, 30)),
               }).catch(() => null)
               
-              if (!post) continue
+              if (!post || !post.id || typeof post.id !== 'string' || post.id.length !== 26) {
+                continue;
+              }
               const questionPostId = post.id
               
-              // PostQuestion relation ekle
-              await prisma.postQuestion.create({
-                data: {
-                  postId: questionPostId,
-                  expectedAnswerFormat: 'LONG',
-                },
-              }).catch(() => {})
+              // PostQuestion relation ekle (duplicate kontrolü ile)
+              try {
+                const existingQuestion = await prisma.postQuestion.findUnique({
+                  where: { postId: questionPostId },
+                });
+                
+                if (!existingQuestion) {
+                  await prisma.postQuestion.create({
+                    data: {
+                      postId: questionPostId,
+                      expectedAnswerFormat: 'LONG' as const,
+                    },
+                  });
+                }
+              } catch (error: any) {
+                // Unique constraint hatası normal (duplicate), diğer hataları logla
+                if (error?.code === 'P2002') {
+                  // Duplicate, sessizce devam et
+                } else if (error?.code === 'P2003') {
+                  // Foreign key hatası - post mevcut değil
+                  console.warn(`⚠️ PostQuestion için foreign key hatası (postId: ${questionPostId}): Post bulunamadı`);
+                } else {
+                  // Detaylı hata loglama
+                  console.error(`⚠️ PostQuestion oluşturma hatası (postId: ${questionPostId}):`);
+                  console.error(`   Code: ${error?.code || 'N/A'}`);
+                  console.error(`   Message: ${error?.message || String(error)}`);
+                  console.error(`   Meta:`, error?.meta || 'N/A');
+                }
+              }
               
               // Post tag'leri ekle
               await prisma.contentPostTag.createMany({
@@ -12248,17 +12285,41 @@ async function main() {
                 createdAt: daysAgo(randomBetween(1, 30)),
               }).catch(() => null)
               
-              if (!post) continue
+              if (!post || !post.id || typeof post.id !== 'string' || post.id.length !== 26) {
+                continue;
+              }
               const tipsPostId = post.id
               
-              // PostTip relation ekle
-              await prisma.postTip.create({
-                data: {
-                  postId: tipsPostId,
-                  tipCategory: 'USAGE',
-                  isVerified: false,
-                },
-              }).catch(() => {})
+              // PostTip relation ekle (duplicate kontrolü ile)
+              try {
+                const existingTip = await prisma.postTip.findUnique({
+                  where: { postId: tipsPostId },
+                });
+                
+                if (!existingTip) {
+                  await prisma.postTip.create({
+                    data: {
+                      postId: tipsPostId,
+                      tipCategory: 'USAGE' as const,
+                      isVerified: false,
+                    },
+                  });
+                }
+              } catch (error: any) {
+                // Unique constraint hatası normal (duplicate), diğer hataları logla
+                if (error?.code === 'P2002') {
+                  // Duplicate, sessizce devam et
+                } else if (error?.code === 'P2003') {
+                  // Foreign key hatası - post mevcut değil
+                  console.warn(`⚠️ PostTip için foreign key hatası (postId: ${tipsPostId}): Post bulunamadı`);
+                } else {
+                  // Detaylı hata loglama
+                  console.error(`⚠️ PostTip oluşturma hatası (postId: ${tipsPostId}):`);
+                  console.error(`   Code: ${error?.code || 'N/A'}`);
+                  console.error(`   Message: ${error?.message || String(error)}`);
+                  console.error(`   Meta:`, error?.meta || 'N/A');
+                }
+              }
               
               // Post tag'leri ekle
               await prisma.contentPostTag.createMany({

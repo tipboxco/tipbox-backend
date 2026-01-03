@@ -311,28 +311,28 @@ async function buildSeedAssets(): Promise<void> {
 
   // 7. EVENT/EVENTS → events/
   console.log('🎉 Event görselleri ekleniyor...');
-  const eventPath = path.join(assetsBasePath, 'event');
-  const eventsPath = path.join(assetsBasePath, 'events');
-  let effectiveEventPath: string | null = null;
+  const eventPath1 = path.join(assetsBasePath, 'event');
+  const eventsPath1 = path.join(assetsBasePath, 'events');
+  let effectiveEventPath1: string | null = null;
   
   try {
     try {
-      await fs.access(eventPath);
-      effectiveEventPath = eventPath;
+      await fs.access(eventPath1);
+      effectiveEventPath1 = eventPath1;
     } catch {
       try {
-        await fs.access(eventsPath);
-        effectiveEventPath = eventsPath;
+        await fs.access(eventsPath1);
+        effectiveEventPath1 = eventsPath1;
       } catch {
         console.warn(`   ⚠️  Event klasörü bulunamadı (event veya events)`);
         throw new Error('Event klasörü bulunamadı');
       }
     }
     
-    const eventFiles = await fs.readdir(effectiveEventPath);
+    const eventFiles = await fs.readdir(effectiveEventPath1);
     for (const file of eventFiles) {
       if (file.startsWith('.')) continue;
-      const filePath = path.join(effectiveEventPath, file);
+      const filePath = path.join(effectiveEventPath1, file);
       const stat = await fs.stat(filePath);
       if (stat.isFile()) {
         const nameWithoutExt = file.replace(/\.[^/.]+$/, '');
@@ -680,49 +680,7 @@ async function buildSeedAssets(): Promise<void> {
     console.warn(`   ⚠️  Product Catalog klasörü okunamadı: ${error}`);
   }
 
-  // 13. EVENTS → events/
-  console.log('🎉 Event görselleri ekleniyor...');
-  const eventPath = path.join(assetsBasePath, 'event');
-  const eventsPath = path.join(assetsBasePath, 'events');
-  let effectiveEventPath: string | null = null;
-  
-  try {
-    try {
-      await fs.access(eventPath);
-      effectiveEventPath = eventPath;
-    } catch {
-      try {
-        await fs.access(eventsPath);
-        effectiveEventPath = eventsPath;
-      } catch {
-        console.warn(`   ⚠️  Event klasörü bulunamadı (event veya events)`);
-      }
-    }
-    
-    if (effectiveEventPath) {
-      const eventFiles = await fs.readdir(effectiveEventPath);
-      for (const file of eventFiles) {
-        if (file.startsWith('.')) continue;
-        const filePath = path.join(effectiveEventPath, file);
-        const stat = await fs.stat(filePath);
-        if (stat.isFile()) {
-          const nameWithoutExt = file.replace(/\.[^/.]+$/, '');
-          const slug = slugify(nameWithoutExt);
-          
-          seedAssets.push({
-            key: `event.${slug}`,
-            localPath: filePath,
-            targetKey: `events/${file}`, // Orijinal dosya adını koru
-            contentType: inferContentType(filePath),
-            description: `Event görseli: ${file}`,
-          });
-        }
-      }
-      console.log(`   ✅ ${eventFiles.filter(f => !f.startsWith('.')).length} event görseli eklendi`);
-    }
-  } catch (error) {
-    console.warn(`   ⚠️  Event klasörü okunamadı: ${error}`);
-  }
+  // 13. EVENTS → events/ (duplicate section removed - already handled in section 7)
 
   // 14. APPLE/APPLE_PRODUCTS → products/apple/
   console.log('🍎 Apple product görselleri ekleniyor...');

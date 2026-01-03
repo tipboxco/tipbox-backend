@@ -1,15 +1,12 @@
 import { PushTokenPrismaRepository } from '../../infrastructure/repositories/push-token-prisma.repository';
-import { ExpoPushService } from '../../infrastructure/push/expo-push.service';
 import { PushToken } from '../../domain/notification/push-token.entity';
 import logger from '../../infrastructure/logger/logger';
 
 export class PushTokenService {
   private pushTokenRepo: PushTokenPrismaRepository;
-  private expoPushService: ExpoPushService;
 
   constructor() {
     this.pushTokenRepo = new PushTokenPrismaRepository();
-    this.expoPushService = new ExpoPushService();
   }
 
   /**
@@ -21,9 +18,9 @@ export class PushTokenService {
     deviceType: string
   ): Promise<PushToken> {
     try {
-      // Validate token format
-      if (!this.expoPushService.isValidPushToken(token)) {
-        throw new Error('Invalid Expo push token format');
+      // Basic token validation (non-empty)
+      if (!token || token.trim().length === 0) {
+        throw new Error('Invalid push token: token cannot be empty');
       }
 
       // Create or update token

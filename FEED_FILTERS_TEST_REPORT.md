@@ -149,3 +149,4 @@ Feed'deki postların kategori dağılımı:
 
 **Not:** Bazı testler 0 item döndürüyor, bu normal çünkü o filtreye uygun post olmayabilir (örneğin MUTUAL_TRUST source'unda post yok, Review tag'inde post yok).
 
+

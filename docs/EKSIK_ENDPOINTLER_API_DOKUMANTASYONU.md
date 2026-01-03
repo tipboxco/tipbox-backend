@@ -1219,3 +1219,4 @@ Bazı endpoint'ler mevcut endpoint'ler kullanılarak implement edilebilir:
 - `GET /search` → Mevcut (aynı format)
 
 
+

@@ -96,6 +96,13 @@ export class NotificationFactory {
       getMessage: (data) => `${data.accepterName} desteğini kabul etti`,
     });
 
+    this.registerTemplate({
+      type: NotificationType.SUPPORT_REQUEST_ACCEPTED,
+      category: NotificationCategory.SUPPORT,
+      getTitle: () => 'Destek Talebi Kabul Edildi! ✅',
+      getMessage: (data) => `${data.accepterName} destek talebinizi kabul etti`,
+    });
+
     // Gamification
     this.registerTemplate({
       type: NotificationType.NEW_BADGE,
@@ -168,6 +175,21 @@ export class NotificationFactory {
       category: NotificationCategory.EVENT,
       getTitle: () => 'Etkinlik Ödülü Hazır! 🎁',
       getMessage: (data) => `${data.eventName} etkinliğinden ${data.rewardAmount} TIPS ödülü kazanabilirsiniz!`,
+    });
+
+    // Collection Notifications
+    this.registerTemplate({
+      type: NotificationType.COLLECTION_POST_ADDED,
+      category: NotificationCategory.COLLECTION,
+      getTitle: () => 'Postunuz Koleksiyona Eklendi! 📚',
+      getMessage: (data) => `Postunuz "${data.collectionName}" koleksiyonuna eklendi`,
+    });
+
+    this.registerTemplate({
+      type: NotificationType.COLLECTION_SHARED,
+      category: NotificationCategory.COLLECTION,
+      getTitle: () => 'Koleksiyon Paylaşıldı! 📤',
+      getMessage: (data) => `${data.sharerName || data.userName} "${data.collectionName}" koleksiyonunu paylaştı`,
     });
   }
 

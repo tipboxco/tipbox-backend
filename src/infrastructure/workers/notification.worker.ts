@@ -2,7 +2,6 @@ import { Worker, Job } from 'bullmq';
 import RedisConfigManager from '../config/redis.config';
 import { NotificationJobData } from '../queue/queue.provider';
 import { NotificationPrismaRepository } from '../repositories/notification-prisma.repository';
-import { ExpoPushService } from '../push/expo-push.service';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
 import logger from '../logger/logger';
 
@@ -10,12 +9,10 @@ export class NotificationWorker {
   private worker!: Worker;
   private redisConfig: RedisConfigManager;
   private notificationRepo: NotificationPrismaRepository;
-  private expoPushService: ExpoPushService;
 
   constructor() {
     this.redisConfig = RedisConfigManager.getInstance();
     this.notificationRepo = new NotificationPrismaRepository();
-    this.expoPushService = new ExpoPushService();
   }
 
   /**
@@ -99,12 +96,9 @@ export class NotificationWorker {
       }
 
       // 3. Send push notification (if enabled)
+      // Note: Push notification service removed (Expo not used)
       if (sendPush !== false) {
-        await this.expoPushService.sendPushNotification(userId, {
-          title,
-          message,
-          data,
-        });
+        logger.debug(`Push notification for ${type} to user ${userId} (push service not implemented)`);
       }
 
       // 4. Send email (if enabled and implemented)

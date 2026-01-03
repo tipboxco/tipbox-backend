@@ -201,7 +201,7 @@ export function getPrismaModel<T = unknown>(
   prisma: ReturnType<typeof import('./prisma.client').getPrisma>,
   modelName: string
 ): T {
-  return (prisma as { [key: string]: T })[modelName] as T;
+  return (prisma as unknown as { [key: string]: T })[modelName] as T;
 }
 
 /**

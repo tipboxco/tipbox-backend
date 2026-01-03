@@ -53,6 +53,9 @@ export const CACHE_TTL = {
   DM_MESSAGES: 300,            // 5 dakika - mesajlar çok sık gelir
   DM_UNREAD_COUNT: 60,         // 1 dakika - okunmamış sayısı real-time'a yakın olmalı
   
+  // Notification related
+  NOTIFICATION_UNREAD_COUNT: 60, // 1 dakika - okunmamış bildirim sayısı real-time'a yakın olmalı
+  
   // Search related
   SEARCH_RESULTS: 1800,        // 30 dakika - arama sonuçları
   SEARCH_SUGGESTIONS: 3600,    // 1 saat - arama önerileri

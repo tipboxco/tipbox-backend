@@ -76,7 +76,7 @@ async function testGamificationNotifications() {
       // Get achievement ID for cleanup
       const userAchievement = await prisma.userAchievement.findFirst({
         where: { userId: user.userId },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { id: 'desc' },
       });
       if (userAchievement) {
         createdIds.achievementIds.push(userAchievement.id);
@@ -127,7 +127,7 @@ async function testGamificationNotifications() {
 
         const userBadge = await prisma.userBadge.findFirst({
           where: { userId: user.userId },
-          orderBy: { createdAt: 'desc' },
+          orderBy: { id: 'desc' },
         });
         if (userBadge) {
           createdIds.badgeIds.push(userBadge.id);
@@ -343,5 +343,6 @@ async function testGamificationNotifications() {
 }
 
 testGamificationNotifications();
+
 
 

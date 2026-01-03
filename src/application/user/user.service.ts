@@ -530,15 +530,15 @@ export class UserService {
     if (trustedIds.length === 0) return [];
 
     const whereClause = {
-      userId: { in: trustedIds },
-      ...(query
-        ? {
-            OR: [
+        userId: { in: trustedIds },
+        ...(query
+          ? {
+              OR: [
               { displayName: { contains: query, mode: 'insensitive' as const } },
               { userName: { contains: query, mode: 'insensitive' as const } },
-            ],
-          }
-        : {}),
+              ],
+            }
+          : {}),
     };
 
     const profiles = await this.prisma.profile.findMany({
@@ -726,15 +726,15 @@ export class UserService {
     if (trusterIds.length === 0) return [];
 
     const whereClause = {
-      userId: { in: trusterIds },
-      ...(query
-        ? {
-            OR: [
+        userId: { in: trusterIds },
+        ...(query
+          ? {
+              OR: [
               { displayName: { contains: query, mode: 'insensitive' as const } },
               { userName: { contains: query, mode: 'insensitive' as const } },
-            ],
-          }
-        : {}),
+              ],
+            }
+          : {}),
     };
 
     const profiles = await this.prisma.profile.findMany({

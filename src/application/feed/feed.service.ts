@@ -104,9 +104,13 @@ export class FeedService {
       };
     }
 
-    // Batch fetch posts with all relations
+    // Batch fetch posts with all relations (exclude user's own posts as safety check)
+    const postIds = feeds.map((feed) => feed.postId);
     const posts = await this.prisma.contentPost.findMany({
-      where: { id: { in: feeds.map((feed) => feed.postId) } },
+      where: { 
+        id: { in: postIds },
+        userId: { not: userId }, // Exclude user's own posts (safety check)
+      },
       include: {
         user: {
           include: {

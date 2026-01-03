@@ -76,7 +76,7 @@ async function testTrustNotifications() {
       const trustRelation = await prisma.trustRelation.findFirst({
         where: {
           trusterId: user1.userId,
-          trustedId: user2.userId,
+          trustedUserId: user2.userId,
         },
       });
       if (trustRelation) {
@@ -133,7 +133,7 @@ async function testTrustNotifications() {
       const trustRelation = await prisma.trustRelation.findFirst({
         where: {
           trusterId: user2.userId,
-          trustedId: user1.userId,
+          trustedUserId: user1.userId,
         },
       });
       if (trustRelation) {
@@ -230,5 +230,6 @@ async function testTrustNotifications() {
 }
 
 testTrustNotifications();
+
 
 

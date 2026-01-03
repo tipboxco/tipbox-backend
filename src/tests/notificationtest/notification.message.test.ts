@@ -1,6 +1,8 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+import http from 'http';
+import { Server } from 'socket.io';
 import { PrismaClient } from '@prisma/client';
 import { MessagingService } from '../../application/messaging/messaging.service';
 import { SupportRequestService } from '../../application/messaging/support-request.service';
@@ -10,6 +12,7 @@ import { TestDataCleaner } from './helpers/test-data-cleaner';
 import { MediaHelper } from './helpers/media-helper';
 import RedisConfigManager from '../../infrastructure/config/redis.config';
 import QueueProvider from '../../infrastructure/queue/queue.provider';
+import SocketManager from '../../infrastructure/realtime/socket-manager';
 import logger from '../../infrastructure/logger/logger';
 
 const prisma = new PrismaClient();
@@ -53,6 +56,15 @@ async function testMessageNotifications() {
     try {
       await RedisConfigManager.getInstance().initialize();
       await QueueProvider.getInstance().initialize();
+      
+      // Initialize SocketManager for messaging service
+      const httpServer = http.createServer();
+      const io = new Server(httpServer, {
+        cors: { origin: '*' },
+        transports: ['websocket', 'polling'],
+      });
+      SocketManager.getInstance().initialize(io);
+      
       console.log('✅ Services initialized\n');
     } catch (error: any) {
       console.log(`⚠️  Services initialization warning: ${error.message}\n`);
@@ -211,10 +223,14 @@ async function testMessageNotifications() {
       });
 
       if (request) {
+        console.log(`  📋 Found request: ${request.id}, status: ${request.status}`);
+        
         // Accept the request
         await supportRequestService.acceptSupportRequest(request.id, supportExpert.userId);
+        console.log(`  ✅ Request accepted successfully`);
 
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Worker'ın bildirimi işlemesi için daha uzun bekleme
+        await new Promise(resolve => setTimeout(resolve, 5000));
 
         // Check for SUPPORT_REQUEST_ACCEPTED (DM_REQUEST_ACCEPTED is same)
         const notification = await prisma.notification.findFirst({
@@ -284,10 +300,14 @@ async function testMessageNotifications() {
       });
 
       if (request) {
+        console.log(`  📋 Found request: ${request.id}, status: ${request.status}`);
+        
         // Accept the request
         await supportRequestService.acceptSupportRequest(request.id, supportExpert.userId);
+        console.log(`  ✅ Request accepted successfully`);
 
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Worker'ın bildirimi işlemesi için daha uzun bekleme
+        await new Promise(resolve => setTimeout(resolve, 5000));
 
         const notification = await prisma.notification.findFirst({
           where: {

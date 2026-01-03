@@ -158,3 +158,4 @@ await RedisConfigManager.getInstance().disconnect();
 - Bildirimler queue'ya ekleniyor, worker tarafından işleniyor
 
 
+
