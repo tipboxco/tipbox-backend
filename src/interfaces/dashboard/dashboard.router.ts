@@ -466,7 +466,7 @@ const dashboardScript = `
       const dangerousCommands = ['db:reset:all', 'db:reset:force'];
       if (dangerousCommands.includes(command)) {
         const confirmMessage = command === 'db:reset:force' 
-          ? 'Bu işlem tüm tabloları silecek ve migration\'ları baştan oluşturacak. Devam etmek istediğinize emin misiniz?'
+          ? 'Bu işlem tüm tabloları silecek ve migrationları baştan oluşturacak. Devam etmek istediğinize emin misiniz?'
           : 'Bu işlem tüm verileri (taxonomy dahil) silecek. Devam etmek istediğinize emin misiniz?';
         if (!confirm(confirmMessage)) {
           return;
@@ -655,6 +655,57 @@ const dashboardScript = `
       } else {
         console.error('Clear seed button not found');
       }
+      
+      // Data command butonlarına event listener ekle
+      const dataCommandButtons = document.querySelectorAll('[data-command]');
+      dataCommandButtons.forEach(function(button) {
+        button.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          const command = button.getAttribute('data-command');
+          console.log('Data command button clicked:', command);
+          if (command) {
+            executeDataCommand(command);
+          }
+        });
+      });
+      console.log('Data command buttons listeners added:', dataCommandButtons.length);
+      
+      // Container action butonlarına event listener ekle
+      const containerActionButtons = document.querySelectorAll('[data-action][data-container]');
+      containerActionButtons.forEach(function(button) {
+        button.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          const action = button.getAttribute('data-action');
+          const containerName = button.getAttribute('data-container');
+          console.log('Container action button clicked:', action, containerName);
+          
+          if (action === 'stop' && containerName) {
+            dockerContainerStop(containerName);
+          } else if (action === 'start' && containerName) {
+            dockerContainerStart(containerName);
+          }
+        });
+      });
+      console.log('Container action buttons listeners added:', containerActionButtons.length);
+      
+      // Container actions div'lerine click event propagation'ı durdur
+      const containerActionsDivs = document.querySelectorAll('[data-container-actions]');
+      containerActionsDivs.forEach(function(div) {
+        div.addEventListener('click', function(e) {
+          e.stopPropagation();
+        });
+      });
+      
+      // Logo için error handler ekle
+      const dashboardLogo = document.getElementById('dashboard-logo');
+      if (dashboardLogo) {
+        dashboardLogo.addEventListener('error', function() {
+          this.style.display = 'none';
+        });
+        console.log('Dashboard logo error handler added');
+      }
     }
     
     async function updateDockerStatusUI() {
@@ -696,7 +747,7 @@ const dashboardScript = `
 
           // İlgili kartlardaki Start/Stop butonlarını status'e göre enable/disable et
           const actionContainers = document.querySelectorAll(
-            '.container-actions [onclick*="' + containerName + '"]'
+            '.container-actions [data-container="' + containerName + '"]'
           );
           actionContainers.forEach(function(btn) {
             const isStartButton = btn.classList.contains('start');
@@ -738,7 +789,7 @@ const dashboardScript = `
       }
       
       try {
-        const buttons = document.querySelectorAll('.container-actions [onclick*="' + containerName + '"]');
+        const buttons = document.querySelectorAll('.container-actions [data-container="' + containerName + '"]');
         buttons.forEach(function(btn) { btn.disabled = true; });
         
         const response = await fetch('/docker/container/stop', {
@@ -756,7 +807,7 @@ const dashboardScript = `
       } catch (e) {
         alert('Error: ' + (e && e.message ? e.message : e));
       } finally {
-        const buttons = document.querySelectorAll('.container-actions [onclick*="' + containerName + '"]');
+        const buttons = document.querySelectorAll('.container-actions [data-container="' + containerName + '"]');
         buttons.forEach(function(btn) { btn.disabled = false; });
       }
     }
@@ -765,7 +816,7 @@ const dashboardScript = `
     
     async function dockerContainerStart(containerName) {
       try {
-        const buttons = document.querySelectorAll('.container-actions [onclick*="' + containerName + '"]');
+        const buttons = document.querySelectorAll('.container-actions [data-container="' + containerName + '"]');
         buttons.forEach(function(btn) { btn.disabled = true; });
         
         const response = await fetch('/docker/container/start', {
@@ -783,7 +834,7 @@ const dashboardScript = `
       } catch (e) {
         alert('Error: ' + (e && e.message ? e.message : e));
       } finally {
-        const buttons = document.querySelectorAll('.container-actions [onclick*="' + containerName + '"]');
+        const buttons = document.querySelectorAll('.container-actions [data-container="' + containerName + '"]');
         buttons.forEach(function(btn) { btn.disabled = false; });
       }
     }
@@ -1770,7 +1821,7 @@ router.get('/', (req: Request, res: Response) => {
         <img src="https://tipbox.co/images/tipbox-logo-yellow.png" 
              alt="Tipbox Logo" 
              class="dashboard-header-logo" 
-             onerror="this.style.display='none'">
+             id="dashboard-logo">
         <h1>Developer Console</h1>
       </div>
       <div class="env-badge" style="background-color: ${envColor}; color: #FFFFFF;">
@@ -1802,10 +1853,11 @@ router.get('/', (req: Request, res: Response) => {
             <p>${service.description}</p>
             <div class="url">${url}</div>
             ${service.canControlContainer ? `
-              <div class="container-actions" onclick="event.preventDefault(); event.stopPropagation();">
+              <div class="container-actions" data-container-actions="${service.containerName}">
                 <button
                   class="container-button stop"
-                  onclick="dockerContainerStop('${service.containerName}'); event.preventDefault(); event.stopPropagation();"
+                  data-action="stop"
+                  data-container="${service.containerName}"
                   title="Stop ${service.containerName} container"
                 >
                   <i class="fas fa-stop"></i>
@@ -1813,7 +1865,8 @@ router.get('/', (req: Request, res: Response) => {
                 </button>
                 <button
                   class="container-button start"
-                  onclick="dockerContainerStart('${service.containerName}'); event.preventDefault(); event.stopPropagation();"
+                  data-action="start"
+                  data-container="${service.containerName}"
                   title="Start ${service.containerName} container"
                 >
                   <i class="fas fa-play"></i>
@@ -1874,7 +1927,7 @@ router.get('/', (req: Request, res: Response) => {
               <li>Seed verileri eklenir</li>
             </ul>
           </div>
-          <button class="seed-button" onclick="executeDataCommand('db:seed')" id="btn-db-seed">
+          <button class="seed-button" data-command="db:seed" id="btn-db-seed">
             Run Seed
           </button>
           <div id="status-db-seed"></div>
@@ -1901,7 +1954,7 @@ router.get('/', (req: Request, res: Response) => {
               <li>Seed verileri eklenir</li>
             </ul>
           </div>
-          <button class="seed-button" onclick="executeDataCommand('db:seed:all')" id="btn-db-seed-all">
+          <button class="seed-button" data-command="db:seed:all" id="btn-db-seed-all">
             Run Seed All
           </button>
           <div id="status-db-seed-all"></div>
@@ -1927,7 +1980,7 @@ router.get('/', (req: Request, res: Response) => {
               <li>Seed çalıştırılmaz</li>
             </ul>
           </div>
-          <button class="seed-button" onclick="executeDataCommand('db:reset')" id="btn-db-reset">
+          <button class="seed-button" data-command="db:reset" id="btn-db-reset">
             Reset Data
           </button>
           <div id="status-db-reset"></div>
@@ -1952,7 +2005,7 @@ router.get('/', (req: Request, res: Response) => {
               <li>Seed çalıştırılmaz</li>
             </ul>
           </div>
-          <button class="danger-button" onclick="executeDataCommand('db:reset:all')" id="btn-db-reset-all">
+          <button class="danger-button" data-command="db:reset:all" id="btn-db-reset-all">
             Reset All
           </button>
           <div id="status-db-reset-all"></div>
@@ -1978,7 +2031,7 @@ router.get('/', (req: Request, res: Response) => {
               <li>Verisiz tablo (seed çalıştırılmaz)</li>
             </ul>
           </div>
-          <button class="danger-button" onclick="executeDataCommand('db:reset:force')" id="btn-db-reset-force">
+          <button class="danger-button" data-command="db:reset:force" id="btn-db-reset-force">
             Force Reset
           </button>
           <div id="status-db-reset-force"></div>

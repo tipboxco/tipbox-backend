@@ -55,6 +55,12 @@ app.use((req, res, next) => {
       "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; img-src 'self' data: https:; connect-src 'self' http: https:;"
     );
   }
+  // Dashboard için CSP gevşetme
+  if (req.path === '/' || req.path.startsWith('/dashboard')) {
+    res.setHeader('Content-Security-Policy',
+      "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; script-src 'self' 'unsafe-inline' 'unsafe-eval'; script-src-attr 'unsafe-inline'; img-src 'self' data: https://tipbox.co https://cdnjs.cloudflare.com; connect-src 'self' http: https:; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com;"
+    );
+  }
   next();
 });
 
