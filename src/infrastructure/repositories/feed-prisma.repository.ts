@@ -12,7 +12,13 @@ export class FeedPrismaRepository {
 
   async findByUserId(userId: string, options?: { limit?: number; cursor?: string; seen?: boolean }): Promise<{ feeds: Feed[]; nextCursor?: string }> {
     const limit = options?.limit || 20;
-    const where: any = { userId };
+    const where: any = { 
+      userId,
+      // Kullanıcının kendi post'larını feed'inde gösterme
+      post: {
+        userId: { not: userId }
+      }
+    };
     
     if (options?.seen !== undefined) {
       where.seen = options.seen;
