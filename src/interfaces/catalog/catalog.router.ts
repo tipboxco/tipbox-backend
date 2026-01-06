@@ -164,6 +164,11 @@ router.get(
  *           type: string
  *           format: uuid
  *         description: Product group ID'si
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Product adı, marka veya açıklamasında arama yapar
  *     responses:
  *       200:
  *         description: Ürünler başarıyla listelendi.
@@ -194,7 +199,8 @@ router.get(
   '/product-groups/:productGroupId/products',
   asyncHandler(async (req: Request, res: Response) => {
     const { productGroupId } = req.params;
-    const products = await catalogService.getProductsByProductGroupId(productGroupId);
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
+    const products = await catalogService.getProductsByProductGroupId(productGroupId, search);
     return res.json(products);
   }),
 );
