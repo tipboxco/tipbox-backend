@@ -61,6 +61,8 @@ model User {
   rewardClaims            RewardClaim[]
   scenarioChoices         ScenarioChoice[]
   supportRequestReports   SupportRequestReport[]  @relation("SupportRequestReportReporter")
+  userReportsAsReporter    UserReport[]            @relation("UserReportReporter")
+  userReportsAsReported    UserReport[]            @relation("UserReportReported")
   sentTips                TipsTokenTransfer[]     @relation("SentTips")
   receivedTips            TipsTokenTransfer[]     @relation("ReceivedTips")
   trustRelationsAsTrusted TrustRelation[]         @relation("TrustedUserRelation")
@@ -1367,6 +1369,24 @@ model SupportRequestReport {
   @@index([requestId])
   @@index([reporterId])
   @@map("support_request_reports")
+}
+
+model UserReport {
+  id          String   @id @default(uuid()) @db.Uuid
+  reportedUserId String @map("reported_user_id") @db.Uuid
+  reporterId  String   @map("reporter_id") @db.Uuid
+  category    String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  reportedUser User    @relation("UserReportReported", fields: [reportedUserId], references: [id], onDelete: Cascade)
+  reporter    User     @relation("UserReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@unique([reporterId, reportedUserId])
+  @@index([reportedUserId])
+  @@index([reporterId])
+  @@index([category])
+  @@map("user_reports")
 }
 
 model DMSupportSession {

@@ -1477,6 +1477,81 @@ router.delete('/:id/block/:targetUserId', asyncHandler(async (req: Request, res:
 
 /**
  * @openapi
+ * /users/{id}/report/{targetUserId}:
+ *   post:
+ *     summary: Bir kullanıcıyı raporla (report)
+ *     description: Bir kullanıcıyı belirtilen kategori ve açıklama ile raporlar
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *         description: Kullanıcı ID (raporlayan)
+ *       - in: path
+ *         name: targetUserId
+ *         required: true
+ *         schema: { type: string }
+ *         description: Raporlanacak kullanıcı ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - category
+ *             properties:
+ *               category:
+ *                 type: string
+ *                 enum: [SPAM, HARASSMENT, SCAM, INAPPROPRIATE_CONTENT, FAKE_ACCOUNT, OTHER]
+ *                 description: Rapor kategorisi
+ *               description:
+ *                 type: string
+ *                 maxLength: 500
+ *                 description: Rapor açıklaması (opsiyonel)
+ *     responses:
+ *       201:
+ *         description: Kullanıcı başarıyla raporlandı
+ *       400:
+ *         description: Geçersiz istek (kendini raporlama, geçersiz kategori, vb.)
+ *       409:
+ *         description: Bu kullanıcı zaten raporlanmış
+ *       404:
+ *         description: Raporlanan kullanıcı bulunamadı
+ */
+router.post('/:id/report/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
+  const id = String(req.params.id);
+  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
+  const targetUserId = String(req.params.targetUserId);
+  const { category, description } = req.body || {};
+  
+  if (!category || typeof category !== 'string') {
+    return res.status(400).json({ message: 'Category is required' });
+  }
+
+  try {
+    await userService.reportUser(id, targetUserId, category, description);
+    return res.status(201).json({ message: 'Kullanıcı başarıyla raporlandı' });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata';
+    if (errorMessage.includes('zaten raporlanmış')) {
+      return res.status(409).json({ message: errorMessage });
+    }
+    if (errorMessage.includes('bulunamadı')) {
+      return res.status(404).json({ message: errorMessage });
+    }
+    return res.status(400).json({ message: errorMessage });
+  }
+}));
+
+/**
+ * @openapi
  * /users/{id}/mute/{targetUserId}:
  *   post:
  *     summary: Bir kullanıcıyı sustur (mute)

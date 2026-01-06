@@ -821,6 +821,55 @@ export class UserService {
     }
   }
 
+  async reportUser(
+    reporterId: string,
+    reportedUserId: string,
+    category: string,
+    description?: string | null
+  ): Promise<void> {
+    if (reporterId === reportedUserId) {
+      throw new Error('Kendinizi raporlayamazsınız');
+    }
+
+    // Kullanıcının var olup olmadığını kontrol et
+    const reportedUser = await this.prisma.user.findUnique({
+      where: { id: reportedUserId },
+    });
+    if (!reportedUser) {
+      throw new Error('Raporlanan kullanıcı bulunamadı');
+    }
+
+    const { UserReportPrismaRepository } = await import('../../infrastructure/repositories/user-report-prisma.repository');
+    const { UserReportCategory } = await import('../../domain/user/user-report-category.enum');
+    const userReportRepo = new UserReportPrismaRepository();
+
+    // Aynı kullanıcı aynı kullanıcıyı birden fazla kez raporlayamaz
+    const existingReport = await userReportRepo.findByReporterIdAndReportedUserId(reporterId, reportedUserId);
+    if (existingReport) {
+      throw new Error('Bu kullanıcı zaten raporlanmış. Her kullanıcı bir kullanıcı için sadece bir kez rapor gönderebilir.');
+    }
+
+    const normalizedCategory = String(category || '').toUpperCase();
+    const validCategories = Object.values(UserReportCategory) as string[];
+    if (!validCategories.includes(normalizedCategory)) {
+      throw new Error('Geçersiz rapor kategorisi');
+    }
+
+    const trimmedDescription = description?.trim();
+    if (trimmedDescription && trimmedDescription.length > 500) {
+      throw new Error('Açıklama çok uzun (maksimum 500 karakter)');
+    }
+
+    await userReportRepo.create({
+      reportedUserId,
+      reporterId,
+      category: normalizedCategory as any,
+      description: trimmedDescription || null,
+    });
+
+    logger.info(`User ${reportedUserId} reported by ${reporterId} with category ${normalizedCategory}`);
+  }
+
   async muteUser(userId: string, targetUserId: string): Promise<void> {
     // idempotent create - Prisma model name is UserMute
     const userMute = getPrismaModel<{

@@ -139,11 +139,26 @@ app.get('/api-docs/custom-swagger.js', (req, res) => {
 
 function getDynamicSwaggerOptions(req: express.Request) {
   const baseOptions = getSwaggerOptions();
+  
+  // BASE_URL set edilmişse, onu kullan (req.get('host') yerine)
+  const baseUrl = process.env.BASE_URL;
+  
   return {
     ...baseOptions,
     definition: {
       ...baseOptions.definition,
       servers: getSwaggerServers().map(server => {
+        // BASE_URL set edilmişse, onu kullan
+        if (baseUrl) {
+          let cleanUrl = baseUrl.replace(/\/$/, '');
+          // Eğer protocol yoksa http:// ekle
+          if (!cleanUrl.match(/^https?:\/\//)) {
+            cleanUrl = `http://${cleanUrl}`;
+          }
+          return { ...server, url: cleanUrl };
+        }
+        
+        // BASE_URL yoksa ve localhost ise, request'ten host al
         if (server.url.includes('localhost') && req.get('host')) {
           const protocol = req.protocol || 'http';
           return { ...server, url: `${protocol}://${req.get('host')}` };
