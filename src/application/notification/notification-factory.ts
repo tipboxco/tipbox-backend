@@ -221,5 +221,18 @@ export class NotificationFactory {
     const template = this.templates.get(type);
     return template?.category;
   }
+
+  /**
+   * Get all notification types for a given category
+   */
+  public getTypesByCategory(category: NotificationCategory): NotificationType[] {
+    const types: NotificationType[] = [];
+    this.templates.forEach((template, type) => {
+      if (template.category === category) {
+        types.push(type);
+      }
+    });
+    return types;
+  }
 }
 

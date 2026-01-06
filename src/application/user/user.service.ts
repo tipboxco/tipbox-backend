@@ -710,7 +710,11 @@ export class UserService {
     ]);
   }
 
-  async listTrusters(userId: string, query?: string): Promise<Array<{
+  async listTrusters(
+    userId: string,
+    query?: string,
+    sort?: 'name_asc' | 'name_desc' | 'date_asc' | 'date_desc' | 'trusted_first'
+  ): Promise<Array<{
     id: string;
     userName: string | null;
     titles: string[];
@@ -720,10 +724,14 @@ export class UserService {
   }>> {
     const trusterRelations = await this.prisma.trustRelation.findMany({
       where: { trustedUserId: userId },
-      select: { trusterId: true },
+      select: { trusterId: true, createdAt: true },
+      orderBy: sort === 'date_asc' ? { createdAt: 'asc' } : sort === 'date_desc' ? { createdAt: 'desc' } : undefined,
     });
     const trusterIds = trusterRelations.map(r => r.trusterId);
     if (trusterIds.length === 0) return [];
+
+    // Create a map of trusterId -> createdAt for sorting
+    const trustDateMap = new Map(trusterRelations.map(r => [r.trusterId, r.createdAt]));
 
     const whereClause = {
         userId: { in: trusterIds },
@@ -737,6 +745,16 @@ export class UserService {
           : {}),
     };
 
+    // Build orderBy based on sort parameter
+    let orderBy: any = {};
+    if (sort === 'name_asc') {
+      orderBy = { displayName: 'asc' };
+    } else if (sort === 'name_desc') {
+      orderBy = { displayName: 'desc' };
+    }
+    // date_asc and date_desc are handled at trustRelation level
+    // trusted_first will be handled after fetching
+
     const profiles = await this.prisma.profile.findMany({
       where: asProfileWhere(whereClause),
       select: {
@@ -744,6 +762,7 @@ export class UserService {
         displayName: true,
         userName: true,
       },
+      ...(Object.keys(orderBy).length > 0 && { orderBy }),
     });
 
     const titles = await this.prisma.userTitle.findMany({
@@ -774,7 +793,7 @@ export class UserService {
     const defaultAvatarPath = 'avatars/default/default-useravatar.png';
     const defaultAvatarUrl = resolveMediaUrl(defaultAvatarPath);
 
-    return profiles.map(p => {
+    let result = profiles.map(p => {
       const avatarUrl = resolveMediaUrl(avatarMap.get(String(p.userId)) ?? null);
       return {
         id: String(p.userId),
@@ -783,8 +802,33 @@ export class UserService {
         avatar: avatarUrl || defaultAvatarUrl || '',
         name: p.displayName,
         isTrusted: myTrustedSet.has(String(p.userId)),
+        trustDate: trustDateMap.get(String(p.userId)),
       };
     });
+
+    // Apply additional sorting
+    if (sort === 'date_asc') {
+      result = result.sort((a, b) => {
+        const dateA = a.trustDate?.getTime() || 0;
+        const dateB = b.trustDate?.getTime() || 0;
+        return dateA - dateB;
+      });
+    } else if (sort === 'date_desc') {
+      result = result.sort((a, b) => {
+        const dateA = a.trustDate?.getTime() || 0;
+        const dateB = b.trustDate?.getTime() || 0;
+        return dateB - dateA;
+      });
+    } else if (sort === 'trusted_first') {
+      result = result.sort((a, b) => {
+        if (a.isTrusted && !b.isTrusted) return -1;
+        if (!a.isTrusted && b.isTrusted) return 1;
+        return 0;
+      });
+    }
+
+    // Remove trustDate from result
+    return result.map(({ trustDate, ...rest }) => rest);
   }
 
   async blockUser(userId: string, targetUserId: string): Promise<void> {

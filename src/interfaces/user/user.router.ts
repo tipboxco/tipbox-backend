@@ -294,6 +294,13 @@ router.get('/:id/trusts', asyncHandler(async (req: Request, res: Response) => {
  *         name: q
  *         schema: { type: string }
  *         description: İsim veya kullanıcı adına göre arama (case-insensitive)
+ *       - in: query
+ *         name: sort
+ *         schema:
+ *           type: string
+ *           enum: [name_asc, name_desc, date_asc, date_desc, trusted_first]
+ *           default: date_desc
+ *         description: Sıralama kriteri (name_asc: A-Z, name_desc: Z-A, date_asc: Eski-yeni, date_desc: Yeni-eski, trusted_first: Önce trust edilenler)
  *     responses:
  *       200:
  *         description: Truster listesi
@@ -301,7 +308,10 @@ router.get('/:id/trusts', asyncHandler(async (req: Request, res: Response) => {
 router.get('/:id/trusters', asyncHandler(async (req: Request, res: Response) => {
   const id = String(req.params.id);
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : undefined;
-  const list = await userService.listTrusters(id, q);
+  const sort = typeof req.query.sort === 'string' 
+    ? req.query.sort as 'name_asc' | 'name_desc' | 'date_asc' | 'date_desc' | 'trusted_first'
+    : 'date_desc'; // Default sort
+  const list = await userService.listTrusters(id, q, sort);
   return res.json(list);
 }));
 

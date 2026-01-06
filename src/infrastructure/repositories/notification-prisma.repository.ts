@@ -92,13 +92,30 @@ export class NotificationPrismaRepository {
       limit?: number;
       offset?: number;
       unreadOnly?: boolean;
+      type?: NotificationType;
+      category?: NotificationCategory;
     }
   ): Promise<Notification[]> {
     try {
+      // Import NotificationFactory to get types by category
+      const { NotificationFactory } = await import('../../application/notification/notification-factory');
+      const { NotificationCategory } = await import('../../domain/notification/notification-category.enum');
+      
+      const factory = new NotificationFactory();
+      
+      // Build type filter
+      let typeFilter: NotificationType[] | undefined;
+      if (options?.type) {
+        typeFilter = [options.type];
+      } else if (options?.category) {
+        typeFilter = factory.getTypesByCategory(options.category);
+      }
+
       const notifications = await this.prisma.notification.findMany({
         where: {
           userId,
           ...(options?.unreadOnly && { read: false }),
+          ...(typeFilter && typeFilter.length > 0 && { type: { in: typeFilter } }),
         },
         orderBy: { createdAt: 'desc' },
         take: options?.limit || 20,
@@ -130,13 +147,29 @@ export class NotificationPrismaRepository {
     userId: string,
     options?: {
       unreadOnly?: boolean;
+      type?: NotificationType;
+      category?: NotificationCategory;
     }
   ): Promise<number> {
     try {
+      // Import NotificationFactory to get types by category
+      const { NotificationFactory } = await import('../../application/notification/notification-factory');
+      
+      const factory = new NotificationFactory();
+      
+      // Build type filter
+      let typeFilter: NotificationType[] | undefined;
+      if (options?.type) {
+        typeFilter = [options.type];
+      } else if (options?.category) {
+        typeFilter = factory.getTypesByCategory(options.category);
+      }
+
       return await this.prisma.notification.count({
         where: {
           userId,
           ...(options?.unreadOnly && { read: false }),
+          ...(typeFilter && typeFilter.length > 0 && { type: { in: typeFilter } }),
         },
       });
     } catch (error) {

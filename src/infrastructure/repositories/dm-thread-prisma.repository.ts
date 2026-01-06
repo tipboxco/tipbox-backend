@@ -70,9 +70,18 @@ export class DMThreadPrismaRepository {
 
   async findDetailedByUserId(
     userId: string,
-    options: { search?: string; unreadOnly?: boolean; limit?: number } = {},
+    options: { search?: string; unreadOnly?: boolean; limit?: number; threadType?: 'DM' | 'SUPPORT' | 'ALL' } = {},
   ): Promise<ThreadWithRelations[]> {
     const userIdStr = String(userId);
+
+    // Build isSupportThread filter based on threadType
+    let isSupportThreadFilter: boolean | undefined;
+    if (options.threadType === 'DM') {
+      isSupportThreadFilter = false;
+    } else if (options.threadType === 'SUPPORT') {
+      isSupportThreadFilter = true;
+    }
+    // If threadType is 'ALL' or undefined, don't filter by isSupportThread
 
     const threads = await this.prisma.dMThread.findMany({
       where: {
@@ -80,7 +89,7 @@ export class DMThreadPrismaRepository {
           { userOneId: userIdStr },
           { userTwoId: userIdStr },
         ],
-        isSupportThread: false,
+        ...(isSupportThreadFilter !== undefined && { isSupportThread: isSupportThreadFilter }),
       } as any,
       include: THREAD_INCLUDE,
       orderBy: { updatedAt: 'desc' },

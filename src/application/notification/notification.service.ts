@@ -99,6 +99,8 @@ export class NotificationService {
       limit?: number;
       offset?: number;
       unreadOnly?: boolean;
+      type?: NotificationType;
+      category?: NotificationCategory;
     }
   ): Promise<{
     notifications: Notification[];
@@ -112,9 +114,25 @@ export class NotificationService {
     const limit = options?.limit || 20;
     const offset = options?.offset || 0;
 
+    // If category is provided, get all types for that category
+    let typeFilter: NotificationType | undefined = options?.type;
+    if (options?.category && !typeFilter) {
+      const typesForCategory = this.notificationFactory.getTypesByCategory(options.category);
+      // If category filter is provided, we'll filter by types in repository
+      typeFilter = undefined; // We'll handle category filtering in repository
+    }
+
     const [notifications, total] = await Promise.all([
-      this.notificationRepo.findByUserId(userId, options),
-      this.notificationRepo.getTotalCount(userId, { unreadOnly: options?.unreadOnly }),
+      this.notificationRepo.findByUserId(userId, {
+        ...options,
+        type: typeFilter,
+        category: options?.category,
+      }),
+      this.notificationRepo.getTotalCount(userId, {
+        unreadOnly: options?.unreadOnly,
+        type: typeFilter,
+        category: options?.category,
+      }),
     ]);
 
     return {
