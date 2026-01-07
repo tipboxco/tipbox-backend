@@ -641,3 +641,4 @@ Mobil uygulamada yukarıdaki performans önerilerini uygulayarak kullanıcı den
 
 
 
+

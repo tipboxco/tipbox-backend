@@ -1224,3 +1224,4 @@ Bazı endpoint'ler mevcut endpoint'ler kullanılarak implement edilebilir:
 
 
 
+
