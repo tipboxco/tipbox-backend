@@ -1058,12 +1058,189 @@ const dashboardScript = `
     }
 `;
 
+// HTML escape fonksiyonu (XSS koruması ve syntax hatalarını önlemek için)
+function escapeHtml(text: string): string {
+  if (!text) return 'N/A';
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/`/g, '&#96;')
+    .replace(/\$/g, '&#36;');
+}
+
+// Versiyon ve commit bilgisini al
+async function getVersionInfo(): Promise<{ version: string; commit: string; repoUrl?: string }> {
+  const projectRoot = getProjectRoot();
+  let version = 'N/A';
+  let commit = 'N/A';
+  let repoUrl: string | undefined;
+
+  // package.json'dan version ve repository bilgisini al
+  try {
+    const packageJsonPath = path.join(projectRoot, 'package.json');
+    if (fs.existsSync(packageJsonPath)) {
+      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+      version = packageJson.version || 'N/A';
+      
+      // Repository URL'ini al (GitHub commit linki için)
+      if (packageJson.repository) {
+        if (typeof packageJson.repository === 'string') {
+          repoUrl = packageJson.repository.replace(/^git\+/, '').replace(/\.git$/, '');
+        } else if (packageJson.repository.url) {
+          repoUrl = packageJson.repository.url.replace(/^git\+/, '').replace(/\.git$/, '');
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('Could not read package.json:', error);
+  }
+
+  // Git commit hash'ini al (7 haneli)
+  // Önce environment variable'dan dene (CI/CD ortamlarında genellikle set edilir)
+  const envCommit = process.env.GIT_COMMIT || process.env.GITHUB_SHA || process.env.CI_COMMIT_SHA;
+  if (envCommit) {
+    commit = envCommit.substring(0, 7);
+    console.log('Using commit hash from environment variable:', commit);
+  } else {
+    // Git komutunu dene
+    try {
+      // Önce git'in varlığını kontrol et
+      await execAsync('git --version', {
+        cwd: projectRoot,
+        maxBuffer: 1024,
+        encoding: 'utf8'
+      });
+      
+      // Git repository kontrolü
+      let gitProjectRoot = projectRoot;
+      const gitDir = path.join(gitProjectRoot, '.git');
+      if (!fs.existsSync(gitDir)) {
+        // .git dizini yoksa, parent dizinlerde ara
+        let searchDir = gitProjectRoot;
+        let found = false;
+        for (let i = 0; i < 5; i++) {
+          const testGitDir = path.join(searchDir, '.git');
+          if (fs.existsSync(testGitDir)) {
+            gitProjectRoot = searchDir;
+            found = true;
+            break;
+          }
+          searchDir = path.dirname(searchDir);
+        }
+        if (!found) {
+          throw new Error('Git repository not found');
+        }
+      }
+      
+      const { stdout } = await execAsync('git rev-parse --short=7 HEAD', {
+        cwd: gitProjectRoot,
+        maxBuffer: 1024,
+        encoding: 'utf8'
+      });
+      commit = stdout.trim() || 'N/A';
+      if (commit && commit !== 'N/A') {
+        console.log('Git commit hash retrieved:', commit);
+      } else {
+        console.warn('Git commit hash is empty');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.warn('Could not get git commit hash:', errorMessage);
+      
+      // Alternatif: .git/HEAD dosyasından oku (detached HEAD durumunda)
+      try {
+        let gitProjectRoot = projectRoot;
+        // .git dizinini bul
+        let searchDir = projectRoot;
+        for (let i = 0; i < 5; i++) {
+          const testGitDir = path.join(searchDir, '.git');
+          if (fs.existsSync(testGitDir)) {
+            gitProjectRoot = searchDir;
+            break;
+          }
+          searchDir = path.dirname(searchDir);
+        }
+        
+        const gitHeadPath = path.join(gitProjectRoot, '.git', 'HEAD');
+        if (fs.existsSync(gitHeadPath)) {
+          let headContent = fs.readFileSync(gitHeadPath, 'utf8').trim();
+          // Eğer ref ise (örn: ref: refs/heads/main), ref dosyasını oku
+          if (headContent.startsWith('ref:')) {
+            const refPath = headContent.substring(5).trim();
+            const refFilePath = path.join(gitProjectRoot, '.git', refPath);
+            if (fs.existsSync(refFilePath)) {
+              headContent = fs.readFileSync(refFilePath, 'utf8').trim();
+            }
+          }
+          // Commit hash'in ilk 7 karakterini al
+          if (headContent && headContent.length >= 7) {
+            commit = headContent.substring(0, 7);
+            console.log('Git commit hash read from .git/HEAD:', commit);
+          }
+        }
+      } catch (headError) {
+        const errorMessage = headError instanceof Error ? headError.message : String(headError);
+        console.warn('Could not read .git/HEAD:', errorMessage);
+      }
+    }
+  }
+
+  // Eğer hala commit yoksa, git remote'u kontrol et ve son commit'i almayı dene
+  if (commit === 'N/A') {
+    try {
+      let gitProjectRoot = projectRoot;
+      // .git dizinini bul
+      let searchDir = projectRoot;
+      for (let i = 0; i < 5; i++) {
+        const testGitDir = path.join(searchDir, '.git');
+        if (fs.existsSync(testGitDir)) {
+          gitProjectRoot = searchDir;
+          break;
+        }
+        searchDir = path.dirname(searchDir);
+      }
+      
+      // Git log'dan son commit'i al
+      const { stdout } = await execAsync('git log -1 --format=%H', {
+        cwd: gitProjectRoot,
+        maxBuffer: 1024,
+        encoding: 'utf8'
+      });
+      const fullHash = stdout.trim();
+      if (fullHash && fullHash.length >= 7) {
+        commit = fullHash.substring(0, 7);
+        console.log('Git commit hash retrieved from git log:', commit);
+      }
+    } catch (logError) {
+      const errorMessage = logError instanceof Error ? logError.message : String(logError);
+      console.warn('Could not get commit from git log:', errorMessage);
+    }
+  }
+
+  return { version, commit, repoUrl };
+}
+
 // Dashboard HTML - sadece root path
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   // Ortam bilgisini al
   const environment = process.env.NODE_ENV || 'development';
   const envLabel = environment === 'production' ? 'Prod' : environment === 'test' ? 'Test' : 'Dev';
   const envColor = environment === 'production' ? '#ef4444' : environment === 'test' ? '#f59e0b' : '#10b981';
+  
+  // Versiyon ve commit bilgisini al
+  const { version, commit, repoUrl } = await getVersionInfo();
+  
+  // GitHub commit linki oluştur
+  let commitLink = '#';
+  if (commit && commit !== 'N/A' && repoUrl) {
+    commitLink = `${repoUrl}/commit/${commit}`;
+  } else if (commit && commit !== 'N/A') {
+    // Repository URL yoksa, varsayılan GitHub URL'ini kullan
+    commitLink = `https://github.com/tipboxco/tipbox-backend/commit/${commit}`;
+  }
   
   // API hostname'lerini ortam değişkenlerinden al
   const testApiHostname = process.env.TEST_API_HOSTNAME || 'api-test.tipbox.co';
@@ -1206,6 +1383,24 @@ router.get('/', (req: Request, res: Response) => {
       border: none;
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
     }
+    .version-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 10px 20px;
+      border-radius: 24px;
+      font-size: 0.9375rem;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(163, 163, 163, 0.2);
+      color: #FAFAFA;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+      transition: all 0.3s ease;
+    }
+    .version-badge:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(163, 163, 163, 0.3);
+    }
     .env-badge-dot {
       width: 12px;
       height: 12px;
@@ -1244,7 +1439,15 @@ router.get('/', (req: Request, res: Response) => {
       h1 {
         font-size: 2rem;
       }
+      .dashboard-header > div:last-child {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+      }
       .env-badge {
+        align-self: flex-start;
+      }
+      .version-badge {
         align-self: flex-start;
       }
     }
@@ -1824,9 +2027,29 @@ router.get('/', (req: Request, res: Response) => {
              id="dashboard-logo">
         <h1>Developer Console</h1>
       </div>
-      <div class="env-badge" style="background-color: ${envColor}; color: #FFFFFF;">
-        <span class="env-badge-dot"></span>
-        ${envLabel}
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div class="version-badge">
+          <i class="fas fa-code-branch" style="font-size: 0.875rem; margin-right: 6px;"></i>
+          <span>v${escapeHtml(version)}</span>
+          <span style="margin: 0 4px; opacity: 0.6;">•</span>
+          ${commit !== 'N/A' ? `
+            <a href="${commitLink}" target="_blank" rel="noopener noreferrer" 
+               style="font-family: 'Monaco', 'Courier New', monospace; font-size: 0.875rem; 
+                      color: #D0F205; text-decoration: none; cursor: pointer; 
+                      transition: opacity 0.2s ease;"
+               onmouseover="this.style.opacity='0.8'" 
+               onmouseout="this.style.opacity='1'"
+               title="View commit on GitHub">
+              ${escapeHtml(commit)}
+            </a>
+          ` : `
+            <span style="font-family: 'Monaco', 'Courier New', monospace; font-size: 0.875rem; opacity: 0.6;">N/A</span>
+          `}
+        </div>
+        <div class="env-badge" style="background-color: ${envColor}; color: #FFFFFF;">
+          <span class="env-badge-dot"></span>
+          ${envLabel}
+        </div>
       </div>
     </div>
     
@@ -2283,8 +2506,10 @@ router.post('/docker/stop', async (req: Request, res: Response) => {
         stoppedCount++;
       } catch (error: unknown) {
         // Container yoksa veya zaten durmuşsa hata verme
-        if (!error.message.includes('No such container') && !error.stderr?.includes('No such container')) {
-          errors.push(`${containerName}: ${error.message}`);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorStderr = (error as { stderr?: string })?.stderr;
+        if (!errorMessage.includes('No such container') && !errorStderr?.includes('No such container')) {
+          errors.push(`${containerName}: ${errorMessage}`);
         }
       }
     }
@@ -2502,7 +2727,8 @@ router.get('/docker/status', async (req: Request, res: Response) => {
       });
     } catch (error: unknown) {
       // docker yoksa veya erişilemiyorsa logla ama akışı bozma
-      console.warn(`docker ps kontrolü başarısız (${baseName}):`, error?.message || error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.warn(`docker ps kontrolü başarısız (${baseName}):`, errorMessage);
     }
 
     // 2) CLI başarısızsa veya isim eşleşmiyorsa, port/health-check fallback kullan
@@ -2511,7 +2737,8 @@ router.get('/docker/status', async (req: Request, res: Response) => {
       try {
         isRunning = await checkContainerByPort(baseName);
       } catch (error: unknown) {
-        console.warn(`Port kontrolü başarısız (${baseName}):`, error?.message || error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.warn(`Port kontrolü başarısız (${baseName}):`, errorMessage);
         isRunning = false;
       }
     }
