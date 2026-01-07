@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.*
+
+# Logs
+logs/
+*.log
+
+# Prisma
+.prisma/
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Generated files
+src/generated/
+
+# Seed metadata
+prisma/seed/seed-metadata.json
+
+# Documentation (temporary)
+tipbox-docs/
+
+# Test results
+test-results/
+
+# SSL certificates
+ssl/
+certbot/
+*.pem
+*.key
+
+# Service account files
+*service-account*.json
+*gserviceaccount*.json
+

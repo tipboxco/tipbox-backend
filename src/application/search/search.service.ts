@@ -1,6 +1,6 @@
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import { SearchData, SearchUserData, SearchBrandData, SearchProductData } from '../../interfaces/search/search.dto';
-import { buildMediaUrl, getPublicMediaBaseUrl } from '../../infrastructure/config/media.config';
+import { resolveMediaUrl, getPublicMediaBaseUrl } from '../../infrastructure/config/media.config';
 
 export type SearchTypes = Array<'user' | 'brand' | 'product'>;
 
@@ -237,54 +237,20 @@ export class SearchService {
     const [users, brands, products] = await Promise.all(tasks);
 
     // Database'deki URL veya path'i MinIO path formatına çeviren helper fonksiyon
-    // URL ise path'e çevirir, path ise olduğu gibi döndürür
-    const extractPath = (urlOrPath: string | null): string | null => {
-      if (!urlOrPath) return null;
+    // Database'den sadece path gelir, path'i temizler
+    const extractPath = (path: string | null): string | null => {
+      if (!path) return null;
       
-      // Eğer URL ise (http:// veya https:// ile başlıyorsa) path'i çıkar
-      if (urlOrPath.startsWith('http://') || urlOrPath.startsWith('https://')) {
-        try {
-          const urlObj = new URL(urlOrPath);
-          // pathname'den tipbox-media/ prefix'ini kaldır (varsa)
-          // Örnek: /tipbox-media/profile-pictures/... -> profile-pictures/...
-          let path = urlObj.pathname.replace(/^\/tipbox-media\//, '').replace(/^\/+/, '');
-          // Eğer path boş değilse döndür
-          if (path) {
-            return path;
-          }
-          // Path boşsa, pathname'in tamamını al (tipbox-media/ dahil)
-          path = urlObj.pathname.replace(/^\/+/, '');
-          return path || null;
-        } catch {
-          // URL parse edilemezse string'den path çıkar
-          const match = urlOrPath.match(/\/tipbox-media\/(.+)$/);
-          if (match && match[1]) {
-            return match[1];
-          }
-          // Başka bir format varsa direkt pathname'i al
-          const pathMatch = urlOrPath.match(/\/[^\/]+\/(.+)$/);
-          return pathMatch ? pathMatch[1] : null;
-        }
-      }
-      
-      // Zaten path ise, tipbox-media/ prefix'ini kaldır (varsa)
-      // buildMediaUrl zaten tipbox-media/ ekleyecek
-      return urlOrPath.replace(/^tipbox-media\//, '').replace(/^\/+/, '');
+      // Path'i temizle (başındaki / ve tipbox-media/ prefix'ini kaldır)
+      // resolveMediaUrl zaten tipbox-media/ ekleyecek
+      return path.replace(/^\/+/, '').replace(/^tipbox-media\//, '');
     };
 
-    // Path'i MEDIA_BASE_URL ile birleştirerek tam URL oluştur
-    // ASLA localhost döndürmez
+    // Path'i BASE_URL ile birleştirerek tam URL oluştur
     const buildFullUrl = (path: string | null): string | null => {
       if (!path) return null;
-      // buildMediaUrl path'e tipbox-media/ ekleyecek ve MEDIA_BASE_URL ile birleştirecek
-      const fullUrl = buildMediaUrl(path);
-      // Eğer hala localhost içeriyorsa (olmamalı ama güvenlik için), MEDIA_BASE_URL ile değiştir
-      if (fullUrl && (fullUrl.includes('localhost') || fullUrl.includes('127.0.0.1'))) {
-        const mediaBaseUrl = getPublicMediaBaseUrl();
-        const urlObj = new URL(fullUrl);
-        return `${mediaBaseUrl}${urlObj.pathname}${urlObj.search}${urlObj.hash}`;
-      }
-      return fullUrl;
+      // resolveMediaUrl path'e tipbox-media/ ekleyecek ve BASE_URL ile birleştirecek
+      return resolveMediaUrl(path);
     };
 
     const userData: SearchUserData[] = (users as any[]).map((u) => {

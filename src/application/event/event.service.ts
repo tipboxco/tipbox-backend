@@ -16,7 +16,7 @@ import {
   LimitedTimeEventUser,
 } from '../../interfaces/event/event.dto';
 import { FeedItem, FeedItemType } from '../../interfaces/feed/feed.dto';
-import { buildMediaUrl, resolveMediaUrl } from '../../infrastructure/config/media.config';
+import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import { CacheService } from '../../infrastructure/cache/cache.service';
 import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
 
@@ -659,8 +659,8 @@ export class EventService {
       };
     }
 
-    const backgroundImage = buildMediaUrl('event/eventcardbg.png');
-    const eventImage = buildMediaUrl('event/event.png');
+    const backgroundImage = resolveMediaUrl('event/eventcardbg.png') || '';
+    const eventImage = resolveMediaUrl('event/event.png') || '';
 
     return {
       id: event.id,

@@ -52,6 +52,11 @@ const settingsRepo = new UserSettingsPrismaRepository();
  *           type: string
  *           enum: [POST, TRUST, MESSAGE, SUPPORT, COLLECTION, GAMIFICATION, EXPERT, EVENT, SYSTEM]
  *         description: Filter by notification category
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search in notification title and message
  *     responses:
  *       200:
  *         description: Notifications retrieved successfully
@@ -93,42 +98,49 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
-    const { limit, offset, unreadOnly, type, category } = req.query as unknown as GetNotificationsQuery;
+    const { limit, offset, unreadOnly } = req.query as unknown as GetNotificationsQuery;
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
 
-    // Import enums for validation
+    // Import enums and repository
     const { NotificationType } = await import('../../domain/notification/notification-type.enum');
-    const { NotificationCategory } = await import('../../domain/notification/notification-category.enum');
+    const { NotificationPrismaRepository } = await import('../../infrastructure/repositories/notification-prisma.repository');
 
-    // Validate type if provided
-    let validatedType: NotificationType | undefined;
-    if (type) {
-      const validTypes = Object.values(NotificationType) as string[];
-      if (validTypes.includes(type)) {
-        validatedType = type as NotificationType;
-      }
-    }
+    // Sadece izin verilen bildirim tipleri: replies, trust, tips
+    const allowedTypes: NotificationType[] = [
+      NotificationType.COMMENT_REPLIED, // all replies
+      NotificationType.NEW_TRUSTER, // Trust-Truster
+      NotificationType.NEW_TRUSTED_BY, // Trust-Truster
+      NotificationType.TIPS_RECEIVED, // TIPS
+      NotificationType.TIPS_SENT, // TIPS
+    ];
 
-    // Validate category if provided
-    let validatedCategory: NotificationCategory | undefined;
-    if (category) {
-      const validCategories = Object.values(NotificationCategory) as string[];
-      if (validCategories.includes(category)) {
-        validatedCategory = category as NotificationCategory;
-      }
-    }
-
-    const result = await notificationService.getUserNotifications(userId, {
-      limit: parseQueryInt(limit, 20),
-      offset: parseQueryInt(offset, 0),
-      unreadOnly: parseQueryBoolean(unreadOnly),
-      type: validatedType,
-      category: validatedCategory,
-    });
+    const notificationRepo = new NotificationPrismaRepository();
+    
+    // Repository'de types array desteği eklendi, direkt kullanabiliriz
+    const [notifications, total] = await Promise.all([
+      notificationRepo.findByUserId(userId, {
+        limit: parseQueryInt(limit, 20),
+        offset: parseQueryInt(offset, 0),
+        unreadOnly: parseQueryBoolean(unreadOnly),
+        types: allowedTypes, // types array kullan
+        search,
+      }),
+      notificationRepo.getTotalCount(userId, {
+        unreadOnly: parseQueryBoolean(unreadOnly),
+        types: allowedTypes, // types array kullan
+        search,
+      }),
+    ]);
 
     return res.json({
       success: true,
-      data: result.notifications.map((n) => n.toJSON()),
-      pagination: result.pagination,
+      data: notifications.map((n) => n.toJSON()),
+      pagination: {
+        total,
+        limit: parseQueryInt(limit, 20),
+        offset: parseQueryInt(offset, 0),
+        hasMore: parseQueryInt(offset, 0) + notifications.length < total,
+      },
     });
   } catch (error) {
     logger.error('Error getting notifications:', error);

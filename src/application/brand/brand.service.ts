@@ -1,7 +1,7 @@
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import { FeedItem, FeedItemType, FeedResponse, ContextData, ExperiencePost, ExperienceContent } from '../../interfaces/feed/feed.dto';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
-import { buildMediaUrl, resolveMediaUrl } from '../../infrastructure/config/media.config';
+import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import logger from '../../infrastructure/logger/logger';
 import { NotFoundError } from '../../infrastructure/errors/custom-errors';
 
@@ -709,7 +709,7 @@ export class BrandService {
       },
     });
 
-    const badgeImageUrl = buildMediaUrl('brandbadge/badge1.png');
+    const badgeImageUrl = resolveMediaUrl('brandbadge/badge1.png') || '';
     const rewards: EventRewards = {
       title: reward ? `Badge Reward #${reward.rewardId}` : 'Participation Badge',
       badgeImage: badgeImageUrl,
@@ -916,7 +916,7 @@ export class BrandService {
 
     // Distinct badge'leri map'le
     const uniqueBadgesMap = new Map<string, BrandHistoryBadge>();
-    const defaultBadgeImage = buildMediaUrl('badge/badge1.png');
+    const defaultBadgeImage = resolveMediaUrl('badge/badge1.png') || '';
     
     for (const br of allRewards) {
       if (!uniqueBadgesMap.has(br.badgeId)) {
@@ -1111,7 +1111,7 @@ export class BrandService {
     const hasMore = rewards.length > limit;
     const resultRewards = hasMore ? rewards.slice(0, limit) : rewards;
 
-    const defaultBadgeImage = buildMediaUrl('badge/badge1.png');
+    const defaultBadgeImage = resolveMediaUrl('badge/badge1.png') || '';
     const items: BrandHistoryPointsItem[] = resultRewards.map((r) => ({
       id: r.id,
       title: r.badge.name,

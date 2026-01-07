@@ -1,4 +1,4 @@
-import { buildMediaUrl } from '../../../infrastructure/config/media.config';
+import { resolveMediaUrl } from '../../../infrastructure/config/media.config';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -58,20 +58,21 @@ export class MediaHelper {
 
   /**
    * Build full media URL from relative path
-   * Uses SEED_MEDIA_BASE_URL from environment
+   * Uses BASE_URL from environment (resolveMediaUrl derives media base URL from BASE_URL)
    */
   static buildFullMediaUrl(relativePath: string): string {
-    return buildMediaUrl(relativePath);
+    return resolveMediaUrl(relativePath) || relativePath;
   }
 
   /**
-   * Validate SEED_MEDIA_BASE_URL is set
+   * Validate BASE_URL is set (resolveMediaUrl uses BASE_URL to derive media base URL)
    */
   static validateEnvironment(): void {
-    if (!process.env.SEED_MEDIA_BASE_URL) {
+    if (!process.env.BASE_URL) {
       throw new Error(
-        'SEED_MEDIA_BASE_URL environment variable is required! ' +
-        'Set it in your .env file (e.g., SEED_MEDIA_BASE_URL=http://192.168.1.195:9000)'
+        'BASE_URL environment variable is required! ' +
+        'Set it in your .env file (e.g., BASE_URL=http://192.168.1.195:3000) ' +
+        'resolveMediaUrl derives the media base URL from BASE_URL automatically.'
       );
     }
   }

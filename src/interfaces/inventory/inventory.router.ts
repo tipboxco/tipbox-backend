@@ -479,6 +479,100 @@ router.get(
  *       503:
  *         description: AI servisi hatası
  */
+/**
+ * @openapi
+ * /inventory/experiences/search:
+ *   get:
+ *     summary: Product experience'larda arama yap
+ *     description: Experience başlığı ve metninde arama yapar
+ *     tags: [Inventory]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Arama terimi
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 20
+ *         description: Sayfa başına item sayısı
+ *     responses:
+ *       200:
+ *         description: Arama sonuçları
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       title:
+ *                         type: string
+ *                       experienceText:
+ *                         type: string
+ *                       inventory:
+ *                         type: object
+ *                         nullable: true
+ *                       createdAt:
+ *                         type: string
+ *                         format: date-time
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       nullable: true
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
+ *       400:
+ *         description: Arama terimi gerekli
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ */
+router.get(
+  '/experiences/search',
+  authMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const query = typeof req.query.q === 'string' ? req.query.q.trim() : undefined;
+    if (!query) {
+      return res.status(400).json({ message: 'Search query (q) is required' });
+    }
+
+    const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined;
+    const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+    const limit = limitParam && !Number.isNaN(limitParam) && limitParam > 0 && limitParam <= 50 ? limitParam : 20;
+
+    const result = await inventoryService.searchExperiences(query, { cursor, limit });
+    return res.json(result);
+  })
+);
+
 router.post(
   '/split-experience',
   authMiddleware,

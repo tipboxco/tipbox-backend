@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { Notification } from '../../domain/notification/notification.entity';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
+import { NotificationCategory } from '../../domain/notification/notification-category.enum';
 import { getPrisma } from './prisma.client';
 import logger from '../logger/logger';
 import { CacheService } from '../cache/cache.service';
@@ -93,7 +94,9 @@ export class NotificationPrismaRepository {
       offset?: number;
       unreadOnly?: boolean;
       type?: NotificationType;
+      types?: NotificationType[]; // Array of types support
       category?: NotificationCategory;
+      search?: string;
     }
   ): Promise<Notification[]> {
     try {
@@ -105,18 +108,32 @@ export class NotificationPrismaRepository {
       
       // Build type filter
       let typeFilter: NotificationType[] | undefined;
-      if (options?.type) {
+      if (options?.types && options.types.length > 0) {
+        // If types array is provided, use it directly
+        typeFilter = options.types;
+      } else if (options?.type) {
         typeFilter = [options.type];
       } else if (options?.category) {
         typeFilter = factory.getTypesByCategory(options.category);
       }
 
+      const searchTrimmed = options?.search?.trim();
+      const whereClause: any = {
+        userId,
+        ...(options?.unreadOnly && { read: false }),
+        ...(typeFilter && typeFilter.length > 0 && { type: { in: typeFilter } }),
+      };
+
+      // Add search filter if provided
+      if (searchTrimmed) {
+        whereClause.OR = [
+          { title: { contains: searchTrimmed, mode: 'insensitive' } },
+          { message: { contains: searchTrimmed, mode: 'insensitive' } },
+        ];
+      }
+
       const notifications = await this.prisma.notification.findMany({
-        where: {
-          userId,
-          ...(options?.unreadOnly && { read: false }),
-          ...(typeFilter && typeFilter.length > 0 && { type: { in: typeFilter } }),
-        },
+        where: whereClause,
         orderBy: { createdAt: 'desc' },
         take: options?.limit || 20,
         skip: options?.offset || 0,
@@ -148,7 +165,9 @@ export class NotificationPrismaRepository {
     options?: {
       unreadOnly?: boolean;
       type?: NotificationType;
+      types?: NotificationType[]; // Array of types support
       category?: NotificationCategory;
+      search?: string;
     }
   ): Promise<number> {
     try {
@@ -159,18 +178,32 @@ export class NotificationPrismaRepository {
       
       // Build type filter
       let typeFilter: NotificationType[] | undefined;
-      if (options?.type) {
+      if (options?.types && options.types.length > 0) {
+        // If types array is provided, use it directly
+        typeFilter = options.types;
+      } else if (options?.type) {
         typeFilter = [options.type];
       } else if (options?.category) {
         typeFilter = factory.getTypesByCategory(options.category);
       }
 
+      const searchTrimmed = options?.search?.trim();
+      const whereClause: any = {
+        userId,
+        ...(options?.unreadOnly && { read: false }),
+        ...(typeFilter && typeFilter.length > 0 && { type: { in: typeFilter } }),
+      };
+
+      // Add search filter if provided
+      if (searchTrimmed) {
+        whereClause.OR = [
+          { title: { contains: searchTrimmed, mode: 'insensitive' } },
+          { message: { contains: searchTrimmed, mode: 'insensitive' } },
+        ];
+      }
+
       return await this.prisma.notification.count({
-        where: {
-          userId,
-          ...(options?.unreadOnly && { read: false }),
-          ...(typeFilter && typeFilter.length > 0 && { type: { in: typeFilter } }),
-        },
+        where: whereClause,
       });
     } catch (error) {
       logger.error('Error getting total notification count:', error);
