@@ -36,6 +36,13 @@ router.use(authMiddleware);
  *           type: boolean
  *         description: Sadece okunmamış mesajı olan thread'leri döndürür.
  *       - in: query
+ *         name: threadType
+ *         schema:
+ *           type: string
+ *           enum: [DM, SUPPORT, ALL]
+ *           default: ALL
+ *         description: Thread tipine göre filtreleme (DM, SUPPORT veya tümü)
+ *       - in: query
  *         name: limit
  *         schema:
  *           type: integer
@@ -154,6 +161,15 @@ router.get(
       ? unreadOnlyParam.some((value) => value === 'true')
       : unreadOnlyParam === 'true';
 
+    // Parse threadType
+    let threadType: 'DM' | 'SUPPORT' | 'ALL' = 'ALL';
+    if (typeof req.query.threadType === 'string') {
+      const threadTypeValue = req.query.threadType.toUpperCase();
+      if (threadTypeValue === 'DM' || threadTypeValue === 'SUPPORT' || threadTypeValue === 'ALL') {
+        threadType = threadTypeValue as 'DM' | 'SUPPORT' | 'ALL';
+      }
+    }
+
     let limit: number | undefined;
     if (typeof req.query.limit === 'string') {
       const parsed = parseInt(req.query.limit, 10);
@@ -166,6 +182,7 @@ router.get(
       search,
       unreadOnly,
       limit,
+      threadType,
     });
 
     return res.json(inbox);

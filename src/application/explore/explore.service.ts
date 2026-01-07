@@ -31,10 +31,11 @@ export class ExploreService {
    */
   async getHottestPosts(
     userId: string,
-    options?: { cursor?: string; limit?: number }
+    options?: { cursor?: string; limit?: number; search?: string }
   ): Promise<TrendingFeedResponse> {
     const limit = options?.limit || 20;
-    const cacheKey = `explore:hottest:${userId}:${options?.cursor || 'first'}:${limit}`;
+    const search = options?.search?.trim();
+    const cacheKey = `explore:hottest:${userId}:${options?.cursor || 'first'}:${limit}:${search || 'all'}`;
 
     try {
       const cached = await this.cacheService.get<TrendingFeedResponse>(cacheKey);
@@ -56,6 +57,14 @@ export class ExploreService {
           gte: sevenDaysAgo,
         },
         trendPeriod: 'DAILY',
+        ...(search && {
+          post: {
+            OR: [
+              { title: { contains: search, mode: 'insensitive' } },
+              { body: { contains: search, mode: 'insensitive' } },
+            ],
+          },
+        }),
       },
       include: {
         post: {
@@ -293,12 +302,13 @@ export class ExploreService {
   /**
    * Get What's News - New Events
    */
-  async getWhatsNewsEvents(options?: { cursor?: string; limit?: number }): Promise<{
+  async getWhatsNewsEvents(options?: { cursor?: string; limit?: number; search?: string }): Promise<{
     items: EventResponse[];
     pagination: { cursor?: string; hasMore: boolean; limit: number };
   }> {
     const limit = options?.limit || 20;
-    const cacheKey = `explore:events:new:${options?.cursor || 'first'}:${limit}`;
+    const search = options?.search?.trim();
+    const cacheKey = `explore:events:new:${options?.cursor || 'first'}:${limit}:${search || 'all'}`;
 
     try {
       const cached = await this.cacheService.get<{
@@ -316,6 +326,12 @@ export class ExploreService {
     const events = await this.prisma.wishboxEvent.findMany({
       where: {
         status: 'PUBLISHED',
+        ...(search && {
+          OR: [
+            { title: { contains: search, mode: 'insensitive' } },
+            { description: { contains: search, mode: 'insensitive' } },
+          ],
+        }),
       },
       orderBy: {
         createdAt: 'desc',
@@ -397,12 +413,13 @@ export class ExploreService {
   /**
    * Get New Brands
    */
-  async getNewBrands(options?: { cursor?: string; limit?: number }): Promise<{
+  async getNewBrands(options?: { cursor?: string; limit?: number; search?: string }): Promise<{
     items: NewBrandResponse[];
     pagination: { cursor?: string; hasMore: boolean; limit: number };
   }> {
     const limit = options?.limit || 20;
-    const cacheKey = `explore:brands:new:${options?.cursor || 'first'}:${limit}`;
+    const search = options?.search?.trim();
+    const cacheKey = `explore:brands:new:${options?.cursor || 'first'}:${limit}:${search || 'all'}`;
 
     try {
       const cached = await this.cacheService.get<{
@@ -418,6 +435,11 @@ export class ExploreService {
     }
 
     const brands = await this.prisma.brand.findMany({
+      where: {
+        ...(search && {
+          name: { contains: search, mode: 'insensitive' },
+        }),
+      },
       orderBy: {
         createdAt: 'desc',
       },

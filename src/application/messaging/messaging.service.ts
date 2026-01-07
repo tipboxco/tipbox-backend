@@ -39,6 +39,7 @@ export interface InboxQueryOptions {
   search?: string;
   unreadOnly?: boolean;
   limit?: number;
+  threadType?: 'DM' | 'SUPPORT' | 'ALL'; // Thread tipi filtresi
 }
 
 export class MessagingService {

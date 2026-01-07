@@ -18,5 +18,7 @@ export interface GetNotificationsQuery {
   limit?: number;
   offset?: number;
   unreadOnly?: boolean;
+  type?: string; // NotificationType enum value
+  category?: string; // NotificationCategory enum value
 }
 

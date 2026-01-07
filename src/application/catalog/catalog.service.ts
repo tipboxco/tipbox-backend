@@ -180,20 +180,29 @@ export class CatalogService {
   /**
    * Product group'a göre ürünleri listele
    */
-  async getProductsByProductGroupId(productGroupId: string): Promise<ProductItem[]> {
+  async getProductsByProductGroupId(productGroupId: string, search?: string): Promise<ProductItem[]> {
+    const searchTrimmed = search?.trim();
+    const cacheKey = `product-group:${productGroupId}:products:${searchTrimmed || 'all'}`;
     return withCache(
-      `product-group:${productGroupId}:products`,
-      async () => this.fetchProducts(productGroupId),
+      cacheKey,
+      async () => this.fetchProducts(productGroupId, searchTrimmed),
       CACHE_TTL.CATEGORY_PRODUCTS, // 1 saat
       { logPrefix: 'CatalogService' }
     );
   }
 
-  private async fetchProducts(productGroupId: string): Promise<ProductItem[]> {
+  private async fetchProducts(productGroupId: string, search?: string): Promise<ProductItem[]> {
     try {
       const products = await prisma.product.findMany({
         where: {
           groupId: productGroupId,
+          ...(search && {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' } },
+              { brand: { contains: search, mode: 'insensitive' } },
+              { description: { contains: search, mode: 'insensitive' } },
+            ],
+          }),
         },
         select: {
           id: true,

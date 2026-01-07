@@ -94,12 +94,13 @@ router.get(
 
     const cursor = req.query.cursor as string | undefined;
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
 
     if (limit < 1 || limit > 50) {
       return res.status(400).json({ message: 'Limit must be between 1 and 50' });
     }
 
-    const result = await exploreService.getHottestPosts(String(userId), { cursor, limit });
+    const result = await exploreService.getHottestPosts(String(userId), { cursor, limit, search });
     return res.json(result);
   })
 );
@@ -162,6 +163,11 @@ router.get(
  *           maximum: 50
  *           default: 20
  *         description: Sayfa başına item sayısı
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Event başlığı veya açıklamasında arama yapar
  *     responses:
  *       200:
  *         description: Event'lar başarıyla getirildi
@@ -221,12 +227,13 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const cursor = req.query.cursor as string | undefined;
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
 
     if (limit < 1 || limit > 50) {
       return res.status(400).json({ message: 'Limit must be between 1 and 50' });
     }
 
-    const result = await exploreService.getWhatsNewsEvents({ cursor, limit });
+    const result = await exploreService.getWhatsNewsEvents({ cursor, limit, search });
     return res.json(result);
   })
 );
@@ -252,6 +259,11 @@ router.get(
  *           maximum: 50
  *           default: 20
  *         description: Sayfa başına item sayısı
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Marka adında arama yapar
  *     responses:
  *       200:
  *         description: Markalar başarıyla getirildi
@@ -289,12 +301,13 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const cursor = req.query.cursor as string | undefined;
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
 
     if (limit < 1 || limit > 50) {
       return res.status(400).json({ message: 'Limit must be between 1 and 50' });
     }
 
-    const result = await exploreService.getNewBrands({ cursor, limit });
+    const result = await exploreService.getNewBrands({ cursor, limit, search });
     return res.json(result);
   })
 );
