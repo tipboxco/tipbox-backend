@@ -2,7 +2,9 @@
 
 /**
  * Versiyon numarasını otomatik olarak artırır
- * Minör versiyonu artırır: 0.1.0 -> 0.2.0 -> ... -> 0.9.0 -> 1.0.0
+ * Patch versiyonu artırır: 0.0.1 -> 0.0.2 -> ... -> 0.0.9 -> 0.1.0
+ * Patch 9 olduğunda minör artar: 0.0.9 -> 0.1.0, 0.1.9 -> 0.2.0
+ * Minör 9 olduğunda major artar: 0.9.9 -> 1.0.0
  * 1.0.0'a ulaştığında durur (manuel müdahale gerekir)
  */
 
@@ -33,7 +35,7 @@ function formatVersion(version: { major: number; minor: number; patch: number })
   return `${version.major}.${version.minor}.${version.patch}`;
 }
 
-function bumpMinorVersion(version: string): string {
+function bumpPatchVersion(version: string): string {
   const parsed = parseVersion(version);
   
   // Eğer major 1.0.0 veya üzerindeyse, artırma yapma
@@ -42,17 +44,20 @@ function bumpMinorVersion(version: string): string {
     return version;
   }
   
-  // Minör versiyonu artır
-  parsed.minor += 1;
+  // Patch versiyonu artır
+  parsed.patch += 1;
   
-  // Eğer minor 10'a ulaşırsa, major'ı 1 yap ve minor'ı 0 yap
-  if (parsed.minor >= 10) {
-    parsed.major = 1;
-    parsed.minor = 0;
+  // Eğer patch 10'a ulaşırsa (0.0.9 -> 0.1.0)
+  if (parsed.patch >= 10) {
+    parsed.patch = 0;
+    parsed.minor += 1;
+    
+    // Eğer minor 10'a ulaşırsa (0.9.9 -> 1.0.0)
+    if (parsed.minor >= 10) {
+      parsed.major = 1;
+      parsed.minor = 0;
+    }
   }
-  
-  // Patch'i her zaman 0 yap (minör versiyon artışında)
-  parsed.patch = 0;
   
   return formatVersion(parsed);
 }
@@ -71,8 +76,8 @@ function main() {
     const currentVersion = packageJson.version;
     console.log(`📦 Mevcut versiyon: ${currentVersion}`);
     
-    // Versiyonu artır
-    const newVersion = bumpMinorVersion(currentVersion);
+    // Versiyonu artır (patch tabanlı: 0.0.1 -> 0.0.2 -> ... -> 0.0.9 -> 0.1.0)
+    const newVersion = bumpPatchVersion(currentVersion);
     
     if (newVersion === currentVersion) {
       console.log('ℹ️  Versiyon değişmedi.');
