@@ -55,11 +55,11 @@ export function getPublicMediaBaseUrl(): string {
  * Örnekler:
  * - Input:  'catalog/home-appliances.png'
  *   SEED_MEDIA_BASE_URL=https://api-test.tipbox.co/media
- *   Output: 'https://api-test.tipbox.co/media/tipbox-media/catalog/home-appliances.png'
+ *   Output: 'https://api-test.tipbox.co/media/catalog/home-appliances.png'
  * 
  * - Input:  'profile-pictures/xxx/avatar.jpg'
  *   BASE_URL=http://192.168.1.164:3000 (port 9000'e çevrilir)
- *   Output: 'http://192.168.1.164:9000/tipbox-media/profile-pictures/xxx/avatar.jpg'
+ *   Output: 'http://192.168.1.164:9000/profile-pictures/xxx/avatar.jpg'
  * 
  * - Input:  'http://example.com/image.jpg' (tam URL)
  *   Output: 'http://example.com/image.jpg' (değişmeden döndürülür)
@@ -80,10 +80,9 @@ export function resolveMediaUrl(mediaPath: string | null | undefined): string | 
   
   // getPublicMediaBaseUrl() ile media base URL'ini al
   const baseUrl = getPublicMediaBaseUrl();
-  const bucketName = s3Config.bucketName;
   
-  // Tam URL oluştur
-  return `${baseUrl}/${bucketName}/${cleanPath}`;
+  // Tam URL oluştur (bucket ismi olmadan)
+  return `${baseUrl}/${cleanPath}`;
 }
 
 

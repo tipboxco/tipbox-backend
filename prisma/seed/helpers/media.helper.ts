@@ -71,10 +71,10 @@ function getBucketName(): string {
 
 /**
  * Seed media için sadece path döndürür (bucket içindeki path)
- * DB'ye yazılacak format: tipbox-media/products/phone6.png
+ * DB'ye yazılacak format: products/phone6.png (bucket ismi olmadan)
  * @param key Seed media key
  * @param optional Eğer true ise, key bulunamazsa null döndürür (hata fırlatmaz)
- * @returns Bucket path (örn: tipbox-media/products/phone6.png) veya null (optional=true ise)
+ * @returns Path (örn: products/phone6.png) veya null (optional=true ise)
  */
 export function getSeedMediaPath(key: SeedMediaKey): string;
 export function getSeedMediaPath(key: SeedMediaKey, optional: true): string | null;
@@ -89,8 +89,8 @@ export function getSeedMediaPath(key: SeedMediaKey, optional?: boolean): string 
     throw new Error(`Seed media anahtarı bulunamadı: ${key}`);
   }
 
-  const bucketName = getBucketName();
-  return `${bucketName}/${entry.targetKey}`;
+  // Bucket ismi olmadan sadece path döndür
+  return entry.targetKey;
 }
 
 // Runtime'da URL oluştur (DEPRECATED: Seed için kullanmayın, sadece path kullanın)
