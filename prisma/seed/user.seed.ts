@@ -1,15 +1,15 @@
 import { PrismaClient } from '@prisma/client'
 import * as bcrypt from 'bcryptjs'
 import { DEFAULT_PROFILE_BANNER_URL } from '../../src/domain/user/profile.constants'
-import { getSeedMediaUrl } from './helpers/media.helper'
+import { getSeedMediaPath } from './helpers/media.helper'
 import { S3Service } from '../../src/infrastructure/s3/s3.service'
 import { readFileSync } from 'fs'
 import * as path from 'path'
 import { generateUlid } from './types'
 
 const prisma = new PrismaClient()
-const DEFAULT_BANNER_URL = DEFAULT_PROFILE_BANNER_URL || getSeedMediaUrl('user.banner.primary')
-const PRIMARY_AVATAR_URL = getSeedMediaUrl('user.avatar.primary')
+const DEFAULT_BANNER_URL = DEFAULT_PROFILE_BANNER_URL || getSeedMediaPath('user.banner.primary')
+const PRIMARY_AVATAR_URL = getSeedMediaPath('user.avatar.primary')
 
 // Static IDs (same as in main seed)
 const TEST_USER_ID = '480f5de9-b691-4d70-a6a8-2789226f4e07' // omer@tipbox.co
@@ -126,7 +126,7 @@ export async function seedUsersAndProfiles(): Promise<void> {
   } else {
     await prisma.userAvatar.updateMany({ where: { userId: userIdToUse }, data: { isActive: false } })
     await prisma.userAvatar.create({
-      data: { userId: userIdToUse, imageUrl: PRIMARY_AVATAR_URL || 'https://cdn.tipbox.co/avatars/omer.jpg', isActive: true },
+      data: { userId: userIdToUse, imageUrl: PRIMARY_AVATAR_URL || 'users/default-avatar.jpg', isActive: true },
     })
   }
   console.log('✅ Avatar set')
@@ -292,7 +292,7 @@ export async function seedUsersAndProfiles(): Promise<void> {
         console.log(`✅ Julia avatar yüklendi: ${juliaAvatarUrl}`)
       } catch (error) {
         console.warn('⚠️ Avatar yüklenemedi, varsayılan kullanılıyor:', error)
-        juliaAvatarUrl = getSeedMediaUrl('user.avatar.primary') || 'https://cdn.tipbox.co/avatars/default.jpg'
+        juliaAvatarUrl = getSeedMediaPath('user.avatar.primary') || 'users/default-avatar.jpg'
       }
       
       // Upload banner
@@ -308,7 +308,7 @@ export async function seedUsersAndProfiles(): Promise<void> {
       }
     } catch (error) {
       console.warn('⚠️ MinIO bağlantı hatası, varsayılan görseller kullanılıyor:', error)
-      juliaAvatarUrl = getSeedMediaUrl('user.avatar.primary') || 'https://cdn.tipbox.co/avatars/default.jpg'
+      juliaAvatarUrl = getSeedMediaPath('user.avatar.primary') || 'users/default-avatar.jpg'
       juliaBannerUrl = DEFAULT_BANNER_URL
     }
     
