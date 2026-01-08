@@ -1,18 +1,26 @@
 import { s3Config } from './s3.config';
 
 /**
- * Ortak public media base URL (MinIO için)
- * - .env dosyasından BASE_URL'i okur
- * - BASE_URL'den port 9000'i türetir (MinIO için)
- * - Örnek: BASE_URL=http://192.168.1.164:3000 → http://192.168.1.164:9000
+ * Ortak public media base URL
+ * - Tüm görsel URL'leri için TEK kontrol noktası
+ * - Öncelikle SEED_MEDIA_BASE_URL kullanılır (önerilen)
+ * - Yoksa BASE_URL'den port 9000 türetilir (eski yöntem)
  */
 export function getPublicMediaBaseUrl(): string {
+  // Öncelik 1: SEED_MEDIA_BASE_URL (önerilen yöntem - nginx proxy için)
+  const seedMediaBaseUrl = process.env.SEED_MEDIA_BASE_URL;
+  if (seedMediaBaseUrl) {
+    return seedMediaBaseUrl.replace(/\/$/, '');
+  }
+
+  // Öncelik 2: BASE_URL'den port 9000 türet (eski yöntem - geriye dönük uyumluluk)
   const baseUrl = process.env.BASE_URL;
   
   if (!baseUrl) {
     throw new Error(
-      'BASE_URL environment variable set edilmelidir! ' +
-      'Örnek: BASE_URL=http://192.168.1.164:3000 (development) veya BASE_URL=https://api-test.tipbox.co (test)'
+      'SEED_MEDIA_BASE_URL veya BASE_URL environment variable set edilmelidir! ' +
+      'Önerilen: SEED_MEDIA_BASE_URL=https://api-test.tipbox.co/media (nginx proxy ile) ' +
+      'veya BASE_URL=http://192.168.1.164:3000 (development için port 9000\'e çevrilir)'
     );
   }
 
@@ -39,22 +47,25 @@ export function getPublicMediaBaseUrl(): string {
 /**
  * Database'den gelen media path'ini tam URL'ye çevirir.
  * 
- * Database'den sadece path gelir (örn: profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg)
- * Bu fonksiyon BASE_URL'den türetilen MinIO endpoint'i ile birleştirerek tam URL oluşturur.
+ * Database'den sadece path gelir (örn: catalog/home-appliances.png)
+ * Bu fonksiyon getPublicMediaBaseUrl() ile birleştirerek tam URL oluşturur.
  * 
  * Eğer mediaPath zaten tam bir URL ise (http:// veya https:// ile başlıyorsa), direkt döndürülür.
  * 
- * MinIO için doğru format: http://[endpoint]:9000/tipbox-media/path/to/file.jpg
- * BASE_URL'den otomatik türetilir: BASE_URL=http://192.168.1.164:3000 → http://192.168.1.164:9000
+ * Örnekler:
+ * - Input:  'catalog/home-appliances.png'
+ *   SEED_MEDIA_BASE_URL=https://api-test.tipbox.co/media
+ *   Output: 'https://api-test.tipbox.co/media/tipbox-media/catalog/home-appliances.png'
  * 
- * Örn: 
- * - Input:  'profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg'
- * - Output: 'http://192.168.1.164:9000/tipbox-media/profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg'
+ * - Input:  'profile-pictures/xxx/avatar.jpg'
+ *   BASE_URL=http://192.168.1.164:3000 (port 9000'e çevrilir)
+ *   Output: 'http://192.168.1.164:9000/tipbox-media/profile-pictures/xxx/avatar.jpg'
+ * 
  * - Input:  'http://example.com/image.jpg' (tam URL)
- * - Output: 'http://example.com/image.jpg' (değişmeden döndürülür)
+ *   Output: 'http://example.com/image.jpg' (değişmeden döndürülür)
  * 
- * @param mediaPath - Database'den gelen path (örn: profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg) veya tam URL
- * @returns Tam media URL (BASE_URL'den türetilen MinIO endpoint kullanarak) veya null
+ * @param mediaPath - Database'den gelen path veya tam URL
+ * @returns Tam media URL veya null
  */
 export function resolveMediaUrl(mediaPath: string | null | undefined): string | null {
   if (!mediaPath) return null;
@@ -67,11 +78,11 @@ export function resolveMediaUrl(mediaPath: string | null | undefined): string | 
   // Path'i temizle (başındaki / ve tipbox-media/ prefix'ini kaldır)
   const cleanPath = mediaPath.replace(/^\/+/, '').replace(/^tipbox-media\//, '');
   
-  // BASE_URL'den türetilen MinIO endpoint'i al
+  // getPublicMediaBaseUrl() ile media base URL'ini al
   const baseUrl = getPublicMediaBaseUrl();
   const bucketName = s3Config.bucketName;
   
-  // MinIO için doğru format: http://endpoint/bucket-name/object-key
+  // Tam URL oluştur
   return `${baseUrl}/${bucketName}/${cleanPath}`;
 }
 
