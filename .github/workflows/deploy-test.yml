@@ -1,4 +1,4 @@
-name: Deploy to Test Server
+name: Deploy to Hetzner Test Server
 
 on:
   push:
@@ -17,7 +17,7 @@ on:
           - staging
 
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '23.6.0'
 
 permissions:
   contents: write
@@ -25,7 +25,7 @@ permissions:
 
 jobs:
   deploy:
-    name: Deploy to Test Server
+    name: Deploy to Hetzner Test Server
     runs-on: ubuntu-latest
     
     steps:
@@ -112,7 +112,7 @@ jobs:
           project_dir: /opt/tipbox-backend
           compose_file: docker-compose.test.yml
           db_user: tipbox_user
-          db_name: tipbox_dev
+          db_name: tipbox_test
 
       - name: Stop services
         if: steps.check-secrets.outputs.available == 'true'
@@ -177,8 +177,6 @@ jobs:
           stage: seed
           project_dir: /opt/tipbox-backend
           compose_file: docker-compose.test.yml
-          db_user: tipbox_user
-          db_name: tipbox_dev
 
       - name: Start all services
         if: steps.check-secrets.outputs.available == 'true'

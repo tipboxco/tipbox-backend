@@ -51,10 +51,6 @@ runs:
               echo "📥 Pulling latest changes from branch: $DEPLOY_BRANCH"
               git fetch origin
               git checkout "$DEPLOY_BRANCH"
-              echo "🧹 Cleaning local changes..."
-              git reset --hard "origin/$DEPLOY_BRANCH"
-              git clean -fd
-              echo "📥 Pulling latest changes..."
               git pull origin "$DEPLOY_BRANCH"
               if [ ! -f "$ENV_FILE" ]; then
                 echo "❌ $ENV_FILE file not found! Please create it first."
@@ -64,7 +60,6 @@ runs:
               ;;
             backup)
               echo "💾 Creating database backup..."
-              cd "$PROJECT_DIR" || exit 1
               BACKUP_DIR="${PROJECT_DIR}/backups"
               mkdir -p "$BACKUP_DIR"
               BACKUP_FILE="${BACKUP_DIR}/backup-$(date +%Y%m%d-%H%M%S).sql"
@@ -75,7 +70,6 @@ runs:
               ;;
             stop)
               echo "🛑 Stopping and removing all containers..."
-              cd "$PROJECT_DIR" || exit 1
               docker compose -f "$COMPOSE_FILE" down || {
                 echo "⚠️  Some containers were not running, continuing..."
               }
@@ -83,13 +77,11 @@ runs:
               ;;
             build)
               echo "🔨 Building Docker images..."
-              cd "$PROJECT_DIR" || exit 1
               docker compose -f "$COMPOSE_FILE" build --no-cache backend
               echo "✅ Images built successfully"
               ;;
             prisma)
               echo "🔧 Generating Prisma Client on host..."
-              cd "$PROJECT_DIR" || exit 1
               npx prisma generate || {
                 echo "⚠️  Prisma generate on host failed, trying in container..."
                 docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma generate || {
@@ -101,13 +93,11 @@ runs:
               ;;
             infrastructure)
               echo "🚀 Starting infrastructure services..."
-              cd "$PROJECT_DIR" || exit 1
               docker compose -f "$COMPOSE_FILE" up -d postgres redis minio
               echo "✅ Infrastructure services started"
               ;;
             wait-db)
               echo "⏳ Waiting for database to be ready..."
-              cd "$PROJECT_DIR" || exit 1
               sleep 5
               for i in {1..20}; do
                 if docker compose -f "$COMPOSE_FILE" exec -T postgres pg_isready -U "$DB_USER" > /dev/null 2>&1; then
@@ -125,67 +115,28 @@ runs:
               ;;
             migrate)
               echo "📊 Running database migrations..."
-              cd "$PROJECT_DIR" || exit 1
-              
-              # 1. Prisma Client'ı yeniden generate et
-              echo "🔧 Generating Prisma Client..."
-              docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma generate || {
-                echo "❌ Prisma generate failed!"
-                exit 1
-              }
-              
-              # 2. Migration'ları uygula
-              echo "📊 Deploying migrations..."
               docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma migrate deploy || {
                 echo "❌ Migration failed! Check the logs above."
                 echo "📋 Migration logs:"
                 docker compose -f "$COMPOSE_FILE" logs backend | tail -50
                 exit 1
               }
-              
-              # 3. Schema sync yap (eksik kolonları ekle)
-              echo "🔄 Syncing schema..."
-              docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma db push --accept-data-loss || {
-                echo "⚠️  Schema push failed, but migration succeeded. Continuing..."
-              }
-              
               echo "✅ Migrations completed"
               ;;
             seed)
-              echo "🌱 Checking if database needs seeding..."
-              cd "$PROJECT_DIR" || exit 1
-              
-              # Check if users table has data (smart seed check)
-              HAS_DATA=$(docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT COUNT(*) FROM users WHERE email LIKE '%@tipbox.%' LIMIT 1;" 2>/dev/null | xargs || echo "0")
-              
-              if [ "$HAS_DATA" = "0" ] || [ -z "$HAS_DATA" ]; then
-                echo "🌱 Running database seeds..."
-                
-                # Önce Prisma Client'ın güncel olduğundan emin ol
-                docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma generate
-                
-                # Seed'i çalıştır
-                docker compose -f "$COMPOSE_FILE" run --rm backend npx ts-node scripts/clear-and-seed.ts --all || {
-                  echo "⚠️  Full seed failed, trying minimal seed..."
-                  docker compose -f "$COMPOSE_FILE" run --rm backend npx ts-node scripts/clear-and-seed.ts || {
-                    echo "⚠️  Seed failed, continuing without seed data..."
-                  }
-                }
-                echo "✅ Seeds completed"
-              else
-                echo "⏭️  Database already has seed data, skipping..."
-                echo "✅ Seed check completed"
-              fi
+              echo "🌱 Running database seeds..."
+              docker compose -f "$COMPOSE_FILE" run --rm backend npm run seed:all || {
+                echo "⚠️  Seed failed or data already exists, continuing..."
+              }
+              echo "✅ Seeds completed (or skipped if data exists)"
               ;;
             start)
               echo "🚀 Starting all services..."
-              cd "$PROJECT_DIR" || exit 1
               docker compose -f "$COMPOSE_FILE" up -d
               echo "✅ All services started"
               ;;
             health)
               echo "🏥 Checking backend health..."
-              cd "$PROJECT_DIR" || exit 1
               sleep 10
               MAX_RETRIES=30
               RETRY_COUNT=0
@@ -207,7 +158,6 @@ runs:
               ;;
             cleanup)
               echo "🧹 Cleaning up old Docker images..."
-              cd "$PROJECT_DIR" || exit 1
               docker image prune -f
               echo "📊 Container status:"
               docker compose -f "$COMPOSE_FILE" ps
