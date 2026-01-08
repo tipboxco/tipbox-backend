@@ -8,7 +8,7 @@ COPY prisma ./prisma
 
 # npm cache temizle ve dependencies'leri yükle
 RUN npm cache clean --force && \
-    npm install --legacy-peer-deps --no-optional
+    npm install --legacy-peer-deps
 
 # Docker CLI kur (docker ps için)
 RUN apk add --no-cache docker-cli
