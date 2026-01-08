@@ -22,7 +22,8 @@ S3_ACCESS_KEY=minioadmin
 S3_SECRET_KEY=minioadmin123
 
 # Production Public Endpoint (Frontend ve Seed için) ⭐ ÖNEMLİ
-SEED_MEDIA_BASE_URL=http://api-test.tipbox.co:9000
+# Nginx proxy üzerinden /media/ path'i ile erişim (port 9000 VPN/internal only)
+SEED_MEDIA_BASE_URL=https://api-test.tipbox.co/media
 ```
 
 **ÖNEMLİ:** `SEED_MEDIA_BASE_URL` **MUTLAKA** set edilmelidir!
@@ -102,14 +103,14 @@ Eğer production ortamında (`NODE_ENV=production`) `SEED_MEDIA_BASE_URL` set ed
 ```
 ⚠️  UYARI: Production ortamında SEED_MEDIA_BASE_URL veya MINIO_PUBLIC_ENDPOINT set edilmemiş!
    Runtime'da görsel URL'leri localhost olarak oluşturulacak ve frontend erişemeyecek.
-   Lütfen .env dosyasına SEED_MEDIA_BASE_URL=http://api-test.tipbox.co:9000 ekleyin.
+   Lütfen .env dosyasına SEED_MEDIA_BASE_URL=https://api-test.tipbox.co/media ekleyin.
 ```
 
 ## 📋 Kontrol Listesi
 
 ### Deploy Öncesi
 
-- [ ] Sunucudaki `.env` dosyasında `SEED_MEDIA_BASE_URL=http://api-test.tipbox.co:9000` var
+- [ ] Sunucudaki `.env` dosyasında `SEED_MEDIA_BASE_URL=https://api-test.tipbox.co/media` var
 - [ ] `S3_ENDPOINT=http://minio:9000` (container içi, backend için)
 - [ ] `S3_BUCKET_NAME=tipbox-media`
 
@@ -128,7 +129,7 @@ Eğer production ortamında (`NODE_ENV=production`) `SEED_MEDIA_BASE_URL` set ed
 ```bash
 # Sunucuda kontrol et
 docker compose exec backend env | grep SEED_MEDIA_BASE_URL
-# Çıktı: SEED_MEDIA_BASE_URL=http://api-test.tipbox.co:9000
+# Çıktı: SEED_MEDIA_BASE_URL=https://api-test.tipbox.co/media
 ```
 
 ### 2. Database Path Kontrolü
@@ -160,8 +161,8 @@ Seed workflow çalıştığında log'larda şunları görmelisiniz:
 API endpoint'lerinden birine istek atın ve response'da URL'lerin production endpoint'i içerdiğini kontrol edin:
 
 ```bash
-curl http://api-test.tipbox.co/api/brands | jq '.[0].image'
-# Beklenen: "http://api-test.tipbox.co:9000/tipbox-media/brand-categories/cameras.png"
+curl https://api-test.tipbox.co/api/brands | jq '.[0].image'
+# Beklenen: "https://api-test.tipbox.co/media/brand-categories/cameras.png"
 ```
 
 ## 🎯 Sonuç
@@ -185,7 +186,7 @@ Test branch'inde deploy alındığında:
 ### Sorun: API response'larında localhost URL'leri görünüyor
 
 **Çözüm:**
-1. `.env` dosyasına `SEED_MEDIA_BASE_URL=http://api-test.tipbox.co:9000` ekleyin
+1. `.env` dosyasına `SEED_MEDIA_BASE_URL=https://api-test.tipbox.co/media` ekleyin
 2. Backend container'ını yeniden başlatın: `docker compose restart backend`
 3. API response'larında `getPublicMediaBaseUrl()` kullanıldığından emin olun
 
