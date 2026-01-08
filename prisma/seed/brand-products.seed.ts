@@ -2,7 +2,7 @@
 import { readFileSync } from 'fs';
 import path from 'path';
 import { prisma, generateUlid, TEST_USER_ID } from './types';
-import { getSeedMediaUrl } from './helpers/media.helper';
+import { getSeedMediaPath } from './helpers/media.helper';
 import { S3Service } from '../../src/infrastructure/s3/s3.service';
 
 export async function seedBrandProducts(): Promise<void> {
@@ -32,7 +32,7 @@ export async function seedBrandProducts(): Promise<void> {
         name: 'Akıllı Telefonlar',
         description: 'iPhone, Android, Samsung, Xiaomi vs.',
         mainCategoryId: techCategory.id,
-        imageUrl: getSeedMediaUrl('catalog.phones'),
+        imageUrl: getSeedMediaPath('catalog.phones'),
       },
     });
   }
@@ -44,7 +44,7 @@ export async function seedBrandProducts(): Promise<void> {
         name: 'Temizlik Ürünleri',
         description: 'Süpürge, temizlik robotu vb.',
         mainCategoryId: evYasamCategory.id,
-        imageUrl: getSeedMediaUrl('catalog.home-appliances'),
+        imageUrl: getSeedMediaPath('catalog.home-appliances'),
       },
     });
   }
@@ -84,7 +84,7 @@ export async function seedBrandProducts(): Promise<void> {
           name: `${brand.name} Ürünleri`,
           description: `${brand.name} markasına ait ürünler`,
           subCategoryId: subCategory.id,
-          imageUrl: getSeedMediaUrl('product.laptop.macbook'),
+          imageUrl: getSeedMediaPath('product.laptop.macbook'),
         },
       });
     }
@@ -108,7 +108,7 @@ export async function seedBrandProducts(): Promise<void> {
             brand: brand.name,
             description: productConfig.description,
             groupId: productGroup.id,
-            imageUrl: getSeedMediaUrl(productConfig.imageKey as any),
+            imageUrl: getSeedMediaPath(productConfig.imageKey as any),
           },
         });
       }
@@ -135,7 +135,7 @@ export async function seedBrandProducts(): Promise<void> {
         await prisma.inventoryMedia.create({
           data: {
             inventoryId: inventory.id,
-            mediaUrl: getSeedMediaUrl(productConfig.imageKey as any),
+            mediaUrl: getSeedMediaPath(productConfig.imageKey as any),
           },
         }).catch(() => {});
       }

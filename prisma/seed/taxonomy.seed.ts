@@ -1,5 +1,5 @@
 import { prisma } from './types';
-import { getSeedMediaUrl } from './helpers/media.helper';
+import { getSeedMediaPath } from './helpers/media.helper';
 
 export async function seedTaxonomy(): Promise<void> {
   console.log('📱 [seed] user themes');
@@ -71,7 +71,7 @@ export async function seedTaxonomy(): Promise<void> {
       await prisma.mainCategory.update({
         where: { id: category.id },
         data: {
-          imageUrl: getSeedMediaUrl(key as any),
+          imageUrl: getSeedMediaPath(key as any),
         },
       });
     }

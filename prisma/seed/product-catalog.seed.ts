@@ -57,8 +57,8 @@ async function seedProductCatalog(): Promise<void> {
     return;
   }
 
-  // Öncelikli kategoriler: Cosmetics, Electronics, Sports Outdoors
-  const priorityMainCategories = ['Cosmetics', 'Electronics', 'Sports Outdoors'];
+  // Öncelikli kategoriler: Cosmetics, Electronics
+  const priorityMainCategories = ['Cosmetics', 'Electronics'];
   
   // Main Category klasörlerini bul
   const mainCategoryFolders: FileInfo[] = [];

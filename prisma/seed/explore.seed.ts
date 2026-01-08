@@ -1,5 +1,5 @@
 import { prisma, generateUlid, TEST_USER_ID, TARGET_USER_ID, TRUST_USER_IDS } from './types';
-import { getSeedMediaUrl } from './helpers/media.helper';
+import { getSeedMediaPath } from './helpers/media.helper';
 
 // Wishbox istatistikleri için kullanılacak maksimum kullanıcı sayısı (default: 5)
 const MAX_WISHBOX_STATS_USERS = Number.parseInt(process.env.SEED_WISHBOX_USER_LIMIT || '5', 10);
@@ -12,7 +12,7 @@ export async function seedExplore(): Promise<void> {
       data: {
         title: 'Yeni Sezon NFT Koleksiyonu',
         description: "Sınırlı sayıda özel avatar ve badge NFT'leri şimdi satışta!",
-        imageUrl: getSeedMediaUrl('explore.event.primary'),
+        imageUrl: getSeedMediaPath('explore.event.primary'),
         linkUrl: '/marketplace/listings?type=BADGE',
         isActive: true,
         displayOrder: 1,
@@ -22,7 +22,7 @@ export async function seedExplore(): Promise<void> {
       data: {
         title: 'Epic Rarity İndirimi',
         description: "%30 indirimli EPIC rarity NFT'lere göz at",
-        imageUrl: getSeedMediaUrl('explore.event.primary'),
+        imageUrl: getSeedMediaPath('explore.event.primary'),
         linkUrl: '/marketplace/listings?rarity=EPIC',
         isActive: true,
         displayOrder: 2,
@@ -32,7 +32,7 @@ export async function seedExplore(): Promise<void> {
       data: {
         title: 'Yeni Markalar Platformda',
         description: "Ünlü markalar TipBox'a katıldı! Hemen keşfet.",
-        imageUrl: getSeedMediaUrl('explore.event.primary'),
+        imageUrl: getSeedMediaPath('explore.event.primary'),
         linkUrl: '/explore/brands/new',
         isActive: true,
         displayOrder: 3,
@@ -52,7 +52,7 @@ export async function seedExplore(): Promise<void> {
     ].map((b) =>
       prisma.brand
         .create({
-          data: { name: b.name, description: b.description, category: b.category, logoUrl: getSeedMediaUrl(b.logoKey as any) },
+          data: { name: b.name, description: b.description, category: b.category, logoUrl: getSeedMediaPath(b.logoKey as any) },
         })
         .catch(() => null)
     )
@@ -158,7 +158,7 @@ export async function seedExplore(): Promise<void> {
             name: 'Explore Tech Products',
             description: 'Explore için teknoloji ürünleri',
             subCategoryId: techSubCategory.id,
-            imageUrl: getSeedMediaUrl('product.laptop.macbook'),
+            imageUrl: getSeedMediaPath('product.laptop.macbook'),
           },
         });
       }
@@ -170,7 +170,7 @@ export async function seedExplore(): Promise<void> {
             name: 'Explore Home Products',
             description: 'Explore için ev ürünleri',
             subCategoryId: evYasamSubCategory.id,
-            imageUrl: getSeedMediaUrl('product.vacuum.dyson'),
+            imageUrl: getSeedMediaPath('product.vacuum.dyson'),
           },
         });
       }
@@ -201,7 +201,7 @@ export async function seedExplore(): Promise<void> {
                 brand: productData.brand,
                 description: `Yeni eklenen ${productData.name} ürünü`,
                 groupId: productData.group.id,
-                imageUrl: getSeedMediaUrl(productData.mediaKey as any),
+                imageUrl: getSeedMediaPath(productData.mediaKey as any),
               },
             });
 
@@ -216,7 +216,7 @@ export async function seedExplore(): Promise<void> {
             });
 
             // Inventory media ekle
-            const mediaUrl = getSeedMediaUrl(productData.mediaKey as any);
+            const mediaUrl = getSeedMediaPath(productData.mediaKey as any);
             if (mediaUrl) {
               await prisma.inventoryMedia.create({
                 data: {
