@@ -40,6 +40,53 @@ export class PostService {
   private geminiService: GeminiService;
   private experienceSnippetRepo: AiExperienceSplitPrismaRepository;
 
+  /**
+   * Search posts by title and body
+   */
+  async searchPosts(query: string, options?: { limit?: number; cursor?: string }): Promise<{
+    items: any[];
+    pagination: { cursor?: string; hasMore: boolean; limit: number };
+  }> {
+    const limit = options?.limit || 20;
+    const searchTrimmed = query?.trim();
+    
+    if (!searchTrimmed) {
+      return { items: [], pagination: { hasMore: false, limit } };
+    }
+
+    const posts = await this.postRepo.search(searchTrimmed);
+    
+    // Apply cursor-based pagination if needed
+    let resultPosts = posts;
+    if (options?.cursor) {
+      const cursorIndex = resultPosts.findIndex(p => p.id === options.cursor);
+      if (cursorIndex >= 0) {
+        resultPosts = resultPosts.slice(cursorIndex + 1);
+      }
+    }
+    
+    const hasMore = resultPosts.length > limit;
+    const paginated = hasMore ? resultPosts.slice(0, limit) : resultPosts;
+    const nextCursor = hasMore && paginated.length > 0 ? paginated[paginated.length - 1].id : undefined;
+
+    // Convert to feed format
+    const feedItems = await Promise.all(
+      paginated.map(async (post) => {
+        const feedItem = await this.feedService.mapContentPostToFeedItem(post, undefined);
+        return feedItem;
+      })
+    );
+
+    return {
+      items: feedItems,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
+  }
+
   constructor() {
     this.postRepo = new ContentPostPrismaRepository();
     this.tipRepo = new PostTipPrismaRepository();

@@ -344,15 +344,11 @@ async function main() {
   console.log('🧪 Kapsamlı Messaging Test Başlatılıyor...\n');
 
   try {
-    // 1. Kullanıcıları DB'den al
-    console.log('1️⃣  Kullanıcıları DB\'den alınıyor...');
-    const users = await getUsersFromDB();
-    if (users.length < 2) {
-      console.error('❌ En az 2 kullanıcı bulunmalı');
-      process.exit(1);
-    }
-    user1 = users[0];
-    user2 = users[1];
+    // 1. Kullanıcıları DB'den al veya bilinen kullanıcıları kullan
+    console.log('1️⃣  Kullanıcıları belirleme...');
+    // Bilinen kullanıcıları kullan (şifreleri bilinen)
+    user1 = { email: 'omer@tipbox.co', id: '480f5de9-b691-4d70-a6a8-2789226f4e07' };
+    user2 = { email: 'julia.havk@tipbox.co', id: '99999999-9999-4999-9999-999999999999' };
     console.log(`   ✅ User 1: ${user1.email} (${user1.id})`);
     console.log(`   ✅ User 2: ${user2.email} (${user2.id})\n`);
 

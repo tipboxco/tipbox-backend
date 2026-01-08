@@ -37,6 +37,63 @@ export class InventoryService {
   }
 
   /**
+   * Search product experiences by title and text
+   */
+  async searchExperiences(query: string, options?: { limit?: number; cursor?: string }): Promise<{
+    items: any[];
+    pagination: { cursor?: string; hasMore: boolean; limit: number };
+  }> {
+    const limit = options?.limit || 20;
+    const searchTrimmed = query?.trim();
+    
+    if (!searchTrimmed) {
+      return { items: [], pagination: { hasMore: false, limit } };
+    }
+
+    const experiences = await this.experienceRepo.searchByText(searchTrimmed);
+    
+    // Apply cursor-based pagination if needed
+    let resultExperiences = experiences;
+    if (options?.cursor) {
+      const cursorIndex = resultExperiences.findIndex(e => e.id === options.cursor);
+      if (cursorIndex >= 0) {
+        resultExperiences = resultExperiences.slice(cursorIndex + 1);
+      }
+    }
+    
+    const hasMore = resultExperiences.length > limit;
+    const paginated = hasMore ? resultExperiences.slice(0, limit) : resultExperiences;
+    const nextCursor = hasMore && paginated.length > 0 ? paginated[paginated.length - 1].id : undefined;
+
+    // Map to response format
+    const items = paginated.map(exp => ({
+      id: exp.id,
+      title: exp.title,
+      experienceText: exp.experienceText,
+      inventory: exp.inventory ? {
+        id: exp.inventory.id,
+        product: exp.inventory.product ? {
+          id: exp.inventory.product.id,
+          name: exp.inventory.product.name,
+        } : null,
+        user: exp.inventory.user ? {
+          id: exp.inventory.user.id,
+        } : null,
+      } : null,
+      createdAt: exp.createdAt.toISOString(),
+    }));
+
+    return {
+      items,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
+    };
+  }
+
+  /**
    * Kullanıcının sahip olduğu ürünlerin listesini getir
    */
   async getUserInventoryList(userId: string): Promise<InventoryListItemResponse[]> {

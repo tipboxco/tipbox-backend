@@ -1731,11 +1731,9 @@ export class UserService {
       const tags = await this.collectProductTags(String(inv.productId));
       const images = ((inv as any).media || [])
         .map((m: any) => {
-          const mediaUrl = m.mediaUrl;
-          if (mediaUrl && (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://'))) {
-            return mediaUrl;
-          } else if (mediaUrl) {
-            return resolveMediaUrl(mediaUrl);
+          const mediaPath = m.mediaUrl;
+          if (mediaPath) {
+            return resolveMediaUrl(mediaPath);
           }
           return null;
         })
@@ -2734,15 +2732,7 @@ export class UserService {
 
     // Image URL'ini bul ve prefix ekle
     const imagePath = product.imageUrl || group?.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
-    let imageUrl: string | null = null;
-    
-    if (imagePath) {
-      if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
-        imageUrl = imagePath;
-      } else {
-        imageUrl = resolveMediaUrl(imagePath);
-      }
-    }
+    const imageUrl = resolveMediaUrl(imagePath);
 
     return {
       id: String(product.id),

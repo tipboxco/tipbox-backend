@@ -101,6 +101,7 @@ export class NotificationService {
       unreadOnly?: boolean;
       type?: NotificationType;
       category?: NotificationCategory;
+      search?: string;
     }
   ): Promise<{
     notifications: Notification[];
@@ -127,11 +128,13 @@ export class NotificationService {
         ...options,
         type: typeFilter,
         category: options?.category,
+        search: options?.search,
       }),
       this.notificationRepo.getTotalCount(userId, {
         unreadOnly: options?.unreadOnly,
         type: typeFilter,
         category: options?.category,
+        search: options?.search,
       }),
     ]);
 

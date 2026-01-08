@@ -1,7 +1,7 @@
 import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, PutBucketPolicyCommand, ListObjectsV2Command, DeleteObjectsCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { s3Config } from '../config/s3.config';
-import { getPublicMediaBaseUrl, buildMediaUrl } from '../config/media.config';
+import { getPublicMediaBaseUrl, resolveMediaUrl } from '../config/media.config';
 import logger from '../logger/logger';
 import fs from 'fs';
 
@@ -215,8 +215,8 @@ export class S3Service {
    * @returns Dosyanın erişilebilir tam URL'i (buildMediaUrl ile oluşturulur)
    */
   getFileUrl(fileName: string): string {
-    // buildMediaUrl kullanarak tam URL oluştur
-    return buildMediaUrl(fileName);
+    // resolveMediaUrl kullanarak tam URL oluştur
+    return resolveMediaUrl(fileName) || fileName;
   }
 
   /**

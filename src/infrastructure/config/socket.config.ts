@@ -1,5 +1,6 @@
 import config from './index';
 import { getCorsOptions } from './cors.config';
+import type { Transport } from 'socket.io';
 
 export interface SocketConfig {
   cors: {
@@ -7,7 +8,7 @@ export interface SocketConfig {
     methods: string[];
     credentials: boolean;
   };
-  transports: string[];
+  transports: Transport[];
   allowEIO3: boolean;
   path: string;
   connectTimeout: number;
@@ -24,7 +25,7 @@ export function getSocketConfig(): SocketConfig {
       methods: config.corsMethods,
       credentials: true,
     },
-    transports: ['websocket', 'polling'],
+    transports: ['websocket', 'polling'] as Transport[],
     allowEIO3: false,
     path: '/socket.io/',
     connectTimeout: 20000,
