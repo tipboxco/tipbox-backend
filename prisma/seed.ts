@@ -2854,7 +2854,7 @@ async function seedNFTMarketplace() {
         data: {
           name: `${name} #${Math.floor(Math.random() * 9999) + 1}`,
           description: `A ${rarity.toLowerCase()} ${nftType.toLowerCase()} NFT with unique attributes.`,
-          imageUrl: getSeedMediaPath('nft.marketplace.1') ?? '', // Test asset
+          imageUrl: getSeedMediaPath('feed.product.placeholder') ?? '', // Fallback to product image
           type: nftType,
           rarity,
           isTransferable: Math.random() > 0.2, // %80 transferable
