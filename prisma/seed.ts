@@ -1968,38 +1968,75 @@ async function seedPosts() {
   for (const user of users) {
     console.log(`  📝 ${user.email} için postlar oluşturuluyor...`)
     
+    // Kullanıcının inventory'sindeki ürünleri getir (EXPERIENCE ve UPDATE için)
+    const userInventory = await prisma.inventory.findMany({
+      where: { userId: user.id },
+      include: { product: true }
+    })
+    
     for (const postType of postTypes) {
       // Her tipten 10 post
       for (let i = 1; i <= 10; i++) {
-        const randomProduct = products[Math.floor(Math.random() * products.length)]
+        let selectedProduct
+        
+        // EXPERIENCE ve UPDATE için SADECE inventory'deki ürünler
+        if ((postType === 'EXPERIENCE' || postType === 'UPDATE') && userInventory.length > 0) {
+          const randomInventory = userInventory[Math.floor(Math.random() * userInventory.length)]
+          selectedProduct = randomInventory.product
+        } else {
+          // Diğer tipler için herhangi bir ürün
+          selectedProduct = products[Math.floor(Math.random() * products.length)]
+        }
+        
         const createdAt = new Date(Date.now() - Math.random() * 90 * 24 * 60 * 60 * 1000) // Son 90 gün içinde
         
         const post = await createPost({
           userId: user.id,
           type: postType,
-          title: `${postType} Post ${i} - ${randomProduct.name}`,
-          body: `Bu bir ${postType} tipi içerik. ${randomProduct.name} hakkında detaylı bilgi ve deneyimler paylaşılıyor. Ürünü kullanma deneyimim oldukça olumlu oldu. Kaliteli malzeme ve iyi tasarım dikkat çekiyor.`,
-          productId: randomProduct.id,
-          productGroupId: randomProduct.groupId ?? undefined,
+          title: `${postType} Post ${i} - ${selectedProduct.name}`,
+          body: `Bu bir ${postType} tipi içerik. ${selectedProduct.name} hakkında detaylı bilgi ve deneyimler paylaşılıyor. Ürünü kullanma deneyimim oldukça olumlu oldu. Kaliteli malzeme ve iyi tasarım dikkat çekiyor.`,
+          productId: selectedProduct.id,
+          productGroupId: selectedProduct.groupId ?? undefined,
           mainCategoryId: undefined,
           subCategoryId: undefined,
-          inventoryRequired: postType === 'EXPERIENCE',
+          inventoryRequired: postType === 'EXPERIENCE' || postType === 'UPDATE',
           createdAt,
         })
         
         // Post tipine göre ilişkili kayıtlar oluştur
         if (postType === 'QUESTION') {
-          await createPostQuestion(post.id, randomProduct.id)
+          await createPostQuestion(post.id, selectedProduct.id)
         } else if (postType === 'TIPS') {
           await createPostTip(post.id)
         } else if (postType === 'COMPARE') {
           const product2 = products[Math.floor(Math.random() * products.length)]
-          await createPostComparison(post.id, randomProduct.id, product2.id)
+          await createPostComparison(post.id, selectedProduct.id, product2.id)
         } else if (postType === 'EXPERIENCE' && durations.length > 0 && locations.length > 0 && purposes.length > 0) {
           const randomDuration = durations[Math.floor(Math.random() * durations.length)]
           const randomLocation = locations[Math.floor(Math.random() * locations.length)]
           const randomPurpose = purposes[Math.floor(Math.random() * purposes.length)]
           await addExperienceRelations(post.id, randomDuration.id, randomLocation.id, randomPurpose.id)
+        }
+        
+        // PostMedia ekle (bazı postlara)
+        if (Math.random() > 0.7) { // %30 şansla media ekle
+          const mediaKeys: SeedMediaKey[] = [
+            'product.phone.phone1', 'product.phone.samsung', 'product.laptop.macbook',
+            'product.tablet.ipad', 'product.watch.applewatch',
+          ]
+          const randomMediaKey = mediaKeys[Math.floor(Math.random() * mediaKeys.length)]
+          const mediaUrl = getSeedMediaPath(randomMediaKey, true)
+          
+          if (mediaUrl) {
+            await prisma.postMedia.create({
+              data: {
+                postId: post.id,
+                userId: user.id,
+                mediaUrl,
+                orderIndex: 1,
+              }
+            })
+          }
         }
         
         totalPosts++
@@ -3425,6 +3462,63 @@ async function createSeedUsers(defaultThemeId: string): Promise<Map<string, { id
       }
     })
     
+    // 6. Inventory + InventoryMedia ekle (5-15 ürün)
+    const inventoryCount = Math.floor(Math.random() * 11) + 5 // 5-15
+    const allProducts = await prisma.product.findMany({ take: 500 })
+    
+    if (allProducts.length > 0) {
+      const userProducts = allProducts
+        .sort(() => Math.random() - 0.5)
+        .slice(0, Math.min(inventoryCount, allProducts.length))
+      
+      for (const product of userProducts) {
+        // Inventory kaydı oluştur
+        const inventory = await prisma.inventory.upsert({
+          where: {
+            userId_productId: {
+              userId: user.id,
+              productId: product.id
+            }
+          },
+          create: {
+            userId: user.id,
+            productId: product.id,
+            hasOwned: true, // Kullanıcı bu ürünü sahiplendi
+          },
+          update: {
+            hasOwned: true,
+          }
+        })
+        
+        // InventoryMedia ekle (bazı ürünlere)
+        if (Math.random() > 0.5) { // %50 şansla media ekle
+          const existingMedia = await prisma.inventoryMedia.findFirst({
+            where: { inventoryId: inventory.id }
+          })
+          
+          if (!existingMedia) {
+            // Random product image seç
+            const productImageKeys = [
+              'product.phone.phone1', 'product.phone.phone2', 'product.phone.samsung',
+              'product.laptop.laptop1', 'product.laptop.macbook',
+              'product.tablet.ipad', 'product.watch.applewatch',
+            ]
+            const randomImageKey = productImageKeys[Math.floor(Math.random() * productImageKeys.length)] as SeedMediaKey
+            const mediaUrl = getSeedMediaPath(randomImageKey, true)
+            
+            if (mediaUrl) {
+              await prisma.inventoryMedia.create({
+                data: {
+                  inventoryId: inventory.id,
+                  mediaUrl,
+                }
+              })
+            }
+          }
+        }
+      }
+    }
+    
     // Map'e ekle
     createdUsers.set(user.id, {
       id: user.id,
@@ -3434,6 +3528,7 @@ async function createSeedUsers(defaultThemeId: string): Promise<Map<string, { id
   }
   
   console.log(`✅ ${createdUsers.size} kullanıcı oluşturuldu/güncellendi`)
+  console.log(`✅ Her kullanıcı için 5-15 ürün inventory'e eklendi + InventoryMedia`)
   
   // Metadata'ya ekle
   for (const userId of createdUsers.keys()) {
