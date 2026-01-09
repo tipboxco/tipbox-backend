@@ -523,19 +523,31 @@ async function buildSeedAssets(): Promise<void> {
     ];
     const COMMUNITY_COACH_USER_ID = '66666666-6666-4666-a666-666666666666';
     
-    // Avatar eşleştirmesi
+    // Avatar eşleştirmesi - Gerçek dosya isimleri ile SEED_USERS'daki userId'ler
     const avatarMapping: Record<string, { key: string; userId: string }> = {
-      'ozan.jpg': { key: 'user.avatar.primary', userId: TEST_USER_ID },
-      'man-user.jpg': { key: 'user.avatar.market', userId: TARGET_USER_ID },
-      'woman-user.jpg': { key: 'user.avatar.julia', userId: JULIA_USER_ID },
-      'man-user-2.png': { key: 'user.avatar.trust1', userId: TRUST_USER_IDS[0] },
-      'man-user-3.jpg': { key: 'user.avatar.trust2', userId: TRUST_USER_IDS[1] },
-      'man-user-4.jpg': { key: 'user.avatar.trust3', userId: TRUST_USER_IDS[2] },
-      'man-user-5.jpg': { key: 'user.avatar.trust4', userId: TRUST_USER_IDS[3] },
-      'woman-user-2.jpg': { key: 'user.avatar.truster1', userId: TRUSTER_USER_IDS[0] },
-      'woman-user-3.jpg': { key: 'user.avatar.truster2', userId: TRUSTER_USER_IDS[1] },
-      'woman-user-4.jpg': { key: 'user.avatar.truster3', userId: TRUSTER_USER_IDS[2] },
-      'woman-user-5.jpg': { key: 'user.avatar.coach', userId: COMMUNITY_COACH_USER_ID },
+      // İsme özel avatarlar
+      'omer.png': { key: 'user.avatar.omer', userId: '480f5de9-b691-4d70-a6a8-2789226f4e07' },
+      'mehmet.png': { key: 'user.avatar.mehmet', userId: '22222222-2222-4222-a222-222222222222' },
+      'burakcan.png': { key: 'user.avatar.burakcan', userId: '44444444-4444-4444-a444-444444444444' },
+      'mihrac.png': { key: 'user.avatar.mihrac', userId: '55555555-5555-4555-a555-555555555555' },
+      'furkan.png': { key: 'user.avatar.furkan', userId: 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb' },
+      'aycan.png': { key: 'user.avatar.aycan', userId: 'cccccccc-cccc-4ccc-cccc-cccccccccccc' },
+      'ozan.png': { key: 'user.avatar.ozan', userId: 'dddddddd-dddd-4ddd-dddd-dddddddddddd' },
+      
+      // Generic man/woman avatars (diğer kullanıcılar için)
+      'man-user.jpg': { key: 'user.avatar.man1', userId: '11111111-1111-4111-a111-111111111111' },
+      'man-user-2.png': { key: 'user.avatar.man2', userId: '33333333-3333-4333-a333-333333333333' },
+      'man-user-3.jpg': { key: 'user.avatar.man3', userId: 'eeeeeeee-eeee-4eee-eeee-eeeeeeeeeeee' },
+      'man-user-4.jpg': { key: 'user.avatar.man4', userId: 'ffffffff-ffff-4fff-ffff-ffffffffffff' },
+      'man-user-5.jpg': { key: 'user.avatar.man5', userId: '10000000-0000-4000-0000-000000000001' },
+      'woman-user.jpg': { key: 'user.avatar.woman1', userId: 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa' },
+      'woman-user-2.jpg': { key: 'user.avatar.woman2', userId: '10000000-0000-4000-0000-000000000003' },
+      'woman-user-3.jpg': { key: 'user.avatar.woman3', userId: '10000000-0000-4000-0000-000000000005' },
+      'woman-user-4.jpg': { key: 'user.avatar.woman4', userId: '10000000-0000-4000-0000-000000000007' },
+      'woman-user-5.jpg': { key: 'user.avatar.woman5', userId: '10000000-0000-4000-0000-000000000009' },
+      
+      // Özel key'ler (seed'de tekrar kullanılan)
+      // primary, trust1-5, truster1-3, coach, market key'leri yukarıdaki dosyalara eşlendi
     };
     
     for (const file of profileFiles) {
@@ -563,16 +575,8 @@ async function buildSeedAssets(): Promise<void> {
             description: `User avatar: ${file} (${mapping.userId})`,
           });
         } else {
-          // Diğer user avatar'ları (eski format için geriye dönük uyumluluk)
-          const nameWithoutExt = file.replace(/\.[^/.]+$/, '');
-          const key = `user.avatar.${slugify(nameWithoutExt)}`;
-          seedAssets.push({
-            key,
-            localPath: filePath,
-            targetKey: `userprofile/${file}`,
-            contentType: inferContentType(filePath),
-            description: `User avatar: ${file}`,
-          });
+          // Eşleşmeyen dosyalar için UYARI ver (artık yanlış path oluşturmuyoruz)
+          console.warn(`   ⚠️  Avatar mapping bulunamadı: ${file} - Atlanıyor`);
         }
       }
     }

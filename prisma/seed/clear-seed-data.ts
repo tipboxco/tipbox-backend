@@ -56,6 +56,9 @@ async function clearAllData(): Promise<void> {
   const progress = new ProgressBar(totalSteps, 50)
 
   try {
+    // Foreign key constraint'lerini geçici olarak devre dışı bırak
+    await prisma.$executeRawUnsafe('SET session_replication_role = replica;');
+    
     // Foreign key constraint'leri nedeniyle ters sırada silme
     // En son oluşturulan verilerden başla
     
@@ -77,6 +80,7 @@ async function clearAllData(): Promise<void> {
     await prisma.topCommunityChoice.deleteMany({});
     await prisma.postMedia.deleteMany({});
     await prisma.postComparisonScore.deleteMany({});
+    // PostComparison Product'a referans veriyor - önce sil
     await prisma.postComparison.deleteMany({});
     await prisma.postTag.deleteMany({});
     await prisma.postTip.deleteMany({});
@@ -192,6 +196,9 @@ async function clearAllData(): Promise<void> {
   } catch (error) {
     console.error('❌ Seed verileri temizlenirken hata oluştu:', error);
     throw error;
+  } finally {
+    // Foreign key constraint'lerini tekrar aktif et
+    await prisma.$executeRawUnsafe('SET session_replication_role = origin;');
   }
 }
 

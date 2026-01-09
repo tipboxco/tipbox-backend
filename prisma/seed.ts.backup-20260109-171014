@@ -3016,24 +3016,11 @@ async function seedNFTMarketplace() {
       const nameOptions = nftNames[nftType]
       const name = nameOptions[Math.floor(Math.random() * nameOptions.length)]
       
-      // NFT görseli için fallback (seed-media-map.json'da yoksa product/badge image kullan)
-      let nftImageUrl = '';
-      try {
-        nftImageUrl = getSeedMediaPath('nft.marketplace.1') || getSeedMediaPath('product.headphone') || getSeedMediaPath('badge.earlyadapter') || '';
-      } catch (error) {
-        // Son fallback: badge veya product kullan
-        try {
-          nftImageUrl = getSeedMediaPath('badge.earlyadapter') || '';
-        } catch {
-          nftImageUrl = getSeedMediaPath('product.headphone') || '';
-        }
-      }
-      
       const nft = await prisma.nFT.create({
         data: {
           name: `${name} #${Math.floor(Math.random() * 9999) + 1}`,
           description: `A ${rarity.toLowerCase()} ${nftType.toLowerCase()} NFT with unique attributes.`,
-          imageUrl: nftImageUrl,
+          imageUrl: getSeedMediaPath('product.post.electronic-post-1') ?? '', // Fallback to product image
           type: nftType,
           rarity,
           isTransferable: Math.random() > 0.2, // %80 transferable
@@ -5126,9 +5113,9 @@ async function ensureBookmarkFor(userId: string, postId: string): Promise<boolea
 async function seedBrandProducts(userIdToUse: string): Promise<void> {
   console.log('🏷️ [seedBrandProducts] Fonksiyon başlatılıyor...')
   
-  // Kategorileri bul (yeni kategori isimleriyle)
-  const techCategory = await prisma.mainCategory.findFirst({ where: { name: 'Electronics' } })
-  const evYasamCategory = await prisma.mainCategory.findFirst({ where: { name: 'Beauty' } })
+  // Kategorileri bul
+  const techCategory = await prisma.mainCategory.findFirst({ where: { name: 'Teknoloji' } })
+  const evYasamCategory = await prisma.mainCategory.findFirst({ where: { name: 'Ev & Yaşam' } })
   
   if (!techCategory || !evYasamCategory) {
     console.warn('⚠️ Kategoriler bulunamadı, brand products seed atlanıyor')
@@ -7424,8 +7411,7 @@ async function main() {
     }
   });
 
-  // FALLBACK: techSubCategories tanımlı değil, mevcut subCategory'lerden birini kullan
-  const akilliTelefonSubCat = evYasamSubCategory
+  const akilliTelefonSubCat = techSubCategories.find(c => c.name === 'Akıllı Telefonlar')!
   
   // Telefon markaları ve görsel eşleştirmeleri
   const phoneBrands = [
@@ -7680,23 +7666,19 @@ async function main() {
     },
   });
 
-  // FALLBACK: Eski inline koddan kalan değişkenler - mevcut verilerden çek
-  const allSubCategories = await prisma.subCategory.findMany({ take: 10 });
-  const allProductGroups = await prisma.productGroup.findMany({ take: 10 });
-  
-  const akilliTelefonlarSubCategory = allSubCategories[0] || evYasamSubCategory;
-  const laptoplarSubCategory = allSubCategories[1] || evYasamSubCategory;
-  const kulakliklarSubCategory = allSubCategories[2] || evYasamSubCategory;
-  const samsungGroup = allProductGroups[0];
-  const iphoneGroup = allProductGroups[1];
-  const redmiGroup = allProductGroups[2];
+  const akilliTelefonlarSubCategory = techSubCategories.find((cat) => cat.name === 'Akıllı Telefonlar');
+  const laptoplarSubCategory = techSubCategories.find((cat) => cat.name === 'Laptoplar');
+  const kulakliklarSubCategory = techSubCategories.find((cat) => cat.name === 'Kulaklıklar');
+  const samsungGroup = phoneProductGroups.find((group) => group.name === 'Samsung Serisi');
+  const iphoneGroup = phoneProductGroups.find((group) => group.name === 'iPhone Serisi');
+  const redmiGroup = phoneProductGroups.find((group) => group.name === 'Redmi Serisi');
 
   if (!akilliTelefonlarSubCategory || !laptoplarSubCategory || !kulakliklarSubCategory) {
-    console.warn('⚠️  Teknoloji alt kategorileri bulunamadı, fallback kullanılıyor');
+    throw new Error('Teknoloji alt kategorileri bulunamadı (Akıllı Telefonlar, Laptoplar, Kulaklıklar)');
   }
 
   if (!samsungGroup || !iphoneGroup || !redmiGroup) {
-    console.warn('⚠️  Telefon product group verileri eksik, bazı özellikler atlanabilir');
+    throw new Error('Telefon product group verileri eksik (Samsung/iPhone/Redmi)');
   }
 
   type ContextPostSeed = {

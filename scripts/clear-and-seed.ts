@@ -18,11 +18,7 @@
 
 import { execSync } from 'child_process';
 import path from 'path';
-// MinIO işlemleri artık ayrı script'ler ile yapılıyor
-// - Temizleme: scripts/clear-minio-media.ts (eğer gerekirse)
-// - Yükleme: scripts/upload-seed-media.ts
-// import { clearUserContentMedia, clearAllMedia } from '../prisma/seed/helpers/clear-minio-media';
-// import { ensureSeedMediaUploaded } from '../prisma/seed/helpers/ensure-seed-media';
+import { clearUserContentMedia, clearAllMedia } from '../prisma/seed/helpers/clear-minio-media';
 
 async function clearAndSeed(clearAll: boolean = false): Promise<void> {
   console.log('🔍 Prisma schema kontrol ediliyor...\n');
@@ -184,23 +180,16 @@ async function clearAndSeed(clearAll: boolean = false): Promise<void> {
       }
     }
     
-    // Seed görsellerini MinIO'ya yükle (migration ve prisma generate'den sonra)
-    console.log('📤 Seed görselleri MinIO\'ya yükleniyor...\n');
-    try {
-      const uploadMediaPath = path.join(process.cwd(), 'scripts', 'upload-seed-media.ts');
-      execSync(`npx ts-node ${uploadMediaPath}`, {
-        stdio: 'inherit',
-        cwd: process.cwd(),
-      });
-      console.log('✅ Seed görselleri yüklendi\n');
-    } catch (error) {
-      console.warn('⚠️  Seed görselleri yüklenemedi, devam ediliyor...');
-      console.warn('   Hata:', error instanceof Error ? error.message : String(error));
-      console.warn('   💡 Manuel olarak çalıştırabilirsiniz: npm run upload-seed-media\n');
-      // Media upload hatası seed işlemini durdurmaz
+    // ADIM 1: MinIO görsellerini temizle (ÖNCE)
+    if (clearAll) {
+      console.log('\n🧹 MinIO TÜM görselleri temizleniyor (taxonomy dahil)...\n');
+      await clearAllMedia();
+    } else {
+      console.log('\n🧹 MinIO kullanıcı/içerik görselleri temizleniyor (taxonomy korunuyor)...\n');
+      await clearUserContentMedia();
     }
-
-    // Seed verilerini temizle (DB)
+    
+    // ADIM 2: Seed verilerini temizle (DB)
     if (clearAll) {
       console.log('\n🧹 TÜM seed verileri temizleniyor (taxonomy dahil)...\n');
       const clearSeedPath = path.join(process.cwd(), 'prisma', 'seed', 'clear-seed-data.ts');
@@ -217,6 +206,23 @@ async function clearAndSeed(clearAll: boolean = false): Promise<void> {
       });
     }
     
+    // ADIM 3: Seed görsellerini MinIO'ya yükle (Temizlemeden SONRA)
+    console.log('\n📤 Seed görselleri MinIO\'ya yükleniyor (doğru UGC yapısı ile)...\n');
+    try {
+      const uploadMediaPath = path.join(process.cwd(), 'scripts', 'fix-minio-structure.ts');
+      execSync(`npx ts-node ${uploadMediaPath}`, {
+        stdio: 'inherit',
+        cwd: process.cwd(),
+      });
+      console.log('✅ Seed görselleri yüklendi (UGC yapısı: profile-pictures/{userId}/)\n');
+    } catch (error) {
+      console.warn('⚠️  Seed görselleri yüklenemedi, devam ediliyor...');
+      console.warn('   Hata:', error instanceof Error ? error.message : String(error));
+      console.warn('   💡 Manuel olarak çalıştırabilirsiniz: npx ts-node scripts/fix-minio-structure.ts\n');
+      // Media upload hatası seed işlemini durdurmaz
+    }
+    
+    // ADIM 4: Seed.ts çalıştır
     console.log('\n🌱 Seed.ts çalıştırılıyor...\n');
     
     // seed.ts'yi çalıştır (SKIP_SEED_MEDIA_UPLOAD=true ile görselleri tekrar yüklemesin)
