@@ -3007,6 +3007,128 @@ async function seedNFTMarketplace() {
   console.log('═'.repeat(80) + '\n')
 }
 
+// ==================== REMAINING PHASES: BADGES, SYSTEM TABLES ====================
+
+/**
+ * Kalan tüm sistemleri oluştur (Badges, System Tables)
+ */
+async function seedRemainingSystemTables() {
+  console.log('\n🏅 Kalan sistem tabloları oluşturuluyor...\n')
+  
+  const users = await prisma.user.findMany({ take: 40 })
+  
+  if (users.length === 0) {
+    console.log('⚠️ Kullanıcı bulunamadı, atlanıyor...')
+    return
+  }
+  
+  let totalBadges = 0
+  let totalUserBadges = 0
+  
+  // 1. BADGE CATEGORIES
+  console.log('📁 Badge categories oluşturuluyor...')
+  
+  const categories = [
+    { name: 'Achievement Badges', description: 'Başarı rozetleri' },
+    { name: 'Event Badges', description: 'Etkinlik rozetleri' },
+    { name: 'Community Badges', description: 'Topluluk rozetleri' },
+    { name: 'Special Badges', description: 'Özel rozetler' },
+  ]
+  
+  const createdCategories: string[] = []
+  
+  for (const cat of categories) {
+    const category = await prisma.badgeCategory.create({
+      data: {
+        name: cat.name,
+        description: cat.description,
+      }
+    })
+    createdCategories.push(category.id)
+  }
+  
+  console.log(`  ✅ ${categories.length} badge category oluşturuldu`)
+  
+  // 2. BADGES
+  console.log('🏅 Badges oluşturuluyor...')
+  
+  const badgeTypes: Array<'ACHIEVEMENT' | 'EVENT' | 'COSMETIC'> = ['ACHIEVEMENT', 'EVENT', 'COSMETIC']
+  const badgeRarities: Array<'COMMON' | 'RARE' | 'EPIC'> = ['COMMON', 'RARE', 'EPIC']
+  
+  const badgeNames = [
+    'First Post', 'Power User', 'Trusted Member', 'Event Champion', 'Community Hero',
+    'Expert Reviewer', 'Influencer', 'Early Adopter', 'Beta Tester', 'Top Contributor',
+    'Golden User', 'Diamond Tier', 'Platinum Member', 'Elite User', 'VIP Member'
+  ]
+  
+  const createdBadges: string[] = []
+  
+  for (const name of badgeNames) {
+    const randomType = badgeTypes[Math.floor(Math.random() * badgeTypes.length)]
+    const randomRarity = badgeRarities[Math.floor(Math.random() * badgeRarities.length)]
+    const randomCategory = createdCategories[Math.floor(Math.random() * createdCategories.length)]
+    
+    const badge = await prisma.badge.create({
+      data: {
+        name,
+        description: `${name} badge - ${randomRarity}`,
+        imageUrl: null,
+        type: randomType,
+        rarity: randomRarity,
+        boostMultiplier: randomRarity === 'EPIC' ? 2.0 : (randomRarity === 'RARE' ? 1.5 : 1.0),
+        rewardMultiplier: randomRarity === 'EPIC' ? 3.0 : (randomRarity === 'RARE' ? 2.0 : 1.0),
+        categoryId: randomCategory,
+      }
+    })
+    
+    createdBadges.push(badge.id)
+    totalBadges++
+  }
+  
+  console.log(`  ✅ ${totalBadges} badge oluşturuldu`)
+  
+  // 3. USER BADGES (Her kullanıcı 2-5 badge)
+  console.log('🎖️ UserBadges oluşturuluyor...')
+  
+  const visibilities: Array<'PUBLIC' | 'FRIENDS' | 'TRUSTERS' | 'PRIVATE'> = ['PUBLIC', 'FRIENDS', 'TRUSTERS', 'PRIVATE']
+  
+  for (const user of users) {
+    const badgeCount = Math.floor(Math.random() * 4) + 2 // 2-5 badge
+    const userBadges = createdBadges
+      .sort(() => Math.random() - 0.5)
+      .slice(0, badgeCount)
+    
+    for (let i = 0; i < userBadges.length; i++) {
+      const badgeId = userBadges[i]
+      const visibility = visibilities[Math.floor(Math.random() * visibilities.length)]
+      
+      await prisma.userBadge.create({
+        data: {
+          userId: user.id,
+          badgeId,
+          isVisible: Math.random() > 0.2, // %80 visible
+          displayOrder: i + 1,
+          visibility,
+          claimed: Math.random() > 0.3, // %70 claimed
+          claimedAt: Math.random() > 0.3 ? new Date(Date.now() - Math.random() * 60 * 24 * 60 * 60 * 1000) : null,
+        }
+      })
+      totalUserBadges++
+    }
+  }
+  
+  console.log(`  ✅ ${totalUserBadges} user badge oluşturuldu`)
+  
+  // Özet
+  console.log('\n' + '═'.repeat(80))
+  console.log('✨ KALAN SİSTEMLER TAMAMLANDI\n')
+  console.log(`   📁 Badge Categories: ${categories.length}`)
+  console.log(`   🏅 Badges: ${totalBadges}`)
+  console.log(`   🎖️ User Badges: ${totalUserBadges}`)
+  console.log(`      👤 Kullanıcı başına ortalama: ${(totalUserBadges / users.length).toFixed(1)} badge`)
+  console.log('═'.repeat(80) + '\n')
+}
+
 /**
  * Genel görsel mapping sistemi
  * Tüm görsel tipleri için merkezi yönetim
@@ -5399,6 +5521,11 @@ async function main() {
   progress.increment('NFT & Marketplace oluşturuluyor...')
   await seedNFTMarketplace()
   progress.increment('NFT & Marketplace oluşturuldu')
+
+  // 10. Badges & System Tables
+  progress.increment('Badges & System Tables oluşturuluyor...')
+  await seedRemainingSystemTables()
+  progress.increment('Badges & System Tables oluşturuldu')
 
   // 5. User Themes
   console.log('📱 Creating user themes...')
