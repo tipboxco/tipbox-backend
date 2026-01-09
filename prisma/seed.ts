@@ -19,30 +19,466 @@ const prisma = new PrismaClient()
 
 // Sabit kullanıcı ID'leri - her seed'de aynı ID'ler kullanılır
 const TEST_USER_ID = '480f5de9-b691-4d70-a6a8-2789226f4e07' // omer@tipbox.co
-const TARGET_USER_ID = '248cc91f-b551-4ecc-a885-db1163571330' // markettest@tipbox.co
+const TARGET_USER_ID = '10000000-0000-4000-a000-000000000018' // serkan@tipbox.co (markettest yerine)
 
-// Trust user ID'leri (5 kullanıcı)
+// Trust user ID'leri (SEED_USERS array'inden)
 const TRUST_USER_IDS = [
-  '11111111-1111-4111-a111-111111111111', // trust-user-0@tipbox.co
-  '22222222-2222-4222-a222-222222222222', // trust-user-1@tipbox.co
-  '33333333-3333-4333-a333-333333333333', // trust-user-2@tipbox.co
-  '44444444-4444-4444-a444-444444444444', // trust-user-3@tipbox.co
-  '55555555-5555-4555-a555-555555555555', // trust-user-4@tipbox.co
+  '11111111-1111-4111-a111-111111111111', // tuna@tipbox.co
+  '22222222-2222-4222-a222-222222222222', // mehmet@tipbox.co
+  '33333333-3333-4333-a333-333333333333', // ibrahim@tipbox.co
+  '44444444-4444-4444-a444-444444444444', // burakcan@tipbox.co
+  '55555555-5555-4555-a555-555555555555', // mihrac@tipbox.co
 ]
 
-// Truster user ID'leri (3 kullanıcı)
+// Truster user ID'leri (SEED_USERS array'inden)
 const TRUSTER_USER_IDS = [
-  'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa', // truster-user-0@tipbox.co
-  'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb', // truster-user-1@tipbox.co
-  'cccccccc-cccc-4ccc-cccc-cccccccccccc', // truster-user-2@tipbox.co
+  'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa', // irem@tipbox.co
+  'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb', // furkan@tipbox.co
+  'cccccccc-cccc-4ccc-cccc-cccccccccccc', // aycan@tipbox.co
 ]
 
 // Julia Havk user ID
-const JULIA_USER_ID = '99999999-9999-4999-9999-999999999999'
+const JULIA_USER_ID = '99999999-9999-4999-9999-999999999999' // ozan@tipbox.co
+const COMMUNITY_COACH_USER_ID = '10000000-0000-4000-a000-000000000017' // ebru@tipbox.co
 
 // Hash the default password for all users
 const DEFAULT_PASSWORD = 'password123'
 let passwordHash: string
+
+// 40 Kullanıcı Seed Data
+interface SeedUserConfig {
+  id: string
+  name: string
+  email: string
+  userName: string
+  avatarKey: SeedMediaKey
+  bio: string
+  title: string
+  country: string
+}
+
+const SEED_USERS: SeedUserConfig[] = [
+  {
+    id: '480f5de9-b691-4d70-a6a8-2789226f4e07',
+    name: 'Ömer Faruk',
+    email: 'omer@tipbox.co',
+    userName: 'omerfaruk',
+    avatarKey: 'user.avatar.omer',
+    bio: 'Tech enthusiast and gadget reviewer. Sharing honest reviews and real-life experiences.',
+    title: 'Tech Explorer',
+    country: 'Turkey',
+  },
+  {
+    id: '11111111-1111-4111-a111-111111111111',
+    name: 'Tuna',
+    email: 'tuna@tipbox.co',
+    userName: 'tuna',
+    avatarKey: 'user.avatar.man1',
+    bio: 'Mobile tech lover and app tester. Always looking for the next big thing.',
+    title: 'Mobile Guru',
+    country: 'Turkey',
+  },
+  {
+    id: '22222222-2222-4222-a222-222222222222',
+    name: 'Mehmet',
+    email: 'mehmet@tipbox.co',
+    userName: 'mehmet',
+    avatarKey: 'user.avatar.mehmet',
+    bio: 'Audio equipment expert. Passionate about high-quality sound and headphones.',
+    title: 'Audio Expert',
+    country: 'Turkey',
+  },
+  {
+    id: '33333333-3333-4333-a333-333333333333',
+    name: 'İbrahim',
+    email: 'ibrahim@tipbox.co',
+    userName: 'ibrahim',
+    avatarKey: 'user.avatar.man2',
+    bio: 'Beauty and skincare enthusiast. Sharing product reviews and skincare routines.',
+    title: 'Skincare Specialist',
+    country: 'Turkey',
+  },
+  {
+    id: '44444444-4444-4444-a444-444444444444',
+    name: 'Burakcan',
+    email: 'burakcan@tipbox.co',
+    userName: 'burakcan',
+    avatarKey: 'user.avatar.burakcan',
+    bio: 'Laptop and PC hardware reviewer. Building the perfect setup.',
+    title: 'Hardware Pro',
+    country: 'Turkey',
+  },
+  {
+    id: '55555555-5555-4555-a555-555555555555',
+    name: 'Mihraç',
+    email: 'mihrac@tipbox.co',
+    userName: 'mihrac',
+    bio: 'Gaming enthusiast and streaming setup expert.',
+    avatarKey: 'user.avatar.mihrac',
+    title: 'Gaming Master',
+    country: 'Turkey',
+  },
+  {
+    id: 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa',
+    name: 'İrem',
+    email: 'irem@tipbox.co',
+    userName: 'irem',
+    avatarKey: 'user.avatar.woman1',
+    bio: 'Makeup artist and beauty product reviewer. Love trying new cosmetics.',
+    title: 'Beauty Curator',
+    country: 'Turkey',
+  },
+  {
+    id: 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb',
+    name: 'Furkan',
+    email: 'furkan@tipbox.co',
+    userName: 'furkan',
+    avatarKey: 'user.avatar.furkan',
+    bio: 'Camera and photography gear enthusiast. Capturing life one shot at a time.',
+    title: 'Photo Expert',
+    country: 'Turkey',
+  },
+  {
+    id: 'cccccccc-cccc-4ccc-cccc-cccccccccccc',
+    name: 'Aycan',
+    email: 'aycan@tipbox.co',
+    userName: 'aycan',
+    avatarKey: 'user.avatar.aycan',
+    bio: 'Fragrance lover and perfume collector. Sharing scent experiences.',
+    title: 'Fragrance Connoisseur',
+    country: 'Turkey',
+  },
+  {
+    id: '99999999-9999-4999-9999-999999999999',
+    name: 'Ozan',
+    email: 'ozan@tipbox.co',
+    userName: 'ozan',
+    avatarKey: 'user.avatar.ozan',
+    bio: 'Smart home enthusiast and IoT explorer.',
+    title: 'Smart Home Pro',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000001',
+    name: 'Elif',
+    email: 'elif@tipbox.co',
+    userName: 'elif',
+    avatarKey: 'user.avatar.woman2',
+    bio: 'Hair care specialist and styling expert.',
+    title: 'Hair Care Expert',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000002',
+    name: 'Can',
+    email: 'can@tipbox.co',
+    userName: 'can',
+    avatarKey: 'user.avatar.man3',
+    bio: 'Fitness tracker and wearable tech reviewer.',
+    title: 'Fitness Tech',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000003',
+    name: 'Zeynep',
+    email: 'zeynep@tipbox.co',
+    userName: 'zeynep',
+    avatarKey: 'user.avatar.woman3',
+    bio: 'Nail art enthusiast and nail care product tester.',
+    title: 'Nail Artist',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000004',
+    name: 'Ahmet',
+    email: 'ahmet@tipbox.co',
+    userName: 'ahmet',
+    avatarKey: 'user.avatar.man4',
+    bio: 'Men grooming expert and beard care specialist.',
+    title: 'Grooming Guru',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000005',
+    name: 'Selin',
+    email: 'selin@tipbox.co',
+    userName: 'selin',
+    avatarKey: 'user.avatar.woman4',
+    bio: 'Personal care product reviewer and wellness advocate.',
+    title: 'Wellness Expert',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000006',
+    name: 'Emre',
+    email: 'emre@tipbox.co',
+    userName: 'emre',
+    avatarKey: 'user.avatar.man5',
+    bio: 'Tablet and e-reader enthusiast. Digital reading expert.',
+    title: 'Digital Reader',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000007',
+    name: 'Deniz',
+    email: 'deniz@tipbox.co',
+    userName: 'deniz',
+    avatarKey: 'user.avatar.woman5',
+    bio: 'Wireless earbuds collector and audio quality tester.',
+    title: 'Audio Lover',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000008',
+    name: 'Barış',
+    email: 'baris@tipbox.co',
+    userName: 'baris',
+    avatarKey: 'user.avatar.primary',
+    bio: 'Drone pilot and aerial photography enthusiast.',
+    title: 'Drone Expert',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000009',
+    name: 'Merve',
+    email: 'merve@tipbox.co',
+    userName: 'merve',
+    avatarKey: 'user.avatar.trust1',
+    bio: 'Smartwatch and fitness band reviewer.',
+    title: 'Wearable Tech',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000010',
+    name: 'Berkay',
+    email: 'berkay@tipbox.co',
+    userName: 'berkay',
+    avatarKey: 'user.avatar.trust2',
+    bio: 'Mechanical keyboard enthusiast and RGB lighting expert.',
+    title: 'Keyboard Master',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000011',
+    name: 'Aslı',
+    email: 'asli@tipbox.co',
+    userName: 'asli',
+    avatarKey: 'user.avatar.trust3',
+    bio: 'Moisturizer and serum expert. Hydration is key!',
+    title: 'Hydration Expert',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000012',
+    name: 'Murat',
+    email: 'murat@tipbox.co',
+    userName: 'murat',
+    avatarKey: 'user.avatar.trust4',
+    bio: 'Monitor and display technology reviewer.',
+    title: 'Display Expert',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000013',
+    name: 'Gizem',
+    email: 'gizem@tipbox.co',
+    userName: 'gizem',
+    avatarKey: 'user.avatar.trust5',
+    bio: 'Foundation and concealer specialist.',
+    title: 'Base Makeup Pro',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000014',
+    name: 'Onur',
+    email: 'onur@tipbox.co',
+    userName: 'onur',
+    avatarKey: 'user.avatar.truster1',
+    bio: 'Router and networking equipment expert.',
+    title: 'Network Guru',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000015',
+    name: 'Burcu',
+    email: 'burcu@tipbox.co',
+    userName: 'burcu',
+    avatarKey: 'user.avatar.truster2',
+    bio: 'Lipstick and lip care enthusiast.',
+    title: 'Lip Expert',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000016',
+    name: 'Tolga',
+    email: 'tolga@tipbox.co',
+    userName: 'tolga',
+    avatarKey: 'user.avatar.truster3',
+    bio: 'Power bank and charging accessories reviewer.',
+    title: 'Charging Pro',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000017',
+    name: 'Ebru',
+    email: 'ebru@tipbox.co',
+    userName: 'ebru',
+    avatarKey: 'user.avatar.coach',
+    bio: 'Eyeshadow palette collector and eye makeup artist.',
+    title: 'Eye Makeup Artist',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000018',
+    name: 'Serkan',
+    email: 'serkan@tipbox.co',
+    userName: 'serkan',
+    avatarKey: 'user.avatar.market',
+    bio: 'External SSD and storage solutions expert.',
+    title: 'Storage Expert',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000019',
+    name: 'Ece',
+    email: 'ece@tipbox.co',
+    userName: 'ece',
+    avatarKey: 'user.avatar.primary',
+    bio: 'Mascara and eyeliner specialist.',
+    title: 'Lash Expert',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000020',
+    name: 'Kaan',
+    email: 'kaan@tipbox.co',
+    userName: 'kaan',
+    avatarKey: 'user.avatar.man1',
+    bio: 'Mouse and gaming accessories reviewer.',
+    title: 'Gaming Gear',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000021',
+    name: 'Derya',
+    email: 'derya@tipbox.co',
+    userName: 'derya',
+    avatarKey: 'user.avatar.woman1',
+    bio: 'Facial cleanser and toner expert.',
+    title: 'Cleansing Expert',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000022',
+    name: 'Selim',
+    email: 'selim@tipbox.co',
+    userName: 'selim',
+    avatarKey: 'user.avatar.man2',
+    bio: 'Webcam and streaming equipment specialist.',
+    title: 'Streaming Pro',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000023',
+    name: 'Pelin',
+    email: 'pelin@tipbox.co',
+    userName: 'pelin',
+    avatarKey: 'user.avatar.woman2',
+    bio: 'Blush and bronzer enthusiast.',
+    title: 'Blush Master',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000024',
+    name: 'Cem',
+    email: 'cem@tipbox.co',
+    userName: 'cem',
+    avatarKey: 'user.avatar.man3',
+    bio: 'USB hub and docking station expert.',
+    title: 'Connectivity Pro',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000025',
+    name: 'Duygu',
+    email: 'duygu@tipbox.co',
+    userName: 'duygu',
+    avatarKey: 'user.avatar.woman3',
+    bio: 'Sunscreen and SPF product specialist.',
+    title: 'SPF Expert',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000026',
+    name: 'Hakan',
+    email: 'hakan@tipbox.co',
+    userName: 'hakan',
+    avatarKey: 'user.avatar.man4',
+    bio: 'Bluetooth speaker and portable audio reviewer.',
+    title: 'Portable Audio',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000027',
+    name: 'Nil',
+    email: 'nil@tipbox.co',
+    userName: 'nil',
+    avatarKey: 'user.avatar.woman4',
+    bio: 'Shampoo and conditioner expert.',
+    title: 'Hair Care Pro',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000028',
+    name: 'Utku',
+    email: 'utku@tipbox.co',
+    userName: 'utku',
+    avatarKey: 'user.avatar.man5',
+    bio: 'Graphics card and PC building enthusiast.',
+    title: 'PC Builder',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000029',
+    name: 'Ceren',
+    email: 'ceren@tipbox.co',
+    userName: 'ceren',
+    avatarKey: 'user.avatar.woman5',
+    bio: 'Face mask and treatment specialist.',
+    title: 'Mask Expert',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000030',
+    name: 'Yiğit',
+    email: 'yigit@tipbox.co',
+    userName: 'yigit',
+    avatarKey: 'user.avatar.primary',
+    bio: 'Printer and scanner technology reviewer.',
+    title: 'Print Expert',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000031',
+    name: 'Sude',
+    email: 'sude@tipbox.co',
+    userName: 'sude',
+    avatarKey: 'user.avatar.trust1',
+    bio: 'Body lotion and body care product enthusiast.',
+    title: 'Body Care Expert',
+    country: 'Turkey',
+  },
+  {
+    id: '10000000-0000-4000-a000-000000000032',
+    name: 'Alper',
+    email: 'alper@tipbox.co',
+    userName: 'alper',
+    avatarKey: 'user.avatar.trust2',
+    bio: 'Smart light and home automation expert.',
+    title: 'Smart Lighting',
+    country: 'Turkey',
+  },
+]
 
 // NOT: Seed'de artık sadece path kullanılacak (full URL değil)
 // DB'ye sadece bucket path yazılacak: tipbox-media/products/phone6.png
@@ -76,8 +512,7 @@ const TRUSTER_USER_TITLE_OPTIONS = [
   'AI Explorer',
   'Platform Researcher',
 ]
-const COMMUNITY_COACH_USER_ID = '66666666-6666-4666-a666-666666666666'
-const COMMUNITY_COACH_EMAIL = 'coach@tipbox.co'
+const COMMUNITY_COACH_EMAIL = 'ebru@tipbox.co'
 const COMMUNITY_COACH_AVATAR_URL = getSeedMediaPath('user.avatar.coach', true) || getSeedMediaPath('user.avatar.truster3', true) || ''
 const TARGET_USER_TITLE = 'Marketplace Strategist'
 
@@ -448,6 +883,55 @@ const MEDIA_IMAGE_MAPPING: {
     'Bridge Ambassador': 'badge.wishmarker',
     'Brand Visionary': 'badge.earlyadapter',
   },
+  // User avatar görselleri (tests/assets/userprofile klasöründen)
+  userAvatar: {
+    'omer': 'user.avatar.omer',
+    'tuna': 'user.avatar.man1',
+    'mehmet': 'user.avatar.mehmet',
+    'ibrahim': 'user.avatar.man2',
+    'burakcan': 'user.avatar.burakcan',
+    'mihrac': 'user.avatar.mihrac',
+    'irem': 'user.avatar.woman1',
+    'furkan': 'user.avatar.furkan',
+    'aycan': 'user.avatar.aycan',
+    'ozan': 'user.avatar.ozan',
+    'elif': 'user.avatar.woman2',
+    'can': 'user.avatar.man3',
+    'zeynep': 'user.avatar.woman3',
+    'ahmet': 'user.avatar.man4',
+    'selin': 'user.avatar.woman4',
+    'emre': 'user.avatar.man5',
+    'deniz': 'user.avatar.woman5',
+    'baris': 'user.avatar.primary',
+    'merve': 'user.avatar.trust1',
+    'berkay': 'user.avatar.trust2',
+    'asli': 'user.avatar.trust3',
+    'murat': 'user.avatar.trust4',
+    'gizem': 'user.avatar.trust5',
+    'onur': 'user.avatar.truster1',
+    'burcu': 'user.avatar.truster2',
+    'tolga': 'user.avatar.truster3',
+    'ebru': 'user.avatar.coach',
+    'serkan': 'user.avatar.market',
+    'ece': 'user.avatar.primary',
+    'kaan': 'user.avatar.man1',
+    'derya': 'user.avatar.woman1',
+    'selim': 'user.avatar.man2',
+    'pelin': 'user.avatar.woman2',
+    'cem': 'user.avatar.man3',
+    'duygu': 'user.avatar.woman3',
+    'hakan': 'user.avatar.man4',
+    'nil': 'user.avatar.woman4',
+    'utku': 'user.avatar.man5',
+    'ceren': 'user.avatar.woman5',
+    'yigit': 'user.avatar.primary',
+    'sude': 'user.avatar.trust1',
+    'alper': 'user.avatar.trust2',
+  },
+  // User banner görselleri
+  userBanner: {
+    'default': 'user.banner.primary',
+  },
 };
 
 /**
@@ -566,6 +1050,148 @@ function getUserAvatarImageKey(userIdentifier: string): SeedMediaKey | undefined
  */
 function getUserBannerImageKey(userIdentifier: string): SeedMediaKey | undefined {
   return MEDIA_IMAGE_MAPPING.userBanner?.[userIdentifier];
+}
+
+/**
+ * 40 seed kullanıcısını oluşturur
+ * Her kullanıcı için User, Profile, UserAvatar, UserTitle, UserSettings oluşturulur
+ */
+async function createSeedUsers(defaultThemeId: string): Promise<Map<string, { id: string; email: string; name: string }>> {
+  console.log('\n👥 40 Seed kullanıcısı oluşturuluyor...')
+  
+  const createdUsers = new Map<string, { id: string; email: string; name: string }>()
+  const bannerUrl = getSeedMediaPath('user.banner.primary', true)
+  
+  for (const userConfig of SEED_USERS) {
+    // 1. User oluştur veya bul
+    let user = await prisma.user.findUnique({
+      where: { id: userConfig.id }
+    })
+    
+    if (!user) {
+      // Email ile de kontrol et
+      user = await prisma.user.findUnique({
+        where: { email: userConfig.email }
+      })
+      
+      if (!user) {
+        user = await prisma.user.create({
+          data: {
+            id: userConfig.id,
+            email: userConfig.email,
+            passwordHash: passwordHash,
+            emailVerified: true,
+            status: 'ACTIVE',
+          }
+        })
+      }
+    }
+    
+    // 2. Profile oluştur/güncelle
+    await prisma.profile.upsert({
+      where: { userId: user.id },
+      create: {
+        userId: user.id,
+        displayName: userConfig.name,
+        userName: userConfig.userName,
+        bio: userConfig.bio,
+        bannerUrl: bannerUrl,
+        country: userConfig.country,
+        postsCount: 0,
+        trustCount: 0,
+        trusterCount: 0,
+      },
+      update: {
+        displayName: userConfig.name,
+        userName: userConfig.userName,
+        bio: userConfig.bio,
+        bannerUrl: bannerUrl,
+        country: userConfig.country,
+      }
+    })
+    
+    // 3. UserAvatar oluştur/güncelle
+    const avatarUrl = getSeedMediaPath(userConfig.avatarKey, true)
+    
+    if (avatarUrl) {
+      const existingAvatar = await prisma.userAvatar.findFirst({
+        where: { userId: user.id, isActive: true }
+      })
+      
+      if (existingAvatar) {
+        await prisma.userAvatar.update({
+          where: { id: existingAvatar.id },
+          data: {
+            imageUrl: avatarUrl,
+            isActive: true,
+          }
+        })
+      } else {
+        // Eski avatarları deaktif et
+        await prisma.userAvatar.updateMany({
+          where: { userId: user.id },
+          data: { isActive: false }
+        })
+        
+        await prisma.userAvatar.create({
+          data: {
+            userId: user.id,
+            imageUrl: avatarUrl,
+            isActive: true,
+          }
+        })
+      }
+    }
+    
+    // 4. UserTitle oluştur (sadece yoksa)
+    const existingTitle = await prisma.userTitle.findFirst({
+      where: { userId: user.id }
+    })
+    
+    if (!existingTitle) {
+      await prisma.userTitle.create({
+        data: {
+          userId: user.id,
+          title: userConfig.title,
+        }
+      })
+    }
+    
+    // 5. UserSettings oluştur/güncelle
+    await prisma.userSettings.upsert({
+      where: { userId: user.id },
+      create: {
+        userId: user.id,
+        themeId: defaultThemeId,
+        receiveNotifications: true,
+        visibility: 'PUBLIC',
+        trustNotifications: true,
+        supportNotifications: true,
+        messageNotifications: true,
+        collectionNotifications: true,
+        postNotifications: true,
+      },
+      update: {
+        themeId: defaultThemeId,
+      }
+    })
+    
+    // Map'e ekle
+    createdUsers.set(user.id, {
+      id: user.id,
+      email: userConfig.email,
+      name: userConfig.name,
+    })
+  }
+  
+  console.log(`✅ ${createdUsers.size} kullanıcı oluşturuldu/güncellendi`)
+  
+  // Metadata'ya ekle
+  for (const userId of createdUsers.keys()) {
+    addSeedUserId(userId)
+  }
+  
+  return createdUsers
 }
 
 /**
@@ -2394,7 +3020,14 @@ async function main() {
   )
   console.log(`✅ ${themes.length} tema oluşturuldu/güncellendi`)
 
-  // 2. Main Categories
+  // 2. Seed Users (40 isimlendirilmiş kullanıcı)
+  progress.increment('40 seed kullanıcısı oluşturuluyor...')
+  const defaultTheme = themes.find(t => t.name === 'Dark') || themes[0]
+  const seedUsers = await createSeedUsers(defaultTheme.id)
+  const allUserIds = Array.from(seedUsers.keys())
+  console.log(`✅ ${seedUsers.size} kullanıcı seed'e hazır`)
+
+  // 3. Main Categories
   progress.increment('Ana kategoriler oluşturuluyor...')
   console.log('\n📂 Creating main categories...')
   // Görsel eşleştirmeleri: kategori isimlerine göre assets/catalog görselleri
@@ -7577,10 +8210,10 @@ async function main() {
 
   // Add event statistics for some users
   console.log('📊 Creating event statistics...')
-  const allUserIds = [userIdToUse, TARGET_USER_ID, ...TRUST_USER_IDS.slice(0, 3)]
+  const eventStatUserIds = [userIdToUse, TARGET_USER_ID, ...TRUST_USER_IDS.slice(0, 3)]
   const eventStats = await Promise.all(
     createdEvents.flatMap((event) =>
-      event ? allUserIds.map((userId) =>
+      event ? eventStatUserIds.map((userId) =>
         prisma.wishboxStats.create({
           data: {
             userId,

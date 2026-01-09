@@ -354,40 +354,94 @@
     "targetKey": "products/smartwatch.png"
   },
   "user.banner.primary": {
-    "targetKey": "profile-banners/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-banner.png"
+    "targetKey": "userprofile/banner.png"
   },
   "user.avatar.trust1": {
-    "targetKey": "profile-pictures/11111111-1111-4111-a111-111111111111/seed-avatar.png"
+    "targetKey": "userprofile/man-user-2.png"
   },
   "user.avatar.trust2": {
-    "targetKey": "profile-pictures/22222222-2222-4222-a222-222222222222/seed-avatar.jpg"
+    "targetKey": "userprofile/man-user-3.jpg"
   },
   "user.avatar.trust3": {
-    "targetKey": "profile-pictures/33333333-3333-4333-a333-333333333333/seed-avatar.jpg"
+    "targetKey": "userprofile/woman-user-2.jpg"
   },
   "user.avatar.trust4": {
-    "targetKey": "profile-pictures/44444444-4444-4444-a444-444444444444/seed-avatar.jpg"
+    "targetKey": "userprofile/man-user-4.jpg"
+  },
+  "user.avatar.trust5": {
+    "targetKey": "userprofile/woman-user-3.jpg"
   },
   "user.avatar.market": {
-    "targetKey": "profile-pictures/248cc91f-b551-4ecc-a885-db1163571330/seed-avatar.jpg"
+    "targetKey": "userprofile/man-user-2.png"
   },
   "user.avatar.primary": {
-    "targetKey": "profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.jpg"
+    "targetKey": "userprofile/man-user.jpg"
   },
   "user.avatar.truster1": {
-    "targetKey": "profile-pictures/aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa/seed-avatar.jpg"
+    "targetKey": "userprofile/man-user-5.jpg"
   },
   "user.avatar.truster2": {
-    "targetKey": "profile-pictures/bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb/seed-avatar.jpg"
+    "targetKey": "userprofile/woman-user-4.jpg"
   },
   "user.avatar.truster3": {
-    "targetKey": "profile-pictures/cccccccc-cccc-4ccc-cccc-cccccccccccc/seed-avatar.jpg"
+    "targetKey": "userprofile/woman-user-5.jpg"
   },
   "user.avatar.coach": {
-    "targetKey": "profile-pictures/66666666-6666-4666-a666-666666666666/seed-avatar.jpg"
+    "targetKey": "userprofile/man-user.jpg"
   },
   "user.avatar.julia": {
-    "targetKey": "profile-pictures/99999999-9999-4999-9999-999999999999/seed-avatar.jpg"
+    "targetKey": "userprofile/ozan.png"
+  },
+  "user.avatar.omer": {
+    "targetKey": "userprofile/omer.png"
+  },
+  "user.avatar.mehmet": {
+    "targetKey": "userprofile/mehmet.png"
+  },
+  "user.avatar.burakcan": {
+    "targetKey": "userprofile/burakcan.png"
+  },
+  "user.avatar.mihrac": {
+    "targetKey": "userprofile/mihrac.png"
+  },
+  "user.avatar.furkan": {
+    "targetKey": "userprofile/furkan.png"
+  },
+  "user.avatar.aycan": {
+    "targetKey": "userprofile/aycan.png"
+  },
+  "user.avatar.ozan": {
+    "targetKey": "userprofile/ozan.png"
+  },
+  "user.avatar.man1": {
+    "targetKey": "userprofile/man-user.jpg"
+  },
+  "user.avatar.man2": {
+    "targetKey": "userprofile/man-user-2.png"
+  },
+  "user.avatar.man3": {
+    "targetKey": "userprofile/man-user-3.jpg"
+  },
+  "user.avatar.man4": {
+    "targetKey": "userprofile/man-user-4.jpg"
+  },
+  "user.avatar.man5": {
+    "targetKey": "userprofile/man-user-5.jpg"
+  },
+  "user.avatar.woman1": {
+    "targetKey": "userprofile/woman-user.jpg"
+  },
+  "user.avatar.woman2": {
+    "targetKey": "userprofile/woman-user-2.jpg"
+  },
+  "user.avatar.woman3": {
+    "targetKey": "userprofile/woman-user-3.jpg"
+  },
+  "user.avatar.woman4": {
+    "targetKey": "userprofile/woman-user-4.jpg"
+  },
+  "user.avatar.woman5": {
+    "targetKey": "userprofile/woman-user-5.jpg"
   },
   "user.avatar.default": {
     "targetKey": "avatars/default/default-useravatar.png"
