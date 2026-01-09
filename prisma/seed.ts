@@ -1932,6 +1932,144 @@ async function addExperienceRelations(
 }
 
 /**
+ * Post'lara tag ekle
+ */
+async function seedPostTags() {
+  console.log('\n🏷️  Post tagleri ekleniyor...\n')
+  
+  const allPosts = await prisma.contentPost.findMany()
+  
+  if (allPosts.length === 0) {
+    console.log('⚠️  Post bulunamadı, Tag eklenemiyor!')
+    return
+  }
+  
+  // Tag pool'u
+  const tagPool = [
+    // Electronics tags
+    'technology', 'electronics', 'smartphone', 'laptop', 'tablet', 
+    'audio', 'camera', 'gaming', 'wearable', 'accessory',
+    // Beauty tags
+    'beauty', 'skincare', 'makeup', 'fragrance', 'haircare',
+    'cosmetics', 'serum', 'moisturizer', 'cleanser', 'sunscreen',
+    // General tags
+    'review', 'comparison', 'tips', 'guide', 'recommendation',
+    'budget', 'premium', 'trending', 'popular', 'new',
+  ]
+  
+  let totalTags = 0
+  
+  for (const post of allPosts) {
+    // Her post için 2-5 tag ekle
+    const tagCount = Math.floor(Math.random() * 4) + 2 // 2-5
+    const selectedTags = tagPool
+      .sort(() => Math.random() - 0.5)
+      .slice(0, tagCount)
+    
+    for (const tag of selectedTags) {
+      try {
+        await prisma.contentPostTag.create({
+          data: {
+            postId: post.id,
+            tag,
+          }
+        })
+        totalTags++
+      } catch (e) {
+        // Duplicate ignore
+      }
+    }
+  }
+  
+  console.log(`✅ ${totalTags} tag eklendi (${allPosts.length} post)`)
+  console.log(`   Ortalama: ${(totalTags / allPosts.length).toFixed(1)} tag/post\n`)
+}
+
+/**
+ * Kullanıcıların inventory'lerine ürün ekle
+ * NOT: Bu fonksiyon Products oluşturulduktan SONRA çalıştırılmalı!
+ */
+async function seedUserInventories() {
+  console.log('\n🎒 Kullanıcı inventory\'leri oluşturuluyor...\n')
+  
+  const users = await prisma.user.findMany({ take: 40 })
+  const allProducts = await prisma.product.findMany({ take: 500 })
+  
+  if (allProducts.length === 0) {
+    console.log('⚠️  Ürün bulunamadı, Inventory eklenemiyor!')
+    return
+  }
+  
+  let totalInventories = 0
+  let totalInventoryMedia = 0
+  
+  for (const user of users) {
+    // Her kullanıcı 5-15 ürüne sahip olsun
+    const inventoryCount = Math.floor(Math.random() * 11) + 5 // 5-15
+    const userProducts = allProducts
+      .sort(() => Math.random() - 0.5)
+      .slice(0, Math.min(inventoryCount, allProducts.length))
+    
+    for (const product of userProducts) {
+      // Inventory kaydı oluştur
+      const inventory = await prisma.inventory.upsert({
+        where: {
+          userId_productId: {
+            userId: user.id,
+            productId: product.id
+          }
+        },
+        create: {
+          userId: user.id,
+          productId: product.id,
+          hasOwned: true,
+          experienceSummary: `Bu ${product.name} ürününü kullanıyorum. Deneyimlerimi paylaşacağım.`,
+        },
+        update: {
+          hasOwned: true,
+        }
+      })
+      totalInventories++
+      
+      // InventoryMedia ekle (ürünlerin %60'ına)
+      if (Math.random() > 0.4) {
+        const existingMedia = await prisma.inventoryMedia.findFirst({
+          where: { inventoryId: inventory.id }
+        })
+        
+        if (!existingMedia) {
+          // Random product image seç
+          const productImageKeys = [
+            'feed.product.1', 'feed.product.2', 'feed.product.3',
+            'feed.product.4', 'feed.product.5', 'feed.product.6',
+            'feed.product.placeholder',
+          ]
+          const randomImageKey = productImageKeys[Math.floor(Math.random() * productImageKeys.length)] as SeedMediaKey
+          const mediaUrl = getSeedMediaPath(randomImageKey, true)
+          
+          if (mediaUrl) {
+            await prisma.inventoryMedia.create({
+              data: {
+                inventoryId: inventory.id,
+                mediaUrl,
+              }
+            })
+            totalInventoryMedia++
+          }
+        }
+      }
+    }
+  }
+  
+  console.log('\n' + '═'.repeat(80))
+  console.log('✨ USER INVENTORIES TAMAMLANDI\n')
+  console.log(`   🎒 Toplam Inventory: ${totalInventories}`)
+  console.log(`   📸 Toplam Inventory Media: ${totalInventoryMedia}`)
+  console.log(`   👥 Kullanıcı Başına Ortalama: ${(totalInventories / users.length).toFixed(1)} ürün`)
+  console.log('═'.repeat(80) + '\n')
+}
+
+/**
  * 2800 Post oluştur (40 kullanıcı x 70 post)
  */
 async function seedPosts() {
@@ -2078,10 +2216,10 @@ async function seedSocialFeatures() {
   let totalFavorites = 0
   let totalCommentVotes = 0
   
-  // 1. LIKES - Her post için 10-100 like (ortalama 55)
+  // 1. LIKES - Her post için 3-15 like (ortalama 9)
   console.log('❤️ Likes ekleniyor...')
   for (const post of allPosts) {
-    const likeCount = Math.floor(Math.random() * 91) + 10 // 10-100 arası
+    const likeCount = Math.floor(Math.random() * 13) + 3 // 3-15 arası
     const availableLikers = Math.min(likeCount, users.length)
     const likerUsers = users.sort(() => Math.random() - 0.5).slice(0, availableLikers)
     
@@ -2107,10 +2245,10 @@ async function seedSocialFeatures() {
   }
   console.log(`  ✅ ${totalLikes} like eklendi`)
   
-  // 2. VIEWS - Her post için 20-300 view (ortalama 160)
+  // 2. VIEWS - Her post için 10-50 view (ortalama 30)
   console.log('👁️ Views ekleniyor...')
   for (const post of allPosts) {
-    const viewCount = Math.floor(Math.random() * 281) + 20 // 20-300 arası
+    const viewCount = Math.floor(Math.random() * 41) + 10 // 10-50 arası
     
     for (let i = 0; i < viewCount; i++) {
       const isAuthenticatedView = Math.random() > 0.3 // %70 authenticated
@@ -2134,12 +2272,12 @@ async function seedSocialFeatures() {
   }
   console.log(`  ✅ ${totalViews} view eklendi`)
   
-  // 3. COMMENTS - Her post için 5-30 yorum (ortalama 17.5)
+  // 3. COMMENTS - Her post için 2-8 yorum (ortalama 5)
   console.log('💬 Comments ekleniyor...')
   const allComments: string[] = []
   
   for (const post of allPosts) {
-    const commentCount = Math.floor(Math.random() * 26) + 5 // 5-30 arası
+    const commentCount = Math.floor(Math.random() * 7) + 2 // 2-8 arası
     const commenters = users.sort(() => Math.random() - 0.5).slice(0, Math.min(commentCount, users.length))
     
     for (const user of commenters) {
@@ -3595,62 +3733,8 @@ async function createSeedUsers(defaultThemeId: string): Promise<Map<string, { id
       }
     })
     
-    // 6. Inventory + InventoryMedia ekle (5-15 ürün)
-    const inventoryCount = Math.floor(Math.random() * 11) + 5 // 5-15
-    const allProducts = await prisma.product.findMany({ take: 500 })
-    
-    if (allProducts.length > 0) {
-      const userProducts = allProducts
-        .sort(() => Math.random() - 0.5)
-        .slice(0, Math.min(inventoryCount, allProducts.length))
-      
-      for (const product of userProducts) {
-        // Inventory kaydı oluştur
-        const inventory = await prisma.inventory.upsert({
-          where: {
-            userId_productId: {
-              userId: user.id,
-              productId: product.id
-            }
-          },
-          create: {
-            userId: user.id,
-            productId: product.id,
-            hasOwned: true, // Kullanıcı bu ürünü sahiplendi
-          },
-          update: {
-            hasOwned: true,
-          }
-        })
-        
-        // InventoryMedia ekle (bazı ürünlere)
-        if (Math.random() > 0.5) { // %50 şansla media ekle
-          const existingMedia = await prisma.inventoryMedia.findFirst({
-            where: { inventoryId: inventory.id }
-          })
-          
-          if (!existingMedia) {
-            // Random product image seç
-            const productImageKeys = [
-              'product.phone.phone1', 'product.phone.phone2', 'product.phone.samsung',
-              'product.laptop.laptop1', 'product.laptop.macbook',
-              'product.tablet.ipad', 'product.watch.applewatch',
-            ]
-            const randomImageKey = productImageKeys[Math.floor(Math.random() * productImageKeys.length)] as SeedMediaKey
-            const mediaUrl = getSeedMediaPath(randomImageKey, true)
-            
-            if (mediaUrl) {
-              await prisma.inventoryMedia.create({
-                data: {
-                  inventoryId: inventory.id,
-                  mediaUrl,
-                }
-              })
-            }
-          }
-        }
-      }
-    }
+    // NOT: Inventory eklemesi Products oluşturulduktan SONRA yapılacak
+    // Şu anda henüz ürün yok, bu yüzden bu adımı atlıyoruz
     
     // Map'e ekle
     createdUsers.set(user.id, {
@@ -3661,7 +3745,7 @@ async function createSeedUsers(defaultThemeId: string): Promise<Map<string, { id
   }
   
   console.log(`✅ ${createdUsers.size} kullanıcı oluşturuldu/güncellendi`)
-  console.log(`✅ Her kullanıcı için 5-15 ürün inventory'e eklendi + InventoryMedia`)
+  console.log(`ℹ️  Inventory ekleme Products'tan sonra yapılacak`)
   
   // Metadata'ya ekle
   for (const userId of createdUsers.keys()) {
@@ -5539,13 +5623,23 @@ async function main() {
   progress.increment('Ürünler oluşturuluyor...')
   await seedProducts()
   progress.increment('Ürünler oluşturuldu')
+  
+  // 6.5 User Inventories (Ürünler oluşturulduktan SONRA)
+  progress.increment('Kullanıcı inventory\'leri oluşturuluyor...')
+  await seedUserInventories()
+  progress.increment('Kullanıcı inventory\'leri oluşturuldu')
 
   // 7. Posts (40 users × 70 posts = 2800 posts)
   progress.increment('Post\'lar oluşturuluyor...')
   await seedPosts()
   progress.increment('Post\'lar oluşturuldu')
+  
+  // 7.5 Post Tags
+  progress.increment('Post tag\'leri ekleniyor...')
+  await seedPostTags()
+  progress.increment('Post tag\'leri eklendi')
 
-  // 7. Social Features (Likes, Comments, Views, Shares, Favorites)
+  // 8. Social Features (Likes, Comments, Views, Shares, Favorites)
   progress.increment('Social features oluşturuluyor...')
   await seedSocialFeatures()
   progress.increment('Social features oluşturuldu')
