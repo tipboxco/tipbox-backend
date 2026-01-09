@@ -1271,28 +1271,119 @@ async function seedProducts(): Promise<void> {
   })
   
   if (iphoneSeries) {
-    const iPhones = [
-      { name: 'iPhone 15', description: '6.1" display, A16 Bionic, Dual camera' },
-      { name: 'iPhone 15 Plus', description: '6.7" display, A16 Bionic, Dual camera' },
-      { name: 'iPhone 15 Pro', description: '6.1" display, A17 Pro, Triple camera, Titanium' },
-      { name: 'iPhone 15 Pro Max', description: '6.7" display, A17 Pro, Periscope zoom' },
-      { name: 'iPhone 14', description: '6.1" display, A15 Bionic' },
-      { name: 'iPhone 14 Plus', description: '6.7" display, A15 Bionic' },
-      { name: 'iPhone 14 Pro', description: '6.1" display, A16 Bionic, Dynamic Island' },
-      { name: 'iPhone 14 Pro Max', description: '6.7" display, A16 Bionic, Dynamic Island' },
-      { name: 'iPhone 13', description: '6.1" display, A15 Bionic' },
-      { name: 'iPhone 13 Mini', description: '5.4" compact display' },
-      { name: 'iPhone SE (2022)', description: '4.7" display, A15 Bionic, Touch ID' },
-    ]
+    // iPhone 15 Pro Max - 4 capacities x 4 colors = 16 products
+    const capacities15ProMax = ['128GB', '256GB', '512GB', '1TB']
+    const colors15ProMax = ['Natural Titanium', 'Blue Titanium', 'White Titanium', 'Black Titanium']
     
-    for (const p of iPhones) {
-      await ensureProduct({
-        name: p.name,
-        brand: 'Apple',
-        groupId: iphoneSeries.id,
-        description: p.description
-      })
-      totalProducts++
+    for (const capacity of capacities15ProMax) {
+      for (const color of colors15ProMax) {
+        await ensureProduct({
+          name: `iPhone 15 Pro Max ${capacity} ${color}`,
+          brand: 'Apple',
+          groupId: iphoneSeries.id,
+          description: `6.7" display, A17 Pro, ${capacity}, ${color}`
+        })
+        totalProducts++
+      }
+    }
+    
+    // iPhone 15 Pro - 4 capacities x 4 colors = 16 products
+    for (const capacity of capacities15ProMax) {
+      for (const color of colors15ProMax) {
+        await ensureProduct({
+          name: `iPhone 15 Pro ${capacity} ${color}`,
+          brand: 'Apple',
+          groupId: iphoneSeries.id,
+          description: `6.1" display, A17 Pro, ${capacity}, ${color}`
+        })
+        totalProducts++
+      }
+    }
+    
+    // iPhone 15 Plus - 3 capacities x 5 colors = 15 products
+    const capacities15 = ['128GB', '256GB', '512GB']
+    const colors15 = ['Pink', 'Yellow', 'Green', 'Blue', 'Black']
+    
+    for (const capacity of capacities15) {
+      for (const color of colors15) {
+        await ensureProduct({
+          name: `iPhone 15 Plus ${capacity} ${color}`,
+          brand: 'Apple',
+          groupId: iphoneSeries.id,
+          description: `6.7" display, A16 Bionic, ${capacity}, ${color}`
+        })
+        totalProducts++
+      }
+    }
+    
+    // iPhone 15 - 3 capacities x 5 colors = 15 products
+    for (const capacity of capacities15) {
+      for (const color of colors15) {
+        await ensureProduct({
+          name: `iPhone 15 ${capacity} ${color}`,
+          brand: 'Apple',
+          groupId: iphoneSeries.id,
+          description: `6.1" display, A16 Bionic, ${capacity}, ${color}`
+        })
+        totalProducts++
+      }
+    }
+    
+    // iPhone 14 series - 3 models x 3 capacities x 3 colors = 27 products
+    const models14 = [
+      { name: 'iPhone 14', display: '6.1"' },
+      { name: 'iPhone 14 Plus', display: '6.7"' },
+      { name: 'iPhone 14 Pro', display: '6.1" with Dynamic Island' },
+    ]
+    const capacities14 = ['128GB', '256GB', '512GB']
+    const colors14 = ['Midnight', 'Starlight', 'Purple']
+    
+    for (const model of models14) {
+      for (const capacity of capacities14) {
+        for (const color of colors14) {
+          await ensureProduct({
+            name: `${model.name} ${capacity} ${color}`,
+            brand: 'Apple',
+            groupId: iphoneSeries.id,
+            description: `${model.display}, A16 Bionic, ${capacity}`
+          })
+          totalProducts++
+        }
+      }
+    }
+    
+    // iPhone 13 series - 2 models x 3 capacities x 4 colors = 24 products
+    const models13 = ['iPhone 13', 'iPhone 13 Mini']
+    const colors13 = ['Pink', 'Blue', 'Midnight', 'Starlight']
+    
+    for (const model of models13) {
+      for (const capacity of capacities15) {
+        for (const color of colors13) {
+          await ensureProduct({
+            name: `${model} ${capacity} ${color}`,
+            brand: 'Apple',
+            groupId: iphoneSeries.id,
+            description: `A15 Bionic, ${capacity}, ${color}`
+          })
+          totalProducts++
+        }
+      }
+    }
+    
+    // iPhone SE - 3 capacities x 3 colors = 9 products
+    const capacitiesSE = ['64GB', '128GB', '256GB']
+    const colorsSE = ['Midnight', 'Starlight', 'Product Red']
+    
+    for (const capacity of capacitiesSE) {
+      for (const color of colorsSE) {
+        await ensureProduct({
+          name: `iPhone SE (2022) ${capacity} ${color}`,
+          brand: 'Apple',
+          groupId: iphoneSeries.id,
+          description: `4.7" display, A15 Bionic, Touch ID, ${capacity}`
+        })
+        totalProducts++
+      }
     }
   }
   
@@ -1302,27 +1393,122 @@ async function seedProducts(): Promise<void> {
   })
   
   if (samsungGalaxy) {
-    const galaxyPhones = [
-      { name: 'Galaxy S24', description: '6.2" AMOLED, Snapdragon 8 Gen 3' },
-      { name: 'Galaxy S24+', description: '6.7" AMOLED, Snapdragon 8 Gen 3' },
-      { name: 'Galaxy S24 Ultra', description: '6.8" AMOLED, S Pen, 200MP camera' },
-      { name: 'Galaxy S23', description: '6.1" AMOLED, Snapdragon 8 Gen 2' },
-      { name: 'Galaxy S23+', description: '6.6" AMOLED' },
-      { name: 'Galaxy S23 Ultra', description: '6.8" AMOLED, S Pen' },
-      { name: 'Galaxy Z Fold 5', description: 'Foldable 7.6" main display' },
-      { name: 'Galaxy Z Flip 5', description: 'Foldable flip phone' },
-      { name: 'Galaxy A54', description: 'Mid-range, 120Hz display' },
-      { name: 'Galaxy A34', description: 'Budget-friendly 5G phone' },
-    ]
+    // Galaxy S24 Ultra - 4 capacities x 4 colors = 16 products
+    const capacitiesS24Ultra = ['256GB', '512GB', '1TB']
+    const colorsS24Ultra = ['Titanium Gray', 'Titanium Black', 'Titanium Violet', 'Titanium Yellow']
     
-    for (const p of galaxyPhones) {
-      await ensureProduct({
-        name: p.name,
-        brand: 'Samsung',
-        groupId: samsungGalaxy.id,
-        description: p.description
-      })
-      totalProducts++
+    for (const capacity of capacitiesS24Ultra) {
+      for (const color of colorsS24Ultra) {
+        await ensureProduct({
+          name: `Galaxy S24 Ultra ${capacity} ${color}`,
+          brand: 'Samsung',
+          groupId: samsungGalaxy.id,
+          description: `6.8" AMOLED, S Pen, 200MP, ${capacity}`
+        })
+        totalProducts++
+      }
+    }
+    
+    // Galaxy S24+ - 3 capacities x 4 colors = 12 products
+    const capacitiesS24 = ['256GB', '512GB']
+    const colorsS24 = ['Onyx Black', 'Marble Gray', 'Cobalt Violet', 'Amber Yellow']
+    
+    for (const capacity of capacitiesS24) {
+      for (const color of colorsS24) {
+        await ensureProduct({
+          name: `Galaxy S24+ ${capacity} ${color}`,
+          brand: 'Samsung',
+          groupId: samsungGalaxy.id,
+          description: `6.7" AMOLED, Snapdragon 8 Gen 3, ${capacity}`
+        })
+        totalProducts++
+      }
+    }
+    
+    // Galaxy S24 - 2 capacities x 4 colors = 8 products
+    for (const capacity of capacitiesS24) {
+      for (const color of colorsS24) {
+        await ensureProduct({
+          name: `Galaxy S24 ${capacity} ${color}`,
+          brand: 'Samsung',
+          groupId: samsungGalaxy.id,
+          description: `6.2" AMOLED, Snapdragon 8 Gen 3, ${capacity}`
+        })
+        totalProducts++
+      }
+    }
+    
+    // Galaxy S23 series - 3 models x 2 capacities x 4 colors = 24 products
+    const models23 = [
+      { name: 'Galaxy S23', size: '6.1"' },
+      { name: 'Galaxy S23+', size: '6.6"' },
+      { name: 'Galaxy S23 Ultra', size: '6.8"' },
+    ]
+    const capacities23 = ['256GB', '512GB']
+    const colors23 = ['Phantom Black', 'Cream', 'Green', 'Lavender']
+    
+    for (const model of models23) {
+      for (const capacity of capacities23) {
+        for (const color of colors23) {
+          await ensureProduct({
+            name: `${model.name} ${capacity} ${color}`,
+            brand: 'Samsung',
+            groupId: samsungGalaxy.id,
+            description: `${model.size} AMOLED, ${capacity}`
+          })
+          totalProducts++
+        }
+      }
+    }
+    
+    // Galaxy Z Fold 5 - 2 capacities x 3 colors = 6 products
+    const capacitiesFold = ['256GB', '512GB']
+    const colorsFold = ['Phantom Black', 'Cream', 'Icy Blue']
+    
+    for (const capacity of capacitiesFold) {
+      for (const color of colorsFold) {
+        await ensureProduct({
+          name: `Galaxy Z Fold 5 ${capacity} ${color}`,
+          brand: 'Samsung',
+          groupId: samsungGalaxy.id,
+          description: `Foldable 7.6" main display, ${capacity}`
+        })
+        totalProducts++
+      }
+    }
+    
+    // Galaxy Z Flip 5 - 2 capacities x 4 colors = 8 products
+    const colorsFlip = ['Mint', 'Graphite', 'Cream', 'Lavender']
+    
+    for (const capacity of capacitiesFold) {
+      for (const color of colorsFlip) {
+        await ensureProduct({
+          name: `Galaxy Z Flip 5 ${capacity} ${color}`,
+          brand: 'Samsung',
+          groupId: samsungGalaxy.id,
+          description: `Foldable flip phone, ${capacity}`
+        })
+        totalProducts++
+      }
+    }
+    
+    // Galaxy A series - 2 models x 2 capacities x 4 colors = 16 products
+    const modelsA = ['Galaxy A54', 'Galaxy A34']
+    const capacitiesA = ['128GB', '256GB']
+    const colorsA = ['Awesome Black', 'Awesome Violet', 'Awesome Lime', 'Awesome White']
+    
+    for (const model of modelsA) {
+      for (const capacity of capacitiesA) {
+        for (const color of colorsA) {
+          await ensureProduct({
+            name: `${model} ${capacity} ${color}`,
+            brand: 'Samsung',
+            groupId: samsungGalaxy.id,
+            description: `Mid-range 5G, ${capacity}`
+          })
+          totalProducts++
+        }
+      }
     }
   }
   
