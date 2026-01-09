@@ -2246,6 +2246,98 @@ async function seedSocialFeatures() {
   console.log('═'.repeat(80) + '\n')
 }
 
+// ==================== PHASE 8: TRUST RELATIONS ====================
+
+/**
+ * TrustRelation oluştur (her kullanıcı 5-15 kişi trust eder)
+ */
+async function seedTrustRelations() {
+  console.log('\n🤝 Trust relations oluşturuluyor...\n')
+  
+  const users = await prisma.user.findMany({ take: 40 })
+  
+  if (users.length < 2) {
+    console.log('⚠️ Yeterli kullanıcı yok, Phase 8 atlanıyor...')
+    return
+  }
+  
+  let totalTrusts = 0
+  let mutualTrusts = 0
+  
+  for (const truster of users) {
+    // Her kullanıcı 5-15 kişiyi trust eder
+    const trustCount = Math.floor(Math.random() * 11) + 5 // 5-15 arası
+    
+    // Kendisi hariç diğer kullanıcılardan rastgele seç
+    const otherUsers = users.filter(u => u.id !== truster.id)
+    const trustedUsers = otherUsers
+      .sort(() => Math.random() - 0.5)
+      .slice(0, Math.min(trustCount, otherUsers.length))
+    
+    for (const trusted of trustedUsers) {
+      try {
+        await prisma.trustRelation.create({
+          data: {
+            trusterId: truster.id,
+            trustedUserId: trusted.id,
+            createdAt: new Date(Date.now() - Math.random() * 180 * 24 * 60 * 60 * 1000), // Son 6 ay
+          }
+        })
+        totalTrusts++
+        
+        // Karşılıklı trust var mı kontrol et
+        const reverseTrust = await prisma.trustRelation.findUnique({
+          where: {
+            trusterId_trustedUserId: {
+              trusterId: trusted.id,
+              trustedUserId: truster.id,
+            }
+          }
+        })
+        
+        if (reverseTrust) {
+          mutualTrusts++
+        }
+      } catch (e) {
+        // Duplicate ignore
+      }
+    }
+  }
+  
+  // Her kullanıcının trust stats'larını hesapla
+  console.log('📊 Trust istatistikleri hesaplanıyor...')
+  
+  const trustStats: Array<{ email: string | null; trusting: number; trustedBy: number }> = []
+  for (const user of users) {
+    const trusting = await prisma.trustRelation.count({
+      where: { trusterId: user.id }
+    })
+    const trustedBy = await prisma.trustRelation.count({
+      where: { trustedUserId: user.id }
+    })
+    
+    trustStats.push({
+      email: user.email,
+      trusting,
+      trustedBy,
+    })
+  }
+  
+  // Özet
+  console.log('\n' + '═'.repeat(80))
+  console.log('✨ PHASE 8 TAMAMLANDI - TRUST RELATIONS\n')
+  console.log(`   🤝 Toplam Trust İlişkileri: ${totalTrusts}`)
+  console.log(`   💚 Karşılıklı Trust: ${mutualTrusts}`)
+  console.log(`   👥 Kullanıcı Başına Ortalama: ${(totalTrusts / users.length).toFixed(1)} trust`)
+  console.log(`\n   📊 İlk 5 kullanıcının trust durumu:`)
+  
+  trustStats.slice(0, 5).forEach(stat => {
+    console.log(`      ${stat.email}: ${stat.trusting} kişiye güveniyor, ${stat.trustedBy} kişi tarafından güveniliyor`)
+  })
+  
+  console.log('═'.repeat(80) + '\n')
+}
+
 /**
  * Genel görsel mapping sistemi
  * Tüm görsel tipleri için merkezi yönetim
@@ -4560,6 +4652,11 @@ async function main() {
   progress.increment('Social features oluşturuluyor...')
   await seedSocialFeatures()
   progress.increment('Social features oluşturuldu')
+
+  // 8. Trust Relations
+  progress.increment('Trust relations oluşturuluyor...')
+  await seedTrustRelations()
+  progress.increment('Trust relations oluşturuldu')
 
   // 5. User Themes
   console.log('📱 Creating user themes...')
