@@ -1486,11 +1486,596 @@ async function seedProducts(): Promise<void> {
   
   console.log(`  ✅ Laptops: ${totalProducts - laptopStart} ürün`)
   
-  console.log(`\n💡 İlk ${totalProducts} ürün oluşturuldu, devam ediliyor...\n`)
-  console.log('✨ Seed Products fonksiyonu devam edecek - Bu büyük bir işlem!')
-  console.log('📝 Not: Tablets, Audio, Wearables, Accessories, Cameras ve Beauty ürünleri eklenecek\n')
+  // 3. TABLETS
+  console.log('📱 Tablets kategorisi ürünleri...')
+  const tabletStart = totalProducts
   
-  // Şimdilik bu kadarını commit edelim, sonra devam ederiz
+  // iPad
+  const ipad = await prisma.productGroup.findFirst({
+    where: { name: 'iPad' }
+  })
+  
+  if (ipad) {
+    const ipads = [
+      { name: 'iPad Pro 13" M4', description: '13" Liquid Retina XDR, M4 chip' },
+      { name: 'iPad Pro 11" M4', description: '11" Liquid Retina, M4 chip' },
+      { name: 'iPad Air 11" M2', description: '11" display, M2 chip' },
+      { name: 'iPad Air 13" M2', description: '13" display, M2 chip' },
+      { name: 'iPad 10th Gen', description: '10.9" display, A14 Bionic' },
+      { name: 'iPad 9th Gen', description: '10.2" display, A13 Bionic' },
+      { name: 'iPad Mini 6', description: '8.3" compact tablet' },
+    ]
+    
+    for (const p of ipads) {
+      await ensureProduct({
+        name: p.name,
+        brand: 'Apple',
+        groupId: ipad.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  // Samsung Tab
+  const samsungTab = await prisma.productGroup.findFirst({
+    where: { name: 'Samsung Tab' }
+  })
+  
+  if (samsungTab) {
+    const tabs = [
+      { name: 'Galaxy Tab S9 Ultra', description: '14.6" AMOLED, S Pen included' },
+      { name: 'Galaxy Tab S9+', description: '12.4" AMOLED' },
+      { name: 'Galaxy Tab S9', description: '11" AMOLED' },
+      { name: 'Galaxy Tab A9+', description: '11" budget tablet' },
+    ]
+    
+    for (const p of tabs) {
+      await ensureProduct({
+        name: p.name,
+        brand: 'Samsung',
+        groupId: samsungTab.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  // Surface
+  const surface = await prisma.productGroup.findFirst({
+    where: { name: 'Surface' }
+  })
+  
+  if (surface) {
+    const surfaces = [
+      { name: 'Surface Pro 10', description: '13" 2-in-1, Intel Core Ultra' },
+      { name: 'Surface Laptop 6', description: '13.5" touchscreen laptop' },
+      { name: 'Surface Go 4', description: '10.5" portable tablet' },
+    ]
+    
+    for (const p of surfaces) {
+      await ensureProduct({
+        name: p.name,
+        brand: 'Microsoft',
+        groupId: surface.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  console.log(`  ✅ Tablets: ${totalProducts - tabletStart} ürün`)
+  
+  // 4. AUDIO
+  console.log('🎧 Audio kategorisi ürünleri...')
+  const audioStart = totalProducts
+  
+  // Headphones
+  const headphones = await prisma.productGroup.findFirst({
+    where: { name: 'Headphones' }
+  })
+  
+  if (headphones) {
+    const headphoneProducts = [
+      { name: 'Sony WH-1000XM5', description: 'Premium noise canceling', brand: 'Sony' },
+      { name: 'Bose QuietComfort Ultra', description: 'Spatial audio headphones', brand: 'Bose' },
+      { name: 'Bose QuietComfort 45', description: 'Legendary noise canceling', brand: 'Bose' },
+      { name: 'Sony WH-1000XM4', description: 'Industry-leading ANC', brand: 'Sony' },
+    ]
+    
+    for (const p of headphoneProducts) {
+      await ensureProduct({
+        name: p.name,
+        brand: p.brand,
+        groupId: headphones.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  // Earbuds
+  const earbuds = await prisma.productGroup.findFirst({
+    where: { name: 'Earbuds' }
+  })
+  
+  if (earbuds) {
+    const earbudProducts = [
+      { name: 'AirPods Pro 2nd Gen', description: 'Adaptive Audio, USB-C', brand: 'Apple' },
+      { name: 'AirPods 3rd Gen', description: 'Spatial Audio', brand: 'Apple' },
+      { name: 'AirPods Max', description: 'Over-ear premium', brand: 'Apple' },
+      { name: 'Samsung Galaxy Buds 2 Pro', description: 'Hi-Fi sound, ANC', brand: 'Samsung' },
+      { name: 'Sony WF-1000XM5', description: 'Premium earbuds', brand: 'Sony' },
+      { name: 'Bose QuietComfort Earbuds II', description: 'Personalized ANC', brand: 'Bose' },
+    ]
+    
+    for (const p of earbudProducts) {
+      await ensureProduct({
+        name: p.name,
+        brand: p.brand,
+        groupId: earbuds.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  // Speakers
+  const speakers = await prisma.productGroup.findFirst({
+    where: { name: 'Speakers' }
+  })
+  
+  if (speakers) {
+    const speakerProducts = [
+      { name: 'Bose SoundLink Flex', description: 'Portable Bluetooth speaker', brand: 'Bose' },
+      { name: 'Sony SRS-XB43', description: 'Extra bass speaker', brand: 'Sony' },
+    ]
+    
+    for (const p of speakerProducts) {
+      await ensureProduct({
+        name: p.name,
+        brand: p.brand,
+        groupId: speakers.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  // Soundbars
+  const soundbars = await prisma.productGroup.findFirst({
+    where: { name: 'Soundbars' }
+  })
+  
+  if (soundbars) {
+    const soundbarProducts = [
+      { name: 'Bose Smart Soundbar 900', description: 'Dolby Atmos soundbar', brand: 'Bose' },
+      { name: 'Sony HT-A7000', description: '7.1.2ch Dolby Atmos', brand: 'Sony' },
+    ]
+    
+    for (const p of soundbarProducts) {
+      await ensureProduct({
+        name: p.name,
+        brand: p.brand,
+        groupId: soundbars.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  console.log(`  ✅ Audio: ${totalProducts - audioStart} ürün`)
+  
+  // 5. WEARABLES
+  console.log('⌚ Wearables kategorisi ürünleri...')
+  const wearableStart = totalProducts
+  
+  // Apple Watch
+  const appleWatch = await prisma.productGroup.findFirst({
+    where: { name: 'Apple Watch' }
+  })
+  
+  if (appleWatch) {
+    const watches = [
+      { name: 'Apple Watch Series 10', description: 'Latest flagship watch' },
+      { name: 'Apple Watch Series 9', description: 'Double tap gesture' },
+      { name: 'Apple Watch Ultra 2', description: 'Titanium, extreme sports' },
+      { name: 'Apple Watch SE 2nd Gen', description: 'Budget-friendly option' },
+    ]
+    
+    for (const p of watches) {
+      await ensureProduct({
+        name: p.name,
+        brand: 'Apple',
+        groupId: appleWatch.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  // Samsung Galaxy Watch
+  const galaxyWatch = await prisma.productGroup.findFirst({
+    where: { name: 'Samsung Galaxy Watch' }
+  })
+  
+  if (galaxyWatch) {
+    const watches = [
+      { name: 'Galaxy Watch 6 Classic', description: 'Rotating bezel, Wear OS' },
+      { name: 'Galaxy Watch 6', description: 'AMOLED display' },
+      { name: 'Galaxy Watch 5 Pro', description: 'Titanium case' },
+    ]
+    
+    for (const p of watches) {
+      await ensureProduct({
+        name: p.name,
+        brand: 'Samsung',
+        groupId: galaxyWatch.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  // Fitness Trackers
+  const fitnessTrackers = await prisma.productGroup.findFirst({
+    where: { name: 'Fitness Trackers' }
+  })
+  
+  if (fitnessTrackers) {
+    const trackers = [
+      { name: 'Fitbit Charge 6', description: 'Fitness band with GPS', brand: 'Fitbit' },
+      { name: 'Fitbit Versa 4', description: 'Health smartwatch', brand: 'Fitbit' },
+    ]
+    
+    for (const p of trackers) {
+      await ensureProduct({
+        name: p.name,
+        brand: p.brand,
+        groupId: fitnessTrackers.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  console.log(`  ✅ Wearables: ${totalProducts - wearableStart} ürün`)
+  
+  // 6. ACCESSORIES
+  console.log('🔌 Accessories kategorisi ürünleri...')
+  const accessoryStart = totalProducts
+  
+  // Chargers
+  const chargers = await prisma.productGroup.findFirst({
+    where: { name: 'Chargers' }
+  })
+  
+  if (chargers) {
+    const chargerProducts = [
+      { name: '20W USB-C Power Adapter', description: 'Fast charging', brand: 'Apple' },
+      { name: '35W Dual USB-C Adapter', description: 'Charge two devices', brand: 'Apple' },
+      { name: 'MagSafe Charger', description: 'Wireless iPhone charging', brand: 'Apple' },
+      { name: '45W USB-C Super Fast Charger', description: 'Samsung fast charge', brand: 'Samsung' },
+    ]
+    
+    for (const p of chargerProducts) {
+      await ensureProduct({
+        name: p.name,
+        brand: p.brand,
+        groupId: chargers.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  // Cases
+  const cases = await prisma.productGroup.findFirst({
+    where: { name: 'Cases' }
+  })
+  
+  if (cases) {
+    const caseProducts = [
+      { name: 'Silicone Case', description: 'Soft-touch finish', brand: 'Apple' },
+      { name: 'Leather Case', description: 'Premium leather', brand: 'Apple' },
+      { name: 'Clear Case', description: 'Show your phone color', brand: 'Apple' },
+    ]
+    
+    for (const p of caseProducts) {
+      await ensureProduct({
+        name: p.name,
+        brand: p.brand,
+        groupId: cases.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  // Cables
+  const cables = await prisma.productGroup.findFirst({
+    where: { name: 'Cables' }
+  })
+  
+  if (cables) {
+    const cableProducts = [
+      { name: 'USB-C to Lightning Cable 1m', description: 'Fast charge cable', brand: 'Apple' },
+      { name: 'USB-C to USB-C Cable 2m', description: 'Charging and data', brand: 'Apple' },
+      { name: 'Thunderbolt 4 Cable', description: 'Pro cable 40Gbps', brand: 'Apple' },
+    ]
+    
+    for (const p of cableProducts) {
+      await ensureProduct({
+        name: p.name,
+        brand: p.brand,
+        groupId: cables.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  // Screen Protectors
+  const screenProtectors = await prisma.productGroup.findFirst({
+    where: { name: 'Screen Protectors' }
+  })
+  
+  if (screenProtectors) {
+    const protectorProducts = [
+      { name: 'Tempered Glass Screen Protector', description: '9H hardness', brand: 'Generic' },
+      { name: 'Anti-Glare Screen Protector', description: 'Matte finish', brand: 'Generic' },
+    ]
+    
+    for (const p of protectorProducts) {
+      await ensureProduct({
+        name: p.name,
+        brand: p.brand,
+        groupId: screenProtectors.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  console.log(`  ✅ Accessories: ${totalProducts - accessoryStart} ürün`)
+  
+  // 7. CAMERAS
+  console.log('📷 Cameras kategorisi ürünleri...')
+  const cameraStart = totalProducts
+  
+  // DSLR Cameras
+  const dslr = await prisma.productGroup.findFirst({
+    where: { name: 'DSLR Cameras' }
+  })
+  
+  if (dslr) {
+    const dslrProducts = [
+      { name: 'Canon EOS R5', description: '45MP full-frame mirrorless', brand: 'Canon' },
+      { name: 'Canon EOS 90D', description: '32.5MP APS-C DSLR', brand: 'Canon' },
+      { name: 'Sony A7 IV', description: '33MP full-frame', brand: 'Sony' },
+    ]
+    
+    for (const p of dslrProducts) {
+      await ensureProduct({
+        name: p.name,
+        brand: p.brand,
+        groupId: dslr.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  // Mirrorless Cameras
+  const mirrorless = await prisma.productGroup.findFirst({
+    where: { name: 'Mirrorless Cameras' }
+  })
+  
+  if (mirrorless) {
+    const mirrorlessProducts = [
+      { name: 'Sony A7R V', description: '61MP high-resolution', brand: 'Sony' },
+      { name: 'Canon EOS R6 Mark II', description: '24MP versatile camera', brand: 'Canon' },
+    ]
+    
+    for (const p of mirrorlessProducts) {
+      await ensureProduct({
+        name: p.name,
+        brand: p.brand,
+        groupId: mirrorless.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  // Action Cameras
+  const actionCam = await prisma.productGroup.findFirst({
+    where: { name: 'Action Cameras' }
+  })
+  
+  if (actionCam) {
+    const actionProducts = [
+      { name: 'GoPro HERO 12 Black', description: '5.3K video, waterproof', brand: 'GoPro' },
+      { name: 'GoPro HERO 11 Black', description: '5.3K60 video', brand: 'GoPro' },
+    ]
+    
+    for (const p of actionProducts) {
+      await ensureProduct({
+        name: p.name,
+        brand: p.brand,
+        groupId: actionCam.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  // Drones
+  const drones = await prisma.productGroup.findFirst({
+    where: { name: 'Drones' }
+  })
+  
+  if (drones) {
+    const droneProducts = [
+      { name: 'DJI Mini 4 Pro', description: 'Compact 4K drone', brand: 'DJI' },
+      { name: 'DJI Air 3', description: 'Dual camera drone', brand: 'DJI' },
+      { name: 'DJI Mavic 3', description: 'Professional drone', brand: 'DJI' },
+    ]
+    
+    for (const p of droneProducts) {
+      await ensureProduct({
+        name: p.name,
+        brand: p.brand,
+        groupId: drones.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  console.log(`  ✅ Cameras: ${totalProducts - cameraStart} ürün`)
+  
+  const electronicsTotal = totalProducts
+  console.log(`\n📱 Electronics Toplam: ${electronicsTotal} ürün\n`)
+  console.log('💄 Beauty ürünleri ekleniyor...\n')
+  
+  // ==================== BEAUTY PRODUCTS ====================
+  
+  // 1. SKINCARE
+  console.log('🧴 Skincare kategorisi ürünleri...')
+  const skincareStart = totalProducts
+  
+  // Cleansers
+  const cleansers = await prisma.productGroup.findFirst({
+    where: { name: 'Cleansers' }
+  })
+  
+  if (cleansers) {
+    const cleanserProducts = [
+      { name: 'Hydrating Facial Cleanser', description: 'Gentle daily cleanser', brand: 'CeraVe' },
+      { name: 'Foaming Facial Cleanser', description: 'For normal to oily skin', brand: 'CeraVe' },
+      { name: 'Toleriane Hydrating Gentle Cleanser', description: 'For sensitive skin', brand: 'La Roche-Posay' },
+      { name: 'Squalane Cleanser', description: 'Gentle cleansing balm', brand: 'The Ordinary' },
+    ]
+    
+    for (const p of cleanserProducts) {
+      await ensureProduct({
+        name: p.name,
+        brand: p.brand,
+        groupId: cleansers.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  // Moisturizers
+  const moisturizers = await prisma.productGroup.findFirst({
+    where: { name: 'Moisturizers' }
+  })
+  
+  if (moisturizers) {
+    const moisturizerProducts = [
+      { name: 'Moisturizing Cream', description: 'Face and body moisturizer', brand: 'CeraVe' },
+      { name: 'PM Facial Moisturizing Lotion', description: 'Night cream', brand: 'CeraVe' },
+      { name: 'Toleriane Double Repair Face Moisturizer', description: 'With SPF', brand: 'La Roche-Posay' },
+      { name: 'Effaclar Mat', description: 'Oil-free mattifying moisturizer', brand: 'La Roche-Posay' },
+      { name: 'Natural Moisturizing Factors + HA', description: 'Surface hydration', brand: 'The Ordinary' },
+    ]
+    
+    for (const p of moisturizerProducts) {
+      await ensureProduct({
+        name: p.name,
+        brand: p.brand,
+        groupId: moisturizers.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  // Serums
+  const serums = await prisma.productGroup.findFirst({
+    where: { name: 'Serums' }
+  })
+  
+  if (serums) {
+    const serumProducts = [
+      { name: 'Hyaluronic Acid 2% + B5', description: 'Hydration serum', brand: 'The Ordinary' },
+      { name: 'Niacinamide 10% + Zinc 1%', description: 'Blemish formula', brand: 'The Ordinary' },
+      { name: 'Retinol 0.5% in Squalane', description: 'Anti-aging serum', brand: 'The Ordinary' },
+      { name: 'Vitamin C Suspension 23% + HA', description: 'Brightening', brand: 'The Ordinary' },
+      { name: 'Hyalu B5 Serum', description: 'Pure hyaluronic acid', brand: 'La Roche-Posay' },
+    ]
+    
+    for (const p of serumProducts) {
+      await ensureProduct({
+        name: p.name,
+        brand: p.brand,
+        groupId: serums.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  // Sunscreen
+  const sunscreen = await prisma.productGroup.findFirst({
+    where: { name: 'Sunscreen' }
+  })
+  
+  if (sunscreen) {
+    const sunscreenProducts = [
+      { name: 'Anthelios Melt-in Milk SPF 100', description: 'Body and face sunscreen', brand: 'La Roche-Posay' },
+      { name: 'Anthelios UV Correct SPF 70', description: 'Tinted sunscreen', brand: 'La Roche-Posay' },
+      { name: 'Ultra-Light Moisturizing Lotion SPF 30', description: 'Daily face moisturizer', brand: 'CeraVe' },
+    ]
+    
+    for (const p of sunscreenProducts) {
+      await ensureProduct({
+        name: p.name,
+        brand: p.brand,
+        groupId: sunscreen.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  // Masks
+  const masks = await prisma.productGroup.findFirst({
+    where: { name: 'Masks' }
+  })
+  
+  if (masks) {
+    const maskProducts = [
+      { name: 'AHA 30% + BHA 2% Peeling Solution', description: 'Exfoliating mask', brand: 'The Ordinary' },
+      { name: 'Salicylic Acid 2% Masque', description: 'Blemish clearing mask', brand: 'The Ordinary' },
+    ]
+    
+    for (const p of maskProducts) {
+      await ensureProduct({
+        name: p.name,
+        brand: p.brand,
+        groupId: masks.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  console.log(`  ✅ Skincare: ${totalProducts - skincareStart} ürün`)
+  
+  // Not: Makeup ve diğer Beauty kategorileri çok uzun olduğu için bir sonraki commit'te eklenecek
+  
+  const beautyTotal = totalProducts - electronicsTotal
+  console.log(`\n💄 Beauty (Skincare): ${beautyTotal} ürün (devam edecek)\n`)
+  
+  console.log('═'.repeat(80))
+  console.log(`\n✨ ŞU ANA KADAR: ${totalProducts} ürün oluşturuldu`)
+  console.log(`   📱 Electronics: ${electronicsTotal} ürün`)
+  console.log(`   💄 Beauty (Skincare): ${beautyTotal} ürün`)
+  console.log(`\n📝 Not: Makeup, Fragrance, Haircare, Personal Care, Nail Care, Men's Grooming kategorileri eklenecek\n`)
 }
 
 /**
