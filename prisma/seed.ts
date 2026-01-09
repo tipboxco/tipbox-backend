@@ -2761,6 +2761,215 @@ async function seedMessaging() {
   console.log('═'.repeat(80) + '\n')
 }
 
+// ==================== PHASE 13: NFT & MARKETPLACE ====================
+
+/**
+ * NFT & Marketplace sistemi oluştur
+ */
+async function seedNFTMarketplace() {
+  console.log('\n🎨 NFT & Marketplace oluşturuluyor...\n')
+  
+  const users = await prisma.user.findMany({ take: 40 })
+  
+  if (users.length === 0) {
+    console.log('⚠️ Kullanıcı bulunamadı, Phase 13 atlanıyor...')
+    return
+  }
+  
+  const nfts: string[] = []
+  let totalAttributes = 0
+  let totalTransactions = 0
+  let totalListings = 0
+  
+  // 1. NFT OLUŞTURMA (Her kullanıcı 2-5 NFT)
+  console.log('🎨 NFT\'ler oluşturuluyor...')
+  
+  const nftTypes: Array<'BADGE' | 'COSMETIC' | 'LOOTBOX'> = ['BADGE', 'COSMETIC', 'LOOTBOX']
+  const nftRarities: Array<'COMMON' | 'RARE' | 'EPIC'> = ['COMMON', 'RARE', 'EPIC']
+  
+  const nftNames = {
+    BADGE: ['Pioneer Badge', 'Expert Badge', 'Contributor Badge', 'Elite Badge', 'Champion Badge'],
+    COSMETIC: ['Golden Frame', 'Diamond Border', 'Neon Glow', 'Crystal Shine', 'Rainbow Aura'],
+    LOOTBOX: ['Mystery Box', 'Treasure Chest', 'Lucky Pack', 'Premium Box', 'Legendary Crate']
+  }
+  
+  for (const user of users) {
+    const nftCount = Math.floor(Math.random() * 4) + 2 // 2-5 NFT
+    
+    for (let i = 0; i < nftCount; i++) {
+      const nftType = nftTypes[Math.floor(Math.random() * nftTypes.length)]
+      const rarity = nftRarities[Math.floor(Math.random() * nftRarities.length)]
+      const nameOptions = nftNames[nftType]
+      const name = nameOptions[Math.floor(Math.random() * nameOptions.length)]
+      
+      const nft = await prisma.nFT.create({
+        data: {
+          name: `${name} #${Math.floor(Math.random() * 9999) + 1}`,
+          description: `A ${rarity.toLowerCase()} ${nftType.toLowerCase()} NFT with unique attributes.`,
+          imageUrl: getSeedMediaPath('nft.marketplace.1') ?? '', // Test asset
+          type: nftType,
+          rarity,
+          isTransferable: Math.random() > 0.2, // %80 transferable
+          currentOwnerId: user.id,
+        }
+      })
+      
+      nfts.push(nft.id)
+      
+      // Her NFT için MINT transaction
+      await prisma.nFTTransaction.create({
+        data: {
+          nftId: nft.id,
+          fromUserId: null, // System mint
+          toUserId: user.id,
+          price: null,
+          transactionType: 'MINT',
+        }
+      })
+      totalTransactions++
+      
+      // 2. NFT ATTRIBUTES (Her NFT için 3-5 attribute)
+      const attributeCount = Math.floor(Math.random() * 3) + 3 // 3-5
+      const attributeKeys = ['Power', 'Rarity Score', 'Edition', 'Creator', 'Collection', 'Level']
+      
+      for (let j = 0; j < attributeCount; j++) {
+        const key = attributeKeys[j % attributeKeys.length]
+        let value = ''
+        
+        switch (key) {
+          case 'Power':
+            value = `${Math.floor(Math.random() * 100) + 1}`
+            break
+          case 'Rarity Score':
+            value = `${(Math.random() * 10).toFixed(2)}`
+            break
+          case 'Edition':
+            value = `${Math.floor(Math.random() * 1000) + 1}/1000`
+            break
+          case 'Creator':
+            value = 'Tipbox Official'
+            break
+          case 'Collection':
+            value = `${nftType} Collection`
+            break
+          case 'Level':
+            value = `${Math.floor(Math.random() * 10) + 1}`
+            break
+        }
+        
+        await prisma.nFTAttribute.create({
+          data: {
+            nftId: nft.id,
+            key,
+            value,
+          }
+        })
+        totalAttributes++
+      }
+    }
+  }
+  
+  console.log(`  ✅ ${nfts.length} NFT oluşturuldu`)
+  console.log(`  ✅ ${totalAttributes} attribute eklendi`)
+  console.log(`  ✅ ${totalTransactions} MINT transaction oluşturuldu`)
+  
+  // 3. NFT TRANSFERS (Bazı NFT'ler el değiştirmiş)
+  console.log('🔄 NFT transfer işlemleri oluşturuluyor...')
+  
+  const transferCount = Math.floor(nfts.length * 0.2) // %20'si transfer olmuş
+  const nftsToTransfer = nfts.sort(() => Math.random() - 0.5).slice(0, transferCount)
+  
+  for (const nftId of nftsToTransfer) {
+    const nft = await prisma.nFT.findUnique({ where: { id: nftId } })
+    if (!nft || !nft.isTransferable) continue
+    
+    // Random yeni sahip
+    const newOwner = users[Math.floor(Math.random() * users.length)]
+    const price = Math.random() > 0.5 ? (Math.random() * 500 + 50) : null // %50 bedava transfer
+    
+    await prisma.nFTTransaction.create({
+      data: {
+        nftId: nft.id,
+        fromUserId: nft.currentOwnerId,
+        toUserId: newOwner.id,
+        price,
+        transactionType: price ? 'PURCHASE' : 'TRANSFER',
+      }
+    })
+    
+    // NFT owner'ını güncelle
+    await prisma.nFT.update({
+      where: { id: nft.id },
+      data: { currentOwnerId: newOwner.id }
+    })
+    
+    totalTransactions++
+  }
+  
+  console.log(`  ✅ ${transferCount} transfer işlemi oluşturuldu`)
+  
+  // 4. MARKET LISTINGS (20-30 aktif liste)
+  console.log('🏪 Market listings oluşturuluyor...')
+  
+  const listingCount = Math.floor(Math.random() * 11) + 20 // 20-30
+  const nftsForListing = nfts
+    .sort(() => Math.random() - 0.5)
+    .slice(0, Math.min(listingCount, nfts.length))
+  
+  for (const nftId of nftsForListing) {
+    const nft = await prisma.nFT.findUnique({ where: { id: nftId } })
+    if (!nft || !nft.isTransferable || !nft.currentOwnerId) continue
+    
+    // Rarity'ye göre fiyat
+    let basePrice = 100
+    if (nft.rarity === 'RARE') basePrice = 300
+    if (nft.rarity === 'EPIC') basePrice = 800
+    
+    const price = basePrice + Math.random() * basePrice
+    const status: 'ACTIVE' | 'SOLD' | 'CANCELLED' = 
+      Math.random() > 0.7 ? (Math.random() > 0.5 ? 'SOLD' : 'CANCELLED') : 'ACTIVE'
+    
+    await prisma.nFTMarketListing.create({
+      data: {
+        nftId: nft.id,
+        listedByUserId: nft.currentOwnerId,
+        price,
+        status,
+        listedAt: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000), // Son 30 gün
+      }
+    })
+    
+    totalListings++
+  }
+  
+  console.log(`  ✅ ${totalListings} market listing oluşturuldu`)
+  
+  // İstatistikler hesapla
+  const activeListings = await prisma.nFTMarketListing.count({ where: { status: 'ACTIVE' } })
+  const soldListings = await prisma.nFTMarketListing.count({ where: { status: 'SOLD' } })
+  const commonNFTs = await prisma.nFT.count({ where: { rarity: 'COMMON' } })
+  const rareNFTs = await prisma.nFT.count({ where: { rarity: 'RARE' } })
+  const epicNFTs = await prisma.nFT.count({ where: { rarity: 'EPIC' } })
+  
+  // Özet
+  console.log('\n' + '═'.repeat(80))
+  console.log('✨ PHASE 13 TAMAMLANDI - NFT & MARKETPLACE\n')
+  console.log(`   🎨 Total NFTs: ${nfts.length}`)
+  console.log(`      👤 Kullanıcı başına ortalama: ${(nfts.length / users.length).toFixed(1)} NFT`)
+  console.log(`      🔹 COMMON: ${commonNFTs}`)
+  console.log(`      💎 RARE: ${rareNFTs}`)
+  console.log(`      ⭐ EPIC: ${epicNFTs}`)
+  console.log(`   🏷️ Attributes: ${totalAttributes}`)
+  console.log(`   🔄 Transactions: ${totalTransactions}`)
+  console.log(`      🆕 MINT: ${nfts.length}`)
+  console.log(`      📤 TRANSFER/PURCHASE: ${totalTransactions - nfts.length}`)
+  console.log(`   🏪 Market Listings: ${totalListings}`)
+  console.log(`      🟢 ACTIVE: ${activeListings}`)
+  console.log(`      ✅ SOLD: ${soldListings}`)
+  console.log(`      ❌ CANCELLED: ${totalListings - activeListings - soldListings}`)
+  console.log('═'.repeat(80) + '\n')
+}
+
 /**
  * Genel görsel mapping sistemi
  * Tüm görsel tipleri için merkezi yönetim
@@ -5090,6 +5299,11 @@ async function main() {
   progress.increment('Messaging oluşturuluyor...')
   await seedMessaging()
   progress.increment('Messaging oluşturuldu')
+
+  // 13. NFT & Marketplace (NFT, Attributes, Transactions, Listings)
+  progress.increment('NFT & Marketplace oluşturuluyor...')
+  await seedNFTMarketplace()
+  progress.increment('NFT & Marketplace oluşturuldu')
 
   // 5. User Themes
   console.log('📱 Creating user themes...')
