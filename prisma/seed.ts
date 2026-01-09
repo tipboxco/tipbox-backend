@@ -2014,6 +2014,238 @@ async function seedPosts() {
   console.log(`   📝 Her kullanıcı: 10 QUESTION, 10 TIPS, 10 FREE, 10 EXPERIENCE, 10 COMPARE, 10 UPDATE\n`)
 }
 
+// ==================== PHASE 7: SOCIAL FEATURES ====================
+
+/**
+ * Social features oluştur (likes, comments, views, shares, favorites)
+ * Count alanlarını gerçek verilerle güncelle
+ */
+async function seedSocialFeatures() {
+  console.log('\n❤️ Social features oluşturuluyor...\n')
+  
+  // Tüm kullanıcıları ve postları getir
+  const users = await prisma.user.findMany({ take: 40 })
+  const allPosts = await prisma.contentPost.findMany()
+  
+  if (allPosts.length === 0) {
+    console.log('⚠️ Post bulunamadı, Phase 7 atlanıyor...')
+    return
+  }
+  
+  console.log(`📊 ${allPosts.length} post için social features ekleniyor...\n`)
+  
+  let totalLikes = 0
+  let totalComments = 0
+  let totalViews = 0
+  let totalShares = 0
+  let totalFavorites = 0
+  let totalCommentVotes = 0
+  
+  // 1. LIKES - Her post için 5-50 like
+  console.log('❤️ Likes ekleniyor...')
+  for (const post of allPosts) {
+    const likeCount = Math.floor(Math.random() * 46) + 5 // 5-50 arası
+    const likerUsers = users.sort(() => Math.random() - 0.5).slice(0, likeCount)
+    
+    for (const user of likerUsers) {
+      try {
+        await prisma.contentLike.create({
+          data: {
+            userId: user.id,
+            postId: post.id,
+            createdAt: new Date(post.createdAt.getTime() + Math.random() * 7 * 24 * 60 * 60 * 1000),
+          }
+        })
+        totalLikes++
+      } catch (e) {
+        // Duplicate ignore
+      }
+    }
+  }
+  console.log(`  ✅ ${totalLikes} like eklendi`)
+  
+  // 2. VIEWS - Her post için 10-200 view
+  console.log('👁️ Views ekleniyor...')
+  for (const post of allPosts) {
+    const viewCount = Math.floor(Math.random() * 191) + 10 // 10-200 arası
+    
+    for (let i = 0; i < viewCount; i++) {
+      const isAuthenticatedView = Math.random() > 0.3 // %70 authenticated
+      const viewerUser = isAuthenticatedView ? users[Math.floor(Math.random() * users.length)] : null
+      
+      await prisma.contentPostView.create({
+        data: {
+          postId: post.id,
+          userId: viewerUser?.id ?? null,
+          viewerIp: `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
+          viewedAt: new Date(post.createdAt.getTime() + Math.random() * 14 * 24 * 60 * 60 * 1000),
+        }
+      })
+      totalViews++
+    }
+  }
+  console.log(`  ✅ ${totalViews} view eklendi`)
+  
+  // 3. COMMENTS - Her post için 3-20 yorum
+  console.log('💬 Comments ekleniyor...')
+  const allComments: string[] = []
+  
+  for (const post of allPosts) {
+    const commentCount = Math.floor(Math.random() * 18) + 3 // 3-20 arası
+    const commenters = users.sort(() => Math.random() - 0.5).slice(0, commentCount)
+    
+    for (const user of commenters) {
+      const commentId = generateUlid()
+      await prisma.contentComment.create({
+        data: {
+          id: commentId,
+          postId: post.id,
+          userId: user.id,
+          comment: `Bu ürün hakkında düşüncelerim: Kullanımı kolay ve kaliteli. ${Math.random() > 0.5 ? 'Kesinlikle tavsiye ederim!' : 'Bazı eksiklikleri var ama genel olarak memnunum.'}`,
+          isAnswer: false,
+          parentId: null,
+          createdAt: new Date(post.createdAt.getTime() + Math.random() * 10 * 24 * 60 * 60 * 1000),
+        }
+      })
+      allComments.push(commentId)
+      totalComments++
+    }
+  }
+  console.log(`  ✅ ${totalComments} comment eklendi`)
+  
+  // 4. COMMENT VOTES - Yorumların %50'sine vote
+  console.log('👍👎 Comment votes ekleniyor...')
+  const commentsToVote = allComments.sort(() => Math.random() - 0.5).slice(0, Math.floor(allComments.length * 0.5))
+  
+  for (const commentId of commentsToVote) {
+    const voteCount = Math.floor(Math.random() * 10) + 1 // 1-10 vote
+    const voters = users.sort(() => Math.random() - 0.5).slice(0, voteCount)
+    
+    for (const voter of voters) {
+      const voteType: 'UPVOTE' | 'DOWNVOTE' = Math.random() > 0.3 ? 'UPVOTE' : 'DOWNVOTE'
+      
+      try {
+        await prisma.contentCommentVote.create({
+          data: {
+            userId: voter.id,
+            commentId,
+            voteType,
+          }
+        })
+        totalCommentVotes++
+      } catch (e) {
+        // Duplicate ignore
+      }
+    }
+  }
+  console.log(`  ✅ ${totalCommentVotes} comment vote eklendi`)
+  
+  // 5. SHARES - Her post için 3-4 paylaşım
+  console.log('🔄 Shares ekleniyor...')
+  for (const post of allPosts) {
+    const shareCount = Math.floor(Math.random() * 2) + 3 // 3-4 arası
+    const sharers = users.sort(() => Math.random() - 0.5).slice(0, shareCount)
+    
+    for (const user of sharers) {
+      const shareType: 'INTERNAL_REPOST' | 'EXTERNAL_SHARE' = Math.random() > 0.5 ? 'INTERNAL_REPOST' : 'EXTERNAL_SHARE'
+      const platform = shareType === 'EXTERNAL_SHARE' ? ['Twitter', 'Facebook', 'WhatsApp', 'Telegram'][Math.floor(Math.random() * 4)] : null
+      
+      try {
+        await prisma.contentShare.create({
+          data: {
+            userId: user.id,
+            postId: post.id,
+            shareType,
+            platform,
+            createdAt: new Date(post.createdAt.getTime() + Math.random() * 12 * 24 * 60 * 60 * 1000),
+          }
+        })
+        totalShares++
+      } catch (e) {
+        // Duplicate ignore
+      }
+    }
+  }
+  console.log(`  ✅ ${totalShares} share eklendi`)
+  
+  // 6. FAVORITES - Her kullanıcı ~10 post favori
+  console.log('⭐ Favorites ekleniyor...')
+  for (const user of users) {
+    const favoriteCount = Math.floor(Math.random() * 6) + 8 // 8-13 arası
+    const favoritePosts = allPosts.sort(() => Math.random() - 0.5).slice(0, favoriteCount)
+    
+    for (const post of favoritePosts) {
+      try {
+        await prisma.contentFavorite.create({
+          data: {
+            userId: user.id,
+            postId: post.id,
+            createdAt: new Date(post.createdAt.getTime() + Math.random() * 15 * 24 * 60 * 60 * 1000),
+          }
+        })
+        totalFavorites++
+      } catch (e) {
+        // Duplicate ignore
+      }
+    }
+  }
+  console.log(`  ✅ ${totalFavorites} favorite eklendi`)
+  
+  // 7. COUNT GÜNCELLEMELERI - Gerçek sayıları hesapla ve güncelle
+  console.log('🔢 Count alanları güncelleniyor...')
+  let updatedPosts = 0
+  
+  for (const post of allPosts) {
+    // Gerçek sayıları hesapla
+    const likesCount = await prisma.contentLike.count({ where: { postId: post.id } })
+    const commentsCount = await prisma.contentComment.count({ where: { postId: post.id } })
+    const viewsCount = await prisma.contentPostView.count({ where: { postId: post.id } })
+    const sharesCount = await prisma.contentShare.count({ where: { postId: post.id } })
+    const favoritesCount = await prisma.contentFavorite.count({ where: { postId: post.id } })
+    
+    // Post'u güncelle
+    await prisma.contentPost.update({
+      where: { id: post.id },
+      data: {
+        likesCount,
+        commentsCount,
+        viewsCount,
+        sharesCount,
+        favoritesCount,
+      }
+    })
+    updatedPosts++
+  }
+  console.log(`  ✅ ${updatedPosts} post count alanları güncellendi`)
+  
+  // Comment likes count güncelle
+  console.log('💬 Comment likes count güncelleniyor...')
+  let updatedComments = 0
+  for (const commentId of allComments) {
+    const likesCount = await prisma.contentLike.count({ where: { commentId } })
+    if (likesCount > 0) {
+      await prisma.contentComment.update({
+        where: { id: commentId },
+        data: { likesCount }
+      })
+      updatedComments++
+    }
+  }
+  console.log(`  ✅ ${updatedComments} comment likes count güncellendi`)
+  
+  // Özet
+  console.log('\n' + '═'.repeat(80))
+  console.log('✨ PHASE 7 TAMAMLANDI - SOCIAL FEATURES\n')
+  console.log(`   ❤️ Toplam Likes: ${totalLikes}`)
+  console.log(`   💬 Toplam Comments: ${totalComments}`)
+  console.log(`   👁️ Toplam Views: ${totalViews}`)
+  console.log(`   🔄 Toplam Shares: ${totalShares}`)
+  console.log(`   ⭐ Toplam Favorites: ${totalFavorites}`)
+  console.log(`   👍👎 Toplam Comment Votes: ${totalCommentVotes}`)
+  console.log(`\n   📊 ${updatedPosts} post count alanları gerçek verilerle güncellendi!`)
+  console.log('═'.repeat(80) + '\n')
+}
+
 /**
  * Genel görsel mapping sistemi
  * Tüm görsel tipleri için merkezi yönetim
@@ -4323,6 +4555,11 @@ async function main() {
   progress.increment('Post\'lar oluşturuluyor...')
   await seedPosts()
   progress.increment('Post\'lar oluşturuldu')
+
+  // 7. Social Features (Likes, Comments, Views, Shares, Favorites)
+  progress.increment('Social features oluşturuluyor...')
+  await seedSocialFeatures()
+  progress.increment('Social features oluşturuldu')
 
   // 5. User Themes
   console.log('📱 Creating user themes...')
