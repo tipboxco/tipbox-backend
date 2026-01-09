@@ -1338,102 +1338,34 @@ async function seedProducts(): Promise<void> {
   console.log('💻 Laptops kategorisi ürünleri...')
   const laptopStart = totalProducts
   
-  // MacBook
-  const macbook = await prisma.productGroup.findFirst({
-    where: { name: 'MacBook' }
-  })
-  
+  const macbook = await prisma.productGroup.findFirst({ where: { name: 'MacBook' } })
   if (macbook) {
-    const macbooks = [
-      { name: 'MacBook Air M3', description: '13" Retina, M3 chip, fanless' },
-      { name: 'MacBook Air M3 15"', description: '15" Retina, M3 chip' },
-      { name: 'MacBook Air M2', description: '13" Retina, M2 chip' },
-      { name: 'MacBook Pro 14" M3', description: '14" Liquid Retina XDR, M3' },
-      { name: 'MacBook Pro 14" M3 Pro', description: '14" XDR, M3 Pro chip' },
-      { name: 'MacBook Pro 16" M3 Pro', description: '16" XDR, M3 Pro' },
-      { name: 'MacBook Pro 16" M3 Max', description: '16" XDR, M3 Max' },
-    ]
-    
-    for (const p of macbooks) {
-      await ensureProduct({
-        name: p.name,
-        brand: 'Apple',
-        groupId: macbook.id,
-        description: p.description
-      })
+    for (let i = 1; i <= 20; i++) {
+      await ensureProduct({ name: `MacBook Pro Model ${i}`, brand: 'Apple', groupId: macbook.id, description: `Premium Apple laptop ${i}` })
       totalProducts++
     }
   }
   
-  // Dell Laptops
-  const dell = await prisma.productGroup.findFirst({
-    where: { name: 'Dell Laptops' }
-  })
-  
+  const dell = await prisma.productGroup.findFirst({ where: { name: 'Dell Laptops' } })
   if (dell) {
-    const dellLaptops = [
-      { name: 'Dell XPS 13', description: '13" InfinityEdge, Intel Core Ultra' },
-      { name: 'Dell XPS 15', description: '15" OLED display, RTX graphics' },
-      { name: 'Dell XPS 17', description: '17" workstation laptop' },
-      { name: 'Dell Inspiron 15', description: '15" budget-friendly laptop' },
-      { name: 'Dell G15 Gaming', description: '15" gaming laptop, RTX 4060' },
-    ]
-    
-    for (const p of dellLaptops) {
-      await ensureProduct({
-        name: p.name,
-        brand: 'Dell',
-        groupId: dell.id,
-        description: p.description
-      })
+    for (let i = 1; i <= 18; i++) {
+      await ensureProduct({ name: `Dell Workstation ${i}`, brand: 'Dell', groupId: dell.id, description: `Dell laptop model ${i}` })
       totalProducts++
     }
   }
   
-  // HP Laptops
-  const hp = await prisma.productGroup.findFirst({
-    where: { name: 'HP Laptops' }
-  })
-  
+  const hp = await prisma.productGroup.findFirst({ where: { name: 'HP Laptops' } })
   if (hp) {
-    const hpLaptops = [
-      { name: 'HP Spectre x360', description: '13" 2-in-1 convertible' },
-      { name: 'HP Envy 14', description: '14" creative workstation' },
-      { name: 'HP Pavilion 15', description: '15" everyday laptop' },
-      { name: 'HP Omen 16', description: '16" gaming laptop' },
-    ]
-    
-    for (const p of hpLaptops) {
-      await ensureProduct({
-        name: p.name,
-        brand: 'HP',
-        groupId: hp.id,
-        description: p.description
-      })
+    for (let i = 1; i <= 15; i++) {
+      await ensureProduct({ name: `HP Performance ${i}`, brand: 'HP', groupId: hp.id, description: `HP laptop ${i}` })
       totalProducts++
     }
   }
   
-  // Lenovo Laptops
-  const lenovo = await prisma.productGroup.findFirst({
-    where: { name: 'Lenovo Laptops' }
-  })
-  
+  const lenovo = await prisma.productGroup.findFirst({ where: { name: 'Lenovo Laptops' } })
   if (lenovo) {
-    const lenovoLaptops = [
-      { name: 'Lenovo ThinkPad X1 Carbon', description: '14" business ultrabook' },
-      { name: 'Lenovo Yoga 9i', description: '14" 2-in-1 convertible' },
-      { name: 'Lenovo IdeaPad 5', description: '15" budget laptop' },
-      { name: 'Lenovo Legion 5', description: '15" gaming laptop' },
-    ]
-    
-    for (const p of lenovoLaptops) {
-      await ensureProduct({
-        name: p.name,
-        brand: 'Lenovo',
-        groupId: lenovo.id,
-        description: p.description
-      })
+    for (let i = 1; i <= 17; i++) {
+      await ensureProduct({ name: `Lenovo ThinkBook ${i}`, brand: 'Lenovo', groupId: lenovo.id, description: `Lenovo laptop ${i}` })
       totalProducts++
     }
   }
@@ -1444,445 +1376,177 @@ async function seedProducts(): Promise<void> {
   console.log('📱 Tablets kategorisi ürünleri...')
   const tabletStart = totalProducts
   
-  // iPad
-  const ipad = await prisma.productGroup.findFirst({
-    where: { name: 'iPad' }
-  })
-  
+  const ipad = await prisma.productGroup.findFirst({ where: { name: 'iPad' } })
   if (ipad) {
-    const ipads = [
-      { name: 'iPad Pro 13" M4', description: '13" Liquid Retina XDR, M4 chip' },
-      { name: 'iPad Pro 11" M4', description: '11" Liquid Retina, M4 chip' },
-      { name: 'iPad Air 11" M2', description: '11" display, M2 chip' },
-      { name: 'iPad Air 13" M2', description: '13" display, M2 chip' },
-      { name: 'iPad 10th Gen', description: '10.9" display, A14 Bionic' },
-      { name: 'iPad 9th Gen', description: '10.2" display, A13 Bionic' },
-      { name: 'iPad Mini 6', description: '8.3" compact tablet' },
-    ]
-    
-    for (const p of ipads) {
-      await ensureProduct({
-        name: p.name,
-        brand: 'Apple',
-        groupId: ipad.id,
-        description: p.description
-      })
+    for (let i = 1; i <= 20; i++) {
+      await ensureProduct({ name: `iPad Pro ${i}`, brand: 'Apple', groupId: ipad.id, description: `Apple tablet model ${i}` })
       totalProducts++
     }
   }
   
-  // Samsung Tab
-  const samsungTab = await prisma.productGroup.findFirst({
-    where: { name: 'Samsung Tab' }
-  })
-  
+  const samsungTab = await prisma.productGroup.findFirst({ where: { name: 'Samsung Tab' } })
   if (samsungTab) {
-    const tabs = [
-      { name: 'Galaxy Tab S9 Ultra', description: '14.6" AMOLED, S Pen included' },
-      { name: 'Galaxy Tab S9+', description: '12.4" AMOLED' },
-      { name: 'Galaxy Tab S9', description: '11" AMOLED' },
-      { name: 'Galaxy Tab A9+', description: '11" budget tablet' },
-    ]
-    
-    for (const p of tabs) {
-      await ensureProduct({
-        name: p.name,
-        brand: 'Samsung',
-        groupId: samsungTab.id,
-        description: p.description
-      })
+    for (let i = 1; i <= 15; i++) {
+      await ensureProduct({ name: `Galaxy Tab ${i}`, brand: 'Samsung', groupId: samsungTab.id, description: `Samsung tablet ${i}` })
       totalProducts++
     }
   }
   
-  // Surface
-  const surface = await prisma.productGroup.findFirst({
-    where: { name: 'Surface' }
-  })
-  
+  const surface = await prisma.productGroup.findFirst({ where: { name: 'Surface' } })
   if (surface) {
-    const surfaces = [
-      { name: 'Surface Pro 10', description: '13" 2-in-1, Intel Core Ultra' },
-      { name: 'Surface Laptop 6', description: '13.5" touchscreen laptop' },
-      { name: 'Surface Go 4', description: '10.5" portable tablet' },
-    ]
-    
-    for (const p of surfaces) {
-      await ensureProduct({
-        name: p.name,
-        brand: 'Microsoft',
-        groupId: surface.id,
-        description: p.description
-      })
+    for (let i = 1; i <= 12; i++) {
+      await ensureProduct({ name: `Surface Device ${i}`, brand: 'Microsoft', groupId: surface.id, description: `Microsoft tablet ${i}` })
       totalProducts++
     }
   }
   
   console.log(`  ✅ Tablets: ${totalProducts - tabletStart} ürün`)
   
-  // 4. AUDIO
+  // 4. AUDIO - 42 products
   console.log('🎧 Audio kategorisi ürünleri...')
   const audioStart = totalProducts
   
-  // Headphones
-  const headphones = await prisma.productGroup.findFirst({
-    where: { name: 'Headphones' }
-  })
-  
+  const headphones = await prisma.productGroup.findFirst({ where: { name: 'Headphones' } })
   if (headphones) {
-    const headphoneProducts = [
-      { name: 'Sony WH-1000XM5', description: 'Premium noise canceling', brand: 'Sony' },
-      { name: 'Bose QuietComfort Ultra', description: 'Spatial audio headphones', brand: 'Bose' },
-      { name: 'Bose QuietComfort 45', description: 'Legendary noise canceling', brand: 'Bose' },
-      { name: 'Sony WH-1000XM4', description: 'Industry-leading ANC', brand: 'Sony' },
-    ]
-    
-    for (const p of headphoneProducts) {
-      await ensureProduct({
-        name: p.name,
-        brand: p.brand,
-        groupId: headphones.id,
-        description: p.description
-      })
+    for (let i = 1; i <= 12; i++) {
+      const brand = i % 2 === 0 ? 'Sony' : 'Bose'
+      await ensureProduct({ name: `Premium Headphones ${i}`, brand, groupId: headphones.id, description: `Noise canceling headphones ${i}` })
       totalProducts++
     }
   }
   
-  // Earbuds
-  const earbuds = await prisma.productGroup.findFirst({
-    where: { name: 'Earbuds' }
-  })
-  
+  const earbuds = await prisma.productGroup.findFirst({ where: { name: 'Earbuds' } })
   if (earbuds) {
-    const earbudProducts = [
-      { name: 'AirPods Pro 2nd Gen', description: 'Adaptive Audio, USB-C', brand: 'Apple' },
-      { name: 'AirPods 3rd Gen', description: 'Spatial Audio', brand: 'Apple' },
-      { name: 'AirPods Max', description: 'Over-ear premium', brand: 'Apple' },
-      { name: 'Samsung Galaxy Buds 2 Pro', description: 'Hi-Fi sound, ANC', brand: 'Samsung' },
-      { name: 'Sony WF-1000XM5', description: 'Premium earbuds', brand: 'Sony' },
-      { name: 'Bose QuietComfort Earbuds II', description: 'Personalized ANC', brand: 'Bose' },
-    ]
-    
-    for (const p of earbudProducts) {
-      await ensureProduct({
-        name: p.name,
-        brand: p.brand,
-        groupId: earbuds.id,
-        description: p.description
-      })
+    for (let i = 1; i <= 12; i++) {
+      const brand = i <= 4 ? 'Apple' : (i <= 8 ? 'Samsung' : 'Sony')
+      await ensureProduct({ name: `Wireless Earbuds ${i}`, brand, groupId: earbuds.id, description: `True wireless earbuds ${i}` })
       totalProducts++
     }
   }
   
-  // Speakers
-  const speakers = await prisma.productGroup.findFirst({
-    where: { name: 'Speakers' }
-  })
-  
+  const speakers = await prisma.productGroup.findFirst({ where: { name: 'Speakers' } })
   if (speakers) {
-    const speakerProducts = [
-      { name: 'Bose SoundLink Flex', description: 'Portable Bluetooth speaker', brand: 'Bose' },
-      { name: 'Sony SRS-XB43', description: 'Extra bass speaker', brand: 'Sony' },
-    ]
-    
-    for (const p of speakerProducts) {
-      await ensureProduct({
-        name: p.name,
-        brand: p.brand,
-        groupId: speakers.id,
-        description: p.description
-      })
+    for (let i = 1; i <= 10; i++) {
+      const brand = i % 2 === 0 ? 'Bose' : 'Sony'
+      await ensureProduct({ name: `Bluetooth Speaker ${i}`, brand, groupId: speakers.id, description: `Portable speaker ${i}` })
       totalProducts++
     }
   }
   
-  // Soundbars
-  const soundbars = await prisma.productGroup.findFirst({
-    where: { name: 'Soundbars' }
-  })
-  
+  const soundbars = await prisma.productGroup.findFirst({ where: { name: 'Soundbars' } })
   if (soundbars) {
-    const soundbarProducts = [
-      { name: 'Bose Smart Soundbar 900', description: 'Dolby Atmos soundbar', brand: 'Bose' },
-      { name: 'Sony HT-A7000', description: '7.1.2ch Dolby Atmos', brand: 'Sony' },
-    ]
-    
-    for (const p of soundbarProducts) {
-      await ensureProduct({
-        name: p.name,
-        brand: p.brand,
-        groupId: soundbars.id,
-        description: p.description
-      })
+    for (let i = 1; i <= 8; i++) {
+      const brand = i % 2 === 0 ? 'Bose' : 'Sony'
+      await ensureProduct({ name: `Home Soundbar ${i}`, brand, groupId: soundbars.id, description: `Dolby Atmos soundbar ${i}` })
       totalProducts++
     }
   }
   
   console.log(`  ✅ Audio: ${totalProducts - audioStart} ürün`)
   
-  // 5. WEARABLES
+  // 5. WEARABLES - 30 products
   console.log('⌚ Wearables kategorisi ürünleri...')
   const wearableStart = totalProducts
   
-  // Apple Watch
-  const appleWatch = await prisma.productGroup.findFirst({
-    where: { name: 'Apple Watch' }
-  })
-  
+  const appleWatch = await prisma.productGroup.findFirst({ where: { name: 'Apple Watch' } })
   if (appleWatch) {
-    const watches = [
-      { name: 'Apple Watch Series 10', description: 'Latest flagship watch' },
-      { name: 'Apple Watch Series 9', description: 'Double tap gesture' },
-      { name: 'Apple Watch Ultra 2', description: 'Titanium, extreme sports' },
-      { name: 'Apple Watch SE 2nd Gen', description: 'Budget-friendly option' },
-    ]
-    
-    for (const p of watches) {
-      await ensureProduct({
-        name: p.name,
-        brand: 'Apple',
-        groupId: appleWatch.id,
-        description: p.description
-      })
+    for (let i = 1; i <= 12; i++) {
+      await ensureProduct({ name: `Apple Watch Series ${i}`, brand: 'Apple', groupId: appleWatch.id, description: `Smartwatch model ${i}` })
       totalProducts++
     }
   }
   
-  // Samsung Galaxy Watch
-  const galaxyWatch = await prisma.productGroup.findFirst({
-    where: { name: 'Samsung Galaxy Watch' }
-  })
-  
+  const galaxyWatch = await prisma.productGroup.findFirst({ where: { name: 'Samsung Galaxy Watch' } })
   if (galaxyWatch) {
-    const watches = [
-      { name: 'Galaxy Watch 6 Classic', description: 'Rotating bezel, Wear OS' },
-      { name: 'Galaxy Watch 6', description: 'AMOLED display' },
-      { name: 'Galaxy Watch 5 Pro', description: 'Titanium case' },
-    ]
-    
-    for (const p of watches) {
-      await ensureProduct({
-        name: p.name,
-        brand: 'Samsung',
-        groupId: galaxyWatch.id,
-        description: p.description
-      })
+    for (let i = 1; i <= 10; i++) {
+      await ensureProduct({ name: `Galaxy Watch ${i}`, brand: 'Samsung', groupId: galaxyWatch.id, description: `Samsung smartwatch ${i}` })
       totalProducts++
     }
   }
   
-  // Fitness Trackers
-  const fitnessTrackers = await prisma.productGroup.findFirst({
-    where: { name: 'Fitness Trackers' }
-  })
-  
+  const fitnessTrackers = await prisma.productGroup.findFirst({ where: { name: 'Fitness Trackers' } })
   if (fitnessTrackers) {
-    const trackers = [
-      { name: 'Fitbit Charge 6', description: 'Fitness band with GPS', brand: 'Fitbit' },
-      { name: 'Fitbit Versa 4', description: 'Health smartwatch', brand: 'Fitbit' },
-    ]
-    
-    for (const p of trackers) {
-      await ensureProduct({
-        name: p.name,
-        brand: p.brand,
-        groupId: fitnessTrackers.id,
-        description: p.description
-      })
+    for (let i = 1; i <= 8; i++) {
+      await ensureProduct({ name: `Fitness Band ${i}`, brand: 'Fitbit', groupId: fitnessTrackers.id, description: `Fitness tracker ${i}` })
       totalProducts++
     }
   }
   
   console.log(`  ✅ Wearables: ${totalProducts - wearableStart} ürün`)
   
-  // 6. ACCESSORIES
+  // 6. ACCESSORIES - 34 products
   console.log('🔌 Accessories kategorisi ürünleri...')
   const accessoryStart = totalProducts
   
-  // Chargers
-  const chargers = await prisma.productGroup.findFirst({
-    where: { name: 'Chargers' }
-  })
-  
+  const chargers = await prisma.productGroup.findFirst({ where: { name: 'Chargers' } })
   if (chargers) {
-    const chargerProducts = [
-      { name: '20W USB-C Power Adapter', description: 'Fast charging', brand: 'Apple' },
-      { name: '35W Dual USB-C Adapter', description: 'Charge two devices', brand: 'Apple' },
-      { name: 'MagSafe Charger', description: 'Wireless iPhone charging', brand: 'Apple' },
-      { name: '45W USB-C Super Fast Charger', description: 'Samsung fast charge', brand: 'Samsung' },
-    ]
-    
-    for (const p of chargerProducts) {
-      await ensureProduct({
-        name: p.name,
-        brand: p.brand,
-        groupId: chargers.id,
-        description: p.description
-      })
+    for (let i = 1; i <= 10; i++) {
+      const brand = i <= 5 ? 'Apple' : 'Samsung'
+      await ensureProduct({ name: `Fast Charger ${i}W`, brand, groupId: chargers.id, description: `USB-C charger ${i}` })
       totalProducts++
     }
   }
   
-  // Cases
-  const cases = await prisma.productGroup.findFirst({
-    where: { name: 'Cases' }
-  })
-  
+  const cases = await prisma.productGroup.findFirst({ where: { name: 'Cases' } })
   if (cases) {
-    const caseProducts = [
-      { name: 'Silicone Case', description: 'Soft-touch finish', brand: 'Apple' },
-      { name: 'Leather Case', description: 'Premium leather', brand: 'Apple' },
-      { name: 'Clear Case', description: 'Show your phone color', brand: 'Apple' },
-    ]
-    
-    for (const p of caseProducts) {
-      await ensureProduct({
-        name: p.name,
-        brand: p.brand,
-        groupId: cases.id,
-        description: p.description
-      })
+    for (let i = 1; i <= 10; i++) {
+      await ensureProduct({ name: `Protective Case ${i}`, brand: 'Apple', groupId: cases.id, description: `Phone case model ${i}` })
       totalProducts++
     }
   }
   
-  // Cables
-  const cables = await prisma.productGroup.findFirst({
-    where: { name: 'Cables' }
-  })
-  
+  const cables = await prisma.productGroup.findFirst({ where: { name: 'Cables' } })
   if (cables) {
-    const cableProducts = [
-      { name: 'USB-C to Lightning Cable 1m', description: 'Fast charge cable', brand: 'Apple' },
-      { name: 'USB-C to USB-C Cable 2m', description: 'Charging and data', brand: 'Apple' },
-      { name: 'Thunderbolt 4 Cable', description: 'Pro cable 40Gbps', brand: 'Apple' },
-    ]
-    
-    for (const p of cableProducts) {
-      await ensureProduct({
-        name: p.name,
-        brand: p.brand,
-        groupId: cables.id,
-        description: p.description
-      })
+    for (let i = 1; i <= 8; i++) {
+      await ensureProduct({ name: `USB-C Cable ${i}m`, brand: 'Apple', groupId: cables.id, description: `Charging cable ${i}` })
       totalProducts++
     }
   }
   
-  // Screen Protectors
-  const screenProtectors = await prisma.productGroup.findFirst({
-    where: { name: 'Screen Protectors' }
-  })
-  
+  const screenProtectors = await prisma.productGroup.findFirst({ where: { name: 'Screen Protectors' } })
   if (screenProtectors) {
-    const protectorProducts = [
-      { name: 'Tempered Glass Screen Protector', description: '9H hardness', brand: 'Generic' },
-      { name: 'Anti-Glare Screen Protector', description: 'Matte finish', brand: 'Generic' },
-    ]
-    
-    for (const p of protectorProducts) {
-      await ensureProduct({
-        name: p.name,
-        brand: p.brand,
-        groupId: screenProtectors.id,
-        description: p.description
-      })
+    for (let i = 1; i <= 6; i++) {
+      await ensureProduct({ name: `Screen Guard ${i}`, brand: 'Generic', groupId: screenProtectors.id, description: `Tempered glass ${i}` })
       totalProducts++
     }
   }
   
   console.log(`  ✅ Accessories: ${totalProducts - accessoryStart} ürün`)
   
-  // 7. CAMERAS
+  // 7. CAMERAS - 40 products
   console.log('📷 Cameras kategorisi ürünleri...')
   const cameraStart = totalProducts
   
-  // DSLR Cameras
-  const dslr = await prisma.productGroup.findFirst({
-    where: { name: 'DSLR Cameras' }
-  })
-  
+  const dslr = await prisma.productGroup.findFirst({ where: { name: 'DSLR Cameras' } })
   if (dslr) {
-    const dslrProducts = [
-      { name: 'Canon EOS R5', description: '45MP full-frame mirrorless', brand: 'Canon' },
-      { name: 'Canon EOS 90D', description: '32.5MP APS-C DSLR', brand: 'Canon' },
-      { name: 'Sony A7 IV', description: '33MP full-frame', brand: 'Sony' },
-    ]
-    
-    for (const p of dslrProducts) {
-      await ensureProduct({
-        name: p.name,
-        brand: p.brand,
-        groupId: dslr.id,
-        description: p.description
-      })
+    for (let i = 1; i <= 10; i++) {
+      const brand = i % 2 === 0 ? 'Canon' : 'Sony'
+      await ensureProduct({ name: `DSLR Camera ${i}`, brand, groupId: dslr.id, description: `Professional DSLR ${i}` })
       totalProducts++
     }
   }
   
-  // Mirrorless Cameras
-  const mirrorless = await prisma.productGroup.findFirst({
-    where: { name: 'Mirrorless Cameras' }
-  })
-  
+  const mirrorless = await prisma.productGroup.findFirst({ where: { name: 'Mirrorless Cameras' } })
   if (mirrorless) {
-    const mirrorlessProducts = [
-      { name: 'Sony A7R V', description: '61MP high-resolution', brand: 'Sony' },
-      { name: 'Canon EOS R6 Mark II', description: '24MP versatile camera', brand: 'Canon' },
-    ]
-    
-    for (const p of mirrorlessProducts) {
-      await ensureProduct({
-        name: p.name,
-        brand: p.brand,
-        groupId: mirrorless.id,
-        description: p.description
-      })
+    for (let i = 1; i <= 10; i++) {
+      const brand = i % 2 === 0 ? 'Canon' : 'Sony'
+      await ensureProduct({ name: `Mirrorless Camera ${i}`, brand, groupId: mirrorless.id, description: `Mirrorless model ${i}` })
       totalProducts++
     }
   }
   
-  // Action Cameras
-  const actionCam = await prisma.productGroup.findFirst({
-    where: { name: 'Action Cameras' }
-  })
-  
+  const actionCam = await prisma.productGroup.findFirst({ where: { name: 'Action Cameras' } })
   if (actionCam) {
-    const actionProducts = [
-      { name: 'GoPro HERO 12 Black', description: '5.3K video, waterproof', brand: 'GoPro' },
-      { name: 'GoPro HERO 11 Black', description: '5.3K60 video', brand: 'GoPro' },
-    ]
-    
-    for (const p of actionProducts) {
-      await ensureProduct({
-        name: p.name,
-        brand: p.brand,
-        groupId: actionCam.id,
-        description: p.description
-      })
+    for (let i = 1; i <= 10; i++) {
+      await ensureProduct({ name: `Action Cam ${i}`, brand: 'GoPro', groupId: actionCam.id, description: `Action camera ${i}` })
       totalProducts++
     }
   }
   
-  // Drones
-  const drones = await prisma.productGroup.findFirst({
-    where: { name: 'Drones' }
-  })
-  
+  const drones = await prisma.productGroup.findFirst({ where: { name: 'Drones' } })
   if (drones) {
-    const droneProducts = [
-      { name: 'DJI Mini 4 Pro', description: 'Compact 4K drone', brand: 'DJI' },
-      { name: 'DJI Air 3', description: 'Dual camera drone', brand: 'DJI' },
-      { name: 'DJI Mavic 3', description: 'Professional drone', brand: 'DJI' },
-    ]
-    
-    for (const p of droneProducts) {
-      await ensureProduct({
-        name: p.name,
-        brand: p.brand,
-        groupId: drones.id,
-        description: p.description
-      })
+    for (let i = 1; i <= 10; i++) {
+      await ensureProduct({ name: `Drone Model ${i}`, brand: 'DJI', groupId: drones.id, description: `Camera drone ${i}` })
       totalProducts++
     }
   }
@@ -1895,141 +1559,267 @@ async function seedProducts(): Promise<void> {
   
   // ==================== BEAUTY PRODUCTS ====================
   
-  // 1. SKINCARE
+  // 1. SKINCARE - 100 products
   console.log('🧴 Skincare kategorisi ürünleri...')
   const skincareStart = totalProducts
   
-  // Cleansers
-  const cleansers = await prisma.productGroup.findFirst({
-    where: { name: 'Cleansers' }
-  })
-  
+  const cleansers = await prisma.productGroup.findFirst({ where: { name: 'Cleansers' } })
   if (cleansers) {
-    const cleanserProducts = [
-      { name: 'Hydrating Facial Cleanser', description: 'Gentle daily cleanser', brand: 'CeraVe' },
-      { name: 'Foaming Facial Cleanser', description: 'For normal to oily skin', brand: 'CeraVe' },
-      { name: 'Toleriane Hydrating Gentle Cleanser', description: 'For sensitive skin', brand: 'La Roche-Posay' },
-      { name: 'Squalane Cleanser', description: 'Gentle cleansing balm', brand: 'The Ordinary' },
-    ]
-    
-    for (const p of cleanserProducts) {
-      await ensureProduct({
-        name: p.name,
-        brand: p.brand,
-        groupId: cleansers.id,
-        description: p.description
-      })
+    for (let i = 1; i <= 20; i++) {
+      const brand = i <= 7 ? 'CeraVe' : (i <= 14 ? 'La Roche-Posay' : 'The Ordinary')
+      await ensureProduct({ name: `Facial Cleanser ${i}`, brand, groupId: cleansers.id, description: `Gentle cleanser ${i}` })
       totalProducts++
     }
   }
   
-  // Moisturizers
-  const moisturizers = await prisma.productGroup.findFirst({
-    where: { name: 'Moisturizers' }
-  })
-  
+  const moisturizers = await prisma.productGroup.findFirst({ where: { name: 'Moisturizers' } })
   if (moisturizers) {
-    const moisturizerProducts = [
-      { name: 'Moisturizing Cream', description: 'Face and body moisturizer', brand: 'CeraVe' },
-      { name: 'PM Facial Moisturizing Lotion', description: 'Night cream', brand: 'CeraVe' },
-      { name: 'Toleriane Double Repair Face Moisturizer', description: 'With SPF', brand: 'La Roche-Posay' },
-      { name: 'Effaclar Mat', description: 'Oil-free mattifying moisturizer', brand: 'La Roche-Posay' },
-      { name: 'Natural Moisturizing Factors + HA', description: 'Surface hydration', brand: 'The Ordinary' },
-    ]
-    
-    for (const p of moisturizerProducts) {
-      await ensureProduct({
-        name: p.name,
-        brand: p.brand,
-        groupId: moisturizers.id,
-        description: p.description
-      })
+    for (let i = 1; i <= 20; i++) {
+      const brand = i <= 7 ? 'CeraVe' : (i <= 14 ? 'La Roche-Posay' : 'The Ordinary')
+      await ensureProduct({ name: `Face Moisturizer ${i}`, brand, groupId: moisturizers.id, description: `Hydrating cream ${i}` })
       totalProducts++
     }
   }
   
-  // Serums
-  const serums = await prisma.productGroup.findFirst({
-    where: { name: 'Serums' }
-  })
-  
+  const serums = await prisma.productGroup.findFirst({ where: { name: 'Serums' } })
   if (serums) {
-    const serumProducts = [
-      { name: 'Hyaluronic Acid 2% + B5', description: 'Hydration serum', brand: 'The Ordinary' },
-      { name: 'Niacinamide 10% + Zinc 1%', description: 'Blemish formula', brand: 'The Ordinary' },
-      { name: 'Retinol 0.5% in Squalane', description: 'Anti-aging serum', brand: 'The Ordinary' },
-      { name: 'Vitamin C Suspension 23% + HA', description: 'Brightening', brand: 'The Ordinary' },
-      { name: 'Hyalu B5 Serum', description: 'Pure hyaluronic acid', brand: 'La Roche-Posay' },
-    ]
-    
-    for (const p of serumProducts) {
-      await ensureProduct({
-        name: p.name,
-        brand: p.brand,
-        groupId: serums.id,
-        description: p.description
-      })
+    for (let i = 1; i <= 25; i++) {
+      const brand = i <= 18 ? 'The Ordinary' : 'La Roche-Posay'
+      await ensureProduct({ name: `Serum Formula ${i}`, brand, groupId: serums.id, description: `Treatment serum ${i}` })
       totalProducts++
     }
   }
   
-  // Sunscreen
-  const sunscreen = await prisma.productGroup.findFirst({
-    where: { name: 'Sunscreen' }
-  })
-  
+  const sunscreen = await prisma.productGroup.findFirst({ where: { name: 'Sunscreen' } })
   if (sunscreen) {
-    const sunscreenProducts = [
-      { name: 'Anthelios Melt-in Milk SPF 100', description: 'Body and face sunscreen', brand: 'La Roche-Posay' },
-      { name: 'Anthelios UV Correct SPF 70', description: 'Tinted sunscreen', brand: 'La Roche-Posay' },
-      { name: 'Ultra-Light Moisturizing Lotion SPF 30', description: 'Daily face moisturizer', brand: 'CeraVe' },
-    ]
-    
-    for (const p of sunscreenProducts) {
-      await ensureProduct({
-        name: p.name,
-        brand: p.brand,
-        groupId: sunscreen.id,
-        description: p.description
-      })
+    for (let i = 1; i <= 20; i++) {
+      const brand = i % 2 === 0 ? 'La Roche-Posay' : 'CeraVe'
+      await ensureProduct({ name: `SPF ${30 + i} Sunscreen`, brand, groupId: sunscreen.id, description: `Sun protection ${i}` })
       totalProducts++
     }
   }
   
-  // Masks
-  const masks = await prisma.productGroup.findFirst({
-    where: { name: 'Masks' }
-  })
-  
+  const masks = await prisma.productGroup.findFirst({ where: { name: 'Masks' } })
   if (masks) {
-    const maskProducts = [
-      { name: 'AHA 30% + BHA 2% Peeling Solution', description: 'Exfoliating mask', brand: 'The Ordinary' },
-      { name: 'Salicylic Acid 2% Masque', description: 'Blemish clearing mask', brand: 'The Ordinary' },
-    ]
-    
-    for (const p of maskProducts) {
-      await ensureProduct({
-        name: p.name,
-        brand: p.brand,
-        groupId: masks.id,
-        description: p.description
-      })
+    for (let i = 1; i <= 15; i++) {
+      await ensureProduct({ name: `Face Mask ${i}`, brand: 'The Ordinary', groupId: masks.id, description: `Treatment mask ${i}` })
       totalProducts++
     }
   }
   
   console.log(`  ✅ Skincare: ${totalProducts - skincareStart} ürün`)
   
-  // Not: Makeup ve diğer Beauty kategorileri çok uzun olduğu için bir sonraki commit'te eklenecek
+  // 2. MAKEUP - 400 products
+  console.log('💄 Makeup kategorisi ürünleri...')
+  const makeupStart = totalProducts
+  
+  const foundation = await prisma.productGroup.findFirst({ where: { name: 'Foundation' } })
+  if (foundation) {
+    for (let i = 1; i <= 120; i++) {
+      const brand = i <= 40 ? 'MAC' : (i <= 80 ? 'Maybelline' : "L'Oréal")
+      await ensureProduct({ name: `Foundation Shade ${i}`, brand, groupId: foundation.id, description: `Foundation tone ${i}` })
+      totalProducts++
+    }
+  }
+  
+  const lipstick = await prisma.productGroup.findFirst({ where: { name: 'Lipstick' } })
+  if (lipstick) {
+    for (let i = 1; i <= 100; i++) {
+      const brand = i <= 30 ? 'MAC' : (i <= 60 ? 'Maybelline' : (i <= 85 ? "L'Oréal" : 'NYX'))
+      await ensureProduct({ name: `Lipstick Color ${i}`, brand, groupId: lipstick.id, description: `Lip color ${i}` })
+      totalProducts++
+    }
+  }
+  
+  const mascara = await prisma.productGroup.findFirst({ where: { name: 'Mascara' } })
+  if (mascara) {
+    for (let i = 1; i <= 60; i++) {
+      const brand = i <= 25 ? 'Maybelline' : (i <= 45 ? "L'Oréal" : 'NYX')
+      await ensureProduct({ name: `Mascara Formula ${i}`, brand, groupId: mascara.id, description: `Volumizing mascara ${i}` })
+      totalProducts++
+    }
+  }
+  
+  const eyeshadow = await prisma.productGroup.findFirst({ where: { name: 'Eyeshadow' } })
+  if (eyeshadow) {
+    for (let i = 1; i <= 80; i++) {
+      const brand = i <= 40 ? 'NYX' : "L'Oréal"
+      await ensureProduct({ name: `Eyeshadow Palette ${i}`, brand, groupId: eyeshadow.id, description: `Eye color ${i}` })
+      totalProducts++
+    }
+  }
+  
+  const blush = await prisma.productGroup.findFirst({ where: { name: 'Blush' } })
+  if (blush) {
+    for (let i = 1; i <= 40; i++) {
+      const brand = i <= 15 ? 'MAC' : (i <= 28 ? 'Maybelline' : 'NYX')
+      await ensureProduct({ name: `Blush Shade ${i}`, brand, groupId: blush.id, description: `Cheek color ${i}` })
+      totalProducts++
+    }
+  }
+  
+  console.log(`  ✅ Makeup: ${totalProducts - makeupStart} ürün`)
+  
+  // 3-7. Other Beauty categories - 205 products
+  console.log('🌸 Diğer Beauty kategorileri ürünleri...')
+  const otherBeautyStart = totalProducts
+  
+  // Fragrance - 45 products
+  const perfume = await prisma.productGroup.findFirst({ where: { name: 'Perfume' } })
+  if (perfume) {
+    for (let i = 1; i <= 20; i++) {
+      const brand = i % 2 === 0 ? 'Chanel' : 'Dior'
+      await ensureProduct({ name: `Perfume ${i}`, brand, groupId: perfume.id, description: `Fragrance ${i}` })
+      totalProducts++
+    }
+  }
+  
+  const cologne = await prisma.productGroup.findFirst({ where: { name: 'Cologne' } })
+  if (cologne) {
+    for (let i = 1; i <= 15; i++) {
+      const brand = i % 2 === 0 ? 'Chanel' : 'Dior'
+      await ensureProduct({ name: `Cologne ${i}`, brand, groupId: cologne.id, description: `Men's fragrance ${i}` })
+      totalProducts++
+    }
+  }
+  
+  const bodySpray = await prisma.productGroup.findFirst({ where: { name: 'Body Spray' } })
+  if (bodySpray) {
+    for (let i = 1; i <= 10; i++) {
+      await ensureProduct({ name: `Body Mist ${i}`, brand: 'Flormar', groupId: bodySpray.id, description: `Body spray ${i}` })
+      totalProducts++
+    }
+  }
+  
+  // Haircare - 40 products
+  const shampoo = await prisma.productGroup.findFirst({ where: { name: 'Shampoo' } })
+  if (shampoo) {
+    for (let i = 1; i <= 15; i++) {
+      const brand = i % 2 === 0 ? 'Pantene' : "L'Oréal"
+      await ensureProduct({ name: `Shampoo ${i}`, brand, groupId: shampoo.id, description: `Hair shampoo ${i}` })
+      totalProducts++
+    }
+  }
+  
+  const conditioner = await prisma.productGroup.findFirst({ where: { name: 'Conditioner' } })
+  if (conditioner) {
+    for (let i = 1; i <= 12; i++) {
+      await ensureProduct({ name: `Conditioner ${i}`, brand: 'Pantene', groupId: conditioner.id, description: `Hair conditioner ${i}` })
+      totalProducts++
+    }
+  }
+  
+  const stylingProducts = await prisma.productGroup.findFirst({ where: { name: 'Styling Products' } })
+  if (stylingProducts) {
+    for (let i = 1; i <= 8; i++) {
+      await ensureProduct({ name: `Hair Gel ${i}`, brand: "L'Oréal", groupId: stylingProducts.id, description: `Styling product ${i}` })
+      totalProducts++
+    }
+  }
+  
+  const hairTreatments = await prisma.productGroup.findFirst({ where: { name: 'Hair Treatments' } })
+  if (hairTreatments) {
+    for (let i = 1; i <= 5; i++) {
+      await ensureProduct({ name: `Hair Mask ${i}`, brand: 'Pantene', groupId: hairTreatments.id, description: `Hair treatment ${i}` })
+      totalProducts++
+    }
+  }
+  
+  // Personal Care - 40 products
+  const deodorant = await prisma.productGroup.findFirst({ where: { name: 'Deodorant' } })
+  if (deodorant) {
+    for (let i = 1; i <= 15; i++) {
+      const brand = i % 2 === 0 ? 'Dove' : 'Nivea'
+      await ensureProduct({ name: `Deodorant ${i}`, brand, groupId: deodorant.id, description: `Antiperspirant ${i}` })
+      totalProducts++
+    }
+  }
+  
+  const bodyWash = await prisma.productGroup.findFirst({ where: { name: 'Body Wash' } })
+  if (bodyWash) {
+    for (let i = 1; i <= 12; i++) {
+      const brand = i % 2 === 0 ? 'Dove' : 'Nivea'
+      await ensureProduct({ name: `Body Wash ${i}`, brand, groupId: bodyWash.id, description: `Shower gel ${i}` })
+      totalProducts++
+    }
+  }
+  
+  const handCream = await prisma.productGroup.findFirst({ where: { name: 'Hand Cream' } })
+  if (handCream) {
+    for (let i = 1; i <= 8; i++) {
+      await ensureProduct({ name: `Hand Cream ${i}`, brand: 'Nivea', groupId: handCream.id, description: `Hand lotion ${i}` })
+      totalProducts++
+    }
+  }
+  
+  const bodyLotion = await prisma.productGroup.findFirst({ where: { name: 'Body Lotion' } })
+  if (bodyLotion) {
+    for (let i = 1; i <= 5; i++) {
+      await ensureProduct({ name: `Body Lotion ${i}`, brand: 'Dove', groupId: bodyLotion.id, description: `Body moisturizer ${i}` })
+      totalProducts++
+    }
+  }
+  
+  // Nail Care - 30 products
+  const nailPolish = await prisma.productGroup.findFirst({ where: { name: 'Nail Polish' } })
+  if (nailPolish) {
+    for (let i = 1; i <= 25; i++) {
+      await ensureProduct({ name: `Nail Polish Color ${i}`, brand: 'Flormar', groupId: nailPolish.id, description: `Nail enamel ${i}` })
+      totalProducts++
+    }
+  }
+  
+  const nailTreatment = await prisma.productGroup.findFirst({ where: { name: 'Nail Treatment' } })
+  if (nailTreatment) {
+    for (let i = 1; i <= 3; i++) {
+      await ensureProduct({ name: `Nail Treatment ${i}`, brand: 'Flormar', groupId: nailTreatment.id, description: `Nail care ${i}` })
+      totalProducts++
+    }
+  }
+  
+  const nailTools = await prisma.productGroup.findFirst({ where: { name: 'Nail Tools' } })
+  if (nailTools) {
+    for (let i = 1; i <= 2; i++) {
+      await ensureProduct({ name: `Nail Tool Set ${i}`, brand: 'Generic', groupId: nailTools.id, description: `Nail tools ${i}` })
+      totalProducts++
+    }
+  }
+  
+  // Men's Grooming - 20 products
+  const shavingProducts = await prisma.productGroup.findFirst({ where: { name: 'Shaving Products' } })
+  if (shavingProducts) {
+    for (let i = 1; i <= 10; i++) {
+      await ensureProduct({ name: `Shaving Product ${i}`, brand: 'Nivea', groupId: shavingProducts.id, description: `Shaving care ${i}` })
+      totalProducts++
+    }
+  }
+  
+  const mensSkincare = await prisma.productGroup.findFirst({ where: { name: "Men's Skincare" } })
+  if (mensSkincare) {
+    for (let i = 1; i <= 6; i++) {
+      await ensureProduct({ name: `Men's Face Care ${i}`, brand: 'Nivea', groupId: mensSkincare.id, description: `Men's skincare ${i}` })
+      totalProducts++
+    }
+  }
+  
+  const mensHaircare = await prisma.productGroup.findFirst({ where: { name: "Men's Haircare" } })
+  if (mensHaircare) {
+    for (let i = 1; i <= 4; i++) {
+      const brand = i % 2 === 0 ? "L'Oréal" : 'Dove'
+      await ensureProduct({ name: `Men's Hair Product ${i}`, brand, groupId: mensHaircare.id, description: `Men's haircare ${i}` })
+      totalProducts++
+    }
+  }
+  
+  console.log(`  ✅ Diğer Beauty: ${totalProducts - otherBeautyStart} ürün`)
   
   const beautyTotal = totalProducts - electronicsTotal
-  console.log(`\n💄 Beauty (Skincare): ${beautyTotal} ürün (devam edecek)\n`)
+  console.log(`\n💄 Beauty Toplam: ${beautyTotal} ürün\n`)
   
   console.log('═'.repeat(80))
-  console.log(`\n✨ ŞU ANA KADAR: ${totalProducts} ürün oluşturuldu`)
+  console.log(`\n✨ TOPLAM: ${totalProducts} ürün oluşturuldu`)
   console.log(`   📱 Electronics: ${electronicsTotal} ürün`)
-  console.log(`   💄 Beauty (Skincare): ${beautyTotal} ürün`)
-  console.log(`\n📝 Not: Makeup, Fragrance, Haircare, Personal Care, Nail Care, Men's Grooming kategorileri eklenecek\n`)
+  console.log(`   💄 Beauty: ${beautyTotal} ürün\n`)
 }
 
 /**
