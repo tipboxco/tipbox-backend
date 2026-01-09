@@ -6,8 +6,10 @@
  * 2. Migration status kontrolü ve uygulama
  * 3. DB schema ile Prisma schema uyumluluğu kontrolü
  * 4. Prisma client generate
- * 5. Mevcut seed verilerini temizler (taxonomy korunur veya silinir)
- * 6. seed.ts'yi çalıştırır
+ * 5. Seed görsellerini MinIO'ya yükler
+ * 6. Mevcut seed verilerini temizler (taxonomy korunur veya silinir)
+ * 7. seed.ts'yi çalıştırır
+ * 8. Feed distribution worker'ı tetikler (post'lar için feed kayıtları)
  * 
  * Kullanım:
  *   npx ts-node scripts/clear-and-seed.ts          # Taxonomy korunur (sadece user/content temizlenir)
@@ -229,6 +231,24 @@ async function clearAndSeed(clearAll: boolean = false): Promise<void> {
     });
     
     console.log('\n✅ Seed işlemi tamamlandı!');
+    
+    // Feed Distribution Worker'ı çalıştır
+    console.log('\n🔄 Feed distribution tetikleniyor...\n');
+    try {
+      const feedDistributionPath = path.join(process.cwd(), 'scripts', 'trigger-feed-distribution.ts');
+      execSync(`npx ts-node ${feedDistributionPath}`, {
+        stdio: 'inherit',
+        cwd: process.cwd(),
+      });
+      console.log('✅ Feed distribution job\'ları oluşturuldu!');
+      console.log('💡 Worker aktif olduğunda bu job\'lar otomatik işlenecek.');
+      console.log('   Backend service restart ederseniz worker hemen başlar.\n');
+    } catch (error) {
+      console.warn('⚠️  Feed distribution tetiklenemedi, manuel çalıştırabilirsiniz:');
+      console.warn('   npx ts-node scripts/trigger-feed-distribution.ts');
+      console.warn('   Hata:', error instanceof Error ? error.message : String(error), '\n');
+      // Feed distribution hatası seed işlemini durdurmaz
+    }
   } catch (error) {
     console.error('❌ Seed işlemi başarısız:', error);
     process.exit(1);
