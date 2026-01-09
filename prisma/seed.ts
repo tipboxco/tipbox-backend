@@ -2038,11 +2038,12 @@ async function seedUserInventories() {
         })
         
         if (!existingMedia) {
-          // Random product image seç
+          // Random product image seç (mevcut product key'lerinden)
           const productImageKeys = [
-            'feed.product.1', 'feed.product.2', 'feed.product.3',
-            'feed.product.4', 'feed.product.5', 'feed.product.6',
-            'feed.product.placeholder',
+            'product.phone.phone1', 'product.phone.phone2', 'product.phone.samsung',
+            'product.laptop.macbook', 'product.headphone.primary',
+            'product.post.electronic-post-1', 'product.post.electronic-post-2',
+            'product.post.makeup-post-1', 'product.post.makeup-post-2',
           ]
           const randomImageKey = productImageKeys[Math.floor(Math.random() * productImageKeys.length)] as SeedMediaKey
           const mediaUrl = getSeedMediaPath(randomImageKey, true)
@@ -2992,7 +2993,7 @@ async function seedNFTMarketplace() {
         data: {
           name: `${name} #${Math.floor(Math.random() * 9999) + 1}`,
           description: `A ${rarity.toLowerCase()} ${nftType.toLowerCase()} NFT with unique attributes.`,
-          imageUrl: getSeedMediaPath('feed.product.placeholder') ?? '', // Fallback to product image
+          imageUrl: getSeedMediaPath('product.post.electronic-post-1') ?? '', // Fallback to product image
           type: nftType,
           rarity,
           isTransferable: Math.random() > 0.2, // %80 transferable
