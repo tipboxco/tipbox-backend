@@ -1072,6 +1072,186 @@ async function seedProductCategories(): Promise<void> {
 }
 
 /**
+ * Seed Brands - Electronics ve Beauty brand'leri
+ * Her brand için BrandCategory ilişkisi, logo ve banner oluşturur
+ */
+async function seedBrands(): Promise<void> {
+  console.log('\n🏷️  Brand Sistemi Oluşturuluyor...\n')
+  
+  // 1. Brand Categories
+  const electronicsBrandCat = await ensureBrandCategory({
+    name: 'Electronics'
+  })
+  
+  const beautyBrandCat = await ensureBrandCategory({
+    name: 'Beauty'
+  })
+  
+  console.log(`✅ Brand Categories: ${electronicsBrandCat.name}, ${beautyBrandCat.name}`)
+  
+  // 2. Electronics Brands
+  const electronicsBrands = [
+    {
+      name: 'Apple',
+      description: 'Premium consumer electronics and software',
+      logoKey: 'brand.apple.logo' as SeedMediaKey,
+      bannerKey: 'brand.apple.banner' as SeedMediaKey
+    },
+    {
+      name: 'Samsung',
+      description: 'Global leader in consumer electronics',
+      logoKey: 'brand.samsung.logo' as SeedMediaKey,
+      bannerKey: 'brand.samsung.banner' as SeedMediaKey
+    },
+    {
+      name: 'Google',
+      description: 'Technology and software company',
+      logoKey: 'brand.google.logo' as SeedMediaKey,
+      bannerKey: 'brand.google.banner' as SeedMediaKey
+    },
+    {
+      name: 'Sony',
+      description: 'Audio, video and gaming electronics',
+      logoKey: 'brand.sony.logo' as SeedMediaKey,
+      bannerKey: 'brand.sony.banner' as SeedMediaKey
+    },
+    {
+      name: 'Bose',
+      description: 'Premium audio equipment manufacturer',
+      logoKey: 'brand.bose.logo' as SeedMediaKey,
+      bannerKey: 'brand.bose.banner' as SeedMediaKey
+    },
+    {
+      name: 'Logitech',
+      description: 'Computer peripherals and accessories',
+      logoKey: 'brand.logitech.logo' as SeedMediaKey,
+      bannerKey: 'brand.logitech.banner' as SeedMediaKey
+    },
+    {
+      name: 'Canon',
+      description: 'Imaging and optical products',
+      logoKey: 'brand.canon.logo' as SeedMediaKey,
+      bannerKey: 'brand.canon.banner' as SeedMediaKey
+    },
+    {
+      name: 'DJI',
+      description: 'Drone and camera technology',
+      logoKey: 'brand.dji.logo' as SeedMediaKey,
+      bannerKey: 'brand.dji.banner' as SeedMediaKey
+    },
+  ]
+  
+  for (const brandConfig of electronicsBrands) {
+    await ensureBrand({
+      name: brandConfig.name,
+      categoryId: electronicsBrandCat.id,
+      description: brandConfig.description,
+      logoKey: brandConfig.logoKey,
+      bannerKey: brandConfig.bannerKey
+    })
+  }
+  
+  console.log(`  ✅ Electronics: ${electronicsBrands.length} brand oluşturuldu`)
+  
+  // 3. Beauty Brands
+  const beautyBrands = [
+    {
+      name: 'CeraVe',
+      description: 'Dermatologist-developed skincare',
+      logoKey: 'brand.cerave.logo' as SeedMediaKey,
+      bannerKey: 'brand.cerave.banner' as SeedMediaKey
+    },
+    {
+      name: 'La Roche-Posay',
+      description: 'Dermatological skincare brand',
+      logoKey: 'brand.laroche.logo' as SeedMediaKey,
+      bannerKey: 'brand.laroche.banner' as SeedMediaKey
+    },
+    {
+      name: 'The Ordinary',
+      description: 'Clinical skincare formulations',
+      logoKey: 'brand.ordinary.logo' as SeedMediaKey,
+      bannerKey: 'brand.ordinary.banner' as SeedMediaKey
+    },
+    {
+      name: 'MAC',
+      description: 'Professional makeup and cosmetics',
+      logoKey: 'brand.mac.logo' as SeedMediaKey,
+      bannerKey: 'brand.mac.banner' as SeedMediaKey
+    },
+    {
+      name: 'Maybelline',
+      description: 'Affordable makeup and beauty',
+      logoKey: 'brand.maybelline.logo' as SeedMediaKey,
+      bannerKey: 'brand.maybelline.banner' as SeedMediaKey
+    },
+    {
+      name: "L'Oréal",
+      description: 'Beauty and personal care',
+      logoKey: 'brand.loreal.logo' as SeedMediaKey,
+      bannerKey: 'brand.loreal.banner' as SeedMediaKey
+    },
+    {
+      name: 'NYX',
+      description: 'Professional makeup brand',
+      logoKey: 'brand.nyx.logo' as SeedMediaKey,
+      bannerKey: 'brand.nyx.banner' as SeedMediaKey
+    },
+    {
+      name: 'Flormar',
+      description: 'Trendy cosmetics and makeup',
+      logoKey: 'brand.flormar.logo' as SeedMediaKey,
+      bannerKey: 'brand.flormar.banner' as SeedMediaKey
+    },
+    {
+      name: 'Chanel',
+      description: 'Luxury fashion and beauty',
+      logoKey: 'brand.chanel.logo' as SeedMediaKey,
+      bannerKey: 'brand.chanel.banner' as SeedMediaKey
+    },
+    {
+      name: 'Dior',
+      description: 'Luxury cosmetics and fragrance',
+      logoKey: 'brand.dior.logo' as SeedMediaKey,
+      bannerKey: 'brand.dior.banner' as SeedMediaKey
+    },
+    {
+      name: 'Pantene',
+      description: 'Haircare and styling products',
+      logoKey: 'brand.pantene.logo' as SeedMediaKey,
+      bannerKey: 'brand.pantene.banner' as SeedMediaKey
+    },
+    {
+      name: 'Dove',
+      description: 'Personal care and beauty',
+      logoKey: 'brand.dove.logo' as SeedMediaKey,
+      bannerKey: 'brand.dove.banner' as SeedMediaKey
+    },
+    {
+      name: 'Nivea',
+      description: 'Skincare and body care',
+      logoKey: 'brand.nivea.logo' as SeedMediaKey,
+      bannerKey: 'brand.nivea.banner' as SeedMediaKey
+    },
+  ]
+  
+  for (const brandConfig of beautyBrands) {
+    await ensureBrand({
+      name: brandConfig.name,
+      categoryId: beautyBrandCat.id,
+      description: brandConfig.description,
+      logoKey: brandConfig.logoKey,
+      bannerKey: brandConfig.bannerKey
+    })
+  }
+  
+  console.log(`  ✅ Beauty: ${beautyBrands.length} brand oluşturuldu`)
+  
+  console.log('\n═'.repeat(80))
+  console.log(`\n✨ Toplam: 2 brand category, ${electronicsBrands.length + beautyBrands.length} brand\n`)
+}
+
+/**
  * Genel görsel mapping sistemi
  * Tüm görsel tipleri için merkezi yönetim
  * 
@@ -1801,7 +1981,7 @@ async function updateProductImages(): Promise<void> {
 }
 
 // BrandCategory için idempotent create/update
-async function ensureBrandCategory(config: { name: string; imageKey?: SeedMediaKey }): Promise<{ id: string; name: string }> {
+async function ensureBrandCategory(config: { name: string; description?: string; imageKey?: SeedMediaKey }): Promise<{ id: string; name: string }> {
   // Eğer imageKey belirtilmemişse, mapping'den otomatik bul
   let finalImageKey = config.imageKey;
   if (!finalImageKey) {
@@ -1827,10 +2007,14 @@ async function ensureBrandCategory(config: { name: string; imageKey?: SeedMediaK
       }
     }
     
-    if (imageUrl) {
+    const updateData: any = {};
+    if (config.description !== undefined) updateData.description = config.description;
+    if (imageUrl) updateData.imageUrl = imageUrl;
+    
+    if (Object.keys(updateData).length > 0) {
       return prisma.brandCategory.update({
         where: { id: existing.id },
-        data: { imageUrl }
+        data: updateData
       });
     }
     return existing;
@@ -1859,10 +2043,28 @@ async function ensureBrandCategory(config: { name: string; imageKey?: SeedMediaK
 }
 
 // Brand için idempotent create/update
-async function ensureBrand(config: { name: string; categoryId?: string; description?: string; logoUrl?: string; imageUrl?: string; category?: string; imageKey?: SeedMediaKey }) {
-  // Eğer imageKey belirtilmişse, imageUrl'yi otomatik oluştur
+async function ensureBrand(config: { 
+  name: string; 
+  categoryId?: string; 
+  description?: string; 
+  logoUrl?: string; 
+  imageUrl?: string; 
+  logoKey?: SeedMediaKey; 
+  bannerKey?: SeedMediaKey; 
+  imageKey?: SeedMediaKey;
+  category?: string;
+}) {
+  // Logo URL'yi oluştur
+  let finalLogoUrl: string | undefined = config.logoUrl;
+  if (config.logoKey) {
+    finalLogoUrl = getSeedMediaPath(config.logoKey, true) || undefined;
+  }
+  
+  // Banner/Image URL'yi oluştur (öncelik: bannerKey > imageKey > imageUrl)
   let finalImageUrl: string | undefined = config.imageUrl;
-  if (config.imageKey) {
+  if (config.bannerKey) {
+    finalImageUrl = getSeedMediaPath(config.bannerKey, true) || undefined;
+  } else if (config.imageKey) {
     finalImageUrl = getSeedMediaPath(config.imageKey, true) || undefined;
   } else if (!finalImageUrl) {
     // Mapping'den otomatik bul
@@ -1880,7 +2082,7 @@ async function ensureBrand(config: { name: string; categoryId?: string; descript
     const updateData: any = {};
     if (config.description !== undefined) updateData.description = config.description;
     if (config.categoryId !== undefined) updateData.categoryId = config.categoryId;
-    if (config.logoUrl !== undefined) updateData.logoUrl = config.logoUrl;
+    if (finalLogoUrl !== undefined) updateData.logoUrl = finalLogoUrl;
     if (finalImageUrl !== undefined && finalImageUrl !== null) updateData.imageUrl = finalImageUrl;
     
     if (Object.keys(updateData).length > 0) {
@@ -1897,7 +2099,7 @@ async function ensureBrand(config: { name: string; categoryId?: string; descript
       name: config.name,
       description: config.description,
       categoryId: config.categoryId,
-      logoUrl: config.logoUrl,
+      logoUrl: finalLogoUrl,
       imageUrl: finalImageUrl,
     }
   });
@@ -3344,7 +3546,12 @@ async function main() {
   await seedProductCategories()
   progress.increment('Kategori yapısı oluşturuldu')
 
-  // 3. User Themes
+  // 3. Brand System (BrandCategory + Brands with logos and banners)
+  progress.increment('Brand sistemi oluşturuluyor...')
+  await seedBrands()
+  progress.increment('Brand sistemi oluşturuldu')
+
+  // 4. User Themes
   console.log('📱 Creating user themes...')
   const themeConfigs = [
     { name: 'Light', description: 'Açık tema - günün her saati için ideal' },
