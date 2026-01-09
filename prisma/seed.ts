@@ -2985,15 +2985,9 @@ async function main() {
   progress.increment('Şifre hashleniyor...')
   passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, 10)
 
-  // 1. Taxonomy (Experience Options)
-  console.log('\n📋 Creating taxonomy (Experience Durations, Locations, Purposes)...')
+  // 1. Experience Taxonomy (Duration, Location, Purpose - for Experience posts)
   await seedTaxonomy()
-  progress.increment('Taxonomy oluşturuldu')
-
-  // 1.5. Product Catalog (Main Categories, Sub Categories, Product Groups, Products)
-  console.log('\n📦 Creating Product Catalog...')
-  await seedProductCatalog()
-  progress.increment('Product Catalog oluşturuldu')
+  progress.increment('Experience Taxonomy oluşturuldu')
 
   // 2. User Themes
   console.log('📱 Creating user themes...')
