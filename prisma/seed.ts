@@ -722,6 +722,356 @@ async function ensureProduct(config: { name: string; brand?: string; groupId?: s
 }
 
 /**
+ * Seed Product Categories - Electronics ve Beauty kategorileri
+ * Her kategori altında 5-7 subcategory ve 3-5 product group oluşturur
+ */
+async function seedProductCategories(): Promise<void> {
+  console.log('\n📂 Ürün Kategorileri Oluşturuluyor...\n')
+  
+  // 1. ELECTRONICS Ana Kategorisi
+  const electronics = await ensureMainCategory({
+    name: 'Electronics',
+    description: 'Consumer electronics, gadgets and digital devices',
+    imageKey: 'catalog.computers-tablets'
+  })
+  console.log(`✅ Ana Kategori: ${electronics.name}`)
+  
+  // Electronics > Phones
+  const phones = await ensureSubCategory({
+    name: 'Phones',
+    mainCategoryId: electronics.id,
+    description: 'Smartphones and mobile devices',
+    imageKey: 'catalog.computers-tablets'
+  })
+  
+  const phonesGroups = [
+    { name: 'iPhone Series', description: 'Apple iPhone models' },
+    { name: 'Samsung Galaxy', description: 'Samsung Galaxy smartphones' },
+    { name: 'Google Pixel', description: 'Google Pixel smartphones' },
+    { name: 'OnePlus Devices', description: 'OnePlus smartphones' },
+  ]
+  
+  for (const group of phonesGroups) {
+    await ensureProductGroup({
+      name: group.name,
+      subCategoryId: phones.id,
+      description: group.description
+    })
+  }
+  console.log(`  ✅ ${phones.name} - ${phonesGroups.length} product group`)
+  
+  // Electronics > Laptops
+  const laptops = await ensureSubCategory({
+    name: 'Laptops',
+    mainCategoryId: electronics.id,
+    description: 'Laptop computers and notebooks',
+  })
+  
+  const laptopGroups = [
+    { name: 'MacBook', description: 'Apple MacBook laptops' },
+    { name: 'Dell Laptops', description: 'Dell laptop computers' },
+    { name: 'HP Laptops', description: 'HP laptop computers' },
+    { name: 'Lenovo Laptops', description: 'Lenovo laptop computers' },
+  ]
+  
+  for (const group of laptopGroups) {
+    await ensureProductGroup({
+      name: group.name,
+      subCategoryId: laptops.id,
+      description: group.description
+    })
+  }
+  console.log(`  ✅ ${laptops.name} - ${laptopGroups.length} product group`)
+  
+  // Electronics > Tablets
+  const tablets = await ensureSubCategory({
+    name: 'Tablets',
+    mainCategoryId: electronics.id,
+    description: 'Tablet computers and iPads',
+  })
+  
+  const tabletGroups = [
+    { name: 'iPad', description: 'Apple iPad tablets' },
+    { name: 'Samsung Tab', description: 'Samsung tablet computers' },
+    { name: 'Surface', description: 'Microsoft Surface tablets' },
+  ]
+  
+  for (const group of tabletGroups) {
+    await ensureProductGroup({
+      name: group.name,
+      subCategoryId: tablets.id,
+      description: group.description
+    })
+  }
+  console.log(`  ✅ ${tablets.name} - ${tabletGroups.length} product group`)
+  
+  // Electronics > Audio
+  const audio = await ensureSubCategory({
+    name: 'Audio',
+    mainCategoryId: electronics.id,
+    description: 'Headphones, earbuds, speakers and audio devices',
+  })
+  
+  const audioGroups = [
+    { name: 'Headphones', description: 'Over-ear and on-ear headphones' },
+    { name: 'Earbuds', description: 'In-ear wireless earbuds' },
+    { name: 'Speakers', description: 'Bluetooth and smart speakers' },
+    { name: 'Soundbars', description: 'TV soundbars and home audio' },
+  ]
+  
+  for (const group of audioGroups) {
+    await ensureProductGroup({
+      name: group.name,
+      subCategoryId: audio.id,
+      description: group.description
+    })
+  }
+  console.log(`  ✅ ${audio.name} - ${audioGroups.length} product group`)
+  
+  // Electronics > Wearables
+  const wearables = await ensureSubCategory({
+    name: 'Wearables',
+    mainCategoryId: electronics.id,
+    description: 'Smartwatches and fitness trackers',
+  })
+  
+  const wearableGroups = [
+    { name: 'Apple Watch', description: 'Apple smartwatches' },
+    { name: 'Samsung Galaxy Watch', description: 'Samsung smartwatches' },
+    { name: 'Fitness Trackers', description: 'Fitness bands and trackers' },
+  ]
+  
+  for (const group of wearableGroups) {
+    await ensureProductGroup({
+      name: group.name,
+      subCategoryId: wearables.id,
+      description: group.description
+    })
+  }
+  console.log(`  ✅ ${wearables.name} - ${wearableGroups.length} product group`)
+  
+  // Electronics > Accessories
+  const accessories = await ensureSubCategory({
+    name: 'Accessories',
+    mainCategoryId: electronics.id,
+    description: 'Chargers, cases, cables and accessories',
+  })
+  
+  const accessoryGroups = [
+    { name: 'Chargers', description: 'Phone and laptop chargers' },
+    { name: 'Cases', description: 'Phone and tablet cases' },
+    { name: 'Cables', description: 'USB-C, Lightning and other cables' },
+    { name: 'Screen Protectors', description: 'Screen guards and protectors' },
+  ]
+  
+  for (const group of accessoryGroups) {
+    await ensureProductGroup({
+      name: group.name,
+      subCategoryId: accessories.id,
+      description: group.description
+    })
+  }
+  console.log(`  ✅ ${accessories.name} - ${accessoryGroups.length} product group`)
+  
+  // Electronics > Cameras
+  const cameras = await ensureSubCategory({
+    name: 'Cameras',
+    mainCategoryId: electronics.id,
+    description: 'Digital cameras and photography equipment',
+  })
+  
+  const cameraGroups = [
+    { name: 'DSLR Cameras', description: 'Digital SLR cameras' },
+    { name: 'Mirrorless Cameras', description: 'Mirrorless digital cameras' },
+    { name: 'Action Cameras', description: 'GoPro and action cameras' },
+    { name: 'Drones', description: 'Camera drones and quadcopters' },
+  ]
+  
+  for (const group of cameraGroups) {
+    await ensureProductGroup({
+      name: group.name,
+      subCategoryId: cameras.id,
+      description: group.description
+    })
+  }
+  console.log(`  ✅ ${cameras.name} - ${cameraGroups.length} product group`)
+  
+  console.log(`\n✅ ${electronics.name}: 7 subcategory, 27 product group oluşturuldu\n`)
+  
+  // 2. BEAUTY Ana Kategorisi
+  const beauty = await ensureMainCategory({
+    name: 'Beauty',
+    description: 'Cosmetics, skincare, haircare and personal care products',
+    imageKey: 'catalog.smart-home-devices'
+  })
+  console.log(`✅ Ana Kategori: ${beauty.name}`)
+  
+  // Beauty > Skincare
+  const skincare = await ensureSubCategory({
+    name: 'Skincare',
+    mainCategoryId: beauty.id,
+    description: 'Facial skincare and treatments',
+  })
+  
+  const skincareGroups = [
+    { name: 'Cleansers', description: 'Face wash and cleansing products' },
+    { name: 'Moisturizers', description: 'Face creams and moisturizers' },
+    { name: 'Serums', description: 'Facial serums and treatments' },
+    { name: 'Sunscreen', description: 'SPF and sun protection' },
+    { name: 'Masks', description: 'Face masks and treatments' },
+  ]
+  
+  for (const group of skincareGroups) {
+    await ensureProductGroup({
+      name: group.name,
+      subCategoryId: skincare.id,
+      description: group.description
+    })
+  }
+  console.log(`  ✅ ${skincare.name} - ${skincareGroups.length} product group`)
+  
+  // Beauty > Makeup
+  const makeup = await ensureSubCategory({
+    name: 'Makeup',
+    mainCategoryId: beauty.id,
+    description: 'Cosmetics and makeup products',
+  })
+  
+  const makeupGroups = [
+    { name: 'Foundation', description: 'Face foundation and base' },
+    { name: 'Lipstick', description: 'Lipsticks and lip colors' },
+    { name: 'Mascara', description: 'Eye mascara products' },
+    { name: 'Eyeshadow', description: 'Eye shadow palettes' },
+    { name: 'Blush', description: 'Cheek blush and bronzer' },
+  ]
+  
+  for (const group of makeupGroups) {
+    await ensureProductGroup({
+      name: group.name,
+      subCategoryId: makeup.id,
+      description: group.description
+    })
+  }
+  console.log(`  ✅ ${makeup.name} - ${makeupGroups.length} product group`)
+  
+  // Beauty > Fragrance
+  const fragrance = await ensureSubCategory({
+    name: 'Fragrance',
+    mainCategoryId: beauty.id,
+    description: 'Perfumes and fragrances',
+  })
+  
+  const fragranceGroups = [
+    { name: 'Perfume', description: "Women's perfumes" },
+    { name: 'Cologne', description: "Men's cologne" },
+    { name: 'Body Spray', description: 'Body mists and sprays' },
+  ]
+  
+  for (const group of fragranceGroups) {
+    await ensureProductGroup({
+      name: group.name,
+      subCategoryId: fragrance.id,
+      description: group.description
+    })
+  }
+  console.log(`  ✅ ${fragrance.name} - ${fragranceGroups.length} product group`)
+  
+  // Beauty > Haircare
+  const haircare = await ensureSubCategory({
+    name: 'Haircare',
+    mainCategoryId: beauty.id,
+    description: 'Hair products and treatments',
+  })
+  
+  const haircareGroups = [
+    { name: 'Shampoo', description: 'Hair shampoo products' },
+    { name: 'Conditioner', description: 'Hair conditioners' },
+    { name: 'Styling Products', description: 'Hair gels, mousses and sprays' },
+    { name: 'Hair Treatments', description: 'Hair masks and treatments' },
+  ]
+  
+  for (const group of haircareGroups) {
+    await ensureProductGroup({
+      name: group.name,
+      subCategoryId: haircare.id,
+      description: group.description
+    })
+  }
+  console.log(`  ✅ ${haircare.name} - ${haircareGroups.length} product group`)
+  
+  // Beauty > Personal Care
+  const personalCare = await ensureSubCategory({
+    name: 'Personal Care',
+    mainCategoryId: beauty.id,
+    description: 'Body care and hygiene products',
+  })
+  
+  const personalCareGroups = [
+    { name: 'Deodorant', description: 'Antiperspirants and deodorants' },
+    { name: 'Body Wash', description: 'Shower gels and body wash' },
+    { name: 'Hand Cream', description: 'Hand lotions and creams' },
+    { name: 'Body Lotion', description: 'Body moisturizers' },
+  ]
+  
+  for (const group of personalCareGroups) {
+    await ensureProductGroup({
+      name: group.name,
+      subCategoryId: personalCare.id,
+      description: group.description
+    })
+  }
+  console.log(`  ✅ ${personalCare.name} - ${personalCareGroups.length} product group`)
+  
+  // Beauty > Nail Care
+  const nailCare = await ensureSubCategory({
+    name: 'Nail Care',
+    mainCategoryId: beauty.id,
+    description: 'Nail polish and care products',
+  })
+  
+  const nailCareGroups = [
+    { name: 'Nail Polish', description: 'Nail lacquer and polish' },
+    { name: 'Nail Treatment', description: 'Nail strengtheners and treatments' },
+    { name: 'Nail Tools', description: 'Nail files and care tools' },
+  ]
+  
+  for (const group of nailCareGroups) {
+    await ensureProductGroup({
+      name: group.name,
+      subCategoryId: nailCare.id,
+      description: group.description
+    })
+  }
+  console.log(`  ✅ ${nailCare.name} - ${nailCareGroups.length} product group`)
+  
+  // Beauty > Men's Grooming
+  const mensGrooming = await ensureSubCategory({
+    name: "Men's Grooming",
+    mainCategoryId: beauty.id,
+    description: 'Grooming products for men',
+  })
+  
+  const mensGroomingGroups = [
+    { name: 'Shaving Products', description: 'Razors, creams and aftershave' },
+    { name: "Men's Skincare", description: 'Face care for men' },
+    { name: "Men's Haircare", description: 'Hair products for men' },
+  ]
+  
+  for (const group of mensGroomingGroups) {
+    await ensureProductGroup({
+      name: group.name,
+      subCategoryId: mensGrooming.id,
+      description: group.description
+    })
+  }
+  console.log(`  ✅ ${mensGrooming.name} - ${mensGroomingGroups.length} product group`)
+  
+  console.log(`\n✅ ${beauty.name}: 7 subcategory, 30 product group oluşturuldu\n`)
+  console.log('═'.repeat(80))
+  console.log('\n✨ Toplam: 2 ana kategori, 14 alt kategori, 57 product group\n')
+}
+
+/**
  * Genel görsel mapping sistemi
  * Tüm görsel tipleri için merkezi yönetim
  * 
@@ -2989,7 +3339,12 @@ async function main() {
   await seedTaxonomy()
   progress.increment('Experience Taxonomy oluşturuldu')
 
-  // 2. User Themes
+  // 2. Product Categories (Electronics, Beauty with subcategories and product groups)
+  progress.increment('Kategori yapısı oluşturuluyor...')
+  await seedProductCategories()
+  progress.increment('Kategori yapısı oluşturuldu')
+
+  // 3. User Themes
   console.log('📱 Creating user themes...')
   const themeConfigs = [
     { name: 'Light', description: 'Açık tema - günün her saati için ideal' },
