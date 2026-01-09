@@ -61,8 +61,8 @@ model User {
   rewardClaims            RewardClaim[]
   scenarioChoices         ScenarioChoice[]
   supportRequestReports   SupportRequestReport[]  @relation("SupportRequestReportReporter")
-  userReportsAsReporter    UserReport[]            @relation("UserReportReporter")
-  userReportsAsReported    UserReport[]            @relation("UserReportReported")
+  userReportsAsReporter   UserReport[]            @relation("UserReportReporter")
+  userReportsAsReported   UserReport[]            @relation("UserReportReported")
   sentTips                TipsTokenTransfer[]     @relation("SentTips")
   receivedTips            TipsTokenTransfer[]     @relation("ReceivedTips")
   trustRelationsAsTrusted TrustRelation[]         @relation("TrustedUserRelation")
@@ -113,28 +113,28 @@ model Profile {
 }
 
 model UserSettings {
-  id                       String          @id @default(uuid()) @db.Uuid
-  userId                   String          @unique @map("user_id") @db.Uuid
-  themeId                  String?         @map("theme_id") @db.Uuid
-  receiveNotifications     Boolean?        @map("receive_notifications")
-  visibility               UserVisibility?
-  
+  id                   String          @id @default(uuid()) @db.Uuid
+  userId               String          @unique @map("user_id") @db.Uuid
+  themeId              String?         @map("theme_id") @db.Uuid
+  receiveNotifications Boolean?        @map("receive_notifications")
+  visibility           UserVisibility?
+
   // Notification Channel Preferences
-  notificationEmailEnabled Boolean?        @default(true) @map("notification_email_enabled")
-  notificationPushEnabled  Boolean?        @default(true) @map("notification_push_enabled")
-  notificationInAppEnabled Boolean?        @default(true) @map("notification_in_app_enabled")
-  
+  notificationEmailEnabled Boolean? @default(true) @map("notification_email_enabled")
+  notificationPushEnabled  Boolean? @default(true) @map("notification_push_enabled")
+  notificationInAppEnabled Boolean? @default(true) @map("notification_in_app_enabled")
+
   // Notification Type Preferences
-  trustNotifications       Boolean         @default(true) @map("trust_notifications")
-  supportNotifications     Boolean         @default(true) @map("support_notifications")
-  messageNotifications     Boolean         @default(true) @map("message_notifications")
-  collectionNotifications  Boolean         @default(true) @map("collection_notifications")
-  postNotifications        Boolean         @default(true) @map("post_notifications")
-  
-  createdAt                DateTime        @default(now()) @map("created_at")
-  updatedAt                DateTime        @updatedAt @map("updated_at")
-  theme                    UserTheme?      @relation(fields: [themeId], references: [id])
-  user                     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trustNotifications      Boolean @default(true) @map("trust_notifications")
+  supportNotifications    Boolean @default(true) @map("support_notifications")
+  messageNotifications    Boolean @default(true) @map("message_notifications")
+  collectionNotifications Boolean @default(true) @map("collection_notifications")
+  postNotifications       Boolean @default(true) @map("post_notifications")
+
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+  theme     UserTheme? @relation(fields: [themeId], references: [id])
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_settings")
 }
@@ -1372,15 +1372,15 @@ model SupportRequestReport {
 }
 
 model UserReport {
-  id          String   @id @default(uuid()) @db.Uuid
-  reportedUserId String @map("reported_user_id") @db.Uuid
-  reporterId  String   @map("reporter_id") @db.Uuid
-  category    String
-  description String?
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-  reportedUser User    @relation("UserReportReported", fields: [reportedUserId], references: [id], onDelete: Cascade)
-  reporter    User     @relation("UserReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  id             String   @id @default(uuid()) @db.Uuid
+  reportedUserId String   @map("reported_user_id") @db.Uuid
+  reporterId     String   @map("reporter_id") @db.Uuid
+  category       String
+  description    String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  reportedUser   User     @relation("UserReportReported", fields: [reportedUserId], references: [id], onDelete: Cascade)
+  reporter       User     @relation("UserReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
 
   @@unique([reporterId, reportedUserId])
   @@index([reportedUserId])
@@ -1976,9 +1976,9 @@ model Notification {
   readAt    DateTime?        @map("read_at")
   createdAt DateTime         @default(now()) @map("created_at")
   updatedAt DateTime         @updatedAt @map("updated_at")
-  
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   @@index([userId, read])
   @@index([userId, createdAt])
   @@index([type])
@@ -1994,9 +1994,9 @@ model PushToken {
   lastUsedAt DateTime @default(now()) @map("last_used_at")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
-  
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   @@index([userId])
   @@index([token, isActive])
   @@map("push_tokens")
@@ -2010,41 +2010,41 @@ enum NotificationType {
   POST_FAVORITED
   COMMENT_LIKED
   COMMENT_REPLIED
-  
+
   // Trust & Follow Notifications
   NEW_TRUSTER
   NEW_TRUSTED_BY
-  
+
   // Messaging Notifications
   NEW_MESSAGE
   DM_REQUEST_RECEIVED
   DM_REQUEST_ACCEPTED
   SUPPORT_REQUEST_ACCEPTED
-  
+
   // Collection Notifications
   COLLECTION_POST_ADDED
   COLLECTION_SHARED
-  
+
   // Gamification Notifications
   NEW_BADGE
   ACHIEVEMENT_UNLOCKED
   LEVEL_UP
   REWARD_EARNED
-  
+
   // Expert Notifications
   EXPERT_REQUEST_AVAILABLE
   EXPERT_REQUEST_ANSWERED
-  
+
   // Event Notifications
   EVENT_STARTED
   EVENT_ENDING_SOON
   EVENT_REWARD_AVAILABLE
-  
+
   // System Notifications
   SYSTEM_ANNOUNCEMENT
   ACCOUNT_SECURITY
   TIPS_RECEIVED
   TIPS_SENT
-  
+
   @@map("notification_type")
 }
