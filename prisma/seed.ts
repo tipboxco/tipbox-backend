@@ -2544,6 +2544,223 @@ async function seedEvents() {
   console.log('═'.repeat(80) + '\n')
 }
 
+// ==================== PHASE 14: MESSAGING (DM) ====================
+
+/**
+ * Messaging system oluştur (DMThread, DMMessage, DMRequest)
+ */
+async function seedMessaging() {
+  console.log('\n💬 Messaging system oluşturuluyor...\n')
+  
+  const users = await prisma.user.findMany({ take: 40 })
+  
+  if (users.length < 2) {
+    console.log('⚠️ Yeterli kullanıcı yok, Phase 14 atlanıyor...')
+    return
+  }
+  
+  const threads: string[] = []
+  let totalMessages = 0
+  let totalRequests = 0
+  
+  // 1. DM THREADS (30-50 thread)
+  console.log('💬 DM Threads oluşturuluyor...')
+  const threadCount = Math.floor(Math.random() * 21) + 30 // 30-50
+  
+  for (let i = 0; i < threadCount; i++) {
+    // Random iki kullanıcı seç (farklı olmalı)
+    const userOne = users[Math.floor(Math.random() * users.length)]
+    let userTwo = users[Math.floor(Math.random() * users.length)]
+    
+    // userOne ile userTwo aynı olmasın
+    while (userTwo.id === userOne.id) {
+      userTwo = users[Math.floor(Math.random() * users.length)]
+    }
+    
+    const thread = await prisma.dMThread.create({
+      data: {
+        userOneId: userOne.id,
+        userTwoId: userTwo.id,
+        isActive: Math.random() > 0.2, // %80 active
+        isSupportThread: false,
+        unreadCountUserOne: Math.floor(Math.random() * 3), // 0-2 unread
+        unreadCountUserTwo: Math.floor(Math.random() * 3), // 0-2 unread
+        startedAt: new Date(Date.now() - Math.random() * 60 * 24 * 60 * 60 * 1000), // Son 60 gün
+      }
+    })
+    
+    threads.push(thread.id)
+  }
+  console.log(`  ✅ ${threadCount} DM thread oluşturuldu`)
+  
+  // 2. DM MESSAGES (Her thread için 3-15 mesaj)
+  console.log('📨 DM Messages oluşturuluyor...')
+  
+  const conversationStarters = [
+    'Merhaba! Bu ürün hakkında sormak istediğim bir şey var.',
+    'Selam, profilini gördüm çok güzel içerikler paylaşmışsın.',
+    'Hey! Şu ürünü kullanıyor musun? Nasıl buldun?',
+    'Merhaba, yardımına ihtiyacım var.',
+    'Selam! Son paylaşımını gördüm, çok faydalıydı teşekkürler.',
+  ]
+  
+  const responses = [
+    'Teşekkür ederim! Ne sormak istiyordun?',
+    'Merhaba! Tabii ki, nasıl yardımcı olabilirim?',
+    'Evet kullanıyorum, çok memnunum. Detaylı anlatayım mı?',
+    'Hey! Rica ederim, ne zaman istersen yazabilirsin.',
+    'Selam! Çok teşekkür ederim, yardımcı olabildiysem ne mutlu.',
+  ]
+  
+  const followUps = [
+    'Anladım, çok faydalı oldu. Teşekkürler!',
+    'Harika bilgiler, çok yardımcı oldun.',
+    'Tamam, düşüneceğim. Tekrar yazabilirim değil mi?',
+    'Süper! Başka soracak bir şey olursa yazarım.',
+    'Çok sağol, gerçekten işime yaradı bu bilgiler.',
+  ]
+  
+  for (const threadId of threads) {
+    const thread = await prisma.dMThread.findUnique({
+      where: { id: threadId },
+      include: { userOne: true, userTwo: true }
+    })
+    
+    if (!thread) continue
+    
+    const messageCount = Math.floor(Math.random() * 13) + 3 // 3-15 mesaj
+    let currentSender = Math.random() > 0.5 ? thread.userOneId : thread.userTwoId
+    
+    for (let i = 0; i < messageCount; i++) {
+      let messageText = ''
+      
+      // İlk mesaj conversation starter
+      if (i === 0) {
+        messageText = conversationStarters[Math.floor(Math.random() * conversationStarters.length)]
+      } else if (i === 1) {
+        messageText = responses[Math.floor(Math.random() * responses.length)]
+      } else if (i === messageCount - 1) {
+        messageText = followUps[Math.floor(Math.random() * followUps.length)]
+      } else {
+        // Diğer mesajlar
+        messageText = `Evet ben de öyle düşünüyorum. Bu konuda deneyimim oldukça fazla. Detayları anlatayım mı?`
+      }
+      
+      await prisma.dMMessage.create({
+        data: {
+          threadId,
+          senderId: currentSender,
+          message: messageText,
+          isRead: Math.random() > 0.3, // %70 okunmuş
+          context: 'DM',
+          sentAt: new Date(thread.startedAt.getTime() + i * 60 * 60 * 1000), // Her saat 1 mesaj
+        }
+      })
+      
+      totalMessages++
+      
+      // Sender değiştir (konuşma mantığı)
+      currentSender = currentSender === thread.userOneId ? thread.userTwoId : thread.userOneId
+    }
+  }
+  console.log(`  ✅ ${totalMessages} mesaj oluşturuldu`)
+  
+  // 3. SUPPORT THREADS & REQUESTS (10-20 support request)
+  console.log('🎫 Support requests oluşturuluyor...')
+  const requestCount = Math.floor(Math.random() * 11) + 10 // 10-20
+  
+  const supportStatuses: Array<'PENDING' | 'ACCEPTED' | 'DECLINED' | 'CANCELED' | 'AWAITING_COMPLETION' | 'COMPLETED' | 'REPORTED'> = [
+    'PENDING', 'ACCEPTED', 'AWAITING_COMPLETION', 'COMPLETED', 'DECLINED', 'CANCELED'
+  ]
+  
+  const supportTypes: Array<'GENERAL' | 'TECHNICAL' | 'PRODUCT'> = ['GENERAL', 'TECHNICAL', 'PRODUCT']
+  
+  for (let i = 0; i < requestCount; i++) {
+    const fromUser = users[Math.floor(Math.random() * users.length)]
+    let toUser = users[Math.floor(Math.random() * users.length)]
+    
+    while (toUser.id === fromUser.id) {
+      toUser = users[Math.floor(Math.random() * users.length)]
+    }
+    
+    const status = supportStatuses[Math.floor(Math.random() * supportStatuses.length)]
+    const supportType = supportTypes[Math.floor(Math.random() * supportTypes.length)]
+    
+    // Eğer ACCEPTED veya sonrası ise thread oluştur
+    let threadId: string | null = null
+    if (status !== 'PENDING' && status !== 'DECLINED' && status !== 'CANCELED') {
+      const supportThread = await prisma.dMThread.create({
+        data: {
+          userOneId: fromUser.id,
+          userTwoId: toUser.id,
+          isActive: status !== 'COMPLETED',
+          isSupportThread: true,
+          unreadCountUserOne: 0,
+          unreadCountUserTwo: 0,
+          startedAt: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000),
+        }
+      })
+      
+      // Support thread için birkaç mesaj ekle
+      const supportMessages = [
+        'Merhaba, yardıma ihtiyacım var.',
+        'Tabii, size nasıl yardımcı olabilirim?',
+        'Bu konuda destek alabilir miyim?',
+        'Elbette, hemen yardımcı oluyorum.',
+      ]
+      
+      for (let j = 0; j < Math.min(4, supportMessages.length); j++) {
+        await prisma.dMMessage.create({
+          data: {
+            threadId: supportThread.id,
+            senderId: j % 2 === 0 ? fromUser.id : toUser.id,
+            message: supportMessages[j],
+            isRead: true,
+            context: 'SUPPORT',
+            sentAt: new Date(Date.now() - (supportMessages.length - j) * 60 * 60 * 1000),
+          }
+        })
+        totalMessages++
+      }
+      
+      threadId = supportThread.id
+    }
+    
+    await prisma.dMRequest.create({
+      data: {
+        fromUserId: fromUser.id,
+        toUserId: toUser.id,
+        status,
+        type: supportType,
+        description: `${supportType} desteği için talep`,
+        amount: Math.random() * 100,
+        threadId,
+        respondedAt: status !== 'PENDING' ? new Date(Date.now() - Math.random() * 20 * 24 * 60 * 60 * 1000) : null,
+        fromUserRating: status === 'COMPLETED' ? Math.floor(Math.random() * 3) + 3 : null, // 3-5 rating
+        toUserRating: status === 'COMPLETED' ? Math.floor(Math.random() * 3) + 3 : null, // 3-5 rating
+        closedByFromUserAt: status === 'COMPLETED' ? new Date() : null,
+        closedByToUserAt: status === 'COMPLETED' ? new Date() : null,
+      }
+    })
+    
+    totalRequests++
+  }
+  console.log(`  ✅ ${requestCount} support request oluşturuldu`)
+  
+  // Özet
+  console.log('\n' + '═'.repeat(80))
+  console.log('✨ PHASE 14 TAMAMLANDI - MESSAGING\n')
+  console.log(`   💬 DM Threads: ${threadCount}`)
+  console.log(`      🟢 Active: ${Math.floor(threadCount * 0.8)}`)
+  console.log(`      🔴 Inactive: ${Math.floor(threadCount * 0.2)}`)
+  console.log(`   📨 Total Messages: ${totalMessages}`)
+  console.log(`      📩 DM Messages: ${totalMessages - requestCount * 4}`)
+  console.log(`      🎫 Support Messages: ${requestCount * 4}`)
+  console.log(`   🎫 Support Requests: ${totalRequests}`)
+  console.log(`\n   📊 Ortalama thread başına: ${(totalMessages / (threadCount + requestCount)).toFixed(1)} mesaj`)
+  console.log('═'.repeat(80) + '\n')
+}
+
 /**
  * Genel görsel mapping sistemi
  * Tüm görsel tipleri için merkezi yönetim
@@ -4868,6 +5085,11 @@ async function main() {
   progress.increment('Events oluşturuluyor...')
   await seedEvents()
   progress.increment('Events oluşturuldu')
+
+  // 14. Messaging (DMThread, DMMessage, DMRequest)
+  progress.increment('Messaging oluşturuluyor...')
+  await seedMessaging()
+  progress.increment('Messaging oluşturuldu')
 
   // 5. User Themes
   console.log('📱 Creating user themes...')
