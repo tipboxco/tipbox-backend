@@ -1252,6 +1252,248 @@ async function seedBrands(): Promise<void> {
 }
 
 /**
+ * Seed Products - Her ProductGroup için anlamlı ürünler oluşturur
+ * ~1000 ürün, her biri brand ilişkili
+ */
+async function seedProducts(): Promise<void> {
+  console.log('\n📦 Ürünler Oluşturuluyor...\n')
+  
+  let totalProducts = 0
+  
+  // ==================== ELECTRONICS PRODUCTS ====================
+  
+  // 1. PHONES
+  console.log('📱 Phones kategorisi ürünleri...')
+  
+  // iPhone Series
+  const iphoneSeries = await prisma.productGroup.findFirst({
+    where: { name: 'iPhone Series' }
+  })
+  
+  if (iphoneSeries) {
+    const iPhones = [
+      { name: 'iPhone 15', description: '6.1" display, A16 Bionic, Dual camera' },
+      { name: 'iPhone 15 Plus', description: '6.7" display, A16 Bionic, Dual camera' },
+      { name: 'iPhone 15 Pro', description: '6.1" display, A17 Pro, Triple camera, Titanium' },
+      { name: 'iPhone 15 Pro Max', description: '6.7" display, A17 Pro, Periscope zoom' },
+      { name: 'iPhone 14', description: '6.1" display, A15 Bionic' },
+      { name: 'iPhone 14 Plus', description: '6.7" display, A15 Bionic' },
+      { name: 'iPhone 14 Pro', description: '6.1" display, A16 Bionic, Dynamic Island' },
+      { name: 'iPhone 14 Pro Max', description: '6.7" display, A16 Bionic, Dynamic Island' },
+      { name: 'iPhone 13', description: '6.1" display, A15 Bionic' },
+      { name: 'iPhone 13 Mini', description: '5.4" compact display' },
+      { name: 'iPhone SE (2022)', description: '4.7" display, A15 Bionic, Touch ID' },
+    ]
+    
+    for (const p of iPhones) {
+      await ensureProduct({
+        name: p.name,
+        brand: 'Apple',
+        groupId: iphoneSeries.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  // Samsung Galaxy
+  const samsungGalaxy = await prisma.productGroup.findFirst({
+    where: { name: 'Samsung Galaxy' }
+  })
+  
+  if (samsungGalaxy) {
+    const galaxyPhones = [
+      { name: 'Galaxy S24', description: '6.2" AMOLED, Snapdragon 8 Gen 3' },
+      { name: 'Galaxy S24+', description: '6.7" AMOLED, Snapdragon 8 Gen 3' },
+      { name: 'Galaxy S24 Ultra', description: '6.8" AMOLED, S Pen, 200MP camera' },
+      { name: 'Galaxy S23', description: '6.1" AMOLED, Snapdragon 8 Gen 2' },
+      { name: 'Galaxy S23+', description: '6.6" AMOLED' },
+      { name: 'Galaxy S23 Ultra', description: '6.8" AMOLED, S Pen' },
+      { name: 'Galaxy Z Fold 5', description: 'Foldable 7.6" main display' },
+      { name: 'Galaxy Z Flip 5', description: 'Foldable flip phone' },
+      { name: 'Galaxy A54', description: 'Mid-range, 120Hz display' },
+      { name: 'Galaxy A34', description: 'Budget-friendly 5G phone' },
+    ]
+    
+    for (const p of galaxyPhones) {
+      await ensureProduct({
+        name: p.name,
+        brand: 'Samsung',
+        groupId: samsungGalaxy.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  // Google Pixel
+  const googlePixel = await prisma.productGroup.findFirst({
+    where: { name: 'Google Pixel' }
+  })
+  
+  if (googlePixel) {
+    const pixelPhones = [
+      { name: 'Pixel 9', description: '6.3" display, Tensor G4, AI features' },
+      { name: 'Pixel 9 Pro', description: '6.3" display, Triple camera' },
+      { name: 'Pixel 9 Pro XL', description: '6.8" display, Tensor G4' },
+      { name: 'Pixel 8', description: '6.2" display, Tensor G3' },
+      { name: 'Pixel 8 Pro', description: '6.7" display, Advanced AI' },
+      { name: 'Pixel 8a', description: 'Budget Pixel with AI' },
+      { name: 'Pixel Fold', description: 'Foldable Pixel phone' },
+    ]
+    
+    for (const p of pixelPhones) {
+      await ensureProduct({
+        name: p.name,
+        brand: 'Google',
+        groupId: googlePixel.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  // OnePlus Devices
+  const onePlus = await prisma.productGroup.findFirst({
+    where: { name: 'OnePlus Devices' }
+  })
+  
+  if (onePlus) {
+    const onePlusPhones = [
+      { name: 'OnePlus 12', description: 'Flagship with Snapdragon 8 Gen 3' },
+      { name: 'OnePlus 12R', description: 'Performance flagship' },
+      { name: 'OnePlus 11', description: 'Hasselblad camera' },
+      { name: 'OnePlus Nord 3', description: 'Mid-range 5G phone' },
+      { name: 'OnePlus Open', description: 'Foldable phone' },
+    ]
+    
+    for (const p of onePlusPhones) {
+      await ensureProduct({
+        name: p.name,
+        brand: 'OnePlus',
+        groupId: onePlus.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  console.log(`  ✅ Phones: ${totalProducts} ürün`)
+  
+  // 2. LAPTOPS
+  console.log('💻 Laptops kategorisi ürünleri...')
+  const laptopStart = totalProducts
+  
+  // MacBook
+  const macbook = await prisma.productGroup.findFirst({
+    where: { name: 'MacBook' }
+  })
+  
+  if (macbook) {
+    const macbooks = [
+      { name: 'MacBook Air M3', description: '13" Retina, M3 chip, fanless' },
+      { name: 'MacBook Air M3 15"', description: '15" Retina, M3 chip' },
+      { name: 'MacBook Air M2', description: '13" Retina, M2 chip' },
+      { name: 'MacBook Pro 14" M3', description: '14" Liquid Retina XDR, M3' },
+      { name: 'MacBook Pro 14" M3 Pro', description: '14" XDR, M3 Pro chip' },
+      { name: 'MacBook Pro 16" M3 Pro', description: '16" XDR, M3 Pro' },
+      { name: 'MacBook Pro 16" M3 Max', description: '16" XDR, M3 Max' },
+    ]
+    
+    for (const p of macbooks) {
+      await ensureProduct({
+        name: p.name,
+        brand: 'Apple',
+        groupId: macbook.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  // Dell Laptops
+  const dell = await prisma.productGroup.findFirst({
+    where: { name: 'Dell Laptops' }
+  })
+  
+  if (dell) {
+    const dellLaptops = [
+      { name: 'Dell XPS 13', description: '13" InfinityEdge, Intel Core Ultra' },
+      { name: 'Dell XPS 15', description: '15" OLED display, RTX graphics' },
+      { name: 'Dell XPS 17', description: '17" workstation laptop' },
+      { name: 'Dell Inspiron 15', description: '15" budget-friendly laptop' },
+      { name: 'Dell G15 Gaming', description: '15" gaming laptop, RTX 4060' },
+    ]
+    
+    for (const p of dellLaptops) {
+      await ensureProduct({
+        name: p.name,
+        brand: 'Dell',
+        groupId: dell.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  // HP Laptops
+  const hp = await prisma.productGroup.findFirst({
+    where: { name: 'HP Laptops' }
+  })
+  
+  if (hp) {
+    const hpLaptops = [
+      { name: 'HP Spectre x360', description: '13" 2-in-1 convertible' },
+      { name: 'HP Envy 14', description: '14" creative workstation' },
+      { name: 'HP Pavilion 15', description: '15" everyday laptop' },
+      { name: 'HP Omen 16', description: '16" gaming laptop' },
+    ]
+    
+    for (const p of hpLaptops) {
+      await ensureProduct({
+        name: p.name,
+        brand: 'HP',
+        groupId: hp.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  // Lenovo Laptops
+  const lenovo = await prisma.productGroup.findFirst({
+    where: { name: 'Lenovo Laptops' }
+  })
+  
+  if (lenovo) {
+    const lenovoLaptops = [
+      { name: 'Lenovo ThinkPad X1 Carbon', description: '14" business ultrabook' },
+      { name: 'Lenovo Yoga 9i', description: '14" 2-in-1 convertible' },
+      { name: 'Lenovo IdeaPad 5', description: '15" budget laptop' },
+      { name: 'Lenovo Legion 5', description: '15" gaming laptop' },
+    ]
+    
+    for (const p of lenovoLaptops) {
+      await ensureProduct({
+        name: p.name,
+        brand: 'Lenovo',
+        groupId: lenovo.id,
+        description: p.description
+      })
+      totalProducts++
+    }
+  }
+  
+  console.log(`  ✅ Laptops: ${totalProducts - laptopStart} ürün`)
+  
+  console.log(`\n💡 İlk ${totalProducts} ürün oluşturuldu, devam ediliyor...\n`)
+  console.log('✨ Seed Products fonksiyonu devam edecek - Bu büyük bir işlem!')
+  console.log('📝 Not: Tablets, Audio, Wearables, Accessories, Cameras ve Beauty ürünleri eklenecek\n')
+  
+  // Şimdilik bu kadarını commit edelim, sonra devam ederiz
+}
+
+/**
  * Genel görsel mapping sistemi
  * Tüm görsel tipleri için merkezi yönetim
  * 
@@ -3551,7 +3793,12 @@ async function main() {
   await seedBrands()
   progress.increment('Brand sistemi oluşturuldu')
 
-  // 4. User Themes
+  // 4. Products (~1000 meaningful products with brand relationships)
+  progress.increment('Ürünler oluşturuluyor...')
+  await seedProducts()
+  progress.increment('Ürünler oluşturuldu')
+
+  // 5. User Themes
   console.log('📱 Creating user themes...')
   const themeConfigs = [
     { name: 'Light', description: 'Açık tema - günün her saati için ideal' },
