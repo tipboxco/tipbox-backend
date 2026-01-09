@@ -6063,38 +6063,18 @@ async function main() {
   )
   console.log(`✅ ${boostOptions.length} boost option oluşturuldu/güncellendi`)
 
-  // 6. Sub Categories for Technology
-  console.log('📁 Creating sub categories for Technology...')
-  const techCategory = await prisma.mainCategory.findFirst({
-    where: { name: { in: ['Technology', 'Teknoloji'] } },
-  });
-  if (!techCategory) {
-    throw new Error('Teknoloji/Technology main category bulunamadı, seed durduruldu');
-  }
-  const TECH_MAIN_CATEGORY_ID = techCategory.id;
+  // NOT: Sub Categories artık seedProductCategories() içinde oluşturuluyor
+  // Electronics ve Beauty için tüm subcategory/product group yapısı orada
   
-  // SubCategory konfigürasyonları
-  const subCategoryConfigs = [
-    { name: 'Akıllı Telefonlar', description: 'iPhone, Android, Samsung, Xiaomi vs.', imageKey: 'catalog.phones' },
-    { name: 'Laptoplar', description: 'Dizüstü bilgisayarlar, ultrabook, gaming laptop', imageKey: 'catalog.computers-tablets' },
-    { name: 'Kulaklıklar', description: 'Kablosuz, kablolu, gaming, studio kulaklık', imageKey: 'catalog.headphones' },
-    { name: 'Akıllı Saatler', description: 'Apple Watch, Samsung Galaxy Watch, fitness tracker', imageKey: 'catalog.tv' },
-  ];
-
-  // Mevcut sub kategorileri bul veya oluştur (idempotent - ID'ler korunur)
-  const techSubCategories = await Promise.all(
-    subCategoryConfigs.map(async (config) => {
-      return ensureSubCategory({
-        name: config.name,
-        mainCategoryId: techCategory.id,
-        description: config.description,
-        imageKey: config.imageKey as any,
-      });
-    })
-  );
-
-  console.log(`✅ ${techSubCategories.length} teknoloji alt kategorisi oluşturuldu/güncellendi`)
-
+  // Electronics kategorisini ve subcategory'lerini test user için kullanmak üzere al
+  const techCategory = mainCategories.find(c => c.name === 'Electronics') || mainCategories[0]
+  const TECH_MAIN_CATEGORY_ID = techCategory.id
+  const techSubCategories = await prisma.subCategory.findMany({
+    where: { mainCategoryId: techCategory.id },
+    take: 10
+  })
+  console.log(`ℹ️  Test user için Electronics kategorisi kullanılacak (${techSubCategories.length} subcategory)`)
+  
   // 7. Test User için veriler
   progress.increment('Test kullanıcı oluşturuluyor...')
   console.log('\n👤 Creating test user data for Ömer Faruk...')
