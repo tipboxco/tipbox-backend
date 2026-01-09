@@ -2338,6 +2338,212 @@ async function seedTrustRelations() {
   console.log('═'.repeat(80) + '\n')
 }
 
+// ==================== PHASE 12: EVENTS ====================
+
+/**
+ * WishboxEvent oluştur (5-10 active + 3-5 upcoming)
+ * Event participation, scenarios, rewards ekle
+ */
+async function seedEvents() {
+  console.log('\n🎉 Events oluşturuluyor...\n')
+  
+  const users = await prisma.user.findMany({ take: 40 })
+  const brands = await prisma.brand.findMany()
+  
+  if (users.length === 0) {
+    console.log('⚠️ Kullanıcı bulunamadı, Phase 12 atlanıyor...')
+    return
+  }
+  
+  const eventTypes: Array<'SURVEY' | 'POLL' | 'CONTEST' | 'CHALLENGE' | 'PROMOTION'> = [
+    'SURVEY', 'POLL', 'CONTEST', 'CHALLENGE', 'PROMOTION'
+  ]
+  
+  const activeEvents: string[] = []
+  const upcomingEvents: string[] = []
+  
+  // 1. ACTIVE EVENTS (5-10 etkinlik - şu anda devam ediyor)
+  console.log('📅 Active events oluşturuluyor...')
+  const activeCount = Math.floor(Math.random() * 6) + 5 // 5-10
+  
+  for (let i = 1; i <= activeCount; i++) {
+    const eventId = generateUlid()
+    const eventType = eventTypes[Math.floor(Math.random() * eventTypes.length)]
+    const randomBrand = brands.length > 0 ? brands[Math.floor(Math.random() * brands.length)] : null
+    
+    const startDate = new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000) // 0-30 gün önce başladı
+    const endDate = new Date(Date.now() + Math.random() * 60 * 24 * 60 * 60 * 1000) // 0-60 gün sonra bitecek
+    
+    await prisma.wishboxEvent.create({
+      data: {
+        id: eventId,
+        title: `${eventType} Event ${i} - ${randomBrand?.name || 'Community'}`,
+        description: `Bu bir ${eventType} etkinliğidir. Katılımcılar deneyimlerini paylaşabilir, ödüller kazanabilir ve toplulukla etkileşime geçebilirler.`,
+        startDate,
+        endDate,
+        status: 'PUBLISHED',
+        eventType,
+        brandId: randomBrand?.id ?? null,
+        imageUrl: null,
+      }
+    })
+    
+    activeEvents.push(eventId)
+  }
+  console.log(`  ✅ ${activeCount} active event oluşturuldu`)
+  
+  // 2. UPCOMING EVENTS (3-5 etkinlik - henüz başlamadı)
+  console.log('📅 Upcoming events oluşturuluyor...')
+  const upcomingCount = Math.floor(Math.random() * 3) + 3 // 3-5
+  
+  for (let i = 1; i <= upcomingCount; i++) {
+    const eventId = generateUlid()
+    const eventType = eventTypes[Math.floor(Math.random() * eventTypes.length)]
+    const randomBrand = brands.length > 0 ? brands[Math.floor(Math.random() * brands.length)] : null
+    
+    const startDate = new Date(Date.now() + Math.random() * 30 * 24 * 60 * 60 * 1000) // 0-30 gün sonra başlayacak
+    const endDate = new Date(startDate.getTime() + (30 + Math.random() * 30) * 24 * 60 * 60 * 1000) // 30-60 gün sürecek
+    
+    await prisma.wishboxEvent.create({
+      data: {
+        id: eventId,
+        title: `Upcoming ${eventType} ${i} - ${randomBrand?.name || 'Community'}`,
+        description: `Yakında başlayacak ${eventType} etkinliği. Takipte kalın!`,
+        startDate,
+        endDate,
+        status: 'PUBLISHED',
+        eventType,
+        brandId: randomBrand?.id ?? null,
+        imageUrl: null,
+      }
+    })
+    
+    upcomingEvents.push(eventId)
+  }
+  console.log(`  ✅ ${upcomingCount} upcoming event oluşturuldu`)
+  
+  // 3. EVENT PARTICIPATION (WishboxStats - sadece active events için)
+  console.log('👥 Event participation ekleniyor...')
+  let totalParticipants = 0
+  
+  for (const eventId of activeEvents) {
+    // Her event için 20-35 kullanıcı katılımcı
+    const participantCount = Math.floor(Math.random() * 16) + 20 // 20-35
+    const participants = users.sort(() => Math.random() - 0.5).slice(0, participantCount)
+    
+    for (const user of participants) {
+      await prisma.wishboxStats.create({
+        data: {
+          userId: user.id,
+          eventId,
+          totalParticipated: Math.floor(Math.random() * 5) + 1, // 1-5 kez katıldı
+          totalComments: Math.floor(Math.random() * 10) + 1, // 1-10 yorum
+          helpfulVotesReceived: Math.floor(Math.random() * 20) + 5, // 5-25 helpful vote
+        }
+      })
+      totalParticipants++
+    }
+  }
+  console.log(`  ✅ ${totalParticipants} event participation kaydı oluşturuldu`)
+  
+  // 4. EVENT POSTS (Her active event için 20-30 post)
+  console.log('📝 Event postları oluşturuluyor...')
+  let totalEventPosts = 0
+  const products = await prisma.product.findMany({ take: 200 })
+  
+  for (const eventId of activeEvents) {
+    const postCount = Math.floor(Math.random() * 11) + 20 // 20-30 post
+    
+    for (let i = 0; i < postCount; i++) {
+      const randomUser = users[Math.floor(Math.random() * users.length)]
+      const randomProduct = products[Math.floor(Math.random() * products.length)]
+      const postTypes: Array<'FREE' | 'EXPERIENCE' | 'TIPS'> = ['FREE', 'EXPERIENCE', 'TIPS']
+      const postType = postTypes[Math.floor(Math.random() * postTypes.length)]
+      
+      await prisma.contentPost.create({
+        data: {
+          id: generateUlid(),
+          userId: randomUser.id,
+          type: postType,
+          title: `Event Post ${i + 1} - ${randomProduct.name}`,
+          body: `Bu event için paylaşımım: ${randomProduct.name} hakkında deneyimlerim ve düşüncelerim.`,
+          productId: randomProduct.id,
+          productGroupId: randomProduct.groupId ?? null,
+          mainCategoryId: null,
+          subCategoryId: null,
+          inventoryRequired: false,
+          isBoosted: false,
+          eventId, // Event ile ilişkilendir
+          createdAt: new Date(Date.now() - Math.random() * 20 * 24 * 60 * 60 * 1000),
+        }
+      })
+      totalEventPosts++
+    }
+  }
+  console.log(`  ✅ ${totalEventPosts} event post oluşturuldu`)
+  
+  // 5. EVENT SCENARIOS (Her active event için 2-3 senaryo)
+  console.log('🎬 Event scenarios ekleniyor...')
+  let totalScenarios = 0
+  
+  for (const eventId of activeEvents) {
+    const scenarioCount = Math.floor(Math.random() * 2) + 2 // 2-3 senaryo
+    
+    for (let i = 1; i <= scenarioCount; i++) {
+      await prisma.wishboxScenario.create({
+        data: {
+          eventId,
+          title: `Senaryo ${i}`,
+          description: `Bu senaryoda kullanıcılar belirli görevleri tamamlayarak puan kazanabilirler.`,
+          orderIndex: i,
+        }
+      })
+      totalScenarios++
+    }
+  }
+  console.log(`  ✅ ${totalScenarios} scenario oluşturuldu`)
+  
+  // 6. EVENT REWARDS (Bazı kullanıcılara ödül)
+  console.log('🏆 Event rewards ekleniyor...')
+  let totalRewards = 0
+  
+  for (const eventId of activeEvents) {
+    // Her event için 5-10 kullanıcıya ödül
+    const rewardCount = Math.floor(Math.random() * 6) + 5 // 5-10
+    const winners = users.sort(() => Math.random() - 0.5).slice(0, rewardCount)
+    
+    for (const winner of winners) {
+      const rewardTypes: Array<'TIPS' | 'BADGE' | 'TITLE'> = ['TIPS', 'BADGE', 'TITLE']
+      const rewardType = rewardTypes[Math.floor(Math.random() * rewardTypes.length)]
+      
+      await prisma.wishboxReward.create({
+        data: {
+          userId: winner.id,
+          eventId,
+          rewardType,
+          rewardId: Math.floor(Math.random() * 1000) + 1,
+          amount: Math.floor(Math.random() * 500) + 100, // 100-600
+        }
+      })
+      totalRewards++
+    }
+  }
+  console.log(`  ✅ ${totalRewards} reward oluşturuldu`)
+  
+  // Özet
+  console.log('\n' + '═'.repeat(80))
+  console.log('✨ PHASE 12 TAMAMLANDI - EVENTS\n')
+  console.log(`   🎉 Toplam Events: ${activeCount + upcomingCount}`)
+  console.log(`      📅 Active: ${activeCount}`)
+  console.log(`      🔜 Upcoming: ${upcomingCount}`)
+  console.log(`   👥 Total Participants: ${totalParticipants}`)
+  console.log(`   📝 Event Posts: ${totalEventPosts}`)
+  console.log(`   🎬 Scenarios: ${totalScenarios}`)
+  console.log(`   🏆 Rewards: ${totalRewards}`)
+  console.log(`\n   📊 Ortalama event başına: ${(totalParticipants / activeCount).toFixed(1)} katılımcı`)
+  console.log('═'.repeat(80) + '\n')
+}
+
 /**
  * Genel görsel mapping sistemi
  * Tüm görsel tipleri için merkezi yönetim
@@ -4657,6 +4863,11 @@ async function main() {
   progress.increment('Trust relations oluşturuluyor...')
   await seedTrustRelations()
   progress.increment('Trust relations oluşturuldu')
+
+  // 12. Events (WishboxEvent + Participation + Rewards)
+  progress.increment('Events oluşturuluyor...')
+  await seedEvents()
+  progress.increment('Events oluşturuldu')
 
   // 5. User Themes
   console.log('📱 Creating user themes...')
