@@ -1271,119 +1271,15 @@ async function seedProducts(): Promise<void> {
   })
   
   if (iphoneSeries) {
-    // iPhone 15 Pro Max - 4 capacities x 4 colors = 16 products
-    const capacities15ProMax = ['128GB', '256GB', '512GB', '1TB']
-    const colors15ProMax = ['Natural Titanium', 'Blue Titanium', 'White Titanium', 'Black Titanium']
-    
-    for (const capacity of capacities15ProMax) {
-      for (const color of colors15ProMax) {
-        await ensureProduct({
-          name: `iPhone 15 Pro Max ${capacity} ${color}`,
-          brand: 'Apple',
-          groupId: iphoneSeries.id,
-          description: `6.7" display, A17 Pro, ${capacity}, ${color}`
-        })
-        totalProducts++
-      }
-    }
-    
-    // iPhone 15 Pro - 4 capacities x 4 colors = 16 products
-    for (const capacity of capacities15ProMax) {
-      for (const color of colors15ProMax) {
-        await ensureProduct({
-          name: `iPhone 15 Pro ${capacity} ${color}`,
-          brand: 'Apple',
-          groupId: iphoneSeries.id,
-          description: `6.1" display, A17 Pro, ${capacity}, ${color}`
-        })
-        totalProducts++
-      }
-    }
-    
-    // iPhone 15 Plus - 3 capacities x 5 colors = 15 products
-    const capacities15 = ['128GB', '256GB', '512GB']
-    const colors15 = ['Pink', 'Yellow', 'Green', 'Blue', 'Black']
-    
-    for (const capacity of capacities15) {
-      for (const color of colors15) {
-        await ensureProduct({
-          name: `iPhone 15 Plus ${capacity} ${color}`,
-          brand: 'Apple',
-          groupId: iphoneSeries.id,
-          description: `6.7" display, A16 Bionic, ${capacity}, ${color}`
-        })
-        totalProducts++
-      }
-    }
-    
-    // iPhone 15 - 3 capacities x 5 colors = 15 products
-    for (const capacity of capacities15) {
-      for (const color of colors15) {
-        await ensureProduct({
-          name: `iPhone 15 ${capacity} ${color}`,
-          brand: 'Apple',
-          groupId: iphoneSeries.id,
-          description: `6.1" display, A16 Bionic, ${capacity}, ${color}`
-        })
-        totalProducts++
-      }
-    }
-    
-    // iPhone 14 series - 3 models x 3 capacities x 3 colors = 27 products
-    const models14 = [
-      { name: 'iPhone 14', display: '6.1"' },
-      { name: 'iPhone 14 Plus', display: '6.7"' },
-      { name: 'iPhone 14 Pro', display: '6.1" with Dynamic Island' },
-    ]
-    const capacities14 = ['128GB', '256GB', '512GB']
-    const colors14 = ['Midnight', 'Starlight', 'Purple']
-    
-    for (const model of models14) {
-      for (const capacity of capacities14) {
-        for (const color of colors14) {
-          await ensureProduct({
-            name: `${model.name} ${capacity} ${color}`,
-            brand: 'Apple',
-            groupId: iphoneSeries.id,
-            description: `${model.display}, A16 Bionic, ${capacity}`
-          })
-          totalProducts++
-        }
-      }
-    }
-    
-    // iPhone 13 series - 2 models x 3 capacities x 4 colors = 24 products
-    const models13 = ['iPhone 13', 'iPhone 13 Mini']
-    const colors13 = ['Pink', 'Blue', 'Midnight', 'Starlight']
-    
-    for (const model of models13) {
-      for (const capacity of capacities15) {
-        for (const color of colors13) {
-          await ensureProduct({
-            name: `${model} ${capacity} ${color}`,
-            brand: 'Apple',
-            groupId: iphoneSeries.id,
-            description: `A15 Bionic, ${capacity}, ${color}`
-          })
-          totalProducts++
-        }
-      }
-    }
-    
-    // iPhone SE - 3 capacities x 3 colors = 9 products
-    const capacitiesSE = ['64GB', '128GB', '256GB']
-    const colorsSE = ['Midnight', 'Starlight', 'Product Red']
-    
-    for (const capacity of capacitiesSE) {
-      for (const color of colorsSE) {
-        await ensureProduct({
-          name: `iPhone SE (2022) ${capacity} ${color}`,
-          brand: 'Apple',
-          groupId: iphoneSeries.id,
-          description: `4.7" display, A15 Bionic, Touch ID, ${capacity}`
-        })
-        totalProducts++
-      }
+    // 25 iPhone models - basit isimlendirme
+    for (let i = 1; i <= 25; i++) {
+      await ensureProduct({
+        name: `iPhone Pro Model ${i}`,
+        brand: 'Apple',
+        groupId: iphoneSeries.id,
+        description: `Premium smartphone model ${i}`
+      })
+      totalProducts++
     }
   }
   
@@ -1393,172 +1289,44 @@ async function seedProducts(): Promise<void> {
   })
   
   if (samsungGalaxy) {
-    // Galaxy S24 Ultra - 4 capacities x 4 colors = 16 products
-    const capacitiesS24Ultra = ['256GB', '512GB', '1TB']
-    const colorsS24Ultra = ['Titanium Gray', 'Titanium Black', 'Titanium Violet', 'Titanium Yellow']
-    
-    for (const capacity of capacitiesS24Ultra) {
-      for (const color of colorsS24Ultra) {
-        await ensureProduct({
-          name: `Galaxy S24 Ultra ${capacity} ${color}`,
-          brand: 'Samsung',
-          groupId: samsungGalaxy.id,
-          description: `6.8" AMOLED, S Pen, 200MP, ${capacity}`
-        })
-        totalProducts++
-      }
-    }
-    
-    // Galaxy S24+ - 3 capacities x 4 colors = 12 products
-    const capacitiesS24 = ['256GB', '512GB']
-    const colorsS24 = ['Onyx Black', 'Marble Gray', 'Cobalt Violet', 'Amber Yellow']
-    
-    for (const capacity of capacitiesS24) {
-      for (const color of colorsS24) {
-        await ensureProduct({
-          name: `Galaxy S24+ ${capacity} ${color}`,
-          brand: 'Samsung',
-          groupId: samsungGalaxy.id,
-          description: `6.7" AMOLED, Snapdragon 8 Gen 3, ${capacity}`
-        })
-        totalProducts++
-      }
-    }
-    
-    // Galaxy S24 - 2 capacities x 4 colors = 8 products
-    for (const capacity of capacitiesS24) {
-      for (const color of colorsS24) {
-        await ensureProduct({
-          name: `Galaxy S24 ${capacity} ${color}`,
-          brand: 'Samsung',
-          groupId: samsungGalaxy.id,
-          description: `6.2" AMOLED, Snapdragon 8 Gen 3, ${capacity}`
-        })
-        totalProducts++
-      }
-    }
-    
-    // Galaxy S23 series - 3 models x 2 capacities x 4 colors = 24 products
-    const models23 = [
-      { name: 'Galaxy S23', size: '6.1"' },
-      { name: 'Galaxy S23+', size: '6.6"' },
-      { name: 'Galaxy S23 Ultra', size: '6.8"' },
-    ]
-    const capacities23 = ['256GB', '512GB']
-    const colors23 = ['Phantom Black', 'Cream', 'Green', 'Lavender']
-    
-    for (const model of models23) {
-      for (const capacity of capacities23) {
-        for (const color of colors23) {
-          await ensureProduct({
-            name: `${model.name} ${capacity} ${color}`,
-            brand: 'Samsung',
-            groupId: samsungGalaxy.id,
-            description: `${model.size} AMOLED, ${capacity}`
-          })
-          totalProducts++
-        }
-      }
-    }
-    
-    // Galaxy Z Fold 5 - 2 capacities x 3 colors = 6 products
-    const capacitiesFold = ['256GB', '512GB']
-    const colorsFold = ['Phantom Black', 'Cream', 'Icy Blue']
-    
-    for (const capacity of capacitiesFold) {
-      for (const color of colorsFold) {
-        await ensureProduct({
-          name: `Galaxy Z Fold 5 ${capacity} ${color}`,
-          brand: 'Samsung',
-          groupId: samsungGalaxy.id,
-          description: `Foldable 7.6" main display, ${capacity}`
-        })
-        totalProducts++
-      }
-    }
-    
-    // Galaxy Z Flip 5 - 2 capacities x 4 colors = 8 products
-    const colorsFlip = ['Mint', 'Graphite', 'Cream', 'Lavender']
-    
-    for (const capacity of capacitiesFold) {
-      for (const color of colorsFlip) {
-        await ensureProduct({
-          name: `Galaxy Z Flip 5 ${capacity} ${color}`,
-          brand: 'Samsung',
-          groupId: samsungGalaxy.id,
-          description: `Foldable flip phone, ${capacity}`
-        })
-        totalProducts++
-      }
-    }
-    
-    // Galaxy A series - 2 models x 2 capacities x 4 colors = 16 products
-    const modelsA = ['Galaxy A54', 'Galaxy A34']
-    const capacitiesA = ['128GB', '256GB']
-    const colorsA = ['Awesome Black', 'Awesome Violet', 'Awesome Lime', 'Awesome White']
-    
-    for (const model of modelsA) {
-      for (const capacity of capacitiesA) {
-        for (const color of colorsA) {
-          await ensureProduct({
-            name: `${model} ${capacity} ${color}`,
-            brand: 'Samsung',
-            groupId: samsungGalaxy.id,
-            description: `Mid-range 5G, ${capacity}`
-          })
-          totalProducts++
-        }
-      }
-    }
-  }
-  
-  // Google Pixel
-  const googlePixel = await prisma.productGroup.findFirst({
-    where: { name: 'Google Pixel' }
-  })
-  
-  if (googlePixel) {
-    const pixelPhones = [
-      { name: 'Pixel 9', description: '6.3" display, Tensor G4, AI features' },
-      { name: 'Pixel 9 Pro', description: '6.3" display, Triple camera' },
-      { name: 'Pixel 9 Pro XL', description: '6.8" display, Tensor G4' },
-      { name: 'Pixel 8', description: '6.2" display, Tensor G3' },
-      { name: 'Pixel 8 Pro', description: '6.7" display, Advanced AI' },
-      { name: 'Pixel 8a', description: 'Budget Pixel with AI' },
-      { name: 'Pixel Fold', description: 'Foldable Pixel phone' },
-    ]
-    
-    for (const p of pixelPhones) {
+    for (let i = 1; i <= 25; i++) {
       await ensureProduct({
-        name: p.name,
-        brand: 'Google',
-        groupId: googlePixel.id,
-        description: p.description
+        name: `Galaxy Premium Model ${i}`,
+        brand: 'Samsung',
+        groupId: samsungGalaxy.id,
+        description: `Samsung flagship smartphone ${i}`
       })
       totalProducts++
     }
   }
   
-  // OnePlus Devices
+  const googlePixel = await prisma.productGroup.findFirst({
+    where: { name: 'Google Pixel' }
+  })
+  
+  if (googlePixel) {
+    for (let i = 1; i <= 20; i++) {
+      await ensureProduct({
+        name: `Pixel Smart Model ${i}`,
+        brand: 'Google',
+        groupId: googlePixel.id,
+        description: `Google Pixel smartphone ${i}`
+      })
+      totalProducts++
+    }
+  }
+  
   const onePlus = await prisma.productGroup.findFirst({
     where: { name: 'OnePlus Devices' }
   })
   
   if (onePlus) {
-    const onePlusPhones = [
-      { name: 'OnePlus 12', description: 'Flagship with Snapdragon 8 Gen 3' },
-      { name: 'OnePlus 12R', description: 'Performance flagship' },
-      { name: 'OnePlus 11', description: 'Hasselblad camera' },
-      { name: 'OnePlus Nord 3', description: 'Mid-range 5G phone' },
-      { name: 'OnePlus Open', description: 'Foldable phone' },
-    ]
-    
-    for (const p of onePlusPhones) {
+    for (let i = 1; i <= 15; i++) {
       await ensureProduct({
-        name: p.name,
+        name: `OnePlus Performance ${i}`,
         brand: 'OnePlus',
         groupId: onePlus.id,
-        description: p.description
+        description: `OnePlus device model ${i}`
       })
       totalProducts++
     }
