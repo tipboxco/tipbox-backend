@@ -2078,11 +2078,12 @@ async function seedSocialFeatures() {
   let totalFavorites = 0
   let totalCommentVotes = 0
   
-  // 1. LIKES - Her post için 5-50 like
+  // 1. LIKES - Her post için 10-100 like (ortalama 55)
   console.log('❤️ Likes ekleniyor...')
   for (const post of allPosts) {
-    const likeCount = Math.floor(Math.random() * 46) + 5 // 5-50 arası
-    const likerUsers = users.sort(() => Math.random() - 0.5).slice(0, likeCount)
+    const likeCount = Math.floor(Math.random() * 91) + 10 // 10-100 arası
+    const availableLikers = Math.min(likeCount, users.length)
+    const likerUsers = users.sort(() => Math.random() - 0.5).slice(0, availableLikers)
     
     for (const user of likerUsers) {
       try {
@@ -2098,13 +2099,18 @@ async function seedSocialFeatures() {
         // Duplicate ignore
       }
     }
+    
+    // Her 100 post'ta bir progress göster
+    if (totalLikes % 5000 === 0) {
+      console.log(`  ⏳ ${totalLikes} like eklendi...`)
+    }
   }
   console.log(`  ✅ ${totalLikes} like eklendi`)
   
-  // 2. VIEWS - Her post için 10-200 view
+  // 2. VIEWS - Her post için 20-300 view (ortalama 160)
   console.log('👁️ Views ekleniyor...')
   for (const post of allPosts) {
-    const viewCount = Math.floor(Math.random() * 191) + 10 // 10-200 arası
+    const viewCount = Math.floor(Math.random() * 281) + 20 // 20-300 arası
     
     for (let i = 0; i < viewCount; i++) {
       const isAuthenticatedView = Math.random() > 0.3 // %70 authenticated
@@ -2120,16 +2126,21 @@ async function seedSocialFeatures() {
       })
       totalViews++
     }
+    
+    // Her 100 post'ta bir progress göster
+    if ((allPosts.indexOf(post) + 1) % 100 === 0) {
+      console.log(`  ⏳ ${allPosts.indexOf(post) + 1}/${allPosts.length} post işlendi (${totalViews} view)`)
+    }
   }
   console.log(`  ✅ ${totalViews} view eklendi`)
   
-  // 3. COMMENTS - Her post için 3-20 yorum
+  // 3. COMMENTS - Her post için 5-30 yorum (ortalama 17.5)
   console.log('💬 Comments ekleniyor...')
   const allComments: string[] = []
   
   for (const post of allPosts) {
-    const commentCount = Math.floor(Math.random() * 18) + 3 // 3-20 arası
-    const commenters = users.sort(() => Math.random() - 0.5).slice(0, commentCount)
+    const commentCount = Math.floor(Math.random() * 26) + 5 // 5-30 arası
+    const commenters = users.sort(() => Math.random() - 0.5).slice(0, Math.min(commentCount, users.length))
     
     for (const user of commenters) {
       const commentId = generateUlid()
@@ -2186,7 +2197,7 @@ async function seedSocialFeatures() {
     for (const user of sharers) {
       const shareType: 'INTERNAL_REPOST' | 'EXTERNAL_SHARE' = Math.random() > 0.5 ? 'INTERNAL_REPOST' : 'EXTERNAL_SHARE'
       const platform = shareType === 'EXTERNAL_SHARE' ? ['Twitter', 'Facebook', 'WhatsApp', 'Telegram'][Math.floor(Math.random() * 4)] : null
-      
+       
       try {
         await prisma.contentShare.create({
           data: {
@@ -2302,8 +2313,8 @@ async function seedTrustRelations() {
   let mutualTrusts = 0
   
   for (const truster of users) {
-    // Her kullanıcı 5-15 kişiyi trust eder
-    const trustCount = Math.floor(Math.random() * 11) + 5 // 5-15 arası
+    // Her kullanıcı 5-20 kişiyi trust eder
+    const trustCount = Math.floor(Math.random() * 16) + 5 // 5-20 arası
     
     // Kendisi hariç diğer kullanıcılardan rastgele seç
     const otherUsers = users.filter(u => u.id !== truster.id)
@@ -5473,26 +5484,63 @@ async function main() {
   progress.increment('Şifre hashleniyor...')
   passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, 10)
 
-  // 1. Experience Taxonomy (Duration, Location, Purpose - for Experience posts)
+  // 1. User Themes (ÖNCE - createSeedUsers için gerekli)
+  console.log('📱 Creating user themes...')
+  const themeConfigs = [
+    { name: 'Light', description: 'Açık tema - günün her saati için ideal' },
+    { name: 'Dark', description: 'Koyu tema - gözleri yormaz, modern görünüm' },
+    { name: 'Auto', description: 'Otomatik - sistem temasını takip eder' }
+  ]
+  
+  const themes = await Promise.all(
+    themeConfigs.map(async (config) => {
+      const existing = await prisma.userTheme.findFirst({
+        where: { name: config.name }
+      })
+      
+      if (existing) {
+        return existing
+      }
+      
+      return prisma.userTheme.create({
+        data: config
+      })
+    })
+  )
+  console.log(`✅ ${themes.length} tema oluşturuldu/güncellendi`)
+
+  // 2. Seed Users (40 isimlendirilmiş kullanıcı - DİĞER HER ŞEYDEN ÖNCE!)
+  progress.increment('40 seed kullanıcısı oluşturuluyor...')
+  const defaultTheme = themes.find(t => t.name === 'Dark') || themes[0]
+  const seedUsers = await createSeedUsers(defaultTheme.id)
+  const allUserIds = Array.from(seedUsers.keys())
+  console.log(`✅ ${seedUsers.size} kullanıcı oluşturuldu`)
+  progress.increment('Seed kullanıcıları oluşturuldu')
+
+  // 3. Experience Taxonomy (Duration, Location, Purpose - for Experience posts)
   await seedTaxonomy()
   progress.increment('Experience Taxonomy oluşturuldu')
 
-  // 2. Product Categories (Electronics, Beauty with subcategories and product groups)
+  // 4. Product Categories (Electronics, Beauty with subcategories and product groups)
   progress.increment('Kategori yapısı oluşturuluyor...')
   await seedProductCategories()
   progress.increment('Kategori yapısı oluşturuldu')
+  
+  // Main categories'i sonraki fonksiyonlar için hazırla (sadece Electronics & Beauty)
+  const mainCategories = await prisma.mainCategory.findMany()
+  console.log(`📂 ${mainCategories.length} main category bulundu (Electronics & Beauty)`)
 
-  // 3. Brand System (BrandCategory + Brands with logos and banners)
+  // 5. Brand System (BrandCategory + Brands with logos and banners)
   progress.increment('Brand sistemi oluşturuluyor...')
   await seedBrands()
   progress.increment('Brand sistemi oluşturuldu')
 
-  // 4. Products (~1000 meaningful products with brand relationships)
+  // 6. Products (~1000 meaningful products with brand relationships)
   progress.increment('Ürünler oluşturuluyor...')
   await seedProducts()
   progress.increment('Ürünler oluşturuldu')
 
-  // 6. Posts
+  // 7. Posts (40 users × 70 posts = 2800 posts)
   progress.increment('Post\'lar oluşturuluyor...')
   await seedPosts()
   progress.increment('Post\'lar oluşturuldu')
@@ -5527,85 +5575,7 @@ async function main() {
   await seedRemainingSystemTables()
   progress.increment('Badges & System Tables oluşturuldu')
 
-  // 5. User Themes
-  console.log('📱 Creating user themes...')
-  const themeConfigs = [
-    { name: 'Light', description: 'Açık tema - günün her saati için ideal' },
-    { name: 'Dark', description: 'Koyu tema - gözleri yormaz, modern görünüm' },
-    { name: 'Auto', description: 'Otomatik - sistem temasını takip eder' }
-  ]
-  
-  const themes = await Promise.all(
-    themeConfigs.map(async (config) => {
-      const existing = await prisma.userTheme.findFirst({
-        where: { name: config.name }
-      })
-      
-      if (existing) {
-        return existing
-      }
-      
-      return prisma.userTheme.create({
-        data: config
-      })
-    })
-  )
-  console.log(`✅ ${themes.length} tema oluşturuldu/güncellendi`)
-
-  // 2. Seed Users (40 isimlendirilmiş kullanıcı)
-  progress.increment('40 seed kullanıcısı oluşturuluyor...')
-  const defaultTheme = themes.find(t => t.name === 'Dark') || themes[0]
-  const seedUsers = await createSeedUsers(defaultTheme.id)
-  const allUserIds = Array.from(seedUsers.keys())
-  console.log(`✅ ${seedUsers.size} kullanıcı seed'e hazır`)
-
-  // 3. Main Categories
-  progress.increment('Ana kategoriler oluşturuluyor...')
-  console.log('\n📂 Creating main categories...')
-  // Görsel eşleştirmeleri: kategori isimlerine göre assets/catalog görselleri
-  const categoryConfigs = [
-    { name: 'Teknoloji', description: 'Elektronik cihazlar, yazılım, mobil uygulamalar', imageKey: 'catalog.computers-tablets' },
-    { name: 'Ev & Yaşam', description: 'Ev eşyaları, dekorasyon, temizlik ürünleri', imageKey: 'catalog.home-appliances' },
-    { name: 'Gıda & İçecek', description: 'Yiyecek, içecek, gıda takviyesi ürünleri', imageKey: 'catalog.air-conditioner' },
-    { name: 'Moda & Aksesuar', description: 'Giyim, ayakkabı, çanta, takı ve aksesuarlar', imageKey: 'catalog.printers' },
-    { name: 'Sağlık & Güzellik', description: 'Kişisel bakım, kozmetik, sağlık ürünleri', imageKey: 'catalog.smart-home-devices' },
-    { name: 'Spor & Outdoor', description: 'Spor ekipmanları, outdoor aktiviteler, fitness', imageKey: 'catalog.drone' },
-    { name: 'Hobi & Eğlence', description: 'Kitap, oyun, müzik, sanat malzemeleri', imageKey: 'catalog.games' },
-    { name: 'Otomotiv', description: 'Araç aksesuarları, bakım ürünleri, parçalar', imageKey: 'catalog.otomotiv' },
-    { name: 'Technology', description: 'Consumer electronics, gadgets and digital services', imageKey: 'catalog.computers-tablets' },
-    { name: 'Fashion', description: 'Lifestyle, apparel and accessory brands', imageKey: 'catalog.games' },
-    { name: 'Health & Fitness', description: 'Health monitoring, wellness and fitness devices', imageKey: 'catalog.smart-home-devices' },
-    { name: 'Kitchen', description: 'Kitchen appliances and coffee/brewing equipment', imageKey: 'catalog.home-appliances' },
-    { name: 'Home & Living', description: 'Home comfort, living and decoration products', imageKey: 'catalog.kucukev' },
-  ];
-
-  // Mevcut kategorileri bul veya oluştur (idempotent - ID'ler korunur)
-  const mainCategories = await Promise.all(
-    categoryConfigs.map(async (config) => {
-      return ensureMainCategory({
-        name: config.name,
-        description: config.description,
-        imageKey: config.imageKey as any,
-      });
-    })
-  );
-
-  console.log(`✅ ${mainCategories.length} ana kategori oluşturuldu/güncellendi`)
-
-  // 2.a Duplicate Teknoloji kategorisini temizle
-  {
-    const tech = await prisma.mainCategory.findFirst({ where: { name: 'Technology' } });
-    const trTech = await prisma.mainCategory.findFirst({ where: { name: 'Teknoloji' } });
-    if (tech && trTech && tech.id !== trTech.id) {
-      await prisma.mainCategory.delete({ where: { id: trTech.id } }).catch(() => undefined);
-      console.log('🧹 Duplicate "Teknoloji" kategorisi silindi (Technology mevcut olduğu için).');
-    }
-
-    // Technology Sub 1-10 gibi otomatik subcategory oluşturma kaldırıldı
-    // Artık sadece manuel olarak oluşturulan subcategory'ler kullanılacak
-  }
-
-  // 3. Badge Categories
+  // Badge Categories
   progress.increment('Badge kategorileri oluşturuluyor...')
   console.log('\n🏆 Creating badge categories...')
   const badgeCategoryConfigs = [
