@@ -1822,6 +1822,198 @@ async function seedProducts(): Promise<void> {
   console.log(`   💄 Beauty: ${beautyTotal} ürün\n`)
 }
 
+// ==================== PHASE 6: POST CREATION ====================
+
+/**
+ * Post oluşturma helper fonksiyonu
+ */
+async function createPost(data: {
+  userId: string
+  type: 'QUESTION' | 'TIPS' | 'FREE' | 'EXPERIENCE' | 'COMPARE' | 'UPDATE'
+  title: string
+  body: string
+  productId?: string
+  productGroupId?: string
+  mainCategoryId?: string
+  subCategoryId?: string
+  inventoryRequired?: boolean
+  createdAt?: Date
+}) {
+  const postId = generateUlid()
+  
+  const post = await prisma.contentPost.create({
+    data: {
+      id: postId,
+      userId: data.userId,
+      type: data.type,
+      title: data.title,
+      body: data.body,
+      productId: data.productId ?? null,
+      productGroupId: data.productGroupId ?? null,
+      mainCategoryId: data.mainCategoryId ?? null,
+      subCategoryId: data.subCategoryId ?? null,
+      inventoryRequired: data.inventoryRequired ?? false,
+      isBoosted: false,
+      createdAt: data.createdAt ?? new Date(),
+      // Counts başlangıçta 0, Phase 7'de gerçek ilişkilerle güncellenecek
+      commentsCount: 0,
+      likesCount: 0,
+      viewsCount: 0,
+      sharesCount: 0,
+      favoritesCount: 0,
+    }
+  })
+  
+  return post
+}
+
+/**
+ * QUESTION post için PostQuestion kaydı oluştur
+ */
+async function createPostQuestion(postId: string, productId?: string) {
+  const formats: Array<'SHORT' | 'LONG' | 'POLL' | 'CHOICE'> = ['SHORT', 'LONG', 'POLL', 'CHOICE']
+  const randomFormat = formats[Math.floor(Math.random() * formats.length)]
+  
+  await prisma.postQuestion.create({
+    data: {
+      postId,
+      expectedAnswerFormat: randomFormat,
+      relatedProductId: productId ?? null,
+    }
+  })
+}
+
+/**
+ * TIPS post için PostTip kaydı oluştur
+ */
+async function createPostTip(postId: string) {
+  const categories: Array<'USAGE' | 'PURCHASE' | 'CARE' | 'OTHER'> = ['USAGE', 'PURCHASE', 'CARE', 'OTHER']
+  const randomCategory = categories[Math.floor(Math.random() * categories.length)]
+  
+  await prisma.postTip.create({
+    data: {
+      postId,
+      tipCategory: randomCategory,
+      isVerified: false,
+    }
+  })
+}
+
+/**
+ * COMPARE post için PostComparison kaydı oluştur
+ */
+async function createPostComparison(postId: string, product1Id: string, product2Id: string) {
+  await prisma.postComparison.create({
+    data: {
+      postId,
+      product1Id,
+      product2Id,
+    }
+  })
+}
+
+/**
+ * EXPERIENCE post için experience ilişkileri ekle
+ */
+async function addExperienceRelations(
+  postId: string,
+  durationId: string,
+  locationId: string,
+  purposeId: string
+) {
+  await prisma.contentPost.update({
+    where: { id: postId },
+    data: {
+      experienceDurationId: durationId,
+      experienceLocationId: locationId,
+      experiencePurposeId: purposeId,
+    }
+  })
+}
+
+/**
+ * 2800 Post oluştur (40 kullanıcı x 70 post)
+ */
+async function seedPosts() {
+  console.log('\n📝 Post oluşturma başlıyor...\n')
+  
+  // Kullanıcıları getir
+  const users = await prisma.user.findMany({
+    take: 40,
+    orderBy: { createdAt: 'asc' }
+  })
+  
+  if (users.length < 40) {
+    console.log(`⚠️ Sadece ${users.length} kullanıcı bulundu, devam ediliyor...`)
+  }
+  
+  // Experience taxonomy'leri getir
+  const durations = await prisma.experienceDuration.findMany()
+  const locations = await prisma.experienceLocation.findMany()
+  const purposes = await prisma.experiencePurpose.findMany()
+  
+  // Ürünleri getir
+  const products = await prisma.product.findMany({ take: 500 })
+  
+  if (products.length === 0) {
+    throw new Error('❌ Ürün bulunamadı! Önce Phase 5 tamamlanmalı.')
+  }
+  
+  let totalPosts = 0
+  const postTypes: Array<'QUESTION' | 'TIPS' | 'FREE' | 'EXPERIENCE' | 'COMPARE' | 'UPDATE'> = [
+    'QUESTION', 'TIPS', 'FREE', 'EXPERIENCE', 'COMPARE', 'UPDATE'
+  ]
+  
+  // Her kullanıcı için 60 post (6 tip x 10)
+  for (const user of users) {
+    console.log(`  📝 ${user.email} için postlar oluşturuluyor...`)
+    
+    for (const postType of postTypes) {
+      // Her tipten 10 post
+      for (let i = 1; i <= 10; i++) {
+        const randomProduct = products[Math.floor(Math.random() * products.length)]
+        const createdAt = new Date(Date.now() - Math.random() * 90 * 24 * 60 * 60 * 1000) // Son 90 gün içinde
+        
+        const post = await createPost({
+          userId: user.id,
+          type: postType,
+          title: `${postType} Post ${i} - ${randomProduct.name}`,
+          body: `Bu bir ${postType} tipi içerik. ${randomProduct.name} hakkında detaylı bilgi ve deneyimler paylaşılıyor. Ürünü kullanma deneyimim oldukça olumlu oldu. Kaliteli malzeme ve iyi tasarım dikkat çekiyor.`,
+          productId: randomProduct.id,
+          productGroupId: randomProduct.groupId ?? undefined,
+          mainCategoryId: undefined,
+          subCategoryId: undefined,
+          inventoryRequired: postType === 'EXPERIENCE',
+          createdAt,
+        })
+        
+        // Post tipine göre ilişkili kayıtlar oluştur
+        if (postType === 'QUESTION') {
+          await createPostQuestion(post.id, randomProduct.id)
+        } else if (postType === 'TIPS') {
+          await createPostTip(post.id)
+        } else if (postType === 'COMPARE') {
+          const product2 = products[Math.floor(Math.random() * products.length)]
+          await createPostComparison(post.id, randomProduct.id, product2.id)
+        } else if (postType === 'EXPERIENCE' && durations.length > 0 && locations.length > 0 && purposes.length > 0) {
+          const randomDuration = durations[Math.floor(Math.random() * durations.length)]
+          const randomLocation = locations[Math.floor(Math.random() * locations.length)]
+          const randomPurpose = purposes[Math.floor(Math.random() * purposes.length)]
+          await addExperienceRelations(post.id, randomDuration.id, randomLocation.id, randomPurpose.id)
+        }
+        
+        totalPosts++
+      }
+    }
+    
+    console.log(`    ✅ ${user.email}: 60 post oluşturuldu`)
+  }
+  
+  console.log(`\n✨ Toplam ${totalPosts} post oluşturuldu!\n`)
+  console.log(`   📊 Dağılım: ${users.length} kullanıcı x 60 post`)
+  console.log(`   📝 Her kullanıcı: 10 QUESTION, 10 TIPS, 10 FREE, 10 EXPERIENCE, 10 COMPARE, 10 UPDATE\n`)
+}
+
 /**
  * Genel görsel mapping sistemi
  * Tüm görsel tipleri için merkezi yönetim
@@ -4126,6 +4318,11 @@ async function main() {
   progress.increment('Ürünler oluşturuluyor...')
   await seedProducts()
   progress.increment('Ürünler oluşturuldu')
+
+  // 6. Posts
+  progress.increment('Post\'lar oluşturuluyor...')
+  await seedPosts()
+  progress.increment('Post\'lar oluşturuldu')
 
   // 5. User Themes
   console.log('📱 Creating user themes...')
