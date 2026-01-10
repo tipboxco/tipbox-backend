@@ -31,7 +31,7 @@ export class SyncReceiverService {
   }
 
   /**
-   * Brand verilerini batch olarak işler (upsert) - Optimized for high traffic
+   * Brand verilerini batch olarak işler (upsert) - gelen id brand.externalId ile eşlenir
    */
   private async processBrandBatch(data: SyncRecord[]): Promise<ProcessResult> {
     if (data.length === 0) {
@@ -39,21 +39,23 @@ export class SyncReceiverService {
     }
 
     const records: ProcessedRecord[] = [];
-    const recordIds = data.map((r) => r.id);
+    // Data'dan id'leri al ve bunları externalId ile eşle
+    const externalIds = data.map((r) => r.id);
 
-    // Tüm ID'leri bir kerede çek
+    // Brand tablosundaki externalId'leri çek
     const existingBrands = await this.prisma.brand.findMany({
-      where: { id: { in: recordIds } },
-      select: { id: true },
+      where: { externalId: { in: externalIds.filter(Boolean) } }, // null, undefined dışarıda bırak
+      select: { externalId: true },
     });
 
-    const existingIds = new Set(existingBrands.map((b) => b.id));
+    const existingExternalIds = new Set(existingBrands.map((b) => b.externalId));
     const toCreate: typeof data = [];
     const toUpdate: typeof data = [];
 
     // Kayıtları create ve update listelerine ayır
     for (const record of data) {
-      if (existingIds.has(record.id)) {
+      const brandExternalId = record.id;
+      if (brandExternalId && existingExternalIds.has(brandExternalId)) {
         toUpdate.push(record);
       } else {
         toCreate.push(record);
@@ -71,7 +73,7 @@ export class SyncReceiverService {
           // Batch create
           if (toCreate.length > 0) {
             const createData = toCreate.map((record) => ({
-              id: record.id,
+              externalId: record.id,
               name: record.name || record.title || 'Unnamed Brand',
               description: record.description || null,
               logoUrl: record.logo_url || record.image_url || null,
@@ -101,7 +103,7 @@ export class SyncReceiverService {
             // Paralel update işlemleri için Promise.all kullan
             const updatePromises = toUpdate.map((record) =>
               tx.brand.update({
-                where: { id: record.id },
+                where: { externalId: record.id },
                 data: {
                   name: record.name || record.title || 'Unnamed Brand',
                   description: record.description || null,
@@ -148,6 +150,7 @@ export class SyncReceiverService {
 
   /**
    * Brand batch işlemi için fallback - transaction başarısız olursa kullanılır
+   * gelen id brand.externalId ile eşlenir
    */
   private async processBrandBatchFallback(data: SyncRecord[]): Promise<ProcessResult> {
     const records: ProcessedRecord[] = [];
@@ -165,17 +168,21 @@ export class SyncReceiverService {
           imageUrl: record.image_url || record.logo_url || null,
           category: (record.category as string) || null,
           categoryId: record.category_id || null,
+          externalId: record.id,
         };
 
-        // Önce var mı kontrol et
-        const existing = await this.prisma.brand.findUnique({
-          where: { id: record.id },
-          select: { id: true },
-        });
+        // externalId (bizim için buradan gelen id) ile var mı kontrol et
+        let existing = null;
+        if (record.id) {
+          existing = await this.prisma.brand.findUnique({
+            where: { externalId: record.id },
+            select: { id: true, externalId: true },
+          });
+        }
 
         if (existing) {
           await this.prisma.brand.update({
-            where: { id: record.id },
+            where: { externalId: record.id },
             data: brandData,
           });
           updated++;
@@ -187,7 +194,7 @@ export class SyncReceiverService {
         } else {
           await this.prisma.brand.create({
             data: {
-              id: record.id,
+              id: record.externalId ?? generateUuidV4(),
               ...brandData,
             },
           });
@@ -202,7 +209,7 @@ export class SyncReceiverService {
       } catch (error) {
         failed++;
         const message = error instanceof Error ? error.message : 'Unknown error';
-        logger.error(`[SyncReceiver] Brand upsert failed for ${record.id}`, { error: message });
+        logger.error(`[SyncReceiver] Brand upsert failed for externalId=${record.id}`, { error: message });
         records.push({
           id: record.id,
           status: 'failed',
@@ -455,6 +462,8 @@ export class SyncReceiverService {
     let updated = 0;
     let failed = 0;
 
+    console.log('toCreate', toCreate);
+
     // Transaction içinde batch işlemler
     try {
       await this.prisma.$transaction(
@@ -465,7 +474,7 @@ export class SyncReceiverService {
               id: record.id,
               name: record.name || record.title || 'Unnamed Product',
               description: record.description || null,
-              brand: record.brand || null,
+              brandId: record?.brand_id || null,
               subName: record.sub_name || null,
               imageUrl: record.image_url || record.thumbnail || null,
               thumbnail: record.thumbnail || record.image_url || null,
@@ -497,7 +506,7 @@ export class SyncReceiverService {
                 data: {
                   name: record.name || record.title || 'Unnamed Product',
                   description: record.description || null,
-                  brand: record.brand || null,
+                  brandId: record?.brand_id || null,
                   subName: record.sub_name || null,
                   imageUrl: record.image_url || record.thumbnail || null,
                   thumbnail: record.thumbnail || record.image_url || null,
@@ -550,12 +559,13 @@ export class SyncReceiverService {
     let created = 0;
     let updated = 0;
 
+    console.log('data', data);
     for (const record of data) {
       try {
         const productData = {
           name: record.name || record.title || 'Unnamed Product',
           description: record.description || null,
-          brand: record.brand || null,
+          brandId: record?.brand_id || null,
           subName: record.sub_name || null,
           imageUrl: record.image_url || record.thumbnail || null,
           thumbnail: record.thumbnail || record.image_url || null,
@@ -686,4 +696,3 @@ export class SyncReceiverService {
     }
   }
 }
-
