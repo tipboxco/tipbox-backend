@@ -144,7 +144,7 @@ router.post('/login', validateBody(LoginSchema), asyncHandler(async (req: Reques
 
   // Aktif avatar'ı çek
   const activeAvatar = await avatarRepo.findActiveByUserId(user.id);
-  const avatarUrl = resolveMediaUrl(activeAvatar?.imageUrl || null);
+  const avatarUrl = resolveMediaUrl(activeAvatar?.imageUrl || null, true);
 
   // Token oluştur
   const token = authService.generateToken(user);

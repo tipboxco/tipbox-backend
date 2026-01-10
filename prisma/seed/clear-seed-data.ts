@@ -70,6 +70,7 @@ async function clearAllData(): Promise<void> {
 
     // Content verileri
     progress.increment('Content verileri temizleniyor...')
+    await prisma.contentShare.deleteMany({});
     await prisma.contentFavorite.deleteMany({});
     await prisma.contentLike.deleteMany({});
     await prisma.contentCommentVote.deleteMany({});
@@ -117,7 +118,7 @@ async function clearAllData(): Promise<void> {
     // Inventory verileri
     progress.increment('Inventory verileri temizleniyor...')
     await prisma.inventoryMedia.deleteMany({});
-    await prisma.productExperience.deleteMany({});
+    // productExperience tablosu kaldırıldı
     await prisma.inventory.deleteMany({});
 
     // User related verileri
@@ -222,6 +223,24 @@ async function clearDataBeforeTimestamp(timestamp: Date, seedUserIds: string[]):
       });
       
       // Content verileri - seed kullanıcılarına ait
+      await prisma.contentFavorite.deleteMany({
+        where: {
+          OR: [
+            { userId: { in: seedUserIds } },
+            { post: { userId: { in: seedUserIds } } }
+          ]
+        }
+      });
+      
+      await prisma.contentShare.deleteMany({
+        where: {
+          OR: [
+            { userId: { in: seedUserIds } },
+            { post: { userId: { in: seedUserIds } } }
+          ]
+        }
+      });
+      
       await prisma.contentFavorite.deleteMany({
         where: {
           OR: [
@@ -350,9 +369,7 @@ async function clearDataBeforeTimestamp(timestamp: Date, seedUserIds: string[]):
         where: { inventory: { userId: { in: seedUserIds } } }
       });
       
-      await prisma.productExperience.deleteMany({
-        where: { inventory: { userId: { in: seedUserIds } } }
-      });
+      // productExperience tablosu kaldırıldı
       
       await prisma.inventory.deleteMany({
         where: { userId: { in: seedUserIds } }

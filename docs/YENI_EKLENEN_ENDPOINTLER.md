@@ -1,9 +1,104 @@
 # Yeni Eklenen Endpoint'ler - Backend Test/Entegrasyon Dokümantasyonu
 
-**Tarih:** 2025-01-XX  
+**Tarih:** 2025-01-10 (Son Güncelleme)  
 **Durum:** Frontend'de entegre edildi, backend'de test/ekleme gerekiyor
 
 Bu dokümantasyon, frontend'de kullanılmak üzere oluşturulan ancak backend'de henüz mevcut olmayabilecek endpoint'leri içerir. Backend tarafında test edilmeli veya eklenmelidir.
+
+---
+
+## 👥 User Feature - Suggested Users
+
+### Suggested Users (Önerilen Kullanıcılar)
+
+**Endpoint:** `GET /users/suggested`
+
+**Authentication:** Bearer Token gerekli
+
+**Durum:** ✅ **Eklendi ve Hazır** (2026-01-10 - v2.0 Güncellendi)
+
+**Açıklama:** Kullanıcıya özel, trust etmediği kullanıcılardan önerir. Pagination, search ve mutual trust count desteği ile.
+
+**Query Parameters:**
+- `limit` (optional, default: 20, max: 50): Döndürülecek maksimum kullanıcı sayısı
+- `cursor` (optional): Pagination için cursor (son kullanıcının ID'si)
+- `q` (optional): Kullanıcı adı veya isim araması için search query
+
+**Request Examples:**
+```bash
+# Basic
+GET /users/suggested?limit=20
+
+# With pagination
+GET /users/suggested?limit=15&cursor=user-123
+
+# With search
+GET /users/suggested?q=michael&limit=10
+
+# Combined
+GET /users/suggested?q=michael&limit=10&cursor=user-456
+```
+
+**Response (200):**
+```json
+{
+  "items": [
+    {
+      "id": "user-123",
+      "userName": "michael_clark",
+      "name": "Michael Clark",
+      "avatar": "https://cdn.tipbox.com/avatars/user-123.jpg",
+      "titles": [
+        "Technology Enthusiast",
+        "Hardware Expert",
+        "Digital Innovation Specialist"
+      ],
+      "isTrusted": false,
+      "mutualTrustCount": 3,
+      "stats": {
+        "trust": 245,
+        "truster": 189,
+        "posts": 87
+      }
+    }
+  ],
+  "pagination": {
+    "nextCursor": "user-456",
+    "hasMore": true
+  }
+}
+```
+
+**Error Responses:**
+- `401`: Unauthorized
+
+**Özellikler:**
+- ✅ Kullanıcının trust ettiği kişileri hariç tutar
+- ✅ Engellenmiş (blocked) kullanıcıları hariç tutar
+- ✅ Susturulmuş (muted) kullanıcıları hariç tutar
+- ✅ Popülerlik bazlı sıralama (truster count)
+- ✅ **Cursor-based pagination** (infinite scroll)
+- ✅ **Search functionality** (name/username)
+- ✅ **Mutual trust count** ("3 ortak arkadaş")
+- ✅ Her kullanıcı için farklı liste
+
+**Algoritma:**
+1. Trust/Block/Mute listelerini çıkar
+2. Search query varsa filtrele (name/username)
+3. Cursor pagination uygula
+4. Popülerleri seç (truster + posts count)
+5. Mutual trust count hesapla (paralel)
+6. Enrich et (avatar, titles - paralel)
+
+**Frontend Integration:**
+- TypeScript interfaces: ✅ Hazır
+- React Query hook: ✅ `useSuggestedUsers(searchQuery?)`
+- Infinite scroll: ✅ Destekleniyor
+- Search: ✅ Destekleniyor
+
+**Detaylı Döküman:** 
+- [docs/features/suggested-users.md](features/suggested-users.md)
+- [docs/SUGGESTED_USERS_V2_IMPLEMENTATION.md](SUGGESTED_USERS_V2_IMPLEMENTATION.md)
 
 ---
 

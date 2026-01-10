@@ -10,7 +10,6 @@ export class InventoryPrismaRepository {
       include: {
         user: true,
         product: true,
-        productExperiences: true,
         media: true
       }
     });
@@ -23,7 +22,6 @@ export class InventoryPrismaRepository {
       include: {
         user: true,
         product: true,
-        productExperiences: true,
         media: true
       },
       orderBy: { createdAt: 'desc' }
@@ -37,7 +35,6 @@ export class InventoryPrismaRepository {
       include: {
         user: true,
         product: true,
-        productExperiences: true,
         media: true
       },
       orderBy: { createdAt: 'desc' }
@@ -54,7 +51,6 @@ export class InventoryPrismaRepository {
       include: {
         user: true,
         product: true,
-        productExperiences: true,
         media: true
       },
       orderBy: { createdAt: 'desc' }
@@ -78,7 +74,6 @@ export class InventoryPrismaRepository {
       include: {
         user: true,
         product: true,
-        productExperiences: true,
         media: true
       }
     });
@@ -95,7 +90,6 @@ export class InventoryPrismaRepository {
       include: {
         user: true,
         product: true,
-        productExperiences: true,
         media: true
       }
     });
@@ -109,7 +103,6 @@ export class InventoryPrismaRepository {
       include: {
         user: true,
         product: true,
-        productExperiences: true,
         media: true
       }
     });
@@ -134,7 +127,6 @@ export class InventoryPrismaRepository {
       include: {
         user: true,
         product: true,
-        productExperiences: true,
         media: true
       },
       orderBy: { createdAt: 'desc' }
@@ -154,7 +146,6 @@ export class InventoryPrismaRepository {
       include: {
         user: true,
         product: true,
-        productExperiences: true,
         media: true
       },
       orderBy: { createdAt: 'desc' }
@@ -167,7 +158,6 @@ export class InventoryPrismaRepository {
       include: {
         user: true,
         product: true,
-        productExperiences: true,
         media: true
       },
       orderBy: { createdAt: 'desc' }

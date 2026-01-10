@@ -720,7 +720,7 @@ export class FeedService {
       id: userId,
       name: profile?.displayName || 'Anonymous',
       title: title?.title || '',
-      avatar: resolveMediaUrl(avatar?.imageUrl || null) || '',
+      avatar: resolveMediaUrl(avatar?.imageUrl || null, true) || '',
     };
   }
 

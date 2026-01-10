@@ -11,22 +11,82 @@ import { FeedDistributionScheduler } from '../../src/infrastructure/scheduler/fe
 
 const prisma = new PrismaClient();
 
-export async function triggerFeedDistributionAfterSeed(): Promise<void> {
+/**
+ * Queue'daki job'ların tamamlanmasını bekler
+ */
+async function waitForQueueCompletion(
+  scheduler: FeedDistributionScheduler,
+  expectedJobCount: number,
+  timeoutMinutes: number = 15
+): Promise<void> {
+  const startTime = Date.now();
+  const timeoutMs = timeoutMinutes * 60 * 1000;
+  let lastCompletedCount = 0;
+  let stuckCounter = 0;
+
+  console.log(`\n⏳ Feed'lerin oluşturulması bekleniyor (max ${timeoutMinutes} dakika)...`);
+  console.log(`   Hedef: ${expectedJobCount} job\n`);
+
+  while (true) {
+    const elapsed = Date.now() - startTime;
+    
+    // Timeout kontrolü
+    if (elapsed > timeoutMs) {
+      console.log(`\n⚠️  Timeout! ${timeoutMinutes} dakika doldu, seed devam ediyor.`);
+      console.log(`   Feed'ler arka planda oluşturulmaya devam edecek.\n`);
+      break;
+    }
+
+    const stats = await scheduler.getQueueStats();
+    const totalProcessed = stats.completed + stats.failed;
+    const progress = Math.round((totalProcessed / expectedJobCount) * 100);
+
+    // İlerleme göster
+    if (totalProcessed !== lastCompletedCount) {
+      console.log(`   [${progress}%] İşlenen: ${totalProcessed}/${expectedJobCount} | Aktif: ${stats.active} | Bekleyen: ${stats.waiting}`);
+      lastCompletedCount = totalProcessed;
+      stuckCounter = 0;
+    } else {
+      stuckCounter++;
+    }
+
+    // Tamamlandı mı?
+    if (totalProcessed >= expectedJobCount) {
+      console.log(`\n✅ Tüm feed'ler oluşturuldu!`);
+      console.log(`   Başarılı: ${stats.completed}`);
+      if (stats.failed > 0) {
+        console.log(`   Başarısız: ${stats.failed}`);
+      }
+      
+      // Feed sayısını göster
+      const feedCount = await prisma.feed.count();
+      const postCount = await prisma.contentPost.count();
+      console.log(`\n📊 Feed istatistikleri:`);
+      console.log(`   Toplam feed: ${feedCount.toLocaleString()}`);
+      console.log(`   Toplam post: ${postCount.toLocaleString()}`);
+      console.log(`   Post başına ortalama: ${Math.round(feedCount / postCount)} kullanıcı\n`);
+      break;
+    }
+
+    // 30 saniye boyunca ilerleme yoksa uyar
+    if (stuckCounter > 6) { // 6 x 5 saniye = 30 saniye
+      console.log(`   ⚠️  İlerleme yavaş (son 30 saniyede değişiklik yok). Worker çalışıyor mu kontrol edin.`);
+      stuckCounter = 0;
+    }
+
+    // 5 saniye bekle
+    await new Promise(resolve => setTimeout(resolve, 5000));
+  }
+}
+
+export async function triggerFeedDistributionAfterSeed(waitForCompletion: boolean = false): Promise<void> {
   try {
     console.log('\n🚀 Feed distribution job\'ları queue\'ya ekleniyor...\n');
 
     const scheduler = new FeedDistributionScheduler();
 
-    // Son 14 gün içindeki postları al (feed'e eklenebilir postlar)
-    const fourteenDaysAgo = new Date();
-    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
-
+    // TÜM postları al (seed sonrası için)
     const posts = await prisma.contentPost.findMany({
-      where: {
-        createdAt: {
-          gte: fourteenDaysAgo,
-        },
-      },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
@@ -46,7 +106,7 @@ export async function triggerFeedDistributionAfterSeed(): Promise<void> {
     });
 
     if (posts.length === 0) {
-      console.log('⚠️  Feed\'e eklenebilecek post bulunamadı (14 günden eski postlar feed\'e eklenmez)\n');
+      console.log('⚠️  Feed\'e eklenebilecek post bulunamadı\n');
       await scheduler.close();
       return;
     }
@@ -106,7 +166,13 @@ export async function triggerFeedDistributionAfterSeed(): Promise<void> {
     console.log(`   Aktif: ${stats.active}`);
     console.log(`   Tamamlanan: ${stats.completed}`);
     console.log(`   Başarısız: ${stats.failed}`);
-    console.log(`\n💡 FeedDistributionWorker çalıştığında bu job'lar işlenecek ve feed'ler oluşturulacak.\n`);
+
+    // Seed'den çağrılıyorsa worker'ın tamamlamasını bekle
+    if (waitForCompletion) {
+      await waitForQueueCompletion(scheduler, successCount);
+    } else {
+      console.log(`\n💡 FeedDistributionWorker çalıştığında bu job'lar işlenecek ve feed'ler oluşturulacak.\n`);
+    }
 
     await scheduler.close();
   } catch (error) {
@@ -115,6 +181,19 @@ export async function triggerFeedDistributionAfterSeed(): Promise<void> {
   } finally {
     await prisma.$disconnect();
   }
+}
+
+// Direkt çalıştırıldığında main olarak çalış
+if (require.main === module) {
+  triggerFeedDistributionAfterSeed()
+    .then(() => {
+      console.log('✅ Feed distribution trigger tamamlandı');
+      process.exit(0);
+    })
+    .catch((error) => {
+      console.error('❌ Fatal error:', error);
+      process.exit(1);
+    });
 }
 
 

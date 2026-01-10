@@ -897,7 +897,6 @@ export class PostService {
           },
         },
         include: {
-          productExperiences: true,
           media: true,
         },
       });
@@ -912,12 +911,7 @@ export class PostService {
           inventoryId: inventory.id,
           hasOwned: inventory.hasOwned,
           experienceSummary: inventory.experienceSummary,
-          experiences: inventory.productExperiences.map((exp) => ({
-            id: exp.id,
-            title: exp.title,
-            experienceText: exp.experienceText,
-            createdAt: exp.createdAt,
-          })),
+          experiences: [], // ProductExperience modeli artık kullanılmıyor
           media: inventory.media.map((m) => ({
             id: m.id,
             mediaUrl: m.mediaUrl,

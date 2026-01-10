@@ -432,7 +432,6 @@ model Inventory {
   product              Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
   user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   media                InventoryMedia[]
-  productExperiences   ProductExperience[]
 
   @@unique([userId, productId])
   @@index([userId])
@@ -443,19 +442,6 @@ model Inventory {
   @@index([experienceLocationId])
   @@index([experiencePurposeId])
   @@map("inventories")
-}
-
-model ProductExperience {
-  id             String    @id @default(uuid()) @db.Uuid
-  inventoryId    String    @map("inventory_id") @db.Uuid
-  title          String
-  experienceText String    @map("experience_text")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
-  inventory      Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
-
-  @@index([inventoryId])
-  @@map("product_experiences")
 }
 
 model InventoryMedia {

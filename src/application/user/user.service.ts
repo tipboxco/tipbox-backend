@@ -254,7 +254,7 @@ export class UserService {
     return {
       id: user.id,
       name: profile?.displayName || user.name || 'Anonymous User',
-      avatar: resolveMediaUrl(activeAvatar?.imageUrl ?? null),
+      avatar: resolveMediaUrl(activeAvatar?.imageUrl ?? null, true),
       bannerUrl: resolveMediaUrl(profile?.bannerUrl ?? DEFAULT_PROFILE_BANNER_URL),
       description: profile?.bio ?? null,
       titles: titles.map(t => t.title),
@@ -569,17 +569,13 @@ export class UserService {
       if (!avatarMap.has(a.userId)) avatarMap.set(a.userId, a.imageUrl);
     });
 
-    // Default avatar path'ini resolve et
-    const defaultAvatarPath = 'avatars/default/default-useravatar.png';
-    const defaultAvatarUrl = resolveMediaUrl(defaultAvatarPath);
-
     return profiles.map(p => {
-      const avatarUrl = resolveMediaUrl(avatarMap.get(String(p.userId)) ?? null);
+      const avatarUrl = resolveMediaUrl(avatarMap.get(String(p.userId)) ?? null, true);
       return {
         id: String(p.userId),
         userName: p.userName ?? null,
         titles: (titleMap.get(String(p.userId)) || []).slice(0, 3),
-        avatar: avatarUrl || defaultAvatarUrl || '',
+        avatar: avatarUrl || '',
         name: p.displayName,
       };
     });
@@ -789,17 +785,13 @@ export class UserService {
       if (!avatarMap.has(a.userId)) avatarMap.set(a.userId, a.imageUrl);
     });
 
-    // Default avatar path'ini resolve et
-    const defaultAvatarPath = 'avatars/default/default-useravatar.png';
-    const defaultAvatarUrl = resolveMediaUrl(defaultAvatarPath);
-
     let result = profiles.map(p => {
-      const avatarUrl = resolveMediaUrl(avatarMap.get(String(p.userId)) ?? null);
+      const avatarUrl = resolveMediaUrl(avatarMap.get(String(p.userId)) ?? null, true);
       return {
         id: String(p.userId),
         userName: p.userName ?? null,
         titles: (titleMap.get(String(p.userId)) || []).slice(0, 3),
-        avatar: avatarUrl || defaultAvatarUrl || '',
+        avatar: avatarUrl || '',
         name: p.displayName,
         isTrusted: myTrustedSet.has(String(p.userId)),
         trustDate: trustDateMap.get(String(p.userId)),
@@ -1325,7 +1317,7 @@ export class UserService {
       id: userId,
       name: profile?.displayName || 'Anonymous',
       title: title?.title || '',
-      avatar: resolveMediaUrl(avatar?.imageUrl ?? null) || '',
+      avatar: resolveMediaUrl(avatar?.imageUrl ?? null, true) || '',
     };
   }
 
@@ -1712,7 +1704,6 @@ export class UserService {
             },
           },
         },
-        productExperiences: true,
         media: true,
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -1720,11 +1711,9 @@ export class UserService {
     });
 
     for (const inv of inventories) {
+      // ProductExperience artık kullanılmıyor, boş array kullan
       const experiences = this.buildExperienceSections(
-        ((inv as any).productExperiences || []) as Array<{
-          title: string;
-          experienceText: string;
-        }>,
+        [],
         (inv as any).experienceSummary ?? null,
       );
 
@@ -2517,7 +2506,7 @@ export class UserService {
             id: uid,
             name: profile?.displayName || 'Anonymous',
             title: title?.title || '',
-            avatar: resolveMediaUrl(avatar?.imageUrl ?? null) || '',
+            avatar: resolveMediaUrl(avatar?.imageUrl ?? null, true) || '',
           },
         };
       })
@@ -3492,6 +3481,189 @@ export class UserService {
         message: 'Failed to remove device',
       };
     }
+  }
+
+  /**
+   * Get Suggested Users - Trust edilmemiş kullanıcılardan öneriler getirir
+   * Pagination, search ve mutual trust count desteği ile
+   */
+  async getSuggestedUsers(
+    userId: string,
+    options?: {
+      cursor?: string;
+      limit?: number;
+      searchQuery?: string;
+    }
+  ): Promise<{
+    items: Array<{
+      id: string;
+      userName: string | null;
+      name: string | null;
+      avatar: string | null;
+      titles: string[];
+      isTrusted: boolean;
+      mutualTrustCount: number;
+      stats: {
+        posts: number;
+        trust: number;
+        truster: number;
+      };
+    }>;
+    pagination: {
+      nextCursor: string | null;
+      hasMore: boolean;
+    };
+  }> {
+    const limit = Math.min(options?.limit || 20, 50);
+    const searchQuery = options?.searchQuery?.trim();
+    const cursor = options?.cursor;
+
+    // Kullanıcının trust ettiği kişilerin ID'lerini al
+    const trustedRelations = await this.prisma.trustRelation.findMany({
+      where: { trusterId: userId },
+      select: { trustedUserId: true },
+    });
+    const trustedUserIds = trustedRelations.map(r => r.trustedUserId);
+
+    // Kullanıcının kendisini ve engellediği/mute ettiği kişileri hariç tut
+    const [blockedUsers, mutedUsers] = await Promise.all([
+      this.prisma.userBlock.findMany({
+        where: { blockerId: userId },
+        select: { blockedUserId: true },
+      }),
+      this.prisma.userMute.findMany({
+        where: { muterId: userId },
+        select: { mutedUserId: true },
+      }),
+    ]);
+
+    const excludedUserIds = [
+      userId,
+      ...trustedUserIds,
+      ...blockedUsers.map(b => b.blockedUserId),
+      ...mutedUsers.map(m => m.mutedUserId),
+    ];
+
+    // Where clause oluştur
+    const whereClause: any = {
+      userId: {
+        notIn: excludedUserIds,
+      },
+      displayName: {
+        not: null,
+      },
+    };
+
+    // Cursor varsa ekle
+    if (cursor) {
+      whereClause.userId = {
+        ...whereClause.userId,
+        lt: cursor, // Cursor'dan sonraki kayıtlar
+      };
+    }
+
+    // Search query varsa ekle
+    if (searchQuery) {
+      whereClause.OR = [
+        { displayName: { contains: searchQuery, mode: 'insensitive' as const } },
+        { userName: { contains: searchQuery, mode: 'insensitive' as const } },
+      ];
+    }
+
+    // Trust edilmemiş kullanıcıları getir (limit + 1 ile hasMore kontrolü)
+    const profiles = await this.prisma.profile.findMany({
+      where: whereClause,
+      take: limit + 1, // Bir fazla çek hasMore için
+      select: {
+        userId: true,
+        displayName: true,
+        userName: true,
+        postsCount: true,
+        trustCount: true,
+        trusterCount: true,
+      },
+      orderBy: [
+        { trusterCount: 'desc' }, // Popüler kullanıcıları önce getir
+        { postsCount: 'desc' },
+        { userId: 'desc' }, // Consistent ordering için
+      ],
+    });
+
+    // HasMore kontrolü
+    const hasMore = profiles.length > limit;
+    const paginatedProfiles = hasMore ? profiles.slice(0, limit) : profiles;
+    const nextCursor = hasMore && paginatedProfiles.length > 0 
+      ? paginatedProfiles[paginatedProfiles.length - 1].userId 
+      : null;
+
+    const userIds = paginatedProfiles.map(p => p.userId);
+
+    // Avatar, title ve mutual trust bilgilerini paralel çek
+    const [avatars, titles, mutualTrustCounts] = await Promise.all([
+      this.prisma.userAvatar.findMany({
+        where: {
+          userId: { in: userIds },
+          isActive: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        distinct: ['userId'],
+      }),
+      this.prisma.userTitle.findMany({
+        where: { userId: { in: userIds } },
+        orderBy: { earnedAt: 'desc' },
+      }),
+      // Mutual trust count: Suggested user'ın trust ettiği kişilerden
+      // kaç tanesini current user da trust ediyor
+      Promise.all(
+        userIds.map(async (suggestedUserId) => {
+          const suggestedUserTrusts = await this.prisma.trustRelation.findMany({
+            where: { trusterId: suggestedUserId },
+            select: { trustedUserId: true },
+          });
+          const suggestedUserTrustIds = suggestedUserTrusts.map(t => t.trustedUserId);
+          
+          // Ortak trust sayısı
+          const mutualCount = trustedUserIds.filter(id => 
+            suggestedUserTrustIds.includes(id)
+          ).length;
+          
+          return { userId: suggestedUserId, count: mutualCount };
+        })
+      ),
+    ]);
+
+    // Avatar, title ve mutual trust'ları map'e çevir
+    const avatarMap = new Map(avatars.map(a => [a.userId, a.imageUrl]));
+    const titlesByUser = titles.reduce((acc, t) => {
+      if (!acc[t.userId]) acc[t.userId] = [];
+      if (acc[t.userId].length < 5) acc[t.userId].push(t.title);
+      return acc;
+    }, {} as Record<string, string[]>);
+    const mutualTrustMap = new Map(mutualTrustCounts.map(m => [m.userId, m.count]));
+
+    // Sonuçları oluştur
+    const items = paginatedProfiles.map(profile => ({
+      id: profile.userId,
+      userName: profile.userName,
+      name: profile.displayName,
+      avatar: resolveMediaUrl(avatarMap.get(profile.userId) ?? null, true),
+      titles: titlesByUser[profile.userId] || [],
+      isTrusted: false, // Zaten exclude listesinde oldukları için false
+      mutualTrustCount: mutualTrustMap.get(profile.userId) || 0,
+      stats: {
+        posts: profile.postsCount,
+        trust: profile.trustCount,
+        truster: profile.trusterCount,
+      },
+    }));
+
+    return {
+      items,
+      pagination: {
+        nextCursor,
+        hasMore,
+      },
+    };
   }
 
   /**

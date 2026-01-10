@@ -1,6 +1,12 @@
 import { s3Config } from './s3.config';
 
 /**
+ * Default avatar path (MinIO'daki path)
+ * Bu path tüm ortamlarda (dev, test, prod) aynı olacak
+ */
+export const DEFAULT_AVATAR_PATH = 'defaultavatar/default-useravatar.png';
+
+/**
  * Ortak public media base URL
  * - Tüm görsel URL'leri için TEK kontrol noktası
  * - Öncelikle SEED_MEDIA_BASE_URL kullanılır (önerilen)
@@ -52,6 +58,8 @@ export function getPublicMediaBaseUrl(): string {
  * 
  * Eğer mediaPath zaten tam bir URL ise (http:// veya https:// ile başlıyorsa), direkt döndürülür.
  * 
+ * AVATAR FALLBACK: Eğer mediaPath null/undefined ise, default avatar URL'i döndürülür.
+ * 
  * Örnekler:
  * - Input:  'catalog/home-appliances.png'
  *   SEED_MEDIA_BASE_URL=https://api-test.tipbox.co/media
@@ -64,11 +72,22 @@ export function getPublicMediaBaseUrl(): string {
  * - Input:  'http://example.com/image.jpg' (tam URL)
  *   Output: 'http://example.com/image.jpg' (değişmeden döndürülür)
  * 
+ * - Input:  null (avatar yok)
+ *   Output: 'http://api-test.tipbox.co/media/defaultavatar/default-useravatar.png'
+ * 
  * @param mediaPath - Database'den gelen path veya tam URL
+ * @param useDefaultAvatarFallback - true ise null durumunda default avatar döndürülür (default: false)
  * @returns Tam media URL veya null
  */
-export function resolveMediaUrl(mediaPath: string | null | undefined): string | null {
-  if (!mediaPath) return null;
+export function resolveMediaUrl(mediaPath: string | null | undefined, useDefaultAvatarFallback: boolean = false): string | null {
+  if (!mediaPath) {
+    // Eğer avatar için çağrılıyorsa ve fallback istenmişse, default avatar döndür
+    if (useDefaultAvatarFallback) {
+      const baseUrl = getPublicMediaBaseUrl();
+      return `${baseUrl}/${DEFAULT_AVATAR_PATH}`;
+    }
+    return null;
+  }
 
   // Eğer zaten tam bir URL ise (http:// veya https:// ile başlıyorsa), direkt döndür
   if (mediaPath.match(/^https?:\/\//)) {

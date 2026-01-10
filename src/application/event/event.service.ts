@@ -431,7 +431,7 @@ export class EventService {
               id: post.user.id,
               name: post.user.profile?.displayName || post.user.email || 'Anonymous',
               title: post.user.titles?.[0]?.title || '',
-              avatar: resolveMediaUrl(post.user.avatars?.[0]?.imageUrl || null) || '',
+              avatar: resolveMediaUrl(post.user.avatars?.[0]?.imageUrl || null, true) || '',
             },
             stats: {
               likes: post.likesCount,
@@ -623,7 +623,7 @@ export class EventService {
 
     const leaderboardUsers: LimitedTimeEventLeaderboardUser[] = topUsers.map((s, index) => ({
       id: s.userId,
-      avatar: resolveMediaUrl(s.user.avatars?.[0]?.imageUrl || null),
+      avatar: resolveMediaUrl(s.user.avatars?.[0]?.imageUrl || null, true),
       rank: index + 1,
     }));
 
@@ -648,7 +648,8 @@ export class EventService {
 
       const avatarUrl = resolveMediaUrl(
         statAny.user?.avatars?.[0]?.imageUrl ||
-        null
+        null,
+        true
       );
 
       userScore = {
@@ -721,7 +722,7 @@ export class EventService {
 
     return stats.map((stat) => ({
       userId: stat.user.id,
-      avatar: resolveMediaUrl(stat.user.avatars?.[0]?.imageUrl || null),
+      avatar: resolveMediaUrl(stat.user.avatars?.[0]?.imageUrl || null, true),
       userName: stat.user.profile?.displayName || stat.user.email || 'Anonymous',
     }));
   }

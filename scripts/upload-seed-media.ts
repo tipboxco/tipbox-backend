@@ -532,23 +532,47 @@ async function buildSeedAssets(): Promise<void> {
       'mihrac.png': { key: 'user.avatar.mihrac', userId: '55555555-5555-4555-a555-555555555555' },
       'furkan.png': { key: 'user.avatar.furkan', userId: 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb' },
       'aycan.png': { key: 'user.avatar.aycan', userId: 'cccccccc-cccc-4ccc-cccc-cccccccccccc' },
-      'ozan.png': { key: 'user.avatar.ozan', userId: 'dddddddd-dddd-4ddd-dddd-dddddddddddd' },
+      'ozan.jpg': { key: 'user.avatar.ozan', userId: '99999999-9999-4999-9999-999999999999' },
+      'ozan.png': { key: 'user.avatar.ozan', userId: '99999999-9999-4999-9999-999999999999' },
       
-      // Generic man/woman avatars (diğer kullanıcılar için)
-      'man-user.jpg': { key: 'user.avatar.man1', userId: '11111111-1111-4111-a111-111111111111' },
-      'man-user-2.png': { key: 'user.avatar.man2', userId: '33333333-3333-4333-a333-333333333333' },
-      'man-user-3.jpg': { key: 'user.avatar.man3', userId: 'eeeeeeee-eeee-4eee-eeee-eeeeeeeeeeee' },
-      'man-user-4.jpg': { key: 'user.avatar.man4', userId: 'ffffffff-ffff-4fff-ffff-ffffffffffff' },
-      'man-user-5.jpg': { key: 'user.avatar.man5', userId: '10000000-0000-4000-0000-000000000001' },
-      'woman-user.jpg': { key: 'user.avatar.woman1', userId: 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa' },
-      'woman-user-2.jpg': { key: 'user.avatar.woman2', userId: '10000000-0000-4000-0000-000000000003' },
-      'woman-user-3.jpg': { key: 'user.avatar.woman3', userId: '10000000-0000-4000-0000-000000000005' },
-      'woman-user-4.jpg': { key: 'user.avatar.woman4', userId: '10000000-0000-4000-0000-000000000007' },
-      'woman-user-5.jpg': { key: 'user.avatar.woman5', userId: '10000000-0000-4000-0000-000000000009' },
+      // Generic avatars - İlk kullanıcılar
+      'man-user.jpg': { key: 'user.avatar.man1', userId: '11111111-1111-4111-a111-111111111111' }, // Tuna
+      'man-user-2.png': { key: 'user.avatar.man2', userId: '33333333-3333-4333-a333-333333333333' }, // İbrahim
+      'woman-user.jpg': { key: 'user.avatar.woman1', userId: 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa' }, // İrem
       
-      // Özel key'ler (seed'de tekrar kullanılan)
-      // primary, trust1-5, truster1-3, coach, market key'leri yukarıdaki dosyalara eşlendi
+      // Ozan'dan sonraki kullanıcılar - Random man/woman dağılımı
+      'woman-user-2.jpg': { key: 'user.avatar.elif', userId: '10000000-0000-4000-a000-000000000001' }, // Elif
+      'man-user-3.jpg': { key: 'user.avatar.can', userId: '10000000-0000-4000-a000-000000000002' }, // Can
+      'woman-user-3.jpg': { key: 'user.avatar.zeynep', userId: '10000000-0000-4000-a000-000000000003' }, // Zeynep
+      'man-user-4.jpg': { key: 'user.avatar.ahmet', userId: '10000000-0000-4000-a000-000000000004' }, // Ahmet
+      'woman-user-4.jpg': { key: 'user.avatar.selin', userId: '10000000-0000-4000-a000-000000000005' }, // Selin
+      'man-user-5.jpg': { key: 'user.avatar.emre', userId: '10000000-0000-4000-a000-000000000006' }, // Emre
+      'woman-user-5.jpg': { key: 'user.avatar.deniz', userId: '10000000-0000-4000-a000-000000000007' }, // Deniz
     };
+    
+    // Aynı resmi birden fazla kullanıcı için kullanmak üzere ekstra mapping
+    const additionalAvatars: Array<{ sourceFile: string; key: string; userId: string }> = [
+      { sourceFile: 'man-user.jpg', key: 'user.avatar.baris', userId: '10000000-0000-4000-a000-000000000008' }, // Barış
+      { sourceFile: 'woman-user.jpg', key: 'user.avatar.merve', userId: '10000000-0000-4000-a000-000000000009' }, // Merve
+      { sourceFile: 'man-user-2.png', key: 'user.avatar.berkay', userId: '10000000-0000-4000-a000-000000000010' }, // Berkay
+      { sourceFile: 'woman-user-2.jpg', key: 'user.avatar.asli', userId: '10000000-0000-4000-a000-000000000011' }, // Aslı
+      { sourceFile: 'man-user-3.jpg', key: 'user.avatar.murat', userId: '10000000-0000-4000-a000-000000000012' }, // Murat
+      { sourceFile: 'woman-user-3.jpg', key: 'user.avatar.gizem', userId: '10000000-0000-4000-a000-000000000013' }, // Gizem
+      { sourceFile: 'man-user-4.jpg', key: 'user.avatar.onur', userId: '10000000-0000-4000-a000-000000000014' }, // Onur
+      { sourceFile: 'woman-user-4.jpg', key: 'user.avatar.burcu', userId: '10000000-0000-4000-a000-000000000015' }, // Burcu
+      { sourceFile: 'man-user-5.jpg', key: 'user.avatar.tolga', userId: '10000000-0000-4000-a000-000000000016' }, // Tolga
+      { sourceFile: 'woman-user-5.jpg', key: 'user.avatar.ebru', userId: '10000000-0000-4000-a000-000000000017' }, // Ebru
+      { sourceFile: 'man-user.jpg', key: 'user.avatar.serkan', userId: '10000000-0000-4000-a000-000000000018' }, // Serkan
+      { sourceFile: 'woman-user.jpg', key: 'user.avatar.ece', userId: '10000000-0000-4000-a000-000000000019' }, // Ece
+      { sourceFile: 'man-user-2.png', key: 'user.avatar.kaan', userId: '10000000-0000-4000-a000-000000000020' }, // Kaan
+      { sourceFile: 'woman-user-2.jpg', key: 'user.avatar.derya', userId: '10000000-0000-4000-a000-000000000021' }, // Derya
+      { sourceFile: 'man-user-3.jpg', key: 'user.avatar.selim', userId: '10000000-0000-4000-a000-000000000022' }, // Selim
+      { sourceFile: 'woman-user-3.jpg', key: 'user.avatar.pelin', userId: '10000000-0000-4000-a000-000000000023' }, // Pelin
+      { sourceFile: 'man-user-4.jpg', key: 'user.avatar.cem', userId: '10000000-0000-4000-a000-000000000024' }, // Cem
+      { sourceFile: 'woman-user-4.jpg', key: 'user.avatar.duygu', userId: '10000000-0000-4000-a000-000000000025' }, // Duygu
+      { sourceFile: 'man-user-5.jpg', key: 'user.avatar.hakan', userId: '10000000-0000-4000-a000-000000000026' }, // Hakan
+      { sourceFile: 'woman-user-5.jpg', key: 'user.avatar.nil', userId: '10000000-0000-4000-a000-000000000027' }, // Nil
+    ];
     
     for (const file of profileFiles) {
       if (file.startsWith('.')) continue;
@@ -578,6 +602,24 @@ async function buildSeedAssets(): Promise<void> {
           // Eşleşmeyen dosyalar için UYARI ver (artık yanlış path oluşturmuyoruz)
           console.warn(`   ⚠️  Avatar mapping bulunamadı: ${file} - Atlanıyor`);
         }
+      }
+    }
+    
+    // Ek avatarları işle (aynı resmi farklı kullanıcılar için kullan)
+    for (const avatar of additionalAvatars) {
+      const filePath = path.join(userProfilePath, avatar.sourceFile);
+      try {
+        await fs.access(filePath);
+        const fileExt = path.extname(avatar.sourceFile).toLowerCase().replace('.', '');
+        seedAssets.push({
+          key: avatar.key,
+          localPath: filePath,
+          targetKey: `profile-pictures/${avatar.userId}/seed-avatar.${fileExt}`,
+          contentType: inferContentType(filePath),
+          description: `User avatar (reused): ${avatar.sourceFile} (${avatar.userId})`,
+        });
+      } catch {
+        console.warn(`   ⚠️  Avatar kaynak dosyası bulunamadı: ${avatar.sourceFile}`);
       }
     }
     console.log(`   ✅ ${profileFiles.filter(f => !f.startsWith('.')).length} user profile görseli eklendi`);
