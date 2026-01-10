@@ -70,7 +70,8 @@ async function waitForQueueCompletion(
 
     // 30 saniye boyunca ilerleme yoksa uyar
     if (stuckCounter > 6) { // 6 x 5 saniye = 30 saniye
-      console.log(`   ⚠️  İlerleme yavaş (son 30 saniyede değişiklik yok). Worker çalışıyor mu kontrol edin.`);
+      console.log(`   ⚠️  İlerleme yavaş (son 30 saniyede değişiklik yok).`);
+      console.log(`   💡 Feed worker'ın çalıştığından emin olun: npm run dev:feed-worker`);
       stuckCounter = 0;
     }
 

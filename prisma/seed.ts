@@ -12327,6 +12327,7 @@ async function main() {
   progress.increment('Post media kontrol ediliyor...')
   try {
     await ensureAllPostsHaveMedia()
+    progress.increment('Post media kontrolü tamamlandı')
     console.log('✅ Post media check completed')
   } catch (error) {
     console.error('❌ Post media check hatası:', error)
@@ -12339,14 +12340,26 @@ async function main() {
   
   // ===== FEED DISTRIBUTION =====
   console.log('\n📡 Feed distribution tetikleniyor...')
+  progress.increment('Feed job\'ları oluşturuluyor...')
+  
   try {
     const { triggerFeedDistributionAfterSeed } = await import('./seed/trigger-feed-distribution')
-    await triggerFeedDistributionAfterSeed(true) // true = worker'ın tamamlamasını bekle
+    
+    // Feed distribution'ı bekle (eksik feed kalmaması için)
+    // Not: Bu işlem 3-4 dakika sürebilir
+    console.log('ℹ️  Feed worker\'ların işlemesi bekleniyor (bu 3-4 dakika sürebilir)...')
+    
+    await triggerFeedDistributionAfterSeed(true) // true = tamamlanmasını bekle
+    
+    progress.increment('Feed distribution tamamlandı')
+    console.log('✅ Feed distribution tamamlandı')
   } catch (error) {
     console.error('❌ Feed distribution tetikleme hatası:', error)
     console.log('⚠️  Seed tamamlandı ama feed\'ler oluşturulmadı. Manuel olarak tetikleyebilirsiniz:')
     console.log('   npx ts-node prisma/seed/trigger-feed-distribution.ts')
   }
+  
+  progress.increment('Seed tamamlanıyor...')
 
   // ===== SUMMARY =====
   console.log('\n🎉 Seed process completed successfully!')
