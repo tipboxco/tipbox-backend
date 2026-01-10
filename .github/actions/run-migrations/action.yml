@@ -19,83 +19,64 @@ runs:
         COMPOSE_FILE="${{ inputs.compose_file }}"
         SERVICE="${{ inputs.service }}"
         
+        # Database credentials - compose file'a göre belirle
+        if [[ "$COMPOSE_FILE" == *"test"* ]]; then
+          DB_USER="tipbox_user"
+          DB_NAME="tipbox_test"
+        elif [[ "$COMPOSE_FILE" == *"prod"* ]]; then
+          DB_USER="tipbox_user"
+          DB_NAME="tipbox_prod"
+        else
+          DB_USER="tipbox_user"
+          DB_NAME="tipbox_dev"
+        fi
+        
         echo "🔍 Checking for failed migrations..."
+        echo "📊 Database: $DB_NAME"
         
-        # Prisma migrate status kontrol et
-        MIGRATE_STATUS=$(docker compose -f "$COMPOSE_FILE" exec -T "$SERVICE" npx prisma migrate status 2>&1)
+        # Database'den doğrudan başarısız migration'ları kontrol et
+        FAILED_MIGRATIONS=$(docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -t -c "SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NULL;" 2>&1 | grep -v "^$" | xargs)
         
-        # Başarısız migration var mı kontrol et
-        if echo "$MIGRATE_STATUS" | grep -q "migrate found failed migrations"; then
-          echo "⚠️  Başarısız migration bulundu!"
+        if [ -n "$FAILED_MIGRATIONS" ]; then
+          echo "⚠️  Başarısız migration bulundu: $FAILED_MIGRATIONS"
           
-          # Başarısız migration ismini ve tarihini bul
-          FAILED_MIGRATION=$(echo "$MIGRATE_STATUS" | grep "migration started at" | sed -n 's/.*The `\([^`]*\)`.*/\1/p')
-          FAILED_DATE=$(echo "$MIGRATE_STATUS" | grep "migration started at" | sed -n 's/.*started at \([^ ]*\).*/\1/p')
-          
-          if [ -n "$FAILED_MIGRATION" ]; then
-            echo "📋 Migration: $FAILED_MIGRATION"
-            echo "📅 Started at: $FAILED_DATE"
-            
-            # Migration'ın kaç kere başarısız olduğunu kontrol et (retry counter için dosya kullan)
-            RETRY_FILE="/tmp/migration_retry_${FAILED_MIGRATION}"
-            
-            if [ -f "$RETRY_FILE" ]; then
-              RETRY_COUNT=$(cat "$RETRY_FILE")
-              echo "⚠️  Bu migration daha önce $RETRY_COUNT kere denendi!"
-              
-              if [ "$RETRY_COUNT" -ge 1 ]; then
-                echo ""
-                echo "❌ HATA: Migration birden fazla kez başarısız oldu!"
-                echo "❌ Bu gerçek bir migration problemi olabilir."
-                echo "📋 Migration detayları:"
-                echo "   Name: $FAILED_MIGRATION"
-                echo "   Date: $FAILED_DATE"
-                echo "   Retry Count: $RETRY_COUNT"
-                echo ""
-                echo "🔍 Lütfen migration dosyasını ve veritabanı durumunu manuel kontrol edin."
-                echo "📖 Migration dosyası: prisma/migrations/$FAILED_MIGRATION/migration.sql"
-                echo ""
-                exit 1
-              fi
-            else
-              echo "0" > "$RETRY_FILE"
-            fi
-            
-            # Retry counter'ı artır
-            echo $(($(cat "$RETRY_FILE") + 1)) > "$RETRY_FILE"
-            
+          for FAILED_MIGRATION in $FAILED_MIGRATIONS; do
             echo ""
-            echo "🔧 Başarısız migration kaydı temizleniyor (1. deneme)..."
-            echo "⚠️  Not: İkinci denemede de başarısız olursa deploy durur!"
-            echo ""
+            echo "🔧 Temizleniyor: $FAILED_MIGRATION"
             
-            # Database'den başarısız migration kaydını sil
-            docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U tipbox_user -d tipbox_test << EOF
-              -- Migration detaylarını logla
-              SELECT 
-                migration_name,
-                started_at,
-                finished_at,
-                logs
-              FROM _prisma_migrations 
-              WHERE migration_name = '$FAILED_MIGRATION';
-              
-              -- Başarısız kaydı sil
-              DELETE FROM _prisma_migrations 
-              WHERE migration_name = '$FAILED_MIGRATION' 
-                AND finished_at IS NULL;
-              
-              SELECT 'Migration kaydı temizlendi' as sonuc;
+            # Migration detaylarını göster
+            docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" << EOF
+SELECT 
+  migration_name,
+  started_at,
+  finished_at,
+  logs,
+  CASE 
+    WHEN finished_at IS NULL THEN '❌ Başarısız (tamamlanmadı)'
+    WHEN rolled_back_at IS NOT NULL THEN '🔄 Geri alındı'
+    ELSE '✅ Başarılı'
+  END as durum
+FROM _prisma_migrations 
+WHERE migration_name = '$FAILED_MIGRATION';
 EOF
             
-            echo "✅ Migration kaydı temizlendi, tekrar denenecek..."
-            echo "⏳ Eğer yine başarısız olursa deploy DURACAK!"
-          fi
+            # Başarısız kaydı temizle
+            docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" << EOF
+DELETE FROM _prisma_migrations 
+WHERE migration_name = '$FAILED_MIGRATION' 
+  AND finished_at IS NULL;
+  
+SELECT 'Migration kaydı temizlendi: $FAILED_MIGRATION' as sonuc;
+EOF
+            
+            echo "✅ $FAILED_MIGRATION temizlendi"
+          done
+          
+          echo ""
+          echo "✅ Tüm başarısız migration kayıtları temizlendi"
+          echo "🔄 Migration tekrar çalışacak..."
         else
           echo "✅ Başarısız migration bulunamadı"
-          
-          # Başarılı olduysa retry dosyalarını temizle
-          rm -f /tmp/migration_retry_* 2>/dev/null || true
         fi
         
         set -e
@@ -108,43 +89,51 @@ EOF
         COMPOSE_FILE="${{ inputs.compose_file }}"
         SERVICE="${{ inputs.service }}"
         
-        # Migration'ları çalıştır (backend container başlatılmadan önce)
-        echo "📊 Running database migrations..."
+        # Database credentials - compose file'a göre belirle
+        if [[ "$COMPOSE_FILE" == *"test"* ]]; then
+          DB_USER="tipbox_user"
+          DB_NAME="tipbox_test"
+        elif [[ "$COMPOSE_FILE" == *"prod"* ]]; then
+          DB_USER="tipbox_user"
+          DB_NAME="tipbox_prod"
+        else
+          DB_USER="tipbox_user"
+          DB_NAME="tipbox_dev"
+        fi
+        
+        # Prisma Client generate et (migration'dan önce)
+        echo "🔧 Generating Prisma Client..."
+        docker compose -f "$COMPOSE_FILE" run --rm "$SERVICE" npx prisma generate
+        
+        # Migration'ları çalıştır
+        echo "📊 Deploying migrations..."
         
         if ! docker compose -f "$COMPOSE_FILE" run --rm "$SERVICE" npx prisma migrate deploy; then
           echo ""
           echo "❌ Migration BAŞARISIZ!"
           echo ""
-          echo "📋 Container logs (son 100 satır):"
-          docker compose -f "$COMPOSE_FILE" logs "$SERVICE" | tail -100
-          echo ""
-          echo "📋 Migration durumu:"
-          docker compose -f "$COMPOSE_FILE" exec -T "$SERVICE" npx prisma migrate status || true
-          echo ""
-          echo "🔍 Başarısız migration detayları için veritabanı kontrol ediliyor..."
-          docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U tipbox_user -d tipbox_test << EOF || true
-            SELECT 
-              migration_name,
-              started_at,
-              finished_at,
-              rolled_back_at,
-              logs,
-              CASE 
-                WHEN finished_at IS NULL THEN '❌ Başarısız (tamamlanmadı)'
-                WHEN rolled_back_at IS NOT NULL THEN '🔄 Geri alındı'
-                ELSE '✅ Başarılı'
-              END as durum
-            FROM _prisma_migrations 
-            ORDER BY started_at DESC 
-            LIMIT 5;
+          echo "🔍 Başarısız migration detayları:"
+          docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" << EOF || true
+SELECT 
+  migration_name,
+  started_at,
+  finished_at,
+  rolled_back_at,
+  logs,
+  CASE 
+    WHEN finished_at IS NULL THEN '❌ Başarısız (tamamlanmadı)'
+    WHEN rolled_back_at IS NOT NULL THEN '🔄 Geri alındı'
+    ELSE '✅ Başarılı'
+  END as durum
+FROM _prisma_migrations 
+ORDER BY started_at DESC 
+LIMIT 5;
 EOF
           echo ""
           echo "💡 İpucu: Migration dosyasını kontrol edin: prisma/migrations/[migration_name]/migration.sql"
+          echo "💡 Manuel düzeltme için: ./scripts/fix-failed-migration.sh [migration_name] $DB_NAME $COMPOSE_FILE"
           exit 1
         fi
         
         echo "✅ Migrations completed successfully"
-        
-        # Başarılı olduysa retry counter'ları temizle
-        rm -f /tmp/migration_retry_* 2>/dev/null || true
 
