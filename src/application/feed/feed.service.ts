@@ -308,30 +308,26 @@ export class FeedService {
       ];
     }
 
-    // Interests filter - now uses FeedSource instead of category IDs
-    // interests parametresi artık feed source'larını alıyor (TRUSTER, TRENDING, MUTUAL_TRUST, BOOSTED, etc.)
-    // ENGAGEMENT_HIGH → TRENDING mapping (kullanıcı ENGAGEMENT_HIGH yerine TRENDING kullanabilir)
+    // Interests filter - şu feed source'lar kabul edilir: TRUSTER, CATEGORY_MATCH, TRENDING, NEW_USER, BOOSTED, INVENTORY_MATCH, PRODUCT_GROUP_MATCH
     const feedWhere: any = {};
     if (filters.interests && filters.interests.length > 0) {
+      // İzin verilen feed source'lar
+      const allowedSources = [
+        FeedSource.TRUSTER,
+        FeedSource.CATEGORY_MATCH,
+        FeedSource.TRENDING,
+        FeedSource.NEW_USER,
+        FeedSource.BOOSTED,
+        FeedSource.INVENTORY_MATCH,
+        FeedSource.PRODUCT_GROUP_MATCH,
+      ];
+      
       // Feed source'larını validate et ve filtrele
       const validSources = filters.interests
-        .map((source) => {
-          // ENGAGEMENT_HIGH → TRENDING mapping
-          if (source === 'ENGAGEMENT_HIGH') {
-            return FeedSource.TRENDING;
-          }
-          return source;
-        })
-        .filter((source) => {
-          return Object.values(FeedSource).includes(source as FeedSource);
-        });
+        .filter((source) => allowedSources.includes(source as FeedSource));
       
       if (validSources.length > 0) {
-        // ENGAGEMENT_HIGH ve TRENDING'i birlikte filtrele (ENGAGEMENT_HIGH database'de TRENDING olarak gösterilir)
-        const sourceArray = validSources.includes(FeedSource.TRENDING)
-          ? [...validSources, FeedSource.ENGAGEMENT_HIGH]
-          : validSources;
-        feedWhere.source = { in: sourceArray };
+        feedWhere.source = { in: validSources };
       }
     }
 
@@ -404,16 +400,16 @@ export class FeedService {
     // Note: minLikes and minComments filtering will be done after fetching stats
 
     // Fetch feeds with post filters
-    // Post'un gerçek oluşturulma zamanına göre sırala (gönderim zamanı)
+    // Sort logic:
+    // - recent: En yeni postlar (createdAt'a göre)
+    // - top: Relevance score'a göre popüler olanlar
     const orderBy =
       filters.sort === 'top'
         ? [
-            { post: { likesCount: 'desc' as const } },
-            { post: { viewsCount: 'desc' as const } },
+            { relevanceScore: 'desc' as const },
             { post: { createdAt: 'desc' as const } },
           ]
         : [
-            { post: { isBoosted: 'desc' as const } },
             { post: { createdAt: 'desc' as const } },
           ];
 

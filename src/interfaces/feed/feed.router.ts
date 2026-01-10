@@ -127,9 +127,8 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  *           type: array
  *           items:
  *             type: string
- *             enum: [TRUSTER, CATEGORY_MATCH, TRENDING, NEW_USER, BOOSTED, TRUSTER_NETWORK, MUTUAL_TRUST, INVENTORY_MATCH, PRODUCT_GROUP_MATCH, ENGAGEMENT_HIGH]
- *         description: Feed source filtreleri. ENGAGEMENT_HIGH otomatik olarak TRENDING olarak gösterilir.
- *         example: [TRUSTER, BOOSTED, MUTUAL_TRUST]
+ *             enum: [TRUSTER, CATEGORY_MATCH, TRENDING, NEW_USER, BOOSTED, INVENTORY_MATCH, PRODUCT_GROUP_MATCH]
+ *         description: Feed source filtreleri. Kullanılabilir değerler: TRUSTER, CATEGORY_MATCH, TRENDING, NEW_USER, BOOSTED, INVENTORY_MATCH, PRODUCT_GROUP_MATCH
  *       - in: query
  *         name: tags
  *         schema:
@@ -138,29 +137,26 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  *             type: string
  *             enum: [Review, Benchmark, Tips, Question, Experience, Update]
  *         description: İçerik etiketleri veya post type'ları. Review=FREE, Benchmark=COMPARE, Tips=TIPS, Question=QUESTION, Experience=EXPERIENCE, Update=UPDATE
- *         example: [Question, Review]
  *       - in: query
  *         name: category
  *         schema:
  *           type: string
  *           format: uuid
- *         description: Birincil kategori ID'si (mainCategoryId veya subCategoryId)
+ *         description: Birincil kategori ID'si (mainCategoryId veya subCategoryId). Kategorileri listelemek için GET /catalog/categories endpoint'ini kullanın.
  *       - in: query
  *         name: sort
  *         schema:
  *           type: string
  *           enum: [recent, top]
- *           default: recent
- *         description: Sıralama tipi (recent = en yeni, top = etkileşime göre relevance score)
+ *         description: Sıralama tipi (recent = en yeni postlar, top = relevance score'a göre popüler olanlar)
  *       - in: query
  *         name: types
  *         schema:
  *           type: array
  *           items:
  *             type: string
- *             enum: [feed, benchmark, post, question, tipsAndTricks, experience, update]
+ *             enum: [benchmark, post, question, tipsAndTricks, experience, update]
  *         description: Feed item type'larına göre filtrele
- *         example: [post, question]
  *       - in: query
  *         name: cursor
  *         schema:
@@ -186,13 +182,6 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  *                   type: array
  *                   items:
  *                     oneOf:
- *                       - type: object
- *                         properties:
- *                           type:
- *                             type: string
- *                             enum: [feed]
- *                           data:
- *                             $ref: '#/components/schemas/Post'
  *                       - type: object
  *                         properties:
  *                           type:
