@@ -9,7 +9,7 @@ import { TipsAndTricksBenefitCategory } from '../../src/domain/content/tips-and-
 import { ExperienceType } from '../../src/domain/content/experience-type.enum';
 import { ExperienceStatus } from '../../src/domain/content/experience-status.enum';
 import { ContentPostType } from '../../src/domain/content/content-post-type.enum';
-
+import { generateUuidV4 } from '../../src/infrastructure/ids/id.strategy';
 const BASE_URL = 'http://localhost:3000';
 
 // PrismaClient'ı lazy initialization ile oluştur (DATABASE_URL set edildikten sonra)
@@ -248,6 +248,7 @@ describe('Post Endpoints - Kapsamlı Test (Multipart/Form-Data + MinIO + DB)', (
           // Product yoksa oluştur
           const product1 = await prisma.product.create({
             data: {
+              id: generateUuidV4(),
               name: 'Test Product 1',
               groupId: productGroupId,
               description: 'Test için oluşturuldu',
@@ -255,6 +256,7 @@ describe('Post Endpoints - Kapsamlı Test (Multipart/Form-Data + MinIO + DB)', (
           });
           const product2 = await prisma.product.create({
             data: {
+              id: generateUuidV4(),
               name: 'Test Product 2',
               groupId: productGroupId,
               description: 'Test için oluşturuldu',
@@ -275,6 +277,7 @@ describe('Post Endpoints - Kapsamlı Test (Multipart/Form-Data + MinIO + DB)', (
         productGroupId = newProductGroup.id;
         const product1 = await prisma.product.create({
           data: {
+            id: generateUuidV4(),
             name: 'Test Product 1',
             groupId: productGroupId,
             description: 'Test için oluşturuldu',
@@ -282,6 +285,7 @@ describe('Post Endpoints - Kapsamlı Test (Multipart/Form-Data + MinIO + DB)', (
         });
         const product2 = await prisma.product.create({
           data: {
+            id: generateUuidV4(),
             name: 'Test Product 2',
             groupId: productGroupId,
             description: 'Test için oluşturuldu',
@@ -326,6 +330,7 @@ describe('Post Endpoints - Kapsamlı Test (Multipart/Form-Data + MinIO + DB)', (
       
       const product1 = await prisma.product.create({
         data: {
+          id: generateUuidV4(),
           name: 'Test Product 1',
           groupId: productGroupId,
           description: 'Test için oluşturuldu',
@@ -333,6 +338,7 @@ describe('Post Endpoints - Kapsamlı Test (Multipart/Form-Data + MinIO + DB)', (
       });
       const product2 = await prisma.product.create({
         data: {
+          id: generateUuidV4(),
           name: 'Test Product 2',
           groupId: productGroupId,
           description: 'Test için oluşturuldu',

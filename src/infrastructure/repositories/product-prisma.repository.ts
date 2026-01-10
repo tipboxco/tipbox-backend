@@ -1,4 +1,5 @@
 import { Product } from '../../domain/product/product.entity';
+import { generateUuidV4 } from '../ids/id.strategy';
 import { getPrisma } from './prisma.client';
 
 export class ProductPrismaRepository {
@@ -83,6 +84,7 @@ export class ProductPrismaRepository {
   ): Promise<Product> {
     const product = await this.prisma.product.create({
       data: {
+        id: generateUuidV4(),
         name,
         brand,
         description,

@@ -7,6 +7,7 @@ import {
   ProcessedRecord,
   SyncModuleType,
 } from '../../interfaces/sync-receiver/sync-receiver.dto';
+import { generateUuidV4 } from '../../infrastructure/ids/id.strategy';
 
 export class SyncReceiverService {
   private prisma = getPrisma();
@@ -262,7 +263,7 @@ export class SyncReceiverService {
           // Batch create
           if (toCreate.length > 0) {
             const createData = toCreate.map((record) => ({
-              id: record.id,
+              id: record.id ?? generateUuidV4(),
               name: record.name || record.title || 'Unnamed Category',
               description: record.description || null,
               thumbnail: record.thumbnail || record.image_url || null,
@@ -271,7 +272,7 @@ export class SyncReceiverService {
               rank: record.rank || null,
               parentId: record.parent_id || null,
               isActive: record.is_active !== undefined ? record.is_active : true,
-              metadata: record.metadata || {},
+              metadata: record.metadata ?? {},
               level: record.level || 0,
             }));
 
@@ -583,7 +584,7 @@ export class SyncReceiverService {
         } else {
           await this.prisma.product.create({
             data: {
-              id: record.id,
+              id: record.id ?? generateUuidV4(),
               ...productData,
             },
           });
@@ -616,7 +617,7 @@ export class SyncReceiverService {
    */
   validateSyncSecret(providedSecret: string | string[] | undefined): boolean {
     const expectedSecret = process.env.SYNC_SECRET_TOKEN;
-    
+
     // Secret tanımlı değilse, güvenlik nedeniyle reddet
     if (!expectedSecret) {
       logger.warn('[SyncReceiver] SYNC_SECRET_TOKEN is not configured');

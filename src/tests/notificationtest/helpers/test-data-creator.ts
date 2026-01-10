@@ -2,6 +2,7 @@ import { PrismaClient, ContentPostType } from '@prisma/client';
 import { MediaHelper } from './media-helper';
 import * as path from 'path';
 import * as fs from 'fs';
+import { generateUuidV4 } from '../../../infrastructure/ids/id.strategy';
 
 const prisma = new PrismaClient();
 
@@ -218,6 +219,7 @@ export class TestDataCreator {
 
     const product = await prisma.product.create({
       data: {
+        id: generateUuidV4(),
         name: `Test Product ${Date.now()}`,
         groupId: productGroup.id,
         brand: 'Test Brand',

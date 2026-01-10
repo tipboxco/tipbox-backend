@@ -343,8 +343,8 @@ model Category {
   metadata    Json?    @default("{}") @map("metadata")
   isActive    Boolean? @default(true) @map("is_active")
   level       Int?     @default(0)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   parent       Category?     @relation("CategoryChildren", fields: [parentId], references: [id], onDelete: Cascade)
   children     Category[]    @relation("CategoryChildren")
@@ -399,9 +399,8 @@ model ProductGroup {
 }
 
 model Product {
-  id          String   @id @default(uuid()) @db.Uuid
+  id          String   @id
   name        String
-  brand       String?
   description String?
   groupId     String?  @map("group_id") @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at")
@@ -420,6 +419,8 @@ model Product {
   categoryId         String?
   metadata           Json?               @default("{}") @map("metadata")
   thumbnail          String?             @map("thumbnail")
+  brand              Brand?              @relation(fields: [brandId], references: [externalId])
+  brandId            String?             @map("brand_id")
 
   @@map("products")
 }
@@ -445,7 +446,7 @@ model ProductSuggestion {
 model Inventory {
   id                   String              @id @default(uuid()) @db.Uuid
   userId               String              @map("user_id") @db.Uuid
-  productId            String              @map("product_id") @db.Uuid
+  productId            String              @map("product_id")
   hasOwned             Boolean             @map("has_owned")
   experienceSummary    String?             @map("experience_summary")
   createdAt            DateTime            @default(now()) @map("created_at")
@@ -510,7 +511,7 @@ model ContentPost {
   subCategoryId        String?             @map("sub_category_id") @db.Uuid
   categoryId           String?             @map("category_id")
   productGroupId       String?             @map("product_group_id") @db.Uuid
-  productId            String?             @map("product_id") @db.Uuid
+  productId            String?             @map("product_id")
   inventoryRequired    Boolean             @map("inventory_required")
   isBoosted            Boolean             @map("is_boosted")
   boostedUntil         DateTime?           @map("boosted_until")
@@ -591,7 +592,7 @@ model PostQuestion {
   id                   String               @id @default(uuid()) @db.Uuid
   postId               String               @unique @map("post_id") @db.VarChar(26)
   expectedAnswerFormat QuestionAnswerFormat @map("expected_answer_format")
-  relatedProductId     String?              @map("related_product_id") @db.Uuid
+  relatedProductId     String?              @map("related_product_id")
   createdAt            DateTime             @default(now()) @map("created_at")
   updatedAt            DateTime             @updatedAt @map("updated_at")
   post                 ContentPost          @relation(fields: [postId], references: [id], onDelete: Cascade)
@@ -603,8 +604,8 @@ model PostQuestion {
 model PostComparison {
   id                String                @id @default(uuid()) @db.Uuid
   postId            String                @unique @map("post_id") @db.VarChar(26)
-  product1Id        String                @map("product_1_id") @db.Uuid
-  product2Id        String                @map("product_2_id") @db.Uuid
+  product1Id        String                @map("product_1_id")
+  product2Id        String                @map("product_2_id")
   comparisonSummary String?               @map("comparison_summary")
   createdAt         DateTime              @default(now()) @map("created_at")
   updatedAt         DateTime              @updatedAt @map("updated_at")
@@ -940,6 +941,7 @@ model BrandCategory {
 
 model Brand {
   id            String              @id @default(uuid()) @db.Uuid
+  externalId    String?             @unique @map("external_id")
   name          String
   description   String?
   logoUrl       String?             @map("logo_url")
@@ -956,6 +958,7 @@ model Brand {
   rewards       BridgeReward[]
   userStats     BridgeUserStats[]
   wishboxEvents WishboxEvent[]
+  products      Product[]
 
   @@map("brands")
 }
@@ -1615,7 +1618,7 @@ model ExpertAnswer {
 model AiExperienceSplit {
   id                          String        @id @default(uuid()) @db.Uuid
   userId                      String        @map("user_id") @db.Uuid
-  productId                   String?       @map("product_id") @db.Uuid
+  productId                   String?       @map("product_id")
   originalExperience          String        @map("original_experience")
   priceAndShopping            String?       @map("price_and_shopping")
   productAndUsage             String?       @map("product_and_usage")
