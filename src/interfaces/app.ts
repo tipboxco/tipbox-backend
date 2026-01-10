@@ -25,6 +25,7 @@ import eventRouter from './event/event.router';
 import cacheRouter from './cache/cache.router';
 import notificationRouter from './notification/notification.router';
 import newsRouter from './news/news.router';
+import syncReceiverRouter from './sync-receiver/sync-receiver.router';
 
 // Middleware
 import { authMiddleware } from './auth/auth.middleware';
@@ -257,6 +258,7 @@ app.use('/news', newsRouter);
 app.use('/interactions', interactionRouter);
 app.use('/notifications', authMiddleware, notificationRouter);
 app.use('/api/cache', cacheRouter);
+app.use('/api/sync-receiver', syncReceiverRouter);
 
 // Dashboard routes (must be last)
 app.use('/', dashboardRouter);
