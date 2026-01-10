@@ -105,7 +105,7 @@ export async function clearUserContentData(): Promise<void> {
     // Inventory verileri
     progress.increment('Inventory verileri temizleniyor...');
     await prisma.inventoryMedia.deleteMany({});
-    await prisma.productExperience.deleteMany({});
+    // NOTE: productExperience model removed - no longer exists
     await prisma.inventory.deleteMany({});
     // NOT: Product, ProductGroup korunur (taxonomy)
 
