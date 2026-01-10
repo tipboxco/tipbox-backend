@@ -11,6 +11,52 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    - name: Check for failed migrations
+      shell: bash
+      run: |
+        set +e
+        
+        COMPOSE_FILE="${{ inputs.compose_file }}"
+        SERVICE="${{ inputs.service }}"
+        
+        echo "🔍 Checking for failed migrations..."
+        
+        # Prisma migrate status kontrol et
+        MIGRATE_STATUS=$(docker compose -f "$COMPOSE_FILE" exec -T "$SERVICE" npx prisma migrate status 2>&1)
+        
+        # Başarısız migration var mı kontrol et
+        if echo "$MIGRATE_STATUS" | grep -q "migrate found failed migrations"; then
+          echo "⚠️  Başarısız migration bulundu!"
+          
+          # Başarısız migration ismini bul
+          FAILED_MIGRATION=$(echo "$MIGRATE_STATUS" | grep "migration started at" | sed -n 's/.*The `\([^`]*\)`.*/\1/p')
+          
+          if [ -n "$FAILED_MIGRATION" ]; then
+            echo "🔧 Başarısız migration temizleniyor: $FAILED_MIGRATION"
+            
+            # Database'den başarısız migration kaydını sil
+            docker compose -f "$COMPOSE_FILE" exec -T postgres psql -U tipbox_user -d tipbox_test << EOF
+              DELETE FROM _prisma_migrations 
+              WHERE migration_name = '$FAILED_MIGRATION' 
+                AND finished_at IS NULL;
+              
+              SELECT 
+                CASE 
+                  WHEN COUNT(*) = 0 THEN 'Migration kaydı temizlendi'
+                  ELSE 'Migration hala mevcut'
+                END as sonuc
+              FROM _prisma_migrations 
+              WHERE migration_name = '$FAILED_MIGRATION';
+EOF
+            
+            echo "✅ Başarısız migration temizlendi, tekrar denenecek..."
+          fi
+        else
+          echo "✅ Başarısız migration bulunamadı"
+        fi
+        
+        set -e
+    
     - name: Run migrations
       shell: bash
       run: |

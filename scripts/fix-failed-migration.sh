@@ -1,19 +1,32 @@
 #!/bin/bash
 
 # Başarısız migration'ı düzelt
-# Kullanım: ./scripts/fix-failed-migration.sh [migration_name] [database_name]
-# Örnek: ./scripts/fix-failed-migration.sh 20260109132600_add_notification_settings tipbox_test
+# Kullanım: ./scripts/fix-failed-migration.sh [migration_name] [database_name] [compose_file]
+# Örnek: ./scripts/fix-failed-migration.sh 20260109132600_add_notification_settings tipbox_test docker-compose.test.yml
 
 MIGRATION_NAME="${1:-20260109132600_add_notification_settings}"
 DB_NAME="${2:-tipbox_test}"
+COMPOSE_FILE="${3:-docker-compose.yml}"
+
+# Docker Compose komutunu belirle (v1 veya v2)
+if command -v docker-compose &> /dev/null; then
+    DOCKER_COMPOSE="docker-compose -f $COMPOSE_FILE"
+elif command -v docker &> /dev/null && docker compose version &> /dev/null; then
+    DOCKER_COMPOSE="docker compose -f $COMPOSE_FILE"
+else
+    echo "❌ docker-compose veya docker compose bulunamadı!"
+    exit 1
+fi
 
 echo "🔧 Başarısız migration düzeltiliyor..."
 echo "Migration: $MIGRATION_NAME"
 echo "Database: $DB_NAME"
+echo "Compose File: $COMPOSE_FILE"
+echo "Docker Compose: $DOCKER_COMPOSE"
 echo ""
 
 # Migration'ı rolled back olarak işaretle ve sil
-docker-compose exec -T postgres psql -U tipbox_user -d "$DB_NAME" << EOF
+$DOCKER_COMPOSE exec -T postgres psql -U tipbox_user -d "$DB_NAME" << EOF
 -- Başarısız migration'ı kontrol et
 SELECT 
     migration_name, 
@@ -47,5 +60,5 @@ echo ""
 echo "✅ İşlem tamamlandı"
 echo ""
 echo "🔄 Şimdi tekrar migration deploy edilebilir:"
-echo "docker-compose exec backend npx prisma migrate deploy"
+echo "$DOCKER_COMPOSE exec backend npx prisma migrate deploy"
 
