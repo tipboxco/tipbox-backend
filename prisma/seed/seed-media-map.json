@@ -20,87 +20,6 @@
   "user.avatar.ozan": {
     "targetKey": "profile-pictures/dddddddd-dddd-4ddd-dddd-dddddddddddd/seed-avatar.jpg"
   },
-  "user.avatar.elif": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000001/seed-avatar.jpg"
-  },
-  "user.avatar.can": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000002/seed-avatar.jpg"
-  },
-  "user.avatar.zeynep": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000003/seed-avatar.jpg"
-  },
-  "user.avatar.ahmet": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000004/seed-avatar.jpg"
-  },
-  "user.avatar.selin": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000005/seed-avatar.jpg"
-  },
-  "user.avatar.emre": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000006/seed-avatar.jpg"
-  },
-  "user.avatar.deniz": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000007/seed-avatar.jpg"
-  },
-  "user.avatar.baris": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000008/seed-avatar.jpg"
-  },
-  "user.avatar.merve": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000009/seed-avatar.jpg"
-  },
-  "user.avatar.berkay": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000010/seed-avatar.jpg"
-  },
-  "user.avatar.asli": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000011/seed-avatar.jpg"
-  },
-  "user.avatar.murat": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000012/seed-avatar.png"
-  },
-  "user.avatar.gizem": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000013/seed-avatar.jpg"
-  },
-  "user.avatar.onur": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000014/seed-avatar.jpg"
-  },
-  "user.avatar.burcu": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000015/seed-avatar.jpg"
-  },
-  "user.avatar.tolga": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000016/seed-avatar.jpg"
-  },
-  "user.avatar.ebru": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000017/seed-avatar.jpg"
-  },
-  "user.avatar.serkan": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000018/seed-avatar.jpg"
-  },
-  "user.avatar.ece": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000019/seed-avatar.jpg"
-  },
-  "user.avatar.kaan": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000020/seed-avatar.jpg"
-  },
-  "user.avatar.derya": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000021/seed-avatar.jpg"
-  },
-  "user.avatar.selim": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000022/seed-avatar.png"
-  },
-  "user.avatar.pelin": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000023/seed-avatar.jpg"
-  },
-  "user.avatar.cem": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000024/seed-avatar.jpg"
-  },
-  "user.avatar.duygu": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000025/seed-avatar.jpg"
-  },
-  "user.avatar.hakan": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000026/seed-avatar.jpg"
-  },
-  "user.avatar.nil": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000027/seed-avatar.jpg"
-  },
   "user.banner.primary": {
     "targetKey": "profile-banners/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-banner.png"
   },
@@ -176,9 +95,6 @@
   "catalog.air-conditioner": {
     "targetKey": "catalog/air conditioner.png"
   },
-  "catalog.electronic-main": {
-    "targetKey": "catalog/electronic-main.png"
-  },
   "catalog.beauty-main": {
     "targetKey": "catalog/beauty-main.png"
   },
@@ -190,6 +106,9 @@
   },
   "catalog.drone": {
     "targetKey": "catalog/drone.png"
+  },
+  "catalog.electronic-main": {
+    "targetKey": "catalog/electronic-main.png"
   },
   "catalog.games": {
     "targetKey": "catalog/games.png"
