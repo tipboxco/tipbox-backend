@@ -193,6 +193,98 @@ export class EventService {
   }
 
   /**
+   * Get user's active events (events the user has participated in)
+   */
+  async getMyActiveEvents(
+    userId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<ActiveEvent> {
+    try {
+      const limit = options?.limit || 20;
+      const now = new Date();
+
+      // Kullanıcının EventPost'u olan event'leri bul
+      const userEventIds = await this.prisma.eventPost.findMany({
+        where: { userId },
+        select: { eventId: true },
+        distinct: ['eventId'],
+      });
+
+      const eventIds = userEventIds.map((e) => e.eventId);
+
+      if (eventIds.length === 0) {
+        return {
+          items: [],
+          pagination: { hasMore: false, limit, cursor: undefined },
+        };
+      }
+
+      // Bu event'lerden aktif olanları getir
+      const events = await this.prisma.wishboxEvent.findMany({
+        where: {
+          id: { in: eventIds },
+          status: 'PUBLISHED',
+          startDate: { lte: now },
+          endDate: { gte: now },
+        },
+        orderBy: { startDate: 'desc' },
+        take: limit + 1,
+        ...(options?.cursor && {
+          cursor: { id: options.cursor },
+          skip: 1,
+        }),
+      });
+
+      const hasMore = events.length > limit;
+      const resultEvents = hasMore ? events.slice(0, limit) : events;
+      const nextCursor = hasMore && resultEvents.length > 0 ? resultEvents[resultEvents.length - 1].id : undefined;
+
+      // EventCard formatına çevir
+      const eventCards: EventCard[] = await Promise.all(
+        resultEvents.map(async (event) => {
+          const interaction = await this.getEventInteraction(event.id);
+          const participants = await this.getEventParticipants(event.id, 2);
+
+          // Kullanıcının bu event'teki post sayısını al
+          const userPostCount = await this.prisma.eventPost.count({
+            where: { eventId: event.id, userId },
+          });
+
+          let imageUrl: string | null = null;
+          if (event.imageUrl) {
+            imageUrl = resolveMediaUrl(event.imageUrl);
+          }
+
+          return {
+            eventId: event.id,
+            image: imageUrl,
+            title: event.title,
+            description: event.description,
+            startDate: event.startDate.toISOString(),
+            endDate: event.endDate.toISOString(),
+            interaction,
+            eventType: this.mapEventType(event.eventType),
+            participants,
+            userPostCount, // Kullanıcının post sayısı
+          };
+        })
+      );
+
+      return {
+        items: eventCards,
+        pagination: {
+          cursor: nextCursor,
+          hasMore,
+          limit,
+        },
+      };
+    } catch (error) {
+      logger.error('Failed to get user active events:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Get event detail
    */
   async getEventDetail(eventId: string, userId?: string): Promise<EventDetail> {

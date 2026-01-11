@@ -2606,7 +2606,7 @@ async function seedTrustRelations() {
 // ==================== PHASE 12: EVENTS ====================
 
 /**
- * WishboxEvent oluştur (20-25 active + 10-15 upcoming = 30-40 total)
+ * WishboxEvent oluştur (10-15 kaliteli, gerçekçi event)
  * Event participation, scenarios, rewards ekle
  */
 async function seedEvents() {
@@ -2620,71 +2620,174 @@ async function seedEvents() {
     return
   }
   
-  const eventTypes: Array<'SURVEY' | 'POLL' | 'CONTEST' | 'CHALLENGE' | 'PROMOTION'> = [
-    'SURVEY', 'POLL', 'CONTEST', 'CHALLENGE', 'PROMOTION'
-  ]
-  
   const activeEvents: string[] = []
   const upcomingEvents: string[] = []
   
-  // 1. ACTIVE EVENTS (20-25 etkinlik - şu anda devam ediyor)
-  console.log('📅 Active events oluşturuluyor...')
-  const activeCount = Math.floor(Math.random() * 6) + 20 // 20-25
+  // Apple brand'i bul
+  const appleBrand = brands.find(b => b.name === 'Apple')
+  const samsungBrand = brands.find(b => b.name === 'Samsung')
+  const nikeBrand = brands.find(b => b.name === 'Nike')
+  const adidasBrand = brands.find(b => b.name === 'Adidas')
   
-  for (let i = 1; i <= activeCount; i++) {
-    const eventId = generateUlid()
-    const eventType = eventTypes[Math.floor(Math.random() * eventTypes.length)]
-    const randomBrand = brands.length > 0 ? brands[Math.floor(Math.random() * brands.length)] : null
+  // Kaliteli, gerçekçi event'ler
+  const eventConfigs = [
+    // ACTIVE EVENTS
+    {
+      title: 'iPhone 15 Deneyim Paylaşım Yarışması',
+      description: 'iPhone 15 modelini kullanan kullanıcılarımız deneyimlerini paylaşıyor! En detaylı ve yardımcı paylaşımları yapan 10 kullanıcı özel ödüller kazanacak. Kamera performansı, batarya ömrü ve günlük kullanım deneyimlerinizi bizimle paylaşın.',
+      eventType: 'CONTEST' as const,
+      brandId: appleBrand?.id,
+      startDate: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000), // 15 gün önce başladı
+      endDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000), // 15 gün daha sürecek
+      status: 'PUBLISHED' as const,
+      isActive: true
+    },
+    {
+      title: 'En İyi Koşu Ayakkabısı Anketi',
+      description: 'Koşu tutkunları! Hangi marka ve model sizin için en iyisi? Nike, Adidas, New Balance veya başka markalar... Deneyimlerinizi paylaşın ve topluluğun tercihlerini keşfedin.',
+      eventType: 'POLL' as const,
+      brandId: nikeBrand?.id,
+      startDate: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
+      endDate: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000),
+      status: 'PUBLISHED' as const,
+      isActive: true
+    },
+    {
+      title: 'MacBook ile Üretkenlik İpuçları',
+      description: 'MacBook kullanıcıları için özel bir etkinlik! En yararlı üretkenlik ipuçlarınızı, kısayollarınızı ve uygulama önerilerinizi paylaşın. En faydalı 5 ipucu premium rozet kazanacak.',
+      eventType: 'CHALLENGE' as const,
+      brandId: appleBrand?.id,
+      startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+      endDate: new Date(Date.now() + 23 * 24 * 60 * 60 * 1000),
+      status: 'PUBLISHED' as const,
+      isActive: true
+    },
+    {
+      title: 'Akıllı Saat Kullanım Alışkanlıkları Araştırması',
+      description: 'Apple Watch, Samsung Galaxy Watch veya diğer akıllı saatler... Nasıl kullanıyorsunuz? Hangi özellikler sizin için en değerli? Bu araştırmaya katılarak topluluğa katkıda bulunun.',
+      eventType: 'SURVEY' as const,
+      brandId: null,
+      startDate: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000),
+      endDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
+      status: 'PUBLISHED' as const,
+      isActive: true
+    },
+    {
+      title: 'Yaz Sezonu Spor Ekipmanları Kampanyası',
+      description: 'Yaza hazır mısınız? En sevdiğiniz spor ekipmanlarını paylaşın, indirim kuponları kazanın! Katılımcılar arasından 20 kişiye özel indirim kuponu hediye edilecek.',
+      eventType: 'PROMOTION' as const,
+      brandId: adidasBrand?.id,
+      startDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+      endDate: new Date(Date.now() + 25 * 24 * 60 * 60 * 1000),
+      status: 'PUBLISHED' as const,
+      isActive: true
+    },
+    {
+      title: 'Fotoğrafçılık Beceri Yarışması',
+      description: 'Telefonunuzla çektiğiniz en iyi fotoğrafları paylaşın! iPhone, Samsung veya herhangi bir akıllı telefon... Yaratıcılığınızı gösterin ve ödüller kazanın. En beğenilen 3 fotoğraf sahibi premium rozetler alacak.',
+      eventType: 'CONTEST' as const,
+      brandId: null,
+      startDate: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000),
+      endDate: new Date(Date.now() + 18 * 24 * 60 * 60 * 1000),
+      status: 'PUBLISHED' as const,
+      isActive: true
+    },
+    {
+      title: 'Samsung Galaxy S24 İlk İzlenimler',
+      description: 'Yeni Samsung Galaxy S24 serisi piyasada! Cihazı deneyenler ilk izlenimlerini paylaşabilir. Kamera, performans, tasarım... Tüm detayları bizimle paylaşın.',
+      eventType: 'SURVEY' as const,
+      brandId: samsungBrand?.id,
+      startDate: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
+      endDate: new Date(Date.now() + 22 * 24 * 60 * 60 * 1000),
+      status: 'PUBLISHED' as const,
+      isActive: true
+    },
     
-    const startDate = new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000) // 0-30 gün önce başladı
-    const endDate = new Date(Date.now() + Math.random() * 60 * 24 * 60 * 60 * 1000) // 0-60 gün sonra bitecek
+    // UPCOMING EVENTS
+    {
+      title: 'Yapay Zeka Destekli Uygulamalar Keşif Haftası',
+      description: 'ChatGPT, Midjourney ve daha fazlası... Yapay zeka uygulamalarını nasıl kullanıyorsunuz? Deneyimlerinizi paylaşın, yeni uygulamalar keşfedin. Yakında başlıyor!',
+      eventType: 'CHALLENGE' as const,
+      brandId: null,
+      startDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000), // 5 gün sonra başlayacak
+      endDate: new Date(Date.now() + 35 * 24 * 60 * 60 * 1000),
+      status: 'PUBLISHED' as const,
+      isActive: false
+    },
+    {
+      title: 'Kulaklık Ses Kalitesi Karşılaştırması',
+      description: 'AirPods, Galaxy Buds, Sony, Bose... Hangi kulaklık en iyi ses kalitesini sunuyor? Kullanıcıların görüşleriyle en kapsamlı kulaklık karşılaştırmasını yapacağız.',
+      eventType: 'POLL' as const,
+      brandId: appleBrand?.id,
+      startDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
+      endDate: new Date(Date.now() + 40 * 24 * 60 * 60 * 1000),
+      status: 'PUBLISHED' as const,
+      isActive: false
+    },
+    {
+      title: 'Oyun Bilgisayarı Donanım Önerileri',
+      description: 'En iyi performans için hangi bileşenleri seçmeliyiz? İşlemci, ekran kartı, RAM... Deneyimli oyuncuların önerileriyle yeni başlayanlar için rehber oluşturacağız.',
+      eventType: 'SURVEY' as const,
+      brandId: null,
+      startDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
+      endDate: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000),
+      status: 'PUBLISHED' as const,
+      isActive: false
+    },
+    {
+      title: 'Bahar İndirim Festivali',
+      description: 'Bahar geldi, fırsatlar da! En çok istediğiniz ürünler için özel indirim kuponları kazanma şansı. Katıl, paylaş, kazan!',
+      eventType: 'PROMOTION' as const,
+      brandId: null,
+      startDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      endDate: new Date(Date.now() + 37 * 24 * 60 * 60 * 1000),
+      status: 'PUBLISHED' as const,
+      isActive: false
+    },
+    {
+      title: 'En İyi Tablet Deneyimi Paylaşımları',
+      description: 'iPad, Galaxy Tab veya diğer tabletler... Nasıl kullanıyorsunuz? İş için mi, eğlence için mi? En yararlı kullanım senaryolarını keşfedin.',
+      eventType: 'CONTEST' as const,
+      brandId: appleBrand?.id,
+      startDate: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000),
+      endDate: new Date(Date.now() + 42 * 24 * 60 * 60 * 1000),
+      status: 'PUBLISHED' as const,
+      isActive: false
+    }
+  ]
+  
+  // Event'leri oluştur
+  console.log('📅 Kaliteli eventler oluşturuluyor...')
+  let activeCount = 0
+  let upcomingCount = 0
+  
+  for (const config of eventConfigs) {
+    const eventId = generateUlid()
     
     await prisma.wishboxEvent.create({
       data: {
         id: eventId,
-        title: `${eventType} Event ${i} - ${randomBrand?.name || 'Community'}`,
-        description: `Bu bir ${eventType} etkinliğidir. Katılımcılar deneyimlerini paylaşabilir, ödüller kazanabilir ve toplulukla etkileşime geçebilirler.`,
-        startDate,
-        endDate,
-        status: 'PUBLISHED',
-        eventType,
-        brandId: randomBrand?.id ?? null,
+        title: config.title,
+        description: config.description,
+        startDate: config.startDate,
+        endDate: config.endDate,
+        status: config.status,
+        eventType: config.eventType,
+        brandId: config.brandId ?? null,
         imageUrl: null,
       }
     })
     
-    activeEvents.push(eventId)
-  }
-  console.log(`  ✅ ${activeCount} active event oluşturuldu`)
-  
-  // 2. UPCOMING EVENTS (10-15 etkinlik - henüz başlamadı)
-  console.log('📅 Upcoming events oluşturuluyor...')
-  const upcomingCount = Math.floor(Math.random() * 6) + 10 // 10-15
-  
-  for (let i = 1; i <= upcomingCount; i++) {
-    const eventId = generateUlid()
-    const eventType = eventTypes[Math.floor(Math.random() * eventTypes.length)]
-    const randomBrand = brands.length > 0 ? brands[Math.floor(Math.random() * brands.length)] : null
-    
-    const startDate = new Date(Date.now() + Math.random() * 30 * 24 * 60 * 60 * 1000) // 0-30 gün sonra başlayacak
-    const endDate = new Date(startDate.getTime() + (30 + Math.random() * 30) * 24 * 60 * 60 * 1000) // 30-60 gün sürecek
-    
-    await prisma.wishboxEvent.create({
-      data: {
-        id: eventId,
-        title: `Upcoming ${eventType} ${i} - ${randomBrand?.name || 'Community'}`,
-        description: `Yakında başlayacak ${eventType} etkinliği. Takipte kalın!`,
-        startDate,
-        endDate,
-        status: 'PUBLISHED',
-        eventType,
-        brandId: randomBrand?.id ?? null,
-        imageUrl: null,
-      }
-    })
-    
+    if (config.isActive) {
+      activeEvents.push(eventId)
+      activeCount++
+    } else {
     upcomingEvents.push(eventId)
+      upcomingCount++
   }
+  }
+  
+  console.log(`  ✅ ${activeCount} active event oluşturuldu`)
   console.log(`  ✅ ${upcomingCount} upcoming event oluşturuldu`)
   
   // 3. EVENT PARTICIPATION (WishboxStats - sadece active events için)
@@ -2711,12 +2814,80 @@ async function seedEvents() {
   }
   console.log(`  ✅ ${totalParticipants} event participation kaydı oluşturuldu`)
   
-  // 4. EVENT POSTS (Her active event için 20-30 post)
-  console.log('📝 Event postları oluşturuluyor...')
+  // 4. EVENT POSTS (EventPost tablosuna - Her active event için 15-25 post)
+  console.log('📝 Event postları oluşturuluyor (EventPost tablosu)...')
   let totalEventPosts = 0
-  // Event postları kaldırıldı - Toplam post sayısını 2500 civarında tutmak için
-  // Her kullanıcı zaten 60 post oluşturuyor (40 kullanıcı x 60 = 2400 post)
-  console.log(`  ℹ️  Event postları devre dışı (toplam post sayısını kontrol altında tutmak için)`)
+  
+  const postTitles = [
+    'Benim deneyimim ve önerilerim',
+    'Uzun süredir kullanıyorum, işte düşüncelerim',
+    'Çok beğendim, mutlaka deneyin',
+    'Beklentimi karşıladı',
+    'Detaylı kullanım deneyimi',
+    'Avantajları ve dezavantajları',
+    'Alternatiflerle karşılaştırma',
+    'Günlük kullanımda nasıl?',
+    'Fiyat performans değerlendirmesi',
+    'Size de tavsiye ediyorum',
+  ]
+  
+  const postBodies = [
+    'Uzun süredir bu ürünü kullanıyorum ve çok memnunum. Özellikle performans açısından beklentilerimi fazlasıyla karşıladı. Arkadaşlarıma da tavsiye ediyorum.',
+    'İlk kullandığımda şüpheliydim ama şimdi vazgeçilmezim oldu. Günlük hayatımı kolaylaştıran özellikleri var. Fiyatı biraz yüksek olsa da değer.',
+    'Birkaç alternatifi denedikten sonra buna karar verdim. Diğerlerine göre çok daha iyi performans gösteriyor. Özellikle dayanıklılığı harika.',
+    'Beklentilerimi tam olarak karşıladı. Kullanımı kolay ve pratik. Herkesin ihtiyacına uygun olmayabilir ama benim için idealin',
+    'Detaylı araştırma yaptıktan sonra aldım ve pişman değilim. Kalitesi ve performansı çok iyi. Uzun vadede ekonomik bir seçim.',
+    'Başlangıçta biraz zorlandım ama alışınca çok pratik oldu. Öğrenme eğrisi var ama sonuçta değer. Sabırlı olun.',
+    'Arkadaşımın tavsiyesiyle aldım ve çok memnunum. Günlük kullanımda sorun yaşamıyorum. Fiyat performans oranı gayet iyi.',
+    'Yıllardır farklı markalar kullanıyordum ama bu sefer doğru tercihi yaptığımı düşünüyorum. Kalitesi ortada.',
+  ]
+  
+  for (const eventId of activeEvents) {
+    // Her event için 15-25 kullanıcı post atacak
+    const postCount = Math.floor(Math.random() * 11) + 15 // 15-25
+    const contributors = users.sort(() => Math.random() - 0.5).slice(0, postCount)
+    
+    for (const user of contributors) {
+      const postId = generateUlid()
+      const title = postTitles[Math.floor(Math.random() * postTitles.length)]
+      const body = postBodies[Math.floor(Math.random() * postBodies.length)]
+      
+      await prisma.eventPost.create({
+        data: {
+          id: postId,
+          eventId,
+          userId: user.id,
+          title,
+          body,
+          likesCount: Math.floor(Math.random() * 30) + 5, // 5-35 like
+          commentsCount: Math.floor(Math.random() * 15) + 2, // 2-17 comment
+          createdAt: new Date(Date.now() - Math.random() * 10 * 24 * 60 * 60 * 1000), // Son 10 gün içinde
+        }
+      })
+      totalEventPosts++
+      
+      // WishboxStats güncelle
+      await prisma.wishboxStats.upsert({
+        where: {
+          userId_eventId: {
+            userId: user.id,
+            eventId,
+          }
+        },
+        create: {
+          userId: user.id,
+          eventId,
+          totalParticipated: 1,
+          totalComments: Math.floor(Math.random() * 5) + 1,
+          helpfulVotesReceived: Math.floor(Math.random() * 10) + 1,
+        },
+        update: {
+          totalParticipated: { increment: 1 },
+        }
+      })
+    }
+  }
+  console.log(`  ✅ ${totalEventPosts} event post oluşturuldu (EventPost tablosunda)`)
   
   // 5. EVENT SCENARIOS (Her active event için 2-3 senaryo)
   console.log('🎬 Event scenarios ekleniyor...')
@@ -2769,14 +2940,16 @@ async function seedEvents() {
   // Özet
   console.log('\n' + '═'.repeat(80))
   console.log('✨ PHASE 12 TAMAMLANDI - EVENTS\n')
-  console.log(`   🎉 Toplam Events: ${activeCount + upcomingCount}`)
+  console.log(`   🎉 Toplam Events: ${activeCount + upcomingCount} (Kaliteli ve Gerçekçi)`)
   console.log(`      📅 Active: ${activeCount}`)
   console.log(`      🔜 Upcoming: ${upcomingCount}`)
   console.log(`   👥 Total Participants: ${totalParticipants}`)
   console.log(`   📝 Event Posts: ${totalEventPosts}`)
   console.log(`   🎬 Scenarios: ${totalScenarios}`)
   console.log(`   🏆 Rewards: ${totalRewards}`)
+  if (activeCount > 0) {
   console.log(`\n   📊 Ortalama event başına: ${(totalParticipants / activeCount).toFixed(1)} katılımcı`)
+  }
   console.log('═'.repeat(80) + '\n')
 }
 
@@ -12345,17 +12518,18 @@ async function main() {
   try {
     const { triggerFeedDistributionAfterSeed } = await import('./seed/trigger-feed-distribution')
     
-    // Feed distribution'ı bekle (eksik feed kalmaması için)
-    // Not: Bu işlem 3-4 dakika sürebilir
-    console.log('ℹ️  Feed worker\'ların işlemesi bekleniyor (bu 3-4 dakika sürebilir)...')
+    // Feed distribution job'larını queue'ya ekle ama tamamlanmasını bekleme
+    // Worker'lar arka planda feed'leri oluşturmaya devam edecek
+    console.log('ℹ️  Feed job\'ları queue\'ya ekleniyor (arka planda işlenecek)...')
     
-    await triggerFeedDistributionAfterSeed(true) // true = tamamlanmasını bekle
+    await triggerFeedDistributionAfterSeed(false) // false = bekleme, hemen devam et
     
-    progress.increment('Feed distribution tamamlandı')
-    console.log('✅ Feed distribution tamamlandı')
+    progress.increment('Feed job\'ları queue\'ya eklendi')
+    console.log('✅ Feed job\'ları oluşturuldu (arka planda işlenecek)')
+    console.log('💡 Feed worker çalıştığında bu job\'lar otomatik olarak işlenecek')
   } catch (error) {
     console.error('❌ Feed distribution tetikleme hatası:', error)
-    console.log('⚠️  Seed tamamlandı ama feed\'ler oluşturulmadı. Manuel olarak tetikleyebilirsiniz:')
+    console.log('⚠️  Seed tamamlandı ama feed job\'ları oluşturulamadı. Manuel olarak tetikleyebilirsiniz:')
     console.log('   npx ts-node prisma/seed/trigger-feed-distribution.ts')
   }
   

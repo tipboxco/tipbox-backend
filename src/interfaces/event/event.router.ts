@@ -4,6 +4,7 @@ import { UserService } from '../../application/user/user.service';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { authMiddleware } from '../auth/auth.middleware';
 import { getErrorMessage, hasErrorMessage, errorMessageIncludes } from '../../infrastructure/errors/error-helper';
+import eventPostRouter from './event-post.router';
 
 const router = Router();
 const eventService = new EventService();
@@ -122,6 +123,80 @@ router.get(
     }
 
     return res.json(event);
+  })
+);
+
+/**
+ * @openapi
+ * /events/my-events:
+ *   get:
+ *     summary: Kullanıcının katıldığı aktif event'leri getir
+ *     description: Kullanıcının post attığı ve halen aktif olan event'lerin listesini getirir.
+ *     tags: [Events]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor (son item'ın id'si)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 20
+ *         description: Sayfa başına item sayısı
+ *     responses:
+ *       200:
+ *         description: Kullanıcının event'leri başarıyla getirildi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/EventCard'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
+ *       401:
+ *         description: Unauthorized
+ */
+router.get(
+  '/my-events',
+  authMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const cursor = req.query.cursor as string | undefined;
+    const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+
+    if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
+      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+    }
+
+    const myEvents = await eventService.getMyActiveEvents(String(userId), {
+      cursor,
+      ...(typeof limitParam === 'number' ? { limit: limitParam } : {}),
+    });
+
+    return res.json(myEvents);
   })
 );
 
@@ -690,6 +765,9 @@ router.get(
     }
   })
 );
+
+// Event post router'ını ekle
+router.use('/', eventPostRouter);
 
 export default router;
 
