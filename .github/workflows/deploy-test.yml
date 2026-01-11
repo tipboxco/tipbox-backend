@@ -100,6 +100,7 @@ jobs:
       - name: Configure SSH
         if: steps.check-secrets.outputs.available == 'true'
         run: |
+          mkdir -p ~/.ssh/controlmasters
           cat >> ~/.ssh/config <<EOC
           Host hetzner-deploy
             HostName ${{ secrets.HETZNER_HOST }}
@@ -107,6 +108,13 @@ jobs:
             Port ${{ secrets.HETZNER_SSH_PORT || '22' }}
             IdentityAgent $SSH_AUTH_SOCK
             StrictHostKeyChecking accept-new
+            ServerAliveInterval 60
+            ServerAliveCountMax 10
+            TCPKeepAlive yes
+            ConnectTimeout 30
+            ControlMaster auto
+            ControlPath ~/.ssh/controlmasters/%r@%h:%p
+            ControlPersist 10m
           EOC
           chmod 600 ~/.ssh/config
 
