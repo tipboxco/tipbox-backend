@@ -159,7 +159,7 @@ jobs:
           stage: build
           project_dir: /opt/tipbox-backend
           compose_file: docker-compose.test.yml
-          force_rebuild: ${{ github.event.inputs.force_rebuild || 'false' }}
+          force_rebuild: ${{ github.event.inputs.force_rebuild == true && 'true' || 'false' }}
 
       - name: Generate Prisma Client
         if: steps.check-secrets.outputs.available == 'true'
