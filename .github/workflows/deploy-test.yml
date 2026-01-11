@@ -1,5 +1,14 @@
 name: Deploy to Test Server
 
+# Otomatik Deployment: test/staging branch'ine push yapıldığında
+#   - Seed: Çalışmaz (mevcut data korunur)
+#   - Build: Cache kullanılır (hızlı)
+#   - Backup: Alınır (güvenli)
+#
+# Manuel Deployment: "Run workflow" butonu ile
+#   - Tüm seçenekler sizin kontrolünüzde
+#   - Detaylı kılavuz: .github/DEPLOYMENT_GUIDE.md
+
 on:
   push:
     branches:
@@ -47,7 +56,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.branch || 'test' }}
+          ref: ${{ github.event.inputs.branch || github.ref_name }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
@@ -119,6 +128,8 @@ jobs:
           env_file: .env.test
 
       - name: Backup database
+        # Otomatik deployment: Backup alınır (varsayılan)
+        # Manuel deployment: skip_backup seçeneğine göre
         if: steps.check-secrets.outputs.available == 'true' && github.event.inputs.skip_backup != 'true'
         uses: ./.github/actions/execute-remote-stage
         with:
@@ -139,6 +150,8 @@ jobs:
           compose_file: docker-compose.test.yml
 
       - name: Build images
+        # Otomatik deployment: Cache kullanılır (hızlı)
+        # Manuel deployment: force_rebuild seçeneğine göre
         if: steps.check-secrets.outputs.available == 'true'
         uses: ./.github/actions/execute-remote-stage
         with:
@@ -186,6 +199,8 @@ jobs:
           compose_file: docker-compose.test.yml
 
       - name: Run seeds
+        # Otomatik deployment: Seed çalışmaz (varsayılan)
+        # Manuel deployment: run_seed işaretliyse çalışır
         if: steps.check-secrets.outputs.available == 'true' && github.event.inputs.run_seed == 'true'
         uses: ./.github/actions/execute-remote-stage
         with:
@@ -232,6 +247,7 @@ jobs:
           echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Server**: ${{ secrets.HETZNER_HOST }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployment Type**: ${{ github.event_name == 'workflow_dispatch' && 'Manuel' || 'Otomatik (git push)' }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Time**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### ⚙️ Options Used" >> $GITHUB_STEP_SUMMARY
