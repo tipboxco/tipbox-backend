@@ -309,7 +309,7 @@ async function buildSeedAssets(): Promise<void> {
     console.warn(`   ⚠️  Catalog klasörü okunamadı: ${error}`);
   }
 
-  // 7. EVENT/EVENTS → events/
+  // 7. EVENT/EVENTS → events/ (tüm alt klasörler dahil)
   console.log('🎉 Event görselleri ekleniyor...');
   const eventPath1 = path.join(assetsBasePath, 'event');
   const eventsPath1 = path.join(assetsBasePath, 'events');
@@ -329,24 +329,27 @@ async function buildSeedAssets(): Promise<void> {
       }
     }
     
-    const eventFiles = await fs.readdir(effectiveEventPath1);
-    for (const file of eventFiles) {
-      if (file.startsWith('.')) continue;
-      const filePath = path.join(effectiveEventPath1, file);
-      const stat = await fs.stat(filePath);
-      if (stat.isFile()) {
-        const nameWithoutExt = file.replace(/\.[^/.]+$/, '');
-        const key = `event.${slugify(nameWithoutExt)}`;
-        seedAssets.push({
-          key,
-          localPath: filePath,
-          targetKey: `events/${file}`, // events/ klasörüne yükle
-          contentType: inferContentType(filePath),
-          description: `Event görseli: ${file}`,
-        });
-      }
+    // Recursive olarak tüm event görsellerini bul (new-events dahil)
+    const allEventFiles = await getAllFiles(effectiveEventPath1);
+    const imageFiles = allEventFiles.filter(file => {
+      const ext = path.extname(file).toLowerCase();
+      return ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext);
+    });
+    
+    for (const filePath of imageFiles) {
+      const fileName = path.basename(filePath);
+      const nameWithoutExt = fileName.replace(/\.[^/.]+$/, '');
+      const key = `event.${slugify(nameWithoutExt)}`;
+      
+      seedAssets.push({
+        key,
+        localPath: filePath,
+        targetKey: `events/${fileName}`, // events/ klasörüne yükle
+        contentType: inferContentType(filePath),
+        description: `Event görseli: ${fileName}`,
+      });
     }
-    console.log(`   ✅ ${eventFiles.filter(f => !f.startsWith('.')).length} event görseli eklendi`);
+    console.log(`   ✅ ${imageFiles.length} event görseli eklendi (alt klasörler dahil)`);
   } catch (error) {
     console.warn(`   ⚠️  Event klasörü okunamadı: ${error}`);
   }

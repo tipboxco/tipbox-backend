@@ -2665,6 +2665,7 @@ async function seedEvents() {
       title: 'Akıllı Telefon Batarya Performansı',
       description: 'Hangi telefon en uzun süre dayanıyor? Günlük kullanımda gerçek batarya deneyiminizi paylaşın. Normal kullanımda kaç saat?, yoğun kullanımda ne kadar?, hızlı şarj var mı?',
       categoryId: electronicsCategory?.id,
+      imageKey: 'event.event-batarya', // event-batarya.png
       startDate: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000),
       endDate: new Date(Date.now() + 18 * 24 * 60 * 60 * 1000),
       status: 'PUBLISHED' as const,
@@ -2675,6 +2676,7 @@ async function seedEvents() {
       title: 'Laptop ile Uzaktan Çalışma Deneyimi',
       description: 'Evden çalışırken hangi laptop daha verimli? Performans, klavye konforu, ekran kalitesi, taşınabilirlik... Tüm detayları paylaşın.',
       categoryId: electronicsCategory?.id,
+      imageKey: 'event.event-tablet', // Laptop için tablet görselini kullan (uygun görsel)
       startDate: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
       endDate: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000),
       status: 'PUBLISHED' as const,
@@ -2685,6 +2687,7 @@ async function seedEvents() {
       title: 'Kablosuz Kulaklık Ses Kalitesi Testi',
       description: 'Hangi kulaklık en iyi ses deneyimini sunuyor? Bas performansı, gürültü engelleme, konfor, batarya ömrü... Deneyimlerinizi karşılaştırın.',
       categoryId: electronicsCategory?.id,
+      imageKey: 'event.event-akillisaat', // Akıllı saat görseli (wearable kategorisi)
       startDate: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000),
       endDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
       status: 'PUBLISHED' as const,
@@ -2695,6 +2698,7 @@ async function seedEvents() {
       title: 'Akıllı Saat Spor Takibi Karşılaştırması',
       description: 'Spor yaparken hangi akıllı saat daha doğru ölçüm yapıyor? Kalp atışı, adım sayacı, GPS doğruluğu, uyku takibi... Gerçek kullanım deneyimleriniz.',
       categoryId: electronicsCategory?.id,
+      imageKey: 'event.event-akillisaat', // event-akillisaat.png
       startDate: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
       endDate: new Date(Date.now() + 22 * 24 * 60 * 60 * 1000),
       status: 'PUBLISHED' as const,
@@ -2705,6 +2709,7 @@ async function seedEvents() {
       title: 'Tablet Kullanım Senaryoları',
       description: 'Tablet ile neler yapıyorsunuz? İzleme, okuma, çizim, not alma... Hangi tablet hangi iş için daha uygun? Deneyimlerinizi paylaşın.',
       categoryId: electronicsCategory?.id,
+      imageKey: 'event.event-tablet', // event-tablet.png
       startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
       endDate: new Date(Date.now() + 23 * 24 * 60 * 60 * 1000),
       status: 'PUBLISHED' as const,
@@ -2717,6 +2722,7 @@ async function seedEvents() {
       title: 'Günlük Cilt Bakım Rutini Paylaşımı',
       description: 'Sabah ve akşam cilt bakımınızda hangi ürünleri kullanıyorsunuz? Sırası, etkileri, sonuçları... Kendi rutininizi paylaşın, başkalarından ilham alın.',
       categoryId: beautyCategory?.id,
+      imageKey: 'event.event-ciltbakim', // event-ciltbakim.png
       startDate: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
       endDate: new Date(Date.now() + 16 * 24 * 60 * 60 * 1000),
       status: 'PUBLISHED' as const,
@@ -2727,6 +2733,7 @@ async function seedEvents() {
       title: 'Yağlı Ciltler İçin En İyi Ürünler',
       description: 'Yağlı cilde sahipseniz hangi ürünler işe yarıyor? Matlaştırıcı etkisi olan, gözenekleri sıkılaştıran, yağ dengesini koruyan ürünler...',
       categoryId: beautyCategory?.id,
+      imageKey: 'event.event-yaglicilt', // event-yaglicilt.png
       startDate: new Date(Date.now() - 11 * 24 * 60 * 60 * 1000),
       endDate: new Date(Date.now() + 19 * 24 * 60 * 60 * 1000),
       status: 'PUBLISHED' as const,
@@ -2737,6 +2744,7 @@ async function seedEvents() {
       title: 'Kalıcı Makyaj Ürünleri Testi',
       description: 'Gün boyu kalıcı kalan makyaj ürünleri hangileri? Fondöten, ruj, maskara... Yaz sıcağında, uzun iş gününde test ettiklerinizi paylaşın.',
       categoryId: beautyCategory?.id,
+      imageKey: 'event.event-kalicimakyaj', // event-kalicimakyaj.png
       startDate: new Date(Date.now() - 9 * 24 * 60 * 60 * 1000),
       endDate: new Date(Date.now() + 21 * 24 * 60 * 60 * 1000),
       status: 'PUBLISHED' as const,
@@ -2749,6 +2757,7 @@ async function seedEvents() {
       title: 'Oyun Performansı: Hangi Cihaz Daha İyi?',
       description: 'Mobil oyunlarda hangi telefon/tablet daha iyi performans gösteriyor? FPS, ısınma, batarya tüketimi... Oyuncuların deneyimleri.',
       categoryId: electronicsCategory?.id,
+      imageKey: 'event.event-oyun', // event-oyun.png
       startDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
       endDate: new Date(Date.now() + 35 * 24 * 60 * 60 * 1000),
       status: 'PUBLISHED' as const,
@@ -2759,6 +2768,7 @@ async function seedEvents() {
       title: 'Kamera Performansı: Gece Çekimleri',
       description: 'Düşük ışıkta hangi telefon daha iyi fotoğraf çekiyor? Gece modu, HDR, detay koruma... Gerçek çekim örnekleri ile paylaşın.',
       categoryId: electronicsCategory?.id,
+      imageKey: 'event.event-kamera', // event-kamera.png
       startDate: new Date(Date.now() + 8 * 24 * 60 * 60 * 1000),
       endDate: new Date(Date.now() + 38 * 24 * 60 * 60 * 1000),
       status: 'PUBLISHED' as const,
@@ -2771,6 +2781,7 @@ async function seedEvents() {
       title: 'Güneşten Korunma: En Etkili SPF Ürünleri',
       description: 'Yaz geliyor! Hangi güneş kremi gerçekten etkili? Beyaz iz bırakmayan, yağlamayan, su geçirmez... Deneyimlerinizi paylaşın.',
       categoryId: beautyCategory?.id,
+      imageKey: 'event.event-gunestenkorunma', // event-gunestenkorunma.png
       startDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       endDate: new Date(Date.now() + 37 * 24 * 60 * 60 * 1000),
       status: 'PUBLISHED' as const,
@@ -2781,6 +2792,7 @@ async function seedEvents() {
       title: 'Saç Bakım Rutini: Kuru ve Yıpranmış Saçlar',
       description: 'Kuru saçlar için hangi ürünler işe yarıyor? Şampuan, krem, maske, yağ... Etkili olduğunu gördüğünüz ürünleri paylaşın.',
       categoryId: beautyCategory?.id,
+      imageKey: 'event.event-sacbakim', // event-sacbakim.png
       startDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
       endDate: new Date(Date.now() + 40 * 24 * 60 * 60 * 1000),
       status: 'PUBLISHED' as const,
@@ -2797,6 +2809,9 @@ async function seedEvents() {
   for (const config of eventConfigs) {
     const eventId = generateUlid()
     
+    // Event görselini al
+    const imageUrl = getSeedMediaPath(config.imageKey, true) || null
+    
     await prisma.wishboxEvent.create({
       data: {
         id: eventId,
@@ -2805,7 +2820,7 @@ async function seedEvents() {
         startDate: config.startDate,
         endDate: config.endDate,
         status: config.status,
-        imageUrl: null,
+        imageUrl,
         brandId: null,
         mainCategoryId: config.categoryId || null,
         subCategoryId: null,
