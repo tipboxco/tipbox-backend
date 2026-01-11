@@ -7300,10 +7300,13 @@ async function main() {
   }
   console.log(`✅ ${trendingPosts.length} trending post oluşturuldu (çeşitli type'larda)`)
 
-  // 3. Wishbox Events (What's News) - Diverse event types
+  // 3. Wishbox Events - ESKİ KOD DEVRE DIŞI (Yeni seedEvents() kullanılıyor)
   progress.increment('Wishbox event\'leri oluşturuluyor...')
-  console.log('\n🎪 Creating wishbox events...')
-
+  console.log('\n⚠️ ESKİ EVENT OLUŞTURMA KODU ATLANDI - YENİ seedEvents() KULLANILIYOR')
+  console.log('   (Brand events, bridge events, upcoming events - HEPSİ KALDIRILDI)')
+  console.log('   (Sadece Electronics ve Beauty odaklı 12 event kullanılıyor)')
+  
+  /* ESKİ EVENT KODU BAŞLANGIÇ - 535 SATIR KALDIRILDI
   // 3.a Ensure event images are uploaded to MinIO (event/event.png & event/eventcardbg.png)
   // ÖNEMLİ: Önce MinIO'ya yükle, sonra DB'ye yaz
   try {
@@ -7835,6 +7838,7 @@ async function main() {
     }
     console.log(`✅ ${rewardCount} event badge reward oluşturuldu`)
   }
+  ESKİ EVENT KODU SON - 535 SATIR */
 
   // 4. Yeni product'lar ve inventory media'ları ekle (explore/products/new için)
   console.log('📦 Creating new products with inventory media for explore...')
