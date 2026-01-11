@@ -23,7 +23,6 @@ model User {
   bridgePosts             BridgePost[]
   bridgeRewards           BridgeReward[]
   bridgeUserStats         BridgeUserStats[]
-  choiceComments          ChoiceComment[]
   contentCollections      ContentCollection[]
   contentCommentVotes     ContentCommentVote[]
   contentComments         ContentComment[]
@@ -62,7 +61,6 @@ model User {
   productSuggestions      ProductSuggestion[]
   profile                 Profile?
   rewardClaims            RewardClaim[]
-  scenarioChoices         ScenarioChoice[]
   supportRequestReports   SupportRequestReport[]  @relation("SupportRequestReportReporter")
   userReportsAsReporter    UserReport[]            @relation("UserReportReporter")
   userReportsAsReported    UserReport[]            @relation("UserReportReported")
@@ -1195,58 +1193,12 @@ model WishboxEvent {
   mainCategory MainCategory?    @relation(fields: [mainCategoryId], references: [id])
   subCategory  SubCategory?     @relation(fields: [subCategoryId], references: [id])
   rewards     WishboxReward[]
-  scenarios   WishboxScenario[]
   stats       WishboxStats[]
 
   @@index([brandId])
   @@index([status, startDate, endDate])
   @@index([mainCategoryId])
   @@map("wishbox_events")
-}
-
-model WishboxScenario {
-  id          String           @id @default(uuid()) @db.Uuid
-  eventId     String           @map("event_id") @db.VarChar(26)
-  title       String
-  description String?
-  orderIndex  Int              @map("order_index")
-  createdAt   DateTime         @default(now()) @map("created_at")
-  updatedAt   DateTime         @updatedAt @map("updated_at")
-  choices     ScenarioChoice[]
-  event       WishboxEvent     @relation(fields: [eventId], references: [id], onDelete: Cascade)
-
-  @@map("wishbox_scenarios")
-}
-
-model ScenarioChoice {
-  id         String          @id @default(uuid()) @db.Uuid
-  scenarioId String          @map("scenario_id") @db.Uuid
-  userId     String          @map("user_id") @db.Uuid
-  choiceText String          @map("choice_text")
-  isSelected Boolean         @map("is_selected")
-  createdAt  DateTime        @default(now()) @map("created_at")
-  updatedAt  DateTime        @updatedAt @map("updated_at")
-  comments   ChoiceComment[]
-  scenario   WishboxScenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
-  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([scenarioId, userId])
-  @@map("scenario_choices")
-}
-
-model ChoiceComment {
-  id        String         @id @default(uuid()) @db.Uuid
-  choiceId  String         @map("choice_id") @db.Uuid
-  userId    String         @map("user_id") @db.Uuid
-  comment   String
-  createdAt DateTime       @default(now()) @map("created_at")
-  updatedAt DateTime       @updatedAt @map("updated_at")
-  choice    ScenarioChoice @relation(fields: [choiceId], references: [id], onDelete: Cascade)
-  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([choiceId])
-  @@index([userId])
-  @@map("choice_comments")
 }
 
 model WishboxStats {

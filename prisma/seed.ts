@@ -2894,7 +2894,7 @@ async function seedEvents() {
         },
         update: {
           totalParticipated: { increment: 1 },
-        }
+    }
       })
     }
   }
