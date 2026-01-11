@@ -55,7 +55,7 @@ router.post(
     }
 
     const { eventId } = req.params;
-    const { title, body } = req.body;
+    const { title, body, productId } = req.body;
 
     if (!title || !body) {
       return res.status(400).json({ message: 'Title and body are required' });
@@ -73,6 +73,7 @@ router.post(
       const post = await eventPostService.createEventPost({
         eventId,
         userId: String(userId),
+        productId: productId || undefined,
         title,
         body,
       });

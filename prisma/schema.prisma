@@ -391,6 +391,7 @@ model Product {
   subName            String?             @map("sub_name")
   aiExperienceSplits AiExperienceSplit[] @relation("ProductAiExperienceSplits")
   contentPosts       ContentPost[]
+  eventPosts         EventPost[]
   inventories        Inventory[]
   comparisonProduct1 PostComparison[]    @relation("ComparisonProduct1")
   comparisonProduct2 PostComparison[]    @relation("ComparisonProduct2")
@@ -2051,6 +2052,7 @@ model EventPost {
   id            String             @id @db.VarChar(26)
   eventId       String             @map("event_id") @db.VarChar(26)
   userId        String             @map("user_id") @db.Uuid
+  productId     String?            @map("product_id") @db.Uuid
   title         String             @db.VarChar(200)
   body          String             @db.Text
   likesCount    Int                @default(0) @map("likes_count")
@@ -2060,11 +2062,13 @@ model EventPost {
   
   event    WishboxEvent       @relation(fields: [eventId], references: [id], onDelete: Cascade)
   user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product  Product?           @relation(fields: [productId], references: [id], onDelete: SetNull)
   likes    EventPostLike[]
   comments EventPostComment[]
   
   @@index([eventId, createdAt])
   @@index([userId, eventId])
+  @@index([productId])
   @@map("event_posts")
 }
 

@@ -12,6 +12,7 @@ export class EventPostService {
   async createEventPost(data: {
     eventId: string;
     userId: string;
+    productId?: string;
     title: string;
     body: string;
   }) {
@@ -35,12 +36,24 @@ export class EventPostService {
       throw new Error('Event is not published');
     }
 
+    // Ürün varsa kontrol et
+    if (data.productId) {
+      const product = await this.prisma.product.findUnique({
+        where: { id: data.productId },
+      });
+      
+      if (!product) {
+        throw new Error('Product not found');
+      }
+    }
+
     // Post oluştur
     const post = await this.prisma.eventPost.create({
       data: {
         id: generateUlid(),
         eventId: data.eventId,
         userId: data.userId,
+        productId: data.productId,
         title: data.title,
         body: data.body,
       },
@@ -52,6 +65,14 @@ export class EventPostService {
               where: { isActive: true },
               take: 1,
             },
+          },
+        },
+        product: {
+          select: {
+            id: true,
+            name: true,
+            brand: true,
+            imageUrl: true,
           },
         },
       },
@@ -92,6 +113,12 @@ export class EventPostService {
         name: post.user.profile?.displayName || post.user.email || 'Anonymous',
         avatar: resolveMediaUrl(post.user.avatars?.[0]?.imageUrl, true),
       },
+      product: post.product ? {
+        id: post.product.id,
+        name: post.product.name,
+        brand: post.product.brand,
+        image: resolveMediaUrl(post.product.imageUrl),
+      } : null,
     };
   }
 
@@ -114,6 +141,14 @@ export class EventPostService {
               where: { isActive: true },
               take: 1,
             },
+          },
+        },
+        product: {
+          select: {
+            id: true,
+            name: true,
+            brand: true,
+            imageUrl: true,
           },
         },
         likes: options?.userId
@@ -149,6 +184,12 @@ export class EventPostService {
           name: post.user.profile?.displayName || post.user.email || 'Anonymous',
           avatar: resolveMediaUrl(post.user.avatars?.[0]?.imageUrl, true),
         },
+        product: post.product ? {
+          id: post.product.id,
+          name: post.product.name,
+          brand: post.product.brand,
+          image: resolveMediaUrl(post.product.imageUrl),
+        } : null,
         isLikedByUser: options?.userId ? (post.likes as any[]).length > 0 : false,
       })),
       pagination: {
@@ -173,6 +214,14 @@ export class EventPostService {
               where: { isActive: true },
               take: 1,
             },
+          },
+        },
+        product: {
+          select: {
+            id: true,
+            name: true,
+            brand: true,
+            imageUrl: true,
           },
         },
         likes: userId
@@ -207,6 +256,12 @@ export class EventPostService {
         name: post.user.profile?.displayName || post.user.email || 'Anonymous',
         avatar: resolveMediaUrl(post.user.avatars?.[0]?.imageUrl, true),
       },
+      product: post.product ? {
+        id: post.product.id,
+        name: post.product.name,
+        brand: post.product.brand,
+        image: resolveMediaUrl(post.product.imageUrl),
+      } : null,
       event: {
         id: post.event.id,
         title: post.event.title,
