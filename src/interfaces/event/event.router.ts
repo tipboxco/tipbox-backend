@@ -4,7 +4,7 @@ import { UserService } from '../../application/user/user.service';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { authMiddleware } from '../auth/auth.middleware';
 import { getErrorMessage, hasErrorMessage, errorMessageIncludes } from '../../infrastructure/errors/error-helper';
-import eventPostRouter from './event-post.router';
+import logger from '../../infrastructure/logger/logger';
 
 const router = Router();
 const eventService = new EventService();
@@ -675,6 +675,65 @@ router.post(
 
 /**
  * @openapi
+ * /events/{eventId}/leave:
+ *   post:
+ *     summary: Event'ten ayrıl
+ *     description: Kullanıcının event'ten ayrılmasını sağlar. Response formatı GET /events/{eventId} ile aynıdır. Idempotent endpoint - zaten ayrılmışsa hata vermez.
+ *     tags: [Events]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: eventId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Event ID
+ *     responses:
+ *       200:
+ *         description: Event'ten başarıyla ayrıldı
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/EventDetail'
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Event not found
+ */
+router.post(
+  '/:eventId/leave',
+  authMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const eventId = req.params.eventId;
+
+    if (!eventId) {
+      return res.status(400).json({ message: 'Event ID is required' });
+    }
+
+    try {
+      const eventDetail = await eventService.leaveEvent(eventId, userId);
+      return res.json(eventDetail);
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      if (hasErrorMessage(error, 'Event not found')) {
+        return res.status(404).json({ message: 'Event not found' });
+      }
+      logger.error(`Error leaving event ${eventId}:`, error);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  })
+);
+
+/**
+ * @openapi
  * /events/{eventId}/requirements:
  *   get:
  *     summary: Event gereksinimlerini ve ilerlemeyi getir
@@ -765,9 +824,6 @@ router.get(
     }
   })
 );
-
-// Event post router'ını ekle
-router.use('/', eventPostRouter);
 
 export default router;
 

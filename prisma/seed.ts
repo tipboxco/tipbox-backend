@@ -10,9 +10,6 @@ import { DEFAULT_AVATAR_PATH } from '../src/infrastructure/config/media.config'
 import { ProgressBar } from './seed/helpers/progress-bar'
 import { seedTaxonomy } from './seed/taxonomy.seed'
 import { seedProductCatalog } from './seed/product-catalog.seed'
-// MinIO görsel yükleme artık ayrı bir script ile yapılıyor (upload-seed-media.ts)
-// import { ensureSeedMediaUploaded } from './seed/helpers/ensure-seed-media'
-// Import from JS file (no ts-node issues)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { markSeedStart, markSeedEnd, addSeedUserId } = require('./seed/seed-metadata')
 
@@ -481,10 +478,6 @@ const SEED_USERS: SeedUserConfig[] = [
   },
 ]
 
-// NOT: Seed'de artık sadece path kullanılacak (full URL değil)
-// DB'ye sadece bucket path yazılacak: tipbox-media/products/phone6.png
-// DEFAULT_PROFILE_BANNER_URL env'den geliyor, eğer full URL ise .env'de path formatına çevrilmeli
-// Şimdilik sadece path kullanıyoruz
 const DEFAULT_BANNER_URL =  getSeedMediaPath('user.banner.primary', true) || null
 const PRIMARY_AVATAR_URL = getSeedMediaPath('user.avatar.primary', true) || getSeedMediaPath('user.avatar.default', true) || null
 const MARKET_AVATAR_URL = getSeedMediaPath('user.avatar.market', true) || getSeedMediaPath('user.avatar.default', true) || null
@@ -527,20 +520,13 @@ const MARKETPLACE_NFT_IMAGE_KEYS: SeedMediaKey[] = [
 
 let marketplaceImageCursor = 0
 
-// Seed görselleri için dış erişim host'u (frontend'in bağlandığı IP)
-// Tüm seed URL'leri buradan üretilecek ki IP değişimi tek yerden yönetilebilsin.
-// NOTE: SEED_MEDIA_HOST was previously used as a static base URL; media URLs are now
-// fully managed via getSeedMediaPath / getPublicMediaBaseUrl. The old constant is
-// intentionally removed to avoid unused-variable compile errors.
 const nextMarketplaceImage = (): string => {
   const key = MARKETPLACE_NFT_IMAGE_KEYS[marketplaceImageCursor % MARKETPLACE_NFT_IMAGE_KEYS.length]
   marketplaceImageCursor += 1
   return getSeedMediaPath(key, true) ?? ''
 }
 
-// Simple ULID generator for seed (avoids import issues)
 function generateUlid(): string {
-  // ULID format: timestamp (10 chars) + randomness (16 chars) = 26 chars
   const timestamp = Date.now().toString(36).toUpperCase().padStart(10, '0')
   const randomPart = Math.random().toString(36).substring(2, 18).toUpperCase().padStart(16, '0')
   return (timestamp + randomPart).substring(0, 26)
@@ -556,15 +542,7 @@ function daysAgo(days: number): Date {
   return date
 }
 
-/**
- * Taxonomy/Core veriler için idempotent seeding helper'ları
- * Bu fonksiyonlar mevcut verileri bulur, yoksa oluşturur
- * ID'lerin değişmemesini sağlar (referans bütünlüğü için kritik)
- */
-
-// MainCategory için idempotent create/update
 async function ensureMainCategory(config: { name: string; description?: string; imageKey?: SeedMediaKey }): Promise<{ id: string; name: string }> {
-  // Eğer imageKey belirtilmemişse, mapping'den otomatik bul
   let finalImageKey = config.imageKey;
   if (!finalImageKey) {
     finalImageKey = getMainCategoryImageKey(config.name);
@@ -600,9 +578,7 @@ async function ensureMainCategory(config: { name: string; description?: string; 
   });
 }
 
-// SubCategory için idempotent create/update
 async function ensureSubCategory(config: { name: string; mainCategoryId: string; description?: string; imageKey?: SeedMediaKey }): Promise<{ id: string; name: string; mainCategoryId: string }> {
-  // Eğer imageKey belirtilmemişse, mapping'den otomatik bul
   let finalImageKey = config.imageKey;
   if (!finalImageKey) {
     finalImageKey = getSubCategoryImageKey(config.name);
@@ -642,7 +618,6 @@ async function ensureSubCategory(config: { name: string; mainCategoryId: string;
   });
 }
 
-// ProductGroup için idempotent create/update
 async function ensureProductGroup(config: { name: string; subCategoryId: string; description?: string; imageKey?: SeedMediaKey }): Promise<{ id: string; name: string; subCategoryId: string }> {
   const existing = await prisma.productGroup.findFirst({
     where: { 
@@ -678,7 +653,6 @@ async function ensureProductGroup(config: { name: string; subCategoryId: string;
   });
 }
 
-// Product için idempotent create/update (name + brand bazlı)
 async function ensureProduct(config: { name: string; brand?: string; groupId?: string; description?: string; imageKey?: SeedMediaKey }): Promise<{ id: string; name: string; brand?: string | null; groupId?: string | null }> {
   const whereClause: any = { name: config.name };
   if (config.brand) whereClause.brand = config.brand;
@@ -687,7 +661,6 @@ async function ensureProduct(config: { name: string; brand?: string; groupId?: s
     where: whereClause
   });
   
-  // Eğer imageKey belirtilmemişse, mapping'den otomatik bul
   let finalImageKey = config.imageKey;
   if (!finalImageKey) {
     finalImageKey = getProductImageKey(config.name, config.brand);
@@ -1261,18 +1234,13 @@ async function seedProducts(): Promise<void> {
   
   let totalProducts = 0
   
-  // ==================== ELECTRONICS PRODUCTS ====================
-  
-  // 1. PHONES
   console.log('📱 Phones kategorisi ürünleri...')
   
-  // iPhone Series
   const iphoneSeries = await prisma.productGroup.findFirst({
     where: { name: 'iPhone Series' }
   })
   
   if (iphoneSeries) {
-    // 25 iPhone models - basit isimlendirme
     for (let i = 1; i <= 25; i++) {
       await ensureProduct({
         name: `iPhone Pro Model ${i}`,
@@ -1284,7 +1252,6 @@ async function seedProducts(): Promise<void> {
     }
   }
   
-  // Samsung Galaxy
   const samsungGalaxy = await prisma.productGroup.findFirst({
     where: { name: 'Samsung Galaxy' }
   })
@@ -1335,7 +1302,6 @@ async function seedProducts(): Promise<void> {
   
   console.log(`  ✅ Phones: ${totalProducts} ürün`)
   
-  // 2. LAPTOPS
   console.log('💻 Laptops kategorisi ürünleri...')
   const laptopStart = totalProducts
   
@@ -1373,7 +1339,6 @@ async function seedProducts(): Promise<void> {
   
   console.log(`  ✅ Laptops: ${totalProducts - laptopStart} ürün`)
   
-  // 3. TABLETS
   console.log('📱 Tablets kategorisi ürünleri...')
   const tabletStart = totalProducts
   
@@ -1403,7 +1368,6 @@ async function seedProducts(): Promise<void> {
   
   console.log(`  ✅ Tablets: ${totalProducts - tabletStart} ürün`)
   
-  // 4. AUDIO - 42 products
   console.log('🎧 Audio kategorisi ürünleri...')
   const audioStart = totalProducts
   
@@ -1445,7 +1409,6 @@ async function seedProducts(): Promise<void> {
   
   console.log(`  ✅ Audio: ${totalProducts - audioStart} ürün`)
   
-  // 5. WEARABLES - 30 products
   console.log('⌚ Wearables kategorisi ürünleri...')
   const wearableStart = totalProducts
   
@@ -1475,7 +1438,6 @@ async function seedProducts(): Promise<void> {
   
   console.log(`  ✅ Wearables: ${totalProducts - wearableStart} ürün`)
   
-  // 6. ACCESSORIES - 34 products
   console.log('🔌 Accessories kategorisi ürünleri...')
   const accessoryStart = totalProducts
   
@@ -1514,7 +1476,6 @@ async function seedProducts(): Promise<void> {
   
   console.log(`  ✅ Accessories: ${totalProducts - accessoryStart} ürün`)
   
-  // 7. CAMERAS - 40 products
   console.log('📷 Cameras kategorisi ürünleri...')
   const cameraStart = totalProducts
   
@@ -1558,9 +1519,6 @@ async function seedProducts(): Promise<void> {
   console.log(`\n📱 Electronics Toplam: ${electronicsTotal} ürün\n`)
   console.log('💄 Beauty ürünleri ekleniyor...\n')
   
-  // ==================== BEAUTY PRODUCTS ====================
-  
-  // 1. SKINCARE - 100 products
   console.log('🧴 Skincare kategorisi ürünleri...')
   const skincareStart = totalProducts
   
@@ -1610,7 +1568,6 @@ async function seedProducts(): Promise<void> {
   
   console.log(`  ✅ Skincare: ${totalProducts - skincareStart} ürün`)
   
-  // 2. MAKEUP - 400 products
   console.log('💄 Makeup kategorisi ürünleri...')
   const makeupStart = totalProducts
   
@@ -1661,11 +1618,9 @@ async function seedProducts(): Promise<void> {
   
   console.log(`  ✅ Makeup: ${totalProducts - makeupStart} ürün`)
   
-  // 3-7. Other Beauty categories - 205 products
   console.log('🌸 Diğer Beauty kategorileri ürünleri...')
   const otherBeautyStart = totalProducts
   
-  // Fragrance - 45 products
   const perfume = await prisma.productGroup.findFirst({ where: { name: 'Perfume' } })
   if (perfume) {
     for (let i = 1; i <= 20; i++) {
@@ -1692,7 +1647,6 @@ async function seedProducts(): Promise<void> {
     }
   }
   
-  // Haircare - 40 products
   const shampoo = await prisma.productGroup.findFirst({ where: { name: 'Shampoo' } })
   if (shampoo) {
     for (let i = 1; i <= 15; i++) {
@@ -1726,7 +1680,6 @@ async function seedProducts(): Promise<void> {
     }
   }
   
-  // Personal Care - 40 products
   const deodorant = await prisma.productGroup.findFirst({ where: { name: 'Deodorant' } })
   if (deodorant) {
     for (let i = 1; i <= 15; i++) {
@@ -1761,7 +1714,6 @@ async function seedProducts(): Promise<void> {
     }
   }
   
-  // Nail Care - 30 products
   const nailPolish = await prisma.productGroup.findFirst({ where: { name: 'Nail Polish' } })
   if (nailPolish) {
     for (let i = 1; i <= 25; i++) {
@@ -1786,7 +1738,6 @@ async function seedProducts(): Promise<void> {
     }
   }
   
-  // Men's Grooming - 20 products
   const shavingProducts = await prisma.productGroup.findFirst({ where: { name: 'Shaving Products' } })
   if (shavingProducts) {
     for (let i = 1; i <= 10; i++) {
@@ -2801,6 +2752,35 @@ async function seedEvents() {
     }
   ]
   
+  // Event image'lerini Minio'ya upload et
+  console.log("📸 Event görselleri Minio'ya yükleniyor...")
+  const s3Service = new S3Service()
+  const eventImagesDir = path.join(__dirname, '../tests/assets/events/new-events')
+  
+  let uploadedEventImageCount = 0
+  for (const config of eventConfigs) {
+    if (!config.imageKey) continue
+    
+    // imageKey'den dosya adını çıkar (örn: 'event.event-batarya' -> 'event-batarya.png')
+    const imageKeyParts = config.imageKey.split('.')
+    const imageName = imageKeyParts[imageKeyParts.length - 1] // 'event-batarya'
+    const localImagePath = path.join(eventImagesDir, `${imageName}.png`)
+    
+    if (existsSync(localImagePath)) {
+      try {
+        const imageBuffer = readFileSync(localImagePath)
+        const minioPath = `events/new-events/${imageName}.png`
+        await s3Service.uploadFile(minioPath, imageBuffer, 'image/png')
+        uploadedEventImageCount++
+      } catch (error) {
+        console.warn(`  ⚠️ ${imageName}.png yüklenemedi:`, error instanceof Error ? error.message : String(error))
+      }
+    } else {
+      console.warn(`  ⚠️ Event görseli bulunamadı: ${localImagePath}`)
+    }
+  }
+  console.log(`  ✅ ${uploadedEventImageCount}/${eventConfigs.length} event görseli yüklendi\n`)
+  
   // Event'leri oluştur
   console.log('📅 Eventler oluşturuluyor...')
   let activeCount = 0
@@ -2809,8 +2789,13 @@ async function seedEvents() {
   for (const config of eventConfigs) {
     const eventId = generateUlid()
     
-    // Event görselini al
-    const imageUrl = getSeedMediaPath(config.imageKey, true) || null
+    // Event görselini al - Doğrudan Minio path'ini kullan
+    let imageUrl: string | null = null
+    if (config.imageKey) {
+      const imageKeyParts = config.imageKey.split('.')
+      const imageName = imageKeyParts[imageKeyParts.length - 1] // 'event-batarya'
+      imageUrl = `events/new-events/${imageName}.png`
+    }
     
     await prisma.wishboxEvent.create({
       data: {
@@ -2822,8 +2807,6 @@ async function seedEvents() {
         status: config.status,
         imageUrl,
         brandId: null,
-        mainCategoryId: config.categoryId || null,
-        subCategoryId: null,
       }
     })
     
@@ -2839,57 +2822,142 @@ async function seedEvents() {
   console.log(`  ✅ ${activeCount} active event oluşturuldu`)
   console.log(`  ✅ ${upcomingCount} upcoming event oluşturuldu`)
   
-  // Active event'lere EventPost ekle (ÜRÜN BAZLI)
-  console.log('📝 Event postları oluşturuluyor (ÜRÜN BAZLI)...')
+  // Active event'lere ContentPost ekle (FREE tipinde - Event Posts)
+  console.log('📝 Event postları oluşturuluyor (ContentPost FREE tipinde)...')
   let totalEventPosts = 0
+  
+  // Gerçekçi post içerikleri - Event türüne göre
+  const eventPostTemplates = {
+    electronics: [
+      {
+        titleTemplate: (product: string) => `${product} - Uzun Süreli Kullanım Deneyimim`,
+        bodyTemplate: (product: string) => `${product} ürününü yaklaşık 6 aydır kullanıyorum. İlk başta fiyatına göre çok fazla özellik sunuyor diye düşünmüştüm ama kullandıkça ne kadar doğru bir seçim yaptığımı anladım. Özellikle performans açısından beklentilerimin çok üstünde çıktı. Günlük işlerimde hiç sorun yaşamadım. Batarya ömrü de oldukça tatmin edici. Arkadaşlarıma da öneriyorum.`
+      },
+      {
+        titleTemplate: (product: string) => `${product} ile 3 Aylık Gerçek Deneyim`,
+        bodyTemplate: (product: string) => `${product} aldığım ilk günden beri günlük olarak kullanıyorum. Kalite açısından gerçekten başarılı bir ürün. Alternatiflerini de inceledim ama bu hem fiyat hem de özellik olarak en iyisi gibiydi. Özellikle kullanım kolaylığı çok hoşuma gitti. Hiç teknik sorun yaşamadım. Kesinlikle tavsiye ederim.`
+      },
+      {
+        titleTemplate: (product: string) => `${product} - Beklediğimden İyi Çıktı`,
+        bodyTemplate: (product: string) => `${product} için uzun süredir araştırma yapıyordum. Farklı markaları karşılaştırdım ve sonunda bunu almaya karar verdim. İlk izlenimim çok olumlu. Tasarım oldukça şık ve modern. Kullanırken de çok rahat. Henüz birkaç hafta oldu ama şimdiye kadar memnun kaldım. Umarım uzun ömürlü olur.`
+      },
+      {
+        titleTemplate: (product: string) => `${product} Kullanıcısı Olarak Düşüncelerim`,
+        bodyTemplate: (product: string) => `${product} modelini bir süredir kullanıyorum ve genel olarak memnunum. Performans açısından günlük ihtiyaçlarımı fazlasıyla karşılıyor. Sadece bazı küçük detaylarda iyileştirme yapılabilir diye düşünüyorum ama bunlar büyük sorunlar değil. Fiyat/performans dengesi gayet iyi. Bu fiyata alınabilecek en iyi ürünlerden biri bence.`
+      },
+      {
+        titleTemplate: (product: string) => `${product} - Detaylı İnceleme ve Yorumum`,
+        bodyTemplate: (product: string) => `${product} hakkında detaylı bir inceleme yazmak istedim çünkü gerçekten beğendiğim bir ürün. Hem günlük kullanımda hem de yoğun iş yükünde gayet iyi performans gösteriyor. Kalite açısından fiyatının çok üstünde bir ürün. Dayanıklılık konusunda da şimdilik herhangi bir sorun gözlemlemedim. Kullanırken keyif alıyorum.`
+      },
+    ],
+    beauty: [
+      {
+        titleTemplate: (product: string) => `${product} Cilt Bakım Rutinimi Değiştirdi`,
+        bodyTemplate: (product: string) => `${product} kullanmaya başladığımdan beri cildimde gerçekten fark gördüm. İlk haftada bile cildin nem dengesinin düzeldiğini hissettim. Artık sabah akşam rutinimin vazgeçilmezi oldu. Hassas ciltler için de uygun bence çünkü hiç tahriş yapmıyor. Kesinlikle denemenizi tavsiye ederim.`
+      },
+      {
+        titleTemplate: (product: string) => `${product} İle 2 Aylık Deneyimim`,
+        bodyTemplate: (product: string) => `${product} hakkında çok olumlu yorumlar okumuştum ve sonunda denedim. 2 aydır düzenli kullanıyorum ve cildimde bariz iyileşmeler var. Özellikle gözenekler küçüldü ve cilt tonu eşitlendi. Kokusu da çok hoş, sabah uyanınca uygulamak keyifli oluyor. Fiyatı biraz yüksek ama etkisine değiyor bence.`
+      },
+      {
+        titleTemplate: (product: string) => `${product} - Yağlı Ciltler İçin Mükemmel`,
+        bodyTemplate: (product: string) => `Yağlı cilde sahip biri olarak ${product} tam aradığım şeymiş. Cildi matlaştırıyor ama kurutmuyor. Gün içinde parlaklık problemi yaşamıyorum artık. Makyajın altına da harika uyum sağlıyor. Birkaç hafta içinde cildimdeki değişimi gördüm. Aynı cilt tipine sahip herkese tavsiye ederim.`
+      },
+      {
+        titleTemplate: (product: string) => `${product} Beklentimi Karşıladı mı?`,
+        bodyTemplate: (product: string) => `${product} almadan önce epey araştırma yaptım. Başlangıçta fiyatını yüksek buldum ama kullanmaya başlayınca paranın karşılığını aldığımı anladım. Cildin dokusu gerçekten yumuşadı ve nemlenme seviyesi arttı. Tek kutu bitirdim ve kesinlikle yeniden alacağım. Doğal içerikli olması da ayrı bir artı.`
+      },
+      {
+        titleTemplate: (product: string) => `${product} - Günlük Rutinimin Favorisi`,
+        bodyTemplate: (product: string) => `${product} şu an makyaj çantamın vazgeçilmezi. Hem kullanımı çok pratik hem de etkisi uzun sürüyor. Özellikle gün boyu kalıcılığı çok beğendim. Renk tonu da cilt tonuma mükemmel uydu. İçeriğindeki formül de cildi besliyor, sadece makyaj yapmakla kalmıyorum aynı zamanda cildim de bakım görüyor. Herkese gönül rahatlığıyla önerebilirim.`
+      },
+    ],
+  };
+
+  // Event kategorisine göre template seç
+  const getTemplatesForEvent = (categoryId: string | undefined, eventTitle: string) => {
+    // Elektronik kategorisi kontrolü
+    if (categoryId === electronicsCategory?.id) {
+      return eventPostTemplates.electronics;
+    }
+    
+    // Beauty kategorisi kontrolü
+    if (categoryId === beautyCategory?.id) {
+      return eventPostTemplates.beauty;
+    }
+    
+    // Fallback: Event title'a göre kategori tahmin et
+    const titleLower = eventTitle.toLowerCase();
+    if (titleLower.includes('telefon') || titleLower.includes('laptop') || 
+        titleLower.includes('tablet') || titleLower.includes('kulaklık') ||
+        titleLower.includes('saat') || titleLower.includes('kamera') || 
+        titleLower.includes('oyun') || titleLower.includes('batarya') ||
+        titleLower.includes('performans') || titleLower.includes('cihaz')) {
+      return eventPostTemplates.electronics;
+    }
+    
+    if (titleLower.includes('cilt') || titleLower.includes('makyaj') || 
+        titleLower.includes('serum') || titleLower.includes('güneş') ||
+        titleLower.includes('saç') || titleLower.includes('yağlı') ||
+        titleLower.includes('bakım') || titleLower.includes('rutin')) {
+      return eventPostTemplates.beauty;
+    }
+    
+    // Son fallback: Random
+    return Math.random() > 0.5 ? eventPostTemplates.electronics : eventPostTemplates.beauty;
+  };
   
   for (let i = 0; i < activeEvents.length; i++) {
     const eventId = activeEvents[i]
     const config = eventConfigs.filter(c => c.isActive)[i]
     const eventProducts = config.products || []
     
-    // Her event için 15-25 post
-    const postCount = Math.floor(Math.random() * 11) + 15
+    if (eventProducts.length === 0) {
+      console.log(`  ⚠️ Event "${config.title}" için ürün yok, post oluşturulmadı`)
+      continue
+    }
+    
+    // Her event için 5-8 post
+    const postCount = Math.floor(Math.random() * 4) + 5 // 5-8 arası
     const contributors = users.sort(() => Math.random() - 0.5).slice(0, postCount)
     
-    for (const user of contributors) {
-      // Rastgele bir ürün seç
-      const selectedProduct = eventProducts.length > 0 
-        ? eventProducts[Math.floor(Math.random() * eventProducts.length)]
-        : null
+    // Event kategorisine göre template'leri seç
+    const templates = getTemplatesForEvent(config.categoryId, config.title);
+    const shuffledTemplates = [...templates].sort(() => Math.random() - 0.5);
+    
+    for (let j = 0; j < contributors.length; j++) {
+      const user = contributors[j];
+      
+      // Her post için rastgele farklı bir ürün seç
+      const selectedProduct = eventProducts[Math.floor(Math.random() * eventProducts.length)]
+      
+      // Template'i döngüsel olarak kullan (tekrar olmaması için)
+      const template = shuffledTemplates[j % shuffledTemplates.length];
+      const productName = selectedProduct.name;
       
       const postId = generateUlid()
-      const productName = selectedProduct?.name || 'Genel Deneyim'
       
-      // Ürün bazlı title ve body
-      const titles = [
-        `${productName} ile deneyimim`,
-        `${productName} hakkında düşüncelerim`,
-        `${productName} kullanım deneyimi`,
-        `${productName} - Detaylı İnceleme`,
-        `${productName} uzun süreli kullanım`,
-      ]
-      
-      const bodies = [
-        `${productName} ürününü ${Math.floor(Math.random() * 12) + 1} aydır kullanıyorum. Genel olarak memnunum. Özellikle ${['performans', 'kalite', 'dayanıklılık', 'kullanım kolaylığı'][Math.floor(Math.random() * 4)]} açısından beklentilerimi karşıladı. Fiyat performans oranı gayet iyi.`,
-        `${productName} için uzun süredir araştırma yaptım ve sonunda aldım. İlk izlenimlerim oldukça olumlu. ${['Tasarım', 'Kullanım', 'Özellikler', 'Kalite'][Math.floor(Math.random() * 4)]} açısından çok başarılı. Arkadaşlarıma da tavsiye ediyorum.`,
-        `${productName} günlük kullanımda gerçekten işimi görüyor. ${['Pratiklik', 'Verimlilik', 'Dayanıklılık', 'Kullanım kolaylığı'][Math.floor(Math.random() * 4)]} konusunda çok memnunum. Alternatiflerini de denedim ama bu benim favorim oldu.`,
-        `${productName} ürününü farklı senaryolarda test ettim. Hem ${['günlük kullanımda', 'yoğun kullanımda', 'farklı ortamlarda', 'uzun süreli kullanımda'][Math.floor(Math.random() * 4)]} sorunsuz çalışıyor. Kalite açısından çok başarılı buldum.`,
-      ]
-      
-      await prisma.eventPost.create({
+      // ContentPost oluştur (FREE tipinde, event ile ilişkili)
+      await prisma.contentPost.create({
         data: {
           id: postId,
-          eventId,
           userId: user.id,
-          productId: selectedProduct?.id,
-          title: titles[Math.floor(Math.random() * titles.length)],
-          body: bodies[Math.floor(Math.random() * bodies.length)],
-          likesCount: Math.floor(Math.random() * 30) + 5,
-          commentsCount: Math.floor(Math.random() * 15) + 2,
-          createdAt: new Date(Date.now() - Math.random() * 10 * 24 * 60 * 60 * 1000),
+          type: 'FREE', // FREE tipinde ContentPost
+          title: template.titleTemplate(productName),
+          body: template.bodyTemplate(productName),
+          productId: selectedProduct.id,
+          eventId: eventId, // Event ile ilişkilendir
+          inventoryRequired: false,
+          isBoosted: false,
+          likesCount: Math.floor(Math.random() * 25) + 3, // 3-27 like
+          commentsCount: 0, // Başlangıçta 0, sonra gerçek comment'ler eklenecek
+          viewsCount: Math.floor(Math.random() * 100) + 20, // 20-119 view
+          favoritesCount: Math.floor(Math.random() * 10), // 0-9 favorite
+          sharesCount: Math.floor(Math.random() * 5), // 0-4 share
+          createdAt: new Date(Date.now() - Math.random() * 14 * 24 * 60 * 60 * 1000), // Son 14 gün
         }
       })
+      
       totalEventPosts++
       
       // WishboxStats güncelle
@@ -2904,8 +2972,8 @@ async function seedEvents() {
           userId: user.id,
           eventId,
           totalParticipated: 1,
-          totalComments: Math.floor(Math.random() * 5) + 1,
-          helpfulVotesReceived: Math.floor(Math.random() * 10) + 1,
+          totalComments: Math.floor(Math.random() * 3) + 1,
+          helpfulVotesReceived: Math.floor(Math.random() * 5) + 1,
         },
         update: {
           totalParticipated: { increment: 1 },
@@ -2914,7 +2982,129 @@ async function seedEvents() {
     }
   }
   
-  console.log(`  ✅ ${totalEventPosts} event post oluşturuldu (ÜRÜN BAZLI)`)
+  console.log(`  ✅ ${totalEventPosts} ContentPost oluşturuldu (FREE tipinde, Event'lere bağlı)`)
+  
+  // Event post'larına comment ekle (max 3 comment per post)
+  console.log("💬 Event post'larına comment ekleniyor...")
+  
+  // Comment template'leri (gerçekçi yorumlar)
+  const commentTemplates = {
+    electronics: [
+      'Ben de aynı ürünü kullanıyorum, çok memnunum. Özellikle performans konusunda farkı hemen fark ediyorsunuz.',
+      'Çok detaylı bir paylaşım olmuş, teşekkürler. Ben almayı düşünüyordum, karar vermeme yardımcı oldu.',
+      'Fiyat/performans dengesi gerçekten iyi mi? Alternatiflerini de inceledim ama tam kararsızım.',
+      'Batarya ömrü konusunda katılıyorum. Bende de aynı deneyim var, günlük kullanımda gerçekten yeterli.',
+      'Hangi renkten aldınız? Renk seçenekleri hakkında da bilgi verirseniz çok sevinirim.',
+      'Garantisi kaç yıl? Servis hizmetleri hakkında bir fikriniz var mı?',
+      'Aynı fiyata başka hangi modelleri önerirsiniz? Karşılaştırma yapabilir miyiz?',
+      'Çok güzel anlatmışsınız. Ben de sipariş vermeye karar verdim, umarım pişman olmam 😊',
+      'Uzun süreli kullanımda herhangi bir sorun yaşadınız mı? İlk izlenim her zaman olumlu oluyor.',
+      'Kamera kalitesi hakkında ne düşünüyorsunuz? Fotoğraf çekmek için önemli benim için.',
+    ],
+    beauty: [
+      'Bu ürünü ben de kullanıyorum ve cildimdeki değişim gerçekten çok iyi. Tavsiye ederim.',
+      'Hassas ciltler için uygun mu? Cildinizde herhangi bir tahrişe neden oldu mu?',
+      'Kokusu nasıl? Bazı ürünler çok keskin kokabiliyor, dayanılmaz oluyor.',
+      'Sabah mı akşam mı kullanıyorsunuz? Kullanım sırasına dikkat etmek gerekiyor mu?',
+      'Fiyatına göre gerçekten değer mi? Daha ucuz alternatifleri de var gibi.',
+      'Ne kadar sürede etkisini görmeye başladınız? Ben de denemek istiyorum ama merak ediyorum.',
+      "Hangi yaş grubu için uygun? 30'lu yaşlarda kullanmak mantıklı mı?",
+      'Çok güzel bir paylaşım olmuş, detaylı anlatım için teşekkürler. Hemen alıyorum 💕',
+      'Yağlı ciltler için de uygun mu? Cildin yağ dengesini bozuyor mu?',
+      'Günlük kullanım için pratik mi? Rutine kolayca dahil edilebiliyor mu?',
+    ],
+    general: [
+      'Çok faydalı bir paylaşım olmuş, teşekkürler!',
+      'Ben de aynı şeyi düşünüyorum, kesinlikle katılıyorum.',
+      'Daha detaylı bilgi verebilir misiniz? Merak ettim.',
+      'Süper paylaşım! 👏',
+      'Benim için çok yararlı bilgiler, sağ olun.',
+    ],
+  }
+  
+  // Tüm event post'larını al
+  const allEventPosts = await prisma.contentPost.findMany({
+    where: { eventId: { not: null } },
+    select: { 
+      id: true, 
+      eventId: true,
+      createdAt: true,
+    },
+  })
+  
+  let totalComments = 0
+  const postCommentCounts: Record<string, number> = {}
+  
+  for (const post of allEventPosts) {
+    // Her post için 0-3 arası random comment
+    const commentCount = Math.floor(Math.random() * 4) // 0, 1, 2, veya 3
+    
+    if (commentCount === 0) {
+      postCommentCounts[post.id] = 0
+      continue
+    }
+    
+    // Event'in kategorisine göre template seç
+    const event = await prisma.wishboxEvent.findUnique({
+      where: { id: post.eventId! },
+      select: { title: true },
+    })
+    
+    let templates = commentTemplates.general
+    if (event) {
+      const titleLower = event.title.toLowerCase()
+      if (titleLower.includes('telefon') || titleLower.includes('laptop') || 
+          titleLower.includes('tablet') || titleLower.includes('kulaklık') ||
+          titleLower.includes('saat') || titleLower.includes('kamera') || 
+          titleLower.includes('oyun') || titleLower.includes('batarya')) {
+        templates = commentTemplates.electronics
+      } else if (titleLower.includes('cilt') || titleLower.includes('makyaj') || 
+                 titleLower.includes('serum') || titleLower.includes('saç') ||
+                 titleLower.includes('bakım')) {
+        templates = commentTemplates.beauty
+      }
+    }
+    
+    // Random kullanıcılardan comment ekle
+    const commenters = users.sort(() => Math.random() - 0.5).slice(0, commentCount)
+    
+    for (const commenter of commenters) {
+      const randomTemplate = templates[Math.floor(Math.random() * templates.length)]
+      const commentId = generateUlid()
+      
+      // Comment'i post'tan sonra oluşturulmuş gibi göster
+      const commentCreatedAt = new Date(post.createdAt.getTime() + Math.random() * 7 * 24 * 60 * 60 * 1000)
+      
+      await prisma.contentComment.create({
+        data: {
+          id: commentId,
+          postId: post.id,
+          userId: commenter.id,
+          comment: randomTemplate,
+          isAnswer: false,
+          createdAt: commentCreatedAt,
+          likesCount: Math.floor(Math.random() * 5), // 0-4 like
+        },
+      })
+      
+      totalComments++
+    }
+    
+    postCommentCounts[post.id] = commentCount
+  }
+  
+  // ContentPost'ların commentsCount'larını güncelle
+  console.log("📊 Post comment count'ları güncelleniyor...")
+  for (const [postId, count] of Object.entries(postCommentCounts)) {
+    await prisma.contentPost.update({
+      where: { id: postId },
+      data: { commentsCount: count },
+    })
+  }
+  
+  console.log(`  ✅ ${totalComments} comment eklendi (max 3 per post)`)
+  console.log(`  ✅ ${allEventPosts.length} post'un comment count'u güncellendi`)
+  
   
   // Özet
   console.log('\n' + '═'.repeat(80))
@@ -2922,9 +3112,11 @@ async function seedEvents() {
   console.log(`   🎉 Toplam Events: ${activeCount + upcomingCount}`)
   console.log(`      📅 Active: ${activeCount}`)
   console.log(`      🔜 Upcoming: ${upcomingCount}`)
-  console.log(`   📝 Event Posts: ${totalEventPosts} (ÜRÜN BAZLI)`)
+  console.log(`   📝 ContentPosts (FREE): ${totalEventPosts} (Event'lere bağlı, 5-8 post/event)`)
+  console.log(`   💬 Comments: ${totalComments} (max 3 per post, gerçekçi içerikler)`)
   if (activeCount > 0) {
     console.log(`\n   📊 Ortalama event başına: ${(totalEventPosts / activeCount).toFixed(1)} post`)
+    console.log(`   📊 Ortalama post başına: ${(totalComments / totalEventPosts).toFixed(1)} comment`)
   }
   console.log('═'.repeat(80) + '\n')
 }
@@ -4840,17 +5032,6 @@ async function addAppleBrandEvents(): Promise<void> {
   return
 }
 
-// ===== EVENT POST'LARINA PRODUCT EKLE =====
-// NOT: Bu fonksiyon artık kullanılmıyor - EventPost tablosu zaten productId içeriyor
-async function addProductToEventPosts(): Promise<void> {
-  console.log('⚠️ addProductToEventPosts fonksiyonu devre dışı (EventPost artık productId içeriyor)')
-  return
-  
-  /* ESKI KOD - SCENARIO TABANLI (KALDIRILDI)
-  const scenarios = await prisma.wishboxScenario.findMany({...})
-  // ... diğer scenario kodu
-  */
-}
 
 // ===== SEED TAXONOMY ===== 
 
@@ -5773,6 +5954,375 @@ async function main() {
       rewardMultiplier: 1.65,
       categoryId: eventCategory.id,
       imageKey: 'badge.earlyadapter',
+    },
+    // EVENT-SPECIFIC BADGES (Her event için 5 badge)
+    // Batarya Event Badges
+    {
+      name: 'Batarya Uzmanı',
+      description: 'Akıllı Telefon Batarya Performansı etkinliğinde deneyimlerinizi paylaştınız',
+      type: 'EVENT',
+      rarity: 'COMMON',
+      boostMultiplier: 1.1,
+      rewardMultiplier: 1.1,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Şarj Kahramanı',
+      description: 'Batarya testi etkinliğinde en fazla katkıyı yaptınız',
+      type: 'EVENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.3,
+      rewardMultiplier: 1.3,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Enerji Efendi',
+      description: 'Batarya performansı konusunda topluma öncülük ettiniz',
+      type: 'EVENT',
+      rarity: 'EPIC',
+      boostMultiplier: 1.5,
+      rewardMultiplier: 1.5,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Güç Yöneticisi',
+      description: 'Batarya tasarrufu ipuçlarınız çok beğenildi',
+      type: 'EVENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.25,
+      rewardMultiplier: 1.25,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Şarj Savaşçısı',
+      description: 'Hızlı şarj teknolojilerini en iyi anlatan kişisiniz',
+      type: 'EVENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.2,
+      rewardMultiplier: 1.2,
+      categoryId: eventCategory.id,
+    },
+    // Laptop Event Badges
+    {
+      name: 'Uzaktan Çalışma Gurusu',
+      description: 'Laptop ile Uzaktan Çalışma etkinliğine katıldınız',
+      type: 'EVENT',
+      rarity: 'COMMON',
+      boostMultiplier: 1.1,
+      rewardMultiplier: 1.1,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Verimlilik Uzmanı',
+      description: 'Uzaktan çalışma ipuçlarınız topluma ilham verdi',
+      type: 'EVENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.3,
+      rewardMultiplier: 1.3,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Home Office Kahramanı',
+      description: 'En iyi laptop kurulum deneyimini paylaştınız',
+      type: 'EVENT',
+      rarity: 'EPIC',
+      boostMultiplier: 1.5,
+      rewardMultiplier: 1.5,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Klavye Ustası',
+      description: 'Klavye konforu konusunda en detaylı analizleri yaptınız',
+      type: 'EVENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.25,
+      rewardMultiplier: 1.25,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Ekran Yorumcusu',
+      description: 'Ekran kalitesi değerlendirmeleriniz referans oldu',
+      type: 'EVENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.2,
+      rewardMultiplier: 1.2,
+      categoryId: eventCategory.id,
+    },
+    // Kulaklık Event Badges
+    {
+      name: 'Ses Mühendisi',
+      description: 'Kablosuz Kulaklık Ses Kalitesi etkinliğine katıldınız',
+      type: 'EVENT',
+      rarity: 'COMMON',
+      boostMultiplier: 1.1,
+      rewardMultiplier: 1.1,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Audio Gurusu',
+      description: 'Ses kalitesi analizleriniz profesyonel seviyede',
+      type: 'EVENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.3,
+      rewardMultiplier: 1.3,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Gürültü Avcısı',
+      description: 'Gürültü engelleme teknolojilerini en iyi anlattınız',
+      type: 'EVENT',
+      rarity: 'EPIC',
+      boostMultiplier: 1.5,
+      rewardMultiplier: 1.5,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Bas Uzmanı',
+      description: 'Bas performansı değerlendirmeleriniz çok detaylı',
+      type: 'EVENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.25,
+      rewardMultiplier: 1.25,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Konfor Uzmanı',
+      description: 'Kulak konforu konusunda en faydalı paylaşımları yaptınız',
+      type: 'EVENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.2,
+      rewardMultiplier: 1.2,
+      categoryId: eventCategory.id,
+    },
+    // Akıllı Saat Event Badges
+    {
+      name: 'Fitness Takipçisi',
+      description: 'Akıllı Saat Spor Takibi etkinliğine katıldınız',
+      type: 'EVENT',
+      rarity: 'COMMON',
+      boostMultiplier: 1.1,
+      rewardMultiplier: 1.1,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Sağlık Danışmanı',
+      description: 'Sağlık takibi özelliklerini en iyi anlattınız',
+      type: 'EVENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.3,
+      rewardMultiplier: 1.3,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'GPS Navigatörü',
+      description: 'GPS doğruluğu testleriniz referans oldu',
+      type: 'EVENT',
+      rarity: 'EPIC',
+      boostMultiplier: 1.5,
+      rewardMultiplier: 1.5,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Uyku Analisti',
+      description: 'Uyku takibi karşılaştırmalarınız çok faydalı',
+      type: 'EVENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.25,
+      rewardMultiplier: 1.25,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Kalp Atışı Uzmanı',
+      description: 'Kalp atışı ölçüm doğruluğu konusunda öncüsünüz',
+      type: 'EVENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.2,
+      rewardMultiplier: 1.2,
+      categoryId: eventCategory.id,
+    },
+    // Tablet Event Badges
+    {
+      name: 'Dijital Sanatçı',
+      description: 'Tablet Kullanım Senaryoları etkinliğine katıldınız',
+      type: 'EVENT',
+      rarity: 'COMMON',
+      boostMultiplier: 1.1,
+      rewardMultiplier: 1.1,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Çizim Ustası',
+      description: 'Dijital çizim deneyimleriniz ilham verici',
+      type: 'EVENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.3,
+      rewardMultiplier: 1.3,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Not Alma Kahramanı',
+      description: 'Not alma uygulamaları konusunda en detaylı analizi yaptınız',
+      type: 'EVENT',
+      rarity: 'EPIC',
+      boostMultiplier: 1.5,
+      rewardMultiplier: 1.5,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'İzleme Deneyimi Gurusu',
+      description: 'Video izleme deneyimi paylaşımlarınız çok beğenildi',
+      type: 'EVENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.25,
+      rewardMultiplier: 1.25,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Okuma Tutkunu',
+      description: 'E-kitap okuma deneyimleri konusunda referanssınız',
+      type: 'EVENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.2,
+      rewardMultiplier: 1.2,
+      categoryId: eventCategory.id,
+    },
+    // Cilt Bakım Event Badges
+    {
+      name: 'Cilt Bakım Uzmanı',
+      description: 'Günlük Cilt Bakım Rutini etkinliğine katıldınız',
+      type: 'EVENT',
+      rarity: 'COMMON',
+      boostMultiplier: 1.1,
+      rewardMultiplier: 1.1,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Rutin Mimarı',
+      description: 'Cilt bakım rutininiz örnek teşkil etti',
+      type: 'EVENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.3,
+      rewardMultiplier: 1.3,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Serum Gurusu',
+      description: 'Serum kullanımı konusunda en detaylı bilgileri paylaştınız',
+      type: 'EVENT',
+      rarity: 'EPIC',
+      boostMultiplier: 1.5,
+      rewardMultiplier: 1.5,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Nem Dengesi Ustası',
+      description: 'Nemlendirici ürün tavsiyeleri çok faydalı',
+      type: 'EVENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.25,
+      rewardMultiplier: 1.25,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Sabah Rutini Kahramanı',
+      description: 'Sabah cilt bakım rutininiz ilham verdi',
+      type: 'EVENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.2,
+      rewardMultiplier: 1.2,
+      categoryId: eventCategory.id,
+    },
+    // Yağlı Cilt Event Badges
+    {
+      name: 'Matlaştırma Uzmanı',
+      description: 'Yağlı Ciltler İçin En İyi Ürünler etkinliğine katıldınız',
+      type: 'EVENT',
+      rarity: 'COMMON',
+      boostMultiplier: 1.1,
+      rewardMultiplier: 1.1,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Gözenek Savaşçısı',
+      description: 'Gözenek bakımı konusunda en iyi tavsiyeleri verdiniz',
+      type: 'EVENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.3,
+      rewardMultiplier: 1.3,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Yağ Dengesi Gurusu',
+      description: 'Yağ dengeleme ürünleri konusunda referanssınız',
+      type: 'EVENT',
+      rarity: 'EPIC',
+      boostMultiplier: 1.5,
+      rewardMultiplier: 1.5,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Parlama Kontrolcüsü',
+      description: 'Parlama kontrolü ipuçlarınız çok işe yaradı',
+      type: 'EVENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.25,
+      rewardMultiplier: 1.25,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'T-Bölgesi Ustası',
+      description: 'T-bölgesi bakımı konusunda en detaylı analizleri yaptınız',
+      type: 'EVENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.2,
+      rewardMultiplier: 1.2,
+      categoryId: eventCategory.id,
+    },
+    // Makyaj Event Badges
+    {
+      name: 'Kalıcılık Testi Uzmanı',
+      description: 'Kalıcı Makyaj Ürünleri Testi etkinliğine katıldınız',
+      type: 'EVENT',
+      rarity: 'COMMON',
+      boostMultiplier: 1.1,
+      rewardMultiplier: 1.1,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Fondöten Gurusu',
+      description: 'Fondöten değerlendirmeleriniz profesyonel seviyede',
+      type: 'EVENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.3,
+      rewardMultiplier: 1.3,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Ruj Koleksiyoncusu',
+      description: 'Ruj testleriniz çok kapsamlı ve detaylı',
+      type: 'EVENT',
+      rarity: 'EPIC',
+      boostMultiplier: 1.5,
+      rewardMultiplier: 1.5,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Maskara Ustası',
+      description: 'Maskara karşılaştırmalarınız referans oldu',
+      type: 'EVENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.25,
+      rewardMultiplier: 1.25,
+      categoryId: eventCategory.id,
+    },
+    {
+      name: 'Yaz Sıcağı Kahramanı',
+      description: 'Sıcak havada makyaj ipuçlarınız çok faydalı',
+      type: 'EVENT',
+      rarity: 'RARE',
+      boostMultiplier: 1.2,
+      rewardMultiplier: 1.2,
+      categoryId: eventCategory.id,
     },
   ];
 
@@ -7306,539 +7856,7 @@ async function main() {
   console.log('   (Brand events, bridge events, upcoming events - HEPSİ KALDIRILDI)')
   console.log('   (Sadece Electronics ve Beauty odaklı 12 event kullanılıyor)')
   
-  /* ESKİ EVENT KODU BAŞLANGIÇ - 535 SATIR KALDIRILDI
-  // 3.a Ensure event images are uploaded to MinIO (event/event.png & event/eventcardbg.png)
-  // ÖNEMLİ: Önce MinIO'ya yükle, sonra DB'ye yaz
-  try {
-    const nodeEnv = process.env.NODE_ENV || 'development'
-    const s3Endpoint = process.env.S3_ENDPOINT || 'http://minio:9000'
-    const containerName = s3Endpoint.includes('minio:9000') 
-      ? `tipbox_minio_${nodeEnv}` 
-      : 'Harici MinIO'
-    
-    console.log(`📦 Event görselleri MinIO'ya yükleniyor (${containerName})...`)
-    
-    const s3Service = new S3Service()
-    await s3Service.checkAndCreateBucket()
 
-    const eventPrimaryPath = path.join(__dirname, '../tests/assets/event/event.png')
-    const eventBgPath = path.join(__dirname, '../tests/assets/event/eventcardbg.png')
-
-    if (existsSync(eventPrimaryPath)) {
-      const buf = readFileSync(eventPrimaryPath)
-      await s3Service.uploadFile('event/event.png', buf, 'image/png')
-      console.log(`✅ event/event.png ${containerName} container'ına yüklendi`)
-    } else {
-      console.warn(`⚠️  Event primary image not found at ${eventPrimaryPath}`)
-    }
-
-    if (existsSync(eventBgPath)) {
-      const buf = readFileSync(eventBgPath)
-      await s3Service.uploadFile('event/eventcardbg.png', buf, 'image/png')
-      console.log(`✅ event/eventcardbg.png ${containerName} container'ına yüklendi`)
-    } else {
-      console.warn(`⚠️  Event background image not found at ${eventBgPath}`)
-    }
-  } catch (err: any) {
-    console.error('❌ Event görselleri MinIO\'ya yüklenemedi!', err?.message || String(err))
-    console.error('   Seed işlemi devam ediyor ancak event görselleri eksik olacak.')
-    // Event görselleri kritik değil, devam et
-  }
-  const today = new Date()
-  const nextWeek = new Date()
-  nextWeek.setDate(today.getDate() + 7)
-  const nextMonth = new Date()
-  nextMonth.setMonth(today.getMonth() + 1)
-  const nextTwoWeeks = new Date()
-  nextTwoWeeks.setDate(today.getDate() + 14)
-
-  const eventTemplates = [
-    // SURVEY events
-    { title: 'Yılbaşı Mega Ödül Anketi', description: 'Yılın en iyi ürünlerini belirle, büyük ödüller kazan! 1000 TIPS havuzu seni bekliyor.', eventType: 'SURVEY' as const, endDate: nextMonth },
-    { title: 'Kullanıcı Memnuniyet Anketi', description: 'Platform deneyimini değerlendir, görüşlerini paylaş!', eventType: 'SURVEY' as const, endDate: nextTwoWeeks },
-    { title: 'Ürün Tercih Anketi', description: 'Hangi ürünleri tercih ediyorsun? Tercihlerini paylaş!', eventType: 'SURVEY' as const, endDate: nextWeek },
-    // POLL events
-    { title: 'Teknoloji Trendleri 2024', description: '2024\'ün en çok beklenen teknoloji ürünlerini seçiyoruz. Senin tercihin ne?', eventType: 'POLL' as const, endDate: nextWeek },
-    { title: 'En İyi Marka Oylaması', description: 'Hangi markayı tercih ediyorsun? Oyunu kullan!', eventType: 'POLL' as const, endDate: nextTwoWeeks },
-    { title: 'Yılın Ürünü Oylaması', description: '2024\'ün en iyi ürününü belirle!', eventType: 'POLL' as const, endDate: nextMonth },
-    // CONTEST events
-    { title: 'Coffee Lovers Survey', description: 'Which coffee machine is the best? Coffee lovers cast their votes in this event.', eventType: 'CONTEST' as const, endDate: nextWeek },
-    { title: 'Photo Contest', description: 'Share your best product photos and win rewards!', eventType: 'CONTEST' as const, endDate: nextTwoWeeks },
-    { title: 'Content Challenge', description: 'Create the most creative content and win big prizes!', eventType: 'CONTEST' as const, endDate: nextMonth },
-    // CHALLENGE events
-    { title: '30-Day Product Experience', description: 'Share your product experience for 30 days and earn a badge!', eventType: 'CHALLENGE' as const, endDate: nextMonth },
-    { title: 'Community Challenge', description: 'Compete with other users and climb the leaderboard!', eventType: 'CHALLENGE' as const, endDate: nextTwoWeeks },
-    { title: 'Monthly Missions', description: 'Complete monthly missions and unlock special rewards!', eventType: 'CHALLENGE' as const, endDate: nextMonth },
-    // PROMOTION events
-    { title: 'Special Discount Campaign', description: 'Limited-time special discounts! Don’t miss out!', eventType: 'PROMOTION' as const, endDate: nextWeek },
-    { title: 'New Member Rewards', description: 'Exclusive gifts and perks for new members!', eventType: 'PROMOTION' as const, endDate: nextTwoWeeks },
-    { title: 'End-of-Season Deals', description: 'End-of-season offers and special campaigns!', eventType: 'PROMOTION' as const, endDate: nextMonth },
-  ]
-
-  const events = await Promise.all(
-    eventTemplates.map((template) =>
-      prisma.wishboxEvent
-        .create({
-          data: {
-            id: generateUlid(),
-            title: template.title,
-            description: template.description,
-            imageUrl: getSeedMediaPath('event.primary' as any, true) || null,
-            startDate: today,
-            endDate: template.endDate,
-            status: 'PUBLISHED',
-            eventType: template.eventType,
-          } as any,
-        })
-        .catch(() => null)
-    )
-  )
-  const createdEvents = events.filter(Boolean) as any[]
-  console.log(`✅ ${createdEvents.length} wishbox event oluşturuldu (tüm eventType'larda çeşitli)`)
-
-  // Brand-specific events (8 per brand, English, unique per brand)
-  const brandEventTemplates = [
-    { title: 'Launch Spotlight', description: 'Vote on this brand’s most anticipated launch of the season.', eventType: 'POLL' as const },
-    { title: 'Customer Voice Pulse', description: 'Share the one improvement you want to see first.', eventType: 'SURVEY' as const },
-    { title: 'Feature Priority Vote', description: 'Help us rank the next set of features to build.', eventType: 'POLL' as const },
-    { title: 'Usage Deep Dive', description: 'Tell us how you actually use these products day-to-day.', eventType: 'SURVEY' as const },
-    { title: 'Bug Bash Challenge', description: 'Report issues and help us harden the experience.', eventType: 'CHALLENGE' as const },
-    { title: 'Beta Feedback Sprint', description: 'Try the latest beta and leave actionable feedback.', eventType: 'CONTEST' as const },
-    { title: 'Community AMA Week', description: 'Ask anything to the product team and vote on answers.', eventType: 'CONTEST' as const },
-    { title: 'Roadmap Checkpoint', description: 'Sanity-check the roadmap and validate our priorities.', eventType: 'SURVEY' as const },
-  ]
-
-  console.log('🎯 Creating brand-specific events (8 per brand)...')
-  const brandsForEvents = await prisma.brand.findMany()
-  if (brandsForEvents.length === 0) {
-    console.warn('⚠️ Brand not found, skipping brand-specific event seeding')
-  }
-  const brandSpecificEvents = await Promise.all(
-    brandsForEvents.flatMap((brand) =>
-      brandEventTemplates.map((template, templateIndex) => {
-        const startDate = new Date(today)
-        startDate.setDate(today.getDate() + templateIndex)
-        const endDate = new Date(startDate)
-        endDate.setDate(startDate.getDate() + 7 + templateIndex)
-
-        return prisma.wishboxEvent
-          .create({
-            data: {
-              id: generateUlid(),
-              title: template.title,
-              description: template.description,
-              imageUrl: getSeedMediaPath('event.primary' as any, true) || null,
-              startDate,
-              endDate,
-              status: 'PUBLISHED',
-              eventType: template.eventType,
-              brandId: brand.id,
-            } as any,
-          })
-          .catch(() => null)
-      })
-    )
-  )
-  const createdBrandEvents = brandSpecificEvents.filter(Boolean) as any[]
-  console.log(`✅ ${createdBrandEvents.length} brand-specific wishbox event oluşturuldu (${brandEventTemplates.length} per brand)`)
-
-  // Brand 081d5660-a6d6-412a-b0ae-1557acaaa028 için özel 12 event oluştur
-  const TARGET_BRAND_ID_FOR_EVENTS = '081d5660-a6d6-412a-b0ae-1557acaaa028'
-  const targetBrandForEvents = await prisma.brand.findUnique({
-    where: { id: TARGET_BRAND_ID_FOR_EVENTS },
-    select: { id: true, name: true },
-  })
-
-  if (targetBrandForEvents) {
-    const targetBrandEventTemplates = [
-      { title: 'Bridge Kickoff Summit', description: 'Join the kickoff and learn what is coming next.', eventType: 'POLL' as const, offsetDays: 0, durationDays: 7 },
-      { title: 'Feature Wishlist', description: 'Vote the next feature you want delivered first.', eventType: 'SURVEY' as const, offsetDays: 1, durationDays: 10 },
-      { title: 'Beta Access Contest', description: 'Enter to win early beta access slots.', eventType: 'CONTEST' as const, offsetDays: 2, durationDays: 5 },
-      { title: 'Usage Challenge', description: 'Complete daily tasks and climb the bridge leaderboard.', eventType: 'CHALLENGE' as const, offsetDays: 3, durationDays: 14 },
-      { title: 'Creator Spotlight Vote', description: 'Pick the best creator story for this brand.', eventType: 'POLL' as const, offsetDays: 4, durationDays: 6 },
-      { title: 'Support Satisfaction Pulse', description: 'Rate the latest support experience.', eventType: 'SURVEY' as const, offsetDays: 5, durationDays: 7 },
-      { title: 'Roadmap Checkpoint', description: 'Validate roadmap priorities for Q3.', eventType: 'SURVEY' as const, offsetDays: 6, durationDays: 9 },
-      { title: 'Bug Bash Sprint', description: 'Report bugs, earn credit and badges.', eventType: 'CHALLENGE' as const, offsetDays: 7, durationDays: 4 },
-      { title: 'Launch Hype Contest', description: 'Share hype content to win merch.', eventType: 'CONTEST' as const, offsetDays: 8, durationDays: 7 },
-      { title: 'Referral Boost', description: 'Invite friends and track conversions.', eventType: 'PROMOTION' as const, offsetDays: 9, durationDays: 10 },
-      { title: 'Seasonal Offers', description: 'Limited seasonal bundles for the community.', eventType: 'PROMOTION' as const, offsetDays: 10, durationDays: 12 },
-      { title: 'Community AMA', description: 'Ask anything to the product leads.', eventType: 'CONTEST' as const, offsetDays: 11, durationDays: 5 },
-    ]
-
-    // Batch kontrol: Tüm mevcut event'leri tek sorguda al
-    // Not: brandId filtrelemesi Prisma client'ında henüz mevcut olmadığı için tüm event'leri alıyoruz
-    const existingEvents = await prisma.wishboxEvent.findMany({
-      where: { brandId: targetBrandForEvents.id } as any,
-      select: { title: true },
-    }).catch(() => [])
-    const existingTitles = new Set(existingEvents.map(e => e.title))
-
-    let createdTargetBrandEvents = 0
-    for (const template of targetBrandEventTemplates) {
-      // Hızlı Set kontrolü (DB sorgusu yok)
-      if (existingTitles.has(template.title)) continue
-
-      const startDate = new Date(today)
-      startDate.setDate(today.getDate() + template.offsetDays)
-      const endDate = new Date(startDate)
-      endDate.setDate(startDate.getDate() + template.durationDays)
-
-      await prisma.wishboxEvent
-        .create({
-          data: {
-            id: generateUlid(),
-            title: template.title,
-            description: template.description,
-            imageUrl: getSeedMediaPath('event.primary' as any, true) || null,
-            startDate,
-            endDate,
-            status: 'PUBLISHED',
-            eventType: template.eventType,
-            brandId: targetBrandForEvents.id,
-          } as any,
-        })
-        .catch(() => null)
-
-      existingTitles.add(template.title) // Set'e ekle ki tekrar kontrol etmesin
-      createdTargetBrandEvents++
-    }
-    console.log(`✅ ${createdTargetBrandEvents} wishbox event brand ${targetBrandForEvents.name ?? TARGET_BRAND_ID_FOR_EVENTS} için oluşturuldu (hedef: 12)`)
-
-    // Aynı brand için survey sekmesinin dolu gelmesi adına 12 SURVEY ağırlıklı event
-    const targetBrandSurveyTemplates = [
-      { title: 'UX Feedback Pulse', description: 'Share your experience with the latest UX changes.', offsetDays: 0, durationDays: 6 },
-      { title: 'Onboarding Survey', description: 'Help us improve the first-run experience.', offsetDays: 1, durationDays: 7 },
-      { title: 'Performance Check', description: 'Rate app performance on your daily workflow.', offsetDays: 2, durationDays: 5 },
-      { title: 'Content Relevance', description: 'Tell us if the recommendations match your interests.', offsetDays: 3, durationDays: 8 },
-      { title: 'Notification Tuning', description: 'Which alerts are useful? Help us tune notifications.', offsetDays: 4, durationDays: 6 },
-      { title: 'Support Quality', description: 'Evaluate your last support interaction.', offsetDays: 5, durationDays: 7 },
-      { title: 'Feature Priorities', description: 'Rank the backlog items for the next release.', offsetDays: 6, durationDays: 9 },
-      { title: 'Mobile vs Web', description: 'Which platform do you prefer and why?', offsetDays: 7, durationDays: 5 },
-      { title: 'Accessibility Review', description: 'Rate accessibility and propose quick wins.', offsetDays: 8, durationDays: 10 },
-      { title: 'Localization Survey', description: 'Are translations accurate? Report issues.', offsetDays: 9, durationDays: 6 },
-      { title: 'Security Confidence', description: 'How confident are you in account security?', offsetDays: 10, durationDays: 7 },
-      { title: 'Community Health', description: 'How welcoming is the community experience?', offsetDays: 11, durationDays: 8 },
-    ]
-
-    // Mevcut existingTitles Set'ini kullan (zaten yukarıda oluşturuldu)
-    let createdTargetBrandSurveys = 0
-    for (const template of targetBrandSurveyTemplates) {
-      // Hızlı Set kontrolü (DB sorgusu yok)
-      if (existingTitles.has(template.title)) continue
-
-      const startDate = new Date(today)
-      startDate.setDate(today.getDate() + template.offsetDays)
-      const endDate = new Date(startDate)
-      endDate.setDate(startDate.getDate() + template.durationDays)
-
-      await prisma.wishboxEvent
-        .create({
-          data: {
-            id: generateUlid(),
-            title: template.title,
-            description: template.description,
-            imageUrl: getSeedMediaPath('event.primary' as any, true) || null,
-            startDate,
-            endDate,
-            status: 'PUBLISHED',
-            eventType: 'SURVEY',
-            brandId: targetBrandForEvents.id,
-          } as any,
-        })
-        .catch(() => null)
-
-      existingTitles.add(template.title) // Set'e ekle ki tekrar kontrol etmesin
-      createdTargetBrandSurveys++
-    }
-    console.log(`✅ ${createdTargetBrandSurveys} SURVEY event brand ${targetBrandForEvents.name ?? TARGET_BRAND_ID_FOR_EVENTS} için oluşturuldu (hedef: 12)`)
-  } else {
-    console.warn(`⚠️ Brand not found (ID: ${TARGET_BRAND_ID_FOR_EVENTS}), skipping target brand event seeding`)
-  }
-
-  // Brand bazlı geçmiş/survey event'leri (history & surveys endpoint'leri için)
-  console.log('🗂️  Creating brand history/survey events with user stats...')
-  const surveyUsers = await prisma.user.findMany({ select: { id: true }, take: 20 })
-  const historySurveyEvents = await Promise.all(
-    brandsForEvents.map((brand, idx) => {
-      const startDate = new Date(today)
-      startDate.setDate(today.getDate() - (idx + 3))
-      const endDate = new Date(startDate)
-      endDate.setDate(startDate.getDate() + 2)
-      return prisma.wishboxEvent
-        .create({
-          data: {
-            id: generateUlid(),
-            title: `${brand.name || 'Brand'} Satisfaction Survey`,
-            description: `Share your experience with ${brand.name || 'this brand'} for the history list.`,
-            imageUrl: getSeedMediaPath('event.primary' as any, true) || null,
-            startDate,
-            endDate,
-            status: 'PUBLISHED',
-            eventType: 'SURVEY',
-            brandId: brand.id,
-          } as any,
-        })
-        .catch(() => null)
-    })
-  )
-  const createdHistorySurveyEvents = historySurveyEvents.filter(Boolean) as any[]
-
-  // Kullanıcı bazlı basit istatistikler ekle (foreign key tutarlılığı için)
-  const historyStats = await Promise.all(
-    createdHistorySurveyEvents.flatMap((event: any, eventIdx) =>
-      surveyUsers.slice(0, 5).map((user, userIdx) =>
-        prisma.wishboxStats.create({
-          data: {
-            id: generateUlid(),
-            eventId: event.id,
-            userId: user.id,
-            votes: 1 + ((eventIdx + userIdx) % 3),
-            impressions: 10 + eventIdx * 5 + userIdx,
-            responses: 1 + (userIdx % 2),
-          } as any,
-        }).catch(() => null)
-      )
-    )
-  )
-  console.log(`✅ ${createdHistorySurveyEvents.length} brand history/survey event eklendi, ${historyStats.filter(Boolean).length} stats oluşturuldu`)
-
-  // Create upcoming events (future events)
-  console.log('🔮 Creating upcoming events...')
-  const nextMonthPlus = new Date()
-  nextMonthPlus.setMonth(today.getMonth() + 2)
-  const nextThreeMonths = new Date()
-  nextThreeMonths.setMonth(today.getMonth() + 3)
-
-  const upcomingEventTemplates = [
-    // SURVEY events (future)
-    {
-      title: 'Summer Season Product Survey',
-      description: 'Help us choose the best products for the summer season!',
-      eventType: 'SURVEY' as const,
-      startDate: nextMonthPlus,
-      endDate: nextThreeMonths,
-    },
-    {
-      title: 'Home Appliances Satisfaction Survey',
-      description: 'Rate your experience with your home appliances and share your feedback.',
-      eventType: 'SURVEY' as const,
-      startDate: nextMonthPlus,
-      endDate: nextThreeMonths,
-    },
-    {
-      title: 'Mobile & Gadgets Usage Survey',
-      description: 'Tell us how you use your phones, headphones, and wearables in daily life.',
-      eventType: 'SURVEY' as const,
-      startDate: nextMonthPlus,
-      endDate: nextThreeMonths,
-    },
-    {
-      title: 'Gaming & Entertainment Survey',
-      description: 'Share which gaming and entertainment products you love the most.',
-      eventType: 'SURVEY' as const,
-      startDate: nextMonthPlus,
-      endDate: nextThreeMonths,
-    },
-
-    // POLL events (future)
-    {
-      title: 'Next-Gen Smartphone Poll',
-      description: 'Vote for the smartphone brand you are most excited about this year.',
-      eventType: 'POLL' as const,
-      startDate: nextMonthPlus,
-      endDate: nextThreeMonths,
-    },
-    {
-      title: 'Smart Home Upgrade Poll',
-      description: 'Which smart home upgrade would you buy first? Vote now.',
-      eventType: 'POLL' as const,
-      startDate: nextMonthPlus,
-      endDate: nextThreeMonths,
-    },
-    {
-      title: 'Coffee Machine Preference Poll',
-      description: 'Automatic vs. manual coffee machines – cast your vote.',
-      eventType: 'POLL' as const,
-      startDate: nextMonthPlus,
-      endDate: nextThreeMonths,
-    },
-    {
-      title: 'Best Value-for-Money Brand Poll',
-      description: 'Choose the brand that offers the best value for the price.',
-      eventType: 'POLL' as const,
-      startDate: nextMonthPlus,
-      endDate: nextThreeMonths,
-    },
-
-    // CONTEST events (future)
-    {
-      title: 'Summer Product Photo Contest',
-      description: 'Share your best summer-themed product photos and win rewards.',
-      eventType: 'CONTEST' as const,
-      startDate: nextMonthPlus,
-      endDate: nextThreeMonths,
-    },
-    {
-      title: 'Home Setup Showcase Contest',
-      description: 'Show your home office or gaming setup and compete for prizes.',
-      eventType: 'CONTEST' as const,
-      startDate: nextMonthPlus,
-      endDate: nextThreeMonths,
-    },
-    {
-      title: 'Creative Review Contest',
-      description: 'Write the most creative and helpful product review to win.',
-      eventType: 'CONTEST' as const,
-      startDate: nextMonthPlus,
-      endDate: nextThreeMonths,
-    },
-    {
-      title: 'Tech Collection Showcase Contest',
-      description: 'Share a photo of your tech collection and join the contest.',
-      eventType: 'CONTEST' as const,
-      startDate: nextMonthPlus,
-      endDate: nextThreeMonths,
-    },
-
-    // CHALLENGE events (future)
-    {
-      title: 'Summer Missions Challenge',
-      description: 'Complete summer missions and unlock special badges.',
-      eventType: 'CHALLENGE' as const,
-      startDate: nextMonthPlus,
-      endDate: nextThreeMonths,
-    },
-    {
-      title: '30-Day Review Challenge',
-      description: 'Share at least one detailed product review every day for 30 days.',
-      eventType: 'CHALLENGE' as const,
-      startDate: nextMonthPlus,
-      endDate: nextThreeMonths,
-    },
-    {
-      title: 'Daily Tips Sharing Challenge',
-      description: 'Post useful product tips every day and help the community.',
-      eventType: 'CHALLENGE' as const,
-      startDate: nextMonthPlus,
-      endDate: nextThreeMonths,
-    },
-    {
-      title: 'Weekly Comparison Challenge',
-      description: 'Publish one detailed product comparison every week.',
-      eventType: 'CHALLENGE' as const,
-      startDate: nextMonthPlus,
-      endDate: nextThreeMonths,
-    },
-  ]
-
-  const upcomingEvents = await Promise.all(
-    upcomingEventTemplates.map((template) =>
-      prisma.wishboxEvent
-        .create({
-          data: {
-            id: generateUlid(),
-            title: template.title,
-            description: template.description,
-            imageUrl: getSeedMediaPath('event.cardbg' as any, true) || null,
-            startDate: template.startDate,
-            endDate: template.endDate,
-            status: 'PUBLISHED',
-            eventType: template.eventType,
-          } as any,
-        })
-        .catch(() => null)
-    )
-  )
-  const createdUpcomingEvents = upcomingEvents.filter(Boolean) as any[]
-  console.log(`✅ ${createdUpcomingEvents.length} yaklaşan event oluşturuldu`)
-
-  // Create scenarios for events - ARTIK KULLANILMIYOR (EventPost sistemi kullanılıyor)
-  console.log('⚠️ Scenario oluşturma atlandı (EventPost sistemi kullanılıyor)')
-  /*
-  console.log('🎯 Creating event scenarios...')
-  const scenarios = await Promise.all([
-    // ESKI SCENARIO KODU KALDIRILDI
-  ])
-  const createdScenarios = scenarios.filter(Boolean)
-  console.log(`✅ ${createdScenarios.length} scenario oluşturuldu`)
-  */
-
-  // Add event statistics for some users
-  console.log('📊 Creating event statistics...')
-  const eventStatUserIds = [TEST_USER_ID, TARGET_USER_ID, ...TRUST_USER_IDS.slice(0, 3)]
-  const eventStats = await Promise.all(
-    createdEvents.flatMap((event) =>
-      event ? eventStatUserIds.map((userId) =>
-        prisma.wishboxStats.create({
-          data: {
-            userId,
-            eventId: event.id,
-            totalParticipated: Math.floor(Math.random() * 5) + 1,
-            totalComments: Math.floor(Math.random() * 10),
-            helpfulVotesReceived: Math.floor(Math.random() * 20),
-          },
-        })
-      ) : []
-    )
-  )
-  console.log(`✅ ${eventStats.length} event stat oluşturuldu`)
-
-  // 3.d Limited event için senaryolar - ARTIK KULLANILMIYOR (EventPost sistemi kullanılıyor)
-  console.log('⚠️ Scenario/Choice oluşturma atlandı (EventPost sistemi kullanılıyor)')
-  
-  /*
-  console.log('🧩 Creating scenarios & choices for limited-time promotion event...')
-  const limitedEvent = createdEvents.find((e) => e && e.title === 'Special Discount Campaign')
-  if (limitedEvent) {
-    // ESKI SCENARIO KODU KALDIRILDI
-  }
-  */
-
-  // Add badge rewards to events
-  console.log('🏅 Creating event badge rewards...')
-  const allEvents = [...createdEvents, ...createdUpcomingEvents].filter(Boolean)
-  const eventBadges = await prisma.badge.findMany({
-    where: { type: 'EVENT' },
-    take: 10,
-  })
-
-  // Get achievement goals that have badge rewards (to map rewardId)
-  const eventAchievementGoals = await prisma.achievementGoal.findMany({
-    where: { rewardBadgeId: { not: null } },
-    include: { rewardBadge: true },
-    take: 20,
-  })
-
-  if (eventBadges.length > 0 && allEvents.length > 0 && eventAchievementGoals.length > 0) {
-    let rewardCount = 0
-    for (const event of allEvents.slice(0, 5)) {
-      // Her event'e 2-3 badge reward ekle
-      const goalsToAdd = eventAchievementGoals.slice(0, Math.min(3, eventAchievementGoals.length))
-      for (const goal of goalsToAdd) {
-        if (!goal.rewardBadgeId) continue
-        try {
-          // Her event için farklı kullanıcılara reward ver
-          const randomUser = allUserIds[Math.floor(Math.random() * allUserIds.length)]
-          // rewardId için achievement goal'un id'sini kullan (Int olarak)
-          const rewardIdInt = parseInt(goal.id.replace(/-/g, '').substring(0, 8), 16) % 2147483647
-          await prisma.wishboxReward.create({
-            data: {
-              userId: randomUser,
-              eventId: event.id,
-              rewardType: 'BADGE',
-              rewardId: rewardIdInt,
-              amount: null,
-            },
-          })
-          rewardCount++
-        } catch (error) {
-          // Duplicate veya başka bir hata - devam et
-        }
-      }
-    }
-    console.log(`✅ ${rewardCount} event badge reward oluşturuldu`)
-  }
-  ESKİ EVENT KODU SON - 535 SATIR */
 
   // 4. Yeni product'lar ve inventory media'ları ekle (explore/products/new için)
   console.log('📦 Creating new products with inventory media for explore...')
@@ -10649,47 +10667,6 @@ async function main() {
     'A batch of refinements based on real‑world feedback has just been announced for the current generation. Many of the changes are small on their own, but together they make the product feel more polished and mature. Bugs that slipped through early versions have been addressed without adding extra complexity. It is a good sign that the brand is listening closely to everyday users.',
   ]
 
-  /*
-  // TEST_USER_ID için ekstra post oluşturma devre dışı (60 post hedefi için)
-  for (const product of seedBrandProductsData.slice(0, 10)) {
-    // Her product için 2 experience post (FREE type)
-    for (let i = 0; i < 2; i++) {
-      try {
-        const post = await createOrGetContentPost({
-          userId: TEST_USER_ID,
-          type: 'FREE',
-          title: `${product.name} Deneyim Paylaşımı ${i + 1}`,
-          body: experienceTemplates[i % experienceTemplates.length],
-          productId: product.id,
-          inventoryRequired: false,
-          isBoosted: false,
-          createdAt: daysAgo(Math.floor(Math.random() * 30) + 1),
-        })
-        if (post) experienceNewsPostsCount++
-      } catch (error) {
-        console.warn(`Experience post oluşturulamadı: ${error}`)
-      }
-    }
-
-    // Her product için 1 news post (UPDATE type)
-    try {
-      const post = await createOrGetContentPost({
-        userId: TEST_USER_ID,
-        type: 'UPDATE',
-        title: `${product.name} Haberleri`,
-        body: newsTemplates[Math.floor(Math.random() * newsTemplates.length)],
-        productId: product.id,
-        inventoryRequired: false,
-        isBoosted: false,
-        createdAt: daysAgo(Math.floor(Math.random() * 30) + 1),
-      })
-      if (post) experienceNewsPostsCount++
-    } catch (error) {
-      console.warn(`News post oluşturulamadı: ${error}`)
-    }
-  }
-  console.log(`✅ ${experienceNewsPostsCount} experience ve news post oluşturuldu seed brand product'lar için`)
-  */
   console.log('ℹ️  Brand product experience/news postları devre dışı (60 post/kullanıcı hedefi için)')
 
   // Brand feed'de farklı tipleri gösterebilmek için AudioMax odaklı ekstra post'lar
@@ -11881,99 +11858,7 @@ async function main() {
     throw error
   }
 
-  /*
-  // ===== BRAND EXPERIENCES BOOST (SPECIFIC BRAND) ===== DEVRE DIŞI (60 post/kullanıcı hedefi)
-  // Belirli bir brand için (ID: 8386190d-39ad-4f55-b994-84a753eacacf) tüm product'larda
-  // /brands/{brandId}/products/{productId}/experiences endpoint'ine en az 10 FREE deneyim post'u üret
-  console.log('📝 Ensuring at least 10 FREE experience posts for specific brand products...')
-  const TARGET_BRAND_ID_FOR_EXPERIENCES = '8386190d-39ad-4f55-b994-84a753eacacf'
-
-  const targetBrand = await prisma.brand.findUnique({
-    where: { id: TARGET_BRAND_ID_FOR_EXPERIENCES },
-  })
-
-  if (!targetBrand) {
-    console.warn(`⚠️ Brand not found for experiences boost (id: ${TARGET_BRAND_ID_FOR_EXPERIENCES})`)
-  } else {
-    const targetBrandName = targetBrand.name
-    console.log(`✅ Experiences boost for brand: ${targetBrandName} (${targetBrand.id})`)
-
-    // Bu brand'e ait tüm product'ları bul (Product.brand alanı isim tutuyor)
-    const brandProducts = await prisma.product.findMany({
-      where: { brand: targetBrandName },
-      orderBy: { createdAt: 'asc' },
-    })
-
-    console.log(`  📦 Found ${brandProducts.length} products for brand ${targetBrandName}`)
-
-    for (const product of brandProducts) {
-      // Mevcut FREE deneyim post sayısını kontrol et
-      const existingExperiences = await prisma.contentPost.findMany({
-        where: {
-          productId: product.id,
-          type: 'FREE',
-        },
-      })
-
-      const existingCount = existingExperiences.length
-      const minRequired = 10
-
-      if (existingCount >= minRequired) {
-        console.log(`  ✅ Product "${product.name}" already has ${existingCount} FREE experiences (>= ${minRequired})`)
-        continue
-      }
-
-      const toCreate = minRequired - existingCount
-      console.log(`  ✏️  Creating ${toCreate} additional FREE experiences for product "${product.name}"`)
-
-      const experienceTemplates = [
-        ` I tested ${product.name} in detail during everyday use. Its performance and durability genuinely surprised me.`,
-        ` My first week with ${product.name}: I shared my setup experience and the most notable pros and cons.`,
-        ` A long-term ownership review of ${product.name}. In which scenarios does it shine, and where does it struggle?`,
-        ` I made a price/performance evaluation for ${product.name}, including a short comparison with competitors in the same segment.`,
-        ` I wrote down my observations on the accessories that come with ${product.name} and how they affect my daily routine.`,
-      ]
-
-      for (let i = 0; i < toCreate; i++) {
-        const templateBody = experienceTemplates[i % experienceTemplates.length]
-        const title = `${product.name} ile Deneyim Notları #${existingCount + i + 1}`
-
-        const post = await createOrGetContentPost({
-          userId: TEST_USER_ID,
-          type: 'FREE',
-          title,
-          body: `${templateBody} (Brand: ${targetBrandName})`,
-          productId: product.id,
-          inventoryRequired: false,
-          isBoosted: (existingCount + i) % 3 === 0,
-          createdAt: daysAgo(randomBetween(3, 45)),
-        }).catch(() => null)
-        
-        if (!post) continue
-        const experiencePostId = post.id
-
-        // Basit istatistikler ekle (0'dan büyük değerler)
-        const likes = randomBetween(3, 40)
-        const comments = randomBetween(1, 12)
-        const shares = randomBetween(0, 8)
-        const bookmarks = randomBetween(1, 15)
-
-        await prisma.contentPost.update({
-          where: { id: experiencePostId },
-          data: {
-            likesCount: likes,
-            commentsCount: comments,
-            sharesCount: shares,
-            favoritesCount: bookmarks,
-            viewsCount: likes * randomBetween(5, 12) + randomBetween(20, 100),
-          },
-        }).catch(() => {})
-      }
-
-      console.log(`  ✅ Ensured ${minRequired} FREE experiences for product "${product.name}"`)
-    }
-  }
-  */
+  
   console.log('ℹ️  Brand experiences boost devre dışı (60 post/kullanıcı hedefi için)')
 
   // ===== COMPREHENSIVE BRAND SEEDING BY CATEGORY =====

@@ -341,10 +341,13 @@ async function buildSeedAssets(): Promise<void> {
       const nameWithoutExt = fileName.replace(/\.[^/.]+$/, '');
       const key = `event.${slugify(nameWithoutExt)}`;
       
+      // Alt klasör yapısını koruyarak targetKey oluştur
+      const relativePath = path.relative(effectiveEventPath1, filePath);
+      
       seedAssets.push({
         key,
         localPath: filePath,
-        targetKey: `events/${fileName}`, // events/ klasörüne yükle
+        targetKey: `events/${relativePath.replace(/\\/g, '/')}`, // Alt klasör yapısını koru
         contentType: inferContentType(filePath),
         description: `Event görseli: ${fileName}`,
       });

@@ -39,9 +39,6 @@ model User {
   dmThreadsAsUserOne      DMThread[]              @relation("DMThreadUserOne")
   dmThreadsAsUserTwo      DMThread[]              @relation("DMThreadUserTwo")
   emailVerificationCodes  EmailVerificationCode[]
-  eventPosts              EventPost[]
-  eventPostLikes          EventPostLike[]
-  eventPostComments       EventPostComment[]
   expertAnswers           ExpertAnswer[]
   expertRequests          ExpertRequest[]
   feeds                   Feed[]
@@ -389,7 +386,6 @@ model Product {
   subName            String?             @map("sub_name")
   aiExperienceSplits AiExperienceSplit[] @relation("ProductAiExperienceSplits")
   contentPosts       ContentPost[]
-  eventPosts         EventPost[]
   inventories        Inventory[]
   comparisonProduct1 PostComparison[]    @relation("ComparisonProduct1")
   comparisonProduct2 PostComparison[]    @relation("ComparisonProduct2")
@@ -1187,7 +1183,6 @@ model WishboxEvent {
   mainCategoryId String?         @map("main_category_id") @db.Uuid
   subCategoryId  String?         @map("sub_category_id") @db.Uuid
   posts       ContentPost[]
-  eventPosts  EventPost[]
   brand       Brand?             @relation(fields: [brandId], references: [id], onDelete: Cascade)
   mainCategory MainCategory?    @relation(fields: [mainCategoryId], references: [id])
   subCategory  SubCategory?     @relation(fields: [subCategoryId], references: [id])
@@ -1989,58 +1984,4 @@ enum NotificationType {
   @@map("notification_type")
 }
 
-model EventPost {
-  id            String             @id @db.VarChar(26)
-  eventId       String             @map("event_id") @db.VarChar(26)
-  userId        String             @map("user_id") @db.Uuid
-  productId     String?            @map("product_id") @db.Uuid
-  title         String             @db.VarChar(200)
-  body          String             @db.Text
-  likesCount    Int                @default(0) @map("likes_count")
-  commentsCount Int                @default(0) @map("comments_count")
-  createdAt     DateTime           @default(now()) @map("created_at")
-  updatedAt     DateTime           @updatedAt @map("updated_at")
-  
-  event    WishboxEvent       @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  product  Product?           @relation(fields: [productId], references: [id], onDelete: SetNull)
-  likes    EventPostLike[]
-  comments EventPostComment[]
-  
-  @@index([eventId, createdAt])
-  @@index([userId, eventId])
-  @@index([productId])
-  @@map("event_posts")
-}
-
-model EventPostLike {
-  id        String   @id @default(uuid()) @db.Uuid
-  postId    String   @map("post_id") @db.VarChar(26)
-  userId    String   @map("user_id") @db.Uuid
-  createdAt DateTime @default(now()) @map("created_at")
-  
-  post EventPost @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  @@unique([postId, userId])
-  @@index([postId])
-  @@index([userId])
-  @@map("event_post_likes")
-}
-
-model EventPostComment {
-  id        String   @id @db.VarChar(26)
-  postId    String   @map("post_id") @db.VarChar(26)
-  userId    String   @map("user_id") @db.Uuid
-  comment   String   @db.Text
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  
-  post EventPost @relation(fields: [postId], references: [id], onDelete: Cascade)
-  user User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  @@index([postId, createdAt])
-  @@index([userId])
-  @@map("event_post_comments")
-}
 

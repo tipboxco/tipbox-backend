@@ -101,9 +101,10 @@ async function clearAllData(): Promise<void> {
     // Explore verileri
     await prisma.wishboxStats.deleteMany({});
     await prisma.wishboxReward.deleteMany({});
-    await prisma.choiceComment.deleteMany({});
-    await prisma.scenarioChoice.deleteMany({});
-    await prisma.wishboxScenario.deleteMany({});
+    // Scenario tables removed - no longer exist
+    // await prisma.choiceComment.deleteMany({});
+    // await prisma.scenarioChoice.deleteMany({});
+    // await prisma.wishboxScenario.deleteMany({});
     await prisma.wishboxEvent.deleteMany({});
     await prisma.bridgeReward.deleteMany({});
     await prisma.bridgeUserStats.deleteMany({});
@@ -633,17 +634,18 @@ async function clearDataBeforeTimestamp(timestamp: Date, seedUserIds: string[]):
         where: { createdAt: { lt: timestamp } }
       });
       
-      await prisma.choiceComment.deleteMany({
-        where: { createdAt: { lt: timestamp } }
-      });
+      // Scenario tables removed - no longer exist
+      // await prisma.choiceComment.deleteMany({
+      //   where: { createdAt: { lt: timestamp } }
+      // });
       
-      await prisma.scenarioChoice.deleteMany({
-        where: { createdAt: { lt: timestamp } }
-      });
+      // await prisma.scenarioChoice.deleteMany({
+      //   where: { createdAt: { lt: timestamp } }
+      // });
       
-      await prisma.wishboxScenario.deleteMany({
-        where: { createdAt: { lt: timestamp } }
-      });
+      // await prisma.wishboxScenario.deleteMany({
+      //   where: { createdAt: { lt: timestamp } }
+      // });
       
       await prisma.wishboxEvent.deleteMany({
         where: { createdAt: { lt: timestamp } }

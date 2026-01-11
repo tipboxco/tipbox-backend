@@ -53,6 +53,13 @@ export const CACHE_TTL = {
   DM_MESSAGES: 300,            // 5 dakika - mesajlar çok sık gelir
   DM_UNREAD_COUNT: 60,         // 1 dakika - okunmamış sayısı real-time'a yakın olmalı
   
+  // Event related
+  EVENT_ACTIVE: 1800,          // 30 dakika - aktif event'ler
+  EVENT_UPCOMING: 3600,        // 1 saat - yaklaşan event'ler
+  EVENT_DETAIL: 600,           // 10 dakika - event detayı (katılım sayısı sık değişebilir)
+  EVENT_POSTS: 600,            // 10 dakika - event post'ları (yeni post'lar sık eklenebilir)
+  EVENT_BADGES: 3600,          // 1 saat - event badge'leri nadir değişir
+  
   // Notification related
   NOTIFICATION_UNREAD_COUNT: 60, // 1 dakika - okunmamış bildirim sayısı real-time'a yakın olmalı
   

@@ -30,6 +30,49 @@ export class EventService {
   }
 
   /**
+   * Event cache'lerini invalidate et
+   * Join, Leave, Post Create, Post Delete gibi işlemlerde kullanılır
+   */
+  async invalidateEventCaches(eventId: string, userId?: string): Promise<void> {
+    try {
+      const keysToDelete: string[] = [];
+
+      // Event detail cache (kullanıcıya özel)
+      if (userId) {
+        keysToDelete.push(`events:detail:${eventId}:${userId}`);
+        keysToDelete.push(`events:active:${userId}:first:20`);
+      }
+
+      // Event posts cache (eventId'ye özel, tüm cursor'lar için pattern match)
+      // Redis pattern matching ile events:posts:eventId:* şeklinde silebiliriz
+      // Ancak şimdilik sadece ilk sayfa için silelim
+      keysToDelete.push(`events:posts:${eventId}:first:20`);
+
+      // Guest için de active events cache'i temizle
+      keysToDelete.push(`events:active:guest:first:20`);
+
+      // Tüm cache key'lerini sil
+      for (const key of keysToDelete) {
+        await this.cacheService.del(key);
+      }
+
+      logger.info({ 
+        message: 'Event caches invalidated', 
+        eventId, 
+        userId,
+        keysInvalidated: keysToDelete.length 
+      });
+    } catch (error) {
+      logger.warn({ 
+        message: 'Event cache invalidation error', 
+        eventId,
+        userId,
+        error: error instanceof Error ? error.message : String(error) 
+      });
+    }
+  }
+
+  /**
    * Get active events (currently running)
    */
   async getActiveEvents(
@@ -203,14 +246,18 @@ export class EventService {
       const limit = options?.limit || 20;
       const now = new Date();
 
-      // Kullanıcının EventPost'u olan event'leri bul
-      const userEventIds = await this.prisma.eventPost.findMany({
-        where: { userId },
+      // Kullanıcının ContentPost'u olan event'leri bul (FREE tipinde)
+      const userEventIds = await this.prisma.contentPost.findMany({
+        where: { 
+          userId,
+          eventId: { not: null },
+          type: 'FREE',
+        },
         select: { eventId: true },
         distinct: ['eventId'],
       });
 
-      const eventIds = userEventIds.map((e) => e.eventId);
+      const eventIds = userEventIds.map((e: { eventId: string | null }) => e.eventId).filter((id): id is string => id !== null);
 
       if (eventIds.length === 0) {
         return {
@@ -245,9 +292,13 @@ export class EventService {
           const interaction = await this.getEventInteraction(event.id);
           const participants = await this.getEventParticipants(event.id, 2);
 
-          // Kullanıcının bu event'teki post sayısını al
-          const userPostCount = await this.prisma.eventPost.count({
-            where: { eventId: event.id, userId },
+          // Kullanıcının bu event'teki post sayısını al (ContentPost FREE tipinde)
+          const userPostCount = await this.prisma.contentPost.count({
+            where: { 
+              eventId: event.id, 
+              userId,
+              type: 'FREE',
+            },
           });
 
           let imageUrl: string | null = null;
@@ -367,9 +418,8 @@ export class EventService {
   }
 
   /**
-   * Get event posts (content posts related to event products)
-   * Note: Events are linked to products through scenarios/choices
-   * For now, we'll get posts from products that are mentioned in event scenarios
+   * Get event posts (content posts directly linked to event via eventId)
+   * Returns posts of type FREE that are associated with the event
    */
   async getEventPosts(
     eventId: string,
@@ -378,55 +428,29 @@ export class EventService {
   ): Promise<EventPosts> {
     try {
       const limit = options?.limit || 20;
+      const cacheKey = `events:posts:${eventId}:${options?.cursor || 'first'}:${limit}`;
 
-      // Get event scenarios to find related products
+      // Cache check
+      try {
+        const cached = await this.cacheService.get<EventPosts>(cacheKey);
+        if (cached) {
+          logger.info({ message: 'Event posts served from cache', eventId, cacheKey });
+          return cached;
+        }
+      } catch (error) {
+        logger.warn({ message: 'Cache error', error: error instanceof Error ? error.message : String(error) });
+      }
+
+      // Verify event exists
       const event = await this.prisma.wishboxEvent.findUnique({
         where: { id: eventId },
-        include: {
-          scenarios: {
-            include: {
-              choices: {
-                include: {
-                  user: {
-                    include: {
-                      profile: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
       });
 
       if (!event) {
         throw new Error('Event not found');
       }
 
-      // For now, return empty posts or get posts from a general feed
-      // In a real implementation, you might want to link events to specific products
-      // and fetch posts related to those products
-
-      // As a workaround, we can get recent posts from users who participated in the event
-      const participantUserIds = new Set<string>();
-      event.scenarios.forEach((scenario) => {
-        scenario.choices.forEach((choice) => {
-          participantUserIds.add(choice.userId);
-        });
-      });
-
-      if (participantUserIds.size === 0) {
-        return {
-          items: [],
-          pagination: {
-            hasMore: false,
-            limit,
-          },
-        };
-      }
-
-      // Get posts directly linked to event
-      // Fallback mekanizması kaldırıldı - event'e bağlı post yoksa boş döner
+      // Get posts directly linked to event via eventId field
       const posts = await this.prisma.contentPost.findMany({
         where: {
           eventId: eventId,
@@ -545,7 +569,7 @@ export class EventService {
         } as any;
       });
 
-      return {
+      const result: EventPosts = {
         items: feedItems,
         pagination: {
           cursor: nextCursor,
@@ -553,6 +577,15 @@ export class EventService {
           limit,
         },
       };
+
+      // Cache'e kaydet
+      try {
+        await this.cacheService.set(cacheKey, result, CACHE_TTL.EVENT_POSTS);
+      } catch (error) {
+        logger.warn({ message: 'Failed to cache event posts', error: error instanceof Error ? error.message : String(error) });
+      }
+
+      return result;
     } catch (error) {
       logger.error(`Failed to get event posts for ${eventId}:`, error);
       throw error;
@@ -560,7 +593,7 @@ export class EventService {
   }
 
   /**
-   * Get event badges (all badges available in the event)
+   * Get event badges (maximum 5 badges per event, event-specific badges prioritized)
    */
   async getEventBadges(
     eventId: string,
@@ -568,7 +601,7 @@ export class EventService {
     options?: { cursor?: string; limit?: number }
   ): Promise<Badges> {
     try {
-      const limit = options?.limit || 20;
+      const limit = Math.min(options?.limit || 5, 5); // Max 5 badges per event
 
       // Event'in varlığını doğrula
       const event = await this.prisma.wishboxEvent.findUnique({
@@ -579,21 +612,42 @@ export class EventService {
         throw new Error('Event not found');
       }
 
-      // Şimdilik event rozetlerini, global EVENT tipindeki rozetlerden besliyoruz.
-      // WishboxReward.rewardId ile Badge.id birebir eşleşmediği için burada direkt
-      // EVENT tipindeki rozetleri listeliyoruz.
-      const badges = await this.prisma.badge.findMany({
+      // Event-specific badge'leri öncelikle al
+      // Badge name'inde event title'dan keyword'ler ara
+      const eventKeywords = event.title
+        .toLowerCase()
+        .split(' ')
+        .filter(word => word.length > 3); // 3 harften uzun kelimeleri al
+
+      // Tüm EVENT tipindeki badge'leri al
+      const allEventBadges = await this.prisma.badge.findMany({
         where: { type: 'EVENT' as any },
-        take: limit + 1,
-        ...(options?.cursor && {
-          cursor: { id: options.cursor },
-          skip: 1,
-        }),
+        take: 100, // Önce hepsini al, sonra filtrele
       });
 
-      const hasMore = badges.length > limit;
-      const resultBadges = hasMore ? badges.slice(0, limit) : badges;
-      const nextCursor = hasMore && resultBadges.length > 0 ? resultBadges[resultBadges.length - 1].id : undefined;
+      // Event-specific badge'leri filtrele (name'de [Event] ve event keyword'ü içerenler)
+      const eventSpecificBadges = allEventBadges.filter(badge => {
+        if (!badge.name.includes('[Event]')) return false;
+        
+        // Event title'daki keyword'lerden biri badge description'da var mı?
+        const badgeText = `${badge.name} ${badge.description || ''}`.toLowerCase();
+        return eventKeywords.some(keyword => badgeText.includes(keyword));
+      });
+
+      // Önce event-specific badge'leri al, sonra generic EVENT badge'leri
+      const prioritizedBadges = [
+        ...eventSpecificBadges.slice(0, limit),
+        ...allEventBadges
+          .filter(b => !eventSpecificBadges.includes(b))
+          .slice(0, limit - eventSpecificBadges.length)
+      ];
+
+      // Take only the requested limit
+      const badges = prioritizedBadges.slice(0, limit);
+
+      const hasMore = false; // Max 5 badge olduğu için pagination yok
+      const resultBadges = badges;
+      const nextCursor = undefined;
 
       // Map badges to Badge response format
       const badgeItems: Badge[] = await Promise.all(
@@ -769,25 +823,22 @@ export class EventService {
   }
 
   /**
-   * Helper: Get event interaction count (participants + comments)
+   * Helper: Get event interaction count (participants + posts)
    */
   private async getEventInteraction(eventId: string): Promise<number> {
-    const [participantsCount, commentsCount] = await Promise.all([
+    const [participantsCount, contentPostsCount] = await Promise.all([
       this.prisma.wishboxStats.count({
         where: { eventId },
       }),
-      this.prisma.choiceComment.count({
-        where: {
-          choice: {
-            scenario: {
-              eventId,
-            },
-          },
+      this.prisma.contentPost.count({
+        where: { 
+          eventId,
+          type: 'FREE',
         },
       }),
     ]);
 
-    return participantsCount + commentsCount;
+    return participantsCount + contentPostsCount;
   }
 
   /**
@@ -896,17 +947,74 @@ export class EventService {
         data: {
           userId,
           eventId: event.id,
-          participated: 0,
-          completed: false,
+          totalParticipated: 0,
+          totalComments: 0,
+          helpfulVotesReceived: 0,
         },
       });
 
       logger.info(`User ${userId} joined event ${eventId}`);
 
-      // Event detayını döndür (isJoined: true olacak)
+      // Cache'i invalidate et
+      await this.invalidateEventCaches(eventId, userId);
+
+      // Event detayını döndür
       return await this.getEventDetail(eventId, userId);
     } catch (error) {
-      logger.error(`Failed to join event ${eventId} for user ${userId}:`, error);
+      logger.error(`Failed to join event ${eventId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Leave an event (idempotent)
+   */
+  async leaveEvent(eventId: string, userId: string): Promise<EventDetail> {
+    try {
+      // Event'in var olup olmadığını kontrol et
+      const event = await this.prisma.wishboxEvent.findUnique({
+        where: { id: eventId },
+      });
+
+      if (!event) {
+        throw new Error('Event not found');
+      }
+
+      // Kullanıcının katılım kaydını kontrol et
+      const existingStats = await this.prisma.wishboxStats.findUnique({
+        where: {
+          userId_eventId: {
+            userId,
+            eventId: event.id,
+          },
+        },
+      });
+
+      if (!existingStats) {
+        // Zaten katılmamış, mevcut event detayını döndür (idempotent)
+        logger.info(`User ${userId} has not joined event ${eventId}, nothing to leave`);
+        return await this.getEventDetail(eventId, userId);
+      }
+
+      // wishboxStats kaydını sil
+      await this.prisma.wishboxStats.delete({
+        where: {
+          userId_eventId: {
+            userId,
+            eventId: event.id,
+          },
+        },
+      });
+
+      logger.info(`User ${userId} left event ${eventId}`);
+
+      // Cache'i invalidate et
+      await this.invalidateEventCaches(eventId, userId);
+
+      // Event detayını döndür (isJoined: false olacak)
+      return await this.getEventDetail(eventId, userId);
+    } catch (error) {
+      logger.error(`Failed to leave event ${eventId} for user ${userId}:`, error);
       throw error;
     }
   }
