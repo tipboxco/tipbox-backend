@@ -25,6 +25,10 @@ inputs:
   db_name:
     description: 'Database name'
     required: false
+  force_rebuild:
+    description: 'Force rebuild without cache'
+    required: false
+    default: 'false'
 runs:
   using: 'composite'
   steps:
@@ -39,8 +43,9 @@ runs:
         ENV_FILE: ${{ inputs.env_file }}
         DB_USER: ${{ inputs.db_user }}
         DB_NAME: ${{ inputs.db_name }}
+        FORCE_REBUILD: ${{ inputs.force_rebuild }}
       run: |
-        ssh "$SSH_HOST" "export STAGE='$STAGE' PROJECT_DIR='$PROJECT_DIR' COMPOSE_FILE='$COMPOSE_FILE' DEPLOY_BRANCH='$DEPLOY_BRANCH' ENV_FILE='$ENV_FILE' DB_USER='$DB_USER' DB_NAME='$DB_NAME' && bash -s" << 'STAGE_SCRIPT'
+        ssh "$SSH_HOST" "export STAGE='$STAGE' PROJECT_DIR='$PROJECT_DIR' COMPOSE_FILE='$COMPOSE_FILE' DEPLOY_BRANCH='$DEPLOY_BRANCH' ENV_FILE='$ENV_FILE' DB_USER='$DB_USER' DB_NAME='$DB_NAME' FORCE_REBUILD='$FORCE_REBUILD' && bash -s" << 'STAGE_SCRIPT'
           set -e
           
           case "$STAGE" in
@@ -84,7 +89,13 @@ runs:
             build)
               echo "🔨 Building Docker images..."
               cd "$PROJECT_DIR" || exit 1
-              docker compose -f "$COMPOSE_FILE" build --no-cache backend
+              if [ "$FORCE_REBUILD" = "true" ]; then
+                echo "🔄 Force rebuild requested - building without cache"
+                docker compose -f "$COMPOSE_FILE" build --no-cache backend
+              else
+                echo "⚡ Building with cache for faster deployment"
+                docker compose -f "$COMPOSE_FILE" build backend
+              fi
               echo "✅ Images built successfully"
               ;;
             prisma)
