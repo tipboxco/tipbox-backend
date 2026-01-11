@@ -5024,57 +5024,16 @@ async function assignAppleFeedIphoneImages(): Promise<void> {
 }
 
 // ===== EVENT POST'LARINA PRODUCT EKLE =====
+// NOT: Bu fonksiyon artık kullanılmıyor - EventPost tablosu zaten productId içeriyor
 async function addProductToEventPosts(): Promise<void> {
+  console.log('⚠️ addProductToEventPosts fonksiyonu devre dışı (EventPost artık productId içeriyor)')
+  return
+  
+  /* ESKI KOD - SCENARIO TABANLI
   // Event'e ait post'ları bul (scenario choice'lar üzerinden)
   const scenarios = await prisma.wishboxScenario.findMany({
-    include: {
-      choices: {
-        include: {
-          user: true,
-        },
-      },
-    },
-  })
-
-  const participantUserIds = new Set<string>()
-  scenarios.forEach((scenario) => {
-    scenario.choices.forEach((choice) => {
-      participantUserIds.add(choice.userId)
-    })
-  })
-
-  if (participantUserIds.size === 0) {
-    console.warn('   ⚠️  Event\'e katılan kullanıcı bulunamadı')
-    return
-  }
-
-  // Bu kullanıcıların productId'si olmayan post'larını bul
-  const posts = await prisma.contentPost.findMany({
-    where: {
-      userId: { in: Array.from(participantUserIds) },
-      productId: null,
-    },
-  })
-
-  if (posts.length === 0) {
-    console.warn('   ⚠️  Güncellenecek post bulunamadı')
-    return
-  }
-
-  // Varsayılan product'ı bul
-  const targetProduct = await prisma.product.findFirst({
-    include: {
-      group: {
-        include: {
-          subCategory: {
-            include: {
-              mainCategory: true,
-            },
-          },
-        },
-      },
-    },
-  })
+  */
+}
 
   if (!targetProduct) {
     console.warn('   ⚠️  Product bulunamadı')
@@ -7998,63 +7957,16 @@ async function main() {
   const createdUpcomingEvents = upcomingEvents.filter(Boolean) as any[]
   console.log(`✅ ${createdUpcomingEvents.length} yaklaşan event oluşturuldu`)
 
-  // Create scenarios for events (first 3 events)
+  // Create scenarios for events - ARTIK KULLANILMIYOR (EventPost sistemi kullanılıyor)
+  console.log('⚠️ Scenario oluşturma atlandı (EventPost sistemi kullanılıyor)')
+  /*
   console.log('🎯 Creating event scenarios...')
   const scenarios = await Promise.all([
-    // Event 1 - New Year survey scenarios
-    createdEvents[0]
-      ? prisma.wishboxScenario
-          .create({
-            data: {
-              eventId: createdEvents[0].id,
-              title: 'Best Phone of the Year',
-              description: 'Which phone should be the champion of 2024?',
-              orderIndex: 1,
-            },
-          })
-          .catch(() => null)
-      : null,
-    createdEvents[0]
-      ? prisma.wishboxScenario
-          .create({
-            data: {
-              eventId: createdEvents[0].id,
-              title: 'Best Laptop of the Year',
-              description: 'Which laptop delivered the best performance for you?',
-              orderIndex: 2,
-            },
-          })
-          .catch(() => null)
-      : null,
-    // Event 2 - Technology scenarios
-    createdEvents[1]
-      ? prisma.wishboxScenario
-          .create({
-            data: {
-              eventId: createdEvents[1].id,
-              title: 'Most Anticipated Smartwatch',
-              description: 'Which smartwatch are you planning to buy in 2024?',
-              orderIndex: 1,
-            },
-          })
-          .catch(() => null)
-      : null,
-    // Event 3 - Coffee scenarios
-    createdEvents[2]
-      ? prisma.wishboxScenario
-          .create({
-            data: {
-              eventId: createdEvents[2].id,
-              title: 'Fully Automatic vs Manual',
-              description: 'Do you prefer a fully automatic or a manual coffee machine?',
-              orderIndex: 1,
-            },
-          })
-          .catch(() => null)
-      : null,
+    // ESKI SCENARIO KODU KALDIRILDI
   ])
   const createdScenarios = scenarios.filter(Boolean)
   console.log(`✅ ${createdScenarios.length} scenario oluşturuldu`)
+  */
 
   // Add event statistics for some users
   console.log('📊 Creating event statistics...')
