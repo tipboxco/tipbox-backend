@@ -15,6 +15,11 @@ on:
         options:
           - test
           - staging
+      run_seed:
+        description: 'Run seed data? (Varsayılan: Hayır)'
+        required: false
+        default: false
+        type: boolean
 
 env:
   NODE_VERSION: '20'
@@ -170,7 +175,7 @@ jobs:
           compose_file: docker-compose.test.yml
 
       - name: Run seeds
-        if: steps.check-secrets.outputs.available == 'true'
+        if: steps.check-secrets.outputs.available == 'true' && github.event.inputs.run_seed == 'true'
         uses: ./.github/actions/execute-remote-stage
         with:
           ssh_host: hetzner-deploy
