@@ -86,11 +86,15 @@ export async function clearUserContentData(): Promise<void> {
 
     // Explore/Bridge verileri (BrandSurvey, BridgePost, WishboxEvent, vb.)
     progress.increment('Explore/Bridge verileri temizleniyor...');
+    await prisma.eventPostComment.deleteMany({});
+    await prisma.eventPostLike.deleteMany({});
+    await prisma.eventPost.deleteMany({});
     await prisma.wishboxStats.deleteMany({});
     await prisma.wishboxReward.deleteMany({});
-    await prisma.choiceComment.deleteMany({});
-    await prisma.scenarioChoice.deleteMany({});
-    await prisma.wishboxScenario.deleteMany({});
+    // Scenario tables removed - no longer exist
+    // await prisma.choiceComment.deleteMany({});
+    // await prisma.scenarioChoice.deleteMany({});
+    // await prisma.wishboxScenario.deleteMany({});
     await prisma.wishboxEvent.deleteMany({});
     await prisma.bridgeReward.deleteMany({});
     await prisma.bridgeUserStats.deleteMany({});

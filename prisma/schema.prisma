@@ -1182,7 +1182,6 @@ model WishboxEvent {
   status      WishboxEventStatus @default(DRAFT)
   createdAt   DateTime           @default(now()) @map("created_at")
   updatedAt   DateTime           @updatedAt @map("updated_at")
-  eventType   WishboxEventType   @default(SURVEY) @map("event_type")
   imageUrl    String?            @map("image_url")
   brandId     String?            @map("brand_id") @db.Uuid
   mainCategoryId String?         @map("main_category_id") @db.Uuid
@@ -1819,16 +1818,6 @@ enum WishboxEventStatus {
   CLOSED
 
   @@map("wishbox_event_status")
-}
-
-enum WishboxEventType {
-  SURVEY
-  POLL
-  CONTEST
-  CHALLENGE
-  PROMOTION
-
-  @@map("wishbox_event_type")
 }
 
 enum WishboxRewardType {

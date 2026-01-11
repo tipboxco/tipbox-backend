@@ -2805,10 +2805,10 @@ async function seedEvents() {
         startDate: config.startDate,
         endDate: config.endDate,
         status: config.status,
-        eventType: 'SURVEY',
-        mainCategoryId: config.categoryId,
         imageUrl: null,
         brandId: null,
+        mainCategoryId: config.categoryId || null,
+        subCategoryId: null,
       }
     })
     
@@ -4814,7 +4814,18 @@ async function updateBrandBannerImages(): Promise<void> {
 // ===== EVENT GÖRSELLERİNİ EVENT'LERE ATA =====
 // NOT: Görsel yükleme artık upload-seed-media.ts script'i ile yapılıyor
 // Bu fonksiyon sadece mevcut görselleri event'lere atar
+// ===== ESKI FONKS İYONLAR - ARTIK KULLANILMIYOR =====
 async function assignEventImages(): Promise<void> {
+  console.log('⚠️ assignEventImages fonksiyonu devre dışı')
+  return
+}
+
+async function addAppleBrandEvents(): Promise<void> {
+  console.log('⚠️ addAppleBrandEvents fonksiyonu devre dışı')
+  return
+}
+
+// ===== EVENT POST'LARINA PRODUCT EKLE =====
   const communityEventImages = [
     'communityevents-the-gaming-night.jpg',
     'communityevents-the-urban-commuter.jpg',
@@ -5029,38 +5040,13 @@ async function addProductToEventPosts(): Promise<void> {
   console.log('⚠️ addProductToEventPosts fonksiyonu devre dışı (EventPost artık productId içeriyor)')
   return
   
-  /* ESKI KOD - SCENARIO TABANLI
-  // Event'e ait post'ları bul (scenario choice'lar üzerinden)
-  const scenarios = await prisma.wishboxScenario.findMany({
+  /* ESKI KOD - SCENARIO TABANLI (KALDIRILDI)
+  const scenarios = await prisma.wishboxScenario.findMany({...})
+  // ... diğer scenario kodu
   */
 }
 
-  if (!targetProduct) {
-    console.warn('   ⚠️  Product bulunamadı')
-    return
-  }
-
-  const productGroup = (targetProduct as any).group
-  const subCategory = productGroup?.subCategory
-  const mainCategory = subCategory?.mainCategory
-
-  let updated = 0
-
-  for (const post of posts) {
-    await prisma.contentPost.update({
-      where: { id: post.id },
-      data: {
-        productId: targetProduct.id,
-        productGroupId: targetProduct.groupId || post.productGroupId || undefined,
-        subCategoryId: productGroup?.subCategoryId || post.subCategoryId || undefined,
-        mainCategoryId: mainCategory?.id || post.mainCategoryId || undefined,
-      },
-    })
-    updated++
-  }
-
-  console.log(`   ✅ ${updated} post güncellendi`)
-}
+// ===== SEED TAXONOMY ===== 
 
 async function ensureAllPostsHaveMedia(): Promise<void> {
   interface Stats {
@@ -7988,49 +7974,16 @@ async function main() {
   )
   console.log(`✅ ${eventStats.length} event stat oluşturuldu`)
 
-  // 3.d Limited event için senaryolar ve katılımcılar (events/{id}/posts endpoint'i için)
+  // 3.d Limited event için senaryolar - ARTIK KULLANILMIYOR (EventPost sistemi kullanılıyor)
+  console.log('⚠️ Scenario/Choice oluşturma atlandı (EventPost sistemi kullanılıyor)')
+  
+  /*
   console.log('🧩 Creating scenarios & choices for limited-time promotion event...')
   const limitedEvent = createdEvents.find((e) => e && e.title === 'Special Discount Campaign')
   if (limitedEvent) {
-    const limitedEventId = limitedEvent.id as string
-
-    // Hottest / limited event örneğinde kullanılan kullanıcılar:
-    const limitedEventUserIds = [
-      TRUST_USER_IDS[2], // 3333...
-      TARGET_USER_ID,    // 248c...
-      TRUST_USER_IDS[1], // 2222...
-      TEST_USER_ID,      // 480f...
-    ]
-
-    // Tek bir senaryo oluştur
-    const scenario = await prisma.wishboxScenario.create({
-      data: {
-        eventId: limitedEventId,
-        title: 'Special Discount Engagement',
-        description: 'Users participating in the Special Discount Campaign.',
-        orderIndex: 1,
-      },
-    })
-
-    // Her kullanıcı için 10 adet choice oluşturalım (toplam 40 satır)
-    const choicesData = limitedEventUserIds.flatMap((userId) =>
-      Array.from({ length: 10 }).map((_, idx) => ({
-        scenarioId: scenario.id,
-        userId,
-        choiceText: `Participation #${idx + 1} for user ${userId}`,
-        isSelected: true,
-      }))
-    )
-
-    await prisma.scenarioChoice.createMany({
-      data: choicesData,
-      skipDuplicates: true,
-    })
-
-    console.log(`✅ Limited event için ${choicesData.length} scenario choice oluşturuldu`)
-  } else {
-    console.log('⚠️ Special Discount Campaign eventi bulunamadı, limited event için ekstra scenario oluşturulmadı')
+    // ESKI SCENARIO KODU KALDIRILDI
   }
+  */
 
   // Add badge rewards to events
   console.log('🏅 Creating event badge rewards...')
