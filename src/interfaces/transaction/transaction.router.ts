@@ -13,7 +13,7 @@ router.use(authMiddleware);
  * @openapi
  * /transactions/send-tip:
  *   post:
- *     summary: TIPS gönder
+ *     summary: TIPS gönder (kullanıcıya veya wallet address'e)
  *     tags: [Transactions]
  *     security:
  *       - bearerAuth: []
@@ -24,18 +24,25 @@ router.use(authMiddleware);
  *           schema:
  *             type: object
  *             required:
- *               - toUserId
  *               - amount
  *             properties:
- *               toUserId:
+ *               recipientId:
  *                 type: string
+ *                 description: Alıcı kullanıcı ID (internal transfer için)
+ *               walletAddress:
+ *                 type: string
+ *                 description: Alıcı wallet adresi (external transfer için)
  *               amount:
  *                 type: number
- *               reason:
+ *                 description: TIPS miktarı
+ *               message:
  *                 type: string
+ *                 description: Opsiyonel mesaj
  *     responses:
  *       200:
  *         description: Transaction başarıyla oluşturuldu
+ *       400:
+ *         description: Geçersiz parametre veya yetersiz bakiye
  */
 router.post('/send-tip', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
@@ -45,33 +52,97 @@ router.post('/send-tip', asyncHandler(async (req: Request, res: Response) => {
     return res.status(401).json({ message: 'Unauthorized' });
   }
 
-  const { toUserId, amount, reason } = req.body;
+  const { recipientId, walletAddress, amount, message, reason } = req.body;
 
-  if (!toUserId || !amount) {
-    return res.status(400).json({ message: 'toUserId and amount are required' });
+  // Validation: En az biri olmalı
+  if (!recipientId && !walletAddress) {
+    return res.status(400).json({ 
+      message: 'Either recipientId or walletAddress is required' 
+    });
   }
 
-  if (amount <= 0) {
+  // İkisi birden olamaz
+  if (recipientId && walletAddress) {
+    return res.status(400).json({ 
+      message: 'Cannot specify both recipientId and walletAddress' 
+    });
+  }
+
+  if (!amount || amount <= 0) {
     return res.status(400).json({ message: 'Amount must be greater than 0' });
   }
 
-  const result = await transactionService.sendTip({
-    fromUserId: String(fromUserId),
-    toUserId: String(toUserId),
-    amount: Number(amount),
-    reason: reason || undefined
-  });
+  // WalletAddress ile gönderim
+  if (walletAddress) {
+    // Wallet address validation
+    if (!walletAddress.startsWith('0x') || walletAddress.length < 20) {
+      return res.status(400).json({ 
+        message: 'Invalid wallet address format' 
+      });
+    }
 
-  return res.json({
-    id: result.transaction.id,
-    actionType: result.transaction.actionType,
-    status: result.transaction.status,
-    amount: result.transaction.amount,
-    toAddress: result.transaction.toAddress,
-    metadata: result.transaction.metadata,
-    provider: result.transaction.provider,
-    createdAt: result.transaction.createdAt.toISOString()
-  });
+    // Wallet address'den user bulma
+    const prisma = getPrisma();
+    const recipientWallet = await prisma.wallet.findFirst({
+      where: { 
+        publicAddress: walletAddress,
+        isConnected: true
+      },
+      include: {
+        user: true
+      }
+    });
+
+    if (!recipientWallet) {
+      return res.status(404).json({ 
+        message: 'Wallet address not found in system' 
+      });
+    }
+
+    // Internal transfer olarak işle
+    const result = await transactionService.sendTip({
+      fromUserId: String(fromUserId),
+      toUserId: recipientWallet.userId,
+      amount: Number(amount),
+      reason: message || reason || undefined
+    });
+
+    return res.json({
+      id: result.transaction.id,
+      actionType: result.transaction.actionType,
+      status: result.transaction.status,
+      amount: result.transaction.amount,
+      toAddress: result.transaction.toAddress,
+      toUserId: recipientWallet.userId,
+      metadata: result.transaction.metadata,
+      provider: result.transaction.provider,
+      createdAt: result.transaction.createdAt.toISOString()
+    });
+  }
+
+  // RecipientId ile gönderim (mevcut mantık)
+  if (recipientId) {
+    const result = await transactionService.sendTip({
+      fromUserId: String(fromUserId),
+      toUserId: String(recipientId),
+      amount: Number(amount),
+      reason: message || reason || undefined
+    });
+
+    return res.json({
+      id: result.transaction.id,
+      actionType: result.transaction.actionType,
+      status: result.transaction.status,
+      amount: result.transaction.amount,
+      toAddress: result.transaction.toAddress,
+      toUserId: recipientId,
+      metadata: result.transaction.metadata,
+      provider: result.transaction.provider,
+      createdAt: result.transaction.createdAt.toISOString()
+    });
+  }
+
+  return res.status(400).json({ message: 'Invalid request' });
 }));
 
 /**
@@ -124,14 +195,16 @@ router.get('/history', asyncHandler(async (req: Request, res: Response) => {
           where: { id: tx.metadata.senderUserId as string },
           include: {
             profile: true,
-            avatars: { where: { isActive: true }, take: 1 }
+            avatars: { where: { isActive: true }, take: 1 },
+            wallets: { take: 1 }
           }
         });
         if (sender) {
           fromUser = {
             id: sender.id,
             name: sender.profile?.displayName || 'Unknown',
-            avatar: sender.avatars[0]?.imageUrl || null
+            avatar: sender.avatars[0]?.imageUrl || null,
+            walletAddress: sender.wallets[0]?.publicAddress || null
           };
         }
       }
@@ -141,14 +214,16 @@ router.get('/history', asyncHandler(async (req: Request, res: Response) => {
           where: { id: tx.metadata.recipientUserId as string },
           include: {
             profile: true,
-            avatars: { where: { isActive: true }, take: 1 }
+            avatars: { where: { isActive: true }, take: 1 },
+            wallets: { take: 1 }
           }
         });
         if (recipient) {
           toUser = {
             id: recipient.id,
             name: recipient.profile?.displayName || 'Unknown',
-            avatar: recipient.avatars[0]?.imageUrl || null
+            avatar: recipient.avatars[0]?.imageUrl || null,
+            walletAddress: recipient.wallets[0]?.publicAddress || null
           };
         }
       }

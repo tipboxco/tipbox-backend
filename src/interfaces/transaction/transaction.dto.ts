@@ -1,7 +1,9 @@
 export interface SendTipRequest {
-  toUserId: string;
+  recipientId?: string;      // User ID (internal transfer için)
+  walletAddress?: string;    // Wallet address (external wallet için)
   amount: number;
-  reason?: string;
+  message?: string;          // Opsiyonel mesaj
+  reason?: string;           // Backward compatibility için (message ile aynı)
 }
 
 export interface TransactionResponse {
@@ -30,11 +32,13 @@ export interface TransactionHistoryItem {
     id: string;
     name: string;
     avatar: string | null;
+    walletAddress: string | null;
   } | null;
   to: {
     id: string;
     name: string;
     avatar: string | null;
+    walletAddress: string | null;
   } | null;
   reason: string | null;
   status: string;
