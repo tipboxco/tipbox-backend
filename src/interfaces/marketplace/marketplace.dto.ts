@@ -12,6 +12,9 @@ export interface UserNFTResponse {
   title: string;
   username: string;
   image: string;
+  description?: string;
+  type: string;
+  rarity: string;
 }
 
 export interface ListMarketplaceNFTsQuery {

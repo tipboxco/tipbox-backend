@@ -142,7 +142,10 @@ export class MarketplaceService {
         id: nft.id,
         title: nft.name,
         username,
-        image: nft.imageUrl,
+        image: resolveMediaUrl(nft.imageUrl) || nft.imageUrl,
+        description: nft.description || undefined,
+        type: nft.getTypeDisplayName(),
+        rarity: nft.getRarityDisplayName(),
       }));
 
       const nextCursor = hasMore && results.length > 0 ? results[results.length - 1].id : undefined;
@@ -203,7 +206,7 @@ export class MarketplaceService {
         description: nft.description || undefined,
         username,
         price: listing.price.toString(),
-        image: nft.imageUrl,
+        image: resolveMediaUrl(nft.imageUrl) || nft.imageUrl,
         userAvatar: userAvatar || undefined,
         rarity: nft.getRarityDisplayName(),
         type: nft.getTypeDisplayName(),
@@ -265,7 +268,7 @@ export class MarketplaceService {
         description: nft.description || undefined,
         username,
         price: updatedListing.price.toString(),
-        image: nft.imageUrl,
+        image: resolveMediaUrl(nft.imageUrl) || nft.imageUrl,
         userAvatar: userAvatar || undefined,
         rarity: nft.getRarityDisplayName(),
         type: nft.getTypeDisplayName(),

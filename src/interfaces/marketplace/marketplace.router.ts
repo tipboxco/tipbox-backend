@@ -133,18 +133,38 @@ router.get('/listings', asyncHandler(async (req: Request, res: Response) => {
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   id:
- *                     type: string
- *                   title:
- *                     type: string
- *                   username:
- *                     type: string
- *                   image:
- *                     type: string
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       title:
+ *                         type: string
+ *                       username:
+ *                         type: string
+ *                       image:
+ *                         type: string
+ *                       description:
+ *                         type: string
+ *                       type:
+ *                         type: string
+ *                         example: Badge
+ *                       rarity:
+ *                         type: string
+ *                         example: Rare
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: number
  *       401:
  *         description: Yetkisiz erişim
  *       500:
