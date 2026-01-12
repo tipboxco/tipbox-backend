@@ -15,6 +15,7 @@
     "format": "prettier --write .",
     "db:seed": "docker-compose exec backend npx ts-node scripts/clear-and-seed.ts",
     "db:seed:all": "docker-compose exec backend npx ts-node scripts/clear-and-seed.ts --all",
+    "db:seed:transactions": "docker-compose exec backend npx ts-node scripts/test-transaction-seed.ts",
     "db:update-category-images": "docker-compose exec backend npx ts-node scripts/update-main-category-images.ts",
     "db:update-trust-user-1-avatar": "docker-compose exec backend npx ts-node scripts/update-trust-user-1-avatar.ts",
     "db:update-marketplace-banners": "docker-compose exec backend npx ts-node scripts/update-marketplace-banners.ts",
@@ -37,6 +38,7 @@
     "docker:clean:all": "docker-compose down -v && docker-compose build --no-cache && docker-compose up -d",
     "dev:reset": "docker-compose exec backend bash scripts/reset-dev.sh",
     "test:socket-chat": "docker-compose exec backend npx ts-node scripts/test-socket-chat.ts",
+    "test:transactions": "npx ts-node scripts/test-transaction-seed.ts",
     "sim:julia": "docker-compose exec backend npx ts-node scripts/julia-omer-simulation.ts julia",
     "sim:omer": "docker-compose exec backend npx ts-node scripts/julia-omer-simulation.ts omer"
   },

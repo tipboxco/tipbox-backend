@@ -1046,9 +1046,35 @@ model Wallet {
   createdAt     DateTime       @default(now()) @map("created_at")
   updatedAt     DateTime       @updatedAt @map("updated_at")
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions  Transaction[]
 
   @@unique([userId, provider])
   @@map("wallets")
+}
+
+model Transaction {
+  id          String                 @id @default(uuid()) @db.Uuid
+  walletId    String                 @map("wallet_id") @db.Uuid
+  actionType  TransactionActionType  @map("action_type")
+  status      TransactionStatus      @default(created)
+  amount      Float?
+  fromAddress String?                @map("from_address")
+  toAddress   String?                @map("to_address")
+  metadata    Json?
+  txHash      String?                @map("tx_hash")
+  provider    String                 @default("backend")
+  errorMessage String?               @map("error_message")
+  createdAt   DateTime               @default(now()) @map("created_at")
+  confirmedAt DateTime?              @map("confirmed_at")
+  failedAt    DateTime?              @map("failed_at")
+  wallet      Wallet                 @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId])
+  @@index([status])
+  @@index([actionType])
+  @@index([createdAt])
+  @@index([walletId, status])
+  @@map("transactions")
 }
 
 model TipsTokenTransfer {
@@ -1765,6 +1791,30 @@ enum WalletProvider {
   CUSTOM
 
   @@map("wallet_provider")
+}
+
+enum TransactionActionType {
+  TIP_SEND
+  TIP_RECEIVE
+  CLAIM_REWARD
+  CLAIM_BADGE
+  NFT_BUY
+  NFT_SELL
+  SWAP_TIP_TO_SOL
+  SWAP_SOL_TO_TIP
+  AIRDROP
+  FEE
+
+  @@map("transaction_action_type")
+}
+
+enum TransactionStatus {
+  created
+  pending
+  confirmed
+  failed
+
+  @@map("transaction_status")
 }
 
 enum NFTType {

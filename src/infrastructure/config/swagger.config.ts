@@ -71,8 +71,6 @@ export function getSwaggerOptions() {
     },
     apis: [
       './src/interfaces/**/*.ts',
-      './dist/interfaces/**/*.js',
-      './src/interfaces/**/*.router.ts',
     ],
   };
 }

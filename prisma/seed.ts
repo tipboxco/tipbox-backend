@@ -12057,6 +12057,30 @@ async function main() {
   
   progress.increment('Seed tamamlanıyor...')
 
+  // ===== TRANSACTION SEEDING =====
+  console.log('\n💰 Transaction ve Wallet seeding başlatılıyor...')
+  progress.increment('Transaction ve wallet verileri oluşturuluyor...')
+  
+  try {
+    const { seedTransactions } = await import('./seed/transaction-seed')
+    const transactionResult = await seedTransactions()
+    
+    progress.increment('Transaction seeding tamamlandı')
+    console.log('✅ Transaction seeding completed')
+    console.log(`   📊 ${transactionResult.totalWallets} wallet oluşturuldu`)
+    console.log(`   💳 ${transactionResult.totalTransactions} transaction oluşturuldu`)
+    console.log(`   📈 İstatistikler:`)
+    console.log(`      - Type: ${JSON.stringify(transactionResult.byType, null, 2)}`)
+    console.log(`      - Status: ${JSON.stringify(transactionResult.byStatus, null, 2)}`)
+  } catch (error) {
+    console.error('❌ Transaction seeding hatası:', error)
+    if (error instanceof Error) {
+      console.error('   Message:', error.message)
+      console.error('   Stack:', error.stack)
+    }
+    console.log('⚠️  Seed devam ediyor ama transaction verileri oluşturulamadı')
+  }
+
   // ===== SUMMARY =====
   console.log('\n🎉 Seed process completed successfully!')
 }

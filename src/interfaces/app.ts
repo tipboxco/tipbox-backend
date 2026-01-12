@@ -9,6 +9,7 @@ import swaggerJSDoc from 'swagger-jsdoc';
 import authRouter from './auth/auth.router';
 import userRouter from './user/user.router';
 import walletRouter from './wallet/wallet.router';
+import transactionRouter from './transaction/transaction.router';
 import feedRouter from './feed/feed.router';
 import marketplaceRouter from './marketplace/marketplace.router';
 import exploreRouter from './explore/explore.router';
@@ -241,6 +242,7 @@ app.get('/metrics', async (req, res) => {
 app.use('/auth', authRouter);
 app.use('/users', authMiddleware, userRouter);
 app.use('/wallets', authMiddleware, walletRouter);
+app.use('/transactions', authMiddleware, transactionRouter);
 app.use('/feed', authMiddleware, feedRouter);
 app.use('/messages', messagingRouter);
 app.use('/marketplace', marketplaceRouter);
