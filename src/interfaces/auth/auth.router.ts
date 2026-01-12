@@ -123,6 +123,7 @@ router.post('/login', validateBody(LoginSchema), asyncHandler(async (req: Reques
 
   // Authentication
   const user = await authService.authenticate(email, password);
+  console.log({user});
   if (!user) {
     return res.status(401).json({
       success: false,

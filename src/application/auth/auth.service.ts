@@ -25,7 +25,9 @@ export class AuthService implements IAuthService {
     
     // Şifre hash kontrolü
     if (!user.passwordHash) return null;
+    const hashedPassword = await bcrypt.hash(password, 10);
     const valid = await bcrypt.compare(password, user.passwordHash);
+    console.log({valid,password,userPassword: user.passwordHash,hashedPassword});
     if (!valid) return null;
     
     return user;
