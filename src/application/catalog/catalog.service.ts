@@ -58,23 +58,24 @@ export class CatalogService {
    */
   async getAllCategories(): Promise<CategoryItem[]> {
     return withCache(
-      CACHE_KEYS.STATIC_CATEGORIES(),
+      CACHE_KEYS.STATIC_CATEGORIES()+"asdad",
       async () => {
-        const categories = await prisma.mainCategory.findMany({
+        const categories = await prisma.category.findMany({
           select: {
             id: true,
             name: true,
-            imageUrl: true,
+            thumbnail: true,
+            
           },
-          orderBy: {
-            name: 'asc',
-          },
+          where: {
+            level: 0
+          }
         });
-
+        console.log({categories});
         const { resolveMediaUrl } = await import('../../infrastructure/config/media.config');
 
         return categories.map((category) => {
-          const imageUrl = resolveMediaUrl(category.imageUrl);
+          const imageUrl = resolveMediaUrl(category.thumbnail);
 
           return {
             categoryId: category.id,
@@ -83,7 +84,8 @@ export class CatalogService {
           };
         });
       },
-      CACHE_TTL.STATIC_CATEGORIES, // 24 saat - kategoriler çok nadir değişir
+      15,
+      //CACHE_TTL.STATIC_CATEGORIES, // 24 saat - kategoriler çok nadir değişir
       { logPrefix: 'CatalogService' }
     );
   }
@@ -102,14 +104,14 @@ export class CatalogService {
 
   private async fetchSubCategories(categoryId: string): Promise<SubCategoryItem[]> {
     try {
-      const subCategories = await prisma.subCategory.findMany({
+      const subCategories = await prisma.category.findMany({
         where: {
-          mainCategoryId: categoryId,
+          parentId: categoryId,
         },
         select: {
           id: true,
           name: true,
-          imageUrl: true,
+          thumbnail: true,
         },
         orderBy: {
           name: 'asc',
@@ -117,7 +119,7 @@ export class CatalogService {
       });
 
       return subCategories.map((subCategory) => {
-        const imageUrl = resolveMediaUrl(subCategory.imageUrl);
+        const imageUrl = resolveMediaUrl(subCategory.thumbnail);
 
         return {
           subCategoryId: subCategory.id,
@@ -146,15 +148,15 @@ export class CatalogService {
 
   private async fetchProductGroups(subCategoryId: string): Promise<ProductGroupItem[]> {
     try {
-      const productGroups = await prisma.productGroup.findMany({
+      const productGroups = await prisma.category.findMany({
         where: {
-          subCategoryId: subCategoryId,
+          parentId: subCategoryId
         },
         select: {
           id: true,
           name: true,
-          imageUrl: true,
-          subCategoryId: true,
+          thumbnail: true,
+          parentId: true,
         },
         orderBy: {
           name: 'asc',
@@ -162,13 +164,13 @@ export class CatalogService {
       });
 
       return productGroups.map((group) => {
-        const imageUrl = resolveMediaUrl(group.imageUrl);
+        const imageUrl = resolveMediaUrl(group.thumbnail);
 
         return {
           productGroupId: group.id,
           name: group.name,
           image: imageUrl,
-          subCategoryId: group.subCategoryId,
+          subCategoryId: group.parentId || '',
         };
       });
     } catch (error) {
@@ -182,7 +184,8 @@ export class CatalogService {
    */
   async getProductsByProductGroupId(productGroupId: string, search?: string): Promise<ProductItem[]> {
     const searchTrimmed = search?.trim();
-    const cacheKey = `product-group:${productGroupId}:products:${searchTrimmed || 'all'}`;
+    const cacheKey = `product-group:${productGroupId}:products:${searchTrimmed || 'all'}+1`;
+    return this.fetchProducts(productGroupId, searchTrimmed);
     return withCache(
       cacheKey,
       async () => this.fetchProducts(productGroupId, searchTrimmed),
@@ -192,14 +195,37 @@ export class CatalogService {
   }
 
   private async fetchProducts(productGroupId: string, search?: string): Promise<ProductItem[]> {
+   
+    // Gelen productGroupId aslında bir üst kategori veya ara kategori olabilir.
+    // O yüzden, öncelikle bu kategorinin altındaki tüm alt kategori id'lerini (children'lar dahil rekürsif olarak) bulmamız lazım, sonra ilgili id'lere sahip ürünleri getireceğiz.
+
+    // Helper: kategori için tüm alt kategori id'lerini rekürsif olarak bul (kendisi dahil)
+    async function getAllDescendantCategoryIds(categoryId: string): Promise<string[]> {
+      const ids: string[] = [categoryId];
+
+      // İlk seviye children
+      const children = await prisma.category.findMany({
+        where: { parentId: categoryId },
+        select: { id: true },
+      });
+
+      for (const child of children) {
+        const childDescendants = await getAllDescendantCategoryIds(child.id);
+        ids.push(...childDescendants);
+      }
+
+      return ids;
+    }
+    // productGroupId ile başla, tüm child/alt kategorilerin id'lerini bul
+    const categoryIds = await getAllDescendantCategoryIds(productGroupId);
     try {
       const products = await prisma.product.findMany({
         where: {
-          groupId: productGroupId,
+          categoryId: {in:categoryIds},
           ...(search && {
             OR: [
               { name: { contains: search, mode: 'insensitive' } },
-              { brand: { contains: search, mode: 'insensitive' } },
+              { brand: { name: { contains: search, mode: 'insensitive' } } },
               { description: { contains: search, mode: 'insensitive' } },
             ],
           }),
@@ -208,7 +234,7 @@ export class CatalogService {
           id: true,
           name: true,
           imageUrl: true,
-          groupId: true,
+          categoryId: true,
         },
         orderBy: {
           name: 'asc',
@@ -222,7 +248,7 @@ export class CatalogService {
           productId: product.id,
           name: product.name,
           image: imageUrl,
-          productGroupId: product.groupId || '',
+          productGroupId: product.categoryId || '',
         };
       });
     } catch (error) {
