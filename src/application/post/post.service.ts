@@ -29,6 +29,7 @@ import logger from '../../infrastructure/logger/logger';
 import { GeminiService } from '../../infrastructure/ai/gemini.service';
 import { AiExperienceSplitPrismaRepository } from '../../infrastructure/repositories/ai-experience-split-prisma.repository';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
+import { EventService } from '../event/event.service';
 
 export class PostService {
   private postRepo: ContentPostPrismaRepository;
@@ -38,6 +39,7 @@ export class PostService {
   private feedService: FeedService;
   private prisma: ReturnType<typeof getPrisma>;
   private geminiService: GeminiService;
+  private eventService: EventService;
   private experienceSnippetRepo: AiExperienceSplitPrismaRepository;
 
   /**
@@ -96,6 +98,7 @@ export class PostService {
     this.prisma = getPrisma();
     this.geminiService = GeminiService.getInstance();
     this.experienceSnippetRepo = new AiExperienceSplitPrismaRepository();
+    this.eventService = new EventService();
   }
 
   /**
@@ -262,6 +265,13 @@ export class PostService {
 
       logger.info(`Free post created: ${post.id} by user ${userId}`);
       
+      // Event cache'i invalidate et (eventId varsa)
+      if (request.eventId) {
+        this.eventService.invalidateEventCaches(request.eventId, userId).catch((err) => {
+          logger.warn({ message: 'Failed to invalidate event caches', eventId: request.eventId, error: err });
+        });
+      }
+      
       // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
       this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
         logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
@@ -353,6 +363,13 @@ export class PostService {
       logger.info(
         `Tips and tricks post created: ${post.id} by user ${userId}`
       );
+      
+      // Event cache'i invalidate et (eventId varsa)
+      if (request.eventId) {
+        this.eventService.invalidateEventCaches(request.eventId, userId).catch((err) => {
+          logger.warn({ message: 'Failed to invalidate event caches', eventId: request.eventId, error: err });
+        });
+      }
       
       // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
       this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
@@ -473,6 +490,13 @@ export class PostService {
       }
 
       logger.info(`Question post created: ${post.id} by user ${userId}`);
+      
+      // Event cache'i invalidate et (eventId varsa)
+      if (request.eventId) {
+        this.eventService.invalidateEventCaches(request.eventId, userId).catch((err) => {
+          logger.warn({ message: 'Failed to invalidate event caches', eventId: request.eventId, error: err });
+        });
+      }
       
       // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
       this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
@@ -627,6 +651,13 @@ export class PostService {
 
       logger.info(`Benchmark post created: ${post.id} by user ${userId}`);
       
+      // Event cache'i invalidate et (eventId varsa)
+      if (request.eventId) {
+        this.eventService.invalidateEventCaches(request.eventId, userId).catch((err) => {
+          logger.warn({ message: 'Failed to invalidate event caches', eventId: request.eventId, error: err });
+        });
+      }
+      
       // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
       this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
         logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
@@ -723,6 +754,13 @@ export class PostService {
       logger.info(`Experience post created: ${post.id} by user ${userId}`, {
         experienceSnippetId: request.experienceSnippetId || null
       });
+      
+      // Event cache'i invalidate et (eventId varsa)
+      if (request.eventId) {
+        this.eventService.invalidateEventCaches(request.eventId, userId).catch((err) => {
+          logger.warn({ message: 'Failed to invalidate event caches', eventId: request.eventId, error: err });
+        });
+      }
       
       // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
       this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
@@ -864,6 +902,13 @@ export class PostService {
 
       logger.info(`Update post created: ${post.id} by user ${userId}`);
       
+      // Event cache'i invalidate et (eventId varsa)
+      if (request.eventId) {
+        this.eventService.invalidateEventCaches(request.eventId, userId).catch((err) => {
+          logger.warn({ message: 'Failed to invalidate event caches', eventId: request.eventId, error: err });
+        });
+      }
+      
       // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
       this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
         logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
@@ -897,7 +942,6 @@ export class PostService {
           },
         },
         include: {
-          productExperiences: true,
           media: true,
         },
       });
@@ -912,12 +956,7 @@ export class PostService {
           inventoryId: inventory.id,
           hasOwned: inventory.hasOwned,
           experienceSummary: inventory.experienceSummary,
-          experiences: inventory.productExperiences.map((exp) => ({
-            id: exp.id,
-            title: exp.title,
-            experienceText: exp.experienceText,
-            createdAt: exp.createdAt,
-          })),
+          experiences: [], // ProductExperience modeli artık kullanılmıyor
           media: inventory.media.map((m) => ({
             id: m.id,
             mediaUrl: m.mediaUrl,
@@ -1181,10 +1220,24 @@ export class PostService {
         throw new Error('Forbidden: user does not own this post');
       }
 
+      // Post'un eventId'sini al (cache invalidation için) - Prisma'dan direkt çek
+      const postWithEvent = await this.prisma.contentPost.findUnique({
+        where: { id: postId },
+        select: { eventId: true }
+      });
+      const eventId = postWithEvent?.eventId || null;
+
       const deleted = await this.postRepo.delete(postId);
 
       if (deleted) {
         logger.info(`Post deleted: ${postId} by user ${userId}`);
+        
+        // Event cache'i invalidate et (eventId varsa)
+        if (eventId) {
+          this.eventService.invalidateEventCaches(eventId, userId).catch((err) => {
+            logger.warn({ message: 'Failed to invalidate event caches', eventId, error: err });
+          });
+        }
       } else {
         logger.warn(`Post delete returned false for id: ${postId}`);
       }

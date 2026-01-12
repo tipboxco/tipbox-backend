@@ -447,7 +447,7 @@ export class CatalogService {
           user: {
             id: post.user.id,
             name: post.user.profile?.displayName || post.user.email || 'Anonymous',
-            avatar: resolveMediaUrl(post.user.avatars?.[0]?.imageUrl || null) || '',
+            avatar: resolveMediaUrl(post.user.avatars?.[0]?.imageUrl || null, true) || '',
           },
           stats: {
             likes: (post as any).likesCount ?? post.likes?.length ?? 0,

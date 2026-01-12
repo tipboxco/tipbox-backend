@@ -4,6 +4,7 @@ import { UserService } from '../../application/user/user.service';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { authMiddleware } from '../auth/auth.middleware';
 import { getErrorMessage, hasErrorMessage, errorMessageIncludes } from '../../infrastructure/errors/error-helper';
+import logger from '../../infrastructure/logger/logger';
 
 const router = Router();
 const eventService = new EventService();
@@ -122,6 +123,80 @@ router.get(
     }
 
     return res.json(event);
+  })
+);
+
+/**
+ * @openapi
+ * /events/my-events:
+ *   get:
+ *     summary: Kullanıcının katıldığı aktif event'leri getir
+ *     description: Kullanıcının post attığı ve halen aktif olan event'lerin listesini getirir.
+ *     tags: [Events]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor (son item'ın id'si)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 20
+ *         description: Sayfa başına item sayısı
+ *     responses:
+ *       200:
+ *         description: Kullanıcının event'leri başarıyla getirildi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/EventCard'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
+ *       401:
+ *         description: Unauthorized
+ */
+router.get(
+  '/my-events',
+  authMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const cursor = req.query.cursor as string | undefined;
+    const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+
+    if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
+      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+    }
+
+    const myEvents = await eventService.getMyActiveEvents(String(userId), {
+      cursor,
+      ...(typeof limitParam === 'number' ? { limit: limitParam } : {}),
+    });
+
+    return res.json(myEvents);
   })
 );
 
@@ -593,6 +668,65 @@ router.post(
         return res.status(400).json({ message });
       }
       logger.error(`Error joining event ${eventId}:`, error);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  })
+);
+
+/**
+ * @openapi
+ * /events/{eventId}/leave:
+ *   post:
+ *     summary: Event'ten ayrıl
+ *     description: Kullanıcının event'ten ayrılmasını sağlar. Response formatı GET /events/{eventId} ile aynıdır. Idempotent endpoint - zaten ayrılmışsa hata vermez.
+ *     tags: [Events]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: eventId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Event ID
+ *     responses:
+ *       200:
+ *         description: Event'ten başarıyla ayrıldı
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/EventDetail'
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Event not found
+ */
+router.post(
+  '/:eventId/leave',
+  authMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const eventId = req.params.eventId;
+
+    if (!eventId) {
+      return res.status(400).json({ message: 'Event ID is required' });
+    }
+
+    try {
+      const eventDetail = await eventService.leaveEvent(eventId, userId);
+      return res.json(eventDetail);
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      if (hasErrorMessage(error, 'Event not found')) {
+        return res.status(404).json({ message: 'Event not found' });
+      }
+      logger.error(`Error leaving event ${eventId}:`, error);
       return res.status(500).json({ message: 'Internal server error' });
     }
   })

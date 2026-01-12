@@ -582,7 +582,6 @@ export class BrandService {
             productId: { in: productIds },
           },
           include: {
-            productExperiences: true,
             media: true, // type field'ı kaldırıldı, tüm media'ları getir
           },
         });
@@ -1970,7 +1969,7 @@ export class BrandService {
         id: post.user.id,
         name: post.user.profile?.displayName || post.user.email || 'Anonymous',
         title: post.user.titles?.[0]?.title || '',
-        avatar: resolveMediaUrl(post.user.avatars?.[0]?.imageUrl || null) || '',
+        avatar: resolveMediaUrl(post.user.avatars?.[0]?.imageUrl || null, true) || '',
       };
 
       const stats = {
@@ -2157,24 +2156,17 @@ export class BrandService {
       const inventoryKey = `${post.userId}-${post.productId}`;
       const inventory = inventoriesMap.get(inventoryKey);
       
-      if (inventory && inventory.productExperiences && inventory.productExperiences.length > 0) {
-        // Inventory'den gelen experience verilerini kullan
-        experienceContent = this.buildExperienceSectionsFromInventory(
-          inventory.productExperiences,
-          inventory.experienceSummary
-        );
-        
-        // Inventory'den gelen görselleri de kullan
+      // Artık productExperiences yok, sadece inventory media'sını kullan
+      if (inventory) {
+        // Inventory'den gelen görselleri kullan
         if (inventory.media && inventory.media.length > 0) {
           images = inventory.media.map((m: any) => resolveMediaUrl(m.mediaUrl)).filter((url: string | null): url is string => url !== null);
         }
       }
     }
     
-    // Eğer inventory'den veri gelmediyse, body'den parse et
-    if (experienceContent.length === 0) {
-      experienceContent = this.parseExperienceContent(post.body);
-    }
+    // Body'den experience content'i parse et
+    experienceContent = this.parseExperienceContent(post.body);
 
     // Get tags
     const tags = post.tags?.map((t: any) => t.tag) || post.contentPostTags?.map((t: any) => t.tag) || [];

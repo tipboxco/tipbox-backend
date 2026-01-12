@@ -384,7 +384,7 @@ export class ExploreService {
           interaction: totalParticipants,
           participants: participantData.map((pd) => ({
             userId: pd.userId,
-            avatar: resolveMediaUrl(pd.user.avatars[0]?.imageUrl || null),
+            avatar: resolveMediaUrl(pd.user.avatars[0]?.imageUrl || null, true),
             userName: pd.user.profile?.userName || pd.user.profile?.displayName || 'Anonymous',
           })),
         };
@@ -574,7 +574,7 @@ export class ExploreService {
       id: userId,
       name: profile?.displayName || 'Anonymous',
       title: title?.title || '',
-      avatar: resolveMediaUrl(avatar?.imageUrl || null) || '',
+      avatar: resolveMediaUrl(avatar?.imageUrl || null, true) || '',
     };
   }
 

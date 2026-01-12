@@ -309,7 +309,7 @@ async function buildSeedAssets(): Promise<void> {
     console.warn(`   ⚠️  Catalog klasörü okunamadı: ${error}`);
   }
 
-  // 7. EVENT/EVENTS → events/
+  // 7. EVENT/EVENTS → events/ (tüm alt klasörler dahil)
   console.log('🎉 Event görselleri ekleniyor...');
   const eventPath1 = path.join(assetsBasePath, 'event');
   const eventsPath1 = path.join(assetsBasePath, 'events');
@@ -329,24 +329,30 @@ async function buildSeedAssets(): Promise<void> {
       }
     }
     
-    const eventFiles = await fs.readdir(effectiveEventPath1);
-    for (const file of eventFiles) {
-      if (file.startsWith('.')) continue;
-      const filePath = path.join(effectiveEventPath1, file);
-      const stat = await fs.stat(filePath);
-      if (stat.isFile()) {
-        const nameWithoutExt = file.replace(/\.[^/.]+$/, '');
-        const key = `event.${slugify(nameWithoutExt)}`;
-        seedAssets.push({
-          key,
-          localPath: filePath,
-          targetKey: `events/${file}`, // events/ klasörüne yükle
-          contentType: inferContentType(filePath),
-          description: `Event görseli: ${file}`,
-        });
-      }
+    // Recursive olarak tüm event görsellerini bul (new-events dahil)
+    const allEventFiles = await getAllFiles(effectiveEventPath1);
+    const imageFiles = allEventFiles.filter(file => {
+      const ext = path.extname(file).toLowerCase();
+      return ['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext);
+    });
+    
+    for (const filePath of imageFiles) {
+      const fileName = path.basename(filePath);
+      const nameWithoutExt = fileName.replace(/\.[^/.]+$/, '');
+      const key = `event.${slugify(nameWithoutExt)}`;
+      
+      // Alt klasör yapısını koruyarak targetKey oluştur
+      const relativePath = path.relative(effectiveEventPath1, filePath);
+      
+      seedAssets.push({
+        key,
+        localPath: filePath,
+        targetKey: `events/${relativePath.replace(/\\/g, '/')}`, // Alt klasör yapısını koru
+        contentType: inferContentType(filePath),
+        description: `Event görseli: ${fileName}`,
+      });
     }
-    console.log(`   ✅ ${eventFiles.filter(f => !f.startsWith('.')).length} event görseli eklendi`);
+    console.log(`   ✅ ${imageFiles.length} event görseli eklendi (alt klasörler dahil)`);
   } catch (error) {
     console.warn(`   ⚠️  Event klasörü okunamadı: ${error}`);
   }
@@ -523,20 +529,56 @@ async function buildSeedAssets(): Promise<void> {
     ];
     const COMMUNITY_COACH_USER_ID = '66666666-6666-4666-a666-666666666666';
     
-    // Avatar eşleştirmesi
+    // Avatar eşleştirmesi - Gerçek dosya isimleri ile SEED_USERS'daki userId'ler
     const avatarMapping: Record<string, { key: string; userId: string }> = {
-      'ozan.jpg': { key: 'user.avatar.primary', userId: TEST_USER_ID },
-      'man-user.jpg': { key: 'user.avatar.market', userId: TARGET_USER_ID },
-      'woman-user.jpg': { key: 'user.avatar.julia', userId: JULIA_USER_ID },
-      'man-user-2.png': { key: 'user.avatar.trust1', userId: TRUST_USER_IDS[0] },
-      'man-user-3.jpg': { key: 'user.avatar.trust2', userId: TRUST_USER_IDS[1] },
-      'man-user-4.jpg': { key: 'user.avatar.trust3', userId: TRUST_USER_IDS[2] },
-      'man-user-5.jpg': { key: 'user.avatar.trust4', userId: TRUST_USER_IDS[3] },
-      'woman-user-2.jpg': { key: 'user.avatar.truster1', userId: TRUSTER_USER_IDS[0] },
-      'woman-user-3.jpg': { key: 'user.avatar.truster2', userId: TRUSTER_USER_IDS[1] },
-      'woman-user-4.jpg': { key: 'user.avatar.truster3', userId: TRUSTER_USER_IDS[2] },
-      'woman-user-5.jpg': { key: 'user.avatar.coach', userId: COMMUNITY_COACH_USER_ID },
+      // İsme özel avatarlar
+      'omer.png': { key: 'user.avatar.omer', userId: '480f5de9-b691-4d70-a6a8-2789226f4e07' },
+      'mehmet.png': { key: 'user.avatar.mehmet', userId: '22222222-2222-4222-a222-222222222222' },
+      'burakcan.png': { key: 'user.avatar.burakcan', userId: '44444444-4444-4444-a444-444444444444' },
+      'mihrac.png': { key: 'user.avatar.mihrac', userId: '55555555-5555-4555-a555-555555555555' },
+      'furkan.png': { key: 'user.avatar.furkan', userId: 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb' },
+      'aycan.png': { key: 'user.avatar.aycan', userId: 'cccccccc-cccc-4ccc-cccc-cccccccccccc' },
+      'ozan.jpg': { key: 'user.avatar.ozan', userId: '99999999-9999-4999-9999-999999999999' },
+      'ozan.png': { key: 'user.avatar.ozan', userId: '99999999-9999-4999-9999-999999999999' },
+      
+      // Generic avatars - İlk kullanıcılar
+      'man-user.jpg': { key: 'user.avatar.man1', userId: '11111111-1111-4111-a111-111111111111' }, // Tuna
+      'man-user-2.png': { key: 'user.avatar.man2', userId: '33333333-3333-4333-a333-333333333333' }, // İbrahim
+      'woman-user.jpg': { key: 'user.avatar.woman1', userId: 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa' }, // İrem
+      
+      // Ozan'dan sonraki kullanıcılar - Random man/woman dağılımı
+      'woman-user-2.jpg': { key: 'user.avatar.elif', userId: '10000000-0000-4000-a000-000000000001' }, // Elif
+      'man-user-3.jpg': { key: 'user.avatar.can', userId: '10000000-0000-4000-a000-000000000002' }, // Can
+      'woman-user-3.jpg': { key: 'user.avatar.zeynep', userId: '10000000-0000-4000-a000-000000000003' }, // Zeynep
+      'man-user-4.jpg': { key: 'user.avatar.ahmet', userId: '10000000-0000-4000-a000-000000000004' }, // Ahmet
+      'woman-user-4.jpg': { key: 'user.avatar.selin', userId: '10000000-0000-4000-a000-000000000005' }, // Selin
+      'man-user-5.jpg': { key: 'user.avatar.emre', userId: '10000000-0000-4000-a000-000000000006' }, // Emre
+      'woman-user-5.jpg': { key: 'user.avatar.deniz', userId: '10000000-0000-4000-a000-000000000007' }, // Deniz
     };
+    
+    // Aynı resmi birden fazla kullanıcı için kullanmak üzere ekstra mapping
+    const additionalAvatars: Array<{ sourceFile: string; key: string; userId: string }> = [
+      { sourceFile: 'man-user.jpg', key: 'user.avatar.baris', userId: '10000000-0000-4000-a000-000000000008' }, // Barış
+      { sourceFile: 'woman-user.jpg', key: 'user.avatar.merve', userId: '10000000-0000-4000-a000-000000000009' }, // Merve
+      { sourceFile: 'man-user-2.png', key: 'user.avatar.berkay', userId: '10000000-0000-4000-a000-000000000010' }, // Berkay
+      { sourceFile: 'woman-user-2.jpg', key: 'user.avatar.asli', userId: '10000000-0000-4000-a000-000000000011' }, // Aslı
+      { sourceFile: 'man-user-3.jpg', key: 'user.avatar.murat', userId: '10000000-0000-4000-a000-000000000012' }, // Murat
+      { sourceFile: 'woman-user-3.jpg', key: 'user.avatar.gizem', userId: '10000000-0000-4000-a000-000000000013' }, // Gizem
+      { sourceFile: 'man-user-4.jpg', key: 'user.avatar.onur', userId: '10000000-0000-4000-a000-000000000014' }, // Onur
+      { sourceFile: 'woman-user-4.jpg', key: 'user.avatar.burcu', userId: '10000000-0000-4000-a000-000000000015' }, // Burcu
+      { sourceFile: 'man-user-5.jpg', key: 'user.avatar.tolga', userId: '10000000-0000-4000-a000-000000000016' }, // Tolga
+      { sourceFile: 'woman-user-5.jpg', key: 'user.avatar.ebru', userId: '10000000-0000-4000-a000-000000000017' }, // Ebru
+      { sourceFile: 'man-user.jpg', key: 'user.avatar.serkan', userId: '10000000-0000-4000-a000-000000000018' }, // Serkan
+      { sourceFile: 'woman-user.jpg', key: 'user.avatar.ece', userId: '10000000-0000-4000-a000-000000000019' }, // Ece
+      { sourceFile: 'man-user-2.png', key: 'user.avatar.kaan', userId: '10000000-0000-4000-a000-000000000020' }, // Kaan
+      { sourceFile: 'woman-user-2.jpg', key: 'user.avatar.derya', userId: '10000000-0000-4000-a000-000000000021' }, // Derya
+      { sourceFile: 'man-user-3.jpg', key: 'user.avatar.selim', userId: '10000000-0000-4000-a000-000000000022' }, // Selim
+      { sourceFile: 'woman-user-3.jpg', key: 'user.avatar.pelin', userId: '10000000-0000-4000-a000-000000000023' }, // Pelin
+      { sourceFile: 'man-user-4.jpg', key: 'user.avatar.cem', userId: '10000000-0000-4000-a000-000000000024' }, // Cem
+      { sourceFile: 'woman-user-4.jpg', key: 'user.avatar.duygu', userId: '10000000-0000-4000-a000-000000000025' }, // Duygu
+      { sourceFile: 'man-user-5.jpg', key: 'user.avatar.hakan', userId: '10000000-0000-4000-a000-000000000026' }, // Hakan
+      { sourceFile: 'woman-user-5.jpg', key: 'user.avatar.nil', userId: '10000000-0000-4000-a000-000000000027' }, // Nil
+    ];
     
     for (const file of profileFiles) {
       if (file.startsWith('.')) continue;
@@ -563,17 +605,27 @@ async function buildSeedAssets(): Promise<void> {
             description: `User avatar: ${file} (${mapping.userId})`,
           });
         } else {
-          // Diğer user avatar'ları (eski format için geriye dönük uyumluluk)
-          const nameWithoutExt = file.replace(/\.[^/.]+$/, '');
-          const key = `user.avatar.${slugify(nameWithoutExt)}`;
-          seedAssets.push({
-            key,
-            localPath: filePath,
-            targetKey: `userprofile/${file}`,
-            contentType: inferContentType(filePath),
-            description: `User avatar: ${file}`,
-          });
+          // Eşleşmeyen dosyalar için UYARI ver (artık yanlış path oluşturmuyoruz)
+          console.warn(`   ⚠️  Avatar mapping bulunamadı: ${file} - Atlanıyor`);
         }
+      }
+    }
+    
+    // Ek avatarları işle (aynı resmi farklı kullanıcılar için kullan)
+    for (const avatar of additionalAvatars) {
+      const filePath = path.join(userProfilePath, avatar.sourceFile);
+      try {
+        await fs.access(filePath);
+        const fileExt = path.extname(avatar.sourceFile).toLowerCase().replace('.', '');
+        seedAssets.push({
+          key: avatar.key,
+          localPath: filePath,
+          targetKey: `profile-pictures/${avatar.userId}/seed-avatar.${fileExt}`,
+          contentType: inferContentType(filePath),
+          description: `User avatar (reused): ${avatar.sourceFile} (${avatar.userId})`,
+        });
+      } catch {
+        console.warn(`   ⚠️  Avatar kaynak dosyası bulunamadı: ${avatar.sourceFile}`);
       }
     }
     console.log(`   ✅ ${profileFiles.filter(f => !f.startsWith('.')).length} user profile görseli eklendi`);

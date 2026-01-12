@@ -1,6 +1,5 @@
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import { InventoryPrismaRepository } from '../../infrastructure/repositories/inventory-prisma.repository';
-import { ProductExperiencePrismaRepository } from '../../infrastructure/repositories/product-experience-prisma.repository';
 import { InventoryMediaPrismaRepository } from '../../infrastructure/repositories/inventory-media-prisma.repository';
 import {
   InventoryListItemResponse,
@@ -20,7 +19,6 @@ import { AiExperienceSplitPrismaRepository } from '../../infrastructure/reposito
 export class InventoryService {
   private readonly prisma: ReturnType<typeof getPrisma>;
   private readonly inventoryRepo: InventoryPrismaRepository;
-  private readonly experienceRepo: ProductExperiencePrismaRepository;
   private readonly mediaRepo: InventoryMediaPrismaRepository;
   private readonly cacheService: CacheService;
   private readonly geminiService: GeminiService;
@@ -29,7 +27,6 @@ export class InventoryService {
   constructor() {
     this.prisma = getPrisma();
     this.inventoryRepo = new InventoryPrismaRepository();
-    this.experienceRepo = new ProductExperiencePrismaRepository();
     this.mediaRepo = new InventoryMediaPrismaRepository();
     this.cacheService = CacheService.getInstance();
     this.geminiService = GeminiService.getInstance();
@@ -50,7 +47,8 @@ export class InventoryService {
       return { items: [], pagination: { hasMore: false, limit } };
     }
 
-    const experiences = await this.experienceRepo.searchByText(searchTrimmed);
+    // ProductExperience tablosu artık yok, boş sonuç dön
+    const experiences: any[] = [];
     
     // Apply cursor-based pagination if needed
     let resultExperiences = experiences;
@@ -134,8 +132,8 @@ export class InventoryService {
 
         if (!product) continue;
 
-        // ProductExperience'ları reviews olarak al
-        const experiences = await this.experienceRepo.findByInventoryId(inventory.id);
+        // ProductExperience tablosu artık yok, boş array kullan
+        const experiences: any[] = [];
 
         // Media'dan ilk resmi al
         const images = await this.mediaRepo.findByInventoryId(inventory.id);

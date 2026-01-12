@@ -20,6 +20,7 @@ export interface EventCard {
   interaction?: number; // Total interactions (participants, comments, etc.)
   eventType: EventType;
   participants?: EventParticipant[];
+  userPostCount?: number; // Kullanıcının bu event'teki post sayısı (sadece my-events için)
 }
 
 // Active Events Response

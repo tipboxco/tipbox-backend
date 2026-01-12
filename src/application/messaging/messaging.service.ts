@@ -414,7 +414,7 @@ export class MessagingService {
             id: message.senderId,
             senderName,
             senderTitle: sender.titles?.[0]?.title ?? '',
-            senderAvatar: resolveMediaUrl(sender.avatars?.[0]?.imageUrl) || resolveMediaUrl('avatars/default/default-useravatar.png') || '',
+            senderAvatar: resolveMediaUrl(sender.avatars?.[0]?.imageUrl, true) || '',
           };
 
           const messageData: Message = {
@@ -480,7 +480,7 @@ export class MessagingService {
           id: message.senderId,
           senderName,
           senderTitle: sender.titles?.[0]?.title ?? '',
-          senderAvatar: resolveMediaUrl(sender.avatars?.[0]?.imageUrl) || resolveMediaUrl('avatars/default/default-useravatar.png') || '',
+          senderAvatar: resolveMediaUrl(sender.avatars?.[0]?.imageUrl, true) || '',
         };
 
         // TIPS mesajı kontrolü - message içeriğine göre
@@ -540,7 +540,7 @@ export class MessagingService {
           id: transfer.fromUserId,
           senderName,
           senderTitle: sender.titles?.[0]?.title ?? '',
-          senderAvatar: resolveMediaUrl(sender.avatars?.[0]?.imageUrl) || resolveMediaUrl('avatars/default/default-useravatar.png') || '',
+          senderAvatar: resolveMediaUrl(sender.avatars?.[0]?.imageUrl, true) || '',
         };
 
         const tipsInfo: TipsInfo = {
@@ -605,7 +605,7 @@ export class MessagingService {
             id: request.fromUserId,
             senderName,
             senderTitle: senderUser.titles?.[0]?.title ?? '',
-            senderAvatar: resolveMediaUrl(senderUser.avatars?.[0]?.imageUrl) || resolveMediaUrl('avatars/default/default-useravatar.png') || '',
+            senderAvatar: resolveMediaUrl(senderUser.avatars?.[0]?.imageUrl, true) || '',
           };
 
         // Map DMRequestStatus to SupportRequestStatus
@@ -868,7 +868,7 @@ export class MessagingService {
           id: dmRequest.fromUserId,
           senderName,
           senderTitle: requestCreator.titles?.[0]?.title ?? '',
-          senderAvatar: resolveMediaUrl(requestCreator.avatars?.[0]?.imageUrl) || resolveMediaUrl('avatars/default/default-useravatar.png') || '',
+          senderAvatar: resolveMediaUrl(requestCreator.avatars?.[0]?.imageUrl, true) || '',
         };
 
         // Map DMRequestStatus to SupportRequestStatus
@@ -971,7 +971,7 @@ export class MessagingService {
           id: transfer.fromUserId,
           senderName,
           senderTitle: sender.titles?.[0]?.title ?? '',
-          senderAvatar: resolveMediaUrl(sender.avatars?.[0]?.imageUrl) || resolveMediaUrl('avatars/default/default-useravatar.png') || '',
+          senderAvatar: resolveMediaUrl(sender.avatars?.[0]?.imageUrl, true) || '',
         };
 
         const tipsInfo: TipsInfo = {

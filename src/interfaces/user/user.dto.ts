@@ -2,6 +2,64 @@
  * @openapi
  * components:
  *   schemas:
+ *     SuggestedUser:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *           example: "user-123"
+ *         userName:
+ *           type: string
+ *           nullable: true
+ *           example: "michael_clark"
+ *         name:
+ *           type: string
+ *           nullable: true
+ *           example: "Michael Clark"
+ *         avatar:
+ *           type: string
+ *           nullable: true
+ *           example: "https://cdn.tipbox.com/avatars/user-123.jpg"
+ *         titles:
+ *           type: array
+ *           items:
+ *             type: string
+ *           example: ["Technology Enthusiast", "Hardware Expert"]
+ *         isTrusted:
+ *           type: boolean
+ *           example: false
+ *         mutualTrustCount:
+ *           type: integer
+ *           example: 3
+ *         stats:
+ *           type: object
+ *           properties:
+ *             trust:
+ *               type: integer
+ *               example: 245
+ *             truster:
+ *               type: integer
+ *               example: 189
+ *             posts:
+ *               type: integer
+ *               example: 87
+ *     SuggestedUsersApiResponse:
+ *       type: object
+ *       properties:
+ *         items:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/SuggestedUser'
+ *         pagination:
+ *           type: object
+ *           properties:
+ *             nextCursor:
+ *               type: string
+ *               nullable: true
+ *               example: "user-456"
+ *             hasMore:
+ *               type: boolean
+ *               example: true
  *     CreateUserRequest:
  *       type: object
  *       required:
@@ -231,4 +289,28 @@ export interface UpdateUserProfileRequest {
   avatar?: string | null;
   cosmetic?: string | null;
   badge?: string[];
+}
+
+// Suggested Users Response Types
+export interface SuggestedUser {
+  id: string;
+  userName: string | null;
+  name: string | null;
+  avatar: string | null;
+  titles: string[];
+  isTrusted: boolean;
+  mutualTrustCount: number;
+  stats: {
+    trust: number;
+    truster: number;
+    posts: number;
+  };
+}
+
+export interface SuggestedUsersApiResponse {
+  items: SuggestedUser[];
+  pagination: {
+    nextCursor: string | null;
+    hasMore: boolean;
+  };
 } 

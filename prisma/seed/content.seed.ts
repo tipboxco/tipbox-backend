@@ -1,12 +1,12 @@
 /* eslint-disable @typescript-eslint/no-non-null-asserted-optional-chain */
 import { prisma, generateUlid, TEST_USER_ID } from './types';
-import { getSeedMediaUrl } from './helpers/media.helper';
+import { getSeedMediaPath } from './helpers/media.helper';
 
-const HOME_APPLIANCE_IMAGE = getSeedMediaUrl('catalog.home-appliances');
-const PHONE_IMAGE = getSeedMediaUrl('catalog.phones');
-const INVENTORY_MEDIA_URL = getSeedMediaUrl('inventory.dyson-media', 'https://cdn.tipbox.co/inventory/dyson-1.jpg');
-const DYSON_PRODUCT_IMAGE = getSeedMediaUrl('product.vacuum.dyson');
-const MACBOOK_PRODUCT_IMAGE = getSeedMediaUrl('product.laptop.macbook');
+const HOME_APPLIANCE_IMAGE = getSeedMediaPath('catalog.home-appliances');
+const PHONE_IMAGE = getSeedMediaPath('catalog.phones');
+const INVENTORY_MEDIA_URL = getSeedMediaPath('inventory.dyson-media', true) || 'inventory/default-dyson.jpg';
+const DYSON_PRODUCT_IMAGE = getSeedMediaPath('product.vacuum.dyson');
+const MACBOOK_PRODUCT_IMAGE = getSeedMediaPath('product.laptop.macbook');
 
 // Üretilen ekstra FREE post sayısı (default: 2, env ile arttırılabilir)
 const EXTRA_FREE_POST_COUNT = Number.parseInt(process.env.SEED_FREE_POST_COUNT || '2', 10);

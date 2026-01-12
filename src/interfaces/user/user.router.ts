@@ -251,6 +251,161 @@ router.get('/:id/profile', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
+ * /users/suggested:
+ *   get:
+ *     summary: Önerilen kullanıcıları getir (Suggested Users)
+ *     description: |
+ *       Trust edilmemiş kullanıcılardan öneriler döner. 
+ *       Pagination, search ve mutual trust count desteği vardır.
+ *       
+ *       **Öneri Algoritması:**
+ *       - Ortak trust'lar
+ *       - Popülerlik (truster count)
+ *       - Aktiflik (post count)
+ *       
+ *       **Hariç Tutulanlar:**
+ *       - Kullanıcının kendisi
+ *       - Zaten trust edilmiş kullanıcılar
+ *       - Engellenmiş (blocked) kullanıcılar
+ *       - Susturulmuş (muted) kullanıcılar
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 20
+ *         description: Döndürülecek maksimum kullanıcı sayısı
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *         description: Pagination için cursor (son kullanıcının ID'si)
+ *       - in: query
+ *         name: q
+ *         schema:
+ *           type: string
+ *         description: Kullanıcı adı veya isim araması için search query
+ *     responses:
+ *       200:
+ *         description: Önerilen kullanıcılar listesi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         example: "248cc91f-b551-4ecc-a885-db1163571330"
+ *                       userName:
+ *                         type: string
+ *                         nullable: true
+ *                         example: "michael_clark"
+ *                       name:
+ *                         type: string
+ *                         nullable: true
+ *                         example: "Michael Clark"
+ *                       avatar:
+ *                         type: string
+ *                         nullable: true
+ *                         example: "https://cdn.tipbox.co/avatars/user-123.jpg"
+ *                       titles:
+ *                         type: array
+ *                         items:
+ *                           type: string
+ *                         example: ["Technology Enthusiast", "Hardware Expert", "Digital Innovation Specialist"]
+ *                       isTrusted:
+ *                         type: boolean
+ *                         example: false
+ *                         description: Kullanıcının bu kişiyi trust edip etmediği (suggested users'da her zaman false)
+ *                       mutualTrustCount:
+ *                         type: integer
+ *                         example: 3
+ *                         description: Ortak trust sayısı ("3 ortak arkadaş" gibi gösterilebilir)
+ *                       stats:
+ *                         type: object
+ *                         properties:
+ *                           posts:
+ *                             type: integer
+ *                             example: 87
+ *                           trust:
+ *                             type: integer
+ *                             example: 245
+ *                           truster:
+ *                             type: integer
+ *                             example: 189
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     nextCursor:
+ *                       type: string
+ *                       nullable: true
+ *                       example: "user-456"
+ *                       description: Bir sonraki sayfa için cursor (null ise son sayfa)
+ *                     hasMore:
+ *                       type: boolean
+ *                       example: true
+ *                       description: Daha fazla kullanıcı var mı?
+ *             examples:
+ *               success:
+ *                 value:
+ *                   items:
+ *                     - id: "user-123"
+ *                       userName: "michael_clark"
+ *                       name: "Michael Clark"
+ *                       avatar: "https://cdn.tipbox.com/avatars/user-123.jpg"
+ *                       titles: ["Technology Enthusiast", "Hardware Expert", "Digital Innovation Specialist"]
+ *                       isTrusted: false
+ *                       mutualTrustCount: 3
+ *                       stats:
+ *                         trust: 245
+ *                         truster: 189
+ *                         posts: 87
+ *                   pagination:
+ *                     nextCursor: "user-456"
+ *                     hasMore: true
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Unauthorized"
+ */
+router.get('/suggested', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+  // Query parameters
+  const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
+  const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
+  const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
+  const searchQuery = req.query.q ? String(req.query.q) : undefined;
+
+  const suggestions = await userService.getSuggestedUsers(String(userId), {
+    cursor,
+    limit,
+    searchQuery,
+  });
+
+  return res.json(suggestions);
+}));
+
+/**
+ * @openapi
  * /users/{id}/trusts:
  *   get:
  *     summary: Kullanıcının trust listesini getirir

@@ -8240,7 +8240,7 @@ async function main() {
   await ensureBrandHistoryBadgeList({
     brandId: '081d5660-a6d6-412a-b0ae-1557acaaa028',
     brandName: 'AudioMax',
-    userIds: [userIdToUse],
+    userIds: [TEST_USER_ID],
     badgeCount: 12,
   })
   console.log(`✅ ${bridgePostsCount} bridge post oluşturuldu`)

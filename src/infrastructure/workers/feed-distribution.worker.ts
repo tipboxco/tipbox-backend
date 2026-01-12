@@ -63,11 +63,12 @@ export class FeedDistributionWorker {
           host: redisHost,
           port: redisPort,
         },
-        concurrency: 2, // Max 2 job paralel (her job içinde zaten 3 chunk paralel işleniyor)
-        limiter: {
-          max: 5, // Max 5 job
-          duration: 60000, // 1 dakikada
-        },
+        concurrency: 10, // Max 10 job paralel (seed için artırıldı)
+        // Limiter devre dışı (seed için)
+        // limiter: {
+        //   max: 5, // Max 5 job
+        //   duration: 60000, // 1 dakikada
+        // },
       }
     );
 

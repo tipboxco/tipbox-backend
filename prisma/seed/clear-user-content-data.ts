@@ -88,9 +88,6 @@ export async function clearUserContentData(): Promise<void> {
     progress.increment('Explore/Bridge verileri temizleniyor...');
     await prisma.wishboxStats.deleteMany({});
     await prisma.wishboxReward.deleteMany({});
-    await prisma.choiceComment.deleteMany({});
-    await prisma.scenarioChoice.deleteMany({});
-    await prisma.wishboxScenario.deleteMany({});
     await prisma.wishboxEvent.deleteMany({});
     await prisma.bridgeReward.deleteMany({});
     await prisma.bridgeUserStats.deleteMany({});
@@ -105,7 +102,7 @@ export async function clearUserContentData(): Promise<void> {
     // Inventory verileri
     progress.increment('Inventory verileri temizleniyor...');
     await prisma.inventoryMedia.deleteMany({});
-    await prisma.productExperience.deleteMany({});
+    // NOTE: productExperience model removed - no longer exists
     await prisma.inventory.deleteMany({});
     // NOT: Product, ProductGroup korunur (taxonomy)
 
