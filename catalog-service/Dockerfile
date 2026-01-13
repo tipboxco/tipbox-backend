@@ -7,6 +7,9 @@ WORKDIR /server
 # Copy package files and npm config
 COPY package.json package-lock.json ./
 
+# Install unzip for extracting ZIP files
+RUN apk add --no-cache unzip
+
 # Install all dependencies using npm
 RUN npm install --legacy-peer-deps
 
