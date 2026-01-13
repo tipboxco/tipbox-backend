@@ -1,7 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-import { RewardClaimType } from '../../src/domain/reward/reward-claim-type.enum';
-import { RewardSourceType } from '../../src/domain/reward/reward-source-type.enum';
-import { RewardClaimStatus } from '../../src/domain/reward/reward-claim-status.enum';
+import { PrismaClient, RewardClaimType, RewardSourceType, RewardClaimStatus } from '@prisma/client';
 
 const prisma = new PrismaClient();
 

@@ -1,8 +1,7 @@
-import { getPrisma } from '../../src/infrastructure/database/prisma-client';
-import { TransactionActionType, TransactionStatus } from '@prisma/client';
+import { PrismaClient, TransactionActionType, TransactionStatus } from '@prisma/client';
 import logger from '../../src/infrastructure/logger/logger';
 
-const prisma = getPrisma();
+const prisma = new PrismaClient();
 
 /**
  * Transaction Seed Helper
@@ -55,6 +54,22 @@ async function seedWallets(userIds: string[]): Promise<Map<string, string>> {
 
   return walletMap;
 }
+
+/**
+ * Priority kullanıcı ID'leri (seed.ts'deki SEED_USERS ile uyumlu)
+ */
+const PRIORITY_USER_IDS = [
+  '480f5de9-b691-4d70-a6a8-2789226f4e07', // omer@tipbox.co
+  '11111111-1111-4111-a111-111111111111', // tuna@tipbox.co
+  '22222222-2222-4222-a222-222222222222', // mehmet@tipbox.co
+  '33333333-3333-4333-a333-333333333333', // ibrahim@tipbox.co
+  '44444444-4444-4444-a444-444444444444', // burakcan@tipbox.co
+  '55555555-5555-4555-a555-555555555555', // mihrac@tipbox.co
+  'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa', // irem@tipbox.co
+  'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb', // furkan@tipbox.co
+  'cccccccc-cccc-4ccc-cccc-cccccccccccc', // aycan@tipbox.co
+  '99999999-9999-4999-9999-999999999999', // ozan@tipbox.co
+];
 
 /**
  * Ana transaction seed fonksiyonu
@@ -139,14 +154,19 @@ async function seedAirdrops(users: any[], walletMap: Map<string, string>): Promi
     const walletId = walletMap.get(user.id);
     if (!walletId) continue;
 
-    // Her kullanıcıya 1000-5000 TIPS airdrop
-    const amount = Math.floor(Math.random() * 4000) + 1000;
+    // Priority kullanıcılara 1000-10000 TIPS, diğerlerine 1000-5000 TIPS airdrop
+    const isPriority = PRIORITY_USER_IDS.includes(user.id);
+    const amount = isPriority 
+      ? Math.floor(Math.random() * 9000) + 1000  // 1000-10000 TIPS
+      : Math.floor(Math.random() * 4000) + 1000; // 1000-5000 TIPS
+    
+    logger.info(`Airdrop for user ${user.profile?.userName || user.email}: ${amount} TIPS ${isPriority ? '(PRIORITY)' : ''}`);
     
     await prisma.transaction.create({
       data: {
         walletId,
         actionType: TransactionActionType.AIRDROP,
-        status: TransactionStatus.CONFIRMED,
+        status: TransactionStatus.confirmed,
         amount,
         fromAddress: null,
         toAddress: `0xTIPBOX_${user.id}`,
@@ -179,11 +199,15 @@ async function seedTipTransfers(users: any[], walletMap: Map<string, string>): P
     { amount: 75, reason: 'Thanks for your help!' },
     { amount: 150, reason: 'Amazing recommendation!' },
     { amount: 30, reason: 'Quick tip' },
-    { amount: 500, reason: 'Outstanding support!' }
+    { amount: 500, reason: 'Outstanding support!' },
+    { amount: 80, reason: 'Love your content!' },
+    { amount: 120, reason: 'Keep up the good work!' },
+    { amount: 250, reason: 'Excellent review!' },
+    { amount: 60, reason: 'Appreciate it!' },
   ];
 
-  // Bugün (5 transfer)
-  for (let i = 0; i < 5; i++) {
+  // Priority kullanıcılar arası daha fazla transaction (15 transfer)
+  for (let i = 0; i < 15; i++) {
     const sender = users[Math.floor(Math.random() * users.length)];
     const receiver = users.filter(u => u.id !== sender.id)[Math.floor(Math.random() * (users.length - 1))];
     
@@ -199,7 +223,7 @@ async function seedTipTransfers(users: any[], walletMap: Map<string, string>): P
       data: {
         walletId: senderWalletId,
         actionType: TransactionActionType.TIP_SEND,
-        status: TransactionStatus.CONFIRMED,
+        status: TransactionStatus.confirmed,
         amount: scenario.amount,
         fromAddress: `0xTIPBOX_${sender.id}`,
         toAddress: `0xTIPBOX_${receiver.id}`,
@@ -219,7 +243,7 @@ async function seedTipTransfers(users: any[], walletMap: Map<string, string>): P
       data: {
         walletId: receiverWalletId,
         actionType: TransactionActionType.TIP_RECEIVE,
-        status: TransactionStatus.CONFIRMED,
+        status: TransactionStatus.confirmed,
         amount: scenario.amount,
         fromAddress: `0xTIPBOX_${sender.id}`,
         toAddress: `0xTIPBOX_${receiver.id}`,
@@ -255,7 +279,7 @@ async function seedTipTransfers(users: any[], walletMap: Map<string, string>): P
       data: {
         walletId: senderWalletId,
         actionType: TransactionActionType.TIP_SEND,
-        status: TransactionStatus.CONFIRMED,
+        status: TransactionStatus.confirmed,
         amount: scenario.amount,
         fromAddress: `0xTIPBOX_${sender.id}`,
         toAddress: `0xTIPBOX_${receiver.id}`,
@@ -273,7 +297,7 @@ async function seedTipTransfers(users: any[], walletMap: Map<string, string>): P
       data: {
         walletId: receiverWalletId,
         actionType: TransactionActionType.TIP_RECEIVE,
-        status: TransactionStatus.CONFIRMED,
+        status: TransactionStatus.confirmed,
         amount: scenario.amount,
         fromAddress: `0xTIPBOX_${sender.id}`,
         toAddress: `0xTIPBOX_${receiver.id}`,
@@ -308,7 +332,7 @@ async function seedTipTransfers(users: any[], walletMap: Map<string, string>): P
       data: {
         walletId: senderWalletId,
         actionType: TransactionActionType.TIP_SEND,
-        status: TransactionStatus.CONFIRMED,
+        status: TransactionStatus.confirmed,
         amount: scenario.amount,
         fromAddress: `0xTIPBOX_${sender.id}`,
         toAddress: `0xTIPBOX_${receiver.id}`,
@@ -326,7 +350,7 @@ async function seedTipTransfers(users: any[], walletMap: Map<string, string>): P
       data: {
         walletId: receiverWalletId,
         actionType: TransactionActionType.TIP_RECEIVE,
-        status: TransactionStatus.CONFIRMED,
+        status: TransactionStatus.confirmed,
         amount: scenario.amount,
         fromAddress: `0xTIPBOX_${sender.id}`,
         toAddress: `0xTIPBOX_${receiver.id}`,
@@ -373,7 +397,7 @@ async function seedRewardClaims(users: any[], walletMap: Map<string, string>): P
         data: {
           walletId,
           actionType: TransactionActionType.CLAIM_REWARD,
-          status: TransactionStatus.CONFIRMED,
+          status: TransactionStatus.confirmed,
           amount: reward.amount,
           fromAddress: null,
           toAddress: `0xTIPBOX_${user.id}`,
@@ -416,7 +440,7 @@ async function seedBadgeClaims(users: any[], walletMap: Map<string, string>): Pr
       data: {
         walletId,
         actionType: TransactionActionType.CLAIM_BADGE,
-        status: TransactionStatus.CONFIRMED,
+        status: TransactionStatus.confirmed,
         amount,
         fromAddress: null,
         toAddress: `0xTIPBOX_${user.id}`,
@@ -470,7 +494,7 @@ async function seedNFTTransactions(users: any[], walletMap: Map<string, string>)
       data: {
         walletId: buyerWalletId,
         actionType: TransactionActionType.NFT_BUY,
-        status: TransactionStatus.CONFIRMED,
+        status: TransactionStatus.confirmed,
         amount: price,
         fromAddress: `0xTIPBOX_${buyer.id}`,
         toAddress: `0xTIPBOX_${seller.id}`,
@@ -491,7 +515,7 @@ async function seedNFTTransactions(users: any[], walletMap: Map<string, string>)
       data: {
         walletId: sellerWalletId,
         actionType: TransactionActionType.NFT_SELL,
-        status: TransactionStatus.CONFIRMED,
+        status: TransactionStatus.confirmed,
         amount: sellerReceives,
         fromAddress: `0xTIPBOX_${buyer.id}`,
         toAddress: `0xTIPBOX_${seller.id}`,
@@ -537,7 +561,7 @@ async function seedPendingTransactions(users: any[], walletMap: Map<string, stri
       data: {
         walletId: senderWalletId,
         actionType: TransactionActionType.TIP_SEND,
-        status: TransactionStatus.PENDING,
+        status: TransactionStatus.pending,
         amount,
         fromAddress: `0xTIPBOX_${sender.id}`,
         toAddress: `0xTIPBOX_${receiver.id}`,
@@ -577,7 +601,7 @@ async function seedFailedTransactions(users: any[], walletMap: Map<string, strin
       data: {
         walletId,
         actionType: TransactionActionType.TIP_SEND,
-        status: TransactionStatus.FAILED,
+        status: TransactionStatus.failed,
         amount: 1000,
         fromAddress: `0xTIPBOX_${user.id}`,
         toAddress: '0xINVALID',
