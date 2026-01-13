@@ -201,3 +201,13 @@
 2026/01/13 18:30:07 [emerg] 1#1: "gzip" directive is duplicate in /etc/nginx/nginx.conf:92
 2026/01/13 18:31:07 [emerg] 1#1: "gzip" directive is duplicate in /etc/nginx/nginx.conf:92
 2026/01/13 18:32:07 [emerg] 1#1: "gzip" directive is duplicate in /etc/nginx/nginx.conf:92
+2026/01/13 18:40:42 [emerg] 1#1: "gzip" directive is duplicate in /etc/nginx/nginx.conf:92
+2026/01/13 18:40:43 [emerg] 1#1: "gzip" directive is duplicate in /etc/nginx/nginx.conf:92
+2026/01/13 18:40:44 [emerg] 1#1: "gzip" directive is duplicate in /etc/nginx/nginx.conf:92
+2026/01/13 18:40:45 [emerg] 1#1: "gzip" directive is duplicate in /etc/nginx/nginx.conf:92
+2026/01/13 18:40:46 [emerg] 1#1: "gzip" directive is duplicate in /etc/nginx/nginx.conf:92
+2026/01/13 18:40:48 [emerg] 1#1: "gzip" directive is duplicate in /etc/nginx/nginx.conf:92
+2026/01/13 18:40:52 [emerg] 1#1: "gzip" directive is duplicate in /etc/nginx/nginx.conf:92
+2026/01/13 18:40:58 [emerg] 1#1: "gzip" directive is duplicate in /etc/nginx/nginx.conf:92
+2026/01/13 18:41:11 [emerg] 1#1: "gzip" directive is duplicate in /etc/nginx/nginx.conf:92
+2026/01/13 18:41:37 [emerg] 1#1: "gzip" directive is duplicate in /etc/nginx/nginx.conf:92
