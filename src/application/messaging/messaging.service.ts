@@ -5,6 +5,7 @@ import { UserPrismaRepository } from '../../infrastructure/repositories/user-pri
 import SocketManager from '../../infrastructure/realtime/socket-manager';
 import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
+import { WalletService } from '../wallet/wallet.service';
 import logger from '../../infrastructure/logger/logger';
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import {
@@ -48,6 +49,7 @@ export class MessagingService {
   private userRepo = new UserPrismaRepository();
   private supportRequestService = new SupportRequestService();
   private notificationService = new NotificationService();
+  private walletService = new WalletService();
   private prisma = getPrisma();
   async createThreadIfNotExists(senderId: string, recipientId: string) {
     // Sadece normal DM thread'leri kontrol et (support thread'leri hariç)
@@ -152,6 +154,28 @@ export class MessagingService {
       throw new Error(`Recipient user not found: ${recipientId}`);
     }
 
+    // Get wallets
+    const [senderWallet, recipientWallet] = await Promise.all([
+      this.walletService.getActiveWallet(senderId),
+      this.walletService.getActiveWallet(recipientId),
+    ]);
+
+    if (!senderWallet) {
+      throw new Error('Sender wallet not found');
+    }
+
+    if (!recipientWallet) {
+      throw new Error('Recipient wallet not found');
+    }
+
+    // Check balance
+    if (!senderWallet.hasBalance(amount)) {
+      throw new Error(
+        `Insufficient balance. Available: ${senderWallet.getAvailableBalance()} TIPS`
+      );
+    }
+
+    // Create TIPS transfer record
     const tipsTransfer = await this.prisma.tipsTokenTransfer.create({
       data: {
         fromUserId: senderId,
@@ -159,6 +183,30 @@ export class MessagingService {
         amount,
         reason: tipsMessage || null,
       },
+    });
+
+    // Update balances
+    await Promise.all([
+      // Gönderen kişinin balance'ını azalt
+      this.walletService.updateBalance(senderWallet.id, -amount, {
+        reason: 'TIPS sent via messaging',
+        transactionId: tipsTransfer.id,
+        sourceType: 'TIPS_TRANSFER',
+      }),
+      // Alan kişinin balance'ını artır
+      this.walletService.updateBalance(recipientWallet.id, amount, {
+        reason: 'TIPS received via messaging',
+        transactionId: tipsTransfer.id,
+        sourceType: 'TIPS_TRANSFER',
+      }),
+    ]);
+
+    logger.info({
+      senderId,
+      recipientId,
+      amount,
+      tipsTransferId: tipsTransfer.id,
+      message: 'TIPS sent successfully and balances updated',
     });
 
     const body = tipsMessage

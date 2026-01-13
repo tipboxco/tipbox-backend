@@ -85,6 +85,14 @@ export class NotificationService {
         return settings.supportNotifications ?? true;
       case NotificationCategory.COLLECTION:
         return settings.collectionNotifications ?? true;
+      case NotificationCategory.WALLET:
+        return settings.walletNotifications ?? true;
+      case NotificationCategory.TRANSACTION:
+        return settings.transactionNotifications ?? true;
+      case NotificationCategory.REWARD:
+        return settings.rewardNotifications ?? true;
+      case NotificationCategory.NFT:
+        return settings.nftNotifications ?? true;
       default:
         return true;
     }

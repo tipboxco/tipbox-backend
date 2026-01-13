@@ -63,6 +63,8 @@ export interface WalletResponse {
   publicAddress: string;
   provider: 'METAMASK' | 'WALLETCONNECT' | 'CUSTOM';
   isConnected: boolean;
+  balance?: number;
+  lockedBalance?: number;
   shortAddress: string;
   providerIcon: string;
   createdAt: string;

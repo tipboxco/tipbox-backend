@@ -8,5 +8,9 @@ export enum NotificationCategory {
   EXPERT = 'EXPERT',
   EVENT = 'EVENT',
   SYSTEM = 'SYSTEM',
+  WALLET = 'WALLET',
+  TRANSACTION = 'TRANSACTION',
+  REWARD = 'REWARD',
+  NFT = 'NFT',
 }
 

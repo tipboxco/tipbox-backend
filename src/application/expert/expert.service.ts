@@ -6,6 +6,7 @@ import { ExpertNotificationService } from './expert-notification.service';
 import { ProfilePrismaRepository } from '../../infrastructure/repositories/profile-prisma.repository';
 import { UserTitlePrismaRepository } from '../../infrastructure/repositories/user-title-prisma.repository';
 import { UserAvatarPrismaRepository } from '../../infrastructure/repositories/user-avatar-prisma.repository';
+import { WalletService } from '../wallet/wallet.service';
 import { ExpertRequestStatus } from '../../domain/expert/expert-request-status.enum';
 import {
   CreateExpertRequestDto,
@@ -28,6 +29,7 @@ export class ExpertService {
   private readonly profileRepo: ProfilePrismaRepository;
   private readonly titleRepo: UserTitlePrismaRepository;
   private readonly avatarRepo: UserAvatarPrismaRepository;
+  private readonly walletService: WalletService;
 
   constructor() {
     this.prisma = getPrisma();
@@ -38,6 +40,7 @@ export class ExpertService {
     this.profileRepo = new ProfilePrismaRepository();
     this.titleRepo = new UserTitlePrismaRepository();
     this.avatarRepo = new UserAvatarPrismaRepository();
+    this.walletService = new WalletService();
   }
 
   /**
@@ -48,6 +51,20 @@ export class ExpertService {
     dto: CreateExpertRequestDto
   ): Promise<ExpertRequestResponse> {
     try {
+      // tipsAmount varsa balance'ı lock et
+      if (dto.tipsAmount && dto.tipsAmount > 0) {
+        const wallet = await this.walletService.getActiveWallet(userId);
+        if (!wallet) {
+          throw new Error('Wallet not found');
+        }
+
+        // Balance kontrolü ve lock
+        await this.walletService.updateLockedBalance(wallet.id, dto.tipsAmount, {
+          reason: 'Expert request created',
+          lockType: 'EXPERT_REQUEST',
+        });
+      }
+
       const request = await this.expertRequestRepo.create(
         userId,
         dto.description,
@@ -456,6 +473,43 @@ export class ExpertService {
         status: ExpertRequestStatus.ANSWERED,
         answeredAt: new Date(),
       });
+
+      // tipsAmount varsa unlock ve transfer yap
+      if (request.tipsAmount > 0) {
+        // Request sahibinin wallet'ını bul
+        const requesterWallet = await this.walletService.getActiveWallet(request.userId);
+        // Expert'in wallet'ını bul
+        const expertWallet = await this.walletService.getActiveWallet(expertUserId);
+
+        if (requesterWallet && expertWallet) {
+          // Locked balance'ı unlock et
+          await this.walletService.updateLockedBalance(requesterWallet.id, -request.tipsAmount, {
+            reason: 'Expert request answered',
+            lockType: 'EXPERT_REQUEST_UNLOCK',
+          });
+
+          // Balance'dan düş
+          await this.walletService.updateBalance(requesterWallet.id, -request.tipsAmount, {
+            reason: 'Expert request payment',
+            transactionId: answer.id,
+            sourceType: 'EXPERT_REQUEST',
+          });
+
+          // Expert'e ekle
+          await this.walletService.updateBalance(expertWallet.id, request.tipsAmount, {
+            reason: 'Expert answer reward',
+            transactionId: answer.id,
+            sourceType: 'EXPERT_ANSWER',
+          });
+
+          logger.info({
+            requestId,
+            expertUserId,
+            amount: request.tipsAmount,
+            message: 'TIPS transferred to expert',
+          });
+        }
+      }
 
       // Expert user bilgilerini getir
       const expertProfile = await this.profileRepo.findByUserId(expertUserId);

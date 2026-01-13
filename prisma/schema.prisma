@@ -59,8 +59,8 @@ model User {
   profile                 Profile?
   rewardClaims            RewardClaim[]
   supportRequestReports   SupportRequestReport[]  @relation("SupportRequestReportReporter")
-  userReportsAsReporter    UserReport[]            @relation("UserReportReporter")
-  userReportsAsReported    UserReport[]            @relation("UserReportReported")
+  userReportsAsReporter   UserReport[]            @relation("UserReportReporter")
+  userReportsAsReported   UserReport[]            @relation("UserReportReported")
   sentTips                TipsTokenTransfer[]     @relation("SentTips")
   receivedTips            TipsTokenTransfer[]     @relation("ReceivedTips")
   trustRelationsAsTrusted TrustRelation[]         @relation("TrustedUserRelation")
@@ -111,28 +111,32 @@ model Profile {
 }
 
 model UserSettings {
-  id                       String          @id @default(uuid()) @db.Uuid
-  userId                   String          @unique @map("user_id") @db.Uuid
-  themeId                  String?         @map("theme_id") @db.Uuid
-  receiveNotifications     Boolean?        @map("receive_notifications")
-  visibility               UserVisibility?
-  
+  id                   String          @id @default(uuid()) @db.Uuid
+  userId               String          @unique @map("user_id") @db.Uuid
+  themeId              String?         @map("theme_id") @db.Uuid
+  receiveNotifications Boolean?        @map("receive_notifications")
+  visibility           UserVisibility?
+
   // Notification Channel Preferences
-  notificationEmailEnabled Boolean?        @default(true) @map("notification_email_enabled")
-  notificationPushEnabled  Boolean?        @default(true) @map("notification_push_enabled")
-  notificationInAppEnabled Boolean?        @default(true) @map("notification_in_app_enabled")
-  
+  notificationEmailEnabled Boolean? @default(true) @map("notification_email_enabled")
+  notificationPushEnabled  Boolean? @default(true) @map("notification_push_enabled")
+  notificationInAppEnabled Boolean? @default(true) @map("notification_in_app_enabled")
+
   // Notification Type Preferences
-  trustNotifications       Boolean         @default(true) @map("trust_notifications")
-  supportNotifications     Boolean         @default(true) @map("support_notifications")
-  messageNotifications     Boolean         @default(true) @map("message_notifications")
-  collectionNotifications  Boolean         @default(true) @map("collection_notifications")
-  postNotifications        Boolean         @default(true) @map("post_notifications")
-  
-  createdAt                DateTime        @default(now()) @map("created_at")
-  updatedAt                DateTime        @updatedAt @map("updated_at")
-  theme                    UserTheme?      @relation(fields: [themeId], references: [id])
-  user                     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trustNotifications      Boolean @default(true) @map("trust_notifications")
+  supportNotifications    Boolean @default(true) @map("support_notifications")
+  messageNotifications    Boolean @default(true) @map("message_notifications")
+  collectionNotifications Boolean @default(true) @map("collection_notifications")
+  postNotifications       Boolean @default(true) @map("post_notifications")
+  walletNotifications     Boolean @default(true) @map("wallet_notifications")
+  transactionNotifications Boolean @default(true) @map("transaction_notifications")
+  rewardNotifications     Boolean @default(true) @map("reward_notifications")
+  nftNotifications        Boolean @default(true) @map("nft_notifications")
+
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+  theme     UserTheme? @relation(fields: [themeId], references: [id])
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_settings")
 }
@@ -796,7 +800,6 @@ model Badge {
   category         BadgeCategory     @relation(fields: [categoryId], references: [id])
   bridgeRewards    BridgeReward[]
   cosmeticProfiles Profile[]         @relation("ProfileCosmeticBadge")
-  rewardClaims     RewardClaim[]
   userBadges       UserBadge[]
 
   @@map("badges")
@@ -869,15 +872,27 @@ model UserAchievement {
 }
 
 model RewardClaim {
-  id            String        @id @default(uuid()) @db.Uuid
-  userId        String        @map("user_id") @db.Uuid
-  badgeId       String        @map("badge_id") @db.Uuid
+  id            String            @id @default(uuid()) @db.Uuid
+  userId        String            @map("user_id") @db.Uuid
+  rewardType    RewardClaimType   @map("reward_type")
+  sourceType    RewardSourceType  @map("source_type")
+  sourceId      String?           @map("source_id") @db.Uuid
   amount        Float
-  claimedAt     DateTime      @default(now()) @map("claimed_at")
-  vestingStatus VestingStatus @map("vesting_status")
-  badge         Badge         @relation(fields: [badgeId], references: [id])
-  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status        RewardClaimStatus @default(PENDING)
+  claimedAt     DateTime?         @map("claimed_at")
+  earnedAt      DateTime          @default(now()) @map("earned_at")
+  expiresAt     DateTime?         @map("expires_at")
+  metadata      Json?
+  transactionId String?           @map("transaction_id") @db.Uuid
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
 
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transaction Transaction? @relation(fields: [transactionId], references: [id])
+
+  @@index([userId, status])
+  @@index([userId, earnedAt])
+  @@index([status, expiresAt])
   @@map("reward_claims")
 }
 
@@ -1043,31 +1058,36 @@ model Wallet {
   publicAddress String         @map("public_address")
   provider      WalletProvider
   isConnected   Boolean        @map("is_connected")
+  balance       Float          @default(0)
+  lockedBalance Float          @default(0) @map("locked_balance")
   createdAt     DateTime       @default(now()) @map("created_at")
   updatedAt     DateTime       @updatedAt @map("updated_at")
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions  Transaction[]
 
   @@unique([userId, provider])
+  @@index([userId])
+  @@index([balance])
   @@map("wallets")
 }
 
 model Transaction {
-  id          String                 @id @default(uuid()) @db.Uuid
-  walletId    String                 @map("wallet_id") @db.Uuid
-  actionType  TransactionActionType  @map("action_type")
-  status      TransactionStatus      @default(created)
-  amount      Float?
-  fromAddress String?                @map("from_address")
-  toAddress   String?                @map("to_address")
-  metadata    Json?
-  txHash      String?                @map("tx_hash")
-  provider    String                 @default("backend")
+  id           String                @id @default(uuid()) @db.Uuid
+  walletId     String                @map("wallet_id") @db.Uuid
+  actionType   TransactionActionType @map("action_type")
+  status       TransactionStatus     @default(created)
+  amount       Float?
+  fromAddress  String?               @map("from_address")
+  toAddress    String?               @map("to_address")
+  metadata     Json?
+  txHash       String?               @map("tx_hash")
+  provider     String                @default("backend")
   errorMessage String?               @map("error_message")
-  createdAt   DateTime               @default(now()) @map("created_at")
-  confirmedAt DateTime?              @map("confirmed_at")
-  failedAt    DateTime?              @map("failed_at")
-  wallet      Wallet                 @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  createdAt    DateTime              @default(now()) @map("created_at")
+  confirmedAt  DateTime?             @map("confirmed_at")
+  failedAt     DateTime?             @map("failed_at")
+  wallet       Wallet                @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  rewardClaims RewardClaim[]
 
   @@index([walletId])
   @@index([status])
@@ -1102,6 +1122,7 @@ model NFT {
   rarity         NFTRarity
   isTransferable Boolean            @map("is_transferable")
   currentOwnerId String?            @map("current_owner_id") @db.Uuid
+  viewCount      Int                @default(0) @map("view_count")
   createdAt      DateTime           @default(now()) @map("created_at")
   updatedAt      DateTime           @updatedAt @map("updated_at")
   attributes     NFTAttribute[]
@@ -1113,6 +1134,7 @@ model NFT {
   @@index([currentOwnerId])
   @@index([name])
   @@index([type, rarity])
+  @@index([viewCount])
   @@map("nfts")
 }
 
@@ -1196,24 +1218,24 @@ model NFTClaim {
 }
 
 model WishboxEvent {
-  id          String             @id @db.VarChar(26)
-  title       String
-  description String?
-  startDate   DateTime           @map("start_date")
-  endDate     DateTime           @map("end_date")
-  status      WishboxEventStatus @default(DRAFT)
-  createdAt   DateTime           @default(now()) @map("created_at")
-  updatedAt   DateTime           @updatedAt @map("updated_at")
-  imageUrl    String?            @map("image_url")
-  brandId     String?            @map("brand_id") @db.Uuid
-  mainCategoryId String?         @map("main_category_id") @db.Uuid
-  subCategoryId  String?         @map("sub_category_id") @db.Uuid
-  posts       ContentPost[]
-  brand       Brand?             @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  mainCategory MainCategory?    @relation(fields: [mainCategoryId], references: [id])
-  subCategory  SubCategory?     @relation(fields: [subCategoryId], references: [id])
-  rewards     WishboxReward[]
-  stats       WishboxStats[]
+  id             String             @id @db.VarChar(26)
+  title          String
+  description    String?
+  startDate      DateTime           @map("start_date")
+  endDate        DateTime           @map("end_date")
+  status         WishboxEventStatus @default(DRAFT)
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+  imageUrl       String?            @map("image_url")
+  brandId        String?            @map("brand_id") @db.Uuid
+  mainCategoryId String?            @map("main_category_id") @db.Uuid
+  subCategoryId  String?            @map("sub_category_id") @db.Uuid
+  posts          ContentPost[]
+  brand          Brand?             @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  mainCategory   MainCategory?      @relation(fields: [mainCategoryId], references: [id])
+  subCategory    SubCategory?       @relation(fields: [subCategoryId], references: [id])
+  rewards        WishboxReward[]
+  stats          WishboxStats[]
 
   @@index([brandId])
   @@index([status, startDate, endDate])
@@ -1343,15 +1365,15 @@ model SupportRequestReport {
 }
 
 model UserReport {
-  id          String   @id @default(uuid()) @db.Uuid
-  reportedUserId String @map("reported_user_id") @db.Uuid
-  reporterId  String   @map("reporter_id") @db.Uuid
-  category    String
-  description String?
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-  reportedUser User    @relation("UserReportReported", fields: [reportedUserId], references: [id], onDelete: Cascade)
-  reporter    User     @relation("UserReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  id             String   @id @default(uuid()) @db.Uuid
+  reportedUserId String   @map("reported_user_id") @db.Uuid
+  reporterId     String   @map("reporter_id") @db.Uuid
+  category       String
+  description    String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  reportedUser   User     @relation("UserReportReported", fields: [reportedUserId], references: [id], onDelete: Cascade)
+  reporter       User     @relation("UserReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
 
   @@unique([reporterId, reportedUserId])
   @@index([reportedUserId])
@@ -1961,9 +1983,9 @@ model Notification {
   readAt    DateTime?        @map("read_at")
   createdAt DateTime         @default(now()) @map("created_at")
   updatedAt DateTime         @updatedAt @map("updated_at")
-  
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   @@index([userId, read])
   @@index([userId, createdAt])
   @@index([type])
@@ -1979,9 +2001,9 @@ model PushToken {
   lastUsedAt DateTime @default(now()) @map("last_used_at")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
-  
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   @@index([userId])
   @@index([token, isActive])
   @@map("push_tokens")
@@ -1995,43 +2017,73 @@ enum NotificationType {
   POST_FAVORITED
   COMMENT_LIKED
   COMMENT_REPLIED
-  
+
   // Trust & Follow Notifications
   NEW_TRUSTER
   NEW_TRUSTED_BY
-  
+
   // Messaging Notifications
   NEW_MESSAGE
   DM_REQUEST_RECEIVED
   DM_REQUEST_ACCEPTED
   SUPPORT_REQUEST_ACCEPTED
-  
+
   // Collection Notifications
   COLLECTION_POST_ADDED
   COLLECTION_SHARED
-  
+
   // Gamification Notifications
   NEW_BADGE
   ACHIEVEMENT_UNLOCKED
   LEVEL_UP
   REWARD_EARNED
-  
+
   // Expert Notifications
   EXPERT_REQUEST_AVAILABLE
   EXPERT_REQUEST_ANSWERED
-  
+
   // Event Notifications
   EVENT_STARTED
   EVENT_ENDING_SOON
   EVENT_REWARD_AVAILABLE
-  
+
   // System Notifications
   SYSTEM_ANNOUNCEMENT
   ACCOUNT_SECURITY
   TIPS_RECEIVED
   TIPS_SENT
-  
+
   @@map("notification_type")
 }
 
+enum RewardClaimType {
+  TIPS
+  BADGE
+  ACHIEVEMENT
+  LADDER
+  SUPPORT
+  EVENT
 
+  @@map("reward_claim_type")
+}
+
+enum RewardSourceType {
+  LADDER_REWARD
+  TIPS_RECEIVED
+  SUPPORT_SESSION
+  BADGE_EARNED
+  ACHIEVEMENT_UNLOCKED
+  EVENT_PARTICIPATION
+  SYSTEM_GRANT
+
+  @@map("reward_source_type")
+}
+
+enum RewardClaimStatus {
+  PENDING
+  CLAIMED
+  EXPIRED
+  CANCELLED
+
+  @@map("reward_claim_status")
+}

@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import { WalletService } from '../../application/wallet/wallet.service';
 import { TipsBalanceService } from '../../application/wallet/tips-balance.service';
 import { TransactionService } from '../../application/transaction/transaction.service';
+import { RewardClaimService } from '../../application/reward/reward-claim.service';
 import { ConnectWalletRequest, WalletResponse } from './wallet.dto';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { WalletProvider } from '../../domain/wallet/wallet.entity';
@@ -11,6 +12,7 @@ const router = express.Router();
 const walletService = new WalletService();
 const tipsBalanceService = new TipsBalanceService();
 const transactionService = new TransactionService();
+const rewardClaimService = new RewardClaimService();
 
 router.use(authMiddleware);
 
@@ -539,6 +541,11 @@ router.get('/transactions', asyncHandler(async (req: Request, res: Response) => 
     return res.status(400).json({ message: 'Limit must be between 1 and 50' });
   }
 
+  // Cache kontrolü - Transaction history asla cache'lenmemeli
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+
   try {
     const transactions = await tipsBalanceService.getUserTransactionHistory(String(userId), {
       cursor,
@@ -605,14 +612,19 @@ router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
     return res.status(401).json({ message: 'Unauthorized' });
   }
 
+  // Cache kontrolü - Balance asla cache'lenmemeli
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+
   try {
-    const balance = await transactionService.getUserBalance(String(userId));
+    const balanceInfo = await walletService.getUserBalance(String(userId));
     
     return res.json({
-      balance,
+      balance: balanceInfo.balance,
       currency: 'TIPS',
-      locked: 0,
-      available: balance,
+      locked: balanceInfo.lockedBalance,
+      available: balanceInfo.available,
     });
   } catch (error) {
     return res.status(500).json({ 
@@ -658,11 +670,11 @@ router.post('/create', asyncHandler(async (req: Request, res: Response) => {
   // Check if wallet already exists
   const existingWallet = await walletService.getActiveWallet(String(userId));
   if (existingWallet) {
-    const balance = await transactionService.getUserBalance(String(userId));
+    const balanceInfo = await walletService.getUserBalance(String(userId));
     return res.json({
       walletId: existingWallet.id,
       walletIdentifier: existingWallet.publicAddress,
-      balance
+      balance: balanceInfo.balance
     });
   }
 
@@ -764,21 +776,377 @@ router.get('/info', asyncHandler(async (req: Request, res: Response) => {
     return res.status(401).json({ message: 'Unauthorized' });
   }
 
+  // Cache kontrolü - Wallet info asla cache'lenmemeli
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+
   const wallet = await walletService.getActiveWallet(String(userId));
   if (!wallet) {
     return res.status(404).json({ message: 'Wallet not found' });
   }
 
-  const balance = await transactionService.getUserBalance(String(userId));
+  const balanceInfo = await walletService.getUserBalance(String(userId));
 
   return res.json({
     walletId: wallet.id,
     walletIdentifier: wallet.publicAddress,
     provider: wallet.provider,
     isConnected: wallet.isConnected,
-    balance,
+    balance: balanceInfo.balance,
     createdAt: wallet.createdAt.toISOString()
   });
+}));
+
+/**
+ * @openapi
+ * /wallets/rewards/summary:
+ *   get:
+ *     summary: Kullanıcının claim edilebilir reward özetini getir
+ *     description: Kullanıcının tüm claim edilebilir reward'larının özetini ve kaynaklarına göre gruplandırılmış bilgilerini döndürür
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Reward özeti başarıyla getirildi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 totalPending:
+ *                   type: integer
+ *                   description: Bekleyen toplam reward sayısı
+ *                 totalClaimable:
+ *                   type: integer
+ *                   description: Claim edilebilir reward sayısı
+ *                 totalAmount:
+ *                   type: number
+ *                   description: Toplam claim edilebilir TIPS miktarı
+ *                 bySourceType:
+ *                   type: object
+ *                   description: Kaynak tipine göre gruplandırılmış reward'lar
+ *                   additionalProperties:
+ *                     type: object
+ *                     properties:
+ *                       count:
+ *                         type: integer
+ *                       amount:
+ *                         type: number
+ *                       claims:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/rewards/summary', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  try {
+    const summary = await rewardClaimService.getRewardClaimSummary(String(userId));
+    return res.json(summary);
+  } catch (error) {
+    return res.status(500).json({
+      message: 'Failed to get reward summary',
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}));
+
+/**
+ * @openapi
+ * /wallets/rewards/claimable:
+ *   get:
+ *     summary: Kullanıcının claim edilebilir tüm reward'larını getir
+ *     description: Kullanıcının claim edilebilir durumda olan tüm reward'ların detaylı listesini döndürür
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Claimable reward'lar başarıyla getirildi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                   userId:
+ *                     type: string
+ *                   rewardType:
+ *                     type: string
+ *                     enum: [TIPS, BADGE, ACHIEVEMENT, LADDER, SUPPORT, EVENT]
+ *                   sourceType:
+ *                     type: string
+ *                   amount:
+ *                     type: number
+ *                   status:
+ *                     type: string
+ *                   earnedAt:
+ *                     type: string
+ *                     format: date-time
+ *                   expiresAt:
+ *                     type: string
+ *                     format: date-time
+ *                     nullable: true
+ *                   metadata:
+ *                     type: object
+ *                     nullable: true
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/rewards/claimable', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  try {
+    const rewards = await rewardClaimService.getClaimableRewards(String(userId));
+    return res.json(rewards.map((r) => r.toDTO()));
+  } catch (error) {
+    return res.status(500).json({
+      message: 'Failed to get claimable rewards',
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}));
+
+/**
+ * @openapi
+ * /wallets/rewards/source/{sourceType}:
+ *   get:
+ *     summary: Belirli bir kaynaktan gelen reward'ları getir
+ *     description: Kullanıcının belirtilen kaynak tipinden gelen claim edilebilir reward'larını getirir
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: sourceType
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [LADDER_REWARD, TIPS_RECEIVED, SUPPORT_SESSION, BADGE_EARNED, ACHIEVEMENT_UNLOCKED, EVENT_PARTICIPATION]
+ *         description: Reward kaynak tipi
+ *     responses:
+ *       200:
+ *         description: Kaynak tipine göre reward'lar başarıyla getirildi
+ *       400:
+ *         description: Invalid source type
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/rewards/source/:sourceType', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const { sourceType } = req.params;
+
+  try {
+    const rewards = await rewardClaimService.getRewardsBySourceType(
+      String(userId),
+      sourceType as any
+    );
+    return res.json(rewards.map((r) => r.toDTO()));
+  } catch (error) {
+    return res.status(500).json({
+      message: 'Failed to get rewards by source type',
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}));
+
+/**
+ * @openapi
+ * /wallets/rewards/claim/{rewardId}:
+ *   post:
+ *     summary: Belirli bir reward'ı claim et
+ *     description: Kullanıcının belirtilen reward'ını claim eder ve wallet'a ekler
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: rewardId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Claim edilecek reward ID'si
+ *     responses:
+ *       200:
+ *         description: Reward başarıyla claim edildi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 rewardClaim:
+ *                   type: object
+ *                 transactionId:
+ *                   type: string
+ *       400:
+ *         description: Reward claim edilemez
+ *       404:
+ *         description: Reward bulunamadı
+ *       401:
+ *         description: Unauthorized
+ */
+router.post('/rewards/claim/:rewardId', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const { rewardId } = req.params;
+
+  try {
+    const result = await rewardClaimService.claimReward(String(userId), rewardId);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        error: result.error,
+      });
+    }
+
+    return res.json({
+      success: true,
+      rewardClaim: result.rewardClaim?.toDTO(),
+      transactionId: result.transactionId,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}));
+
+/**
+ * @openapi
+ * /wallets/rewards/claim-all:
+ *   post:
+ *     summary: Tüm claim edilebilir reward'ları tek seferde claim et
+ *     description: Kullanıcının tüm claim edilebilir reward'larını tek bir transaction ile claim eder
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Reward'lar başarıyla claim edildi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 totalAmount:
+ *                   type: number
+ *                   description: Claim edilen toplam miktar
+ *                 claimedCount:
+ *                   type: integer
+ *                   description: Başarıyla claim edilen reward sayısı
+ *                 failedCount:
+ *                   type: integer
+ *                   description: Claim edilemeyen reward sayısı
+ *                 transactionId:
+ *                   type: string
+ *                 claims:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       401:
+ *         description: Unauthorized
+ */
+router.post('/rewards/claim-all', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  try {
+    const result = await rewardClaimService.claimAllRewards(String(userId));
+
+    return res.json({
+      success: result.success,
+      totalAmount: result.totalAmount,
+      claimedCount: result.claimedCount,
+      failedCount: result.failedCount,
+      transactionId: result.transactionId,
+      claims: result.claims.map((c) => c.toDTO()),
+      errors: result.errors,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}));
+
+/**
+ * @openapi
+ * /wallets/rewards/history:
+ *   get:
+ *     summary: Kullanıcının claim history'sini getir
+ *     description: Kullanıcının daha önce claim ettiği tüm reward'ların geçmişini döndürür
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Claim history başarıyla getirildi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/rewards/history', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  try {
+    const history = await rewardClaimService.getClaimHistory(String(userId));
+    return res.json(history.map((r) => r.toDTO()));
+  } catch (error) {
+    return res.status(500).json({
+      message: 'Failed to get claim history',
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }));
 
 export default router;
