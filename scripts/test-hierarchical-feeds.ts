@@ -878,6 +878,329 @@ async function testSubCategoryFeed(
   }
 }
 
+/**
+ * Detaylı feed testleri - Tüm endpoint'leri ve filtreleri test eder
+ */
+async function detailedFeedTests(
+  api: AxiosInstance,
+  token: string,
+  hierarchy: any,
+  summary: TestSummary
+): Promise<void> {
+  console.log('🔍 DETAYLI FEED TESTLERİ BAŞLIYOR...\n');
+  
+  const headers = { Authorization: `Bearer ${token}` };
+  
+  // Her seviye için detaylı testler
+  for (const category of [hierarchy.electronics, hierarchy.cosmetics]) {
+    const categoryName = category.categoryName;
+    console.log(`\n📂 ${categoryName.toUpperCase()} KATEGORİSİ\n${'='.repeat(60)}`);
+    
+    for (const subCategory of category.subCategories) {
+      console.log(`\n📁 Sub Category: ${subCategory.subCategoryName} (${subCategory.subCategoryId})`);
+      console.log('-'.repeat(60));
+      
+      // Sub Category Feed Testleri
+      await testSubCategoryFeedDetailed(api, headers, subCategory, summary);
+      
+      // Product Group Feed Testleri
+      for (const productGroup of subCategory.productGroups) {
+        console.log(`\n  📦 Product Group: ${productGroup.productGroupName} (${productGroup.productGroupId})`);
+        await testProductGroupFeedDetailed(api, headers, productGroup, summary);
+        
+        // Product Feed Testleri
+        for (const product of productGroup.products) {
+          console.log(`\n    🏷️  Product: ${product.productName} (${product.productId})`);
+          await testProductFeedDetailed(api, headers, product, summary);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Sub Category feed detaylı testi
+ */
+async function testSubCategoryFeedDetailed(
+  api: AxiosInstance,
+  headers: any,
+  subCategory: any,
+  summary: TestSummary
+): Promise<void> {
+  const subCategoryId = subCategory.subCategoryId;
+  
+  // 1. Tüm post'lar (FREE, TIPS, QUESTION olmalı) - limit=50 ile tüm post'ları al
+  try {
+    const response = await api.get(`/catalog/sub-categories/${subCategoryId}/posts?limit=50`, { headers });
+    const items = response.data.items || [];
+    const postTypes = items.map((item: any) => item.type || item.data?.type).filter(Boolean);
+    
+    // Beklenen: Sub category post'ları (3) + Product group post'ları (2 group × 3 = 6) + Product post'ları (4 product × 3 = 12) = 21
+    const productGroupCount = subCategory.productGroups?.length || 0;
+    const productCount = subCategory.productGroups?.reduce((sum: number, pg: any) => sum + (pg.products?.length || 0), 0) || 0;
+    const expectedTotal = 3 + (productGroupCount * 3) + (productCount * 3);
+    
+    console.log(`  ✅ Tüm Post'lar: ${items.length}/${expectedTotal}`);
+    console.log(`     Post Type Dağılımı: ${JSON.stringify(postTypes.reduce((acc: any, type: string) => {
+      acc[type] = (acc[type] || 0) + 1;
+      return acc;
+    }, {}))}`);
+    
+    // Sadece FREE, TIPS, QUESTION olmalı
+    const invalidTypes = postTypes.filter((type: string) => 
+      !['post', 'tipsAndTricks', 'question'].includes(type)
+    );
+    if (invalidTypes.length > 0) {
+      console.log(`  ⚠️  UYARI: Beklenmeyen post type'lar bulundu: ${invalidTypes.join(', ')}`);
+      console.log(`     Sub category feed'inde sadece FREE, TIPS, QUESTION olmalı!`);
+    }
+    
+    summary.testsRun++;
+    if (items.length >= expectedTotal && invalidTypes.length === 0) {
+      summary.testsPassed++;
+    } else {
+      summary.testsFailed++;
+    }
+  } catch (error: any) {
+    console.log(`  ❌ Hata: ${error.message}`);
+    summary.testsRun++;
+    summary.testsFailed++;
+  }
+  
+  // 2. Tips filtresi - limit=50 ile
+  try {
+    const response = await api.get(`/catalog/sub-categories/${subCategoryId}/posts?type=tips&limit=50`, { headers });
+    const items = response.data.items || [];
+    const productGroupCount = subCategory.productGroups?.length || 0;
+    const productCount = subCategory.productGroups?.reduce((sum: number, pg: any) => sum + (pg.products?.length || 0), 0) || 0;
+    const expectedTips = 1 + productGroupCount + productCount; // 1 sub + N group + N product
+    
+    const allTips = items.every((item: any) => 
+      item.type === 'tipsAndTricks' || item.data?.type === 'TIPS'
+    );
+    
+    console.log(`  ✅ Tips Filtresi: ${items.length}/${expectedTips} ${allTips ? '(hepsi tips)' : '(⚠️ bazıları tips değil!)'}`);
+    
+    summary.testsRun++;
+    if (items.length >= expectedTips && allTips) {
+      summary.testsPassed++;
+    } else {
+      summary.testsFailed++;
+      if (!allTips) {
+        summary.errors.push(`${subCategory.subCategoryName} tips filtresinde tips olmayan post'lar var`);
+      }
+    }
+  } catch (error: any) {
+    console.log(`  ❌ Tips Filtresi Hata: ${error.message}`);
+    summary.testsRun++;
+    summary.testsFailed++;
+  }
+  
+  // 3. Question filtresi - limit=50 ile
+  try {
+    const response = await api.get(`/catalog/sub-categories/${subCategoryId}/posts?type=question&limit=50`, { headers });
+    const items = response.data.items || [];
+    const productGroupCount = subCategory.productGroups?.length || 0;
+    const productCount = subCategory.productGroups?.reduce((sum: number, pg: any) => sum + (pg.products?.length || 0), 0) || 0;
+    const expectedQuestion = 1 + productGroupCount + productCount;
+    
+    const allQuestion = items.every((item: any) => 
+      item.type === 'question' || item.data?.type === 'QUESTION'
+    );
+    
+    console.log(`  ✅ Question Filtresi: ${items.length}/${expectedQuestion} ${allQuestion ? '(hepsi question)' : '(⚠️ bazıları question değil!)'}`);
+    
+    summary.testsRun++;
+    if (items.length >= expectedQuestion && allQuestion) {
+      summary.testsPassed++;
+    } else {
+      summary.testsFailed++;
+    }
+  } catch (error: any) {
+    console.log(`  ❌ Question Filtresi Hata: ${error.message}`);
+    summary.testsRun++;
+    summary.testsFailed++;
+  }
+}
+
+/**
+ * Product Group feed detaylı testi
+ */
+async function testProductGroupFeedDetailed(
+  api: AxiosInstance,
+  headers: any,
+  productGroup: any,
+  summary: TestSummary
+): Promise<void> {
+  const productGroupId = productGroup.productGroupId;
+  const productCount = productGroup.products?.length || 0;
+  
+  // 1. Tüm post'lar (FREE, TIPS, QUESTION olmalı) - limit=50 ile
+  try {
+    const response = await api.get(`/catalog/product-groups/${productGroupId}/posts?limit=50`, { headers });
+    const items = response.data.items || [];
+    const postTypes = items.map((item: any) => item.type || item.data?.type).filter(Boolean);
+    
+    // Beklenen: Product group post'ları (3) + Product post'ları (N product × 3 = 3N)
+    const expectedTotal = 3 + (productCount * 3);
+    
+    console.log(`    ✅ Tüm Post'lar: ${items.length}/${expectedTotal}`);
+    console.log(`       Post Type Dağılımı: ${JSON.stringify(postTypes.reduce((acc: any, type: string) => {
+      acc[type] = (acc[type] || 0) + 1;
+      return acc;
+    }, {}))}`);
+    
+    // Sadece FREE, TIPS, QUESTION olmalı
+    const invalidTypes = postTypes.filter((type: string) => 
+      !['post', 'tipsAndTricks', 'question'].includes(type)
+    );
+    if (invalidTypes.length > 0) {
+      console.log(`    ⚠️  UYARI: Beklenmeyen post type'lar bulundu: ${invalidTypes.join(', ')}`);
+      console.log(`       Product group feed'inde sadece FREE, TIPS, QUESTION olmalı!`);
+    }
+    
+    summary.testsRun++;
+    if (items.length >= expectedTotal && invalidTypes.length === 0) {
+      summary.testsPassed++;
+    } else {
+      summary.testsFailed++;
+    }
+  } catch (error: any) {
+    console.log(`    ❌ Hata: ${error.message}`);
+    summary.testsRun++;
+    summary.testsFailed++;
+  }
+  
+  // 2. Tips filtresi - limit=50 ile
+  try {
+    const response = await api.get(`/catalog/product-groups/${productGroupId}/posts?type=tips&limit=50`, { headers });
+    const items = response.data.items || [];
+    const expectedTips = 1 + productCount; // 1 group + N product
+    
+    const allTips = items.every((item: any) => 
+      item.type === 'tipsAndTricks' || item.data?.type === 'TIPS'
+    );
+    
+    console.log(`    ✅ Tips Filtresi: ${items.length}/${expectedTips} ${allTips ? '(hepsi tips)' : '(⚠️ bazıları tips değil!)'}`);
+    
+    summary.testsRun++;
+    if (items.length >= expectedTips && allTips) {
+      summary.testsPassed++;
+    } else {
+      summary.testsFailed++;
+    }
+  } catch (error: any) {
+    console.log(`    ❌ Tips Filtresi Hata: ${error.message}`);
+    summary.testsRun++;
+    summary.testsFailed++;
+  }
+}
+
+/**
+ * Product feed detaylı testi
+ */
+async function testProductFeedDetailed(
+  api: AxiosInstance,
+  headers: any,
+  product: any,
+  summary: TestSummary
+): Promise<void> {
+  const productId = product.productId;
+  
+  // 1. Tüm post'lar (6 tip olmalı: FREE, TIPS, QUESTION, EXPERIENCE, UPDATE, BENCHMARK) - limit=50 ile
+  try {
+    const response = await api.get(`/catalog/products/${productId}/posts?limit=50`, { headers });
+    const items = response.data.items || [];
+    // Post type'ları hem item.type hem de item.data.type'dan al
+    const postTypes = items.map((item: any) => {
+      // Önce item.type'a bak, yoksa item.data.type'a bak
+      return item.type || item.data?.type || 'unknown';
+    }).filter(Boolean);
+    
+    // Ayrıca data içindeki type'ları da kontrol et
+    const dataTypes = items.map((item: any) => {
+      if (item.data) {
+        // data.type veya data.postType veya data.contentPostType
+        return item.data.type || item.data.postType || item.data.contentPostType;
+      }
+      return null;
+    }).filter(Boolean);
+    
+    const allTypes = [...new Set([...postTypes, ...dataTypes])];
+    
+    const expectedTotal = 6; // Her product için 6 tip post
+    
+    console.log(`      ✅ Tüm Post'lar: ${items.length}/${expectedTotal}`);
+    console.log(`         Post Type Dağılımı (item.type): ${JSON.stringify(postTypes.reduce((acc: any, type: string) => {
+      acc[type] = (acc[type] || 0) + 1;
+      return acc;
+    }, {}))}`);
+    if (dataTypes.length > 0) {
+      console.log(`         Post Type Dağılımı (data.type): ${JSON.stringify(dataTypes.reduce((acc: any, type: string) => {
+        acc[type] = (acc[type] || 0) + 1;
+        return acc;
+      }, {}))}`);
+    }
+    
+    // Tüm 6 tip olmalı (hem item.type hem data.type'da kontrol et)
+    const expectedTypes = ['post', 'tipsAndTricks', 'question', 'experience', 'update', 'benchmark'];
+    const foundTypes = allTypes.filter((type: string) => expectedTypes.includes(type));
+    const missingTypes = expectedTypes.filter((type: string) => !allTypes.includes(type));
+    
+    if (missingTypes.length > 0) {
+      console.log(`      ⚠️  Eksik Post Type'lar: ${missingTypes.join(', ')}`);
+      // İlk item'ı örnek olarak göster
+      if (items.length > 0) {
+        console.log(`      📋 İlk item örneği: ${JSON.stringify({ type: items[0].type, dataType: items[0].data?.type, data: Object.keys(items[0].data || {}) })}`);
+      }
+    }
+    
+    summary.testsRun++;
+    if (items.length >= expectedTotal && missingTypes.length === 0) {
+      summary.testsPassed++;
+    } else {
+      summary.testsFailed++;
+      if (missingTypes.length > 0) {
+        summary.errors.push(`${product.productName} için eksik post type'lar: ${missingTypes.join(', ')}`);
+      }
+    }
+  } catch (error: any) {
+    console.log(`      ❌ Hata: ${error.message}`);
+    summary.testsRun++;
+    summary.testsFailed++;
+  }
+  
+  // 2. Her post type için filtre testi
+  const typeFilters = [
+    { param: 'type=free', expected: 1, typeName: 'FREE' },
+    { param: 'type=tips', expected: 1, typeName: 'TIPS' },
+    { param: 'type=question', expected: 1, typeName: 'QUESTION' },
+    { param: 'type=experience', expected: 1, typeName: 'EXPERIENCE' },
+    { param: 'type=update', expected: 1, typeName: 'UPDATE' },
+    { param: 'type=benchmark', expected: 1, typeName: 'BENCHMARK' },
+  ];
+  
+  for (const filter of typeFilters) {
+    try {
+      const response = await api.get(`/catalog/products/${productId}/posts?${filter.param}&limit=50`, { headers });
+      const items = response.data.items || [];
+      
+      console.log(`      ✅ ${filter.typeName} Filtresi: ${items.length}/${filter.expected}`);
+      
+      summary.testsRun++;
+      if (items.length >= filter.expected) {
+        summary.testsPassed++;
+      } else {
+        summary.testsFailed++;
+      }
+    } catch (error: any) {
+      console.log(`      ❌ ${filter.typeName} Filtresi Hata: ${error.message}`);
+      summary.testsRun++;
+      summary.testsFailed++;
+    }
+  }
+}
+
 // ==================== PRODUCT GROUP CREATION ====================
 
 /**
@@ -1274,23 +1597,117 @@ async function main() {
     const experienceOptions = await getExperienceOptions(api, auth.token);
     console.log(`✅ Boost options: ${boostOptions.length}, Experience options loaded\n`);
 
-    // 3.5. Mobil app simülasyonu (endpoint testi)
-    const mobileAppPosts = await simulateMobileAppPosts(api, auth.token, boostOptions, experienceOptions);
-    console.log(`📱 Mobil app simülasyonu: ${mobileAppPosts.length} post oluşturuldu\n`);
-
-    // 4. Test gönderileri oluşturma
-    console.log('4️⃣  Test gönderileri oluşturuluyor...\n');
-
+    // Test gönderileri için array (tüm post'lar buraya eklenecek)
     const createdPosts: CreatedPost[] = [];
+    
+    // NOT: Mobil app simülasyonu kaldırıldı - sadece 132 post oluşturulacak
+    
+    // Duplicate kontrolü için Set'ler
+    const createdProductPosts = new Set<string>();
+    const createdProductGroupPosts = new Set<string>();
+    const createdSubCategoryPosts = new Set<string>();
 
-    // 4.1 Product seviyesi gönderileri
-    console.log('📦 Product seviyesi gönderileri...');
+    // 3.6. TEST_HIERARCHY'yi temizle ve sadece seed script'inden gelen product group'ları ekle
+    console.log('3.6️⃣  TEST_HIERARCHY temizleniyor ve seed product group\'lar ekleniyor...\n');
+    
+    // Seed script'inde tanımlanan product group isimlerini al
+    const seedProductGroupNames = [
+      'cameras Group 2',
+      'drones Group 1',
+      'drones Group 2',
+      'Bath body Group 2',
+      'Facial tools Group 1',
+      'Facial tools Group 2',
+    ];
+    
+    // Tüm sub category ID'lerini topla
+    const subCategoryIds = [
+      TEST_HIERARCHY.electronics.subCategories.map(sc => sc.subCategoryId),
+      TEST_HIERARCHY.cosmetics.subCategories.map(sc => sc.subCategoryId),
+    ].flat();
+    
+    // Prisma'dan seed product group'ları al (sadece product'ı olanlar ve ilk bulunan)
+    const seedProductGroupsMap = new Map<string, any>();
+    
+    for (const subCategoryId of subCategoryIds) {
+      for (const seedName of seedProductGroupNames) {
+        const dbProductGroup = await prisma.productGroup.findFirst({
+          where: {
+            subCategoryId: subCategoryId,
+            name: seedName,
+            products: {
+              some: {}, // En az 1 product'ı olan
+            },
+          },
+          include: {
+            products: {
+              take: 2, // İlk 2 product'ı al
+            },
+          },
+          orderBy: {
+            createdAt: 'desc', // En yeni olanı al
+          },
+        });
+        
+        if (dbProductGroup && !seedProductGroupsMap.has(`${subCategoryId}-${seedName}`)) {
+          seedProductGroupsMap.set(`${subCategoryId}-${seedName}`, dbProductGroup);
+        }
+      }
+    }
+    
+    // TEST_HIERARCHY'deki product group'ları temizle ve seed'den gelenleri ekle
+    for (const category of [TEST_HIERARCHY.electronics, TEST_HIERARCHY.cosmetics]) {
+      for (const subCategory of category.subCategories) {
+        // Mevcut product group'ları temizle (sadece seed'den gelenler kalacak)
+        const existingProductGroups = subCategory.productGroups || [];
+        subCategory.productGroups = existingProductGroups.filter((pg: any) => {
+          // Seed isimlerinden biri değilse kalsın (örn: "cameras" gibi orijinal olanlar)
+          return !seedProductGroupNames.includes(pg.productGroupName);
+        });
+        
+        // Seed product group'ları ekle
+        for (const [key, dbProductGroup] of seedProductGroupsMap.entries()) {
+          if (dbProductGroup.subCategoryId === subCategory.subCategoryId) {
+            // Duplicate kontrolü
+            const exists = subCategory.productGroups.find(
+              (pg: any) => pg.productGroupId === dbProductGroup.id
+            );
+            
+            if (!exists && dbProductGroup.products.length > 0) {
+              subCategory.productGroups.push({
+                productGroupId: dbProductGroup.id,
+                productGroupName: dbProductGroup.name,
+                products: dbProductGroup.products.map((p: any) => ({
+                  productId: p.id,
+                  productName: p.name,
+                })),
+              });
+              console.log(`  ✅ ${dbProductGroup.name} eklendi (${dbProductGroup.products.length} product)\n`);
+            }
+          }
+        }
+      }
+    }
+    console.log('');
+
+    // 4. Test gönderileri oluşturma (SADECE 132 POST - DUPLICATE YOK)
+    console.log('4️⃣  Test gönderileri oluşturuluyor (132 post - duplicate yok)...\n');
+
+    // 4.1 Product seviyesi gönderileri (16 product × 6 tip = 96 post)
+    console.log('📦 Product seviyesi gönderileri (96 post)...');
     for (const category of [TEST_HIERARCHY.electronics, TEST_HIERARCHY.cosmetics]) {
       const categoryType = category.categoryId === TEST_HIERARCHY.electronics.categoryId ? 'electronics' : 'cosmetics';
 
       for (const subCategory of category.subCategories) {
         for (const productGroup of subCategory.productGroups) {
           for (const product of productGroup.products) {
+            // Duplicate kontrolü
+            if (createdProductPosts.has(product.productId)) {
+              console.log(`  ⏭️  Product ${product.productName} için post'lar zaten oluşturulmuş, atlanıyor`);
+              continue;
+            }
+            createdProductPosts.add(product.productId);
+            
             console.log(`  Creating posts for product: ${product.productName}`);
 
             // FREE
@@ -1329,13 +1746,20 @@ async function main() {
     }
     console.log(`✅ Product posts created: ${summary.postsCreated.product}\n`);
 
-    // 4.2 Product group seviyesi gönderileri
-    console.log('📦 Product group seviyesi gönderileri...');
+    // 4.2 Product group seviyesi gönderileri (8 product group × 3 tip = 24 post)
+    console.log('📦 Product group seviyesi gönderileri (24 post)...');
     for (const category of [TEST_HIERARCHY.electronics, TEST_HIERARCHY.cosmetics]) {
       const categoryType = category.categoryId === TEST_HIERARCHY.electronics.categoryId ? 'electronics' : 'cosmetics';
 
       for (const subCategory of category.subCategories) {
         for (const productGroup of subCategory.productGroups) {
+          // Duplicate kontrolü
+          if (createdProductGroupPosts.has(productGroup.productGroupId)) {
+            console.log(`  ⏭️  Product group ${productGroup.productGroupName} için post'lar zaten oluşturulmuş, atlanıyor`);
+            continue;
+          }
+          createdProductGroupPosts.add(productGroup.productGroupId);
+          
           console.log(`  Creating posts for product group: ${productGroup.productGroupName}`);
 
           // FREE
@@ -1365,12 +1789,19 @@ async function main() {
     }
     console.log(`✅ Product group posts created: ${summary.postsCreated.productGroup}\n`);
 
-    // 4.3 Sub category seviyesi gönderileri
-    console.log('📦 Sub category seviyesi gönderileri...');
+    // 4.3 Sub category seviyesi gönderileri (4 sub category × 3 tip = 12 post)
+    console.log('📦 Sub category seviyesi gönderileri (12 post)...');
     for (const category of [TEST_HIERARCHY.electronics, TEST_HIERARCHY.cosmetics]) {
       const categoryType = category.categoryId === TEST_HIERARCHY.electronics.categoryId ? 'electronics' : 'cosmetics';
 
       for (const subCategory of category.subCategories) {
+        // Duplicate kontrolü
+        if (createdSubCategoryPosts.has(subCategory.subCategoryId)) {
+          console.log(`  ⏭️  Sub category ${subCategory.subCategoryName} için post'lar zaten oluşturulmuş, atlanıyor`);
+          continue;
+        }
+        createdSubCategoryPosts.add(subCategory.subCategoryId);
+        
         console.log(`  Creating posts for sub category: ${subCategory.subCategoryName}`);
 
         // FREE
@@ -1400,17 +1831,28 @@ async function main() {
     console.log(`✅ Sub category posts created: ${summary.postsCreated.subCategory}\n`);
 
     summary.postsCreated.total = createdPosts.length;
-    console.log(`📊 Toplam oluşturulan gönderi: ${summary.postsCreated.total}\n`);
+    console.log(`📊 Toplam oluşturulan gönderi: ${summary.postsCreated.total}`);
+    console.log(`📊 Beklenen toplam: 132 (12 sub + 24 group + 96 product)\n`);
 
-    // 5. Feed endpointlerini test etme
-    console.log('5️⃣  Feed endpointleri test ediliyor...\n');
+    // 5. Feed endpointlerini detaylı test etme
+    console.log('5️⃣  Feed endpointleri detaylı test ediliyor...\n');
+    await detailedFeedTests(api, auth.token, TEST_HIERARCHY, summary);
+    console.log('');
 
     // 5.1 Product feed testleri
     console.log('🔍 Product feed testleri...');
+    const testedProductIds = new Set<string>(); // Duplicate test'leri önlemek için
+    
     for (const category of [TEST_HIERARCHY.electronics, TEST_HIERARCHY.cosmetics]) {
       for (const subCategory of category.subCategories) {
         for (const productGroup of subCategory.productGroups) {
           for (const product of productGroup.products) {
+            // Aynı product'u birden fazla kez test etme
+            if (testedProductIds.has(product.productId)) {
+              continue;
+            }
+            testedProductIds.add(product.productId);
+            
             const result = await testProductFeed(api, auth.token, product.productId, 6);
             summary.testsRun++;
             if (result.success) {
@@ -1429,35 +1871,54 @@ async function main() {
 
     // 5.2 Product group feed testleri
     console.log('🔍 Product group feed testleri...');
+    const testedProductGroupIds = new Set<string>(); // Duplicate test'leri önlemek için
+    const productGroupTestMap = new Map<string, { name: string; products: any[] }>(); // Product group bilgilerini topla
+    
+    // Önce tüm product group'ları topla (duplicate'leri önlemek için)
     for (const category of [TEST_HIERARCHY.electronics, TEST_HIERARCHY.cosmetics]) {
       for (const subCategory of category.subCategories) {
         for (const productGroup of subCategory.productGroups) {
-          // Tüm gönderiler (3 product group + 2 product × 3 tip = 9)
-          const result = await testProductGroupFeed(api, auth.token, productGroup.productGroupId, 9);
-          summary.testsRun++;
-          if (result.success) {
-            summary.testsPassed++;
-            console.log(`  ✅ ${productGroup.productGroupName}: ${result.actualCount}/${result.expectedCount} posts`);
-          } else {
-            summary.testsFailed++;
-            console.log(`  ❌ ${productGroup.productGroupName}: ${result.actualCount}/${result.expectedCount} posts - ${result.error || 'Count mismatch'}`);
-            if (result.error) summary.errors.push(result.error);
-          }
-
-          // Tips gönderileri (1 product group + 2 product × 1 = 3)
-          const tipsResult = await api.get(`/catalog/product-groups/${productGroup.productGroupId}/posts?type=tips`, {
-            headers: { Authorization: `Bearer ${auth.token}` },
-          });
-          const tipsCount = tipsResult.data.items?.length || 0;
-          summary.testsRun++;
-          if (tipsCount >= 3) {
-            summary.testsPassed++;
-            console.log(`  ✅ ${productGroup.productGroupName} (tips): ${tipsCount}/3 posts`);
-          } else {
-            summary.testsFailed++;
-            console.log(`  ❌ ${productGroup.productGroupName} (tips): ${tipsCount}/3 posts`);
+          if (!productGroupTestMap.has(productGroup.productGroupId)) {
+            productGroupTestMap.set(productGroup.productGroupId, {
+              name: productGroup.productGroupName,
+              products: productGroup.products || [],
+            });
           }
         }
+      }
+    }
+    
+    // Her product group'u sadece bir kez test et
+    for (const [productGroupId, productGroupInfo] of productGroupTestMap.entries()) {
+      // Beklenen post sayısını hesapla
+      // 1 product group post (3 tip) + N product × 3 tip (FREE, TIPS, QUESTION)
+      const expectedCount = 3 + productGroupInfo.products.length * 3;
+      
+      // Tüm gönderiler
+      const result = await testProductGroupFeed(api, auth.token, productGroupId, expectedCount);
+      summary.testsRun++;
+      if (result.success) {
+        summary.testsPassed++;
+        console.log(`  ✅ ${productGroupInfo.name}: ${result.actualCount}/${result.expectedCount} posts`);
+      } else {
+        summary.testsFailed++;
+        console.log(`  ❌ ${productGroupInfo.name}: ${result.actualCount}/${result.expectedCount} posts - ${result.error || 'Count mismatch'}`);
+        if (result.error) summary.errors.push(result.error);
+      }
+
+      // Tips gönderileri (1 product group + N product × 1 = 1 + N)
+      const expectedTipsCount = 1 + productGroupInfo.products.length * 1;
+      const tipsResult = await api.get(`/catalog/product-groups/${productGroupId}/posts?type=tips`, {
+        headers: { Authorization: `Bearer ${auth.token}` },
+      });
+      const tipsCount = tipsResult.data.items?.length || 0;
+      summary.testsRun++;
+      if (tipsCount >= expectedTipsCount) {
+        summary.testsPassed++;
+        console.log(`  ✅ ${productGroupInfo.name} (tips): ${tipsCount}/${expectedTipsCount} posts`);
+      } else {
+        summary.testsFailed++;
+        console.log(`  ❌ ${productGroupInfo.name} (tips): ${tipsCount}/${expectedTipsCount} posts`);
       }
     }
     console.log('');
