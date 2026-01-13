@@ -4,6 +4,7 @@ import { FeedDistributionWorker } from './feed-distribution.worker';
 import { TrustBackfillWorker } from './trust-backfill.worker';
 import { FeedCleanupScheduler } from '../scheduler/feed-cleanup.scheduler';
 import { TrustBackfillScheduler } from '../scheduler/trust-backfill.scheduler';
+import { getTransactionProcessor } from './transaction-processor';
 import logger from '../logger/logger';
 
 class WorkerManager {
@@ -13,6 +14,7 @@ class WorkerManager {
   private trustBackfillWorker: TrustBackfillWorker;
   private feedCleanupScheduler: FeedCleanupScheduler;
   private trustBackfillScheduler: TrustBackfillScheduler;
+  private transactionProcessor: ReturnType<typeof getTransactionProcessor>;
 
   constructor() {
     this.notificationWorker = new NotificationWorker();
@@ -21,6 +23,7 @@ class WorkerManager {
     this.trustBackfillWorker = new TrustBackfillWorker();
     this.feedCleanupScheduler = new FeedCleanupScheduler();
     this.trustBackfillScheduler = new TrustBackfillScheduler();
+    this.transactionProcessor = getTransactionProcessor();
   }
 
   /**
@@ -48,6 +51,10 @@ class WorkerManager {
       await this.feedCleanupScheduler.scheduleDaily();
       logger.info('FeedCleanupScheduler started');
 
+      // Transaction processor'ı başlat
+      this.transactionProcessor.start();
+      logger.info('TransactionProcessor started');
+
       logger.info('All workers started successfully');
 
       // Graceful shutdown handlers
@@ -71,6 +78,7 @@ class WorkerManager {
       await this.trustBackfillWorker.stop();
       await this.feedCleanupScheduler.close();
       await this.trustBackfillScheduler.close();
+      this.transactionProcessor.stop();
 
       logger.info('All workers stopped successfully');
     } catch (error) {
