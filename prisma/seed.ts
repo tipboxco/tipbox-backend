@@ -5647,7 +5647,7 @@ async function seedPriorityUserNFTs() {
             rarity: template.rarity as any,
             currentOwnerId: userId,
             isTransferable: true, // NFT transfer edilebilir
-            viewCount: Math.floor(Math.random() * 100), // Random view count
+            viewer: Math.floor(Math.random() * 100), // Random view count
           },
         });
 

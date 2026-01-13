@@ -36,6 +36,15 @@ export const CACHE_KEYS = {
   // Marketplace related
   MARKETPLACE_BANNER: () => `marketplace:banners`,
   MARKETPLACE_FEATURED: () => `marketplace:featured`,
+  MARKETPLACE_LISTINGS: (params?: string) => params ? `marketplace:listings:${params}` : `marketplace:listings`,
+  MARKETPLACE_NFT_DETAIL: (nftId: string) => `marketplace:nft:${nftId}`,
+  
+  // NFT related
+  NFT_MY_NFTS: (userId: string, limit?: number) => 
+    limit ? `nft:${userId}:my-nfts:${limit}` : `nft:${userId}:my-nfts`,
+  NFT_LISTING: (listingId: string) => `nft:listing:${listingId}`,
+  NFT_DETAIL: (nftId: string) => `nft:${nftId}:detail`,
+  NFT_PRICE_HISTORY: (nftId: string) => `nft:${nftId}:price-history`,
   
   // Wallet related
   WALLET_BALANCE: (userId: string) => `wallet:${userId}:balance`,
@@ -88,5 +97,8 @@ export const CACHE_PATTERNS = {
   DM_USER: (userId: string) => `dm:${userId}:*`,
   WALLET_USER: (userId: string) => `wallet:${userId}:*`,
   AI_PRODUCT: (productId: string) => `ai:split:${productId}:*`,
+  MARKETPLACE_ALL: () => `marketplace:*`,
+  NFT_USER: (userId: string) => `nft:${userId}:*`,
+  NFT_ALL: (nftId: string) => `nft:${nftId}:*`,
 };
 

@@ -127,12 +127,12 @@ export interface BuyNFTResponse {
   nftId: string;
   buyerTransaction: {
     id: string;
-    amount: number;
+    amount: number | null;
     status: string;
   };
   sellerTransaction: {
     id: string;
-    amount: number;
+    amount: number | null;
     status: string;
   };
   newOwner: {
