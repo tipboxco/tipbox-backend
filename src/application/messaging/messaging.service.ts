@@ -6,6 +6,7 @@ import SocketManager from '../../infrastructure/realtime/socket-manager';
 import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
 import { WalletService } from '../wallet/wallet.service';
+import { TransactionService } from '../transaction/transaction.service';
 import logger from '../../infrastructure/logger/logger';
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import {
@@ -50,6 +51,7 @@ export class MessagingService {
   private supportRequestService = new SupportRequestService();
   private notificationService = new NotificationService();
   private walletService = new WalletService();
+  private transactionService = new TransactionService();
   private prisma = getPrisma();
   async createThreadIfNotExists(senderId: string, recipientId: string) {
     // Sadece normal DM thread'leri kontrol et (support thread'leri hariç)
@@ -142,8 +144,14 @@ export class MessagingService {
   async sendTips(senderId: string, recipientId: string, amount: number, tipsMessage?: string) {
     // Validate that both sender and recipient users exist
     const [sender, recipient] = await Promise.all([
-      this.prisma.user.findUnique({ where: { id: senderId } }),
-      this.prisma.user.findUnique({ where: { id: recipientId } }),
+      this.prisma.user.findUnique({ 
+        where: { id: senderId },
+        include: { profile: true }
+      }),
+      this.prisma.user.findUnique({ 
+        where: { id: recipientId },
+        include: { profile: true }
+      }),
     ]);
 
     if (!sender) {
@@ -154,59 +162,24 @@ export class MessagingService {
       throw new Error(`Recipient user not found: ${recipientId}`);
     }
 
-    // Get wallets
-    const [senderWallet, recipientWallet] = await Promise.all([
-      this.walletService.getActiveWallet(senderId),
-      this.walletService.getActiveWallet(recipientId),
-    ]);
-
-    if (!senderWallet) {
-      throw new Error('Sender wallet not found');
-    }
-
-    if (!recipientWallet) {
-      throw new Error('Recipient wallet not found');
-    }
-
-    // Check balance
-    if (!senderWallet.hasBalance(amount)) {
-      throw new Error(
-        `Insufficient balance. Available: ${senderWallet.getAvailableBalance()} TIPS`
-      );
-    }
-
-    // Create TIPS transfer record
-    const tipsTransfer = await this.prisma.tipsTokenTransfer.create({
-      data: {
-        fromUserId: senderId,
-        toUserId: recipientId,
-        amount,
-        reason: tipsMessage || null,
-      },
+    // Use TransactionService.sendTip to handle:
+    // - Wallet balance checks
+    // - Transaction creation (SEND & RECEIVE)
+    // - Balance updates
+    // - Notifications
+    const { transaction } = await this.transactionService.sendTip({
+      fromUserId: senderId,
+      toUserId: recipientId,
+      amount,
+      reason: tipsMessage || 'TIPS via messaging',
     });
-
-    // Update balances
-    await Promise.all([
-      // Gönderen kişinin balance'ını azalt
-      this.walletService.updateBalance(senderWallet.id, -amount, {
-        reason: 'TIPS sent via messaging',
-        transactionId: tipsTransfer.id,
-        sourceType: 'TIPS_TRANSFER',
-      }),
-      // Alan kişinin balance'ını artır
-      this.walletService.updateBalance(recipientWallet.id, amount, {
-        reason: 'TIPS received via messaging',
-        transactionId: tipsTransfer.id,
-        sourceType: 'TIPS_TRANSFER',
-      }),
-    ]);
 
     logger.info({
       senderId,
       recipientId,
       amount,
-      tipsTransferId: tipsTransfer.id,
-      message: 'TIPS sent successfully and balances updated',
+      transactionId: transaction.id,
+      message: 'TIPS sent successfully via messaging',
     });
 
     const body = tipsMessage
@@ -235,7 +208,7 @@ export class MessagingService {
 
     const socketHandler = SocketManager.getInstance().getSocketHandler();
     const tipsEvent = {
-      messageId: tipsTransfer.id,
+      messageId: transaction.id, // Transaction ID kullan
       threadId: thread.id,
       senderId: senderId,
       recipientId: recipientId,
@@ -243,7 +216,7 @@ export class MessagingService {
       messageType: 'send-tips' as const,
       amount,
       context: "DM",
-      timestamp: tipsTransfer.createdAt.toISOString(),
+      timestamp: transaction.createdAt.toISOString(), // transaction.createdAt kullan
     };
 
     socketHandler.sendMessageToUser(recipientId, 'new_message', tipsEvent);
