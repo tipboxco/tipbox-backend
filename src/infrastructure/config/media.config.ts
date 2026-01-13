@@ -89,8 +89,23 @@ export function resolveMediaUrl(mediaPath: string | null | undefined, useDefault
     return null;
   }
 
-  // Eğer zaten tam bir URL ise (http:// veya https:// ile başlıyorsa), direkt döndür
+  // Eğer zaten tam bir URL ise (http:// veya https:// ile başlıyorsa)
   if (mediaPath.match(/^https?:\/\//)) {
+    // YOUR_DEVICE_IP placeholder'ını içeriyorsa, SEED_MEDIA_BASE_URL ile değiştir
+    if (mediaPath.includes('YOUR_DEVICE_IP')) {
+      const baseUrl = getPublicMediaBaseUrl();
+      // URL'den path'i çıkar (örn: http://YOUR_DEVICE_IP:9000/product-catalog/main-categories/cameras.png -> product-catalog/main-categories/cameras.png)
+      try {
+        const url = new URL(mediaPath);
+        const path = url.pathname.replace(/^\/+/, '').replace(/^tipbox-media\//, '');
+        return `${baseUrl}/${path}`;
+      } catch {
+        // URL parse edilemezse, YOUR_DEVICE_IP'i baseUrl ile değiştir
+        const path = mediaPath.replace(/^https?:\/\/[^\/]+/, '').replace(/^\/+/, '').replace(/^tipbox-media\//, '');
+        return `${baseUrl}/${path}`;
+      }
+    }
+    // YOUR_DEVICE_IP yoksa, direkt döndür
     return mediaPath;
   }
 

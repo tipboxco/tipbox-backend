@@ -401,5 +401,19 @@ export interface FeedFilterOptions {
    * Filter by feed item types
    */
   types?: FeedItemType[];
+  /**
+   * Context type for context-based filtering
+   * - sub_category: Sub category feed
+   * - product_group: Product group feed
+   * - product: Product feed
+   */
+  contextType?: ContextType;
+  /**
+   * Context ID for context-based filtering
+   * - subCategoryId if contextType is sub_category
+   * - productGroupId if contextType is product_group
+   * - productId if contextType is product
+   */
+  contextId?: string;
 }
 

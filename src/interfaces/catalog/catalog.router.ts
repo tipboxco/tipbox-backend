@@ -207,6 +207,196 @@ router.get(
 
 /**
  * @openapi
+ * /catalog/sub-categories/{subCategoryId}/posts:
+ *   get:
+ *     summary: Sub category'ye ait post'ları getir
+ *     description: Belirli bir sub category'ye ait post'ları getirir. Hiyerarşik feed mantığı ile alt product group ve product'ların gönderilerini de içerir. Feed formatında döner.
+ *     tags: [Catalog]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: subCategoryId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Sub category ID'si
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [tips, experience, comments, benchmark]
+ *           default: null
+ *         description: Post tipi filtresi (opsiyonel). Belirtilmezse sadece Free, Tips, Question gösterilir. tips = Tips gönderileri, experience = Experience ve Update gönderileri, comments = Free ve Question gönderileri, benchmark = Benchmark gönderileri
+ *         style: form
+ *         explode: false
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 20
+ *         description: Sayfa başına item sayısı
+ *     responses:
+ *       200:
+ *         description: Sub category post'ları başarıyla getirildi.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       type:
+ *                         type: string
+ *                       data:
+ *                         type: object
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       nullable: true
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
+ *       401:
+ *         description: Kimlik doğrulaması başarısız.
+ *       404:
+ *         description: Sub category bulunamadı.
+ */
+router.get(
+  '/sub-categories/:subCategoryId/posts',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    const { subCategoryId } = req.params;
+    const type = req.query.type as string | undefined;
+    const cursor = req.query.cursor as string | undefined;
+    const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+
+    if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
+      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+    }
+
+    const posts = await catalogService.getSubCategoryPosts(subCategoryId, userId, {
+      type,
+      cursor,
+      ...(typeof limitParam === 'number' ? { limit: limitParam } : {}),
+    });
+
+    return res.json(posts);
+  }),
+);
+
+/**
+ * @openapi
+ * /catalog/product-groups/{productGroupId}/posts:
+ *   get:
+ *     summary: Product group'a ait post'ları getir
+ *     description: Belirli bir product group'a ait post'ları getirir. Hiyerarşik feed mantığı ile alt product'ların gönderilerini de içerir. Feed formatında döner.
+ *     tags: [Catalog]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: productGroupId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Product group ID'si
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [tips, experience, comments, benchmark]
+ *           default: null
+ *         description: Post tipi filtresi (opsiyonel). Belirtilmezse sadece Free, Tips, Question gösterilir. tips = Tips gönderileri, experience = Experience ve Update gönderileri, comments = Free ve Question gönderileri, benchmark = Benchmark gönderileri
+ *         style: form
+ *         explode: false
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 20
+ *         description: Sayfa başına item sayısı
+ *     responses:
+ *       200:
+ *         description: Product group post'ları başarıyla getirildi.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       type:
+ *                         type: string
+ *                       data:
+ *                         type: object
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       nullable: true
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
+ *       401:
+ *         description: Kimlik doğrulaması başarısız.
+ *       404:
+ *         description: Product group bulunamadı.
+ */
+router.get(
+  '/product-groups/:productGroupId/posts',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    const { productGroupId } = req.params;
+    const type = req.query.type as string | undefined;
+    const cursor = req.query.cursor as string | undefined;
+    const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+
+    if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
+      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+    }
+
+    const posts = await catalogService.getProductGroupPosts(productGroupId, userId, {
+      type,
+      cursor,
+      ...(typeof limitParam === 'number' ? { limit: limitParam } : {}),
+    });
+
+    return res.json(posts);
+  }),
+);
+
+/**
+ * @openapi
  * /catalog/products/{productId}:
  *   get:
  *     summary: Product detay bilgilerini getir
@@ -300,8 +490,11 @@ router.get(
  *         name: type
  *         schema:
  *           type: string
- *           enum: [experience, comments, benchmark]
- *         description: Post tipi filtresi (opsiyonel)
+ *           enum: [tips, experience, comments, benchmark]
+ *           default: null
+ *         description: Post tipi filtresi (opsiyonel). tips = Tips gönderileri, experience = Experience ve Update gönderileri, comments = Free ve Question gönderileri, benchmark = Benchmark gönderileri
+ *         style: form
+ *         explode: false
  *       - in: query
  *         name: cursor
  *         schema:

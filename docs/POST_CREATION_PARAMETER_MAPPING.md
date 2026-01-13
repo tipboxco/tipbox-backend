@@ -450,6 +450,8 @@ Bu parametrelerin hangi post tipine (Free, Tips, Question, vb.) dönüştürüle
 
 Tüm endpoint'lerde `images` parametresi string array olarak bekleniyor. URL'ler muhtemelen MinIO veya başka bir storage servisinden geliyor.
 
+**Not:** Benchmark post'larında `images` parametresi destekleniyor (dokümantasyonda belirtilmemiş olabilir).
+
 ### Context Type Validasyonu
 
 Her post tipi için farklı context type kısıtlamaları var:
@@ -467,6 +469,8 @@ Tüm post oluşturma endpoint'leri aynı response formatını döner:
 ```typescript
 {
   id: string; // Oluşturulan post ID'si
+  message: string; // Başarı mesajı
+  success: boolean; // İşlem başarılı mı
 }
 ```
 
@@ -478,6 +482,59 @@ Tüm post oluşturma endpoint'leri aynı response formatını döner:
 
 ---
 
+## Feed Endpoint'leri
+
+### Context-Based Feed Kullanımı
+
+Backend'de context-based feed endpoint'leri mevcut:
+
+1. **Sub Category Posts**
+   - Endpoint: `GET /catalog/sub-categories/:subCategoryId/posts`
+   - Hiyerarşik feed: Sub category + alt product groups + alt products
+   - Post type filtreleme: `type=tips`, `type=experience`, vb.
+
+2. **Product Group Posts**
+   - Endpoint: `GET /catalog/product-groups/:productGroupId/posts`
+   - Hiyerarşik feed: Product group + alt products
+   - Post type filtreleme: `type=tips`, `type=experience`, vb.
+
+3. **Product Posts**
+   - Endpoint: `GET /catalog/products/:productId/posts`
+   - Sadece product'a ait gönderiler
+   - Post type filtreleme: `type=tips`, `type=experience`, vb.
+
+### Hiyerarşik Feed Mantığı
+
+**Sub Category Feed:**
+- Sub category'ye ait gönderiler
+- Alt product group'ların gönderileri
+- Alt product'ların gönderileri (sadece Free, Tips, Question)
+
+**Product Group Feed:**
+- Product group'a ait gönderiler
+- Alt product'ların gönderileri (sadece Free, Tips, Question)
+
+**Product Feed:**
+- Sadece product'a ait gönderiler (tüm post tipleri)
+
+### Tips Gönderileri İçin Özel Notlar
+
+Tips gönderileri için özel endpoint'ler yok. Mevcut posts endpoint'leri `type=tips` parametresi ile kullanılmalı:
+
+- `GET /catalog/sub-categories/:subCategoryId/posts?type=tips`
+- `GET /catalog/product-groups/:productGroupId/posts?type=tips`
+- `GET /catalog/products/:productId/posts?type=tips`
+
+**Örnek:**
+```typescript
+// Sub category tips gönderileri
+const tips = await fetch(
+  `/catalog/sub-categories/${subCategoryId}/posts?type=tips&limit=20`
+);
+```
+
+---
+
 ## Özet Tablo
 
 | Post Tipi | Endpoint | Durum | Parametre Uyumsuzlukları |
@@ -485,16 +542,32 @@ Tüm post oluşturma endpoint'leri aynı response formatını döner:
 | Free Post | `/posts/free` | ✅ | Yok |
 | Tips & Tricks | `/posts/tips-and-tricks` | ✅ | `selectedCategory` → `benefitCategory` mapping |
 | Question | `/posts/question` | ✅ | `selectedBoost` → `selectedBoostOptionId` (isim farkı) |
-| Benchmark | `/posts/benchmark` | ✅ | `selectedProduct1/2` → `products[]` array dönüşümü, `images` desteklenmiyor |
+| Benchmark | `/posts/benchmark` | ✅ | `selectedProduct1/2` → `products[]` array dönüşümü, `images` destekleniyor ✅ |
 | Update | `/posts/update` | ✅ | `description` → `content` (isim farkı) |
-| Experience | `/posts/experience` | ✅ | Çoklu parametre uyumsuzlukları, bazı parametreler kullanılmıyor |
-| Event Post | ❌ | ❌ | Endpoint eksik |
+| Experience | `/posts/experience` | ✅ | Çoklu parametre uyumsuzlukları, eski parametre isimleri destekleniyor ✅ |
+| Event Post | ❌ | ❌ | Endpoint eksik (ancak tüm endpoint'lerde `eventId` parametresi mevcut) |
+
+---
+
+## Feed Endpoint Özet Tablosu
+
+| Context | Endpoint | Hiyerarşik Feed | Post Type Filtreleme |
+|---------|----------|-----------------|---------------------|
+| Sub Category | `GET /catalog/sub-categories/:id/posts` | ✅ (alt product groups + alt products) | `type=tips`, `type=experience`, vb. |
+| Product Group | `GET /catalog/product-groups/:id/posts` | ✅ (alt products) | `type=tips`, `type=experience`, vb. |
+| Product | `GET /catalog/products/:id/posts` | ❌ (sadece product) | `type=tips`, `type=experience`, vb. |
 
 ---
 
 ## Sonuç
 
-Backend'de 6/7 post tipi için endpoint mevcut. Event post'ları için özel endpoint eksik. Parametre uyumsuzlukları mevcut ancak bunlar frontend'de mapping ile çözülebilir. Backend organizasyonu genel olarak iyi durumda.
+Backend'de 6/7 post tipi için endpoint mevcut. Event post'ları için özel endpoint eksik ancak tüm endpoint'lerde `eventId` parametresi mevcut. Parametre uyumsuzlukları mevcut ancak bunlar frontend'de mapping ile çözülebilir. Backend organizasyonu genel olarak iyi durumda.
+
+**Yeni Özellikler:**
+- ✅ Hiyerarşik feed mantığı (sub category ve product group için)
+- ✅ Context-based filtreleme (feed endpoint'lerinde)
+- ✅ Post type filtreleme (`type` parametresi ile)
+- ✅ Tips gönderileri için özel endpoint'ler yok, mevcut endpoint'ler `type=tips` ile kullanılabilir
 
 
 
