@@ -14,6 +14,7 @@ import {
   LimitedTimeEventResponse,
   LimitedTimeEventLeaderboardUser,
   LimitedTimeEventUser,
+  UpdateEventRequest,
 } from '../../interfaces/event/event.dto';
 import { FeedItem, FeedItemType } from '../../interfaces/feed/feed.dto';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
@@ -1122,6 +1123,172 @@ export class EventService {
       };
     } catch (error) {
       logger.error(`Failed to get event requirements for ${eventId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Event güncelleme (Admin için)
+   */
+  async updateEvent(
+    userId: string,
+    eventId: string,
+    request: UpdateEventRequest
+  ): Promise<EventDetail> {
+    try {
+      // Admin kontrolü
+      const { isAdmin } = await import('../../infrastructure/auth/role-checker');
+      const userIsAdmin = await isAdmin(userId);
+      if (!userIsAdmin) {
+        throw new Error('Forbidden: Only admins can update events');
+      }
+
+      // Event'i bul
+      const event = await this.prisma.wishboxEvent.findUnique({
+        where: { id: eventId },
+      });
+
+      if (!event) {
+        throw new Error('Event not found');
+      }
+
+      // Update data hazırla
+      const updateData: any = {};
+      if (request.title !== undefined) {
+        updateData.title = request.title;
+      }
+      if (request.description !== undefined) {
+        updateData.description = request.description;
+      }
+      if (request.startDate !== undefined) {
+        updateData.startDate = new Date(request.startDate);
+      }
+      if (request.endDate !== undefined) {
+        updateData.endDate = new Date(request.endDate);
+      }
+      if (request.banner !== undefined) {
+        updateData.banner = request.banner;
+      }
+      if (request.status !== undefined) {
+        updateData.status = request.status;
+      }
+
+      // Event'i güncelle
+      const updatedEvent = await this.prisma.wishboxEvent.update({
+        where: { id: eventId },
+        data: updateData,
+      });
+
+      // Cache invalidation
+      await this.invalidateEventCaches(eventId, userId);
+
+      // Event detail response oluştur
+      const eventDetail: EventDetail = {
+        eventId: updatedEvent.id,
+        banner: updatedEvent.banner ? resolveMediaUrl(updatedEvent.banner) : null,
+        title: updatedEvent.title,
+        description: updatedEvent.description,
+        startDate: updatedEvent.startDate.toISOString(),
+        endDate: updatedEvent.endDate.toISOString(),
+        interaction: 0, // Bu bilgiyi ayrı bir query ile almak gerekebilir
+        eventType: updatedEvent.type as EventType,
+        isJoined: false, // Bu bilgiyi ayrı bir query ile almak gerekebilir
+        status: updatedEvent.status === 'PUBLISHED' ? 'active' : 'upcoming',
+        rewards: [], // Bu bilgiyi ayrı bir query ile almak gerekebilir
+      };
+
+      logger.info({
+        message: 'Event updated',
+        eventId,
+        userId,
+      });
+
+      return eventDetail;
+    } catch (error) {
+      logger.error({
+        message: 'Error updating event',
+        eventId,
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Event silme (Admin için - soft delete)
+   */
+  async deleteEvent(userId: string, eventId: string): Promise<void> {
+    try {
+      // Admin kontrolü
+      const { isAdmin } = await import('../../infrastructure/auth/role-checker');
+      const userIsAdmin = await isAdmin(userId);
+      if (!userIsAdmin) {
+        throw new Error('Forbidden: Only admins can delete events');
+      }
+
+      // Event'i bul
+      const event = await this.prisma.wishboxEvent.findUnique({
+        where: { id: eventId },
+        include: {
+          participants: {
+            select: { userId: true },
+            distinct: ['userId'],
+          },
+        },
+      });
+
+      if (!event) {
+        throw new Error('Event not found');
+      }
+
+      // Event'i soft delete: status = ARCHIVED
+      await this.prisma.wishboxEvent.update({
+        where: { id: eventId },
+        data: { status: 'ARCHIVED' },
+      });
+
+      // Event'e katılan kullanıcıları bilgilendirme (notification)
+      const participantIds = event.participants.map((p) => p.userId);
+      if (participantIds.length > 0) {
+        const { NotificationService } = await import('../notification/notification.service');
+        const notificationService = new NotificationService();
+        for (const participantId of participantIds) {
+          try {
+            await notificationService.sendNotification(
+              participantId,
+              'EVENT_CANCELLED' as any, // NotificationType enum'ına eklenmeli
+              {
+                eventId: event.id,
+                eventTitle: event.title,
+              }
+            );
+          } catch (error) {
+            logger.warn({
+              message: 'Failed to send event cancellation notification',
+              participantId,
+              eventId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+      }
+
+      // Cache invalidation
+      await this.invalidateEventCaches(eventId, userId);
+
+      logger.info({
+        message: 'Event deleted (archived)',
+        eventId,
+        userId,
+      });
+    } catch (error) {
+      logger.error({
+        message: 'Error deleting event',
+        eventId,
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
       throw error;
     }
   }

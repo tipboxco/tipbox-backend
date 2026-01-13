@@ -303,6 +303,54 @@ export class InteractionService {
   }
 
   /**
+   * Yorumu güncelle
+   */
+  async updateComment(userId: string, commentId: string, newComment: string): Promise<void> {
+    try {
+      const comment = await this.commentRepo.findById(commentId);
+      if (!comment) {
+        throw new Error('Comment not found');
+      }
+
+      // Yetki kontrolü (sadece kendi yorumunu güncelleyebilir)
+      if (comment.userId !== userId) {
+        throw new Error('Unauthorized to update this comment');
+      }
+
+      // Zaman kontrolü (15 dakika içinde güncellenebilir)
+      const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+      if (comment.createdAt < fifteenMinutesAgo) {
+        throw new Error('Comment can only be updated within 15 minutes of creation');
+      }
+
+      // Comment'i güncelle (Prisma ile direkt)
+      await this.prisma.contentComment.update({
+        where: { id: commentId },
+        data: { comment: newComment },
+      });
+
+      // Cache invalidation
+      try {
+        const { CacheService } = await import('../../infrastructure/cache/cache.service');
+        const cacheService = CacheService.getInstance();
+        await cacheService.delPattern(`post:${comment.postId}:*`).catch(() => {});
+        await cacheService.delPattern('feed:*').catch(() => {});
+      } catch (error) {
+        logger.warn({
+          message: 'Failed to invalidate cache',
+          commentId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      logger.info(`User ${userId} updated comment ${commentId}`);
+    } catch (error) {
+      logger.error(`Failed to update comment ${commentId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Yorumu sil
    */
   async deleteComment(userId: string, commentId: string): Promise<void> {

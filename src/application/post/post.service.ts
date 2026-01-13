@@ -18,6 +18,7 @@ import {
   CreateBenchmarkPostRequest,
   CreateExperiencePostRequest,
   CreateUpdatePostRequest,
+  UpdatePostRequest,
   BoostOption,
   SplitExperienceRequest,
   SplitExperienceResponse,
@@ -30,6 +31,8 @@ import { GeminiService } from '../../infrastructure/ai/gemini.service';
 import { AiExperienceSplitPrismaRepository } from '../../infrastructure/repositories/ai-experience-split-prisma.repository';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import { EventService } from '../event/event.service';
+import { S3Service } from '../../infrastructure/s3/s3.service';
+import { CacheService } from '../../infrastructure/cache/cache.service';
 
 export class PostService {
   private postRepo: ContentPostPrismaRepository;
@@ -41,6 +44,7 @@ export class PostService {
   private geminiService: GeminiService;
   private eventService: EventService;
   private experienceSnippetRepo: AiExperienceSplitPrismaRepository;
+  private s3Service: S3Service;
 
   /**
    * Search posts by title and body
@@ -99,6 +103,7 @@ export class PostService {
     this.geminiService = GeminiService.getInstance();
     this.experienceSnippetRepo = new AiExperienceSplitPrismaRepository();
     this.eventService = new EventService();
+    this.s3Service = new S3Service();
   }
 
   /**
@@ -1206,6 +1211,136 @@ export class PostService {
     // FeedService kullanarak post'u feed formatına çevir
     const feedItem = await this.feedService.getPostAsFeedItem(post);
     return feedItem?.data || null;
+  }
+
+  /**
+   * Post güncelleme
+   */
+  async updatePost(
+    userId: string,
+    postId: string,
+    request: UpdatePostRequest
+  ): Promise<{ id: string; message: string; success: boolean }> {
+    try {
+      const post = await this.postRepo.findById(postId);
+
+      if (!post) {
+        throw new Error('Post not found');
+      }
+
+      if (!post.belongsToUser(userId)) {
+        throw new Error('Forbidden: user does not own this post');
+      }
+
+      // Post'un mevcut eventId'sini al (cache invalidation için)
+      const postWithEvent = await this.prisma.contentPost.findUnique({
+        where: { id: postId },
+        select: { eventId: true },
+      });
+      const oldEventId = postWithEvent?.eventId || null;
+
+      // Event validation (eğer yeni eventId verilmişse)
+      if (request.eventId && request.eventId !== oldEventId) {
+        await this.validateEvent(request.eventId);
+      }
+
+      // Body güncelleme
+      let updatedBody = post.body;
+      if (request.description !== undefined) {
+        updatedBody = this.appendImagesToBody(request.description, request.images);
+      }
+
+      // Post'u güncelle (Prisma ile direkt, çünkü eventId field'ı repository'de yok)
+      const updateData: any = {};
+      if (request.description !== undefined) {
+        updateData.body = updatedBody;
+      }
+      if (request.eventId !== undefined) {
+        updateData.eventId = request.eventId || null;
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        await this.prisma.contentPost.update({
+          where: { id: postId },
+          data: updateData,
+        });
+      }
+
+      // Görselleri güncelle
+      if (request.images !== undefined) {
+        // Mevcut görselleri al
+        const existingMedia = await this.prisma.postMedia.findMany({
+          where: { postId },
+          orderBy: { orderIndex: 'asc' },
+        });
+
+        // Eski görselleri S3'ten sil
+        for (const media of existingMedia) {
+          try {
+            await this.s3Service.deleteFile(media.mediaUrl);
+          } catch (error) {
+            logger.warn({
+              message: 'Failed to delete old image from S3',
+              mediaUrl: media.mediaUrl,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+
+        // Eski görselleri veritabanından sil
+        await this.prisma.postMedia.deleteMany({
+          where: { postId },
+        });
+
+        // Yeni görselleri ekle
+        if (request.images.length > 0) {
+          await this.prisma.postMedia.createMany({
+            data: request.images.map((imageUrl, index) => ({
+              postId: postId,
+              userId: userId,
+              mediaUrl: imageUrl,
+              orderIndex: index,
+            })),
+          });
+        }
+      }
+
+      logger.info(`Post updated: ${postId} by user ${userId}`);
+
+      // Event cache'i invalidate et (eski veya yeni eventId varsa)
+      const newEventId = request.eventId || oldEventId;
+      if (newEventId) {
+        this.eventService.invalidateEventCaches(newEventId, userId).catch((err) => {
+          logger.warn({
+            message: 'Failed to invalidate event caches',
+            eventId: newEventId,
+            error: err,
+          });
+        });
+      }
+
+      // Feed cache'lerini invalidate et (tüm kullanıcılar için)
+      // Feed cache pattern: feed:userId:cursor:limit
+      try {
+        const cacheService = CacheService.getInstance();
+        await cacheService.delPattern('feed:*').catch(() => {});
+      } catch (error) {
+        logger.warn({
+          message: 'Failed to invalidate feed cache',
+          postId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      return {
+        id: postId,
+        message: 'Post başarıyla güncellendi',
+        success: true,
+      };
+    } catch (error) {
+      logger.error(`Failed to update post ${postId} by user ${userId}`, error);
+      throw error;
+    }
   }
 
   async deletePost(userId: string, postId: string): Promise<boolean> {

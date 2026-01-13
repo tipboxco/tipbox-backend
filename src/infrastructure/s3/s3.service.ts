@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, PutBucketPolicyCommand, ListObjectsV2Command, DeleteObjectsCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, PutBucketPolicyCommand, ListObjectsV2Command, DeleteObjectsCommand, DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { s3Config } from '../config/s3.config';
 import { getPublicMediaBaseUrl, resolveMediaUrl } from '../config/media.config';
@@ -306,6 +306,37 @@ export class S3Service {
       }
       
       throw new Error(`Dosya yüklenemedi: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Tek bir dosyayı sil
+   * @param filePath - Silinecek dosyanın path'i (örn: 'posts/user123/image.jpg')
+   * @returns Başarılı ise true
+   */
+  async deleteFile(filePath: string): Promise<boolean> {
+    try {
+      const command = new DeleteObjectCommand({
+        Bucket: s3Config.bucketName,
+        Key: filePath,
+      });
+
+      await this.s3Client.send(command);
+      logger.info({
+        message: 'Dosya başarıyla silindi',
+        filePath,
+        bucketName: s3Config.bucketName,
+      });
+      return true;
+    } catch (error: any) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error({
+        message: 'Dosya silme hatası',
+        error: errorMessage,
+        filePath,
+        bucketName: s3Config.bucketName,
+      });
+      throw new Error(`Dosya silinemedi: ${errorMessage}`);
     }
   }
 

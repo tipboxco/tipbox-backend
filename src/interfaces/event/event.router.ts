@@ -5,6 +5,8 @@ import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { authMiddleware } from '../auth/auth.middleware';
 import { getErrorMessage, hasErrorMessage, errorMessageIncludes } from '../../infrastructure/errors/error-helper';
 import logger from '../../infrastructure/logger/logger';
+import { UpdateEventRequest } from './event.dto';
+import { isAdmin } from '../../infrastructure/auth/role-checker';
 
 const router = Router();
 const eventService = new EventService();
@@ -821,6 +823,160 @@ router.get(
       }
       logger.error(`Error getting event requirements ${eventId}:`, error);
       return res.status(500).json({ message: 'Internal server error' });
+    }
+  })
+);
+
+/**
+ * @openapi
+ * /events/{eventId}:
+ *   put:
+ *     summary: Event güncelle (Admin)
+ *     description: Sadece admin kullanıcılar event'leri güncelleyebilir.
+ *     tags: [Events]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: eventId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Güncellenecek event ID'si
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *                 nullable: true
+ *               startDate:
+ *                 type: string
+ *                 format: date-time
+ *               endDate:
+ *                 type: string
+ *                 format: date-time
+ *               banner:
+ *                 type: string
+ *                 nullable: true
+ *               status:
+ *                 type: string
+ *                 enum: [DRAFT, PUBLISHED, ARCHIVED]
+ *     responses:
+ *       200:
+ *         description: Event başarıyla güncellendi
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Only admins can update events
+ *       404:
+ *         description: Event not found
+ */
+router.put(
+  '/:eventId',
+  authMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    // Admin kontrolü
+    const userIsAdmin = await isAdmin(String(userId));
+    if (!userIsAdmin) {
+      return res.status(403).json({ message: 'Forbidden: Only admins can update events' });
+    }
+
+    const { eventId } = req.params;
+    const request: UpdateEventRequest = {
+      title: req.body.title,
+      description: req.body.description,
+      startDate: req.body.startDate,
+      endDate: req.body.endDate,
+      banner: req.body.banner,
+      status: req.body.status,
+    };
+
+    try {
+      const result = await eventService.updateEvent(String(userId), eventId, request);
+      return res.json(result);
+    } catch (error: unknown) {
+      if (hasErrorMessage(error, 'not found')) {
+        return res.status(404).json({ message: 'Event not found' });
+      }
+      if (hasErrorMessage(error, 'Forbidden')) {
+        return res.status(403).json({ message: getErrorMessage(error) });
+      }
+      throw error;
+    }
+  })
+);
+
+/**
+ * @openapi
+ * /events/{eventId}:
+ *   delete:
+ *     summary: Event sil (Admin)
+ *     description: Sadece admin kullanıcılar event'leri silebilir. Event soft delete yapılır (status = ARCHIVED).
+ *     tags: [Events]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: eventId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Silinecek event ID'si
+ *     responses:
+ *       204:
+ *         description: Event başarıyla silindi (archived)
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Only admins can delete events
+ *       404:
+ *         description: Event not found
+ */
+router.delete(
+  '/:eventId',
+  authMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    // Admin kontrolü
+    const userIsAdmin = await isAdmin(String(userId));
+    if (!userIsAdmin) {
+      return res.status(403).json({ message: 'Forbidden: Only admins can delete events' });
+    }
+
+    const { eventId } = req.params;
+
+    try {
+      await eventService.deleteEvent(String(userId), eventId);
+      return res.status(204).send();
+    } catch (error: unknown) {
+      if (hasErrorMessage(error, 'not found')) {
+        return res.status(404).json({ message: 'Event not found' });
+      }
+      if (hasErrorMessage(error, 'Forbidden')) {
+        return res.status(403).json({ message: getErrorMessage(error) });
+      }
+      throw error;
     }
   })
 );

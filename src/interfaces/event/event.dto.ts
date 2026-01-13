@@ -122,4 +122,13 @@ export interface LimitedTimeEventResponse {
   endDate: string;
 }
 
+export interface UpdateEventRequest {
+  title?: string;
+  description?: string | null;
+  startDate?: string; // ISO 8601 DateTime
+  endDate?: string; // ISO 8601 DateTime
+  banner?: string | null;
+  status?: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+}
+
 

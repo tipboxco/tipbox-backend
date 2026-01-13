@@ -337,6 +337,12 @@ export interface CreateUpdatePostRequest {
   eventId?: string; // Optional event ID to link post to event
 }
 
+export interface UpdatePostRequest {
+  description?: string;
+  images?: string[];
+  eventId?: string;
+}
+
 export interface SplitExperienceRequest {
   userId: string;
   productId: string;

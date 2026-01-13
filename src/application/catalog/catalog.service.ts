@@ -4,7 +4,8 @@ import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import { withCache } from '../../infrastructure/cache/cache-wrapper.helper';
 import { CACHE_KEYS } from '../../infrastructure/cache/cache-keys';
 import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
-import { FeedItem, FeedItemType, ContextType } from '../../interfaces/feed/feed.dto';
+import { FeedItem, FeedItemType } from '../../interfaces/feed/feed.dto';
+import { ContextType } from '../../domain/content/context-type.enum';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
 
 const prisma = getPrisma();

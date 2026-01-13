@@ -10,6 +10,7 @@ import {
   CreateBenchmarkPostRequest,
   CreateExperiencePostRequest,
   CreateUpdatePostRequest,
+  UpdatePostRequest,
   SplitExperienceRequest,
 } from './post.dto';
 import { ContextType } from '../../domain/content/context-type.enum';
@@ -804,6 +805,102 @@ router.get(
     }
 
     return res.json(post);
+  })
+);
+
+/**
+ * @openapi
+ * /posts/{id}:
+ *   put:
+ *     summary: Gönderi güncelle
+ *     description: Sadece gönderinin sahibi kendi gönderisini güncelleyebilir. Description, images ve eventId güncellenebilir.
+ *     tags: [Posts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Güncellenecek post ID'si
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               description:
+ *                 type: string
+ *                 description: Post açıklaması
+ *               images:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Görsel URL'leri (S3 path'leri)
+ *               eventId:
+ *                 type: string
+ *                 nullable: true
+ *                 description: Event ID (opsiyonel)
+ *     responses:
+ *       200:
+ *         description: Gönderi başarıyla güncellendi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                 message:
+ *                   type: string
+ *                 success:
+ *                   type: boolean
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ *       403:
+ *         description: Kullanıcının bu gönderiyi güncelleme yetkisi yok
+ *       404:
+ *         description: Gönderi bulunamadı
+ */
+router.put(
+  '/:id',
+  upload.array('images', 10), // Support up to 10 images via multipart/form-data
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: 'id is required' });
+    }
+
+    try {
+      // Process images (from files or URLs)
+      const images = await processPostImages(req, String(userId));
+
+      const request: UpdatePostRequest = {
+        description: req.body.description,
+        images: images.length > 0 ? images : req.body.images,
+        eventId: req.body.eventId,
+      };
+
+      const result = await postService.updatePost(String(userId), id, request);
+      return res.status(200).json(result);
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      if (error instanceof Error && message.startsWith('Forbidden')) {
+        return res.status(403).json({ message: 'You are not allowed to update this post' });
+      }
+      if (error instanceof Error && message.includes('not found')) {
+        return res.status(404).json({ message: 'Post not found' });
+      }
+      throw error;
+    }
   })
 );
 

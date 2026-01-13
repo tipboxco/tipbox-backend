@@ -293,6 +293,79 @@ router.get(
 /**
  * @openapi
  * /interactions/comments/{commentId}:
+ *   put:
+ *     summary: Yorumu güncelle
+ *     description: Sadece yorumun sahibi, yorumu oluşturduktan sonra 15 dakika içinde güncelleyebilir.
+ *     tags: [Interactions]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: commentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - comment
+ *             properties:
+ *               comment:
+ *                 type: string
+ *                 description: Yeni yorum metni
+ *     responses:
+ *       200:
+ *         description: Yorum güncellendi
+ *       400:
+ *         description: Geçersiz istek veya zaman aşımı
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Kullanıcının bu yorumu güncelleme yetkisi yok
+ *       404:
+ *         description: Yorum bulunamadı
+ */
+router.put(
+  '/comments/:commentId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    const { commentId } = req.params;
+    const { comment } = req.body;
+
+    if (!comment || typeof comment !== 'string' || comment.trim().length === 0) {
+      return res.status(400).json({ message: 'comment is required and must be a non-empty string' });
+    }
+
+    try {
+      await interactionService.updateComment(userId, commentId, comment.trim());
+      return res.status(200).json({
+        success: true,
+        message: 'Comment updated successfully',
+      });
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes('not found')) {
+          return res.status(404).json({ message: error.message });
+        }
+        if (error.message.includes('Unauthorized')) {
+          return res.status(403).json({ message: error.message });
+        }
+        if (error.message.includes('15 minutes')) {
+          return res.status(400).json({ message: error.message });
+        }
+      }
+      throw error;
+    }
+  })
+);
+
+/**
+ * @openapi
+ * /interactions/comments/{commentId}:
  *   delete:
  *     summary: Yorumu sil
  *     tags: [Interactions]
