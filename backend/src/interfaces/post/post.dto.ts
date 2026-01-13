@@ -1,0 +1,364 @@
+import { ContextType } from '../../domain/content/context-type.enum';
+import { TipsAndTricksBenefitCategory } from '../../domain/content/tips-and-tricks-benefit-category.enum';
+import { ExperienceType } from '../../domain/content/experience-type.enum';
+import { ExperienceStatus } from '../../domain/content/experience-status.enum';
+
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *     ContextType:
+ *       type: string
+ *       enum: [product_group, product, sub_category]
+ *     TipsAndTricksBenefitCategory:
+ *       type: string
+ *       enum: [time_saving, energy_efficiency, durability, better_result]
+ *     ExperienceType:
+ *       type: string
+ *       enum: [price_and_shopping, product_and_usage]
+ *     ExperienceStatus:
+ *       type: string
+ *       enum: [own, tested]
+ *     CreatePostRequest:
+ *       type: object
+ *       required:
+ *         - contextType
+ *         - contextId
+ *         - description
+ *       properties:
+ *         contextType:
+ *           $ref: '#/components/schemas/ContextType'
+ *         contextId:
+ *           type: string
+ *         description:
+ *           type: string
+ *         images:
+ *           type: array
+ *           items:
+ *             type: string
+ *         eventId:
+ *           type: string
+ *           description: Optional event ID to link post to event
+ *           example: "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+ *     CreateTipsAndTricksPostRequest:
+ *       type: object
+ *       required:
+ *         - contextType
+ *         - contextId
+ *         - description
+ *         - benefitCategory
+ *       properties:
+ *         contextType:
+ *           $ref: '#/components/schemas/ContextType'
+ *         contextId:
+ *           type: string
+ *         description:
+ *           type: string
+ *         benefitCategory:
+ *           $ref: '#/components/schemas/TipsAndTricksBenefitCategory'
+ *         images:
+ *           type: array
+ *           items:
+ *             type: string
+ *         eventId:
+ *           type: string
+ *           description: Optional event ID to link post to event
+ *     BoostOption:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *         image:
+ *           type: string
+ *         title:
+ *           type: string
+ *         description:
+ *           type: string
+ *         amount:
+ *           type: number
+ *         isPopular:
+ *           type: boolean
+ *     CreateQuestionPostRequest:
+ *       type: object
+ *       required:
+ *         - contextType
+ *         - contextId
+ *         - description
+ *         - selectedBoostOptionId
+ *       properties:
+ *         contextType:
+ *           $ref: '#/components/schemas/ContextType'
+ *         contextId:
+ *           type: string
+ *         description:
+ *           type: string
+ *         images:
+ *           type: array
+ *           items:
+ *             type: string
+ *         selectedBoostOptionId:
+ *           type: string
+ *         eventId:
+ *           type: string
+ *           description: Optional event ID to link post to event
+ *     Product:
+ *       type: object
+ *       required:
+ *         - productId
+ *         - isSelected
+ *       properties:
+ *         productId:
+ *           type: string
+ *         isSelected:
+ *           type: boolean
+ *     CreateBenchmarkPostRequest:
+ *       type: object
+ *       required:
+ *         - contextType
+ *         - contextId
+ *         - products
+ *         - description
+ *       properties:
+ *         contextType:
+ *           $ref: '#/components/schemas/ContextType'
+ *         contextId:
+ *           type: string
+ *         products:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/Product'
+ *         description:
+ *           type: string
+ *         images:
+ *           type: array
+ *           items:
+ *             type: string
+ *         eventId:
+ *           type: string
+ *           description: Optional event ID to link post to event
+ *     Experience:
+ *       type: object
+ *       required:
+ *         - type
+ *         - content
+ *         - rating
+ *       properties:
+ *         type:
+ *           $ref: '#/components/schemas/ExperienceType'
+ *         content:
+ *           type: string
+ *         rating:
+ *           type: number
+ *           minimum: 1
+ *           maximum: 5
+ *     CreateExperiencePostRequest:
+ *       type: object
+ *       required:
+ *         - contextType
+ *         - contextId
+ *         - selectedDurationId
+ *         - selectedLocationId
+ *         - selectedPurposeId
+ *         - content
+ *         - experience
+ *         - status
+ *       properties:
+ *         contextType:
+ *           $ref: '#/components/schemas/ContextType'
+ *         contextId:
+ *           type: string
+ *         selectedDurationId:
+ *           type: string
+ *         selectedLocationId:
+ *           type: string
+ *         selectedPurposeId:
+ *           type: string
+ *         content:
+ *           type: string
+ *         experience:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/Experience'
+ *         status:
+ *           $ref: '#/components/schemas/ExperienceStatus'
+ *         images:
+ *           type: array
+ *           items:
+ *             type: string
+ *         eventId:
+ *           type: string
+ *           description: Optional event ID to link post to event
+ *     CreateUpdatePostRequest:
+ *       type: object
+ *       required:
+ *         - contextType
+ *         - contextId
+ *         - content
+ *       properties:
+ *         contextType:
+ *           $ref: '#/components/schemas/ContextType'
+ *         contextId:
+ *           type: string
+ *         content:
+ *           type: string
+ *         images:
+ *           type: array
+ *           items:
+ *             type: string
+ *         eventId:
+ *           type: string
+ *           description: Optional event ID to link post to event
+ *     SplitExperienceRequest:
+ *       type: object
+ *       required:
+ *         - productId
+ *         - content
+ *       properties:
+ *         productId:
+ *           type: string
+ *         content:
+ *           type: string
+ *     ExperienceCategory:
+ *       type: object
+ *       properties:
+ *         content:
+ *           type: string
+ *           description: Kategori içeriği (AI tarafından standartlaştırılmış)
+ *         rating:
+ *           type: number
+ *           minimum: 0
+ *           maximum: 5
+ *           description: Deneyim puanı (0-5 arası)
+ *         placeholder:
+ *           type: string
+ *           description: Kategori boş veya eksikse, kullanıcıya gösterilecek ipucu metni (AI tarafından dinamik üretilir)
+ *         isEnhanced:
+ *           type: boolean
+ *           description: İçeriğin AI tarafından iyileştirilip iyileştirilmediği
+ *     SplitExperienceResponse:
+ *       type: object
+ *       properties:
+ *         priceAndShopping:
+ *           oneOf:
+ *             - $ref: '#/components/schemas/ExperienceCategory'
+ *             - type: 'null'
+ *         productAndUsage:
+ *           oneOf:
+ *             - $ref: '#/components/schemas/ExperienceCategory'
+ *             - type: 'null'
+ *         metadata:
+ *           type: object
+ *           properties:
+ *             tokensUsed:
+ *               type: number
+ *               nullable: true
+ *             processingTimeMs:
+ *               type: number
+ *             model:
+ *               type: string
+ *             promptVersion:
+ *               type: string
+ */
+
+export interface CreatePostRequest {
+  contextType: ContextType;
+  contextId: string;
+  description: string;
+  images?: string[];
+  eventId?: string; // Optional event ID to link post to event
+}
+
+export interface CreateTipsAndTricksPostRequest {
+  contextType: ContextType;
+  contextId: string;
+  description: string;
+  benefitCategory: TipsAndTricksBenefitCategory;
+  images?: string[];
+  eventId?: string; // Optional event ID to link post to event
+}
+
+export interface BoostOption {
+  id: string;
+  image: string;
+  title: string;
+  description: string;
+  amount: number;
+  isPopular: boolean;
+}
+
+export interface CreateQuestionPostRequest {
+  contextType: ContextType;
+  contextId: string;
+  description: string;
+  images?: string[];
+  selectedBoostOptionId: string;
+  eventId?: string; // Optional event ID to link post to event
+}
+
+export interface Product {
+  productId: string;
+  isSelected: boolean;
+}
+
+export interface CreateBenchmarkPostRequest {
+  contextType: ContextType;
+  contextId: string;
+  products: Product[];
+  description: string;
+  images?: string[]; // Images support for benchmark posts
+  eventId?: string; // Optional event ID to link post to event
+}
+
+export interface Experience {
+  type: ExperienceType;
+  content: string;
+  rating: number;
+}
+
+export interface CreateExperiencePostRequest {
+  contextType: ContextType;
+  contextId: string;
+  selectedDurationId: string | null; // Resolved UUID or null if lookup fails
+  selectedLocationId: string | null; // Resolved UUID or null if lookup fails
+  selectedPurposeId: string | null; // Resolved UUID or null if lookup fails
+  content: string;
+  experience: Experience[];
+  status: ExperienceStatus;
+  images?: string[];
+  experienceSnippetId?: string; // Experience snippet ID (optional)
+  eventId?: string; // Optional event ID to link post to event
+}
+
+export interface CreateUpdatePostRequest {
+  contextType: ContextType;
+  contextId: string;
+  content: string;
+  images?: string[];
+  eventId?: string; // Optional event ID to link post to event
+}
+
+export interface SplitExperienceRequest {
+  userId: string;
+  productId: string;
+  content: string;
+}
+
+export interface ExperienceCategory {
+  content: string;
+  rating: number;
+  placeholder?: string | null;
+  isEnhanced?: boolean;
+}
+
+export interface SplitExperienceResponse {
+  experienceSnippetId: string;
+  priceAndShopping: ExperienceCategory | null;
+  productAndUsage: ExperienceCategory | null;
+  metadata: {
+    tokensUsed: number | null;
+    processingTimeMs: number;
+    model: string;
+    promptVersion: string;
+  };
+}
+

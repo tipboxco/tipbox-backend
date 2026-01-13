@@ -1,0 +1,155 @@
+# Cursor Configuration Rules
+
+Bu dosya Tipbox backend projesi için Cursor AI asistanının takip etmesi gereken kuralları tanımlar.
+
+## Genel Kurallar
+
+### Dil Tercihi
+- **Always respond in Turkish.** - Tüm yanıtlar Türkçe olmalıdır.
+
+## Teknik Profil
+
+### Backend Odaklı Full-Stack Developer
+- Node.js, TypeScript, PostgreSQL uzmanlığı
+- Modüler backend mimarileri konusunda deneyimli
+- Temiz, modüler, ölçeklenebilir ve test edilebilir kod tercihi
+
+### Mimari Prensipler
+- **Domain-Driven Design (DDD)** - Domain odaklı tasarım prensiplerini takip et
+- **Modular Monolith** - Modüler monolitik yapı kullan
+- Her katman kendi sorumluluğunu yerine getirmeli (Separation of Concerns)
+
+### Veritabanı ve ORM
+- **Prisma ORM** - Type-safety ve developer experience için Prisma tercih et
+- Diğer ORM'ler yerine Prisma kullan
+- Prisma schema'yı düzenli olarak güncelle ve migration'ları takip et
+
+### Asenkron İşlemler ve Cache
+- **Redis** - Cache ve session yönetimi için
+- **BullMQ** - Asenkron task'lar için kuyruk sistemi
+- Redis adapter ile Socket.IO horizontal scaling desteği
+
+### Kod Kalitesi ve Araçlar
+- **ESLint** - Kod kalitesi kontrolü
+- **Prettier** - Kod formatlama
+- **commitlint** - Commit mesajlarını standartlaştır
+- **Husky** - Git hooks ile otomatik kontroller
+
+### Logging ve Monitoring
+- **Winston** - Uygulama loglama
+- **Morgan** - HTTP request loglama
+- Tüm önemli işlemler loglanmalı
+
+### Authentication ve Security
+- **JWT** - Token-based authentication
+- **Auth0** - Login entegrasyonu (gerekirse)
+- Tüm endpoint'lerde authentication kontrolü yap
+
+### Environment Yönetimi
+- **dotenv** - Environment variable yönetimi
+- Environment-specific config'leri saygı göster
+- Production, development, test ortamları için ayrı config'ler
+
+### CI/CD ve Infrastructure
+- **GitHub Actions** - Continuous Integration/Continuous Deployment
+- **Terraform** - Infrastructure as Code
+- Deployment pipeline'ları otomatikleştir
+
+## Commit Mesajları
+
+### Format
+- **Always create your GitHub commit message in English**
+- Commit mesajları İngilizce olmalıdır
+- Conventional commits formatını kullan (feat:, fix:, docs:, etc.)
+
+### Örnekler
+```
+feat: add socket.io integration for real-time messaging
+fix: resolve type mismatch in DMRequest repository
+docs: update API documentation for messaging endpoints
+refactor: improve error handling in messaging service
+```
+
+## Kod Standartları
+
+### TypeScript
+- Strict mode aktif olmalı
+- Type safety'e önem ver
+- `any` kullanımından kaçın, gerekirse `unknown` kullan
+- Interface ve type tanımlamaları net olmalı
+
+### Error Handling
+- Try-catch blokları ile hataları yakala
+- Uygun HTTP status code'ları kullan
+- Hata mesajları kullanıcı dostu olmalı
+- Tüm hatalar loglanmalı
+
+### API Design
+- RESTful API prensiplerini takip et
+- Swagger/OpenAPI dokümantasyonu güncel tut
+- Endpoint'lerde validation yap
+- Consistent response format kullan
+
+### Testing
+- Unit test'ler yaz
+- Integration test'ler önemli
+- Test coverage'ı takip et
+
+## Proje Yapısı
+
+### Katmanlı Mimari
+```
+src/
+├── domain/          # Domain entities ve business logic
+├── application/     # Application services
+├── infrastructure/  # External services, repositories
+└── interfaces/      # API routes, DTOs
+```
+
+### Dosya Organizasyonu
+- Her modül kendi klasöründe
+- Router, service, repository ayrı dosyalarda
+- DTO'lar interface klasöründe
+- Domain entities domain klasöründe
+
+## Best Practices
+
+### Code Review
+- Pull request'lerde detaylı açıklama yap
+- Code review sürecini takip et
+- Feedback'leri dikkate al
+
+### Documentation
+- README dosyalarını güncel tut
+- API dokümantasyonunu eksiksiz tut
+- Kod içi yorumlar açıklayıcı olsun
+
+### Performance
+- Database query'lerini optimize et
+- N+1 problem'lerinden kaçın
+- Cache stratejilerini kullan
+- Lazy loading ve pagination kullan
+
+### Security
+- SQL injection'dan korun (Prisma ile otomatik)
+- XSS saldırılarına karşı korun
+- Rate limiting uygula
+- CORS ayarlarını doğru yap
+
+## Özel Notlar
+
+### Socket.IO
+- Redis adapter kullan (horizontal scaling için)
+- JWT authentication socket bağlantılarında
+- Thread room yönetimi için access control yap
+- Event payload'ları standardize et
+
+### Database
+- Migration'ları dikkatli yap
+- Seed data'ları ayrı tut
+- Database schema değişikliklerini dokümante et
+
+### Environment Variables
+- Sensitive bilgileri environment variable olarak tut
+- `.env.example` dosyasını güncel tut
+- Production'da asla hardcode secret kullanma

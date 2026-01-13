@@ -1,0 +1,13 @@
+This is a Node.js + Express + TypeScript backend using Prisma as ORM and PostgreSQL as database.
+Project follows DDD and Modular Monolith folder structure.
+Project is structured into /core, /domains, /modules, and /jobs.
+Caching is handled by Redis. Background jobs are processed via BullMQ.
+Project uses JWT authentication with token refresh mechanism.
+Project integrates with Auth0 for user login.
+Logging is done via Winston and Morgan.
+All routes must have proper validation using Zod.
+Use .env for environment config and organize configs under /core/config.
+Every feature (user, review, wishlist) must have its own domain folder.
+Project must expose a /healthcheck endpoint for readiness probe.
+Use GitHub Actions for dev/test/prod CI/CD pipelines.
+All infrastructure (RDS, Elasticache, Beanstalk) is provisioned via Terraform.

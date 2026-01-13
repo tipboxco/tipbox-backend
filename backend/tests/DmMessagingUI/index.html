@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tipbox Messaging Demo - Dual View</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  </head>
+  <body>
+    <div id="app">
+      <!-- Left Panel -->
+      <div class="panel-container" id="panelLeft">
+        <div class="auth-panel" id="authPanelLeft">
+          <div class="auth-header">
+            <h2>Panel 1</h2>
+            <p class="auth-subtitle">Kullanıcı 1 Girişi</p>
+          </div>
+          <form id="loginFormLeft">
+            <div class="form-row">
+              <label for="emailLeft">E-posta</label>
+              <input id="emailLeft" type="email" placeholder="omer@tipbox.co" required />
+            </div>
+            <div class="form-row">
+              <label for="passwordLeft">Şifre</label>
+              <input id="passwordLeft" type="password" placeholder="password123" required />
+            </div>
+            <button type="submit">Giriş Yap</button>
+          </form>
+        </div>
+
+        <div class="app-shell hidden" id="appShellLeft">
+          <!-- Inbox View -->
+          <div class="inbox-view" id="inboxViewLeft">
+            <div class="inbox-header">
+              <div class="header-content">
+                <h3>Inbox</h3>
+                <span class="user-badge" id="userBadgeLeft">—</span>
+              </div>
+              <div class="header-actions">
+                <button id="refreshThreadsBtnLeft" class="icon-btn" title="Yenile">🔄</button>
+                <button id="logoutBtnLeft" class="icon-btn" title="Çıkış">🚪</button>
+              </div>
+            </div>
+            <div class="inbox-tabs">
+              <button class="inbox-tab active" data-tab="messages" id="messagesTabLeft">Messages</button>
+              <button class="inbox-tab" data-tab="support-requests" id="supportRequestsTabLeft">1-on-1 Support Requests</button>
+            </div>
+            <!-- Messages Tab Content -->
+            <div class="inbox-tab-content active" id="messagesTabContentLeft">
+              <div class="search-bar">
+                <input type="text" id="searchInputLeft" placeholder="Mesajlarda Ara" />
+                <label class="checkbox">
+                  <input type="checkbox" id="unreadOnlyInputLeft" />
+                  <span>Okunmamış</span>
+                </label>
+              </div>
+              <div id="threadListLeft" class="thread-list">
+                <div class="empty-state">Mesaj yok</div>
+              </div>
+            </div>
+            <!-- Support Requests Tab Content -->
+            <div class="inbox-tab-content" id="supportRequestsTabContentLeft">
+              <div class="search-bar">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="searchSupportRequestsInputLeft" placeholder="Destek Taleplerinde Ara" />
+                <button class="filter-icon-btn" id="filterIconBtnLeft" title="Filter">☰</button>
+              </div>
+              <div class="filter-buttons" id="filterButtonsLeft">
+                <button class="filter-btn active" data-status="">All Requests</button>
+                <button class="filter-btn" data-status="active">Active</button>
+                <button class="filter-btn" data-status="completed">Awaiting Completion</button>
+                <button class="filter-btn" data-status="finalized">Finalized</button>
+                <button class="filter-btn" data-status="pending">Pending</button>
+              </div>
+              <div id="supportRequestsListLeft" class="thread-list">
+                <div class="empty-state">Support request yok</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Thread View -->
+          <div class="thread-view-container hidden" id="threadViewContainerLeft">
+            <div class="thread-view" id="threadViewLeft">
+              <div class="thread-header">
+                <button class="back-btn" id="backBtnLeft">←</button>
+                <div class="thread-info">
+                  <h4 id="threadTitleLeft">—</h4>
+                  <span class="thread-status" id="threadStatusLeft">—</span>
+                </div>
+                <div class="thread-actions">
+                </div>
+              </div>
+              <div class="thread-content-wrapper">
+                <div class="messages-container" id="messagesContainerLeft"></div>
+              <div class="typing-indicator hidden" id="typingIndicatorLeft">
+                <span class="typing-indicator-label">yazıyor...</span>
+                <div class="typing-indicator-dots">
+                  <span></span><span></span><span></span>
+                </div>
+              </div>
+                <div class="action-buttons-container">
+                  <button id="requestSupportBtnLeft" class="action-btn">🎧 Request 1-on-1</button>
+                  <button id="sendTipsBtnLeft" class="action-btn">🎁 Send TIPS</button>
+                </div>
+              </div>
+              <div class="message-input-container">
+                <button class="attach-btn" title="Attach">📎</button>
+                <input id="messageInputLeft" placeholder="Bir mesaj yaz..." />
+                <button id="sendMessageBtnLeft" class="send-btn">✈</button>
+              </div>
+            </div>
+
+            <!-- Support Chat View -->
+            <div class="support-chat-view hidden" id="supportChatViewLeft">
+              <div class="thread-header">
+                <button class="back-btn" id="closeSupportChatLeft">←</button>
+                <div class="thread-info">
+                  <h4 id="supportChatTitleLeft">Support Chat</h4>
+                  <span class="thread-status" id="supportChatStatusLeft">—</span>
+                </div>
+                <div class="thread-actions">
+                </div>
+              </div>
+              <div class="support-participants" id="supportParticipantsLeft"></div>
+              <div class="support-summary-card" id="supportSummaryLeft">
+                <div class="support-summary-header">
+                  <div class="support-summary-title">
+                    <span class="support-summary-icon">?</span>
+                    <span class="support-summary-topic"></span>
+                  </div>
+                  <div class="support-summary-actions">
+                    <span class="support-summary-tips"></span>
+                    <button class="support-summary-toggle" aria-label="Toggle details">
+                      <span class="support-summary-arrow">▼</span>
+                    </button>
+                  </div>
+                </div>
+                <div class="support-summary-content hidden">
+                  <div class="support-summary-message"></div>
+                  <div class="support-summary-status"></div>
+                </div>
+              </div>
+              <div class="support-chat-content-wrapper">
+                <div class="messages-container" id="supportMessagesLeft"></div>
+                <div class="typing-indicator hidden" id="supportTypingIndicatorLeft">
+                  <span class="typing-indicator-label">yazıyor...</span>
+                  <div class="typing-indicator-dots">
+                    <span></span><span></span><span></span>
+                  </div>
+                </div>
+                <div class="support-chat-actions" id="supportChatActionsLeft"></div>
+              </div>
+              <div class="message-input-container">
+                <input id="supportChatInputLeft" placeholder="Mesaj yaz..." />
+                <button id="supportChatSendLeft" class="send-btn">➤</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Panel -->
+      <div class="panel-container" id="panelRight">
+        <div class="auth-panel" id="authPanelRight">
+          <div class="auth-header">
+            <h2>Panel 2</h2>
+            <p class="auth-subtitle">Kullanıcı 2 Girişi</p>
+          </div>
+          <form id="loginFormRight">
+            <div class="form-row">
+              <label for="emailRight">E-posta</label>
+              <input id="emailRight" type="email" placeholder="markettest@tipbox.co" required />
+            </div>
+            <div class="form-row">
+              <label for="passwordRight">Şifre</label>
+              <input id="passwordRight" type="password" placeholder="password123" required />
+            </div>
+            <button type="submit">Giriş Yap</button>
+          </form>
+        </div>
+
+        <div class="app-shell hidden" id="appShellRight">
+          <!-- Inbox View -->
+          <div class="inbox-view" id="inboxViewRight">
+            <div class="inbox-header">
+              <div class="header-content">
+                <h3>Inbox</h3>
+                <span class="user-badge" id="userBadgeRight">—</span>
+              </div>
+              <div class="header-actions">
+                <button id="refreshThreadsBtnRight" class="icon-btn" title="Yenile">🔄</button>
+                <button id="logoutBtnRight" class="icon-btn" title="Çıkış">🚪</button>
+              </div>
+            </div>
+            <div class="inbox-tabs">
+              <button class="inbox-tab active" data-tab="messages" id="messagesTabRight">Messages</button>
+              <button class="inbox-tab" data-tab="support-requests" id="supportRequestsTabRight">1-on-1 Support Requests</button>
+            </div>
+            <!-- Messages Tab Content -->
+            <div class="inbox-tab-content active" id="messagesTabContentRight">
+              <div class="search-bar">
+                <input type="text" id="searchInputRight" placeholder="Mesajlarda Ara" />
+                <label class="checkbox">
+                  <input type="checkbox" id="unreadOnlyInputRight" />
+                  <span>Okunmamış</span>
+                </label>
+              </div>
+              <div id="threadListRight" class="thread-list">
+                <div class="empty-state">Mesaj yok</div>
+              </div>
+            </div>
+            <!-- Support Requests Tab Content -->
+            <div class="inbox-tab-content" id="supportRequestsTabContentRight">
+              <div class="search-bar">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="searchSupportRequestsInputRight" placeholder="Destek Taleplerinde Ara" />
+                <button class="filter-icon-btn" id="filterIconBtnRight" title="Filter">☰</button>
+              </div>
+              <div class="filter-buttons" id="filterButtonsRight">
+                <button class="filter-btn active" data-status="">All Requests</button>
+                <button class="filter-btn" data-status="active">Active</button>
+                <button class="filter-btn" data-status="completed">Awaiting Completion</button>
+                <button class="filter-btn" data-status="finalized">Finalized</button>
+                <button class="filter-btn" data-status="pending">Pending</button>
+              </div>
+              <div id="supportRequestsListRight" class="thread-list">
+                <div class="empty-state">Support request yok</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Thread View -->
+          <div class="thread-view-container hidden" id="threadViewContainerRight">
+            <div class="thread-view" id="threadViewRight">
+              <div class="thread-header">
+                <button class="back-btn" id="backBtnRight">←</button>
+                <div class="thread-info">
+                  <h4 id="threadTitleRight">—</h4>
+                  <span class="thread-status" id="threadStatusRight">—</span>
+                </div>
+                <div class="thread-actions">
+                </div>
+              </div>
+              <div class="thread-content-wrapper">
+                <div class="messages-container" id="messagesContainerRight"></div>
+              <div class="typing-indicator hidden" id="typingIndicatorRight">
+                <span class="typing-indicator-label">yazıyor...</span>
+                <div class="typing-indicator-dots">
+                  <span></span><span></span><span></span>
+                </div>
+              </div>
+                <div class="action-buttons-container">
+                  <button id="requestSupportBtnRight" class="action-btn">🎧 Request 1-on-1</button>
+                  <button id="sendTipsBtnRight" class="action-btn">🎁 Send TIPS</button>
+                </div>
+              </div>
+              <div class="message-input-container">
+                <button class="attach-btn" title="Attach">📎</button>
+                <input id="messageInputRight" placeholder="Bir mesaj yaz..." />
+                <button id="sendMessageBtnRight" class="send-btn">✈</button>
+              </div>
+            </div>
+
+            <!-- Support Chat View -->
+            <div class="support-chat-view hidden" id="supportChatViewRight">
+              <div class="thread-header">
+                <button class="back-btn" id="closeSupportChatRight">←</button>
+                <div class="thread-info">
+                  <h4 id="supportChatTitleRight">Support Chat</h4>
+                  <span class="thread-status" id="supportChatStatusRight">—</span>
+                </div>
+                <div class="thread-actions">
+                </div>
+              </div>
+              <div class="support-participants" id="supportParticipantsRight"></div>
+              <div class="support-summary-card" id="supportSummaryRight">
+                <div class="support-summary-header">
+                  <div class="support-summary-title">
+                    <span class="support-summary-icon">?</span>
+                    <span class="support-summary-topic"></span>
+                  </div>
+                  <div class="support-summary-actions">
+                    <span class="support-summary-tips"></span>
+                    <button class="support-summary-toggle" aria-label="Toggle details">
+                      <span class="support-summary-arrow">▼</span>
+                    </button>
+                  </div>
+                </div>
+                <div class="support-summary-content hidden">
+                  <div class="support-summary-message"></div>
+                  <div class="support-summary-status"></div>
+                </div>
+              </div>
+              <div class="support-chat-content-wrapper">
+                <div class="messages-container" id="supportMessagesRight"></div>
+                <div class="typing-indicator hidden" id="supportTypingIndicatorRight">
+                  <span class="typing-indicator-label">yazıyor...</span>
+                  <div class="typing-indicator-dots">
+                    <span></span><span></span><span></span>
+                  </div>
+                </div>
+                <div class="support-chat-actions" id="supportChatActionsRight"></div>
+              </div>
+              <div class="message-input-container">
+                <input id="supportChatInputRight" placeholder="Mesaj yaz..." />
+                <button id="supportChatSendRight" class="send-btn">➤</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modals -->
+    <section class="modal hidden" id="supportModal">
+      <div class="modal-card">
+        <header>
+          <h3>1-on-1 Support Request</h3>
+          <button type="button" id="closeSupportModal" class="ghost small">✕</button>
+        </header>
+        <form id="supportForm">
+          <label>
+            Support Topic
+            <select id="supportType">
+              <option value="GENERAL">General</option>
+              <option value="TECHNICAL">Technical</option>
+              <option value="PRODUCT">Product</option>
+            </select>
+          </label>
+          <label>
+            What do you need?
+            <textarea id="supportMessage" maxlength="500" placeholder="Detayları yaz..."></textarea>
+          </label>
+          <label>
+            TIPS Amount
+            <div class="amount-row">
+              <input id="supportAmount" type="number" min="50" value="1400" />
+              <span class="muted">min 50 TIPS</span>
+            </div>
+          </label>
+          <button type="submit" class="pill primary">Create 1-on-1 Request</button>
+        </form>
+      </div>
+    </section>
+
+    <section class="modal hidden" id="tipsModal">
+      <div class="modal-card">
+        <header>
+          <h3>Send TIPS</h3>
+          <button type="button" id="closeTipsModal" class="ghost small">✕</button>
+        </header>
+        <form id="tipsForm">
+          <label>
+            Amount
+            <input id="tipsAmount" type="number" min="10" step="10" value="100" />
+          </label>
+          <label>
+            Message
+            <textarea id="tipsMessage" maxlength="200" placeholder="Örn. Teşekkürler!"></textarea>
+          </label>
+          <button type="submit" class="pill secondary">Send TIPS</button>
+        </form>
+      </div>
+    </section>
+
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

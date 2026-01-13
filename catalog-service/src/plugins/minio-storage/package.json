@@ -1,0 +1,7 @@
+{
+  "name": "minio-storage-plugin",
+  "version": "1.0.0",
+  "description": "MinIO storage plugin for Medusa.js",
+  "main": "./index.ts"
+}
+

@@ -1,0 +1,12 @@
+export { MediaWidget } from "./media-widget"
+export { ImageUploadField } from "./image-upload-field"
+export { ImagePreview } from "./image-preview"
+export { MediaWidgetHeader } from "./media-widget-header"
+export { MediaPickerDialog } from "./media-picker-dialog"
+export { useImageUpload } from "./hooks/use-image-upload"
+export { useMetadataUpdate } from "./hooks/use-metadata-update"
+export { useMediaEditor } from "./hooks/use-media-editor"
+export type { MediaWidgetConfig, MediaFieldConfig, ImageValidationResult } from "./types"
+export { validateImageFile, fileToBase64, isBase64DataUrl } from "./utils"
+export { compressImage, needsCompression } from "./utils/image-compression"
+

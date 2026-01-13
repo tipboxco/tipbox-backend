@@ -1,0 +1,196 @@
+# Tipbox Design System Rules
+
+Bu dosya Tipbox backend dashboard'ında kullanılan UI/UX tasarım kurallarını tanımlar. Bu kurallar tüm dokümantasyon ve arayüzlerde tutarlılık sağlamak için kullanılmalıdır.
+
+## Renk Paleti
+
+### Ana Renkler
+- **Primary Color**: `#D0F205` - Ana renk (kart border'ları, vurgu, ikonlar, başlık çizgileri)
+- **Secondary Color**: `#571FDD` - İkincil renk (opsiyonel vurgular için)
+- **Background (Dark)**: `#272727` - Ana arka plan rengi
+- **Primary Text**: `#FAFAFA` - Ana metin rengi (başlıklar, önemli içerik)
+- **Secondary Text**: `#A3A3A3` - İkincil metin rengi (açıklamalar, alt metinler)
+- **Error/Danger**: `#FF6B7A` - Hata ve tehlikeli işlemler için
+
+### Şeffaflık (Opacity) Değerleri
+- **Background Overlay**: `rgba(255, 255, 255, 0.03)` - Hafif arka plan katmanı
+- **Card Background**: `rgba(255, 255, 255, 0.05)` - Kart arka planı
+- **Hover Background**: `rgba(255, 255, 255, 0.08)` - Hover durumu
+- **Border Light**: `rgba(163, 163, 163, 0.2)` - Açık kenarlık
+- **Border Medium**: `rgba(163, 163, 163, 0.3)` - Orta kenarlık
+- **Primary Border**: `#D0F205` - Ana renk kenarlık (kartlar, bölümler) - solid color
+- **Primary Border Hover**: `#D0F205` - Hover durumunda aynı renk (shadow ile vurgu)
+- **Secondary Border**: `rgba(87, 31, 221, 0.3)` - İkincil renk kenarlık (opsiyonel)
+- **Error Background**: `rgba(220, 53, 69, 0.1-0.15)` - Hata arka planı
+- **Error Border**: `rgba(220, 53, 69, 0.2-0.3)` - Hata kenarlık
+- **Modal Overlay**: `rgba(0, 0, 0, 0.75-0.85)` - Modal arka plan
+
+## Tipografi
+
+### Font Family
+- **Primary Font**: `'Jura', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`
+- **Monospace**: `'Monaco', 'Courier New', monospace` - Kod ve URL'ler için
+
+### Font Weights
+- **Light**: `300`
+- **Regular**: `400`
+- **Medium**: `500`
+- **Semi-Bold**: `600`
+- **Bold**: `700`
+
+### Font Sizes
+- **H1**: `2.5rem` (40px) - Ana başlık
+- **H2**: `1.5rem` (24px) - Bölüm başlıkları
+- **H3**: `1.1rem` (17.6px) - Kart başlıkları
+- **Body**: `1rem` (16px) - Normal metin
+- **Small**: `0.875rem` (14px) - Küçük metin, açıklamalar
+- **Button**: `0.9375rem` (15px) - Buton metinleri
+
+### Letter Spacing
+- **Tight**: `-0.02em` - Ana başlıklar için
+- **Normal**: `-0.01em` - Bölüm başlıkları için
+- **Default**: `normal` - Normal metin
+
+### Line Height
+- **Default**: `1.6` - Normal metin
+- **Tight**: `1.5` - Kart içerikleri
+
+## Spacing (Padding & Margin)
+
+### Container & Layout
+- **Body Padding**: `32px 24px` - Sayfa kenar boşlukları
+- **Container Max Width**: `1400px` - Maksimum içerik genişliği
+- **Section Margin Bottom**: `32px` - Bölümler arası boşluk
+- **Section Padding**: `32px` - Bölüm içi boşluk
+
+### Cards & Components
+- **Card Padding**: `24px` - Kart içi boşluk
+- **Card Gap**: `20px` - Kartlar arası boşluk
+- **Button Padding**: `12px 24px` - Buton içi boşluk
+- **Modal Padding**: `32px` - Modal içi boşluk
+
+### Internal Spacing
+- **Title Margin Bottom**: `24px` - Başlık alt boşluğu
+- **Card Title Margin**: `8px` - Kart başlık alt boşluğu
+- **Card Description Margin**: `12px-20px` - Açıklama alt boşluğu
+- **Status Padding**: `12px` - Durum mesajı içi boşluk
+- **Modal Actions Gap**: `12px` - Modal butonlar arası boşluk
+
+## Border Radius
+
+- **Small**: `8px` - Butonlar, küçük öğeler
+- **Medium**: `12px` - Kartlar
+- **Large**: `16px` - Bölümler, modaller
+- **Circle**: `50%` - Yuvarlak öğeler (spinner)
+
+## Borders
+
+### Border Width
+- **Default**: `1px` - Standart kenarlık
+
+### Border Styles
+- **Solid**: Tüm kenarlıklar için
+- **Gradient**: Başlık alt çizgileri için (`linear-gradient(90deg, rgba(163, 163, 163, 0.3) 0%, transparent 100%)`)
+
+## Shadows
+
+- **Card Hover**: `0 4px 16px rgba(208, 242, 5, 0.15)` - Kart hover gölgesi
+- **Button Hover**: `0 2px 8px rgba(0, 0, 0, 0.2)` - Buton hover gölgesi
+- **Modal**: `0 20px 60px rgba(0, 0, 0, 0.5)` - Modal gölgesi
+- **Docker Button**: `0 4px 12px rgba(0, 0, 0, 0.3)` - Sabit buton gölgesi
+
+## Transitions & Animations
+
+### Transition Timing
+- **Default**: `0.3s ease` - Standart geçişler
+- **Cubic Bezier**: `cubic-bezier(0.4, 0, 0.2, 1)` - Kart hover geçişleri
+
+### Animations
+- **Fade In Slide**: `fadeInSlide 0.8s ease-out` - Logo animasyonu
+- **Spin**: `spin 1s linear infinite` - Loading spinner
+
+## Grid Layouts
+
+### Card Grids
+- **Template**: `repeat(auto-fill, minmax(280px, 1fr))`
+- **Gap**: `20px`
+
+## Component Patterns
+
+### Cards
+- Background: `rgba(255, 255, 255, 0.05)`
+- Border: `1px solid rgba(208, 242, 5, 0.3)`
+- Border Radius: `12px`
+- Padding: `24px`
+- Hover: Transform `translateY(-2px)`, border color increase, background increase, shadow
+
+### Buttons
+- Background: `rgba(255, 255, 255, 0.1)`
+- Border: `1px solid rgba(163, 163, 163, 0.2)`
+- Border Radius: `8px`
+- Padding: `12px 24px`
+- Hover: Background increase, border color increase, transform `translateY(-1px)`, shadow
+
+### Danger Buttons
+- Background: `rgba(220, 53, 69, 0.15)`
+- Border: `1px solid rgba(220, 53, 69, 0.3)`
+- Color: `#FF6B7A`
+- Hover: Background `rgba(220, 53, 69, 0.25)`, border color increase
+
+### Modals
+- Overlay: `rgba(0, 0, 0, 0.75)` with `backdrop-filter: blur(4px)`
+- Content Background: `#272727`
+- Border: `1px solid rgba(163, 163, 163, 0.2)`
+- Border Radius: `16px`
+- Padding: `32px`
+- Shadow: `0 20px 60px rgba(0, 0, 0, 0.5)`
+
+### Status Messages
+- Success: Background `rgba(255, 255, 255, 0.05)`, border `rgba(163, 163, 163, 0.2)`, color `#A3A3A3`
+- Error: Background `rgba(220, 53, 69, 0.1)`, border `rgba(220, 53, 69, 0.2)`, color `#FF6B7A`
+- Loading: Same as success
+
+## Responsive Design
+
+### Breakpoints
+- **Mobile**: `max-width: 768px`
+  - Header flex-direction: `column`
+  - Logo height: `60px` (from 80px)
+  - H1 font-size: `2rem` (from 2.5rem)
+
+## Backdrop Filter
+
+- **Blur**: `blur(10px)` - Section backdrop
+- **Blur**: `blur(4px)` - Modal overlay
+
+## Icon Usage
+
+- **Font**: Font Awesome 6.4.0
+- **Icon Color**: `#D0F205` (accent color) for normal icons
+- **Icon Color**: `#FF6B7A` for danger/error icons
+- **Icon Size**: `1.3rem` for card icons
+- **Icon Width**: `24px` for alignment
+
+## Z-Index Layers
+
+- **Modal**: `1000`
+- **Docker Controls**: `100`
+- **Loading Overlay**: `2000`
+
+## Disabled States
+
+- Background: `rgba(163, 163, 163, 0.1)`
+- Color: `#A3A3A3`
+- Border: `rgba(163, 163, 163, 0.1)`
+- Cursor: `not-allowed`
+- Transform: `none` (no hover effects)
+
+## Best Practices
+
+1. **Consistency**: Tüm UI öğelerinde aynı renk paleti ve spacing değerlerini kullan
+2. **Accessibility**: Yeterli kontrast oranları sağla (WCAG AA minimum)
+3. **Hover States**: Tüm interaktif öğelerde hover durumları tanımla
+4. **Transitions**: Tüm state değişikliklerinde smooth geçişler kullan
+5. **Shadows**: Depth ve hierarchy için shadow kullan, ancak abartma
+6. **Typography**: Jura font'unu tüm metinlerde kullan (kod hariç)
+7. **Dark Theme**: Tüm arayüzler dark theme'e uygun olmalı

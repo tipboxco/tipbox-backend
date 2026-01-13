@@ -59,13 +59,15 @@ services:
       - tipbox_network
 
   backend:
-    build: .
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: tipbox_backend
     restart: always
     ports:
       - "3000:3000"  # Tüm network interface'lerinden erişim için (0.0.0.0:3000:3000 yerine)
     env_file:
-      - .env
+      - ./backend/.env
     environment:
       - NODE_ENV=development
       - NODE_OPTIONS=--max-old-space-size=4096
@@ -77,9 +79,9 @@ services:
       - redis
       - minio
     volumes:
-      - .:/app
+      - ./backend:/app
       - /app/node_modules
-      - ./tipboxbackend-3e2c3d3c0b31.json:/app/tipboxbackend-3e2c3d3c0b31.json:ro
+      - ./backend/tipboxbackend-3e2c3d3c0b31.json:/app/tipboxbackend-3e2c3d3c0b31.json:ro
       # Docker daemon'a erişim için host docker.sock'u container'a bağla
       - /var/run/docker.sock:/var/run/docker.sock
     working_dir: /app
@@ -117,24 +119,67 @@ services:
       retries: 3
 
   prisma-studio:
-    build: .
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: tipbox_prisma_studio
     restart: always
     ports:
       - "5555:5555"
     env_file:
-      - .env
+      - ./backend/.env
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/tipbox_dev
     depends_on:
       - postgres
     volumes:
-      - .:/app
+      - ./backend:/app
       - /app/node_modules
     working_dir: /app
     command: npx prisma studio --port 5555 --browser none
     networks:
       - tipbox_network
+
+  catalog-service:
+    build:
+      context: ./catalog-service
+      dockerfile: Dockerfile
+    container_name: tipbox_catalog_service
+    restart: always
+    depends_on:
+      - postgres
+      - redis
+      - minio
+    ports:
+      - "9002:9000"  # Medusa backend API (host:container - minio ile çakışmaması için 9002)
+      - "5173:5173"  # Medusa admin dashboard
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/medusa-store?sslmode=disable
+      - REDIS_URL=redis://redis:6379
+      # MinIO yapılandırması - Docker Compose ile çalışan MinIO için
+      # Region parametresi gerekli değil (MinIO local storage için region kullanmaz)
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_BUCKET=medusa-media
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin123}
+      - MINIO_USE_SSL=false
+      - MINIO_REGION=
+    env_file:
+      - ./catalog-service/.env
+    volumes:
+      - ./catalog-service:/server
+      - /server/node_modules
+    working_dir: /server
+    command: ./docker-entrypoint.sh
+    networks:
+      - tipbox_network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
 volumes:
   pgdata:

@@ -1,0 +1,668 @@
+Table users {
+  id int [pk, increment]
+  email varchar
+  password_hash varchar
+  status varchar
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table profiles {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  display_name varchar
+  bio text
+  country varchar
+  birth_date date
+  created_at timestamp
+}
+
+Table user_settings {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  theme_id int [ref: > user_themes.id]
+  receive_notifications boolean
+  visibility enum
+}
+
+Table trust_relations {
+  id int [pk, increment]
+  truster_id int [ref: > users.id]
+  trusted_user_id int [ref: > users.id]
+  created_at timestamp
+}
+Table user_trust_scores {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  score float
+  reason text
+  calculated_at timestamp
+}
+
+Table user_roles {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  role varchar
+}
+Table user_feed_preferences {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  preferred_categories text
+  preferred_content_types text
+  language varchar
+  updated_at timestamp
+}
+
+Table user_avatars {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  image_url varchar
+  is_active boolean
+}
+
+Table user_kyc_records {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  sumsub_applicant_id varchar [unique] // Sumsub'ın döndürdüğü anahtar
+  review_status enum('init', 'pending', 'completed', 'declined', 'on_hold') // Sumsub status
+  review_result enum('null', 'green', 'yellow', 'red') // reviewResult.reviewAnswer
+  review_reason text // Opsiyonel: decline reason
+  kyc_level varchar // örn: "basic-kyc-level"
+  provider enum('sumsub') // future-proofing için
+  created_at timestamp
+  last_updated_at timestamp
+  last_synced_at timestamp // cron-job ile veya webhook ile en son güncellendiği zaman
+}
+
+Table user_themes {
+  id int [pk, increment]
+  name varchar
+  description text
+}
+
+Table user_titles {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  title varchar
+  earned_at timestamp
+}
+
+Table user_collections {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  name varchar
+  description text
+  created_at timestamp
+}
+Table login_attempts {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  ip_address varchar
+  user_agent varchar
+  status enum('success', 'failed', 'locked')
+  attempted_at timestamp
+}
+Table password_reset_tokens {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  token varchar
+  is_used boolean
+  expires_at timestamp
+  created_at timestamp
+}
+
+Table main_categories {
+  id int [pk, increment]
+  name varchar
+  description text
+  created_at timestamp
+}
+
+Table sub_categories {
+  id int [pk, increment]
+  main_category_id int [ref: > main_categories.id]
+  name varchar
+  description text
+  created_at timestamp
+}
+
+Table product_groups {
+  id int [pk, increment]
+  sub_category_id int [ref: > sub_categories.id]
+  name varchar
+  description text
+  created_at timestamp
+}
+
+Table products {
+  id int [pk, increment]
+  name varchar
+  brand varchar
+  description text
+  group_id int [ref: > product_groups.id]
+  created_at timestamp
+}
+Table product_suggestions {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  suggested_name varchar
+  suggested_brand varchar
+  description text
+  reason text
+  status enum('pending', 'approved', 'rejected')
+  created_at timestamp
+  reviewed_at timestamp
+  reviewed_by int [ref: > users.id, null]
+}
+
+Table inventories {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  product_id int [ref: > products.id]
+  has_owned boolean
+  experience_summary text
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table product_experiences {
+  id int [pk, increment]
+  inventory_id int [ref: > inventories.id]
+  title varchar
+  experience_text text
+  updated_at timestamp
+}
+
+Table inventory_media {
+  id int [pk, increment]
+  inventory_id int [ref: > inventories.id]
+  media_url varchar
+  type enum('image', 'video')
+  uploaded_at timestamp
+}
+
+Table content_posts {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  type enum('free', 'tips', 'compare', 'question')
+  title varchar
+  body text
+  main_category_id int [ref: > main_categories.id, null]
+  sub_category_id int [ref: > sub_categories.id, null]
+  product_group_id int [ref: > product_groups.id, null]
+  product_id int [ref: > products.id, null]
+  inventory_required boolean
+  is_boosted boolean
+  boosted_until timestamp
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table post_questions {
+  id int [pk, increment]
+  post_id int [ref: > content_posts.id]
+  expected_answer_format enum('short', 'long', 'poll', 'choice')
+  related_product_id int [ref: > products.id, null]
+}
+
+Table post_comparisons {
+  id int [pk, increment]
+  post_id int [ref: > content_posts.id]
+  product_1_id int [ref: > products.id]
+  product_2_id int [ref: > products.id]
+  comparison_summary text
+}
+
+Table comparison_metrics {
+  id int [pk, increment]
+  name varchar
+  description text
+}
+
+Table post_comparison_scores {
+  id int [pk, increment]
+  comparison_id int [ref: > post_comparisons.id]
+  metric_id int [ref: > comparison_metrics.id]
+  score_product_1 int
+  score_product_2 int
+  comment text
+}
+
+Table post_tips {
+  id int [pk, increment]
+  post_id int [ref: > content_posts.id]
+  tip_category enum('usage', 'purchase', 'care', 'other')
+  is_verified boolean
+}
+
+Table post_tags {
+  id int [pk, increment]
+  post_id int [ref: > content_posts.id]
+  tag varchar
+}
+
+Table content_comments {
+  id int [pk, increment]
+  post_id int [ref: > content_posts.id]
+  user_id int [ref: > users.id]
+  parent_id int [ref: > content_comments.id, null]
+  comment text
+  is_answer boolean
+  created_at timestamp
+}
+
+Table content_likes {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  post_id int [ref: > content_posts.id, null]
+  comment_id int [ref: > content_comments.id, null]
+  created_at timestamp
+}
+
+Table content_favorites {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  post_id int [ref: > content_posts.id]
+  created_at timestamp
+}
+
+Table content_collections {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  name varchar
+  description text
+  created_at timestamp
+}
+
+Table content_ratings {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  comment_id int [ref: > content_comments.id]
+  rating int
+  created_at timestamp
+}
+Table content_post_tags {
+  id int [pk, increment]
+  post_id int [ref: > content_posts.id]
+  tag varchar
+}
+Table content_comment_votes {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  comment_id int [ref: > content_comments.id]
+  vote_type enum('upvote', 'downvote')
+  created_at timestamp
+}
+Table content_post_views {
+  id int [pk, increment]
+  post_id int [ref: > content_posts.id]
+  user_id int [ref: > users.id, null]
+  viewed_at timestamp
+  viewer_ip varchar
+}
+
+Table top_community_choices {
+  id int [pk, increment]
+  post_id int [ref: > content_posts.id]
+  reason text
+  badge_label varchar
+  awarded_at timestamp
+}
+Table badges {
+    id int [pk, increment]
+    name varchar
+    description text
+    image_url varchar
+    type enum('achievement', 'event', 'cosmetic')
+    rarity enum('common', 'rare', 'epic')
+    boost_multiplier float
+    reward_multiplier float
+    category_id int [ref: > badge_categories.id]
+    created_at timestamp
+}
+Table badge_categories {
+  id int [pk, increment]
+  name varchar
+  description text
+}
+
+Table user_badges {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  badge_id int [ref: > badges.id]
+  is_visible boolean
+  display_order int
+  visibility enum('public', 'friends', 'trusters', 'private')
+  claimed boolean
+  claimed_at timestamp
+}
+
+Table achievement_chains {
+  id int [pk, increment]
+  name varchar
+  description text
+  category varchar
+}
+
+Table achievement_goals {
+  id int [pk, increment]
+  chain_id int [ref: > achievement_chains.id]
+  title varchar
+  requirement text
+  reward_badge_id int [ref: > badges.id, null]
+  points_required int
+  difficulty enum('easy', 'medium', 'hard')
+}
+
+Table user_achievements {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  goal_id int [ref: > achievement_goals.id]
+  progress int
+  completed boolean
+  completed_at timestamp
+}
+
+Table reward_claims {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  badge_id int [ref: > badges.id]
+  amount float
+  claimed_at timestamp
+  vesting_status enum('pending', 'partial', 'completed')
+}
+
+
+Table brands {
+  id int [pk, increment]
+  name varchar
+  description text
+  logo_url varchar
+  category varchar
+  created_at timestamp
+}
+
+Table bridge_posts {
+  id int [pk, increment]
+  brand_id int [ref: > brands.id]
+  user_id int [ref: > users.id]
+  content text
+  created_at timestamp
+}
+
+Table brand_surveys {
+  id int [pk, increment]
+  brand_id int [ref: > brands.id]
+  title varchar
+  description text
+  starts_at timestamp
+  ends_at timestamp
+}
+
+Table brand_survey_questions {
+  id int [pk, increment]
+  survey_id int [ref: > brand_surveys.id]
+  question_text text
+  type enum('single_choice', 'multiple_choice', 'text')
+}
+
+Table brand_survey_answers {
+  id int [pk, increment]
+  question_id int [ref: > brand_survey_questions.id]
+  user_id int [ref: > users.id]
+  answer_text text
+  created_at timestamp
+}
+
+Table bridge_followers {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  brand_id int [ref: > brands.id]
+  followed_at timestamp
+}
+
+Table bridge_user_stats {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  brand_id int [ref: > brands.id]
+  comments_count int
+  surveys_participated int
+  trust_score float
+  last_interaction_at timestamp
+}
+
+Table bridge_leaderboards {
+  id int [pk, increment]
+  brand_id int [ref: > brands.id]
+  user_id int [ref: > users.id]
+  period enum('weekly', 'monthly')
+  rank int
+  score float
+  recorded_at timestamp
+}
+
+Table bridge_rewards {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  brand_id int [ref: > brands.id]
+  badge_id int [ref: > badges.id]
+  awarded_at timestamp
+}
+Table wallets {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  public_address varchar
+  provider enum('metamask', 'walletconnect', 'custom')
+  is_connected boolean
+  created_at timestamp
+}
+
+Table tips_token_transfers {
+  id int [pk, increment]
+  from_user_id int [ref: > users.id]
+  to_user_id int [ref: > users.id]
+  amount float
+  reason text
+  created_at timestamp
+}
+
+Table nfts {
+  id int [pk, increment]
+  name varchar
+  description text
+  image_url varchar
+  type enum('badge', 'cosmetic', 'lootbox')
+  rarity enum('common', 'rare', 'epic')
+  is_transferable boolean
+  created_at timestamp
+}
+
+Table nft_transactions {
+  id int [pk, increment]
+  nft_id int [ref: > nfts.id]
+  from_user_id int [ref: > users.id, null]
+  to_user_id int [ref: > users.id]
+  price float
+  transaction_type enum('mint', 'transfer', 'purchase')
+  created_at timestamp
+}
+
+Table nft_market_listings {
+  id int [pk, increment]
+  nft_id int [ref: > nfts.id]
+  listed_by_user_id int [ref: > users.id]
+  price float
+  status enum('active', 'sold', 'cancelled')
+  listed_at timestamp
+}
+
+Table nft_attributes {
+  id int [pk, increment]
+  nft_id int [ref: > nfts.id]
+  key varchar
+  value text
+}
+
+Table lootboxes {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  tips_locked float
+  status enum('locked', 'openable', 'claimed')
+  created_at timestamp
+}
+
+Table nft_claims {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  nft_id int [ref: > nfts.id, null]
+  tips_amount float
+  claimed_at timestamp
+}
+
+Table wishbox_events {
+  id int [pk, increment]
+  title varchar
+  description text
+  start_date timestamp
+  end_date timestamp
+  status enum('draft', 'published', 'closed')
+  created_at timestamp
+  updated_at timestamp
+}
+Table wishbox_scenarios {
+  id int [pk, increment]
+  event_id int [ref: > wishbox_events.id]
+  title varchar
+  description text
+  order_index int
+  created_at timestamp
+}
+
+Table scenario_choices {
+  id int [pk, increment]
+  scenario_id int [ref: > wishbox_scenarios.id]
+  user_id int [ref: > users.id]
+  choice_text varchar
+  is_selected boolean
+  created_at timestamp
+}
+Table choice_comments {
+  id int [pk, increment]
+  choice_id int [ref: > scenario_choices.id]
+  user_id int [ref: > users.id]
+  comment text
+  created_at timestamp
+}
+Table wishbox_stats {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  event_id int [ref: > wishbox_events.id]
+  total_participated int
+  total_comments int
+  helpful_votes_received int
+  updated_at timestamp
+}
+Table wishbox_rewards {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  event_id int [ref: > wishbox_events.id]
+  reward_type enum('tips', 'badge', 'title')
+  reward_id int
+  amount float
+  awarded_at timestamp
+}
+
+Table dm_threads {
+  id int [pk, increment]
+  user_one_id int [ref: > users.id]
+  user_two_id int [ref: > users.id]
+  is_active boolean
+  started_at timestamp
+}
+
+Table dm_messages {
+  id int [pk, increment]
+  thread_id int [ref: > dm_threads.id]
+  sender_id int [ref: > users.id]
+  message text
+  sent_at timestamp
+  is_read boolean
+}
+
+Table dm_requests {
+  id int [pk, increment]
+  from_user_id int [ref: > users.id]
+  to_user_id int [ref: > users.id]
+  status enum('pending', 'accepted', 'declined')
+  sent_at timestamp
+  responded_at timestamp
+}
+
+Table dm_support_sessions {
+  id int [pk, increment]
+  thread_id int [ref: > dm_threads.id]
+  helper_id int [ref: > users.id]
+  tips_amount float
+  supported_at timestamp
+}
+
+Table dm_feedbacks {
+  id int [pk, increment]
+  session_id int [ref: > dm_support_sessions.id]
+  rating int
+  comment text
+  submitted_at timestamp
+}
+Table feeds {
+  id int [pk, increment]
+  user_id int [ref: > users.id]
+  post_id int [ref: > content_posts.id]
+  source enum('truster', 'category_match', 'trending', 'new_user', 'boosted')
+  seen boolean
+  created_at timestamp
+}
+
+Table feed_highlights {
+  id int [pk, increment]
+  post_id int [ref: > content_posts.id]
+  reason enum('most_liked', 'staff_pick', 'boosted')
+  highlighted_at timestamp
+}
+
+Table trending_posts {
+  id int [pk, increment]
+  post_id int [ref: > content_posts.id]
+  score float
+  trend_period enum('daily', 'weekly')
+  calculated_at timestamp
+}
+
+Table admin_logs {
+  id int [pk, increment]
+  admin_id int [ref: > users.id]
+  action varchar
+  description text
+  entity_type varchar
+  entity_id int
+  created_at timestamp
+}
+
+Table moderation_actions {
+  id int [pk, increment]
+  moderator_id int [ref: > users.id]
+  target_user_id int [ref: > users.id]
+  reason text
+  action_type enum('ban', 'warn', 'mute', 'content_removed')
+  content_type varchar
+  content_id int
+  created_at timestamp
+}
+Table manual_review_flags {
+  id int [pk, increment]
+  flagged_by_user_id int [ref: > users.id]
+  content_type varchar
+  content_id int
+  reason text
+  status enum('open', 'in_review', 'resolved')
+  created_at timestamp
+}

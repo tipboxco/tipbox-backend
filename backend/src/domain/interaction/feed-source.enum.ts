@@ -1,0 +1,7 @@
+export enum FeedSource {
+  TRUSTER = 'TRUSTER',
+  CATEGORY_MATCH = 'CATEGORY_MATCH', 
+  TRENDING = 'TRENDING',
+  NEW_USER = 'NEW_USER',
+  BOOSTED = 'BOOSTED'
+}

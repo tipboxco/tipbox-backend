@@ -1,5 +1,0 @@
-export enum BadgeType {
-  ACHIEVEMENT = 'ACHIEVEMENT',
-  EVENT = 'EVENT',
-  COSMETIC = 'COSMETIC'
-}
