@@ -17,41 +17,59 @@ interface TransactionSeedResult {
 
 /**
  * Kullanıcılar için wallet'lar oluşturur
+ * Her kullanıcı için SADECE BİR wallet olmasını garantiler
  */
 async function seedWallets(userIds: string[]): Promise<Map<string, string>> {
-  logger.info('Creating wallets for users...');
+  logger.info(`Creating wallets for ${userIds.length} users...`);
   
   const walletMap = new Map<string, string>(); // userId -> walletId
+  let createdCount = 0;
+  let existingCount = 0;
   
   for (const userId of userIds) {
     try {
-      // Wallet zaten var mı kontrol et
-      const existing = await prisma.wallet.findFirst({
-        where: { userId, isConnected: true }
+      // Bu kullanıcının herhangi bir wallet'ı var mı kontrol et (isConnected true olanı tercih et)
+      let existing = await prisma.wallet.findFirst({
+        where: { userId, isConnected: true },
+        orderBy: { createdAt: 'asc' } // İlk oluşturulanı al
       });
+
+      // Connected wallet yoksa, connected olmayan var mı kontrol et
+      if (!existing) {
+        existing = await prisma.wallet.findFirst({
+          where: { userId },
+          orderBy: { createdAt: 'asc' }
+        });
+      }
 
       if (existing) {
         walletMap.set(userId, existing.id);
+        existingCount++;
+        logger.info(`✓ Existing wallet found for user ${userId.substring(0, 8)}...: ${existing.id.substring(0, 8)}...`);
         continue;
       }
 
-      // Yeni wallet oluştur
+      // Yeni wallet oluştur - unique publicAddress garantisi için timestamp + random kullan
+      const uniqueSuffix = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
       const wallet = await prisma.wallet.create({
         data: {
           userId,
-          publicAddress: `0xTIPBOX_${userId}_${Date.now()}`,
+          publicAddress: `0xTIPBOX_${userId}_${uniqueSuffix}`,
           provider: 'CUSTOM',
           isConnected: true
         }
       });
 
       walletMap.set(userId, wallet.id);
-      logger.info(`Wallet created for user ${userId}: ${wallet.id}`);
+      createdCount++;
+      logger.info(`✓ Wallet created for user ${userId.substring(0, 8)}...: ${wallet.id.substring(0, 8)}...`);
     } catch (error) {
-      logger.error(`Error creating wallet for user ${userId}:`, error);
+      logger.error(`✗ Error creating wallet for user ${userId}:`, error);
+      // Hata durumunda bile devam et
     }
   }
 
+  logger.info(`📊 Wallet Summary: ${existingCount} existing, ${createdCount} created, ${walletMap.size} total`);
   return walletMap;
 }
 
@@ -84,9 +102,9 @@ export async function seedTransactions(): Promise<TransactionSeedResult> {
     byStatus: {}
   };
 
-  // 1. Kullanıcıları al
+  // 1. TÜM kullanıcıları al (40 seed kullanıcısı)
   const users = await prisma.user.findMany({
-    take: 20,
+    take: 40,
     include: {
       profile: true
     }
