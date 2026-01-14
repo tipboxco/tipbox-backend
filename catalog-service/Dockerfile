@@ -20,4 +20,4 @@ COPY . .
 EXPOSE 9000
 
 # Start with migrations and then the development server
-CMD ["sh", "docker-entrypoint.sh"]
+CMD ["sh", "-c", "[ -f src/scripts/tipbox-datas/products_with_images.zip ] && unzip -o src/scripts/tipbox-datas/products_with_images.zip -d src/scripts/tipbox-datas/ || true && echo 'Running database migrations...' && npx medusa db:migrate && echo 'Creating root user...' && npx medusa user --email root@tipbox.co --password root@tipbox.co || true && echo 'Starting Medusa server...' && npm run start"]

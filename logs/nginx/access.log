@@ -1,0 +1,2 @@
+192.168.65.1 - - [14/Jan/2026:15:57:27 +0000] "GET /media/profile-pictures/44444444-4444-4444-a444-444444444444/seed-avatar.png HTTP/1.1" 404 469 "-" "Expo/1017756 CFNetwork/3860.200.71 Darwin/25.1.0"
+192.168.65.1 - - [14/Jan/2026:15:58:29 +0000] "GET / HTTP/1.1" 301 169 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"

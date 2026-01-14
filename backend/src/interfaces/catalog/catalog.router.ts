@@ -59,7 +59,6 @@ router.get(
  *         required: true
  *         schema:
  *           type: string
- *           format: uuid
  *         description: Kategori ID'si
  *     responses:
  *       200:
@@ -73,7 +72,6 @@ router.get(
  *                 properties:
  *                   subCategoryId:
  *                     type: string
- *                     format: uuid
  *                   name:
  *                     type: string
  *                   image:
@@ -81,7 +79,6 @@ router.get(
  *                     nullable: true
  *                   categoryId:
  *                     type: string
- *                     format: uuid
  *       401:
  *         description: Kimlik doğrulaması başarısız.
  *       404:
@@ -111,7 +108,6 @@ router.get(
  *         required: true
  *         schema:
  *           type: string
- *           format: uuid
  *         description: Sub-kategori ID'si
  *     responses:
  *       200:
@@ -125,7 +121,6 @@ router.get(
  *                 properties:
  *                   productGroupId:
  *                     type: string
- *                     format: uuid
  *                   name:
  *                     type: string
  *                   image:
@@ -133,7 +128,6 @@ router.get(
  *                     nullable: true
  *                   subCategoryId:
  *                     type: string
- *                     format: uuid
  *       401:
  *         description: Kimlik doğrulaması başarısız.
  *       404:
@@ -163,7 +157,6 @@ router.get(
  *         required: true
  *         schema:
  *           type: string
- *           format: uuid
  *         description: Product group ID'si
  *       - in: query
  *         name: search
@@ -182,7 +175,6 @@ router.get(
  *                 properties:
  *                   productId:
  *                     type: string
- *                     format: uuid
  *                   name:
  *                     type: string
  *                   image:
@@ -190,7 +182,6 @@ router.get(
  *                     nullable: true
  *                   productGroupId:
  *                     type: string
- *                     format: uuid
  *       401:
  *         description: Kimlik doğrulaması başarısız.
  *       404:
@@ -221,7 +212,6 @@ router.get(
  *         required: true
  *         schema:
  *           type: string
- *           format: uuid
  *         description: Product ID'si
  *     responses:
  *       200:
@@ -233,7 +223,6 @@ router.get(
  *               properties:
  *                 productId:
  *                   type: string
- *                   format: uuid
  *                 name:
  *                   type: string
  *                 subName:
@@ -295,7 +284,6 @@ router.get(
  *         required: true
  *         schema:
  *           type: string
- *           format: uuid
  *         description: Product ID'si
  *       - in: query
  *         name: type
@@ -387,7 +375,6 @@ router.get(
  *         required: true
  *         schema:
  *           type: string
- *           format: uuid
  *         description: Product ID'si
  *       - in: query
  *         name: cursor

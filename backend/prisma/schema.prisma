@@ -53,14 +53,14 @@ model User {
   nftTransactionsSent     NFTTransaction[]        @relation("NFTSender")
   nftTransactionsReceived NFTTransaction[]        @relation("NFTReceiver")
   nftOwned                NFT[]                   @relation("NFTOwner")
+  notifications           Notification[]
   passwordResetTokens     PasswordResetToken[]
   reviewedSuggestions     ProductSuggestion[]     @relation("ProductSuggestionReviewer")
   productSuggestions      ProductSuggestion[]
   profile                 Profile?
+  pushTokens              PushToken[]
   rewardClaims            RewardClaim[]
   supportRequestReports   SupportRequestReport[]  @relation("SupportRequestReportReporter")
-  userReportsAsReporter   UserReport[]            @relation("UserReportReporter")
-  userReportsAsReported   UserReport[]            @relation("UserReportReported")
   sentTips                TipsTokenTransfer[]     @relation("SentTips")
   receivedTips            TipsTokenTransfer[]     @relation("ReceivedTips")
   trustRelationsAsTrusted TrustRelation[]         @relation("TrustedUserRelation")
@@ -75,6 +75,8 @@ model User {
   userKycRecords          UserKycRecord[]
   userMutesAsMuted        UserMute[]              @relation("MutedUserRelation")
   userMutesAsMuter        UserMute[]              @relation("MuterRelation")
+  userReportsAsReported   UserReport[]            @relation("UserReportReported")
+  userReportsAsReporter   UserReport[]            @relation("UserReportReporter")
   roles                   UserRole[]
   settings                UserSettings?
   titles                  UserTitle[]
@@ -82,8 +84,6 @@ model User {
   wallets                 Wallet[]
   wishboxRewards          WishboxReward[]
   wishboxStats            WishboxStats[]
-  notifications           Notification[]
-  pushTokens              PushToken[]
 
   @@map("users")
 }
@@ -111,32 +111,27 @@ model Profile {
 }
 
 model UserSettings {
-  id                   String          @id @default(uuid()) @db.Uuid
-  userId               String          @unique @map("user_id") @db.Uuid
-  themeId              String?         @map("theme_id") @db.Uuid
-  receiveNotifications Boolean?        @map("receive_notifications")
-  visibility           UserVisibility?
-
-  // Notification Channel Preferences
-  notificationEmailEnabled Boolean? @default(true) @map("notification_email_enabled")
-  notificationPushEnabled  Boolean? @default(true) @map("notification_push_enabled")
-  notificationInAppEnabled Boolean? @default(true) @map("notification_in_app_enabled")
-
-  // Notification Type Preferences
-  trustNotifications      Boolean @default(true) @map("trust_notifications")
-  supportNotifications    Boolean @default(true) @map("support_notifications")
-  messageNotifications    Boolean @default(true) @map("message_notifications")
-  collectionNotifications Boolean @default(true) @map("collection_notifications")
-  postNotifications       Boolean @default(true) @map("post_notifications")
-  walletNotifications     Boolean @default(true) @map("wallet_notifications")
-  transactionNotifications Boolean @default(true) @map("transaction_notifications")
-  rewardNotifications     Boolean @default(true) @map("reward_notifications")
-  nftNotifications        Boolean @default(true) @map("nft_notifications")
-
-  createdAt DateTime   @default(now()) @map("created_at")
-  updatedAt DateTime   @updatedAt @map("updated_at")
-  theme     UserTheme? @relation(fields: [themeId], references: [id])
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                       String          @id @default(uuid()) @db.Uuid
+  userId                   String          @unique @map("user_id") @db.Uuid
+  themeId                  String?         @map("theme_id") @db.Uuid
+  receiveNotifications     Boolean?        @map("receive_notifications")
+  visibility               UserVisibility?
+  notificationEmailEnabled Boolean?        @default(true) @map("notification_email_enabled")
+  notificationPushEnabled  Boolean?        @default(true) @map("notification_push_enabled")
+  notificationInAppEnabled Boolean?        @default(true) @map("notification_in_app_enabled")
+  trustNotifications       Boolean         @default(true) @map("trust_notifications")
+  supportNotifications     Boolean         @default(true) @map("support_notifications")
+  messageNotifications     Boolean         @default(true) @map("message_notifications")
+  collectionNotifications  Boolean         @default(true) @map("collection_notifications")
+  postNotifications        Boolean         @default(true) @map("post_notifications")
+  walletNotifications      Boolean         @default(true) @map("wallet_notifications")
+  transactionNotifications Boolean         @default(true) @map("transaction_notifications")
+  rewardNotifications      Boolean         @default(true) @map("reward_notifications")
+  nftNotifications         Boolean         @default(true) @map("nft_notifications")
+  createdAt                DateTime        @default(now()) @map("created_at")
+  updatedAt                DateTime        @updatedAt @map("updated_at")
+  theme                    UserTheme?      @relation(fields: [themeId], references: [id])
+  user                     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_settings")
 }
@@ -334,20 +329,19 @@ model EmailVerificationCode {
 }
 
 model Category {
-  id          String   @id
-  parentId    String?  @map("parent_id")
-  name        String
-  description String?
-  thumbnail   String?  @map("thumbnail")
-  mpath       String?  @map("mpath")
-  handle      String?  @map("handle")
-  rank        Int?     @map("rank")
-  metadata    Json?    @default("{}") @map("metadata")
-  isActive    Boolean? @default(true) @map("is_active")
-  level       Int?     @default(0)
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
+  id           String        @id
+  parentId     String?       @map("parent_id")
+  name         String
+  description  String?
+  thumbnail    String?       @map("thumbnail")
+  mpath        String?       @map("mpath")
+  handle       String?       @map("handle")
+  rank         Int?          @map("rank")
+  metadata     Json?         @default("{}") @map("metadata")
+  isActive     Boolean?      @default(true) @map("is_active")
+  level        Int?          @default(0)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
   parent       Category?     @relation("CategoryChildren", fields: [parentId], references: [id], onDelete: Cascade)
   children     Category[]    @relation("CategoryChildren")
   contentPosts ContentPost[]
@@ -381,8 +375,8 @@ model SubCategory {
   imageUrl       String?        @map("image_url")
   contentPosts   ContentPost[]
   productGroups  ProductGroup[]
-  wishboxEvents  WishboxEvent[]
   mainCategory   MainCategory   @relation(fields: [mainCategoryId], references: [id], onDelete: Cascade)
+  wishboxEvents  WishboxEvent[]
 
   @@map("sub_categories")
 }
@@ -403,28 +397,27 @@ model ProductGroup {
 }
 
 model Product {
-  id          String   @id
-  name        String
-  description String?
-  groupId     String?  @map("group_id") @db.Uuid
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-  imageUrl    String?  @map("image_url")
-
+  id                 String              @id
+  name               String
+  description        String?
+  groupId            String?             @map("group_id") @db.Uuid
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  imageUrl           String?             @map("image_url")
   subName            String?             @map("sub_name")
+  categoryId         String?
+  metadata           Json?               @default("{}") @map("metadata")
+  thumbnail          String?             @map("thumbnail")
+  brandId            String?             @map("brand_id")
   aiExperienceSplits AiExperienceSplit[] @relation("ProductAiExperienceSplits")
   contentPosts       ContentPost[]
   inventories        Inventory[]
   comparisonProduct1 PostComparison[]    @relation("ComparisonProduct1")
   comparisonProduct2 PostComparison[]    @relation("ComparisonProduct2")
   questionPosts      PostQuestion[]
-  group              ProductGroup?       @relation(fields: [groupId], references: [id])
-  category           Category?           @relation(fields: [categoryId], references: [id])
-  categoryId         String?
-  metadata           Json?               @default("{}") @map("metadata")
-  thumbnail          String?             @map("thumbnail")
   brand              Brand?              @relation(fields: [brandId], references: [externalId])
-  brandId            String?             @map("brand_id")
+  category           Category?           @relation(fields: [categoryId], references: [id])
+  group              ProductGroup?       @relation(fields: [groupId], references: [id])
 
   @@map("products")
 }
@@ -492,58 +485,57 @@ model InventoryMedia {
 }
 
 model ContentPost {
-  id                   String              @id @db.VarChar(26)
-  userId               String              @map("user_id") @db.Uuid
+  id                   String               @id @db.VarChar(26)
+  userId               String               @map("user_id") @db.Uuid
   type                 ContentPostType
   title                String
   body                 String
-  mainCategoryId       String?             @map("main_category_id") @db.Uuid
-  subCategoryId        String?             @map("sub_category_id") @db.Uuid
-  categoryId           String?             @map("category_id")
-  productGroupId       String?             @map("product_group_id") @db.Uuid
-  productId            String?             @map("product_id")
-  inventoryRequired    Boolean             @map("inventory_required")
-  isBoosted            Boolean             @map("is_boosted")
-  boostedUntil         DateTime?           @map("boosted_until")
-  createdAt            DateTime            @default(now()) @map("created_at")
-  updatedAt            DateTime            @updatedAt @map("updated_at")
-  commentsCount        Int                 @default(0) @map("comments_count")
-  favoritesCount       Int                 @default(0) @map("favorites_count")
-  likesCount           Int                 @default(0) @map("likes_count")
-  sharesCount          Int                 @default(0) @map("shares_count")
-  viewsCount           Int                 @default(0) @map("views_count")
-  experienceDurationId String?             @map("experience_duration_id") @db.Uuid
-  experienceLocationId String?             @map("experience_location_id") @db.Uuid
-  experiencePurposeId  String?             @map("experience_purpose_id") @db.Uuid
-  experienceSnippetId  String?             @map("experience_snippet_id") @db.Uuid
-  eventId              String?             @map("event_id") @db.VarChar(26)
+  mainCategoryId       String?              @map("main_category_id") @db.Uuid
+  subCategoryId        String?              @map("sub_category_id") @db.Uuid
+  categoryId           String?              @map("category_id")
+  productGroupId       String?              @map("product_group_id") @db.Uuid
+  productId            String?              @map("product_id")
+  inventoryRequired    Boolean              @map("inventory_required")
+  isBoosted            Boolean              @map("is_boosted")
+  boostedUntil         DateTime?            @map("boosted_until")
+  createdAt            DateTime             @default(now()) @map("created_at")
+  updatedAt            DateTime             @updatedAt @map("updated_at")
+  commentsCount        Int                  @default(0) @map("comments_count")
+  favoritesCount       Int                  @default(0) @map("favorites_count")
+  likesCount           Int                  @default(0) @map("likes_count")
+  sharesCount          Int                  @default(0) @map("shares_count")
+  viewsCount           Int                  @default(0) @map("views_count")
+  experienceDurationId String?              @map("experience_duration_id") @db.Uuid
+  experienceLocationId String?              @map("experience_location_id") @db.Uuid
+  experiencePurposeId  String?              @map("experience_purpose_id") @db.Uuid
+  experienceSnippetId  String?              @map("experience_snippet_id") @db.Uuid
+  eventId              String?              @map("event_id") @db.VarChar(26)
   comments             ContentComment[]
   favorites            ContentFavorite[]
   likes                ContentLike[]
   contentPostTags      ContentPostTag[]
   views                ContentPostView[]
-  event                WishboxEvent?       @relation(fields: [eventId], references: [id])
-  experienceDuration   ExperienceDuration? @relation(fields: [experienceDurationId], references: [id])
-  experienceLocation   ExperienceLocation? @relation(fields: [experienceLocationId], references: [id])
-  experiencePurpose    ExperiencePurpose?  @relation(fields: [experiencePurposeId], references: [id])
-  experienceSnippet    AiExperienceSplit?  @relation(fields: [experienceSnippetId], references: [id])
-  mainCategory         MainCategory?       @relation(fields: [mainCategoryId], references: [id])
-  productGroup         ProductGroup?       @relation(fields: [productGroupId], references: [id])
-  product              Product?            @relation(fields: [productId], references: [id])
-  subCategory          SubCategory?        @relation(fields: [subCategoryId], references: [id])
-  user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category             Category?           @relation(fields: [categoryId], references: [id])
-
-  shares              ContentShare[]
-  feedHighlights      FeedHighlight[]
-  feeds               Feed[]
-  comparison          PostComparison?
-  media               PostMedia[]
-  question            PostQuestion?
-  tags                PostTag[]
-  tip                 PostTip?
-  topCommunityChoices TopCommunityChoice[]
-  trendingPosts       TrendingPost[]
+  category             Category?            @relation(fields: [categoryId], references: [id])
+  event                WishboxEvent?        @relation(fields: [eventId], references: [id])
+  experienceDuration   ExperienceDuration?  @relation(fields: [experienceDurationId], references: [id])
+  experienceLocation   ExperienceLocation?  @relation(fields: [experienceLocationId], references: [id])
+  experiencePurpose    ExperiencePurpose?   @relation(fields: [experiencePurposeId], references: [id])
+  experienceSnippet    AiExperienceSplit?   @relation(fields: [experienceSnippetId], references: [id])
+  mainCategory         MainCategory?        @relation(fields: [mainCategoryId], references: [id])
+  productGroup         ProductGroup?        @relation(fields: [productGroupId], references: [id])
+  product              Product?             @relation(fields: [productId], references: [id])
+  subCategory          SubCategory?         @relation(fields: [subCategoryId], references: [id])
+  user                 User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shares               ContentShare[]
+  feedHighlights       FeedHighlight[]
+  feeds                Feed[]
+  comparison           PostComparison?
+  media                PostMedia[]
+  question             PostQuestion?
+  tags                 PostTag[]
+  tip                  PostTip?
+  topCommunityChoices  TopCommunityChoice[]
+  trendingPosts        TrendingPost[]
 
   @@index([userId])
   @@index([userId, createdAt])
@@ -919,9 +911,8 @@ model RewardClaim {
   transactionId String?           @map("transaction_id") @db.Uuid
   createdAt     DateTime          @default(now()) @map("created_at")
   updatedAt     DateTime          @updatedAt @map("updated_at")
-
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transaction Transaction? @relation(fields: [transactionId], references: [id])
+  transaction   Transaction?      @relation(fields: [transactionId], references: [id])
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status])
   @@index([userId, earnedAt])
@@ -958,8 +949,8 @@ model Brand {
   bridgePosts   BridgePost[]
   rewards       BridgeReward[]
   userStats     BridgeUserStats[]
-  wishboxEvents WishboxEvent[]
   products      Product[]
+  wishboxEvents WishboxEvent[]
 
   @@map("brands")
 }
@@ -1097,8 +1088,8 @@ model Wallet {
   lockedBalance Float          @default(0) @map("locked_balance")
   createdAt     DateTime       @default(now()) @map("created_at")
   updatedAt     DateTime       @updatedAt @map("updated_at")
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions  Transaction[]
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, provider])
   @@index([userId])
@@ -1121,8 +1112,8 @@ model Transaction {
   createdAt    DateTime              @default(now()) @map("created_at")
   confirmedAt  DateTime?             @map("confirmed_at")
   failedAt     DateTime?             @map("failed_at")
-  wallet       Wallet                @relation(fields: [walletId], references: [id], onDelete: Cascade)
   rewardClaims RewardClaim[]
+  wallet       Wallet                @relation(fields: [walletId], references: [id], onDelete: Cascade)
 
   @@index([walletId])
   @@index([status])
@@ -1689,6 +1680,41 @@ model ExperiencePurpose {
   @@map("experience_purposes")
 }
 
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  type      NotificationType
+  title     String
+  message   String
+  data      Json?
+  read      Boolean          @default(false)
+  readAt    DateTime?        @map("read_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
+  @@index([type])
+  @@map("notifications")
+}
+
+model PushToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  token      String   @unique
+  deviceType String   @map("device_type")
+  isActive   Boolean  @default(true) @map("is_active")
+  lastUsedAt DateTime @default(now()) @map("last_used_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token, isActive])
+  @@map("push_tokens")
+}
+
 enum DMMessageContext {
   DM
   SUPPORT
@@ -2007,82 +2033,30 @@ enum ExpertRequestStatus {
   @@map("expert_request_status")
 }
 
-model Notification {
-  id        String           @id @default(uuid()) @db.Uuid
-  userId    String           @map("user_id") @db.Uuid
-  type      NotificationType
-  title     String
-  message   String
-  data      Json?
-  read      Boolean          @default(false)
-  readAt    DateTime?        @map("read_at")
-  createdAt DateTime         @default(now()) @map("created_at")
-  updatedAt DateTime         @updatedAt @map("updated_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, read])
-  @@index([userId, createdAt])
-  @@index([type])
-  @@map("notifications")
-}
-
-model PushToken {
-  id         String   @id @default(uuid()) @db.Uuid
-  userId     String   @map("user_id") @db.Uuid
-  token      String   @unique
-  deviceType String   @map("device_type")
-  isActive   Boolean  @default(true) @map("is_active")
-  lastUsedAt DateTime @default(now()) @map("last_used_at")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([token, isActive])
-  @@map("push_tokens")
-}
-
 enum NotificationType {
-  // Interaction Notifications
   POST_LIKED
   POST_COMMENTED
   POST_SHARED
   POST_FAVORITED
   COMMENT_LIKED
   COMMENT_REPLIED
-
-  // Trust & Follow Notifications
   NEW_TRUSTER
   NEW_TRUSTED_BY
-
-  // Messaging Notifications
   NEW_MESSAGE
   DM_REQUEST_RECEIVED
   DM_REQUEST_ACCEPTED
   SUPPORT_REQUEST_ACCEPTED
-
-  // Collection Notifications
   COLLECTION_POST_ADDED
   COLLECTION_SHARED
-
-  // Gamification Notifications
   NEW_BADGE
   ACHIEVEMENT_UNLOCKED
   LEVEL_UP
   REWARD_EARNED
-
-  // Expert Notifications
   EXPERT_REQUEST_AVAILABLE
   EXPERT_REQUEST_ANSWERED
-
-  // Event Notifications
   EVENT_STARTED
   EVENT_ENDING_SOON
   EVENT_REWARD_AVAILABLE
-
-  // System Notifications
   SYSTEM_ANNOUNCEMENT
   ACCOUNT_SECURITY
   TIPS_RECEIVED

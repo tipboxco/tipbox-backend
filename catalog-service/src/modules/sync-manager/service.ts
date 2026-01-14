@@ -147,6 +147,8 @@ class SyncManagerService extends MedusaService({SyncConfig,SyncJob}) {
     }
 
     try {
+      console.log(`[SyncManager] Sending batch ${payload.batch_number} to ${targetUrl}...`)
+      
       const response = await fetch(targetUrl, {
         method: "POST",
         headers,
@@ -167,6 +169,8 @@ class SyncManagerService extends MedusaService({SyncConfig,SyncJob}) {
           // JSON parse hatası - varsayılan değerleri kullan
         }
 
+        console.log(`[SyncManager] Batch ${payload.batch_number} success: ${result.processed} processed, ${result.failed} failed`)
+        
         return {
           batch_number: payload.batch_number,
           success: true,
@@ -177,6 +181,8 @@ class SyncManagerService extends MedusaService({SyncConfig,SyncJob}) {
         }
       } else {
         const errorText = await response.text()
+        console.error(`[SyncManager] Batch ${payload.batch_number} failed with HTTP ${response.status}: ${errorText.substring(0, 200)}`)
+        
         return {
           batch_number: payload.batch_number,
           success: false,
@@ -189,13 +195,19 @@ class SyncManagerService extends MedusaService({SyncConfig,SyncJob}) {
       }
     } catch (error) {
       const durationMs = Date.now() - startTime
+      const errorMessage = error instanceof Error ? error.message : "Unknown error"
+      
+      console.error(`[SyncManager] Batch ${payload.batch_number} request failed: ${errorMessage}`)
+      console.error(`[SyncManager] Target URL: ${targetUrl}`)
+      console.error(`[SyncManager] Error details:`, error)
+      
       return {
         batch_number: payload.batch_number,
         success: false,
         processed: 0,
         failed: payload.data.length,
         duration_ms: durationMs,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: errorMessage,
       }
     }
   }

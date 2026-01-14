@@ -171,7 +171,6 @@ services:
       - ./catalog-service:/server
       - /server/node_modules
     working_dir: /server
-    command: ./docker-entrypoint.sh
     networks:
       - tipbox_network
     healthcheck:

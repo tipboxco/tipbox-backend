@@ -144,8 +144,8 @@ export function checkMemoryHealth(): HealthCheckResult {
     heapUsagePercent: Math.round(heapUsagePercent),
   };
   
-  // Memory kullanımı %90'ın üzerinde ise unhealthy
-  if (heapUsagePercent > 90) {
+  // Memory kullanımı %98'ın üzerinde ise unhealthy
+  if (heapUsagePercent > 98) {
     return {
       status: 'unhealthy',
       message: 'Memory usage critically high',
@@ -153,8 +153,8 @@ export function checkMemoryHealth(): HealthCheckResult {
     };
   }
   
-  // Memory kullanımı %75'in üzerinde ise degraded
-  if (heapUsagePercent > 75) {
+  // Memory kullanımı %90'ın üzerinde ise degraded
+  if (heapUsagePercent > 90) {
     return {
       status: 'degraded',
       message: 'Memory usage high',
