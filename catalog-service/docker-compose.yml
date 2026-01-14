@@ -1,7 +1,7 @@
 services:
   # PostgreSQL Database
   postgres:
-    image: postgres:15-alpine
+    image: postgres:15
     container_name: medusa_postgres
     restart: unless-stopped
     environment:
@@ -17,7 +17,7 @@ services:
 
   # PgAdmin service
   pgadmin:
-    image: dpage/pgadmin4:latest
+    image: dpage/pgadmin4:8
     container_name: medusa_pgadmin
     restart: unless-stopped
     environment:
@@ -34,7 +34,7 @@ services:
 
   # Redis
   redis:
-    image: redis:7-alpine
+    image: redis:7
     container_name: medusa_redis
     restart: unless-stopped
     ports:
