@@ -5,7 +5,8 @@ import { generateIdForModel } from '../ids/id.strategy';
 // Prisma 6.x'te $use kaldırıldı, $extends kullanılıyor
 export function createPrismaWithIdMiddleware() {
   return new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+    // Query loglarını kapat, sadece error'ları göster
+    log: ['error'],
   }).$extends({
     query: {
       $allModels: {
