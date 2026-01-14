@@ -11,6 +11,8 @@ export class Wallet {
     public readonly publicAddress: string,
     public readonly provider: WalletProvider,
     public readonly isConnected: boolean,
+    public readonly balance: number = 0,
+    public readonly lockedBalance: number = 0,
     public readonly createdAt: Date,
     public readonly updatedAt: Date
   ) {}
@@ -18,6 +20,18 @@ export class Wallet {
   // Business logic methods
   isActive(): boolean {
     return this.isConnected;
+  }
+
+  getAvailableBalance(): number {
+    return Math.max(0, this.balance - this.lockedBalance);
+  }
+
+  hasBalance(amount: number): boolean {
+    return this.getAvailableBalance() >= amount;
+  }
+
+  canLock(amount: number): boolean {
+    return this.getAvailableBalance() >= amount;
   }
 
   getShortAddress(): string {

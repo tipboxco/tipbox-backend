@@ -80,6 +80,35 @@ export class WalletPrismaRepository {
     }
   }
 
+  async updateBalance(id: string, newBalance: number): Promise<Wallet | null> {
+    const updatedWallet = await this.prisma.wallet.update({
+      where: { id },
+      data: { balance: newBalance }
+    });
+    return this.toDomain(updatedWallet);
+  }
+
+  async updateLockedBalance(id: string, newLockedBalance: number): Promise<Wallet | null> {
+    const updatedWallet = await this.prisma.wallet.update({
+      where: { id },
+      data: { lockedBalance: newLockedBalance }
+    });
+    return this.toDomain(updatedWallet);
+  }
+
+  async setBalance(id: string, balance: number, lockedBalance?: number): Promise<Wallet | null> {
+    const data: any = { balance };
+    if (lockedBalance !== undefined) {
+      data.lockedBalance = lockedBalance;
+    }
+
+    const updatedWallet = await this.prisma.wallet.update({
+      where: { id },
+      data
+    });
+    return this.toDomain(updatedWallet);
+  }
+
   private toDomain(prismaWallet: any): Wallet {
     return new Wallet(
       prismaWallet.id,
@@ -87,6 +116,8 @@ export class WalletPrismaRepository {
       prismaWallet.publicAddress,
       prismaWallet.provider as WalletProvider,
       prismaWallet.isConnected,
+      prismaWallet.balance || 0,
+      prismaWallet.lockedBalance || 0,
       prismaWallet.createdAt,
       prismaWallet.updatedAt
     );

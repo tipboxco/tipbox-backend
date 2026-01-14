@@ -15,6 +15,12 @@ export interface UserNFTResponse {
   description?: string;
   type: string;
   rarity: string;
+  listing?: {
+    id: string;
+    price: number;
+    listedAt: string;
+    status: 'ACTIVE' | 'SOLD' | 'CANCELLED';
+  };
 }
 
 export interface ListMarketplaceNFTsQuery {
@@ -55,6 +61,10 @@ export type RarityType = 'usual' | 'rare' | 'epic' | 'legendary';
 
 export interface SellNFT {
   id: string;
+  title: string;
+  description?: string;
+  image: string;
+  type: string;
   viewer: number;
   rarity: RarityType;
   price: number; // TIPS
@@ -65,6 +75,10 @@ export interface SellNFT {
 
 export interface SellNFTDetail {
   id: string;
+  title: string;
+  description?: string;
+  image: string;
+  type: string;
   viewer: number;
   rarity: RarityType;
   price: number; // TIPS
@@ -72,6 +86,56 @@ export interface SellNFTDetail {
   earnDate: string;
   totalOwner: number;
   ownerUser: {
+    id: string;
+    name: string;
+  };
+  priceHistory: NFTPriceHistory[];
+}
+
+export interface NFTPriceHistory {
+  id: string;
+  price: number; // TIPS
+  listedAt: string; // ISO date
+  status: 'ACTIVE' | 'SOLD' | 'CANCELLED';
+  seller: {
+    id: string;
+    name: string;
+  };
+}
+
+// Keep salesHistory for backward compatibility (deprecated)
+export interface NFTSaleHistory {
+  id: string;
+  price: number; // TIPS
+  soldAt: string; // ISO date
+  seller: {
+    id: string;
+    name: string;
+  };
+  buyer: {
+    id: string;
+    name: string;
+  };
+}
+
+export interface BuyNFTRequest {
+  listingId: string;
+}
+
+export interface BuyNFTResponse {
+  success: boolean;
+  nftId: string;
+  buyerTransaction: {
+    id: string;
+    amount: number | null;
+    status: string;
+  };
+  sellerTransaction: {
+    id: string;
+    amount: number | null;
+    status: string;
+  };
+  newOwner: {
     id: string;
     name: string;
   };

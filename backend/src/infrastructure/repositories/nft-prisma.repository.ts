@@ -193,6 +193,21 @@ export class NFTPrismaRepository {
     return this.findById(nftId);
   }
 
+  async incrementViewCount(nftId: string): Promise<void> {
+    await this.prisma.$executeRawUnsafe(
+      `UPDATE nfts SET view_count = view_count + 1, updated_at = NOW() WHERE id = $1::uuid`,
+      nftId
+    );
+  }
+
+  async getViewCount(nftId: string): Promise<number> {
+    const result = await this.prisma.$queryRawUnsafe<Array<{ view_count: number }>>(
+      `SELECT view_count FROM nfts WHERE id = $1::uuid`,
+      nftId
+    );
+    return result[0]?.view_count ?? 0;
+  }
+
   private toDomain(prismaNFT: any): NFT {
     return new NFT(
       prismaNFT.id,

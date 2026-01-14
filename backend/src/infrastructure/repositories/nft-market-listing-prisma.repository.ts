@@ -272,6 +272,33 @@ export class NFTMarketListingPrismaRepository {
     return this.toDomain(listing);
   }
 
+  /**
+   * Get all listing history for an NFT (ACTIVE, SOLD, CANCELLED)
+   */
+  async findListingHistoryByNftId(nftId: string): Promise<Array<{
+    id: string;
+    nftId: string;
+    listedByUserId: string;
+    price: number;
+    status: NFTMarketListingStatus;
+    listedAt: Date;
+  }>> {
+    const listings = await this.prisma.nFTMarketListing.findMany({
+      where: { nftId },
+      orderBy: { listedAt: 'desc' },
+      select: {
+        id: true,
+        nftId: true,
+        listedByUserId: true,
+        price: true,
+        status: true,
+        listedAt: true,
+      },
+    });
+
+    return listings;
+  }
+
   private toDomain(prismaListing: any): NFTMarketListing {
     return new NFTMarketListing(
       prismaListing.id,

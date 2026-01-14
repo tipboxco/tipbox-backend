@@ -178,6 +178,11 @@ router.get('/history', asyncHandler(async (req: Request, res: Response) => {
   const cursor = req.query.cursor as string | undefined;
   const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
 
+  // Cache kontrolü - Transaction history asla cache'lenmemeli
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+
   const result = await transactionService.getUserTransactionHistory(
     String(userId),
     { cursor, limit }
@@ -269,6 +274,11 @@ router.get('/history/grouped', asyncHandler(async (req: Request, res: Response) 
   if (!userId) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
+
+  // Cache kontrolü - Transaction history asla cache'lenmemeli
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
 
   const grouped = await transactionService.getUserTransactionHistoryGrouped(String(userId));
 
