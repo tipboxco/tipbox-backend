@@ -45,24 +45,40 @@ async function seedWallets(userIds: string[]): Promise<Map<string, string>> {
       if (existing) {
         walletMap.set(userId, existing.id);
         existingCount++;
-        logger.info(`✓ Existing wallet found for user ${userId.substring(0, 8)}...: ${existing.id.substring(0, 8)}...`);
+        
+        // Eğer balance 0 ise, başlangıç balance'ı ekle
+        if (existing.balance === 0) {
+          const initialBalance = Math.floor(Math.random() * 5000) + 5000; // 5000-10000 TIPS
+          await prisma.wallet.update({
+            where: { id: existing.id },
+            data: { balance: initialBalance }
+          });
+          logger.info(`✓ Existing wallet updated with balance for user ${userId.substring(0, 8)}...: ${existing.id.substring(0, 8)}... (Balance: ${initialBalance} TIPS)`);
+        } else {
+          logger.info(`✓ Existing wallet found for user ${userId.substring(0, 8)}...: ${existing.id.substring(0, 8)}... (Balance: ${existing.balance} TIPS)`);
+        }
         continue;
       }
 
       // Yeni wallet oluştur - unique publicAddress garantisi için timestamp + random kullan
       const uniqueSuffix = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      // Her wallet için 5000-10000 arası başlangıç balance
+      const initialBalance = Math.floor(Math.random() * 5000) + 5000; // 5000-10000 TIPS
+      
       const wallet = await prisma.wallet.create({
         data: {
           userId,
           publicAddress: `0xTIPBOX_${userId}_${uniqueSuffix}`,
           provider: 'CUSTOM',
-          isConnected: true
+          isConnected: true,
+          balance: initialBalance,
+          lockedBalance: 0
         }
       });
 
       walletMap.set(userId, wallet.id);
       createdCount++;
-      logger.info(`✓ Wallet created for user ${userId.substring(0, 8)}...: ${wallet.id.substring(0, 8)}...`);
+      logger.info(`✓ Wallet created for user ${userId.substring(0, 8)}...: ${wallet.id.substring(0, 8)}... (Balance: ${initialBalance} TIPS)`);
     } catch (error) {
       logger.error(`✗ Error creating wallet for user ${userId}:`, error);
       // Hata durumunda bile devam et
