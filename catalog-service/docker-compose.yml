@@ -1,7 +1,7 @@
 services:
   # PostgreSQL Database
   postgres:
-    image: postgres:15
+    image: postgres:15-alpine
     container_name: medusa_postgres
     restart: unless-stopped
     environment:
@@ -15,26 +15,9 @@ services:
     networks:
       - medusa_network
 
-  # PgAdmin service
-  pgadmin:
-    image: dpage/pgadmin4:8
-    container_name: medusa_pgadmin
-    restart: unless-stopped
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com
-      PGADMIN_DEFAULT_PASSWORD: admin
-    ports:
-      - "5050:80"
-    depends_on:
-      - postgres
-    networks:
-      - medusa_network
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-
   # Redis
   redis:
-    image: redis:7
+    image: redis:7-alpine
     container_name: medusa_redis
     restart: unless-stopped
     ports:
@@ -57,10 +40,8 @@ services:
       - "5173:5173"
     environment:
       - NODE_ENV=development
-      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/medusa-store?sslmode=disable
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/medusa-store
       - REDIS_URL=redis://redis:6379
-    env_file:
-      - .env
     volumes:
       - .:/server
       - /server/node_modules
@@ -69,7 +50,6 @@ services:
 
 volumes:
   postgres_data:
-  pgadmin_data:
 
 networks:
   medusa_network:

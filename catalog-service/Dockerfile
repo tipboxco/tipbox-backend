@@ -1,14 +1,14 @@
 # Development Dockerfile for Medusa
 FROM node:20-alpine
 
+# Install dos2unix to fix Windows line endings
+RUN apk add --no-cache dos2unix
+
 # Set working directory
 WORKDIR /server
 
 # Copy package files and npm config
 COPY package.json package-lock.json ./
-
-# Install unzip for extracting ZIP files
-RUN apk add --no-cache unzip
 
 # Install all dependencies using npm
 RUN npm install --legacy-peer-deps
@@ -16,8 +16,12 @@ RUN npm install --legacy-peer-deps
 # Copy source code
 COPY . .
 
+# Fix Windows CRLF line endings and make executable
+RUN dos2unix start.sh && chmod +x start.sh
+
 # Expose the port Medusa runs on
 EXPOSE 9000
 
 # Start with migrations and then the development server
-CMD ["sh", "-c", "[ -f src/scripts/tipbox-datas/products_with_images.zip ] && unzip -o src/scripts/tipbox-datas/products_with_images.zip -d src/scripts/tipbox-datas/ || true && echo 'Running database migrations...' && npx medusa db:migrate && echo 'Creating root user...' && npx medusa user --email root@tipbox.co --password root@tipbox.co || true && echo 'Starting Medusa server...' && npm run start"]
+# Using sh -c to handle potential CRLF issues from volume mount
+CMD ["sh", "-c", "dos2unix /server/start.sh 2>/dev/null || true; sh /server/start.sh"]
