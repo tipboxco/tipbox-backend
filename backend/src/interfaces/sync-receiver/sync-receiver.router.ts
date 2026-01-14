@@ -8,6 +8,7 @@ import {
   SyncResponse,
   SyncErrorResponse,
   SyncStatusResponse,
+  SyncModuleType,
 } from './sync-receiver.dto';
 
 const router = Router();
@@ -69,7 +70,7 @@ const syncReceiverService = new SyncReceiverService();
  *                 example: "job_01XYZ789"
  *               module_type:
  *                 type: string
- *                 enum: [product, category, brand]
+ *                 enum: [product, category, brand, brand-categories]
  *                 description: Veri tipi
  *                 example: "product"
  *               batch_number:
@@ -313,11 +314,11 @@ router.get(
     const response: SyncStatusResponse = {
       status: 'ready',
       endpoint: '/sync-receiver',
-      description: 'Sync batch receiver endpoint - Brand, Category, Product verilerini alır ve veritabanına yazar',
+      description: 'Sync batch receiver endpoint - Brand, Category, Product, Brand Categories verilerini alır ve veritabanına yazar',
       expected_payload: {
         sync_id: 'string - Sync configuration ID',
         job_id: 'string - Sync job ID',
-        module_type: 'product | category | brand',
+        module_type: 'product | category | brand | brand-categories',
         batch_number: 'number - Current batch number',
         total_batches: 'number - Total number of batches',
         batch_size: 'number - Records per batch',
@@ -350,7 +351,7 @@ router.get(
  *         required: true
  *         schema:
  *           type: string
- *           enum: [product, category, brand]
+ *           enum: [product, category, brand, brand-categories]
  *         description: Modül tipi
  *       - in: header
  *         name: X-Sync-Secret
@@ -390,14 +391,14 @@ router.get(
 
     const { moduleType } = req.params;
 
-    if (!['product', 'category', 'brand'].includes(moduleType)) {
+    if (!['product', 'category', 'brand', 'brand-categories'].includes(moduleType)) {
       return res.status(400).json({
         success: false,
-        error: "Invalid module type. Must be 'product', 'category', or 'brand'",
+        error: "Invalid module type. Must be 'product', 'category', 'brand', or 'brand-categories'",
       });
     }
 
-    const stats = await syncReceiverService.getModuleStats(moduleType as 'product' | 'category' | 'brand');
+    const stats = await syncReceiverService.getModuleStats(moduleType as SyncModuleType);
 
     return res.status(200).json({
       success: true,

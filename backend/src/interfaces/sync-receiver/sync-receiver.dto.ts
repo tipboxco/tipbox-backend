@@ -3,7 +3,7 @@
  * Harici sistemlerden gelen batch sync verilerini tanımlar
  */
 
-export type SyncModuleType = 'product' | 'category' | 'brand';
+export type SyncModuleType = 'product' | 'category' | 'brand' | 'brand-categories';
 
 export interface SyncPayload {
   sync_id: string;

@@ -8,6 +8,7 @@ import {
   SyncModuleType,
 } from '../../interfaces/sync-receiver/sync-receiver.dto';
 import { generateUuidV4 } from '../../infrastructure/ids/id.strategy';
+import { Prisma } from '@prisma/client';
 
 export class SyncReceiverService {
   private prisma = getPrisma();
@@ -25,6 +26,8 @@ export class SyncReceiverService {
         return this.processCategoryBatch(data);
       case 'product':
         return this.processProductBatch(data);
+      case 'brand-categories':
+        return this.processBrandCategoriesBatch(data);
       default:
         throw new Error(`Unsupported module type: ${module_type}`);
     }
@@ -32,6 +35,7 @@ export class SyncReceiverService {
 
   /**
    * Brand verilerini batch olarak işler (upsert) - gelen id brand.externalId ile eşlenir
+   * Category'leri de birlikte işler ve gerekirse oluşturur
    */
   private async processBrandBatch(data: SyncRecord[]): Promise<ProcessResult> {
     if (data.length === 0) {
@@ -48,7 +52,7 @@ export class SyncReceiverService {
       select: { externalId: true },
     });
 
-    const existingExternalIds = new Set(existingBrands.map((b) => b.externalId));
+    const existingExternalIds = new Set(existingBrands.map((b: { externalId: string | null }) => b.externalId));
     const toCreate: typeof data = [];
     const toUpdate: typeof data = [];
 
@@ -69,18 +73,26 @@ export class SyncReceiverService {
     // Transaction içinde batch işlemler
     try {
       await this.prisma.$transaction(
-        async (tx) => {
+        async (tx: Prisma.TransactionClient) => {
+          // Category'leri önce işle - brand'lerin category bilgilerini al
+          const categoryMap = await this.processBrandCategories(data, tx);
+
           // Batch create
           if (toCreate.length > 0) {
-            const createData = toCreate.map((record) => ({
-              externalId: record.id,
-              name: record.name || record.title || 'Unnamed Brand',
-              description: record.description || null,
-              logoUrl: record.logo_url || record.image_url || null,
-              imageUrl: record.image_url || record.logo_url || null,
-              category: (record.category as string) || null,
-              categoryId: record.category_id || null,
-            }));
+            const createData = toCreate.map((record) => {
+              const categoryName = (record.category as string) || null;
+              const categoryId = categoryName ? categoryMap.get(categoryName) : null;
+
+              return {
+                externalId: record.id,
+                name: record.name || record.title || 'Unnamed Brand',
+                description: record.description || null,
+                logoUrl: record.logo_url || record.image_url || null,
+                imageUrl: record.image_url || record.logo_url || null,
+                category: categoryName,
+                categoryId: categoryId || record.category_id || null,
+              };
+            });
 
             // Prisma createMany skipDuplicates kullanarak hızlı insert
             await tx.brand.createMany({
@@ -101,19 +113,22 @@ export class SyncReceiverService {
           // Batch update - her kayıt için ayrı update (Prisma updateMany where in desteklemiyor)
           if (toUpdate.length > 0) {
             // Paralel update işlemleri için Promise.all kullan
-            const updatePromises = toUpdate.map((record) =>
-              tx.brand.update({
+            const updatePromises = toUpdate.map((record) => {
+              const categoryName = (record.category as string) || null;
+              const categoryId = categoryName ? categoryMap.get(categoryName) : null;
+
+              return tx.brand.update({
                 where: { externalId: record.id },
                 data: {
                   name: record.name || record.title || 'Unnamed Brand',
                   description: record.description || null,
                   logoUrl: record.logo_url || record.image_url || null,
                   imageUrl: record.image_url || record.logo_url || null,
-                  category: (record.category as string) || null,
-                  categoryId: record.category_id || null,
+                  category: categoryName,
+                  categoryId: categoryId || record.category_id || null,
                 },
-              }),
-            );
+              });
+            });
 
             await Promise.all(updatePromises);
             updated = toUpdate.length;
@@ -149,8 +164,75 @@ export class SyncReceiverService {
   }
 
   /**
+   * Brand category'lerini işler - yoksa oluşturur, varsa ID'sini döner
+   * @returns Category name -> Category ID mapping
+   */
+  private async processBrandCategories(
+    data: SyncRecord[],
+    tx: Prisma.TransactionClient,
+  ): Promise<Map<string, string>> {
+    const categoryMap = new Map<string, string>();
+
+    // Tüm unique category isimlerini topla
+    const categoryNames = new Set<string>();
+    for (const record of data) {
+      const categoryName = (record.category as string) || null;
+      if (categoryName) {
+        categoryNames.add(categoryName);
+      }
+    }
+
+    if (categoryNames.size === 0) {
+      return categoryMap;
+    }
+
+    // Mevcut category'leri çek
+    const existingCategories = await tx.brandCategory.findMany({
+      where: { name: { in: Array.from(categoryNames) } },
+      select: { id: true, name: true },
+    });
+
+    const existingCategoryNames = new Set(
+      existingCategories.map((c: { id: string; name: string }) => c.name),
+    );
+    existingCategories.forEach((cat: { id: string; name: string }) => {
+      categoryMap.set(cat.name, cat.id);
+    });
+
+    // Olmayan category'leri oluştur
+    const categoriesToCreate = Array.from(categoryNames).filter(
+      (name) => !existingCategoryNames.has(name),
+    );
+
+    if (categoriesToCreate.length > 0) {
+      const createData = categoriesToCreate.map((name) => ({
+        name,
+        imageUrl: null,
+      }));
+
+      await tx.brandCategory.createMany({
+        data: createData,
+        skipDuplicates: true,
+      });
+
+      // Yeni oluşturulan category'leri çek ve map'e ekle
+      const newlyCreated = await tx.brandCategory.findMany({
+        where: { name: { in: categoriesToCreate } },
+        select: { id: true, name: true },
+      });
+
+      newlyCreated.forEach((cat: { id: string; name: string }) => {
+        categoryMap.set(cat.name, cat.id);
+      });
+    }
+
+    return categoryMap;
+  }
+
+  /**
    * Brand batch işlemi için fallback - transaction başarısız olursa kullanılır
    * gelen id brand.externalId ile eşlenir
+   * Category'leri de birlikte işler
    */
   private async processBrandBatchFallback(data: SyncRecord[]): Promise<ProcessResult> {
     const records: ProcessedRecord[] = [];
@@ -159,15 +241,21 @@ export class SyncReceiverService {
     let created = 0;
     let updated = 0;
 
+    // Önce tüm category'leri işle
+    const categoryMap = await this.processBrandCategoriesFallback(data);
+
     for (const record of data) {
       try {
+        const categoryName = (record.category as string) || null;
+        const categoryId = categoryName ? categoryMap.get(categoryName) : null;
+
         const brandData = {
           name: record.name || record.title || 'Unnamed Brand',
           description: record.description || null,
           logoUrl: record.logo_url || record.image_url || null,
           imageUrl: record.image_url || record.logo_url || null,
-          category: (record.category as string) || null,
-          categoryId: record.category_id || null,
+          category: categoryName,
+          categoryId: categoryId || record.category_id || null,
           externalId: record.id,
         };
 
@@ -223,6 +311,74 @@ export class SyncReceiverService {
   }
 
   /**
+   * Brand category'lerini fallback modda işler
+   * @returns Category name -> Category ID mapping
+   */
+  private async processBrandCategoriesFallback(data: SyncRecord[]): Promise<Map<string, string>> {
+    const categoryMap = new Map<string, string>();
+
+    // Tüm unique category isimlerini topla
+    const categoryNames = new Set<string>();
+    for (const record of data) {
+      const categoryName = (record.category as string) || null;
+      if (categoryName) {
+        categoryNames.add(categoryName);
+      }
+    }
+
+    if (categoryNames.size === 0) {
+      return categoryMap;
+    }
+
+    // Mevcut category'leri çek
+    const existingCategories = await this.prisma.brandCategory.findMany({
+      where: { name: { in: Array.from(categoryNames) } },
+      select: { id: true, name: true },
+    });
+
+    const existingCategoryNames = new Set(
+      existingCategories.map((c: { id: string; name: string }) => c.name),
+    );
+    existingCategories.forEach((cat: { id: string; name: string }) => {
+      categoryMap.set(cat.name, cat.id);
+    });
+
+    // Olmayan category'leri oluştur
+    const categoriesToCreate = Array.from(categoryNames).filter(
+      (name) => !existingCategoryNames.has(name),
+    );
+
+    if (categoriesToCreate.length > 0) {
+      for (const categoryName of categoriesToCreate) {
+        try {
+          const newCategory = await this.prisma.brandCategory.create({
+            data: {
+              name: categoryName,
+              imageUrl: null,
+            },
+          });
+          categoryMap.set(categoryName, newCategory.id);
+        } catch (error) {
+          // Eğer aynı anda başka bir işlem oluşturduysa, tekrar çek
+          const existing = await this.prisma.brandCategory.findUnique({
+            where: { name: categoryName },
+            select: { id: true },
+          });
+          if (existing) {
+            categoryMap.set(categoryName, existing.id);
+          } else {
+            logger.warn(`[SyncReceiver] Failed to create brand category: ${categoryName}`, {
+              error: error instanceof Error ? error.message : 'Unknown error',
+            });
+          }
+        }
+      }
+    }
+
+    return categoryMap;
+  }
+
+  /**
    * Category verilerini batch olarak işler (upsert) - Optimized for high traffic
    */
   private async processCategoryBatch(data: SyncRecord[]): Promise<ProcessResult> {
@@ -239,7 +395,7 @@ export class SyncReceiverService {
       select: { id: true },
     });
 
-    const existingIds = new Set(existingCategories.map((c) => c.id));
+    const existingIds = new Set(existingCategories.map((c: { id: string }) => c.id));
     const toCreate: typeof data = [];
     const toUpdate: typeof data = [];
 
@@ -266,7 +422,7 @@ export class SyncReceiverService {
     // Transaction içinde batch işlemler
     try {
       await this.prisma.$transaction(
-        async (tx) => {
+        async (tx: Prisma.TransactionClient) => {
           // Batch create
           if (toCreate.length > 0) {
             const createData = toCreate.map((record) => ({
@@ -445,7 +601,7 @@ export class SyncReceiverService {
       select: { id: true },
     });
 
-    const existingIds = new Set(existingProducts.map((p) => p.id));
+    const existingIds = new Set(existingProducts.map((p: { id: string }) => p.id));
     const toCreate: typeof data = [];
     const toUpdate: typeof data = [];
 
@@ -462,12 +618,10 @@ export class SyncReceiverService {
     let updated = 0;
     let failed = 0;
 
-    console.log('toCreate', toCreate);
-
     // Transaction içinde batch işlemler
     try {
       await this.prisma.$transaction(
-        async (tx) => {
+        async (tx: Prisma.TransactionClient) => {
           // Batch create
           if (toCreate.length > 0) {
             const createData = toCreate.map((record) => ({
@@ -559,7 +713,6 @@ export class SyncReceiverService {
     let created = 0;
     let updated = 0;
 
-    console.log('data', data);
     for (const record of data) {
       try {
         const productData = {
@@ -661,8 +814,8 @@ export class SyncReceiverService {
       return { valid: false, error: "Invalid payload: 'job_id' is required and must be a string" };
     }
 
-    if (!p.module_type || !['product', 'category', 'brand'].includes(p.module_type as string)) {
-      return { valid: false, error: "Invalid payload: 'module_type' must be 'product', 'category', or 'brand'" };
+    if (!p.module_type || !['product', 'category', 'brand', 'brand-categories'].includes(p.module_type as string)) {
+      return { valid: false, error: "Invalid payload: 'module_type' must be 'product', 'category', 'brand', or 'brand-categories'" };
     }
 
     if (typeof p.batch_number !== 'number' || p.batch_number < 1) {
@@ -691,8 +844,188 @@ export class SyncReceiverService {
         return { count: await this.prisma.category.count() };
       case 'product':
         return { count: await this.prisma.product.count() };
+      case 'brand-categories':
+        return { count: await this.prisma.brandCategory.count() };
       default:
         return { count: 0 };
     }
+  }
+
+  /**
+   * Brand category verilerini batch olarak işler (upsert) - name ile eşlenir
+   */
+  private async processBrandCategoriesBatch(data: SyncRecord[]): Promise<ProcessResult> {
+    if (data.length === 0) {
+      return { processed: 0, failed: 0, created: 0, updated: 0, records: [] };
+    }
+
+    const records: ProcessedRecord[] = [];
+    // Data'dan name'leri al (id veya name field'ından)
+    const categoryNames = data
+      .map((r) => r.name || r.title || r.id)
+      .filter(Boolean) as string[];
+
+    // BrandCategory tablosundaki name'leri çek
+    const existingCategories = await this.prisma.brandCategory.findMany({
+      where: { name: { in: categoryNames } },
+      select: { name: true },
+    });
+
+    const existingNames = new Set(existingCategories.map((c: { name: string }) => c.name));
+    const toCreate: typeof data = [];
+    const toUpdate: typeof data = [];
+
+    // Kayıtları create ve update listelerine ayır
+    for (const record of data) {
+      const categoryName = record.name || record.title || record.id;
+      if (categoryName && existingNames.has(categoryName)) {
+        toUpdate.push(record);
+      } else {
+        toCreate.push(record);
+      }
+    }
+
+    let created = 0;
+    let updated = 0;
+    let failed = 0;
+
+    // Transaction içinde batch işlemler
+    try {
+      await this.prisma.$transaction(
+        async (tx: any) => {
+          // Batch create
+          if (toCreate.length > 0) {
+            const createData = toCreate.map((record) => ({
+              name: record.name || record.title || record.id || 'Unnamed Category',
+              imageUrl: record.image_url || record.thumbnail || null,
+            }));
+
+            // Prisma createMany skipDuplicates kullanarak hızlı insert
+            await tx.brandCategory.createMany({
+              data: createData,
+              skipDuplicates: true,
+            });
+
+            created = toCreate.length;
+            toCreate.forEach((record) => {
+              records.push({
+                id: record.id || record.name || record.title || '',
+                status: 'success',
+                action: 'created',
+              });
+            });
+          }
+
+          // Batch update - her kayıt için ayrı update (Prisma updateMany where in desteklemiyor)
+          if (toUpdate.length > 0) {
+            // Paralel update işlemleri için Promise.all kullan
+            const updatePromises = toUpdate.map((record) => {
+              const categoryName = record.name || record.title || record.id;
+              return tx.brandCategory.update({
+                where: { name: categoryName },
+                data: {
+                  imageUrl: record.image_url || record.thumbnail || null,
+                },
+              });
+            });
+
+            await Promise.all(updatePromises);
+            updated = toUpdate.length;
+            toUpdate.forEach((record) => {
+              records.push({
+                id: record.id || record.name || record.title || '',
+                status: 'success',
+                action: 'updated',
+              });
+            });
+          }
+        },
+        {
+          timeout: 30000, // 30 saniye timeout
+        },
+      );
+    } catch (error) {
+      // Transaction başarısız olursa, her kaydı tek tek dene
+      logger.warn('[SyncReceiver] Brand categories batch transaction failed, falling back to individual upserts', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+
+      return this.processBrandCategoriesBatchFallback(data);
+    }
+
+    return {
+      processed: created + updated,
+      failed,
+      created,
+      updated,
+      records,
+    };
+  }
+
+  /**
+   * Brand categories batch işlemi için fallback - transaction başarısız olursa kullanılır
+   */
+  private async processBrandCategoriesBatchFallback(data: SyncRecord[]): Promise<ProcessResult> {
+    const records: ProcessedRecord[] = [];
+    let processed = 0;
+    let failed = 0;
+    let created = 0;
+    let updated = 0;
+
+    for (const record of data) {
+      try {
+        const categoryName = record.name || record.title || record.id || 'Unnamed Category';
+        const categoryData = {
+          imageUrl: record.image_url || record.thumbnail || null,
+        };
+
+        // Önce var mı kontrol et (name ile)
+        const existing = await this.prisma.brandCategory.findUnique({
+          where: { name: categoryName },
+          select: { id: true, name: true },
+        });
+
+        if (existing) {
+          await this.prisma.brandCategory.update({
+            where: { name: categoryName },
+            data: categoryData,
+          });
+          updated++;
+          records.push({
+            id: record.id || record.name || record.title || '',
+            status: 'success',
+            action: 'updated',
+          });
+        } else {
+          await this.prisma.brandCategory.create({
+            data: {
+              name: categoryName,
+              ...categoryData,
+            },
+          });
+          created++;
+          records.push({
+            id: record.id || record.name || record.title || '',
+            status: 'success',
+            action: 'created',
+          });
+        }
+        processed++;
+      } catch (error) {
+        failed++;
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        logger.error(`[SyncReceiver] Brand category upsert failed for ${record.name || record.id}`, {
+          error: message,
+        });
+        records.push({
+          id: record.id || record.name || record.title || '',
+          status: 'failed',
+          action: 'skipped',
+          error: message,
+        });
+      }
+    }
+
+    return { processed, failed, created, updated, records };
   }
 }
