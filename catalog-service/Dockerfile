@@ -1,8 +1,8 @@
 # Development Dockerfile for Medusa
 FROM node:20-alpine
 
-# Install dos2unix to fix Windows line endings
-RUN apk add --no-cache dos2unix
+# Install dos2unix, postgresql-client and unzip
+RUN apk add --no-cache dos2unix postgresql-client unzip
 
 # Set working directory
 WORKDIR /server
