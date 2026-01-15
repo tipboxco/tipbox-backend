@@ -13,12 +13,67 @@ import slugify from "slugify"
  *
  * Büyük veri alımı için optimize edilmiştir.
  */
+
+const PRODUCT_BRAND_LINK_QUERY =    `DELETE FROM product_product_brand_brand;
+DO $$ 
+BEGIN
+    -- 1. ADIM: İndekslerin Hazırlanması (Eğer yoksa)
+    -- Ara tablo (Link tablosu) için performans indeksleri
+    CREATE INDEX IF NOT EXISTS idx_link_product_id ON public.product_product_brand_brand (product_id);
+    CREATE INDEX IF NOT EXISTS idx_link_brand_id ON public.product_product_brand_brand (brand_id);
+
+    -- 2. ADIM: Geçici Eşleşme Tablosu
+    -- Burada p.id ve b.id ikilisini alıyoruz. 
+    -- DISTINCT kullanmıyoruz ki tüm ürün-marka kombinasyonları gelsin.
+    CREATE TEMP TABLE tmp_brand_matches AS
+    SELECT 
+        p.id AS p_id, 
+        b.id AS b_id
+    FROM public.product p
+    INNER JOIN public.brand b ON 
+        TRIM(LOWER(TRANSLATE(p.metadata->>'brand', 'âçğıİîöşüûÂÇĞİÎÖŞÜÛ', 'acgiioosuuaCGIiooSUU'))) = 
+        TRIM(LOWER(TRANSLATE(b.name, 'âçğıİîöşüûÂÇĞİÎÖŞÜÛ', 'acgiioosuuaCGIiooSUU')))
+    WHERE 
+        p.metadata->>'brand' IS NOT NULL;
+
+    -- 3. ADIM: Hatalı Linklerin Temizlenmesi
+    -- Sadece ürünün metadata'sındaki marka ile tablodaki marka UYUŞMUYORSA siler.
+    DELETE FROM public.product_product_brand_brand link
+    USING public.product p, public.brand b
+    WHERE link.product_id = p.id 
+      AND link.brand_id = b.id
+      AND TRIM(LOWER(TRANSLATE(p.metadata->>'brand', 'âçğıİîöşüûÂÇĞİÎÖŞÜÛ', 'acgiioosuuaCGIiooSUU'))) 
+          != TRIM(LOWER(TRANSLATE(b.name, 'âçğıİîöşüûÂÇĞİÎÖŞÜÛ', 'acgiioosuuaCGIiooSUU')));
+
+    -- 4. ADIM: Çoklu Ekleme (Bulk Insert)
+    -- Burada can alıcı nokta: Sadece AYNI ürün-marka çifti varsa eklemiyoruz.
+    -- Bir marka 100 farklı ürüne bu sayede bağlanabilir.
+    INSERT INTO public.product_product_brand_brand (id, product_id, brand_id, created_at, updated_at)
+    SELECT 
+        'link_' || gen_random_uuid(),
+        t.p_id,
+        t.b_id,
+        NOW(),
+        NOW()
+    FROM tmp_brand_matches t
+    WHERE NOT EXISTS (
+        -- Kontrolü daraltıyoruz: Sadece bu spesifik eşleşme var mı?
+        SELECT 1 
+        FROM public.product_product_brand_brand existing 
+        WHERE existing.product_id = t.p_id 
+          AND existing.brand_id = t.b_id
+    );
+
+    -- Temizlik
+    DROP TABLE tmp_brand_matches;
+END $$;`;
+
+
 export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   try {
     const container = req.scope
     const logger = container.resolve(ContainerRegistrationKeys.LOGGER)
     const query = container.resolve(ContainerRegistrationKeys.QUERY)
-    const remoteLink = container.resolve(ContainerRegistrationKeys.REMOTE_LINK)
     const salesChannelModuleService = container.resolve(Modules.SALES_CHANNEL)
     const fulfillmentModuleService = container.resolve(Modules.FULFILLMENT)
     const csvDataPath = path.join(process.cwd(), "src", "scripts", "tipbox-datas")
@@ -77,20 +132,20 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
         brandMap.set(brandIdValue, brand.id)
       }
     }
-    
+
     logger.info(
       `Brand map oluşturuldu: ${brandMap.size} brand eşleşmesi bulundu (toplam ${existingBrands.length} brand)`
     )
 
     const handleSet = new Set<string>()
     let createdProducts = 0
-    
+
     // CSV'deki toplam brand_id sayısını hesapla (istatistik için)
     let totalProductsWithBrandId = 0
     let totalProductsWithBrandIdInCsv = 0
     let brandIdNotInMapCount = 0
     const uniqueBrandIdsInCsv = new Set<string>()
-    
+
     for (const productRow of productsData) {
       if (productRow.brand_id) {
         totalProductsWithBrandIdInCsv++
@@ -103,7 +158,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
         }
       }
     }
-    
+
     logger.info(
       `CSV Analizi: ${totalProductsWithBrandIdInCsv} ürün için brand_id var, ` +
       `${totalProductsWithBrandId} ürün için brandMap'te eşleşme bulundu, ` +
@@ -158,8 +213,9 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
         } catch { }
       }
 
+      // Brand link ürün create sırasında EKLENMEYECEK, sadece metadata'da tutulacak, SQL script ile linking yapılacak
+      // Dolayısıyla brand_id döndürelim ama productObj'ye eklemeyelim
       let brand_id: string | undefined
-      // Ürün-Brand eşlemesi: Eğer productRow.brand_id varsa, brandMap'ten asıl brand.id'sini bul ve ata
       if (productRow.brand_id) {
         const brandMapId = brandMap.get(productRow.brand_id)
         if (brandMapId) {
@@ -191,9 +247,6 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
         } catch { }
       }
 
-      // Prepare options as expected by Medusa: array of option objects
-      // The variant's options must provide values matching these option titles
-      // We'll use "Size" as a default for every product, value: "Default"
       const productObj: any = {
         title: (productRow.title || "").substring(0, 255),
         description: productRow.description || "",
@@ -217,201 +270,26 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
         ],
       }
 
-      // brand_id'yi productObj'ye ekleme - linkleme yöntemiyle sonra bağlanacak
+      // brand_id'yi productObj'ye ekleme. Sadece referans için döndürüyoruz (linking SQL ile olacak).
       return { productObj, brand_id }
     }
 
     let failedBatches = 0
-    let linkedBrands = 0
-    let failedBrandLinks = 0
-    
-    // Mevcut brand linkini kontrol et ve silme fonksiyonu
-    const removeExistingBrandLink = async (productId: string): Promise<boolean> => {
-      try {
-        const { data: products } = await query.graph({
-          entity: "product",
-          fields: ["id", "brand.id"],
-          filters: {
-            id: productId,
-          },
-        })
-        
-        const currentBrand = products[0]?.brand
-        if (!currentBrand) {
-          return true // Link yok, devam edebiliriz
-        }
-        
-        // Mevcut linki sil
-        await remoteLink.dismiss({
-          [Modules.PRODUCT]: {
-            product_id: productId,
-          },
-          brand: {
-            brand_id: currentBrand.id,
-          },
-        })
-        
-        // Link'in gerçekten silindiğini doğrula (max 3 deneme, her biri 100ms bekleme)
-        for (let retry = 0; retry < 3; retry++) {
-          await new Promise(resolve => setTimeout(resolve, 100))
-          
-          const { data: recheckProducts } = await query.graph({
-            entity: "product",
-            fields: ["id", "brand.id"],
-            filters: {
-              id: productId,
-            },
-          })
-          
-          const recheckBrand = recheckProducts[0]?.brand
-          if (!recheckBrand) {
-            return true // Link başarıyla silindi
-          }
-        }
-        
-        return false // Link silinemedi
-      } catch (error: any) {
-        logger.warn(`[Brand Link Silme Hatası] Ürün ${productId}: ${error.message}`)
-        return false
-      }
-    }
-    
-    // Paralel işlem sayısını sınırlandırmak için helper fonksiyon
-    const processInBatches = async <T, R>(
-      items: T[],
-      batchSize: number,
-      processor: (item: T) => Promise<R>
-    ): Promise<R[]> => {
-      const results: R[] = []
-      for (let i = 0; i < items.length; i += batchSize) {
-        const batch = items.slice(i, i + batchSize)
-        const batchResults = await Promise.all(batch.map(processor))
-        results.push(...batchResults)
-        // Her batch arasında kısa bir bekleme (DB yükünü azaltmak için)
-        if (i + batchSize < items.length) {
-          await new Promise(resolve => setTimeout(resolve, 50))
-        }
-      }
-      return results
-    }
-    
-    // Brand link oluşturma fonksiyonu (basitleştirilmiş ve daha güvenilir)
-    const createBrandLink = async (productId: string, brandId: string): Promise<boolean> => {
-      // Önce mevcut linki kontrol et
-      const { data: products } = await query.graph({
-        entity: "product",
-        fields: ["id", "brand.id"],
-        filters: {
-          id: productId,
-        },
-      })
-      
-      const currentBrand = products[0]?.brand
-      
-      // Eğer aynı brand'e zaten linklenmişse, işlemi atla
-      if (currentBrand?.id === brandId) {
-        return true // Zaten doğru brand'e linklenmiş
-      }
-      
-      // Eğer farklı bir brand'e linklenmişse, önce onu sil
-      if (currentBrand) {
-        try {
-          await remoteLink.dismiss({
-            [Modules.PRODUCT]: {
-              product_id: productId,
-            },
-            brand: {
-              brand_id: currentBrand.id,
-            },
-          })
-          // Link silme işleminin tamamlanması için bekle
-          await new Promise(resolve => setTimeout(resolve, 200))
-        } catch (dismissError: any) {
-          logger.warn(
-            `[Brand Link Uyarısı] Ürün ${productId} için mevcut brand linki silinirken hata: ${dismissError.message}`
-          )
-          // Devam et, yeni link oluşturmayı dene
-        }
-      }
-      
-      // Yeni linki oluştur
-      try {
-        await remoteLink.create({
-          [Modules.PRODUCT]: {
-            product_id: productId,
-          },
-          brand: {
-            brand_id: brandId,
-          },
-        })
-        return true
-      } catch (error: any) {
-        // Eğer "multiple links" hatası alırsak, bir kez daha dene
-        if (error.message?.includes("multiple links") || error.message?.includes("Cannot create")) {
-          await new Promise(resolve => setTimeout(resolve, 300))
-          
-          // Tekrar kontrol et
-          const { data: recheckProducts } = await query.graph({
-            entity: "product",
-            fields: ["id", "brand.id"],
-            filters: {
-              id: productId,
-            },
-          })
-          
-          const recheckBrand = recheckProducts[0]?.brand
-          
-          // Eğer aynı brand'e zaten linklenmişse, başarılı say
-          if (recheckBrand?.id === brandId) {
-            return true
-          }
-          
-          // Tekrar dene
-          try {
-            await remoteLink.create({
-              [Modules.PRODUCT]: {
-                product_id: productId,
-              },
-              brand: {
-                brand_id: brandId,
-              },
-            })
-            return true
-          } catch (retryError: any) {
-            logger.warn(
-              `[Brand Link Hatası] Ürün ${productId} -> Brand ${brandId} linklenirken hata (retry): ${retryError.message}`
-            )
-            return false
-          }
-        } else {
-          logger.warn(
-            `[Brand Link Hatası] Ürün ${productId} -> Brand ${brandId} linklenirken hata: ${error.message}`
-          )
-          return false
-        }
-      }
-    }
-    
+
     for (let i = 0; i < batches.length; i++) {
       const batch = batches[i]
       const productsToCreate: any[] = []
       const failedProducts: string[] = []
-      // Handle bazlı eşleştirme için: handle => brand_id mapping
-      const batchBrandLinks = new Map<string, string>()
 
       for (const productRow of batch) {
         try {
-          const { productObj, brand_id } = prepareProduct(productRow)
+          const { productObj } = prepareProduct(productRow)
           if (productObj.handle && !/^[a-z0-9-]+$/.test(productObj.handle)) {
             logger.warn(
               `[Ürün Hazırlama Hatası] Handle URL-safe değil: "${productObj.handle}" (Ürün: ${productRow.title || productRow.id})`
             )
           }
           productsToCreate.push(productObj)
-          // Brand linki için handle bazlı sakla (daha güvenilir)
-          if (brand_id && productObj.handle) {
-            batchBrandLinks.set(productObj.handle, brand_id)
-          }
         } catch (error: any) {
           const productInfo = `"${productRow.title || "Başlıksız"}" (ID: ${productRow.id})`
           logger.warn(
@@ -429,75 +307,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
             },
           })
           createdProducts += createdProductsResult.length
-          
-          // Oluşturulan ürünler için brand linklerini hemen oluştur (handle bazlı eşleştirme)
-          const batchBrandLinksToCreate: Array<[string, string]> = []
-          let brandIdNotFoundCount = 0
-          let handleNotFoundCount = 0
-          
-          for (const createdProduct of createdProductsResult) {
-            if (!createdProduct.handle) {
-              handleNotFoundCount++
-              continue
-            }
-            
-            const brandId = batchBrandLinks.get(createdProduct.handle)
-            if (brandId) {
-              batchBrandLinksToCreate.push([createdProduct.id, brandId])
-            } else {
-              brandIdNotFoundCount++
-            }
-          }
-          
-          // Detaylı loglama
-          if (createdProductsResult.length !== productsToCreate.length) {
-            logger.warn(
-              `[Brand Link Uyarısı] Batch ${i + 1}: ${productsToCreate.length} ürün gönderildi, ` +
-              `${createdProductsResult.length} ürün oluşturuldu. Bazı brand linkleri atlanmış olabilir.`
-            )
-          }
-          
-          if (brandIdNotFoundCount > 0) {
-            logger.info(
-              `[Brand Link Bilgisi] Batch ${i + 1}: ${brandIdNotFoundCount} ürün için brand_id bulunamadı (CSV'de brand_id yok veya brandMap'te eşleşme yok)`
-            )
-          }
-          
-          if (handleNotFoundCount > 0) {
-            logger.warn(
-              `[Brand Link Uyarısı] Batch ${i + 1}: ${handleNotFoundCount} ürün için handle bulunamadı`
-            )
-          }
-          
-          // Bu batch için brand linklerini oluştur (sınırlı paralel işlem)
-          if (batchBrandLinksToCreate.length > 0) {
-            // Paralel işlem sayısını sınırla (10 link aynı anda)
-            const CONCURRENT_LINKS = 10
-            const results = await processInBatches(
-              batchBrandLinksToCreate,
-              CONCURRENT_LINKS,
-              async ([productId, brandId]) => createBrandLink(productId, brandId)
-            )
-            const successCount = results.filter(r => r === true).length
-            linkedBrands += successCount
-            failedBrandLinks += (results.length - successCount)
-            
-            logger.info(
-              `Batch ${i + 1}/${batches.length}: ${successCount}/${batchBrandLinksToCreate.length} brand linki oluşturuldu ` +
-              `(${createdProductsResult.length} ürün oluşturuldu, ${brandIdNotFoundCount} ürün için brand_id yok)`
-            )
-            
-            if (successCount < batchBrandLinksToCreate.length) {
-              logger.warn(
-                `[Brand Link Uyarısı] Batch ${i + 1}: ${batchBrandLinksToCreate.length - successCount} link oluşturulamadı`
-              )
-            }
-          } else {
-            logger.info(
-              `Batch ${i + 1}/${batches.length}: ${createdProductsResult.length} ürün oluşturuldu, ancak hiçbir ürün için brand linki oluşturulamadı ` +
-              `(${brandIdNotFoundCount} ürün için brand_id yok)`
-            )
-          }
+
         } catch (err: any) {
           failedBatches++
           const batchErrorMsg = String(err?.message || err)
@@ -540,16 +350,16 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
 
       if ((i + 1) % Math.max(1, Math.floor(batches.length / 20)) === 0) {
         logger.info(
-          `İlerleme: ${createdProducts} / ${productsData.length} ürün oluşturuldu, ` +
-          `${linkedBrands} brand linki oluşturuldu. ${failedBatches} batch başarısız oldu.`
+          `İlerleme: ${createdProducts} / ${productsData.length} ürün oluşturuldu. ${failedBatches} batch başarısız oldu.`
         )
       }
     }
-    
-    logger.info(
-      `Brand linkleme tamamlandı: ${linkedBrands} başarılı, ${failedBrandLinks} başarısız ` +
-      `(CSV'de ${totalProductsWithBrandId} ürün için brand_id vardı, ${createdProducts} ürün oluşturuldu)`
-    )
+
+    // SQL ile batching sonunda product-brand linklerini batch linkleme işlemi
+    logger.info("Ürünler başarıyla oluşturuldu, SQL ile toplu brand linking başlatılıyor...")
+    const pgConnection = container.resolve(ContainerRegistrationKeys.PG_CONNECTION)
+    await pgConnection.raw(PRODUCT_BRAND_LINK_QUERY)
+    logger.info("SQL ile toplu brand linking işlemi tamamlandı.")
 
     // Inventory levels oluştur (toplu ve tek seferde, 30K ürün için optimize)
     const { data: allInventoryItems } = await query.graph({
@@ -586,14 +396,10 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
 
     res.json({
       success: true,
-      message: `${createdProducts} ürün oluşturuldu, ${linkedBrands} ürün brand'e bağlandı`,
+      message: `${createdProducts} ürün oluşturuldu, brand linking SQL ile gerçekleştirildi`,
       count: createdProducts,
-      brand_links: linkedBrands,
-      failed_brand_links: failedBrandLinks,
+      brand_links_sql: true,
       expected_brand_links: totalProductsWithBrandId,
-      brand_link_success_rate: totalProductsWithBrandId > 0 
-        ? `${((linkedBrands / totalProductsWithBrandId) * 100).toFixed(2)}%` 
-        : "N/A",
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error"
