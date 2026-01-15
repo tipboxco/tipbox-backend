@@ -167,6 +167,17 @@ type SyncContext = {
   brandService: BrandModuleService | null
 }
 
+/**
+ * Catalog service module_type'ını backend'in beklediği formata dönüştürür
+ * brand_category -> brand-categories (backend "brand-categories" bekliyor)
+ */
+function mapModuleTypeForBackend(moduleType: ModuleType): string {
+  if (moduleType === "brand_category") {
+    return "brand-categories"
+  }
+  return moduleType
+}
+
 // Category sıralı cache - job bazında
 const categoryCache = new Map<string, CategoryWithLevel[]>()
 
@@ -413,18 +424,22 @@ async function getRecordsBatch(
     }
     case "brand": {
       if (!context.brandService) return []
-      // Brand service ile pagination
+      // Brand service ile pagination - category ilişkisi dahil
       const brands = await context.brandService.listBrands(
         {}, // filters
         {
           skip: offset,
           take: limit,
+          relations: ["category"], // category ilişkisini çek
         }
       )
       return brands.map((brand: any) => ({
         id: brand.id,
         name: brand.name,
         logo_url: brand.logo_url || null,
+        // Backend category ismi (string) ile eşleştirme yapıyor
+        category: brand.category?.title || null, // Kategori ismi (backend bu değeri kullanarak categoryId buluyor)
+        category_id: brand.category?.id || brand.category_id || null, // Fallback olarak direkt ID
         created_at: brand.created_at,
         updated_at: brand.updated_at,
       }))
@@ -437,10 +452,14 @@ async function getRecordsBatch(
       // Manuel pagination (service'de pagination desteği yoksa)
       const paginatedCategories = brandCategories.slice(offset, offset + limit)
       
+      // Backend "brand-categories" modül tipinde name field'ı bekliyor
       return paginatedCategories.map((category: any) => ({
         id: category.id,
-        title: category.title,
+        name: category.title, // Backend'in beklediği field (name)
+        title: category.title, // Orijinal field da gönder
         thumbnail: category.thumbnail || null,
+        image_url: category.thumbnail || null, // Backend alternatif olarak image_url de kabul ediyor
+        metadata: category.metadata || null,
         created_at: category.created_at,
         updated_at: category.updated_at,
       }))
@@ -514,10 +533,11 @@ async function runSyncInBackground(
         await delay(5)
 
         // Payload oluştur - küçük batch boyutu ile
+        // Backend farklı module_type formatı bekliyor (brand_category -> brand-categories)
         const payload: SyncPayload = {
           sync_id: config.id,
           job_id: jobId,
-          module_type: config.module_type,
+          module_type: mapModuleTypeForBackend(config.module_type as ModuleType) as ModuleType,
           batch_number: batch,
           total_batches: totalBatches,
           batch_size: batchSize,

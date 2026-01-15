@@ -45,7 +45,7 @@ export const BrandRow = memo(({
       />
     )}
     <div className="flex-shrink-0">
-      {brand.logo_url ? (
+      {false ? (
         <img 
           src={brand.logo_url} 
           alt={brand.name}
