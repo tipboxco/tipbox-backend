@@ -122,4 +122,44 @@ export interface LimitedTimeEventResponse {
   endDate: string;
 }
 
+// Event Progress DTO'ları
+export interface BadgeProgress {
+  badgeId: string;
+  badgeName: string;
+  badgeDescription: string;
+  badgeImage: string | null;
+  badgeRarity: string;
+  requirement: {
+    type: string; // 'POSTS_COUNT', 'LIKES_RECEIVED'
+    threshold: number;
+  };
+  currentProgress: number;
+  isEarned: boolean; // Kullanıcı bu rozeti aldı mı?
+  progressPercentage: number; // (currentProgress / threshold) * 100
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  userId: string;
+  userName: string;
+  avatar: string | null;
+  postsCount: number;
+  likesReceived: number;
+}
+
+export interface EventUserProgress {
+  userId: string;
+  eventId: string;
+  metrics: {
+    postsCount: number;
+    likesReceived: number;
+  };
+  badges: BadgeProgress[];
+  leaderboard?: LeaderboardEntry[]; // Opsiyonel, sadece ilk N kullanıcı
+}
+
+export interface EventLeaderboard {
+  eventId: string;
+  items: LeaderboardEntry[];
+}
 

@@ -14,19 +14,29 @@ import {
   LimitedTimeEventResponse,
   LimitedTimeEventLeaderboardUser,
   LimitedTimeEventUser,
+  EventUserProgress,
+  EventLeaderboard,
+  BadgeProgress,
+  LeaderboardEntry,
 } from '../../interfaces/event/event.dto';
 import { FeedItem, FeedItemType } from '../../interfaces/feed/feed.dto';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import { CacheService } from '../../infrastructure/cache/cache.service';
 import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
+import { EventMetricsService } from './event-metrics.service';
+import { BadgeEligibilityService } from '../gamification/badge-eligibility.service';
 
 export class EventService {
   private prisma: ReturnType<typeof getPrisma>;
   private cacheService: CacheService;
+  private eventMetricsService: EventMetricsService;
+  private badgeEligibilityService: BadgeEligibilityService;
 
   constructor() {
     this.prisma = getPrisma();
     this.cacheService = CacheService.getInstance();
+    this.eventMetricsService = new EventMetricsService();
+    this.badgeEligibilityService = new BadgeEligibilityService();
   }
 
   /**
@@ -1122,6 +1132,156 @@ export class EventService {
       };
     } catch (error) {
       logger.error(`Failed to get event requirements for ${eventId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Kullanıcının event ilerlemesini ve badge'lerini getir
+   */
+  async getUserEventProgress(userId: string, eventId: string): Promise<EventUserProgress> {
+    try {
+      // Kullanıcının metriklerini al
+      const metrics = await this.eventMetricsService.getUserMetrics(userId, eventId);
+
+      // Event için tanımlı badge'leri ve requirement'ları al
+      const requirements = await this.badgeEligibilityService.getEventBadgeRequirements(eventId);
+
+      // Kullanıcının badge'lerini al
+      const userBadges = await this.prisma.userBadge.findMany({
+        where: {
+          userId,
+          badgeId: {
+            in: requirements.map((r) => r.badgeId),
+          },
+        },
+        select: {
+          badgeId: true,
+        },
+      });
+
+      const earnedBadgeIds = new Set(userBadges.map((ub) => ub.badgeId));
+
+      // Badge progress bilgilerini oluştur
+      const badges: BadgeProgress[] = [];
+      for (const requirement of requirements) {
+        const badge = await this.prisma.badge.findUnique({
+          where: { id: requirement.badgeId },
+        });
+
+        if (!badge) continue;
+
+        let currentProgress = 0;
+        switch (requirement.type) {
+          case 'POSTS_COUNT':
+            currentProgress = metrics.postsCount;
+            break;
+          case 'LIKES_RECEIVED':
+            currentProgress = metrics.likesReceivedCount;
+            break;
+        }
+
+        const progressPercentage = Math.min(
+          100,
+          Math.round((currentProgress / requirement.threshold) * 100)
+        );
+
+        badges.push({
+          badgeId: badge.id,
+          badgeName: badge.name,
+          badgeDescription: badge.description || '',
+          badgeImage: resolveMediaUrl(badge.imageUrl),
+          badgeRarity: badge.rarity,
+          requirement: {
+            type: requirement.type,
+            threshold: requirement.threshold,
+          },
+          currentProgress,
+          isEarned: earnedBadgeIds.has(badge.id),
+          progressPercentage,
+        });
+      }
+
+      // Leaderboard'u al (ilk 10 kullanıcı)
+      const leaderboardData = await this.eventMetricsService.getLeaderboard(eventId, 10);
+      
+      const leaderboard: LeaderboardEntry[] = await Promise.all(
+        leaderboardData.map(async (entry, index) => {
+          const user = await this.prisma.user.findUnique({
+            where: { id: entry.userId },
+            include: {
+              profile: true,
+              avatars: {
+                where: { isActive: true },
+                take: 1,
+              },
+            },
+          });
+
+          return {
+            rank: index + 1,
+            userId: entry.userId,
+            userName: user?.profile?.displayName || user?.email || 'Unknown',
+            avatar: resolveMediaUrl(user?.avatars?.[0]?.imageUrl || null, true),
+            postsCount: entry.postsCount,
+            likesReceived: entry.likesReceivedCount,
+          };
+        })
+      );
+
+      return {
+        userId,
+        eventId,
+        metrics: {
+          postsCount: metrics.postsCount,
+          likesReceived: metrics.likesReceivedCount,
+        },
+        badges,
+        leaderboard,
+      };
+    } catch (error) {
+      logger.error(`Failed to get user event progress for user ${userId} in event ${eventId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Event leaderboard'unu getir
+   */
+  async getEventLeaderboard(eventId: string, limit: number = 50): Promise<EventLeaderboard> {
+    try {
+      const leaderboardData = await this.eventMetricsService.getLeaderboard(eventId, limit);
+      
+      const items: LeaderboardEntry[] = await Promise.all(
+        leaderboardData.map(async (entry, index) => {
+          const user = await this.prisma.user.findUnique({
+            where: { id: entry.userId },
+            include: {
+              profile: true,
+              avatars: {
+                where: { isActive: true },
+                take: 1,
+              },
+            },
+          });
+
+          return {
+            rank: index + 1,
+            userId: entry.userId,
+            userName: user?.profile?.displayName || user?.email || 'Unknown',
+            avatar: resolveMediaUrl(user?.avatars?.[0]?.imageUrl || null, true),
+            postsCount: entry.postsCount,
+            likesReceived: entry.likesReceivedCount,
+          };
+        })
+      );
+
+      return {
+        eventId,
+        items,
+      };
+    } catch (error) {
+      logger.error(`Failed to get event leaderboard for ${eventId}:`, error);
       throw error;
     }
   }

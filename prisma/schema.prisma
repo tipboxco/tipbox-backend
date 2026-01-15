@@ -1250,6 +1250,8 @@ model WishboxStats {
   totalParticipated    Int          @map("total_participated")
   totalComments        Int          @map("total_comments")
   helpfulVotesReceived Int          @map("helpful_votes_received")
+  eventPostsCount      Int          @default(0) @map("event_posts_count")
+  eventLikesReceived   Int          @default(0) @map("event_likes_received")
   createdAt            DateTime     @default(now()) @map("created_at")
   updatedAt            DateTime     @updatedAt @map("updated_at")
   event                WishboxEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)

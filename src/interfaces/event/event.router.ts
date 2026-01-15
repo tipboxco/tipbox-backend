@@ -734,6 +734,128 @@ router.post(
 
 /**
  * @openapi
+ * /events/{eventId}/progress:
+ *   get:
+ *     summary: Kullanıcının event ilerlemesini getir
+ *     description: Kullanıcının event'teki metriklerini, badge progress'ini ve leaderboard'unu getirir
+ *     tags: [Events]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: eventId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Event ID
+ *     responses:
+ *       200:
+ *         description: Event progress bilgisi başarıyla getirildi
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Event not found
+ */
+router.get(
+  '/:eventId/progress',
+  authMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const eventId = req.params.eventId;
+
+    if (!eventId) {
+      return res.status(400).json({ message: 'Event ID is required' });
+    }
+
+    try {
+      const progress = await eventService.getUserEventProgress(String(userId), eventId);
+      return res.json(progress);
+    } catch (error: unknown) {
+      if (hasErrorMessage(error, 'Event not found')) {
+        return res.status(404).json({ message: 'Event not found' });
+      }
+      logger.error(`Error getting event progress ${eventId}:`, error);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  })
+);
+
+/**
+ * @openapi
+ * /events/{eventId}/leaderboard:
+ *   get:
+ *     summary: Event leaderboard'unu getir
+ *     description: Event'in sıralı kullanıcı listesini getirir
+ *     tags: [Events]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: eventId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Event ID
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 50
+ *         description: Sayfa başına item sayısı
+ *     responses:
+ *       200:
+ *         description: Event leaderboard başarıyla getirildi
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Event not found
+ */
+router.get(
+  '/:eventId/leaderboard',
+  authMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const eventId = req.params.eventId;
+
+    if (!eventId) {
+      return res.status(400).json({ message: 'Event ID is required' });
+    }
+
+    const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
+
+    if (limitParam < 1 || limitParam > 100) {
+      return res.status(400).json({ message: 'Limit must be between 1 and 100' });
+    }
+
+    try {
+      const leaderboard = await eventService.getEventLeaderboard(eventId, limitParam);
+      return res.json(leaderboard);
+    } catch (error: unknown) {
+      if (hasErrorMessage(error, 'Event not found')) {
+        return res.status(404).json({ message: 'Event not found' });
+      }
+      logger.error(`Error getting event leaderboard ${eventId}:`, error);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  })
+);
+
+/**
+ * @openapi
  * /events/{eventId}/requirements:
  *   get:
  *     summary: Event gereksinimlerini ve ilerlemeyi getir

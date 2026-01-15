@@ -6,13 +6,16 @@ import { BadgeType } from '../../domain/gamification/badge-type.enum';
 import { BadgeVisibility } from '../../domain/gamification/badge-visibility.enum';
 import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import logger from '../../infrastructure/logger/logger';
 
 export class GamificationService {
   private readonly notificationService: NotificationService;
+  private prisma: ReturnType<typeof getPrisma>;
 
   constructor() {
     this.notificationService = new NotificationService();
+    this.prisma = getPrisma();
   }
 
   /**
@@ -23,48 +26,78 @@ export class GamificationService {
    */
   async grantBadgeToUser(userId: string, badgeId: string): Promise<UserBadge | null> {
     try {
-      // Bu kısımda gerçek veritabanı işlemleri yapılacak
-      // Şimdilik mock data döndürüyoruz
-      const mockBadge = new Badge(
-        badgeId,
-        'İlk Post',
-        'İlk postunuzu paylaştınız',
-        null, // imageUrl
-        BadgeType.ACHIEVEMENT,
-        BadgeRarity.COMMON,
-        null, // boostMultiplier
-        null, // rewardMultiplier
-        '00000000-0000-0000-0000-000000000001', // categoryId
-        new Date()
-      );
+      // Badge bilgisini getir
+      const badge = await this.prisma.badge.findUnique({
+        where: { id: badgeId },
+      });
 
-      const mockUserBadge = new UserBadge(
-        '00000000-0000-0000-0000-000000000001',
-        userId,
-        badgeId,
-        true, // isVisible
-        null, // displayOrder
-        BadgeVisibility.PUBLIC,
-        true, // claimed
-        new Date() // claimedAt
-      );
+      if (!badge) {
+        logger.error(`Badge ${badgeId} not found`);
+        return null;
+      }
 
-      logger.info(`Badge ${mockBadge.name} granted to user ${userId}`);
+      // Kullanıcıda zaten bu badge var mı kontrol et (idempotency)
+      const existingBadge = await this.prisma.userBadge.findUnique({
+        where: {
+          userId_badgeId: {
+            userId,
+            badgeId,
+          },
+        },
+      });
+
+      if (existingBadge) {
+        logger.info(`Badge ${badgeId} already granted to user ${userId}`);
+        return new UserBadge(
+          existingBadge.id,
+          existingBadge.userId,
+          existingBadge.badgeId,
+          existingBadge.isVisible,
+          existingBadge.displayOrder,
+          existingBadge.visibility as BadgeVisibility,
+          existingBadge.claimed,
+          existingBadge.claimedAt
+        );
+      }
+
+      // UserBadge oluştur (claimed=false - kullanıcı claim edecek)
+      const userBadge = await this.prisma.userBadge.create({
+        data: {
+          userId,
+          badgeId,
+          isVisible: true,
+          displayOrder: null,
+          visibility: BadgeVisibility.PUBLIC,
+          claimed: false, // Event rozetleri claim edilmeli
+          claimedAt: null,
+        },
+      });
+
+      logger.info(`Badge ${badge.name} granted to user ${userId}`);
 
       // Rozet bildirimini NotificationService ile gönder
       await this.notificationService.sendNotification(
         userId,
         NotificationType.NEW_BADGE,
         {
-        badgeName: mockBadge.getName(),
-        badgeIcon: mockBadge.hasImage() ? mockBadge.imageUrl : '🏆',
-        badgeId: mockBadge.id,
+          badgeName: badge.name,
+          badgeIcon: badge.imageUrl || '🏆',
+          badgeId: badge.id,
         }
       );
 
-      logger.info(`Notification sent for badge ${mockBadge.getName()} to user ${userId}`);
+      logger.info(`Notification sent for badge ${badge.name} to user ${userId}`);
 
-      return mockUserBadge;
+      return new UserBadge(
+        userBadge.id,
+        userBadge.userId,
+        userBadge.badgeId,
+        userBadge.isVisible,
+        userBadge.displayOrder,
+        userBadge.visibility as BadgeVisibility,
+        userBadge.claimed,
+        userBadge.claimedAt
+      );
     } catch (error) {
       logger.error(`Failed to grant badge ${badgeId} to user ${userId}:`, error);
       throw error;

@@ -10,6 +10,8 @@ import { DEFAULT_AVATAR_PATH } from '../src/infrastructure/config/media.config'
 import { ProgressBar } from './seed/helpers/progress-bar'
 import { seedTaxonomy } from './seed/taxonomy.seed'
 import { seedProductCatalog } from './seed/product-catalog.seed'
+import { ensureEventBadges } from './seed/helpers/ensure-event-badges'
+import { ensureTestEvent } from './seed/helpers/ensure-test-event'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { markSeedStart, markSeedEnd, addSeedUserId } = require('./seed/seed-metadata')
 
@@ -12195,6 +12197,25 @@ async function main() {
       console.error('   Stack:', error.stack)
     }
     console.log('⚠️  Seed devam ediyor ama reward claim verileri oluşturulamadı')
+  }
+
+  // ===== EVENT BADGES & TEST EVENT SEEDING =====
+  console.log('\n🏆 Event badges ve test event oluşturuluyor...')
+  progress.increment('Event badges seeding...')
+  
+  try {
+    await ensureEventBadges(prisma)
+    const testEventId = await ensureTestEvent(prisma)
+    progress.increment('Event badges ve test event tamamlandı')
+    console.log('✅ Event badges ve test event seeding completed')
+    console.log(`   Test Event ID: ${testEventId}`)
+  } catch (error) {
+    console.error('❌ Event badges seeding hatası:', error)
+    if (error instanceof Error) {
+      console.error('   Message:', error.message)
+      console.error('   Stack:', error.stack)
+    }
+    console.log('⚠️  Seed devam ediyor ama event badges oluşturulamadı')
   }
 
   // ===== NFT SEEDING FOR PRIORITY USERS =====

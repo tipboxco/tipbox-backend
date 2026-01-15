@@ -14,6 +14,8 @@ import { UserPrismaRepository } from '../../infrastructure/repositories/user-pri
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
+import { EventMetricsService } from '../event/event-metrics.service';
+import { BadgeEligibilityService } from '../gamification/badge-eligibility.service';
 import logger from '../../infrastructure/logger/logger';
 
 export class InteractionService {
@@ -25,6 +27,8 @@ export class InteractionService {
   private userRepo = new UserPrismaRepository();
   private prisma = getPrisma();
   private notificationService = new NotificationService();
+  private eventMetricsService = new EventMetricsService();
+  private badgeEligibilityService = new BadgeEligibilityService();
 
   constructor() {}
 
@@ -60,6 +64,32 @@ export class InteractionService {
 
       // Beğeni sayısını güncelle
       await this.contentPostRepo.incrementLikeCount(postId);
+
+      // Event varsa post sahibinin metriğini güncelle
+      const postWithEventId = await this.prisma.contentPost.findUnique({
+        where: { id: postId },
+        select: { eventId: true, userId: true },
+      });
+
+      if (postWithEventId?.eventId) {
+        // Async olarak event metrik ve badge kontrolü yap (hata olsa bile devam et)
+        this.eventMetricsService.incrementUserLikesReceived(postWithEventId.userId, postWithEventId.eventId)
+          .then((metrics) => {
+            return this.badgeEligibilityService.checkAndGrantEventBadges(
+              postWithEventId.userId,
+              postWithEventId.eventId!,
+              metrics
+            );
+          })
+          .catch((err) => {
+            logger.warn({
+              message: 'Failed to update event metrics or check badges for like',
+              userId: postWithEventId.userId,
+              eventId: postWithEventId.eventId,
+              error: err,
+            });
+          });
+      }
 
       // Post sahibine bildirim gönder
       if (post.userId !== userId) {
@@ -100,6 +130,25 @@ export class InteractionService {
 
       // Beğeni sayısını güncelle
       await this.contentPostRepo.decrementLikeCount(postId);
+
+      // Event varsa post sahibinin metriğini azalt (badge geri alınmaz)
+      const postWithEventId = await this.prisma.contentPost.findUnique({
+        where: { id: postId },
+        select: { eventId: true, userId: true },
+      });
+
+      if (postWithEventId?.eventId) {
+        // Async olarak event metriği azalt (hata olsa bile devam et)
+        this.eventMetricsService.decrementUserLikesReceived(postWithEventId.userId, postWithEventId.eventId)
+          .catch((err) => {
+            logger.warn({
+              message: 'Failed to decrement event metrics for unlike',
+              userId: postWithEventId.userId,
+              eventId: postWithEventId.eventId,
+              error: err,
+            });
+          });
+      }
 
       logger.info(`User ${userId} unliked post ${postId}`);
     } catch (error) {

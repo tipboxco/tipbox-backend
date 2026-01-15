@@ -30,6 +30,8 @@ import { GeminiService } from '../../infrastructure/ai/gemini.service';
 import { AiExperienceSplitPrismaRepository } from '../../infrastructure/repositories/ai-experience-split-prisma.repository';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import { EventService } from '../event/event.service';
+import { EventMetricsService } from '../event/event-metrics.service';
+import { BadgeEligibilityService } from '../gamification/badge-eligibility.service';
 
 export class PostService {
   private postRepo: ContentPostPrismaRepository;
@@ -41,6 +43,8 @@ export class PostService {
   private geminiService: GeminiService;
   private eventService: EventService;
   private experienceSnippetRepo: AiExperienceSplitPrismaRepository;
+  private eventMetricsService: EventMetricsService;
+  private badgeEligibilityService: BadgeEligibilityService;
 
   /**
    * Search posts by title and body
@@ -99,6 +103,8 @@ export class PostService {
     this.geminiService = GeminiService.getInstance();
     this.experienceSnippetRepo = new AiExperienceSplitPrismaRepository();
     this.eventService = new EventService();
+    this.eventMetricsService = new EventMetricsService();
+    this.badgeEligibilityService = new BadgeEligibilityService();
   }
 
   /**
@@ -369,6 +375,15 @@ export class PostService {
         this.eventService.invalidateEventCaches(request.eventId, userId).catch((err) => {
           logger.warn({ message: 'Failed to invalidate event caches', eventId: request.eventId, error: err });
         });
+        
+        // Event metrik ve badge kontrolü (async, hata olsa bile devam et)
+        this.eventMetricsService.incrementUserPostCount(userId, request.eventId)
+          .then((metrics) => {
+            return this.badgeEligibilityService.checkAndGrantEventBadges(userId, request.eventId!, metrics);
+          })
+          .catch((err) => {
+            logger.warn({ message: 'Failed to update event metrics or check badges', userId, eventId: request.eventId, error: err });
+          });
       }
       
       // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
@@ -496,6 +511,15 @@ export class PostService {
         this.eventService.invalidateEventCaches(request.eventId, userId).catch((err) => {
           logger.warn({ message: 'Failed to invalidate event caches', eventId: request.eventId, error: err });
         });
+        
+        // Event metrik ve badge kontrolü (async, hata olsa bile devam et)
+        this.eventMetricsService.incrementUserPostCount(userId, request.eventId)
+          .then((metrics) => {
+            return this.badgeEligibilityService.checkAndGrantEventBadges(userId, request.eventId!, metrics);
+          })
+          .catch((err) => {
+            logger.warn({ message: 'Failed to update event metrics or check badges', userId, eventId: request.eventId, error: err });
+          });
       }
       
       // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
@@ -656,6 +680,15 @@ export class PostService {
         this.eventService.invalidateEventCaches(request.eventId, userId).catch((err) => {
           logger.warn({ message: 'Failed to invalidate event caches', eventId: request.eventId, error: err });
         });
+        
+        // Event metrik ve badge kontrolü (async, hata olsa bile devam et)
+        this.eventMetricsService.incrementUserPostCount(userId, request.eventId)
+          .then((metrics) => {
+            return this.badgeEligibilityService.checkAndGrantEventBadges(userId, request.eventId!, metrics);
+          })
+          .catch((err) => {
+            logger.warn({ message: 'Failed to update event metrics or check badges', userId, eventId: request.eventId, error: err });
+          });
       }
       
       // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
