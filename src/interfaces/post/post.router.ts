@@ -1129,5 +1129,127 @@ router.get(
   })
 );
 
+/**
+ * @openapi
+ * /posts/{eventId}/post:
+ *   post:
+ *     summary: Event için post oluştur
+ *     description: Belirli bir event için post oluşturur. Otomatik olarak event metriklerini günceller ve badge kontrolü yapar.
+ *     tags: [Posts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: eventId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Event ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - title
+ *               - body
+ *               - contextType
+ *               - contextId
+ *             properties:
+ *               title:
+ *                 type: string
+ *                 description: Post başlığı
+ *               body:
+ *                 type: string
+ *                 description: Post içeriği
+ *               contextType:
+ *                 type: string
+ *                 enum: [sub_category, product_group, product]
+ *                 description: Context tipi
+ *               contextId:
+ *                 type: string
+ *                 description: Context ID (sub_category, product_group veya product ID)
+ *               images:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *                 description: Post görselleri (maksimum 5, her biri max 10MB)
+ *     responses:
+ *       200:
+ *         description: Post başarıyla oluşturuldu
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                 message:
+ *                   type: string
+ *                 success:
+ *                   type: boolean
+ *       400:
+ *         description: Geçersiz istek
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ *       404:
+ *         description: Event bulunamadı
+ */
+router.post(
+  '/:eventId/post',
+  upload.array('images', 5),
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const eventId = req.params.eventId;
+    if (!eventId) {
+      return res.status(400).json({ message: 'Event ID is required' });
+    }
+
+    // Process images
+    const imageUrls = await processPostImages(req, String(userId));
+
+    // Create post request
+    const postData: CreatePostRequest = {
+      title: req.body.title,
+      body: req.body.body,
+      contextType: req.body.contextType as ContextType,
+      contextId: req.body.contextId,
+      images: imageUrls,
+      eventId: eventId, // Event ID from path parameter
+    };
+
+    // Validate required fields
+    if (!postData.title || !postData.body || !postData.contextType || !postData.contextId) {
+      return res.status(400).json({ 
+        message: 'title, body, contextType, and contextId are required' 
+      });
+    }
+
+    try {
+      const result = await postService.createFreePost(String(userId), postData);
+      return res.status(200).json(result);
+    } catch (error) {
+      const message = getErrorMessage(error);
+      
+      if (message.includes('Event not found')) {
+        return res.status(404).json({ message: 'Event not found' });
+      }
+      
+      logger.error('Error creating event post:', error);
+      return res.status(400).json({ 
+        message: message || 'Failed to create post' 
+      });
+    }
+  })
+);
+
 export default router;
 
