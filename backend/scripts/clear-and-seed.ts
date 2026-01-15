@@ -60,7 +60,8 @@ async function clearAndSeed(clearAll: boolean = false) {
     }
 
     // ADIM 3: MinIO görsellerini temizle (ÖNCE)
-    console.log('\n🧹 MinIO görselleri temizleniyor...\n');
+    
+    /*console.log('\n🧹 MinIO görselleri temizleniyor...\n');
     try {
       const clearMediaPath = path.join(process.cwd(), 'scripts', 'clear-minio.ts');
       if (clearAll) {
@@ -79,7 +80,7 @@ async function clearAndSeed(clearAll: boolean = false) {
       console.warn('⚠️  MinIO temizleme hatası, devam ediliyor...');
       console.warn('   Hata:', error instanceof Error ? error.message : String(error));
     }
-
+*/
     // ADIM 4: Seed verilerini temizle (DB)
     if (clearAll) {
       console.log('\n🧹 TÜM seed verileri temizleniyor (taxonomy dahil)...\n');

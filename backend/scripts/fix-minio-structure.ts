@@ -197,6 +197,7 @@ async function uploadToMinIO() {
   console.log('📤 MinIO\'ya upload başlıyor...\n');
   
   const s3Service = new S3Service();
+  
   await s3Service.checkAndCreateBucket();
   
   let uploaded = 0;

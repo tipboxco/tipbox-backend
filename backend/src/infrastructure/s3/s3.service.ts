@@ -56,7 +56,7 @@ export class S3Service {
     
     this.effectiveEndpoint = effectiveEndpoint;
     
-    this.s3Client = new S3Client({
+    const params = {
       endpoint: this.effectiveEndpoint,
       region: s3Config.region,
       credentials: {
@@ -64,7 +64,9 @@ export class S3Service {
         secretAccessKey: s3Config.secretAccessKey,
       },
       forcePathStyle: s3Config.forcePathStyle,
-    });
+    }
+    console.log('params', params);
+    this.s3Client = new S3Client(params);
 
     // Servis başladığında bucket'ı kontrol et ve oluştur
     this.checkAndCreateBucket().catch((error) => {

@@ -5829,9 +5829,13 @@ async function main() {
 
   // ===== CATALOG DATA CHECK (EN ÖNCE!) =====
   console.log('📦 Catalog verileri kontrol ediliyor...\n')
-  const productCount = await prisma.product.count()
-  const categoryCount = await prisma.category.count()
-  const brandCount = await prisma.brand.count()
+  const productCount = await prisma.product.count({})
+  const categoryCount = await prisma.category.count({});
+  const brandCount = await prisma.brand.count({});
+
+  const response  = await prisma.category.findMany({select:{_count:{select:{products:true}},name:true}});
+  console.log({categories:response.map(x=>({name:x.name,productCount:x._count.products}))});
+  
 
   console.log(`   📊 Mevcut Durum:`)
   console.log(`      Products: ${productCount.toLocaleString()}`)

@@ -124,12 +124,12 @@ model UserSettings {
   messageNotifications     Boolean         @default(true) @map("message_notifications")
   collectionNotifications  Boolean         @default(true) @map("collection_notifications")
   postNotifications        Boolean         @default(true) @map("post_notifications")
-  walletNotifications      Boolean         @default(true) @map("wallet_notifications")
-  transactionNotifications Boolean         @default(true) @map("transaction_notifications")
-  rewardNotifications      Boolean         @default(true) @map("reward_notifications")
-  nftNotifications         Boolean         @default(true) @map("nft_notifications")
   createdAt                DateTime        @default(now()) @map("created_at")
   updatedAt                DateTime        @updatedAt @map("updated_at")
+  nftNotifications         Boolean         @default(true) @map("nft_notifications")
+  rewardNotifications      Boolean         @default(true) @map("reward_notifications")
+  transactionNotifications Boolean         @default(true) @map("transaction_notifications")
+  walletNotifications      Boolean         @default(true) @map("wallet_notifications")
   theme                    UserTheme?      @relation(fields: [themeId], references: [id])
   user                     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -899,17 +899,17 @@ model UserAchievement {
 model RewardClaim {
   id            String            @id @default(uuid()) @db.Uuid
   userId        String            @map("user_id") @db.Uuid
-  rewardType    RewardClaimType   @map("reward_type")
-  sourceType    RewardSourceType  @map("source_type")
-  sourceId      String?           @map("source_id") @db.Uuid
   amount        Float
-  status        RewardClaimStatus @default(PENDING)
   claimedAt     DateTime?         @map("claimed_at")
+  createdAt     DateTime          @default(now()) @map("created_at")
   earnedAt      DateTime          @default(now()) @map("earned_at")
   expiresAt     DateTime?         @map("expires_at")
   metadata      Json?
+  rewardType    RewardClaimType   @map("reward_type")
+  sourceId      String?           @map("source_id") @db.Uuid
+  sourceType    RewardSourceType  @map("source_type")
+  status        RewardClaimStatus @default(PENDING)
   transactionId String?           @map("transaction_id") @db.Uuid
-  createdAt     DateTime          @default(now()) @map("created_at")
   updatedAt     DateTime          @updatedAt @map("updated_at")
   transaction   Transaction?      @relation(fields: [transactionId], references: [id])
   user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1084,10 +1084,10 @@ model Wallet {
   publicAddress String         @map("public_address")
   provider      WalletProvider
   isConnected   Boolean        @map("is_connected")
-  balance       Float          @default(0)
-  lockedBalance Float          @default(0) @map("locked_balance")
   createdAt     DateTime       @default(now()) @map("created_at")
   updatedAt     DateTime       @updatedAt @map("updated_at")
+  balance       Float          @default(0)
+  lockedBalance Float          @default(0) @map("locked_balance")
   transactions  Transaction[]
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1148,9 +1148,9 @@ model NFT {
   rarity         NFTRarity
   isTransferable Boolean            @map("is_transferable")
   currentOwnerId String?            @map("current_owner_id") @db.Uuid
-  viewCount      Int                @default(0) @map("view_count")
   createdAt      DateTime           @default(now()) @map("created_at")
   updatedAt      DateTime           @updatedAt @map("updated_at")
+  viewCount      Int                @default(0) @map("view_count")
   attributes     NFTAttribute[]
   claims         NFTClaim[]
   marketListings NFTMarketListing[]
