@@ -74,7 +74,7 @@ export class CatalogService {
         console.log({categories});
         const { resolveMediaUrl } = await import('../../infrastructure/config/media.config');
 
-        return categories.map((category) => {
+        return categories.map((category: any) => {
           const imageUrl = resolveMediaUrl(category.thumbnail);
 
           return {
@@ -118,7 +118,7 @@ export class CatalogService {
         },
       });
 
-      return subCategories.map((subCategory) => {
+      return subCategories.map((subCategory: any) => {
         const imageUrl = resolveMediaUrl(subCategory.thumbnail);
 
         return {
@@ -163,7 +163,7 @@ export class CatalogService {
         },
       });
 
-      return productGroups.map((group) => {
+      return productGroups.map((group: any) => {
         const imageUrl = resolveMediaUrl(group.thumbnail);
 
         return {
@@ -241,7 +241,7 @@ export class CatalogService {
         },
       });
 
-      return products.map((product) => {
+      return products.map((product: any) => {
         const imageUrl = resolveMediaUrl(product.imageUrl);
 
         return {
@@ -457,7 +457,7 @@ export class CatalogService {
       };
 
       // Convert posts to feed items
-      const feedItems: Array<{ type: string; data: any }> = resultPosts.map((post) => {
+      const feedItems: Array<{ type: string; data: any }> = resultPosts.map((post: any) => {
         const baseType = mapContentPostTypeToFeedItemType(post.type);
 
         // Product image için fallback chain
@@ -572,7 +572,7 @@ export class CatalogService {
       const nextCursor = hasMore && resultPosts.length > 0 ? resultPosts[resultPosts.length - 1].id : undefined;
 
       // Haber response formatına dönüştür
-      const newsItems = resultPosts.map((post) => {
+      const newsItems = resultPosts.map((post: any) => {
         const title = post.title || post.body?.slice(0, 80) || 'News';
         const description = post.body || '';
         const source = product.brand || 'tipbox';
