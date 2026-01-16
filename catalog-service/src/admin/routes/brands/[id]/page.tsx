@@ -85,7 +85,7 @@ const BrandDetailPage = () => {
   const [loading, setLoading] = useState(true)
   const [editDrawerOpen, setEditDrawerOpen] = useState(false)
   const [brandName, setBrandName] = useState("")
-  const [brandLogoUrl, setBrandLogoUrl] = useState<string | null>(null)
+  const [brandLogoUrl, setBrandLogoUrl] = useState<any | null>(null)
   const [brandCategoryId, setBrandCategoryId] = useState<string | null>(null)
   const [brandCategories, setBrandCategories] = useState<BrandCategory[]>([])
   const [saving, setSaving] = useState(false)

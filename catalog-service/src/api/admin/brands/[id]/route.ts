@@ -83,7 +83,7 @@ export const PUT = async (
       data: {
         id: updatedBrand.id,
         name: updatedBrand.name,
-        logo_url: updatedBrand.logo_url || null,
+        logo_url: updatedBrand?.logo_url || null,
         created_at: updatedBrand.created_at,
         updated_at: updatedBrand.updated_at,
         previous: {
