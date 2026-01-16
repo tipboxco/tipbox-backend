@@ -525,8 +525,8 @@ router.get(
  * @openapi
  * /events/{eventId}/badges:
  *   get:
- *     summary: Event badge'lerini getir
- *     description: Event'te kazanılabilecek tüm badge'lerin listesini getirir. Scroll ile pagination destekler.
+ *     summary: Event badge'lerini kullanıcı progress'i ile getir
+ *     description: Event'te kazanılabilecek tüm badge'lerin listesini kullanıcının ilerleme bilgisi ile birlikte getirir. Her badge için rarity, category ve detaylı progress bilgisi içerir.
  *     tags: [Events]
  *     security:
  *       - bearerAuth: []
@@ -561,7 +561,41 @@ router.get(
  *                 items:
  *                   type: array
  *                   items:
- *                     $ref: '#/components/schemas/Badge'
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       title:
+ *                         type: string
+ *                       description:
+ *                         type: string
+ *                       imageUrl:
+ *                         type: string
+ *                         nullable: true
+ *                       rarity:
+ *                         type: string
+ *                         enum: [common, rare, epic]
+ *                       category:
+ *                         type: string
+ *                       userProgress:
+ *                         type: object
+ *                         properties:
+ *                           current:
+ *                             type: integer
+ *                           target:
+ *                             type: integer
+ *                           isCompleted:
+ *                             type: boolean
+ *                           completedAt:
+ *                             type: string
+ *                             format: date-time
+ *                           progressPercentage:
+ *                             type: number
+ *                       eventId:
+ *                         type: string
+ *                       createdAt:
+ *                         type: string
+ *                         format: date-time
  *                 pagination:
  *                   type: object
  *                   properties:
@@ -600,10 +634,14 @@ router.get(
       return res.status(400).json({ message: 'Limit must be between 1 and 50' });
     }
 
-    const eventBadges = await eventService.getEventBadges(eventId, userId, {
-      cursor,
-      ...(typeof limitParam === 'number' ? { limit: limitParam } : {}),
-    });
+    const eventBadges = await eventService.getEventBadgesWithProgress(
+      eventId,
+      String(userId),
+      {
+        cursor,
+        ...(typeof limitParam === 'number' ? { limit: limitParam } : {}),
+      }
+    );
 
     return res.json(eventBadges);
   })

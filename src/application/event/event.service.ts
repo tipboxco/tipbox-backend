@@ -19,6 +19,8 @@ import {
   BadgeProgress,
   LeaderboardEntry,
   EventBadgeDetailResponse,
+  EventBadgesResponse,
+  EventBadgeItem,
 } from '../../interfaces/event/event.dto';
 import { FeedItem, FeedItemType } from '../../interfaces/feed/feed.dto';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
@@ -760,6 +762,141 @@ export class EventService {
       };
     } catch (error) {
       logger.error(`Failed to get event badges for ${eventId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Event'in tüm badge'lerini kullanıcı progress'i ile birlikte getir
+   * Yeni format: rarity, category, userProgress dahil
+   */
+  async getEventBadgesWithProgress(
+    eventId: string,
+    userId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<EventBadgesResponse> {
+    try {
+      const limit = Math.min(options?.limit || 20, 50); // Max 50 badges
+
+      // Event'in varlığını doğrula
+      const event = await this.prisma.wishboxEvent.findUnique({
+        where: { id: eventId },
+      });
+
+      if (!event) {
+        throw new Error('Event not found');
+      }
+
+      // Tüm EVENT tipindeki badge'leri al (name'de [Event] olanlar)
+      const allBadges = await this.prisma.badge.findMany({
+        where: {
+          type: 'EVENT',
+          name: {
+            startsWith: '[Event]',
+          },
+        },
+        include: {
+          category: true,
+          achievementGoals: {
+            select: {
+              requirement: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: 'asc',
+        },
+        take: limit,
+      });
+
+      // Kullanıcının event metriklerini al
+      const userMetrics = await this.eventMetricsService.getUserMetrics(userId, eventId);
+
+      // Kullanıcının kazandığı badge'leri al
+      const userBadges = await this.prisma.userBadge.findMany({
+        where: {
+          userId,
+          badgeId: { in: allBadges.map((b) => b.id) },
+        },
+        select: {
+          badgeId: true,
+          createdAt: true,
+        },
+      });
+
+      const userBadgeMap = new Map(
+        userBadges.map((ub) => [ub.badgeId, ub.createdAt])
+      );
+
+      // Badge'leri map et
+      const badgeItems: EventBadgeItem[] = allBadges.map((badge) => {
+        // Badge requirement'ı parse et
+        const achievementGoal = badge.achievementGoals[0];
+        let currentProgress = 0;
+        let targetProgress = 1;
+        let requirementType = 'UNKNOWN';
+
+        if (achievementGoal) {
+          try {
+            const requirement = JSON.parse(achievementGoal.requirement);
+            requirementType = requirement.type;
+            targetProgress = requirement.threshold || 1;
+
+            // Current progress'i belirle
+            switch (requirementType) {
+              case 'POSTS_COUNT':
+                currentProgress = userMetrics.postsCount;
+                break;
+              case 'LIKES_RECEIVED':
+                currentProgress = userMetrics.likesReceivedCount;
+                break;
+              default:
+                currentProgress = 0;
+            }
+          } catch (e) {
+            logger.warn(`Failed to parse requirement for badge ${badge.id}:`, e);
+          }
+        }
+
+        // Badge kazanılmış mı?
+        const completedAt = userBadgeMap.get(badge.id);
+        const isCompleted = completedAt !== undefined;
+
+        // Progress percentage (max 100)
+        const progressPercentage = Math.min(
+          100,
+          Math.round((currentProgress / targetProgress) * 100)
+        );
+
+        return {
+          id: badge.id,
+          title: badge.name,
+          description: badge.description || '',
+          imageUrl: resolveMediaUrl(badge.imageUrl),
+          rarity: badge.rarity.toLowerCase(), // 'common', 'rare', 'epic'
+          category: badge.category?.name || 'Event',
+          userProgress: {
+            current: currentProgress,
+            target: targetProgress,
+            isCompleted,
+            completedAt: completedAt ? completedAt.toISOString() : undefined,
+            progressPercentage,
+          },
+          eventId,
+          createdAt: badge.createdAt.toISOString(),
+        };
+      });
+
+      return {
+        items: badgeItems,
+        pagination: {
+          cursor: undefined, // Şimdilik cursor pagination yok
+          hasMore: false, // Tüm badge'leri tek seferde döndürüyoruz
+          limit,
+        },
+      };
+    } catch (error) {
+      logger.error(`Failed to get event badges with progress for ${eventId}:`, error);
       throw error;
     }
   }

@@ -96,6 +96,34 @@ export interface Badges {
   };
 }
 
+// Event Badges Response (with full user progress)
+export interface EventBadgeItem {
+  id: string;
+  title: string;
+  description: string;
+  imageUrl: string | null;
+  rarity: string; // 'COMMON', 'RARE', 'EPIC'
+  category: string;
+  userProgress: {
+    current: number;
+    target: number;
+    isCompleted: boolean;
+    completedAt?: string; // ISO 8601
+    progressPercentage: number;
+  };
+  eventId: string;
+  createdAt: string; // ISO 8601
+}
+
+export interface EventBadgesResponse {
+  items: EventBadgeItem[];
+  pagination?: {
+    cursor?: string;
+    hasMore: boolean;
+    limit: number;
+  };
+}
+
 // Limited Time Event DTO'ları
 export interface LimitedTimeEventUser {
   id: string;
