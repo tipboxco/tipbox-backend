@@ -655,9 +655,20 @@ async function ensureProductGroup(config: { name: string; subCategoryId: string;
   });
 }
 
-async function ensureProduct(config: { name: string; brand?: string; groupId?: string; description?: string; imageKey?: SeedMediaKey }): Promise<{ id: string; name: string; brand?: string | null; groupId?: string | null }> {
+async function ensureProduct(config: { name: string; brand?: string; groupId?: string; description?: string; imageKey?: SeedMediaKey }): Promise<{ id: string; name: string; brandId?: string | null; groupId?: string | null }> {
   const whereClause: any = { name: config.name };
-  if (config.brand) whereClause.brand = config.brand;
+  
+  // Brand name'den brandId'yi bul
+  let brandId: string | undefined = undefined;
+  if (config.brand) {
+    const foundBrand = await prisma.brand.findFirst({
+      where: { name: config.brand }
+    });
+    if (foundBrand) {
+      brandId = foundBrand.id;
+      whereClause.brandId = brandId;
+    }
+  }
   
   const existing = await prisma.product.findFirst({
     where: whereClause
@@ -672,6 +683,7 @@ async function ensureProduct(config: { name: string; brand?: string; groupId?: s
     const updateData: any = {};
     if (config.description !== undefined) updateData.description = config.description;
     if (config.groupId !== undefined) updateData.groupId = config.groupId;
+    if (brandId !== undefined) updateData.brandId = brandId;
     if (finalImageKey) {
       const imageUrl = getSeedMediaPath(finalImageKey, true);
       if (imageUrl) updateData.imageUrl = imageUrl;
@@ -688,10 +700,11 @@ async function ensureProduct(config: { name: string; brand?: string; groupId?: s
   
   return prisma.product.create({
     data: {
+      id: randomUUID(), // UUID oluştur
       name: config.name,
-      brand: config.brand,
-      groupId: config.groupId,
-      description: config.description,
+      brandId: brandId || null,
+      groupId: config.groupId || null,
+      description: config.description || null,
       imageUrl: finalImageKey ? (getSeedMediaPath(finalImageKey, true) || null) : null,
     }
   });
@@ -2175,7 +2188,7 @@ async function seedPosts() {
           title: `${postType} Post ${i} - ${selectedProduct.name}`,
           body: `Bu bir ${postType} tipi içerik. ${selectedProduct.name} hakkında detaylı bilgi ve deneyimler paylaşılıyor. Ürünü kullanma deneyimim oldukça olumlu oldu. Kaliteli malzeme ve iyi tasarım dikkat çekiyor.`,
           productId: selectedProduct.id,
-          categoryId: selectedProduct.categoryId, // Product'ın categoryId'sini ekle
+          categoryId: selectedProduct.categoryId || undefined, // Product'ın categoryId'sini ekle
           productGroupId: selectedProduct.groupId ?? undefined,
           mainCategoryId: undefined, // Legacy - deprecated
           subCategoryId: undefined, // Legacy - deprecated
@@ -4337,7 +4350,7 @@ async function updateAllEntityImages(): Promise<void> {
     let updated = 0;
     
     for (const product of products) {
-      const imageKey = getProductImageKey(product.name, product.brand || undefined);
+      const imageKey = getProductImageKey(product.name, product.brandId || undefined);
       if (imageKey) {
         try {
           const imagePath = getSeedMediaPath(imageKey, true);
@@ -4849,7 +4862,7 @@ async function ensureProductImages(userIdToUse: string): Promise<void> {
       }).catch(() => null)
       if (newInventory) {
         inventoryId = newInventory.id
-        inventoryMap.set(product.id, inventoryId)
+        inventoryMap.set(product.id, inventoryId!)
       }
     }
 
@@ -5416,7 +5429,7 @@ async function seedBrandProducts(userIdToUse: string): Promise<void> {
       const productNames = productConfigs.map(pc => pc.name)
       const existingProducts = await prisma.product.findMany({
         where: {
-          brand: brand.name,
+          brand: { name: brand.name },
           name: { in: productNames },
         },
         select: { id: true, name: true },
@@ -7134,9 +7147,6 @@ async function main() {
     console.log('   npx ts-node prisma/seed/trigger-feed-distribution.ts')
   }
 
-<<<<<<< HEAD:backend/prisma/seed.ts
-} // main() closing brace
-=======
   // ===== TRANSACTION SEEDING =====
   console.log('\n💰 Transaction ve Wallet seeding başlatılıyor...')
   progress.increment('Transaction ve wallet verileri oluşturuluyor...')
@@ -7221,9 +7231,7 @@ async function main() {
 
   // ===== SUMMARY =====
   console.log('\n🎉 Seed process completed successfully!')
-}
-}
->>>>>>> developer:prisma/seed.ts
+} // main() closing brace
 
 main()
   .then(async () => {

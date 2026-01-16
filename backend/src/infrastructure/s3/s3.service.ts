@@ -61,6 +61,10 @@ export class S3Service {
       },
       forcePathStyle: s3Config.forcePathStyle,
     };
+    
+    // S3Client'ı başlat
+    this.s3Client = new S3Client(params);
+    
     // Servis başladığında bucket'ı kontrol et ve oluştur
     this.checkAndCreateBucket().catch((error) => {
       logger.error({
