@@ -117,6 +117,8 @@ export async function enrichNotificationData(
     let userIdForAvatar: string | undefined;
     
     if (data.userId) userIdForAvatar = data.userId;
+    else if (data.requesterId) userIdForAvatar = data.requesterId; // DM_REQUEST_RECEIVED için
+    else if (data.accepterId) userIdForAvatar = data.accepterId; // SUPPORT_REQUEST_ACCEPTED için
     else if (data.likerId) userIdForAvatar = data.likerId;
     else if (data.commenterId) userIdForAvatar = data.commenterId;
     else if (data.senderId) userIdForAvatar = data.senderId;
@@ -287,9 +289,18 @@ export async function enrichNotificationData(
       // Mesaj bildirimleri
       case NotificationType.NEW_MESSAGE:
       case NotificationType.DM_REQUEST_RECEIVED:
-      case NotificationType.DM_REQUEST_ACCEPTED: {
-        // Mesaj için avatar yeterli, image gerekmez
-        result.imageUrl = null;
+      case NotificationType.DM_REQUEST_ACCEPTED:
+      case NotificationType.DM_REQUEST_DECLINED:
+      case NotificationType.SUPPORT_REQUEST_ACCEPTED: {
+        // Mesaj için avatar yeterli, imageUrl field'ı eklenmez (undefined kalır)
+        // imageUrl sadece event ve badge bildirimleri için kullanılır
+        break;
+      }
+
+      // Tips bildirimleri
+      case NotificationType.TIPS_RECEIVED:
+      case NotificationType.TIPS_SENT: {
+        // Tips için avatar yeterli, imageUrl field'ı eklenmez (undefined kalır)
         break;
       }
 

@@ -196,12 +196,23 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
   // Notification'ları enrich et
   return notifications.map((notification) => {
     // type'dan hemen sonra avatar ve imageUrl eklemek için sıralı object oluştur
-    const enriched: any = {
+    const enriched: {
+      id: string;
+      userId: string;
+      type: NotificationType;
+      avatar?: string | null;
+      title: string;
+      message: string;
+      data: any;
+      read: boolean;
+      readAt?: string | null;
+      createdAt: string;
+      updatedAt: string;
+    } = {
       id: notification.id,
       userId: notification.userId,
       type: notification.type,
-      avatar: undefined as string | null | undefined,
-      imageUrl: undefined as string | null | undefined,
+      avatar: undefined,
       title: notification.title,
       message: notification.message,
       data: notification.data,
@@ -231,14 +242,20 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
         // Data'da avatar yoksa, userAvatars'tan al
         enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
       }
-      // Post görseli ekle
+      // Post görseli ekle (sadece data içine)
+      let postImageUrl = null;
       if (data.postId && postImages.has(data.postId)) {
-        enriched.imageUrl = postImages.get(data.postId);
+        postImageUrl = postImages.get(data.postId);
       } else if (data.productId && productImages.has(data.productId)) {
-        enriched.imageUrl = productImages.get(data.productId);
+        postImageUrl = productImages.get(data.productId);
       } else if (randomImageCache) {
-        enriched.imageUrl = randomImageCache;
+        postImageUrl = randomImageCache;
       }
+      // Data içine ekle
+      if (!enriched.data) enriched.data = {};
+      enriched.data.postId = data.postId;
+      enriched.data.imageUrl = postImageUrl;
+      // productId, userName, commenterId, sharerId kaldırıldı
     }
 
     // Yorum ile ilgili (2)
@@ -247,12 +264,18 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       if (userId && !enriched.avatar) {
         enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
       }
-      // Post görseli ekle
+      // Post görseli ekle (sadece data içine)
+      let postImageUrl = null;
       if (data.postId && postImages.has(data.postId)) {
-        enriched.imageUrl = postImages.get(data.postId);
+        postImageUrl = postImages.get(data.postId);
       } else if (randomImageCache) {
-        enriched.imageUrl = randomImageCache;
+        postImageUrl = randomImageCache;
       }
+      // Data içine ekle
+      if (!enriched.data) enriched.data = {};
+      enriched.data.postId = data.postId;
+      enriched.data.commentId = data.commentId;
+      enriched.data.imageUrl = postImageUrl;
     }
 
     // Trust/Follow ile ilgili (2)
@@ -261,24 +284,42 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       if (userId && !enriched.avatar) {
         enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
       }
+      let trustImageUrl = null;
       if (randomImageCache) {
-        enriched.imageUrl = randomImageCache;
+        trustImageUrl = randomImageCache;
       }
+      // Data içine ekle
+      if (!enriched.data) enriched.data = {};
+      if (data.trusterId) enriched.data.trusterId = data.trusterId;
+      if (data.trustedId) enriched.data.trustedId = data.trustedId;
+      enriched.data.imageUrl = trustImageUrl;
     }
 
-    // Mesajlaşma ile ilgili (3)
+    // Mesajlaşma ile ilgili bildirimler
+    // NEW_MESSAGE kaldırıldı - zaten inbox'ta görüntülenecek
     if (
-      type === NotificationType.NEW_MESSAGE ||
       type === NotificationType.DM_REQUEST_RECEIVED ||
       type === NotificationType.DM_REQUEST_ACCEPTED ||
+      type === NotificationType.DM_REQUEST_DECLINED ||
       type === NotificationType.SUPPORT_REQUEST_ACCEPTED
     ) {
-      const userId = data.senderId || data.requesterId || data.accepterId;
+      // userId field'ı kullan (requesterId/accepterId yerine)
+      const userId = data.userId || data.requesterId || data.accepterId;
       if (userId && !enriched.avatar) {
         enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
       }
-      if (randomImageCache) {
-        enriched.imageUrl = randomImageCache;
+      // Mesajlaşma bildirimleri için imageUrl field'ı eklenmez (undefined kalır)
+      // imageUrl sadece event ve badge bildirimleri için kullanılır
+      delete enriched.imageUrl; // Eğer varsa kaldır
+      
+      // DM_REQUEST_ACCEPTED için data'yı hazırla
+      if (type === NotificationType.DM_REQUEST_ACCEPTED) {
+        if (!enriched.data) enriched.data = {};
+        // Sadece userId, userName ve threadId kalmalı
+        if (userId) enriched.data.userId = userId;
+        if (data.userName) enriched.data.userName = data.userName;
+        if (data.threadId) enriched.data.threadId = data.threadId;
+        // avatar ve diğer alanlar kaldırılacak
       }
     }
 
@@ -288,10 +329,27 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       type === NotificationType.ACHIEVEMENT_UNLOCKED ||
       type === NotificationType.REWARD_EARNED
     ) {
-      if (data.badgeId && badgeImages.has(data.badgeId)) {
-        enriched.imageUrl = badgeImages.get(data.badgeId);
-      } else if (randomImageCache) {
-        enriched.imageUrl = randomImageCache;
+      // Data içine ekle
+      if (!enriched.data) enriched.data = {};
+      
+      if (type === NotificationType.NEW_BADGE) {
+        // NEW_BADGE için sadece badgeId ve badgeName
+        if (data.badgeId) enriched.data.badgeId = data.badgeId;
+        if (data.badgeName) enriched.data.badgeName = data.badgeName;
+        // imageUrl ve avatar eklenmez
+      } else {
+        // Diğer gamification bildirimleri için
+        let badgeImageUrl = null;
+        if (data.badgeId && badgeImages.has(data.badgeId)) {
+          badgeImageUrl = badgeImages.get(data.badgeId);
+        } else if (randomImageCache) {
+          badgeImageUrl = randomImageCache;
+        }
+        if (data.badgeId) enriched.data.badgeId = data.badgeId;
+        enriched.data.imageUrl = badgeImageUrl;
+        if (data.badgeName) enriched.data.badgeName = data.badgeName;
+        if (data.achievementId) enriched.data.achievementId = data.achievementId;
+        if (data.amount) enriched.data.amount = data.amount;
       }
     }
 
@@ -304,11 +362,19 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       if (userId && !enriched.avatar) {
         enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
       }
+      let expertImageUrl = null;
       if (data.productId && productImages.has(data.productId)) {
-        enriched.imageUrl = productImages.get(data.productId);
+        expertImageUrl = productImages.get(data.productId);
       } else if (randomImageCache) {
-        enriched.imageUrl = randomImageCache;
+        expertImageUrl = randomImageCache;
       }
+      // Data içine ekle
+      if (!enriched.data) enriched.data = {};
+      if (data.requestId) enriched.data.requestId = data.requestId;
+      enriched.data.imageUrl = expertImageUrl;
+      if (data.expertId) enriched.data.expertId = data.expertId;
+      if (data.tipsAmount) enriched.data.tipsAmount = data.tipsAmount;
+      // productId kaldırıldı
     }
 
     // Sistem/Tips ile ilgili (3)
@@ -321,8 +387,21 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       if (userId && !enriched.avatar) {
         enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
       }
-      if (randomImageCache) {
-        enriched.imageUrl = randomImageCache;
+      // Data içine ekle (sadece userId ve amount - TIPS_RECEIVED için)
+      if (!enriched.data) enriched.data = {};
+      if (type === NotificationType.TIPS_RECEIVED) {
+        // TIPS_RECEIVED için sadece userId ve amount
+        if (userId) enriched.data.userId = userId;
+        if (data.amount) enriched.data.amount = data.amount;
+        // imageUrl, avatar, senderId eklenmez
+      } else {
+        // Diğer sistem bildirimleri için
+        if (data.amount) enriched.data.amount = data.amount;
+        let tipsImageUrl = null;
+        if (randomImageCache) {
+          tipsImageUrl = randomImageCache;
+        }
+        enriched.data.imageUrl = tipsImageUrl;
       }
     }
 
@@ -332,11 +411,17 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       type === NotificationType.EVENT_ENDING_SOON ||
       type === NotificationType.EVENT_REWARD_AVAILABLE
     ) {
+      let eventImageUrl = null;
       if (data.eventId && eventImages.has(data.eventId)) {
-        enriched.imageUrl = eventImages.get(data.eventId);
+        eventImageUrl = eventImages.get(data.eventId);
       } else if (randomImageCache) {
-        enriched.imageUrl = randomImageCache;
+        eventImageUrl = randomImageCache;
       }
+      // Data içine ekle
+      if (!enriched.data) enriched.data = {};
+      enriched.data.eventId = data.eventId;
+      enriched.data.imageUrl = eventImageUrl;
+      if (data.eventName) enriched.data.eventName = data.eventName;
     }
 
     // Collection ile ilgili (2)
@@ -345,11 +430,17 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       type === NotificationType.COLLECTION_SHARED
     ) {
       // Collection için post görseli veya random image kullan
+      let collectionImageUrl = null;
       if (data.postId && postImages.has(data.postId)) {
-        enriched.imageUrl = postImages.get(data.postId);
+        collectionImageUrl = postImages.get(data.postId);
       } else if (randomImageCache) {
-        enriched.imageUrl = randomImageCache;
+        collectionImageUrl = randomImageCache;
       }
+      // Data içine ekle
+      if (!enriched.data) enriched.data = {};
+      if (data.collectionId) enriched.data.collectionId = data.collectionId;
+      if (data.postId) enriched.data.postId = data.postId;
+      enriched.data.imageUrl = collectionImageUrl;
     }
 
     // undefined değerleri null yap (response'da görünsün ama null olsun)
@@ -357,11 +448,59 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
     if (enriched.avatar === undefined) {
       enriched.avatar = randomImageCache || null;
     }
-    if (enriched.imageUrl === undefined) enriched.imageUrl = null;
+    // imageUrl artık sadece data içinde, root seviyede yok
+    // Mesajlaşma bildirimlerinde data içinde de imageUrl yok
+    const isMessagingNotification = 
+      type === NotificationType.DM_REQUEST_RECEIVED ||
+      type === NotificationType.DM_REQUEST_ACCEPTED ||
+      type === NotificationType.DM_REQUEST_DECLINED ||
+      type === NotificationType.SUPPORT_REQUEST_ACCEPTED ||
+      type === NotificationType.NEW_MESSAGE;
     
-    // Mobil uyumluluk için: avatar'ı avatarUrl olarak da ekle (backward compatibility)
-    if (enriched.avatar !== undefined) {
-      enriched.avatarUrl = enriched.avatar;
+    // Root seviyedeki imageUrl'i kaldır (artık sadece data içinde)
+    delete enriched.imageUrl;
+    
+    // Gereksiz alanları data'dan kaldır
+    if (enriched.data) {
+      delete enriched.data.productId;
+      delete enriched.data.commenterId;
+      delete enriched.data.sharerId;
+      
+      // TIPS_RECEIVED için gereksiz alanları kaldır
+      if (type === NotificationType.TIPS_RECEIVED) {
+        delete enriched.data.avatar;
+        delete enriched.data.imageUrl;
+        delete enriched.data.senderId;
+        delete enriched.data.userName; // TIPS_RECEIVED'de userName yok
+        // Sadece userId ve amount kalmalı
+      }
+      
+      // NEW_BADGE için gereksiz alanları kaldır
+      if (type === NotificationType.NEW_BADGE) {
+        delete enriched.data.avatar;
+        delete enriched.data.imageUrl;
+        // Sadece badgeId ve badgeName kalmalı
+      }
+      
+      // DM_REQUEST_ACCEPTED için gereksiz alanları kaldır
+      if (type === NotificationType.DM_REQUEST_ACCEPTED) {
+        delete enriched.data.avatar;
+        delete enriched.data.imageUrl;
+        delete enriched.data.requesterId;
+        delete enriched.data.accepterId;
+        // Sadece userId, userName ve threadId kalmalı
+      }
+      
+      // Diğer mesajlaşma bildirimleri için userName'i kaldır (DM_REQUEST_ACCEPTED hariç)
+      if (
+        type === NotificationType.DM_REQUEST_RECEIVED ||
+        type === NotificationType.DM_REQUEST_DECLINED ||
+        type === NotificationType.SUPPORT_REQUEST_ACCEPTED
+      ) {
+        delete enriched.data.userName;
+        delete enriched.data.avatar;
+        delete enriched.data.imageUrl;
+      }
     }
     
     return enriched;
@@ -481,8 +620,8 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
           types = undefined;
           break;
         case 'tips':
-          // Tips bildirimleri
-          types = [NotificationType.TIPS_RECEIVED, NotificationType.TIPS_SENT];
+          // Tips bildirimleri - sadece kullanıcıya gelen tips'ler (TIPS_RECEIVED)
+          types = [NotificationType.TIPS_RECEIVED];
           break;
         case 'truster':
         case 'trust':

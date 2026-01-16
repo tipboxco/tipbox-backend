@@ -122,19 +122,8 @@ export class MessagingService {
     // Göndericiye message_sent event'i gönder
     socketHandler.sendMessageToUser(senderId, 'message_sent', newMessageEvent);
 
-    // Notification servisine bildir
-    if (sender) {
-      await this.notificationService.sendNotification(
-        recipientId,
-        NotificationType.NEW_MESSAGE,
-        {
-          senderName: sender.name || sender.email,
-          senderId: sender.id,
-          messagePreview: message.substring(0, 50),
-          threadId: thread.id,
-        }
-      );
-    }
+    // NEW_MESSAGE bildirimi kaldırıldı - zaten inbox ekranında görüntülenecek
+    // Sadece önemli durumlar için bildirim gönderilecek (DM_REQUEST_ACCEPTED, SUPPORT_REQUEST_ACCEPTED)
 
     logger.info(`Direct message sent from ${senderId} to ${recipientId}, socket events emitted`);
   }
