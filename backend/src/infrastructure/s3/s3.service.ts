@@ -60,14 +60,7 @@ export class S3Service {
         secretAccessKey: s3Config.secretAccessKey,
       },
       forcePathStyle: s3Config.forcePathStyle,
-<<<<<<< HEAD:backend/src/infrastructure/s3/s3.service.ts
-    }
-    console.log('params', params);
-    this.s3Client = new S3Client(params);
-
-=======
-    });
->>>>>>> developer:src/infrastructure/s3/s3.service.ts
+    };
     // Servis başladığında bucket'ı kontrol et ve oluştur
     this.checkAndCreateBucket().catch((error) => {
       logger.error({
