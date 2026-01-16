@@ -1357,4 +1357,188 @@ router.get(
   }),
 );
 
+/**
+ * @openapi
+ * /messaging/messages/{messageId}:
+ *   put:
+ *     summary: Mesaj güncelle
+ *     description: Sadece mesajın göndereni, mesajı gönderdikten sonra 5 dakika içinde güncelleyebilir.
+ *     tags: [Messaging]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: messageId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Güncellenecek mesaj ID'si
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - message
+ *             properties:
+ *               message:
+ *                 type: string
+ *                 description: Yeni mesaj içeriği
+ *     responses:
+ *       200:
+ *         description: Mesaj başarıyla güncellendi
+ *       400:
+ *         description: Geçersiz istek veya zaman aşımı
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ *       403:
+ *         description: Kullanıcının bu mesajı güncelleme yetkisi yok
+ *       404:
+ *         description: Mesaj bulunamadı
+ */
+router.put(
+  '/messages/:messageId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { messageId } = req.params;
+    const { message } = req.body;
+
+    if (!message || typeof message !== 'string' || message.trim().length === 0) {
+      return res.status(400).json({ message: 'message is required and must be a non-empty string' });
+    }
+
+    try {
+      await messagingService.updateMessage(String(userId), messageId, message.trim());
+      return res.status(200).json({ success: true, message: 'Message updated successfully' });
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      if (hasErrorMessage(error) && (message.includes('not found') || message.includes('Message not found'))) {
+        return res.status(404).json({ message: 'Message not found' });
+      }
+      if (hasErrorMessage(error) && (message.includes('Forbidden') || message.includes('does not own'))) {
+        return res.status(403).json({ message: 'You are not allowed to update this message' });
+      }
+      if (hasErrorMessage(error) && message.includes('5 minutes')) {
+        return res.status(400).json({ message: 'Message can only be updated within 5 minutes of sending' });
+      }
+      throw error;
+    }
+  })
+);
+
+/**
+ * @openapi
+ * /messaging/messages/{messageId}:
+ *   delete:
+ *     summary: Mesaj sil
+ *     description: Sadece mesajın göndereni kendi mesajını silebilir.
+ *     tags: [Messaging]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: messageId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Silinecek mesaj ID'si
+ *     responses:
+ *       204:
+ *         description: Mesaj başarıyla silindi
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ *       403:
+ *         description: Kullanıcının bu mesajı silme yetkisi yok
+ *       404:
+ *         description: Mesaj bulunamadı
+ */
+router.delete(
+  '/messages/:messageId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { messageId } = req.params;
+
+    try {
+      await messagingService.deleteMessage(String(userId), messageId);
+      return res.status(204).send();
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      if (hasErrorMessage(error) && (message.includes('not found') || message.includes('Message not found'))) {
+        return res.status(404).json({ message: 'Message not found' });
+      }
+      if (hasErrorMessage(error) && (message.includes('Forbidden') || message.includes('does not own'))) {
+        return res.status(403).json({ message: 'You are not allowed to delete this message' });
+      }
+      throw error;
+    }
+  })
+);
+
+/**
+ * @openapi
+ * /messaging/threads/{threadId}:
+ *   delete:
+ *     summary: Thread sil
+ *     description: Thread'deki kullanıcılardan biri thread'i silebilir. Thread soft delete yapılır (isActive = false).
+ *     tags: [Messaging]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: threadId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Silinecek thread ID'si
+ *     responses:
+ *       204:
+ *         description: Thread başarıyla silindi
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ *       403:
+ *         description: Kullanıcı bu thread'in parçası değil
+ *       404:
+ *         description: Thread bulunamadı
+ */
+router.delete(
+  '/threads/:threadId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { threadId } = req.params;
+
+    try {
+      await messagingService.deleteThread(String(userId), threadId);
+      return res.status(204).send();
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      if (hasErrorMessage(error) && (message.includes('not found') || message.includes('Thread not found'))) {
+        return res.status(404).json({ message: 'Thread not found' });
+      }
+      if (hasErrorMessage(error) && (message.includes('Forbidden') || message.includes('not part of'))) {
+        return res.status(403).json({ message: 'You are not part of this thread' });
+      }
+      throw error;
+    }
+  })
+);
+
 export default router;

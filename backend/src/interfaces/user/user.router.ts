@@ -2877,4 +2877,41 @@ router.delete('/settings/devices', asyncHandler(async (req: Request, res: Respon
   return res.json(result);
 }));
 
+/**
+ * @openapi
+ * /users/me:
+ *   delete:
+ *     summary: Kullanıcı hesabını sil
+ *     description: Kullanıcının kendi hesabını siler. İlişkili veriler temizlenir ve GDPR uyumluluğu sağlanır.
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       204:
+ *         description: Hesap başarıyla silindi
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ *       404:
+ *         description: Kullanıcı bulunamadı
+ */
+router.delete('/me', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  try {
+    const deleted = await userService.deleteUser(String(userId));
+    if (!deleted) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    return res.status(204).send();
+  } catch (error) {
+    logger.error(`Failed to delete user ${userId}`, error);
+    throw error;
+  }
+}));
+
 export default router; 

@@ -75,32 +75,35 @@ export class NotificationFactory {
     });
 
     // Messaging
-    this.registerTemplate({
-      type: NotificationType.NEW_MESSAGE,
-      category: NotificationCategory.MESSAGE,
-      getTitle: () => 'New Message! 💬',
-      getMessage: (data) => `${data.senderName}: ${data.messagePreview}`,
-    });
+    // NEW_MESSAGE kaldırıldı - zaten inbox ekranında görüntülenecek
+    // Sadece önemli durumlar için bildirim gönderilecek (DM_REQUEST_ACCEPTED, SUPPORT_REQUEST_ACCEPTED)
 
     this.registerTemplate({
       type: NotificationType.DM_REQUEST_RECEIVED,
       category: NotificationCategory.SUPPORT,
       getTitle: () => 'New Support Request! 🆘',
-      getMessage: (data) => `${data.requesterName} wants to get in touch with you`,
+      getMessage: (data) => `${data.userName || data.requesterName} sent you a support request${data.message ? `: "${data.message.substring(0, 50)}${data.message.length > 50 ? '...' : ''}"` : ''}`,
     });
 
     this.registerTemplate({
       type: NotificationType.DM_REQUEST_ACCEPTED,
       category: NotificationCategory.SUPPORT,
       getTitle: () => 'Request Accepted! ✅',
-      getMessage: (data) => `${data.accepterName} accepted your support request`,
+      getMessage: (data) => `${data.userName || data.accepterName} accepted your request`,
+    });
+
+    this.registerTemplate({
+      type: NotificationType.DM_REQUEST_DECLINED,
+      category: NotificationCategory.SUPPORT,
+      getTitle: () => 'Request Declined ❌',
+      getMessage: (data) => `${data.userName} declined your request`,
     });
 
     this.registerTemplate({
       type: NotificationType.SUPPORT_REQUEST_ACCEPTED,
       category: NotificationCategory.SUPPORT,
       getTitle: () => 'Support Request Accepted! ✅',
-      getMessage: (data) => `${data.accepterName} accepted your support request`,
+      getMessage: (data) => `${data.userName || data.accepterName} accepted your support request`,
     });
 
     // Gamification
@@ -152,7 +155,7 @@ export class NotificationFactory {
       type: NotificationType.TIPS_RECEIVED,
       category: NotificationCategory.SYSTEM,
       getTitle: () => 'TIPS Received! 💰',
-      getMessage: (data) => `${data.senderName} sent you ${data.amount} TIPS`,
+      getMessage: (data) => `You received ${data.amount || 0} TIPS`,
     });
 
     // Event Notifications

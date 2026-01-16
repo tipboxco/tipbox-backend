@@ -14,6 +14,8 @@ import { UserPrismaRepository } from '../../infrastructure/repositories/user-pri
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
+import { EventMetricsService } from '../event/event-metrics.service';
+import { BadgeEligibilityService } from '../gamification/badge-eligibility.service';
 import logger from '../../infrastructure/logger/logger';
 
 export class InteractionService {
@@ -25,6 +27,8 @@ export class InteractionService {
   private userRepo = new UserPrismaRepository();
   private prisma = getPrisma();
   private notificationService = new NotificationService();
+  private eventMetricsService = new EventMetricsService();
+  private badgeEligibilityService = new BadgeEligibilityService();
 
   constructor() {}
 
@@ -60,6 +64,32 @@ export class InteractionService {
 
       // Beğeni sayısını güncelle
       await this.contentPostRepo.incrementLikeCount(postId);
+
+      // Event varsa post sahibinin metriğini güncelle
+      const postWithEventId = await this.prisma.contentPost.findUnique({
+        where: { id: postId },
+        select: { eventId: true, userId: true },
+      });
+
+      if (postWithEventId?.eventId) {
+        // Async olarak event metrik ve badge kontrolü yap (hata olsa bile devam et)
+        this.eventMetricsService.incrementUserLikesReceived(postWithEventId.userId, postWithEventId.eventId)
+          .then((metrics) => {
+            return this.badgeEligibilityService.checkAndGrantEventBadges(
+              postWithEventId.userId,
+              postWithEventId.eventId!,
+              metrics
+            );
+          })
+          .catch((err) => {
+            logger.warn({
+              message: 'Failed to update event metrics or check badges for like',
+              userId: postWithEventId.userId,
+              eventId: postWithEventId.eventId,
+              error: err,
+            });
+          });
+      }
 
       // Post sahibine bildirim gönder
       if (post.userId !== userId) {
@@ -100,6 +130,25 @@ export class InteractionService {
 
       // Beğeni sayısını güncelle
       await this.contentPostRepo.decrementLikeCount(postId);
+
+      // Event varsa post sahibinin metriğini azalt (badge geri alınmaz)
+      const postWithEventId = await this.prisma.contentPost.findUnique({
+        where: { id: postId },
+        select: { eventId: true, userId: true },
+      });
+
+      if (postWithEventId?.eventId) {
+        // Async olarak event metriği azalt (hata olsa bile devam et)
+        this.eventMetricsService.decrementUserLikesReceived(postWithEventId.userId, postWithEventId.eventId)
+          .catch((err) => {
+            logger.warn({
+              message: 'Failed to decrement event metrics for unlike',
+              userId: postWithEventId.userId,
+              eventId: postWithEventId.eventId,
+              error: err,
+            });
+          });
+      }
 
       logger.info(`User ${userId} unliked post ${postId}`);
     } catch (error) {
@@ -298,6 +347,54 @@ export class InteractionService {
       return comment;
     } catch (error) {
       logger.error(`Failed to create comment on post ${postId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Yorumu güncelle
+   */
+  async updateComment(userId: string, commentId: string, newComment: string): Promise<void> {
+    try {
+      const comment = await this.commentRepo.findById(commentId);
+      if (!comment) {
+        throw new Error('Comment not found');
+      }
+
+      // Yetki kontrolü (sadece kendi yorumunu güncelleyebilir)
+      if (comment.userId !== userId) {
+        throw new Error('Unauthorized to update this comment');
+      }
+
+      // Zaman kontrolü (15 dakika içinde güncellenebilir)
+      const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+      if (comment.createdAt < fifteenMinutesAgo) {
+        throw new Error('Comment can only be updated within 15 minutes of creation');
+      }
+
+      // Comment'i güncelle (Prisma ile direkt)
+      await this.prisma.contentComment.update({
+        where: { id: commentId },
+        data: { comment: newComment },
+      });
+
+      // Cache invalidation
+      try {
+        const { CacheService } = await import('../../infrastructure/cache/cache.service');
+        const cacheService = CacheService.getInstance();
+        await cacheService.delPattern(`post:${comment.postId}:*`).catch(() => {});
+        await cacheService.delPattern('feed:*').catch(() => {});
+      } catch (error) {
+        logger.warn({
+          message: 'Failed to invalidate cache',
+          commentId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      logger.info(`User ${userId} updated comment ${commentId}`);
+    } catch (error) {
+      logger.error(`Failed to update comment ${commentId}:`, error);
       throw error;
     }
   }

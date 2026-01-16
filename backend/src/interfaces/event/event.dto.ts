@@ -18,7 +18,7 @@ export interface EventCard {
   startDate: string; // ISO 8601 DateTime
   endDate: string; // ISO 8601 DateTime
   interaction?: number; // Total interactions (participants, comments, etc.)
-  eventType: EventType;
+  eventType?: EventType; // Optional - may not be present in WishboxEvent model
   participants?: EventParticipant[];
   userPostCount?: number; // Kullanıcının bu event'teki post sayısı (sadece my-events için)
 }
@@ -59,7 +59,7 @@ export interface EventDetail {
   startDate: string; // ISO 8601 DateTime
   endDate: string; // ISO 8601 DateTime
   interaction: number;
-  eventType: EventType;
+  eventType?: EventType; // Optional - may not be present in WishboxEvent model
   isJoined: boolean;
   status: EventStatus;
   rewards: RewardBadge[];
@@ -96,6 +96,34 @@ export interface Badges {
   };
 }
 
+// Event Badges Response (with full user progress)
+export interface EventBadgeItem {
+  id: string;
+  title: string;
+  description: string;
+  imageUrl: string | null;
+  rarity: string; // 'COMMON', 'RARE', 'EPIC'
+  category: string;
+  userProgress: {
+    current: number;
+    target: number;
+    isCompleted: boolean;
+    completedAt?: string; // ISO 8601
+    progressPercentage: number;
+  };
+  eventId: string;
+  createdAt: string; // ISO 8601
+}
+
+export interface EventBadgesResponse {
+  items: EventBadgeItem[];
+  pagination?: {
+    cursor?: string;
+    hasMore: boolean;
+    limit: number;
+  };
+}
+
 // Limited Time Event DTO'ları
 export interface LimitedTimeEventUser {
   id: string;
@@ -122,4 +150,68 @@ export interface LimitedTimeEventResponse {
   endDate: string;
 }
 
+// Event Progress DTO'ları
+export interface BadgeProgress {
+  badgeId: string;
+  badgeName: string;
+  badgeDescription: string;
+  badgeImage: string | null;
+  badgeRarity: string;
+  requirement: {
+    type: string; // 'POSTS_COUNT', 'LIKES_RECEIVED'
+    threshold: number;
+  };
+  currentProgress: number;
+  isEarned: boolean; // Kullanıcı bu rozeti aldı mı?
+  progressPercentage: number; // (currentProgress / threshold) * 100
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  userId: string;
+  userName: string;
+  avatar: string | null;
+  postsCount: number;
+  likesReceived: number;
+}
+
+export interface EventUserProgress {
+  userId: string;
+  eventId: string;
+  metrics: {
+    postsCount: number;
+    likesReceived: number;
+  };
+  badges: BadgeProgress[];
+  leaderboard?: LeaderboardEntry[]; // Opsiyonel, sadece ilk N kullanıcı
+}
+
+export interface EventLeaderboard {
+  eventId: string;
+  items: LeaderboardEntry[];
+}
+
+// Event Badge Detail Response
+export interface EventBadgeDetailResponse {
+  // Badge Temel Bilgileri
+  id: string; // Badge ID
+  title: string; // Badge ismi
+  description: string; // Badge açıklaması
+  imageUrl: string | null; // Badge görseli URL'i
+  rarity: string; // Badge nadir değeri (COMMON, RARE, EPIC)
+
+  // İlerleme Bilgileri (User-specific)
+  userProgress: {
+    current: number; // Kullanıcının mevcut ilerleme değeri
+    target: number; // Hedef değer
+    isCompleted: boolean; // Badge tamamlandı mı?
+    completedAt: string | null; // Tamamlanma tarihi (ISO 8601) - Sadece completed ise
+    progressPercentage: number; // İlerleme yüzdesi (0-100)
+  };
+
+  // Badge Metadata
+  category: string; // Badge kategorisi
+  eventId: string; // İlişkili event ID
+  createdAt: string; // Badge oluşturulma tarihi (ISO 8601)
+}
 

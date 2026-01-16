@@ -11,6 +11,7 @@ import { ExpertRequestStatus } from '../../domain/expert/expert-request-status.e
 import {
   CreateExpertRequestDto,
   UpdateExpertRequestTipsDto,
+  UpdateExpertRequestRequest,
   CreateExpertAnswerDto,
   ExpertRequestResponse,
   ExpertAnswerResponse,
@@ -19,6 +20,8 @@ import {
   MyExpertRequestsResponse,
 } from '../../interfaces/expert/expert.dto';
 import logger from '../../infrastructure/logger/logger';
+import SocketManager from '../../infrastructure/realtime/socket-manager';
+import { S3Service } from '../../infrastructure/s3/s3.service';
 
 export class ExpertService {
   private readonly prisma: ReturnType<typeof getPrisma>;
@@ -30,6 +33,7 @@ export class ExpertService {
   private readonly titleRepo: UserTitlePrismaRepository;
   private readonly avatarRepo: UserAvatarPrismaRepository;
   private readonly walletService: WalletService;
+  private readonly s3Service: S3Service;
 
   constructor() {
     this.prisma = getPrisma();
@@ -41,6 +45,7 @@ export class ExpertService {
     this.titleRepo = new UserTitlePrismaRepository();
     this.avatarRepo = new UserAvatarPrismaRepository();
     this.walletService = new WalletService();
+    this.s3Service = new S3Service();
   }
 
   /**
@@ -732,6 +737,190 @@ export class ExpertService {
     } catch (error) {
       logger.error({
         message: 'Error getting expert request status',
+        requestId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Expert request güncelleme
+   * Sadece PENDING durumundaki request'ler güncellenebilir
+   */
+  async updateExpertRequest(
+    userId: string,
+    requestId: string,
+    dto: UpdateExpertRequestRequest
+  ): Promise<ExpertRequestResponse> {
+    try {
+      const existingRequest = await this.expertRequestRepo.findById(requestId);
+      if (!existingRequest) {
+        throw new Error('Expert request not found');
+      }
+
+      if (!existingRequest.belongsToUser(userId)) {
+        throw new Error('Unauthorized: Request does not belong to user');
+      }
+
+      // Sadece PENDING durumundaki request'ler güncellenebilir
+      if (existingRequest.status !== ExpertRequestStatus.PENDING) {
+        throw new Error('Cannot update request: Request is not in PENDING status');
+      }
+
+      // Update data hazırla
+      const updateData: any = {};
+      if (dto.description !== undefined) {
+        updateData.description = dto.description;
+      }
+
+      // Request'i güncelle
+      const updatedRequest = await this.expertRequestRepo.update(requestId, updateData);
+
+      if (!updatedRequest) {
+        throw new Error('Failed to update expert request');
+      }
+
+      // Media güncellemeleri
+      if (dto.mediaUrls !== undefined) {
+        // Mevcut media'ları al
+        const existingMedia = await this.expertMediaRepo.findByRequestId(requestId);
+
+        // Eski media dosyalarını S3'ten sil
+        for (const media of existingMedia) {
+          try {
+            await this.s3Service.deleteFile(media.mediaUrl);
+          } catch (error) {
+            logger.warn({
+              message: 'Failed to delete old media from S3',
+              mediaUrl: media.mediaUrl,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+
+        // Eski media'ları veritabanından sil
+        await this.prisma.expertRequestMedia.deleteMany({
+          where: { requestId },
+        });
+
+        // Yeni media'ları ekle
+        if (dto.mediaUrls.length > 0) {
+          for (const media of dto.mediaUrls) {
+            await this.expertMediaRepo.create(requestId, media.url, media.type);
+          }
+        }
+      }
+
+      // Media'ları da dahil ederek response döndür
+      const mediaList = await this.expertMediaRepo.findByRequestId(requestId);
+      const response = this.mapToResponse(updatedRequest);
+      response.media = mediaList.map((m) => ({
+        id: m.id,
+        mediaUrl: m.mediaUrl,
+        mediaType: m.mediaType,
+        uploadedAt: m.uploadedAt.toISOString(),
+      }));
+
+      // Socket.IO ile real-time bildirim
+      const socketHandler = SocketManager.getInstance().getSocketHandler();
+      const updatedEvent = {
+        requestId: updatedRequest.id,
+        userId: userId,
+        timestamp: new Date().toISOString(),
+      };
+
+      socketHandler.sendMessageToUser(userId, 'expert_request_updated', updatedEvent);
+
+      logger.info({
+        message: 'Expert request updated',
+        userId,
+        requestId,
+      });
+
+      return response;
+    } catch (error) {
+      logger.error({
+        message: 'Error updating expert request',
+        userId,
+        requestId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Expert request silme
+   * Sadece PENDING durumundaki request'ler silinebilir
+   * Eğer TIPS gönderilmişse, geri iade işlemi yapılır
+   */
+  async deleteExpertRequest(userId: string, requestId: string): Promise<void> {
+    try {
+      const existingRequest = await this.expertRequestRepo.findById(requestId);
+      if (!existingRequest) {
+        throw new Error('Expert request not found');
+      }
+
+      if (!existingRequest.belongsToUser(userId)) {
+        throw new Error('Unauthorized: Request does not belong to user');
+      }
+
+      // Sadece PENDING durumundaki request'ler silinebilir
+      if (existingRequest.status !== ExpertRequestStatus.PENDING) {
+        throw new Error('Cannot delete request: Request is not in PENDING status');
+      }
+
+      // Eğer TIPS gönderilmişse, geri iade işlemi
+      if (existingRequest.tipsAmount > 0) {
+        const wallet = await this.walletService.getActiveWallet(userId);
+        if (wallet) {
+          // Locked balance'ı geri al
+          await this.walletService.updateLockedBalance(wallet.id, -existingRequest.tipsAmount, {
+            reason: 'Expert request deleted',
+            lockType: 'EXPERT_REQUEST',
+          });
+        }
+      }
+
+      // Media dosyalarını S3'ten sil
+      const existingMedia = await this.expertMediaRepo.findByRequestId(requestId);
+      for (const media of existingMedia) {
+        try {
+          await this.s3Service.deleteFile(media.mediaUrl);
+        } catch (error) {
+          logger.warn({
+            message: 'Failed to delete media from S3',
+            mediaUrl: media.mediaUrl,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      // Request'i sil (Prisma ile direkt)
+      await this.prisma.expertRequest.delete({
+        where: { id: requestId },
+      });
+
+      // Socket.IO ile real-time bildirim
+      const socketHandler = SocketManager.getInstance().getSocketHandler();
+      const deletedEvent = {
+        requestId: existingRequest.id,
+        userId: userId,
+        timestamp: new Date().toISOString(),
+      };
+
+      socketHandler.sendMessageToUser(userId, 'expert_request_deleted', deletedEvent);
+
+      logger.info({
+        message: 'Expert request deleted',
+        userId,
+        requestId,
+      });
+    } catch (error) {
+      logger.error({
+        message: 'Error deleting expert request',
+        userId,
         requestId,
         error: error instanceof Error ? error.message : String(error),
       });

@@ -156,7 +156,10 @@ async function clearAllData(): Promise<void> {
     await prisma.rewardClaim.deleteMany({});
     await prisma.achievementGoal.deleteMany({});
     await prisma.achievementChain.deleteMany({});
+    // EventBadge join table'ı badge'lerden önce sil (foreign key)
+    await prisma.eventBadge.deleteMany({});
     await prisma.badge.deleteMany({});
+    await prisma.badgeCategory.deleteMany({});
 
     // Crypto verileri
     await prisma.tipsTokenTransfer.deleteMany({});
@@ -173,15 +176,16 @@ async function clearAllData(): Promise<void> {
     await prisma.subCategory.deleteMany({});
     await prisma.mainCategory.deleteMany({});
     await prisma.comparisonMetric.deleteMany({});
-    await prisma.badgeCategory.deleteMany({});
-    await prisma.brandCategory.deleteMany({});
-    await prisma.userTheme.deleteMany({});
 
     // Admin verileri
     progress.increment('Admin verileri temizleniyor...')
     await prisma.manualReviewFlag.deleteMany({});
     await prisma.moderationAction.deleteMany({});
     await prisma.adminLog.deleteMany({});
+    
+    // Taxonomy-only verileri (en sonda sil çünkü diğer veriler bunlara referans verebilir)
+    await prisma.brandCategory.deleteMany({});
+    await prisma.userTheme.deleteMany({});
 
     // Auth verileri
     progress.increment('Auth verileri temizleniyor...')

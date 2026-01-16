@@ -10,6 +10,8 @@ import { DEFAULT_AVATAR_PATH } from '../src/infrastructure/config/media.config'
 import { ProgressBar } from './seed/helpers/progress-bar'
 import { seedTaxonomy } from './seed/taxonomy.seed'
 import { seedProductCatalog } from './seed/product-catalog.seed'
+import { ensureEventBadgeSystem } from './seed/helpers/ensure-event-badge-system'
+import { ensureMarketplaceBadges } from './seed/helpers/ensure-marketplace-badges'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { markSeedStart, markSeedEnd, addSeedUserId } = require('./seed/seed-metadata')
 
@@ -7131,8 +7133,95 @@ async function main() {
     console.log('⚠️  Seed tamamlandı ama feed job\'ları oluşturulamadı. Manuel olarak tetikleyebilirsiniz:')
     console.log('   npx ts-node prisma/seed/trigger-feed-distribution.ts')
   }
+  
+  progress.increment('Seed tamamlanıyor...')
 
-} // main() closing brace
+  // ===== TRANSACTION SEEDING =====
+  console.log('\n💰 Transaction ve Wallet seeding başlatılıyor...')
+  progress.increment('Transaction ve wallet verileri oluşturuluyor...')
+  
+  try {
+    const { seedTransactions } = await import('./seed/transaction-seed')
+    const transactionResult = await seedTransactions()
+    
+    progress.increment('Transaction seeding tamamlandı')
+    console.log('✅ Transaction seeding completed')
+    console.log(`   📊 ${transactionResult.totalWallets} wallet oluşturuldu`)
+    console.log(`   💳 ${transactionResult.totalTransactions} transaction oluşturuldu`)
+    console.log(`   📈 İstatistikler:`)
+    console.log(`      - Type: ${JSON.stringify(transactionResult.byType, null, 2)}`)
+    console.log(`      - Status: ${JSON.stringify(transactionResult.byStatus, null, 2)}`)
+  } catch (error) {
+    console.error('❌ Transaction seeding hatası:', error)
+    if (error instanceof Error) {
+      console.error('   Message:', error.message)
+      console.error('   Stack:', error.stack)
+    }
+    console.log('⚠️  Seed devam ediyor ama transaction verileri oluşturulamadı')
+  }
+
+  // ===== REWARD CLAIM SEEDING =====
+  console.log('\n🎁 Reward Claim seeding başlatılıyor...')
+  progress.increment('Reward claim verileri oluşturuluyor...')
+  
+  try {
+    const { seedRewardClaims } = await import('./seed/reward-claim-seed')
+    await seedRewardClaims()
+    
+    progress.increment('Reward claim seeding tamamlandı')
+    console.log('✅ Reward claim seeding completed')
+  } catch (error) {
+    console.error('❌ Reward claim seeding hatası:', error)
+    if (error instanceof Error) {
+      console.error('   Message:', error.message)
+      console.error('   Stack:', error.stack)
+    }
+    console.log('⚠️  Seed devam ediyor ama reward claim verileri oluşturulamadı')
+  }
+
+  // ===== EVENT BADGES & MARKETPLACE BADGES SEEDING =====
+  console.log('\n🏆 Event Badge Sistemi ve Marketplace Badge\'leri oluşturuluyor...')
+  progress.increment('Event & Marketplace badges seeding...')
+  
+  try {
+    // Event badge sistemi (badge + event + EventBadge join table)
+    await ensureEventBadgeSystem(prisma)
+    
+    // Marketplace badge'leri
+    await ensureMarketplaceBadges(prisma)
+    
+    progress.increment('Event & Marketplace badges tamamlandı')
+    console.log('✅ Event & Marketplace badges seeding completed')
+  } catch (error) {
+    console.error('❌ Event/Marketplace badges seeding hatası:', error)
+    if (error instanceof Error) {
+      console.error('   Message:', error.message)
+      console.error('   Stack:', error.stack)
+    }
+    console.log('⚠️  Seed devam ediyor ama event/marketplace badges oluşturulamadı')
+  }
+
+  // ===== NFT SEEDING FOR PRIORITY USERS =====
+  console.log('\n🖼️  NFT seeding başlatılıyor (priority users)...')
+  progress.increment('NFT verileri oluşturuluyor...')
+  
+  try {
+    await seedPriorityUserNFTs()
+    progress.increment('NFT seeding tamamlandı')
+    console.log('✅ NFT seeding completed')
+  } catch (error) {
+    console.error('❌ NFT seeding hatası:', error)
+    if (error instanceof Error) {
+      console.error('   Message:', error.message)
+      console.error('   Stack:', error.stack)
+    }
+    console.log('⚠️  Seed devam ediyor ama NFT verileri oluşturulamadı')
+  }
+
+  // ===== SUMMARY =====
+  console.log('\n🎉 Seed process completed successfully!')
+}
+}
 
 main()
   .then(async () => {

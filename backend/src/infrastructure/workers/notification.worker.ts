@@ -86,13 +86,21 @@ export class NotificationWorker {
 
       // 2. Send realtime notification via Socket.IO (if enabled)
       if (sendInApp !== false) {
-        await this.sendSocketNotification(userId, {
+        // Get current unread count for the user
+        const unreadCount = await this.notificationRepo.getUnreadCount(userId);
+        
+        // Extract avatar and imageUrl from data for socket notification
+        const socketNotification = {
           type,
           title,
           message,
           data,
+          avatar: data.avatar || null,
+          imageUrl: data.imageUrl || null,
+          unreadCount: unreadCount, // ✅ Mobil için: Unread count ekle
           timestamp: new Date().toISOString(),
-        });
+        };
+        await this.sendSocketNotification(userId, socketNotification);
       }
 
       // 3. Send push notification (if enabled)

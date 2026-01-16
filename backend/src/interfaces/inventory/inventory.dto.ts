@@ -3,6 +3,7 @@ import { ExperienceType } from '../../domain/content/experience-type.enum';
 
 export interface InventoryListItemResponse {
   id: string;
+  productId: string; // ✅ YENİ: Product ID
   brand: {
     name: string;
     model: string;

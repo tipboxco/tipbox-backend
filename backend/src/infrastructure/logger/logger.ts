@@ -51,7 +51,35 @@ const logger: Logger = createLogger({
       format: format.combine(
         format.colorize(),
         format.printf(({ timestamp, level, message, ...meta }) => {
-          const metaStr = Object.keys(meta).length ? JSON.stringify(meta, null, 2) : '';
+          // Circular reference'ları handle et
+          const getCircularReplacer = () => {
+            const seen = new WeakSet();
+            return (key: string, value: any) => {
+              if (typeof value === 'object' && value !== null) {
+                if (seen.has(value)) {
+                  return '[Circular]';
+                }
+                seen.add(value);
+                // Socket, Stream gibi özel objeleri basitleştir
+                if (value.constructor && value.constructor.name) {
+                  if (['Socket', 'IncomingMessage', 'ClientRequest'].includes(value.constructor.name)) {
+                    return `[${value.constructor.name}]`;
+                  }
+                }
+              }
+              return value;
+            };
+          };
+          
+          let metaStr = '';
+          if (Object.keys(meta).length) {
+            try {
+              metaStr = JSON.stringify(meta, getCircularReplacer(), 2);
+            } catch (error) {
+              // JSON.stringify başarısız olursa, sadece error message'ı göster
+              metaStr = `{ "error": "Failed to stringify meta: ${error instanceof Error ? error.message : String(error)}" }`;
+            }
+          }
           return `${timestamp} [${level}]: ${message} ${metaStr}`;
         })
       ),

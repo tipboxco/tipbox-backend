@@ -65,7 +65,7 @@ export class FeedService {
    */
   async getUserFeed(
     userId: string,
-    options?: { cursor?: string; limit?: number }
+    options?: { cursor?: string; limit?: number; contextType?: ContextType; contextId?: string }
   ): Promise<FeedResponse> {
     const limit = options?.limit || 20;
 
@@ -186,9 +186,74 @@ export class FeedService {
     });
 
     const postMap = new Map(posts.map((p) => [p.id, p]));
-    const orderedPosts = feeds
+    let orderedPosts = feeds
       .map((feed) => postMap.get(feed.postId))
       .filter((p): p is typeof posts[number] => Boolean(p));
+
+    // Context-based filtering
+    if (options?.contextType && options?.contextId) {
+      // Context'e göre post'ları filtrele
+      const allowedTypes = this.getAllowedPostTypesForContext(options.contextType);
+      
+      if (options.contextType === ContextType.SUB_CATEGORY) {
+        // Alt product group'ları getir
+        const productGroups = await this.prisma.productGroup.findMany({
+          where: { subCategoryId: options.contextId },
+          select: { id: true },
+        });
+        const productGroupIds = productGroups.map((pg) => pg.id);
+
+        // Alt product'ları getir
+        const products = await this.prisma.product.findMany({
+          where: { groupId: { in: productGroupIds } },
+          select: { id: true },
+        });
+        const productIds = products.map((p) => p.id);
+
+        // Post'ları context'e göre filtrele
+        orderedPosts = orderedPosts.filter((post) => {
+          // Sub category'ye ait mi?
+          if (post.subCategoryId === options.contextId) {
+            return allowedTypes.includes(post.type);
+          }
+          // Alt product group'a ait mi?
+          if (post.productGroupId && productGroupIds.includes(post.productGroupId)) {
+            return allowedTypes.includes(post.type);
+          }
+          // Alt product'a ait mi? (sadece Free, Tips, Question)
+          if (post.productId && productIds.includes(post.productId)) {
+            return allowedTypes.includes(post.type);
+          }
+          return false;
+        });
+      } else if (options.contextType === ContextType.PRODUCT_GROUP) {
+        // Alt product'ları getir
+        const products = await this.prisma.product.findMany({
+          where: { groupId: options.contextId },
+          select: { id: true },
+        });
+        const productIds = products.map((p) => p.id);
+
+        // Post'ları context'e göre filtrele
+        orderedPosts = orderedPosts.filter((post) => {
+          // Product group'a ait mi?
+          if (post.productGroupId === options.contextId) {
+            return allowedTypes.includes(post.type);
+          }
+          // Alt product'a ait mi? (sadece Free, Tips, Question)
+          if (post.productId && productIds.includes(post.productId)) {
+            return allowedTypes.includes(post.type);
+          }
+          return false;
+        });
+      } else if (options.contextType === ContextType.PRODUCT) {
+        // Sadece bu product'a ait gönderiler
+        orderedPosts = orderedPosts.filter((post) => {
+          return post.productId === options.contextId;
+        });
+        // Product için tüm post tipleri gösterilebilir (filtreleme yok)
+      }
+    }
 
     // Get user inventories for benchmark isOwned check
     const inventories = await this.prisma.inventory.findMany({
@@ -339,6 +404,11 @@ export class FeedService {
       postWhere.userId = { in: filters.userIds };
     }
 
+    // Context-based filtering
+    if (filters.contextType && filters.contextId) {
+      await this.applyContextBasedFiltering(postWhere, filters.contextType, filters.contextId);
+    }
+
     // Tag-based filtering (contentPostTags, tags relations, or post type mapping)
     if (filters.tags && filters.tags.length > 0) {
       // Map tag names to post types
@@ -384,6 +454,12 @@ export class FeedService {
         (postWhere.AND ||= []).push({
           OR: tagConditions,
         });
+      }
+    } else if (filters.contextType && !filters.tags) {
+      // Tags yoksa, context seviyesine göre otomatik post type filtreleme
+      const allowedTypes = this.getAllowedPostTypesForContext(filters.contextType);
+      if (allowedTypes.length > 0) {
+        (postWhere.AND ||= []).push({ type: { in: allowedTypes } });
       }
     }
 
@@ -738,6 +814,94 @@ export class FeedService {
       return 'product_group' as ContextType;
     }
     return 'sub_category' as ContextType;
+  }
+
+  /**
+   * Context seviyesine göre izin verilen post tiplerini döndürür
+   */
+  private getAllowedPostTypesForContext(contextType: ContextType): ContentPostType[] {
+    switch (contextType) {
+      case ContextType.SUB_CATEGORY:
+      case ContextType.PRODUCT_GROUP:
+        // Sub category ve product group için sadece Free, Tips, Question
+        return [ContentPostType.FREE, ContentPostType.TIPS, ContentPostType.QUESTION];
+      case ContextType.PRODUCT:
+        // Product için tüm post tipleri
+        return [
+          ContentPostType.FREE,
+          ContentPostType.TIPS,
+          ContentPostType.QUESTION,
+          ContentPostType.EXPERIENCE,
+          ContentPostType.UPDATE,
+          ContentPostType.COMPARE,
+        ];
+      default:
+        return [];
+    }
+  }
+
+  /**
+   * Context-based filtreleme uygular
+   */
+  private async applyContextBasedFiltering(
+    postWhere: any,
+    contextType: ContextType,
+    contextId: string
+  ): Promise<void> {
+    // Context'e göre post'ları filtrele
+    switch (contextType) {
+      case ContextType.SUB_CATEGORY:
+        // Alt product group'ları getir
+        const productGroups = await this.prisma.productGroup.findMany({
+          where: { subCategoryId: contextId },
+          select: { id: true },
+        });
+        const productGroupIds = productGroups.map((pg) => pg.id);
+
+        // Alt product'ları getir
+        const products = await this.prisma.product.findMany({
+          where: { groupId: { in: productGroupIds } },
+          select: { id: true },
+        });
+        const productIds = products.map((p) => p.id);
+
+        // Hiyerarşik where clause
+        postWhere.OR = [
+          { subCategoryId: contextId },
+          ...(productGroupIds.length > 0 ? [{ productGroupId: { in: productGroupIds } }] : []),
+          ...(productIds.length > 0 ? [{ productId: { in: productIds } }] : []),
+        ];
+
+        // Post type filtreleme (Experience, Update, Benchmark hariç)
+        const allowedTypes = this.getAllowedPostTypesForContext(contextType);
+        (postWhere.AND ||= []).push({ type: { in: allowedTypes } });
+        break;
+
+      case ContextType.PRODUCT_GROUP:
+        // Alt product'ları getir
+        const groupProducts = await this.prisma.product.findMany({
+          where: { groupId: contextId },
+          select: { id: true },
+        });
+        const groupProductIds = groupProducts.map((p) => p.id);
+
+        // Hiyerarşik where clause
+        postWhere.OR = [
+          { productGroupId: contextId },
+          ...(groupProductIds.length > 0 ? [{ productId: { in: groupProductIds } }] : []),
+        ];
+
+        // Post type filtreleme (Experience, Update, Benchmark hariç)
+        const groupAllowedTypes = this.getAllowedPostTypesForContext(contextType);
+        (postWhere.AND ||= []).push({ type: { in: groupAllowedTypes } });
+        break;
+
+      case ContextType.PRODUCT:
+        // Sadece bu product'a ait gönderiler
+        postWhere.productId = contextId;
+        // Product için tüm post tipleri gösterilebilir (filtreleme yok)
+        break;
+    }
   }
 
   /**
