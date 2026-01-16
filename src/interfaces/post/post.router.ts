@@ -1134,7 +1134,7 @@ router.get(
  * /posts/{eventId}/post:
  *   post:
  *     summary: Event için post oluştur
- *     description: Belirli bir event için post oluşturur. Otomatik olarak event metriklerini günceller ve badge kontrolü yapar.
+ *     description: Belirli bir event için post oluşturur. InventoryId ile productId otomatik olarak çözümlenir.
  *     tags: [Posts]
  *     security:
  *       - bearerAuth: []
@@ -1144,7 +1144,7 @@ router.get(
  *         required: true
  *         schema:
  *           type: string
- *         description: Event ID
+ *         description: Event ID (ULID format)
  *     requestBody:
  *       required: true
  *       content:
@@ -1152,32 +1152,31 @@ router.get(
  *           schema:
  *             type: object
  *             required:
- *               - title
  *               - body
  *               - contextType
- *               - contextId
  *             properties:
- *               title:
- *                 type: string
- *                 description: Post başlığı
  *               body:
  *                 type: string
- *                 description: Post içeriği
+ *                 maxLength: 2000
+ *                 description: Post içeriği/açıklaması
  *               contextType:
  *                 type: string
- *                 enum: [sub_category, product_group, product]
+ *                 enum: [product, sub_category]
  *                 description: Context tipi
  *               contextId:
  *                 type: string
- *                 description: Context ID (sub_category, product_group veya product ID)
+ *                 description: Product ID veya Sub-category ID (ULID format). inventoryId ile birlikte kullanılamaz.
+ *               inventoryId:
+ *                 type: string
+ *                 description: Inventory ID (UUID format). Belirtilirse productId otomatik olarak inventory'den çekilir.
  *               images:
  *                 type: array
  *                 items:
  *                   type: string
  *                   format: binary
- *                 description: Post görselleri (maksimum 5, her biri max 10MB)
+ *                 description: Post görselleri (maksimum 10, her biri max 5MB)
  *     responses:
- *       200:
+ *       201:
  *         description: Post başarıyla oluşturuldu
  *         content:
  *           application/json:
@@ -1186,26 +1185,63 @@ router.get(
  *               properties:
  *                 id:
  *                   type: string
+ *                   description: Oluşturulan post'un ID'si (ULID format)
  *                 message:
  *                   type: string
- *                 success:
- *                   type: boolean
+ *                   description: Başarı mesajı
  *       400:
  *         description: Geçersiz istek
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
  *       401:
  *         description: Kimlik doğrulaması başarısız
+ *       403:
+ *         description: Event'e katılmamış
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                       example: NOT_JOINED
+ *                     message:
+ *                       type: string
+ *                       example: You must join this event before sharing a post
  *       404:
- *         description: Event bulunamadı
+ *         description: Event veya context bulunamadı
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                     message:
+ *                       type: string
+ *       413:
+ *         description: Dosya boyutu limiti aşıldı
  */
 router.post(
   '/:eventId/post',
-  upload.array('images', 5),
+  upload.array('images', 10), // Max 10 images per spec
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
     if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
+      return res.status(401).json({ message: 'Authentication required' });
     }
 
     const eventId = req.params.eventId;
@@ -1213,39 +1249,154 @@ router.post(
       return res.status(400).json({ message: 'Event ID is required' });
     }
 
-    // Process images
-    const imageUrls = await processPostImages(req, String(userId));
+    // Validate required fields before processing images
+    let { body, contextType, contextId, inventoryId } = req.body;
 
-    // Create post request
-    const postData: CreatePostRequest = {
-      title: req.body.title,
-      body: req.body.body,
-      contextType: req.body.contextType as ContextType,
-      contextId: req.body.contextId,
-      images: imageUrls,
-      eventId: eventId, // Event ID from path parameter
-    };
+    // ✅ Auto-detect contextType from inventoryId (inventory items are always products)
+    if (inventoryId && !contextType) {
+      contextType = 'product';
+      logger.info('Auto-detected contextType as product from inventoryId', { 
+        inventoryId, 
+        userId 
+      });
+    }
 
-    // Validate required fields
-    if (!postData.title || !postData.body || !postData.contextType || !postData.contextId) {
+    if (!body || !contextType) {
       return res.status(400).json({ 
-        message: 'title, body, contextType, and contextId are required' 
+        message: 'body and contextType are required' 
+      });
+    }
+
+    // contextId OR inventoryId gerekli (en az biri)
+    if (!contextId && !inventoryId) {
+      return res.status(400).json({ 
+        message: 'Either contextId or inventoryId is required' 
+      });
+    }
+
+    // Validate body - must not be empty after trim
+    const trimmedBody = typeof body === 'string' ? body.trim() : '';
+    if (trimmedBody.length === 0) {
+      return res.status(400).json({ 
+        message: 'body must be at least 1 character' 
+      });
+    }
+
+    // Validate body length (max 2000 chars)
+    if (trimmedBody.length > 2000) {
+      return res.status(400).json({ 
+        message: 'body must be at most 2000 characters' 
+      });
+    }
+
+    // Validate contextType
+    if (contextType !== 'product' && contextType !== 'sub_category') {
+      return res.status(400).json({ 
+        message: "contextType must be 'product' or 'sub_category'" 
+      });
+    }
+
+    // Validate image count
+    const files = Array.isArray(req.files) ? req.files : [];
+    if (files.length > 10) {
+      return res.status(400).json({ 
+        message: 'Maximum 10 images allowed' 
       });
     }
 
     try {
+      // Process images first
+      const imageUrls = await processPostImages(req, String(userId));
+
+      // Create post request - service will handle all validations
+      const postData: CreatePostRequest = {
+        body: trimmedBody,
+        contextType: contextType as ContextType,
+        contextId: contextId || '', // Will be overridden by inventoryId if provided
+        inventoryId: inventoryId, // ✅ YENİ: InventoryId'yi service'e gönder
+        images: imageUrls,
+        eventId: eventId,
+      };
+
       const result = await postService.createFreePost(String(userId), postData);
-      return res.status(200).json(result);
+      
+      // Return only id and message per spec
+      return res.status(201).json({
+        id: result.id,
+        message: 'Post created successfully'
+      });
     } catch (error) {
       const message = getErrorMessage(error);
       
+      logger.error('Error creating event post:', { 
+        error, 
+        userId, 
+        eventId, 
+        contextType, 
+        contextId: req.body.contextId,
+        inventoryId: req.body.inventoryId 
+      });
+      
+      // Parse error message to return appropriate response
       if (message.includes('Event not found')) {
-        return res.status(404).json({ message: 'Event not found' });
+        return res.status(404).json({ 
+          error: {
+            code: 'EVENT_NOT_FOUND',
+            message: 'Event not found'
+          }
+        });
       }
       
-      logger.error('Error creating event post:', error);
+      if (message.includes('must join this event')) {
+        return res.status(403).json({ 
+          error: {
+            code: 'NOT_JOINED',
+            message: 'You must join this event before sharing a post'
+          }
+        });
+      }
+
+      // ✅ YENİ: Inventory not found error
+      if (message.includes('Inventory item not found')) {
+        return res.status(404).json({ 
+          error: {
+            code: 'INVENTORY_NOT_FOUND',
+            message: message
+          }
+        });
+      }
+
+      // ✅ YENİ: Inventory ownership error
+      if (message.includes('does not belong to you')) {
+        return res.status(403).json({ 
+          error: {
+            code: 'INVENTORY_FORBIDDEN',
+            message: message
+          }
+        });
+      }
+      
+      if (message.includes('does not exist or has been deleted')) {
+        return res.status(404).json({ 
+          error: {
+            code: 'CONTEXT_NOT_FOUND',
+            message: message // User-friendly message from service
+          }
+        });
+      }
+      
+      if (message.includes('not found') || message.includes('does not exist')) {
+        return res.status(404).json({ 
+          error: {
+            code: 'CONTEXT_NOT_FOUND',
+            message: 'Product or sub-category not found'
+          }
+        });
+      }
+      
+      // Generic error response
       return res.status(400).json({ 
-        message: message || 'Failed to create post' 
+        message: message || 'Failed to create post'
       });
     }
   })

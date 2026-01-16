@@ -32,7 +32,7 @@ export class TransactionProcessor {
     }
 
     this.isRunning = true;
-    logger.info('Transaction processor started');
+    logger.info('Transaction processor started - monitoring pending transactions');
 
     this.intervalId = setInterval(() => {
       this.processPendingTransactions().catch(err => {
@@ -67,10 +67,12 @@ export class TransactionProcessor {
     try {
       const pendingTransactions = await this.transactionRepo.findPendingTransactions(50);
 
+      // Eğer pending transaction yoksa sessizce çık
       if (pendingTransactions.length === 0) {
         return;
       }
 
+      // Sadece transaction olduğunda log bas
       logger.info(`Processing ${pendingTransactions.length} pending transactions`);
 
       for (const transaction of pendingTransactions) {

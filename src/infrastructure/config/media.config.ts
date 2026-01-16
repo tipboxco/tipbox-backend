@@ -84,7 +84,7 @@ export function resolveMediaUrl(mediaPath: string | null | undefined, useDefault
     // Eğer avatar için çağrılıyorsa ve fallback istenmişse, default avatar döndür
     if (useDefaultAvatarFallback) {
       const baseUrl = getPublicMediaBaseUrl();
-      return `${baseUrl}/${DEFAULT_AVATAR_PATH}`;
+      return `${baseUrl}/tipbox-media/${DEFAULT_AVATAR_PATH}`;
     }
     return null;
   }
@@ -100,8 +100,8 @@ export function resolveMediaUrl(mediaPath: string | null | undefined, useDefault
   // getPublicMediaBaseUrl() ile media base URL'ini al
   const baseUrl = getPublicMediaBaseUrl();
   
-  // Tam URL oluştur (bucket ismi olmadan)
-  return `${baseUrl}/${cleanPath}`;
+  // MinIO için bucket adını ekle (baseUrl + /bucket-name + /path)
+  return `${baseUrl}/tipbox-media/${cleanPath}`;
 }
 
 

@@ -53,24 +53,60 @@ export class EventService {
         keysToDelete.push(`events:active:${userId}:first:20`);
       }
 
-      // Event posts cache (eventId'ye özel, tüm cursor'lar için pattern match)
-      // Redis pattern matching ile events:posts:eventId:* şeklinde silebiliriz
-      // Ancak şimdilik sadece ilk sayfa için silelim
-      keysToDelete.push(`events:posts:${eventId}:first:20`);
+      // ✅ Event posts cache - TÜM cursor'lar için pattern matching
+      // Pattern: events:posts:eventId:*
+      const eventPostsPattern = `events:posts:${eventId}:*`;
+      try {
+        let cursor = '0';
+        let totalScanned = 0;
+        const maxIterations = 100; // Safety limit
+        let iterations = 0;
+
+        do {
+          const scanResult = await this.cacheService.scan(cursor, eventPostsPattern, 100);
+          cursor = scanResult.cursor;
+          
+          if (scanResult.keys.length > 0) {
+            keysToDelete.push(...scanResult.keys);
+            totalScanned += scanResult.keys.length;
+          }
+          
+          iterations++;
+        } while (cursor !== '0' && iterations < maxIterations);
+
+        logger.info({
+          message: 'Event posts cache keys scanned',
+          eventId,
+          pattern: eventPostsPattern,
+          keysFound: totalScanned,
+          iterations
+        });
+      } catch (scanError) {
+        logger.warn({
+          message: 'Failed to scan event posts cache, falling back to first page',
+          eventId,
+          error: scanError
+        });
+        // Fallback: Sadece ilk sayfayı sil
+        keysToDelete.push(`events:posts:${eventId}:first:20`);
+      }
 
       // Guest için de active events cache'i temizle
       keysToDelete.push(`events:active:guest:first:20`);
 
       // Tüm cache key'lerini sil
+      let deletedCount = 0;
       for (const key of keysToDelete) {
-        await this.cacheService.del(key);
+        const deleted = await this.cacheService.delete(key);
+        if (deleted) deletedCount++;
       }
 
       logger.info({ 
         message: 'Event caches invalidated', 
         eventId, 
         userId,
-        keysInvalidated: keysToDelete.length 
+        keysToDelete: keysToDelete.length,
+        keysDeleted: deletedCount
       });
     } catch (error) {
       logger.warn({ 
