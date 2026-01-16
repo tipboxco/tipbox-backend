@@ -130,6 +130,81 @@ export async function invalidateAllUserCache(userId: string): Promise<void> {
 }
 
 /**
+ * Catalog posts cache'ini invalidate eder
+ * Kullanım: Yeni post oluşturulduğunda veya güncellendiğinde
+ */
+export async function invalidateCatalogPostsCache(context: {
+  subCategoryId?: string;
+  productGroupId?: string;
+  productId?: string;
+}): Promise<void> {
+  try {
+    const keysToDelete: string[] = [];
+
+    // Sub category posts cache
+    if (context.subCategoryId) {
+      await cacheService.delPattern(`catalog:sub-category:${context.subCategoryId}:posts:*`);
+    }
+
+    // Product group posts cache
+    if (context.productGroupId) {
+      await cacheService.delPattern(`catalog:product-group:${context.productGroupId}:posts:*`);
+    }
+
+    // Product posts cache
+    if (context.productId) {
+      await cacheService.delPattern(`catalog:product:${context.productId}:posts:*`);
+    }
+
+    // Hiyerarşik cache invalidation: Eğer product varsa, üst seviyeleri de temizle
+    if (context.productId) {
+      // Product'ın product group'unu bul ve cache'ini temizle
+      const { getPrisma } = await import('../repositories/prisma.client');
+      const prisma = getPrisma();
+      const product = await prisma.product.findUnique({
+        where: { id: context.productId },
+        select: { groupId: true },
+      });
+
+      if (product?.groupId) {
+        await cacheService.delPattern(`catalog:product-group:${product.groupId}:posts:*`);
+        
+        // Product group'un sub category'sini bul
+        const productGroup = await prisma.productGroup.findUnique({
+          where: { id: product.groupId },
+          select: { subCategoryId: true },
+        });
+
+        if (productGroup?.subCategoryId) {
+          await cacheService.delPattern(`catalog:sub-category:${productGroup.subCategoryId}:posts:*`);
+        }
+      }
+    }
+
+    // Eğer product group varsa, üst seviyeyi de temizle
+    if (context.productGroupId) {
+      const { getPrisma } = await import('../repositories/prisma.client');
+      const prisma = getPrisma();
+      const productGroup = await prisma.productGroup.findUnique({
+        where: { id: context.productGroupId },
+        select: { subCategoryId: true },
+      });
+
+      if (productGroup?.subCategoryId) {
+        await cacheService.delPattern(`catalog:sub-category:${productGroup.subCategoryId}:posts:*`);
+      }
+    }
+
+    logger.info({
+      message: 'Catalog posts cache invalidated',
+      context,
+    });
+  } catch (error) {
+    logger.error('Error invalidating catalog posts cache', { error, context });
+  }
+}
+
+/**
  * Tüm cache'i temizler (dikkatli kullan!)
  * Kullanım: Major system update'lerde, cache corruption şüphesinde
  */

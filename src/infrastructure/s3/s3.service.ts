@@ -1,20 +1,17 @@
-import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, PutBucketPolicyCommand, ListObjectsV2Command, DeleteObjectsCommand, DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, PutBucketPolicyCommand, ListObjectsV2Command, DeleteObjectsCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { s3Config } from '../config/s3.config';
 import { getPublicMediaBaseUrl, resolveMediaUrl } from '../config/media.config';
 import logger from '../logger/logger';
 import fs from 'fs';
-
 export class S3Service {
   private s3Client: S3Client;
   private effectiveEndpoint: string;
-
   constructor() {
     // Container dışında çalışıyorsa (seed script gibi) localhost kullan
     // Container içinde çalışıyorsa minio hostname kullan
     // Seed script container dışında çalıştığı için her zaman localhost kontrolü yap
     let effectiveEndpoint = s3Config.endpoint;
-
     // Eğer endpoint minio:9000 içeriyorsa ve container dışındaysak localhost'a çevir.
     // ÖNEMLİ:
     // - S3_ENDPOINT env değişkeni açıkça set edildiyse asla override etme.
@@ -23,7 +20,6 @@ export class S3Service {
     const isContainerEnvironment =
       process.env.DOCKER_CONTAINER === 'true' || fs.existsSync('/.dockerenv');
     const isDevelopment = process.env.NODE_ENV === 'development';
-
     if (effectiveEndpoint.includes('minio:9000') && !isEndpointFromEnv) {
       // Seed script gibi container DIŞI process'lerde, development'ta localhost'a çevir.
       if (!isContainerEnvironment && isDevelopment) {
@@ -65,7 +61,6 @@ export class S3Service {
       },
       forcePathStyle: s3Config.forcePathStyle,
     });
-
     // Servis başladığında bucket'ı kontrol et ve oluştur
     this.checkAndCreateBucket().catch((error) => {
       logger.error({
@@ -75,7 +70,6 @@ export class S3Service {
       });
     });
   }
-
   /**
    * Dosya yükleme için pre-signed URL oluşturur
    * @param fileName - Yüklenecek dosyanın adı
@@ -89,11 +83,9 @@ export class S3Service {
         Key: fileName,
         ContentType: fileType,
       });
-
       const presignedUrl = await getSignedUrl(this.s3Client, command, {
         expiresIn: 900, // 15 dakika
       });
-
       logger.info(`Pre-signed URL oluşturuldu: ${fileName}`);
       return presignedUrl;
     } catch (error) {
@@ -101,7 +93,6 @@ export class S3Service {
       throw new Error('Dosya yükleme URL\'si oluşturulamadı');
     }
   }
-
   /**
    * Bucket'ın var olup olmadığını kontrol eder ve yoksa oluşturur
    */
@@ -116,7 +107,6 @@ export class S3Service {
         message: 'S3 bucket mevcut',
         bucketName: s3Config.bucketName,
       });
-
       // Mevcut bucket için de public policy ayarlamayı dene (hata olursa ignore et)
       this.setBucketPublicPolicy().catch(() => {
         // Policy zaten ayarlanmış olabilir veya yetki sorunu olabilir, kritik değil
@@ -138,7 +128,6 @@ export class S3Service {
             message: 'S3 bucket oluşturuldu',
             bucketName: s3Config.bucketName,
           });
-
           // Bucket oluşturulduktan sonra public read policy ekle
           await this.setBucketPublicPolicy();
         } catch (createError: any) {
@@ -172,7 +161,6 @@ export class S3Service {
       }
     }
   }
-
   /**
    * Bucket'a public read policy ekler (MinIO için)
    */
@@ -182,19 +170,18 @@ export class S3Service {
         Version: '2012-10-17',
         Statement: [
           {
+            Sid: 'PublicReadGetObject',
             Effect: 'Allow',
-            Principal: { AWS: ['*'] },
-            Action: ['s3:GetObject'],
-            Resource: [`arn:aws:s3:::${s3Config.bucketName}/*`],
+            Principal: '*',
+            Action: 's3:GetObject',
+            Resource: `arn:aws:s3:::${s3Config.bucketName}/*`,
           },
         ],
       };
-
       await this.s3Client.send(new PutBucketPolicyCommand({
         Bucket: s3Config.bucketName,
         Policy: JSON.stringify(policy),
       }));
-
       logger.info({
         message: 'S3 bucket public read policy eklendi',
         bucketName: s3Config.bucketName,
@@ -208,7 +195,6 @@ export class S3Service {
       });
     }
   }
-
   /**
    * Yüklenen dosyanın nihai URL'ini oluşturur
    * @param fileName - MinIO bucket path (örn: users/profile/9f2a1c/avatar.jpg)
@@ -218,7 +204,6 @@ export class S3Service {
     // resolveMediaUrl kullanarak tam URL oluştur
     return resolveMediaUrl(fileName) || fileName;
   }
-
   /**
    * Dosyanın MinIO'da mevcut olup olmadığını kontrol eder
    * @param fileName - Dosya adı (örn: users/profile/9f2a1c/avatar.jpg)
@@ -250,7 +235,6 @@ export class S3Service {
       return false;
     }
   }
-
   /**
    * Buffer'dan dosya yükler
    * @param fileName - Dosya adı (örn: users/profile/9f2a1c/avatar.jpg)
@@ -272,7 +256,6 @@ export class S3Service {
         Body: buffer,
         ContentType: contentType,
       });
-
       await this.s3Client.send(command);
       
       // Sadece bucket path döndür (tam URL değil)
@@ -308,38 +291,6 @@ export class S3Service {
       throw new Error(`Dosya yüklenemedi: ${errorMessage}`);
     }
   }
-
-  /**
-   * Tek bir dosyayı sil
-   * @param filePath - Silinecek dosyanın path'i (örn: 'posts/user123/image.jpg')
-   * @returns Başarılı ise true
-   */
-  async deleteFile(filePath: string): Promise<boolean> {
-    try {
-      const command = new DeleteObjectCommand({
-        Bucket: s3Config.bucketName,
-        Key: filePath,
-      });
-
-      await this.s3Client.send(command);
-      logger.info({
-        message: 'Dosya başarıyla silindi',
-        filePath,
-        bucketName: s3Config.bucketName,
-      });
-      return true;
-    } catch (error: any) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error({
-        message: 'Dosya silme hatası',
-        error: errorMessage,
-        filePath,
-        bucketName: s3Config.bucketName,
-      });
-      throw new Error(`Dosya silinemedi: ${errorMessage}`);
-    }
-  }
-
   /**
    * Klasördeki tüm dosyaları recursive olarak sil
    * @param folderPrefix - Klasör prefix'i (örn: 'users/', 'posts/')
@@ -348,7 +299,6 @@ export class S3Service {
   async deleteFolder(folderPrefix: string): Promise<number> {
     let deletedCount = 0;
     let continuationToken: string | undefined;
-
     do {
       try {
         // Klasördeki tüm dosyaları listele
@@ -358,15 +308,12 @@ export class S3Service {
           ContinuationToken: continuationToken,
           MaxKeys: 1000, // Batch size
         });
-
         const response = await this.s3Client.send(listCommand);
-
         if (response.Contents && response.Contents.length > 0) {
           // Batch delete (1000 dosya limit)
           const objectsToDelete = response.Contents.map((obj) => ({
             Key: obj.Key!,
           }));
-
           const deleteCommand = new DeleteObjectsCommand({
             Bucket: s3Config.bucketName,
             Delete: {
@@ -374,10 +321,8 @@ export class S3Service {
               Quiet: true,
             },
           });
-
           const deleteResponse = await this.s3Client.send(deleteCommand);
           deletedCount += objectsToDelete.length;
-
           if (deleteResponse.Errors && deleteResponse.Errors.length > 0) {
             logger.warn({
               message: 'MinIO delete errors',
@@ -386,7 +331,6 @@ export class S3Service {
             });
           }
         }
-
         continuationToken = response.NextContinuationToken;
       } catch (error: any) {
         const errorMsg = error instanceof Error ? error.message : String(error);
@@ -398,10 +342,8 @@ export class S3Service {
         throw new Error(`Klasör silinemedi: ${errorMsg}`);
       }
     } while (continuationToken);
-
     return deletedCount;
   }
-
   /**
    * Tüm bucket içeriğini temizle
    * @returns Silinen dosya sayısı
@@ -410,3 +352,7 @@ export class S3Service {
     return this.deleteFolder('');
   }
 }
+
+
+
+

@@ -60,6 +60,37 @@ const upload = multer({
 router.use(authMiddleware);
 
 /**
+ * Helper function: Normalize eventId by removing invalid values
+ * Returns undefined for invalid values, trimmed string for valid ones
+ */
+function normalizeEventId(eventId: any): string | undefined {
+  // Return undefined for falsy values
+  if (!eventId) {
+    return undefined;
+  }
+  
+  // Must be a string
+  if (typeof eventId !== 'string') {
+    return undefined;
+  }
+  
+  const trimmed = eventId.trim();
+  
+  // Return undefined for empty strings or common invalid values
+  if (trimmed === '' ||
+      trimmed.toLowerCase() === 'string' ||
+      trimmed.toLowerCase() === 'null' ||
+      trimmed.toLowerCase() === 'undefined' ||
+      trimmed.toLowerCase() === 'none' ||
+      trimmed === '0' ||
+      trimmed === 'false') {
+    return undefined;
+  }
+  
+  return trimmed;
+}
+
+/**
  * Helper function: Upload images from multipart/form-data or use provided URLs
  */
 async function processPostImages(
@@ -208,7 +239,7 @@ router.post(
       contextId: req.body.contextId,
       description: req.body.description,
       images: images,
-      eventId: req.body.eventId, // Optional event ID
+      eventId: normalizeEventId(req.body.eventId), // Optional event ID (normalized)
     };
 
     if (!request.contextType || !request.contextId || !request.description) {
@@ -271,7 +302,7 @@ router.post(
       description: req.body.description,
       benefitCategory: req.body.benefitCategory as TipsAndTricksBenefitCategory,
       images: images,
-      eventId: req.body.eventId, // Optional event ID
+      eventId: normalizeEventId(req.body.eventId), // Optional event ID (normalized)
     };
 
     if (
@@ -343,7 +374,7 @@ router.post(
       description: req.body.description,
       images: images,
       selectedBoostOptionId: req.body.selectedBoostOptionId,
-      eventId: req.body.eventId, // Optional event ID
+      eventId: normalizeEventId(req.body.eventId), // Optional event ID (normalized)
     };
 
     if (
@@ -490,7 +521,7 @@ router.post(
       products: products as Array<{ productId: string; isSelected: boolean }>,
       description: req.body.description,
       images: images,
-      eventId: req.body.eventId,
+      eventId: normalizeEventId(req.body.eventId), // Optional event ID (normalized)
     };
 
     if (
@@ -595,7 +626,7 @@ router.post(
       status: req.body.status as ExperienceStatus,
       images: images,
       experienceSnippetId: req.body.experienceSnippetId,
-      eventId: req.body.eventId, // Optional event ID
+      eventId: normalizeEventId(req.body.eventId), // Optional event ID (normalized)
     };
 
     // Validate required fields
@@ -886,7 +917,7 @@ router.put(
       const request: UpdatePostRequest = {
         description: req.body.description,
         images: images.length > 0 ? images : req.body.images,
-        eventId: req.body.eventId,
+        eventId: normalizeEventId(req.body.eventId), // Optional event ID (normalized)
       };
 
       const result = await postService.updatePost(String(userId), id, request);
@@ -1008,7 +1039,7 @@ router.post(
       contextId: req.body.contextId,
       content: req.body.content,
       images: images,
-      eventId: req.body.eventId, // Optional event ID
+      eventId: normalizeEventId(req.body.eventId), // Optional event ID (normalized)
     };
 
     if (!request.contextType || !request.contextId || !request.content) {

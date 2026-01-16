@@ -137,6 +137,8 @@ export class UserPrismaRepository {
       w.publicAddress,
       w.provider as WalletProvider,
       w.isConnected,
+      w.balance || 0,
+      w.lockedBalance || 0,
       w.createdAt,
       w.updatedAt
     )) || [];

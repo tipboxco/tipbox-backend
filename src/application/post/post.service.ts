@@ -33,6 +33,7 @@ import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import { EventService } from '../event/event.service';
 import { S3Service } from '../../infrastructure/s3/s3.service';
 import { CacheService } from '../../infrastructure/cache/cache.service';
+import { invalidateCatalogPostsCache } from '../../infrastructure/cache/cache-invalidation';
 
 export class PostService {
   private postRepo: ContentPostPrismaRepository;
@@ -110,12 +111,33 @@ export class PostService {
    * Event validation - event mevcut ve aktif mi kontrol eder
    */
   private async validateEvent(eventId: string): Promise<void> {
+    // Validate eventId format (should be a valid string, not "string", "null", etc.)
+    if (!eventId) {
+      throw new Error('Event ID is required');
+    }
+    
+    if (typeof eventId !== 'string') {
+      throw new Error(`Invalid eventId type: expected string, got ${typeof eventId}`);
+    }
+    
+    const trimmed = eventId.trim();
+    
+    if (trimmed === '' ||
+        trimmed.toLowerCase() === 'string' ||
+        trimmed.toLowerCase() === 'null' ||
+        trimmed.toLowerCase() === 'undefined' ||
+        trimmed.toLowerCase() === 'none' ||
+        trimmed === '0' ||
+        trimmed === 'false') {
+      throw new Error(`Invalid eventId value: "${eventId}"`);
+    }
+
     const event = await this.prisma.wishboxEvent.findUnique({
-      where: { id: eventId },
+      where: { id: trimmed },
     });
 
     if (!event) {
-      throw new Error(`Event not found: ${eventId}`);
+      throw new Error(`Event not found: ${trimmed}`);
     }
 
     // Event'in aktif olup olmadığını kontrol et
@@ -277,6 +299,15 @@ export class PostService {
         });
       }
       
+      // Catalog posts cache'ini invalidate et
+      invalidateCatalogPostsCache({
+        subCategoryId: contextIds.subCategoryId,
+        productGroupId: contextIds.productGroupId,
+        productId: contextIds.productId,
+      }).catch((err) => {
+        logger.warn({ message: 'Failed to invalidate catalog posts cache', error: err });
+      });
+      
       // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
       this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
         logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
@@ -285,7 +316,14 @@ export class PostService {
       return { 
         id: post.id,
         message: 'Post başarıyla oluşturuldu',
-        success: true
+        success: true,
+        context: {
+          contextType: request.contextType,
+          contextId: request.contextId,
+          subCategoryId: contextIds.subCategoryId,
+          productGroupId: contextIds.productGroupId,
+          productId: contextIds.productId,
+        }
       };
     } catch (error) {
       logger.error(`Failed to create free post:`, error);
@@ -376,6 +414,15 @@ export class PostService {
         });
       }
       
+      // Catalog posts cache'ini invalidate et
+      invalidateCatalogPostsCache({
+        subCategoryId: contextIds.subCategoryId,
+        productGroupId: contextIds.productGroupId,
+        productId: contextIds.productId,
+      }).catch((err) => {
+        logger.warn({ message: 'Failed to invalidate catalog posts cache', error: err });
+      });
+      
       // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
       this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
         logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
@@ -384,7 +431,14 @@ export class PostService {
       return { 
         id: post.id,
         message: 'Tips & tricks post başarıyla oluşturuldu',
-        success: true
+        success: true,
+        context: {
+          contextType: request.contextType,
+          contextId: request.contextId,
+          subCategoryId: contextIds.subCategoryId,
+          productGroupId: contextIds.productGroupId,
+          productId: contextIds.productId,
+        }
       };
     } catch (error) {
       logger.error(`Failed to create tips and tricks post:`, error);
@@ -503,6 +557,15 @@ export class PostService {
         });
       }
       
+      // Catalog posts cache'ini invalidate et
+      invalidateCatalogPostsCache({
+        subCategoryId: contextIds.subCategoryId,
+        productGroupId: contextIds.productGroupId,
+        productId: contextIds.productId,
+      }).catch((err) => {
+        logger.warn({ message: 'Failed to invalidate catalog posts cache', error: err });
+      });
+      
       // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
       this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
         logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
@@ -511,7 +574,14 @@ export class PostService {
       return { 
         id: post.id,
         message: 'Question post başarıyla oluşturuldu',
-        success: true
+        success: true,
+        context: {
+          contextType: request.contextType,
+          contextId: request.contextId,
+          subCategoryId: contextIds.subCategoryId,
+          productGroupId: contextIds.productGroupId,
+          productId: contextIds.productId,
+        }
       };
     } catch (error) {
       logger.error(`Failed to create question post:`, error);
@@ -663,6 +733,15 @@ export class PostService {
         });
       }
       
+      // Catalog posts cache'ini invalidate et
+      invalidateCatalogPostsCache({
+        subCategoryId: contextIds.subCategoryId,
+        productGroupId: contextIds.productGroupId,
+        productId: contextIds.productId,
+      }).catch((err) => {
+        logger.warn({ message: 'Failed to invalidate catalog posts cache', error: err });
+      });
+      
       // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
       this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
         logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
@@ -671,7 +750,14 @@ export class PostService {
       return { 
         id: post.id,
         message: 'Benchmark post başarıyla oluşturuldu',
-        success: true
+        success: true,
+        context: {
+          contextType: request.contextType,
+          contextId: request.contextId,
+          subCategoryId: contextIds.subCategoryId,
+          productGroupId: contextIds.productGroupId,
+          productId: contextIds.productId,
+        }
       };
     } catch (error) {
       logger.error(`Failed to create benchmark post:`, error);
@@ -767,6 +853,15 @@ export class PostService {
         });
       }
       
+      // Catalog posts cache'ini invalidate et
+      invalidateCatalogPostsCache({
+        subCategoryId: contextIds.subCategoryId,
+        productGroupId: contextIds.productGroupId,
+        productId: contextIds.productId,
+      }).catch((err) => {
+        logger.warn({ message: 'Failed to invalidate catalog posts cache', error: err });
+      });
+      
       // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
       this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
         logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
@@ -775,7 +870,14 @@ export class PostService {
       return { 
         id: post.id,
         message: 'Experience post başarıyla oluşturuldu',
-        success: true
+        success: true,
+        context: {
+          contextType: request.contextType,
+          contextId: request.contextId,
+          subCategoryId: contextIds.subCategoryId,
+          productGroupId: contextIds.productGroupId,
+          productId: contextIds.productId,
+        }
       };
     } catch (error) {
       logger.error(`Failed to create experience post:`, error);
@@ -914,6 +1016,15 @@ export class PostService {
         });
       }
       
+      // Catalog posts cache'ini invalidate et
+      invalidateCatalogPostsCache({
+        subCategoryId: contextIds.subCategoryId,
+        productGroupId: contextIds.productGroupId,
+        productId: contextIds.productId,
+      }).catch((err) => {
+        logger.warn({ message: 'Failed to invalidate catalog posts cache', error: err });
+      });
+      
       // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
       this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
         logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
@@ -922,7 +1033,14 @@ export class PostService {
       return { 
         id: post.id,
         message: 'Update post başarıyla oluşturuldu',
-        success: true
+        success: true,
+        context: {
+          contextType: request.contextType,
+          contextId: request.contextId,
+          subCategoryId: contextIds.subCategoryId,
+          productGroupId: contextIds.productGroupId,
+          productId: contextIds.productId,
+        }
       };
     } catch (error) {
       logger.error(`Failed to create update post:`, error);

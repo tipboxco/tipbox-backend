@@ -304,11 +304,18 @@ export class CatalogService {
 
   /**
    * Product'a ait post'ları getir
+   * Filtreler: all, free, tips_and_tricks, questions, updates, benchmarks, reviews
+   * Sıralama: newest, oldest, most_popular
    */
   async getProductPosts(
     productId: string,
     userId?: string,
-    options?: { cursor?: string; limit?: number; type?: string }
+    options?: { 
+      cursor?: string; 
+      limit?: number; 
+      filter?: string; // all, free, tips_and_tricks, questions, updates, benchmarks, reviews
+      sort?: string; // newest, oldest, most_popular
+    }
   ): Promise<{
     items: Array<{ type: string; data: any }>;
     pagination: { cursor?: string; hasMore: boolean; limit: number };
@@ -325,18 +332,25 @@ export class CatalogService {
 
       const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
       const cursor = options?.cursor;
-      const postType = options?.type; // experience, comments, benchmark
+      const filter = options?.filter || 'all'; // all, free, tips_and_tricks, questions, updates, benchmarks, reviews
+      const sort = options?.sort || 'newest'; // newest, oldest, most_popular
 
-      // Post type'a göre filtreleme
+      // Filtreleme: Product için
       let typeFilter: ContentPostType[] | undefined;
-      if (postType === 'experience') {
-        typeFilter = [ContentPostType.EXPERIENCE, ContentPostType.UPDATE];
-      } else if (postType === 'comments') {
-        typeFilter = [ContentPostType.FREE, ContentPostType.QUESTION];
-      } else if (postType === 'benchmark') {
+      if (filter === 'free') {
+        typeFilter = [ContentPostType.FREE];
+      } else if (filter === 'tips_and_tricks') {
+        typeFilter = [ContentPostType.TIPS];
+      } else if (filter === 'questions') {
+        typeFilter = [ContentPostType.QUESTION];
+      } else if (filter === 'updates') {
+        typeFilter = [ContentPostType.UPDATE];
+      } else if (filter === 'benchmarks') {
         typeFilter = [ContentPostType.COMPARE];
+      } else if (filter === 'reviews') {
+        typeFilter = [ContentPostType.EXPERIENCE];
       }
-      // postType yoksa tüm post tipleri
+      // filter === 'all' ise tüm post tipleri (typeFilter undefined)
 
       const whereClause: any = {
         productId: productId,
@@ -402,7 +416,15 @@ export class CatalogService {
             orderBy: { orderIndex: 'asc' },
           },
         },
-        orderBy: { createdAt: 'desc' },
+        // Sıralama
+        ...(sort === 'most_popular' 
+          ? {} // Most popular için önce tüm postları alıp sonra sıralayacağız
+          : {
+              orderBy: sort === 'oldest' 
+                ? { createdAt: 'asc' } 
+                : { createdAt: 'desc' }
+            }
+        ),
         take: limit + 1,
         ...(cursor && {
           cursor: { id: cursor },
@@ -410,8 +432,18 @@ export class CatalogService {
         }),
       });
 
-      const hasMore = posts.length > limit;
-      const resultPosts = hasMore ? posts.slice(0, limit) : posts;
+      // Most popular sıralaması için beğeni + yorum + kaydetme sayısına göre sırala
+      let sortedPosts = posts;
+      if (sort === 'most_popular') {
+        sortedPosts = posts.sort((a, b) => {
+          const aScore = (a.likes?.length || 0) + (a.comments?.length || 0) + (a.favorites?.length || 0);
+          const bScore = (b.likes?.length || 0) + (b.comments?.length || 0) + (b.favorites?.length || 0);
+          return bScore - aScore; // Yüksekten düşüğe
+        });
+      }
+
+      const hasMore = sortedPosts.length > limit;
+      const resultPosts = hasMore ? sortedPosts.slice(0, limit) : sortedPosts;
       const nextCursor = hasMore && resultPosts.length > 0 ? resultPosts[resultPosts.length - 1].id : undefined;
 
       // Map ContentPostType to FeedItemType
@@ -561,11 +593,18 @@ export class CatalogService {
   /**
    * Sub category'ye ait post'ları getir (hiyerarşik feed)
    * Sub category'ye ait + alt product group'ların + alt product'ların gönderilerini getirir
+   * Filtreler: all, free, tips_and_tricks, questions
+   * Sıralama: newest, oldest, most_popular
    */
   async getSubCategoryPosts(
     subCategoryId: string,
     userId?: string,
-    options?: { cursor?: string; limit?: number; type?: string }
+    options?: { 
+      cursor?: string; 
+      limit?: number; 
+      filter?: string; // all, free, tips_and_tricks, questions
+      sort?: string; // newest, oldest, most_popular
+    }
   ): Promise<{
     items: Array<{ type: string; data: any }>;
     pagination: { cursor?: string; hasMore: boolean; limit: number };
@@ -582,7 +621,8 @@ export class CatalogService {
 
       const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
       const cursor = options?.cursor;
-      const postType = options?.type; // tips, experience, vb.
+      const filter = options?.filter || 'all'; // all, free, tips_and_tricks, questions
+      const sort = options?.sort || 'newest'; // newest, oldest, most_popular
 
       // Alt product group'ları getir
       const productGroups = await prisma.productGroup.findMany({
@@ -598,18 +638,16 @@ export class CatalogService {
       });
       const productIds = products.map((p) => p.id);
 
-      // Post type'a göre filtreleme
+      // Filtreleme: Sub category için
       let typeFilter: ContentPostType[] | undefined;
-      if (postType === 'tips') {
+      if (filter === 'free') {
+        typeFilter = [ContentPostType.FREE];
+      } else if (filter === 'tips_and_tricks') {
         typeFilter = [ContentPostType.TIPS];
-      } else if (postType === 'experience') {
-        typeFilter = [ContentPostType.EXPERIENCE, ContentPostType.UPDATE];
-      } else if (postType === 'comments') {
-        typeFilter = [ContentPostType.FREE, ContentPostType.QUESTION];
-      } else if (postType === 'benchmark') {
-        typeFilter = [ContentPostType.COMPARE];
+      } else if (filter === 'questions') {
+        typeFilter = [ContentPostType.QUESTION];
       } else {
-        // postType yoksa, context seviyesine göre otomatik filtreleme
+        // filter === 'all' ise context seviyesine göre otomatik filtreleme
         typeFilter = this.getAllowedPostTypesForContext(ContextType.SUB_CATEGORY);
       }
 
@@ -689,7 +727,15 @@ export class CatalogService {
             orderBy: { orderIndex: 'asc' },
           },
         },
-        orderBy: { createdAt: 'desc' },
+        // Sıralama
+        ...(sort === 'most_popular' 
+          ? {} // Most popular için önce tüm postları alıp sonra sıralayacağız
+          : {
+              orderBy: sort === 'oldest' 
+                ? { createdAt: 'asc' } 
+                : { createdAt: 'desc' }
+            }
+        ),
         take: limit + 1,
         ...(cursor && {
           cursor: { id: cursor },
@@ -697,8 +743,18 @@ export class CatalogService {
         }),
       });
 
-      const hasMore = posts.length > limit;
-      const resultPosts = hasMore ? posts.slice(0, limit) : posts;
+      // Most popular sıralaması için beğeni + yorum + kaydetme sayısına göre sırala
+      let sortedPosts = posts;
+      if (sort === 'most_popular') {
+        sortedPosts = posts.sort((a, b) => {
+          const aScore = (a.likes?.length || 0) + (a.comments?.length || 0) + (a.favorites?.length || 0);
+          const bScore = (b.likes?.length || 0) + (b.comments?.length || 0) + (b.favorites?.length || 0);
+          return bScore - aScore; // Yüksekten düşüğe
+        });
+      }
+
+      const hasMore = sortedPosts.length > limit;
+      const resultPosts = hasMore ? sortedPosts.slice(0, limit) : sortedPosts;
       const nextCursor = hasMore && resultPosts.length > 0 ? resultPosts[resultPosts.length - 1].id : undefined;
 
       // Map ContentPostType to FeedItemType
@@ -767,11 +823,18 @@ export class CatalogService {
   /**
    * Product group'a ait post'ları getir (hiyerarşik feed)
    * Product group'a ait + alt product'ların gönderilerini getirir
+   * Filtreler: all, free, tips_and_tricks, questions
+   * Sıralama: newest, oldest, most_popular
    */
   async getProductGroupPosts(
     productGroupId: string,
     userId?: string,
-    options?: { cursor?: string; limit?: number; type?: string }
+    options?: { 
+      cursor?: string; 
+      limit?: number; 
+      filter?: string; // all, free, tips_and_tricks, questions
+      sort?: string; // newest, oldest, most_popular
+    }
   ): Promise<{
     items: Array<{ type: string; data: any }>;
     pagination: { cursor?: string; hasMore: boolean; limit: number };
@@ -788,7 +851,8 @@ export class CatalogService {
 
       const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
       const cursor = options?.cursor;
-      const postType = options?.type; // tips, experience, vb.
+      const filter = options?.filter || 'all'; // all, free, tips_and_tricks, questions
+      const sort = options?.sort || 'newest'; // newest, oldest, most_popular
 
       // Alt product'ları getir
       const products = await prisma.product.findMany({
@@ -797,18 +861,16 @@ export class CatalogService {
       });
       const productIds = products.map((p) => p.id);
 
-      // Post type'a göre filtreleme
+      // Filtreleme: Product group için
       let typeFilter: ContentPostType[] | undefined;
-      if (postType === 'tips') {
+      if (filter === 'free') {
+        typeFilter = [ContentPostType.FREE];
+      } else if (filter === 'tips_and_tricks') {
         typeFilter = [ContentPostType.TIPS];
-      } else if (postType === 'experience') {
-        typeFilter = [ContentPostType.EXPERIENCE, ContentPostType.UPDATE];
-      } else if (postType === 'comments') {
-        typeFilter = [ContentPostType.FREE, ContentPostType.QUESTION];
-      } else if (postType === 'benchmark') {
-        typeFilter = [ContentPostType.COMPARE];
+      } else if (filter === 'questions') {
+        typeFilter = [ContentPostType.QUESTION];
       } else {
-        // postType yoksa, context seviyesine göre otomatik filtreleme
+        // filter === 'all' ise context seviyesine göre otomatik filtreleme
         typeFilter = this.getAllowedPostTypesForContext(ContextType.PRODUCT_GROUP);
       }
 
@@ -887,7 +949,15 @@ export class CatalogService {
             orderBy: { orderIndex: 'asc' },
           },
         },
-        orderBy: { createdAt: 'desc' },
+        // Sıralama
+        ...(sort === 'most_popular' 
+          ? {} // Most popular için önce tüm postları alıp sonra sıralayacağız
+          : {
+              orderBy: sort === 'oldest' 
+                ? { createdAt: 'asc' } 
+                : { createdAt: 'desc' }
+            }
+        ),
         take: limit + 1,
         ...(cursor && {
           cursor: { id: cursor },
@@ -895,8 +965,18 @@ export class CatalogService {
         }),
       });
 
-      const hasMore = posts.length > limit;
-      const resultPosts = hasMore ? posts.slice(0, limit) : posts;
+      // Most popular sıralaması için beğeni + yorum + kaydetme sayısına göre sırala
+      let sortedPosts = posts;
+      if (sort === 'most_popular') {
+        sortedPosts = posts.sort((a, b) => {
+          const aScore = (a.likes?.length || 0) + (a.comments?.length || 0) + (a.favorites?.length || 0);
+          const bScore = (b.likes?.length || 0) + (b.comments?.length || 0) + (b.favorites?.length || 0);
+          return bScore - aScore; // Yüksekten düşüğe
+        });
+      }
+
+      const hasMore = sortedPosts.length > limit;
+      const resultPosts = hasMore ? sortedPosts.slice(0, limit) : sortedPosts;
       const nextCursor = hasMore && resultPosts.length > 0 ? resultPosts[resultPosts.length - 1].id : undefined;
 
       // Map ContentPostType to FeedItemType

@@ -6,11 +6,372 @@ import { RegisterPushTokenDto, UpdateNotificationSettingsDto, GetNotificationsQu
 import { authMiddleware } from '../auth/auth.middleware';
 import logger from '../../infrastructure/logger/logger';
 import { parseQueryInt, parseQueryBoolean } from '../../infrastructure/utils/query-parser';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
+import { resolveMediaUrl } from '../../infrastructure/config/media.config';
+import { NotificationType } from '../../domain/notification/notification-type.enum';
 
 const router = Router();
 const notificationService = new NotificationService();
 const pushTokenService = new PushTokenService();
 const settingsRepo = new UserSettingsPrismaRepository();
+const prisma = getPrisma();
+
+/**
+ * Notification'ları enrich eder - avatar URL'leri ve görseller ekler
+ * Tüm 22 notification type'ı destekler
+ */
+async function enrichNotifications(notifications: any[]): Promise<any[]> {
+  try {
+  // Tüm user ID'leri topla
+  const userIds = new Set<string>();
+  const eventIds = new Set<string>();
+  const badgeIds = new Set<string>();
+  const postIds = new Set<string>();
+  const productIds = new Set<string>();
+  const collectionIds = new Set<string>();
+
+  notifications.forEach((notification) => {
+    const data = notification.data || {};
+    
+    // User etkileşimleri için user ID'leri topla
+    if (data.trusterId) userIds.add(data.trusterId);
+    if (data.trustedId) userIds.add(data.trustedId);
+    if (data.likerId) userIds.add(data.likerId);
+    if (data.commenterId) userIds.add(data.commenterId);
+    if (data.replierId) userIds.add(data.replierId);
+    if (data.sharerId) userIds.add(data.sharerId);
+    if (data.senderId) userIds.add(data.senderId);
+    if (data.requesterId) userIds.add(data.requesterId);
+    if (data.accepterId) userIds.add(data.accepterId);
+    if (data.expertId) userIds.add(data.expertId);
+    if (data.userId) userIds.add(data.userId);
+    
+    // Event bildirimleri için event ID'leri topla
+    if (data.eventId) eventIds.add(data.eventId);
+    
+    // Badge bildirimleri için badge ID'leri topla
+    if (data.badgeId) badgeIds.add(data.badgeId);
+    
+    // Post bildirimleri için post ID'leri topla
+    if (data.postId) postIds.add(data.postId);
+    
+    // Product bildirimleri için product ID'leri topla
+    if (data.productId) productIds.add(data.productId);
+    
+    // Collection bildirimleri için collection ID'leri topla
+    if (data.collectionId) collectionIds.add(data.collectionId);
+  });
+
+  // Batch olarak user avatar'ları al
+  const userAvatars = new Map<string, string | null>();
+  if (userIds.size > 0) {
+    // Her kullanıcı için en son aktif avatar'ı al
+    const userIdArray = Array.from(userIds);
+    const avatars = await prisma.userAvatar.findMany({
+      where: {
+        userId: { in: userIdArray },
+        isActive: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Her kullanıcı için sadece ilk (en yeni) avatar'ı al
+    avatars.forEach((avatar) => {
+      if (!userAvatars.has(avatar.userId)) {
+        userAvatars.set(avatar.userId, resolveMediaUrl(avatar.imageUrl, true));
+      }
+    });
+
+    // Avatar'ı olmayan kullanıcılar için default avatar
+    userIdArray.forEach((userId) => {
+      if (!userAvatars.has(userId)) {
+        userAvatars.set(userId, resolveMediaUrl(null, true));
+      }
+    });
+    
+    // Debug: userAvatars map'ini logla
+    logger.debug(`Loaded ${userAvatars.size} user avatars for ${userIds.size} users`);
+  }
+
+  // Batch olarak event görselleri al
+  const eventImages = new Map<string, string | null>();
+  if (eventIds.size > 0) {
+    const events = await prisma.wishboxEvent.findMany({
+      where: { id: { in: Array.from(eventIds) } },
+      select: { id: true, imageUrl: true },
+    });
+
+    events.forEach((event) => {
+      eventImages.set(event.id, resolveMediaUrl(event.imageUrl));
+    });
+  }
+
+  // Batch olarak badge görselleri al
+  const badgeImages = new Map<string, string | null>();
+  if (badgeIds.size > 0) {
+    const badges = await prisma.badge.findMany({
+      where: { id: { in: Array.from(badgeIds) } },
+      select: { id: true, imageUrl: true },
+    });
+
+    badges.forEach((badge) => {
+      badgeImages.set(badge.id, resolveMediaUrl(badge.imageUrl));
+    });
+  }
+
+  // Batch olarak post görselleri al (post media'dan)
+  const postImages = new Map<string, string | null>();
+  if (postIds.size > 0) {
+    // Post'ların media'larını al
+    const postMediaList = await prisma.postMedia.findMany({
+      where: {
+        postId: { in: Array.from(postIds) },
+      },
+      orderBy: [{ orderIndex: 'asc' }, { createdAt: 'asc' }],
+      select: { postId: true, mediaUrl: true },
+    });
+
+    // Her post için ilk media'yı al
+    postMediaList.forEach((media) => {
+      if (!postImages.has(media.postId)) {
+        postImages.set(media.postId, resolveMediaUrl(media.mediaUrl));
+      }
+    });
+  }
+
+  // Batch olarak product görselleri al
+  const productImages = new Map<string, string | null>();
+  if (productIds.size > 0) {
+    const products = await prisma.product.findMany({
+      where: { id: { in: Array.from(productIds) } },
+      select: { id: true, imageUrl: true },
+    });
+
+    products.forEach((product) => {
+      productImages.set(product.id, resolveMediaUrl(product.imageUrl));
+    });
+  }
+
+  // Batch olarak collection görselleri al (ContentCollection'da imageUrl yok, random image kullan)
+  const collectionImages = new Map<string, string | null>();
+  // Collection'lar için görsel yok, random image kullanılacak
+
+  // Random görseli bir kez al (tüm notification'lar için cache)
+  let randomImageCache: string | null = null;
+  try {
+    // Badge'lerden random seç
+    const randomBadge = await prisma.badge.findFirst({
+      orderBy: { createdAt: 'desc' },
+      take: 1,
+      select: { imageUrl: true },
+    });
+    if (randomBadge?.imageUrl) {
+      randomImageCache = resolveMediaUrl(randomBadge.imageUrl);
+    } else {
+      // Product'lardan random seç
+      const randomProduct = await prisma.product.findFirst({
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: { imageUrl: true },
+      });
+      if (randomProduct?.imageUrl) {
+        randomImageCache = resolveMediaUrl(randomProduct.imageUrl);
+      } else {
+        // Event'lerden random seç
+        const randomEvent = await prisma.wishboxEvent.findFirst({
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { imageUrl: true },
+        });
+        if (randomEvent?.imageUrl) {
+          randomImageCache = resolveMediaUrl(randomEvent.imageUrl);
+        }
+      }
+    }
+  } catch (error) {
+    logger.error('Error getting random image:', error);
+  }
+
+
+  // Notification'ları enrich et
+  return notifications.map((notification) => {
+    // type'dan hemen sonra avatar ve imageUrl eklemek için sıralı object oluştur
+    const enriched: any = {
+      id: notification.id,
+      userId: notification.userId,
+      type: notification.type,
+      avatar: undefined as string | null | undefined,
+      imageUrl: undefined as string | null | undefined,
+      title: notification.title,
+      message: notification.message,
+      data: notification.data,
+      read: notification.read,
+      readAt: notification.readAt,
+      createdAt: notification.createdAt,
+      updatedAt: notification.updatedAt,
+    };
+    const data = notification.data || {};
+    const type = notification.type as NotificationType;
+
+    // Eğer data'da zaten avatar varsa (enricher'dan gelmişse), onu kullan
+    if (data.avatar) {
+      enriched.avatar = data.avatar;
+    }
+
+    // Avatar URL'leri ekle (tüm user etkileşimleri için)
+    // Post ile ilgili (4)
+    if (
+      type === NotificationType.POST_LIKED ||
+      type === NotificationType.POST_COMMENTED ||
+      type === NotificationType.POST_SHARED ||
+      type === NotificationType.POST_FAVORITED
+    ) {
+      const userId = data.likerId || data.commenterId || data.sharerId || data.userId;
+      if (userId && !enriched.avatar) {
+        // Data'da avatar yoksa, userAvatars'tan al
+        enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
+      }
+      // Post görseli ekle
+      if (data.postId && postImages.has(data.postId)) {
+        enriched.imageUrl = postImages.get(data.postId);
+      } else if (data.productId && productImages.has(data.productId)) {
+        enriched.imageUrl = productImages.get(data.productId);
+      } else if (randomImageCache) {
+        enriched.imageUrl = randomImageCache;
+      }
+    }
+
+    // Yorum ile ilgili (2)
+    if (type === NotificationType.COMMENT_LIKED || type === NotificationType.COMMENT_REPLIED) {
+      const userId = data.likerId || data.replierId || data.commenterId;
+      if (userId && !enriched.avatar) {
+        enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
+      }
+      // Post görseli ekle
+      if (data.postId && postImages.has(data.postId)) {
+        enriched.imageUrl = postImages.get(data.postId);
+      } else if (randomImageCache) {
+        enriched.imageUrl = randomImageCache;
+      }
+    }
+
+    // Trust/Follow ile ilgili (2)
+    if (type === NotificationType.NEW_TRUSTER || type === NotificationType.NEW_TRUSTED_BY) {
+      const userId = data.trusterId || data.trustedId;
+      if (userId && !enriched.avatar) {
+        enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
+      }
+      if (randomImageCache) {
+        enriched.imageUrl = randomImageCache;
+      }
+    }
+
+    // Mesajlaşma ile ilgili (3)
+    if (
+      type === NotificationType.NEW_MESSAGE ||
+      type === NotificationType.DM_REQUEST_RECEIVED ||
+      type === NotificationType.DM_REQUEST_ACCEPTED ||
+      type === NotificationType.SUPPORT_REQUEST_ACCEPTED
+    ) {
+      const userId = data.senderId || data.requesterId || data.accepterId;
+      if (userId && !enriched.avatar) {
+        enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
+      }
+      if (randomImageCache) {
+        enriched.imageUrl = randomImageCache;
+      }
+    }
+
+    // Gamification ile ilgili (3)
+    if (
+      type === NotificationType.NEW_BADGE ||
+      type === NotificationType.ACHIEVEMENT_UNLOCKED ||
+      type === NotificationType.REWARD_EARNED
+    ) {
+      if (data.badgeId && badgeImages.has(data.badgeId)) {
+        enriched.imageUrl = badgeImages.get(data.badgeId);
+      } else if (randomImageCache) {
+        enriched.imageUrl = randomImageCache;
+      }
+    }
+
+    // Expert ile ilgili (2)
+    if (
+      type === NotificationType.EXPERT_REQUEST_AVAILABLE ||
+      type === NotificationType.EXPERT_REQUEST_ANSWERED
+    ) {
+      const userId = data.expertId || data.requesterId;
+      if (userId && !enriched.avatar) {
+        enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
+      }
+      if (data.productId && productImages.has(data.productId)) {
+        enriched.imageUrl = productImages.get(data.productId);
+      } else if (randomImageCache) {
+        enriched.imageUrl = randomImageCache;
+      }
+    }
+
+    // Sistem/Tips ile ilgili (3)
+    if (
+      type === NotificationType.SYSTEM_ANNOUNCEMENT ||
+      type === NotificationType.TIPS_RECEIVED ||
+      type === NotificationType.TIPS_SENT
+    ) {
+      const userId = data.senderId || data.userId;
+      if (userId && !enriched.avatar) {
+        enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
+      }
+      if (randomImageCache) {
+        enriched.imageUrl = randomImageCache;
+      }
+    }
+
+    // Event ile ilgili (3)
+    if (
+      type === NotificationType.EVENT_STARTED ||
+      type === NotificationType.EVENT_ENDING_SOON ||
+      type === NotificationType.EVENT_REWARD_AVAILABLE
+    ) {
+      if (data.eventId && eventImages.has(data.eventId)) {
+        enriched.imageUrl = eventImages.get(data.eventId);
+      } else if (randomImageCache) {
+        enriched.imageUrl = randomImageCache;
+      }
+    }
+
+    // Collection ile ilgili (2)
+    if (
+      type === NotificationType.COLLECTION_POST_ADDED ||
+      type === NotificationType.COLLECTION_SHARED
+    ) {
+      // Collection için post görseli veya random image kullan
+      if (data.postId && postImages.has(data.postId)) {
+        enriched.imageUrl = postImages.get(data.postId);
+      } else if (randomImageCache) {
+        enriched.imageUrl = randomImageCache;
+      }
+    }
+
+    // undefined değerleri null yap (response'da görünsün ama null olsun)
+    // Avatar için: null yerine random avatar veya default avatar kullan
+    if (enriched.avatar === undefined) {
+      enriched.avatar = randomImageCache || null;
+    }
+    if (enriched.imageUrl === undefined) enriched.imageUrl = null;
+    
+    // Mobil uyumluluk için: avatar'ı avatarUrl olarak da ekle (backward compatibility)
+    if (enriched.avatar !== undefined) {
+      enriched.avatarUrl = enriched.avatar;
+    }
+    
+    return enriched;
+  });
+  } catch (error) {
+    logger.error('Error in enrichNotifications:', error);
+    // Hata durumunda original notification'ları döndür
+    return notifications;
+  }
+}
 
 /**
  * @openapi
@@ -98,43 +459,89 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
-    const { limit, offset, unreadOnly } = req.query as unknown as GetNotificationsQuery;
+    const { limit, offset, unreadOnly, type } = req.query as unknown as GetNotificationsQuery;
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
 
     // Import enums and repository
     const { NotificationType } = await import('../../domain/notification/notification-type.enum');
     const { NotificationPrismaRepository } = await import('../../infrastructure/repositories/notification-prisma.repository');
 
-    // Sadece izin verilen bildirim tipleri: replies, trust, tips
-    const allowedTypes: NotificationType[] = [
-      NotificationType.COMMENT_REPLIED, // all replies
-      NotificationType.NEW_TRUSTER, // Trust-Truster
-      NotificationType.NEW_TRUSTED_BY, // Trust-Truster
-      NotificationType.TIPS_RECEIVED, // TIPS
-      NotificationType.TIPS_SENT, // TIPS
-    ];
-
     const notificationRepo = new NotificationPrismaRepository();
     
+    // Mobil uygulama kategorileri: all, tips, truster, replies
+    // Kategori isimlerini notification type'larına çevir
+    let types: NotificationType[] | undefined = undefined;
+    
+    if (type) {
+      const category = (type as string).toLowerCase();
+      
+      switch (category) {
+        case 'all':
+          // Tüm bildirimler
+          types = undefined;
+          break;
+        case 'tips':
+          // Tips bildirimleri
+          types = [NotificationType.TIPS_RECEIVED, NotificationType.TIPS_SENT];
+          break;
+        case 'truster':
+        case 'trust':
+          // Trust/Follow bildirimleri
+          types = [NotificationType.NEW_TRUSTER, NotificationType.NEW_TRUSTED_BY];
+          break;
+        case 'replies':
+        case 'reply':
+          // Yorum ve cevap bildirimleri
+          types = [
+            NotificationType.POST_COMMENTED,
+            NotificationType.COMMENT_REPLIED,
+            NotificationType.COMMENT_LIKED
+          ];
+          break;
+        default:
+          // Direkt notification type ise (örn: POST_LIKED)
+          // NotificationType enum'ında var mı kontrol et
+          if (Object.values(NotificationType).includes(type as NotificationType)) {
+            types = [type as NotificationType];
+          } else {
+            // Geçersiz kategori/type, tüm bildirimleri göster
+            types = undefined;
+          }
+      }
+    }
+
     // Repository'de types array desteği eklendi, direkt kullanabiliriz
     const [notifications, total] = await Promise.all([
       notificationRepo.findByUserId(userId, {
         limit: parseQueryInt(limit, 20),
         offset: parseQueryInt(offset, 0),
         unreadOnly: parseQueryBoolean(unreadOnly),
-        types: allowedTypes, // types array kullan
+        types: types, // undefined = tüm tipler
         search,
       }),
       notificationRepo.getTotalCount(userId, {
         unreadOnly: parseQueryBoolean(unreadOnly),
-        types: allowedTypes, // types array kullan
+        types: types, // undefined = tüm tipler
         search,
       }),
     ]);
 
+    // Notification'ları JSON'a çevir
+    const notificationJSONs = notifications.map((n) => n.toJSON());
+    
+    // Avatar URL'leri ve görselleri ekle
+    let enrichedNotifications;
+    try {
+      enrichedNotifications = await enrichNotifications(notificationJSONs);
+    } catch (enrichError) {
+      logger.error('Error enriching notifications:', enrichError);
+      // Enrich hatası olsa bile notification'ları döndür
+      enrichedNotifications = notificationJSONs;
+    }
+
     return res.json({
       success: true,
-      data: notifications.map((n) => n.toJSON()),
+      data: enrichedNotifications,
       pagination: {
         total,
         limit: parseQueryInt(limit, 20),
@@ -253,7 +660,27 @@ router.get('/unread-count', authMiddleware, async (req: Request, res: Response) 
 router.put('/:id/read', authMiddleware, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    
     await notificationService.markAsRead(id);
+
+    // Mobil için: Socket ile unread count güncellemesi gönder
+    if (userId) {
+      try {
+        const { default: SocketManager } = await import('../../infrastructure/realtime/socket-manager');
+        const socketManager = SocketManager.getInstance();
+        const socketHandler = socketManager.getSocketHandler();
+        
+        const unreadCount = await notificationService.getUnreadCount(userId);
+        socketHandler.sendMessageToUser(userId, 'notification_count_updated', {
+          unreadCount,
+        });
+      } catch (socketError) {
+        // Socket hatası durumunda devam et, sadece log'la
+        logger.debug('Failed to send unread count update via socket:', socketError);
+      }
+    }
 
     return res.json({
       success: true,
@@ -308,6 +735,21 @@ router.put('/mark-all-read', authMiddleware, async (req: Request, res: Response)
     }
 
     const count = await notificationService.markAllAsRead(userId);
+
+    // Mobil için: Socket ile unread count güncellemesi gönder (0 olmalı)
+    try {
+      const { default: SocketManager } = await import('../../infrastructure/realtime/socket-manager');
+      const socketManager = SocketManager.getInstance();
+      const socketHandler = socketManager.getSocketHandler();
+      
+      const unreadCount = await notificationService.getUnreadCount(userId);
+      socketHandler.sendMessageToUser(userId, 'notification_count_updated', {
+        unreadCount,
+      });
+    } catch (socketError) {
+      // Socket hatası durumunda devam et, sadece log'la
+      logger.debug('Failed to send unread count update via socket:', socketError);
+    }
 
     return res.json({
       success: true,

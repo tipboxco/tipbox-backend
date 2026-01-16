@@ -282,7 +282,8 @@ router.get(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     const { subCategoryId } = req.params;
-    const type = req.query.type as string | undefined;
+    const filter = req.query.filter as string | undefined; // all, free, tips_and_tricks, questions
+    const sort = req.query.sort as string | undefined; // newest, oldest, most_popular
     const cursor = req.query.cursor as string | undefined;
     const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
 
@@ -291,7 +292,8 @@ router.get(
     }
 
     const posts = await catalogService.getSubCategoryPosts(subCategoryId, userId, {
-      type,
+      filter,
+      sort,
       cursor,
       ...(typeof limitParam === 'number' ? { limit: limitParam } : {}),
     });
@@ -377,7 +379,8 @@ router.get(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     const { productGroupId } = req.params;
-    const type = req.query.type as string | undefined;
+    const filter = req.query.filter as string | undefined; // all, free, tips_and_tricks, questions
+    const sort = req.query.sort as string | undefined; // newest, oldest, most_popular
     const cursor = req.query.cursor as string | undefined;
     const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
 
@@ -386,7 +389,8 @@ router.get(
     }
 
     const posts = await catalogService.getProductGroupPosts(productGroupId, userId, {
-      type,
+      filter,
+      sort,
       cursor,
       ...(typeof limitParam === 'number' ? { limit: limitParam } : {}),
     });
@@ -546,7 +550,8 @@ router.get(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     const { productId } = req.params;
-    const type = req.query.type as string | undefined;
+    const filter = req.query.filter as string | undefined; // all, free, tips_and_tricks, questions, updates, benchmarks, reviews
+    const sort = req.query.sort as string | undefined; // newest, oldest, most_popular
     const cursor = req.query.cursor as string | undefined;
     const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
 
@@ -555,7 +560,8 @@ router.get(
     }
 
     const posts = await catalogService.getProductPosts(productId, userId, {
-      type,
+      filter,
+      sort,
       cursor,
       ...(typeof limitParam === 'number' ? { limit: limitParam } : {}),
     });

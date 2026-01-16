@@ -137,7 +137,7 @@ export class EventService {
             startDate: event.startDate.toISOString(),
             endDate: event.endDate.toISOString(),
             interaction,
-            eventType: this.mapEventType(event.eventType),
+            eventType: 'default', // eventType alanı migration ile kaldırıldı, varsayılan olarak 'default' kullanıyoruz
             participants,
           };
         })
@@ -216,7 +216,7 @@ export class EventService {
             startDate: event.startDate.toISOString(),
             endDate: event.endDate.toISOString(),
             interaction,
-            eventType: this.mapEventType(event.eventType),
+            eventType: 'default', // eventType alanı migration ile kaldırıldı, varsayılan olarak 'default' kullanıyoruz
             participants,
           };
         })
@@ -315,7 +315,7 @@ export class EventService {
             startDate: event.startDate.toISOString(),
             endDate: event.endDate.toISOString(),
             interaction,
-            eventType: this.mapEventType(event.eventType),
+            eventType: 'default', // eventType alanı migration ile kaldırıldı, varsayılan olarak 'default' kullanıyoruz
             participants,
             userPostCount, // Kullanıcının post sayısı
           };
@@ -407,7 +407,7 @@ export class EventService {
         startDate: event.startDate.toISOString(),
         endDate: event.endDate.toISOString(),
         interaction,
-        eventType: this.mapEventType(event.eventType),
+        eventType: 'default', // eventType alanı migration ile kaldırıldı, varsayılan olarak 'default' kullanıyoruz
         isJoined,
         status,
         rewards: rewardBadges,
@@ -873,13 +873,11 @@ export class EventService {
 
   /**
    * Helper: Map WishboxEventType to EventType
+   * NOTE: eventType alanı migration ile kaldırıldı, artık kullanılmıyor
+   * Tüm event'ler varsayılan olarak 'default' döndürülüyor
    */
-  private mapEventType(eventType: string): EventType {
-    // Map WishboxEventType to 'default' or 'product'
-    // For now, all are 'default' unless we have product-specific events
-    if (eventType === 'PROMOTION') {
-      return 'product';
-    }
+  private mapEventType(eventType?: string): EventType {
+    // eventType alanı migration ile kaldırıldı, varsayılan olarak 'default' döndürüyoruz
     return 'default';
   }
 
@@ -1185,13 +1183,13 @@ export class EventService {
       // Event detail response oluştur
       const eventDetail: EventDetail = {
         eventId: updatedEvent.id,
-        banner: updatedEvent.banner ? resolveMediaUrl(updatedEvent.banner) : null,
+        banner: updatedEvent.imageUrl ? resolveMediaUrl(updatedEvent.imageUrl) : null,
         title: updatedEvent.title,
         description: updatedEvent.description,
         startDate: updatedEvent.startDate.toISOString(),
         endDate: updatedEvent.endDate.toISOString(),
         interaction: 0, // Bu bilgiyi ayrı bir query ile almak gerekebilir
-        eventType: updatedEvent.type as EventType,
+        eventType: 'default', // eventType alanı migration ile kaldırıldı, varsayılan olarak 'default' kullanıyoruz
         isJoined: false, // Bu bilgiyi ayrı bir query ile almak gerekebilir
         status: updatedEvent.status === 'PUBLISHED' ? 'active' : 'upcoming',
         rewards: [], // Bu bilgiyi ayrı bir query ile almak gerekebilir

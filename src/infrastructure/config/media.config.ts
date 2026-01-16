@@ -1,11 +1,9 @@
 import { s3Config } from './s3.config';
-
 /**
  * Default avatar path (MinIO'daki path)
  * Bu path tüm ortamlarda (dev, test, prod) aynı olacak
  */
 export const DEFAULT_AVATAR_PATH = 'defaultavatar/default-useravatar.png';
-
 /**
  * Ortak public media base URL
  * - Tüm görsel URL'leri için TEK kontrol noktası
@@ -18,7 +16,6 @@ export function getPublicMediaBaseUrl(): string {
   if (seedMediaBaseUrl) {
     return seedMediaBaseUrl.replace(/\/$/, '');
   }
-
   // Öncelik 2: BASE_URL'den port 9000 türet (eski yöntem - geriye dönük uyumluluk)
   const baseUrl = process.env.BASE_URL;
   
@@ -29,7 +26,6 @@ export function getPublicMediaBaseUrl(): string {
       'veya BASE_URL=http://192.168.1.164:3000 (development için port 9000\'e çevrilir)'
     );
   }
-
   try {
     // BASE_URL'i parse et
     let cleanBaseUrl = baseUrl.replace(/\/$/, '');
@@ -49,7 +45,6 @@ export function getPublicMediaBaseUrl(): string {
     );
   }
 }
-
 /**
  * Database'den gelen media path'ini tam URL'ye çevirir.
  * 
@@ -84,56 +79,20 @@ export function resolveMediaUrl(mediaPath: string | null | undefined, useDefault
     // Eğer avatar için çağrılıyorsa ve fallback istenmişse, default avatar döndür
     if (useDefaultAvatarFallback) {
       const baseUrl = getPublicMediaBaseUrl();
-      return `${baseUrl}/${DEFAULT_AVATAR_PATH}`;
+      return `${baseUrl}/tipbox-media/${DEFAULT_AVATAR_PATH}`;
     }
     return null;
   }
-
-  // Eğer zaten tam bir URL ise (http:// veya https:// ile başlıyorsa)
+  // Eğer zaten tam bir URL ise (http:// veya https:// ile başlıyorsa), direkt döndür
   if (mediaPath.match(/^https?:\/\//)) {
-    // YOUR_DEVICE_IP placeholder'ını içeriyorsa, SEED_MEDIA_BASE_URL ile değiştir
-    if (mediaPath.includes('YOUR_DEVICE_IP')) {
-      const baseUrl = getPublicMediaBaseUrl();
-      // URL'den path'i çıkar (örn: http://YOUR_DEVICE_IP:9000/product-catalog/main-categories/cameras.png -> product-catalog/main-categories/cameras.png)
-      try {
-        const url = new URL(mediaPath);
-        const path = url.pathname.replace(/^\/+/, '').replace(/^tipbox-media\//, '');
-        return `${baseUrl}/${path}`;
-      } catch {
-        // URL parse edilemezse, YOUR_DEVICE_IP'i baseUrl ile değiştir
-        const path = mediaPath.replace(/^https?:\/\/[^\/]+/, '').replace(/^\/+/, '').replace(/^tipbox-media\//, '');
-        return `${baseUrl}/${path}`;
-      }
-    }
-    // YOUR_DEVICE_IP yoksa, direkt döndür
     return mediaPath;
   }
-
   // Path'i temizle (başındaki / ve tipbox-media/ prefix'ini kaldır)
   const cleanPath = mediaPath.replace(/^\/+/, '').replace(/^tipbox-media\//, '');
   
   // getPublicMediaBaseUrl() ile media base URL'ini al
   const baseUrl = getPublicMediaBaseUrl();
   
-  // Tam URL oluştur (bucket ismi olmadan)
-  return `${baseUrl}/${cleanPath}`;
+  // MinIO için bucket adını ekle (baseUrl + /bucket-name + /path)
+  return `${baseUrl}/tipbox-media/${cleanPath}`;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
