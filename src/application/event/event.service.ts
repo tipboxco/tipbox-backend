@@ -820,12 +820,12 @@ export class EventService {
         },
         select: {
           badgeId: true,
-          createdAt: true,
+          claimedAt: true, // ✅ UserBadge'de createdAt yok, claimedAt kullan
         },
       });
 
       const userBadgeMap = new Map(
-        userBadges.map((ub) => [ub.badgeId, ub.createdAt])
+        userBadges.map((ub) => [ub.badgeId, ub.claimedAt])
       );
 
       // Badge'leri map et
@@ -1541,12 +1541,12 @@ export class EventService {
         select: {
           claimed: true,
           claimedAt: true,
-          createdAt: true,
+          // createdAt: true, // ❌ UserBadge'de createdAt field'ı yok!
         },
       });
 
       const isCompleted = userBadge !== null;
-      const completedAt = userBadge?.createdAt || null; // Badge verildiği zaman
+      const completedAt = userBadge?.claimedAt || null; // ✅ claimedAt kullan
 
       // Progress percentage hesapla (max 100)
       const progressPercentage = Math.min(100, Math.round((currentProgress / threshold) * 100));
