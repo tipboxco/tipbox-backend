@@ -163,3 +163,27 @@ export interface EventLeaderboard {
   items: LeaderboardEntry[];
 }
 
+// Event Badge Detail Response
+export interface EventBadgeDetailResponse {
+  // Badge Temel Bilgileri
+  id: string; // Badge ID
+  title: string; // Badge ismi
+  description: string; // Badge açıklaması
+  imageUrl: string | null; // Badge görseli URL'i
+  rarity: string; // Badge nadir değeri (COMMON, RARE, EPIC)
+
+  // İlerleme Bilgileri (User-specific)
+  userProgress: {
+    current: number; // Kullanıcının mevcut ilerleme değeri
+    target: number; // Hedef değer
+    isCompleted: boolean; // Badge tamamlandı mı?
+    completedAt: string | null; // Tamamlanma tarihi (ISO 8601) - Sadece completed ise
+    progressPercentage: number; // İlerleme yüzdesi (0-100)
+  };
+
+  // Badge Metadata
+  category: string; // Badge kategorisi
+  eventId: string; // İlişkili event ID
+  createdAt: string; // Badge oluşturulma tarihi (ISO 8601)
+}
+

@@ -947,6 +947,158 @@ router.get(
   })
 );
 
+/**
+ * @openapi
+ * /events/{eventId}/badges/{badgeId}:
+ *   get:
+ *     summary: Event badge detayı ve kullanıcı ilerlemesi
+ *     description: Belirli bir event badge'inin detaylarını ve kullanıcının o badge'deki ilerlemesini getirir.
+ *     tags: [Events]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: eventId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Event ID (ULID)
+ *       - in: path
+ *         name: badgeId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Badge ID (ULID)
+ *     responses:
+ *       200:
+ *         description: Badge detayı başarıyla getirildi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                   description: Badge ID
+ *                 title:
+ *                   type: string
+ *                   description: Badge ismi
+ *                 description:
+ *                   type: string
+ *                   description: Badge açıklaması
+ *                 imageUrl:
+ *                   type: string
+ *                   nullable: true
+ *                   description: Badge görseli URL
+ *                 rarity:
+ *                   type: string
+ *                   enum: [COMMON, RARE, EPIC]
+ *                   description: Badge nadir değeri
+ *                 userProgress:
+ *                   type: object
+ *                   properties:
+ *                     current:
+ *                       type: integer
+ *                       description: Kullanıcının mevcut ilerleme değeri
+ *                     target:
+ *                       type: integer
+ *                       description: Hedef değer
+ *                     isCompleted:
+ *                       type: boolean
+ *                       description: Badge tamamlandı mı
+ *                     completedAt:
+ *                       type: string
+ *                       format: date-time
+ *                       nullable: true
+ *                       description: Tamamlanma tarihi (ISO 8601)
+ *                     progressPercentage:
+ *                       type: number
+ *                       description: İlerleme yüzdesi (0-100)
+ *                 category:
+ *                   type: string
+ *                   description: Badge kategorisi
+ *                 eventId:
+ *                   type: string
+ *                   description: İlişkili event ID
+ *                 createdAt:
+ *                   type: string
+ *                   format: date-time
+ *                   description: Badge oluşturulma tarihi
+ *       400:
+ *         description: Geçersiz eventId veya badgeId formatı
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Event veya badge bulunamadı
+ *       500:
+ *         description: Internal server error
+ */
+router.get(
+  '/:eventId/badges/:badgeId',
+  authMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ 
+        error: 'Unauthorized',
+        message: 'Invalid or missing authentication token',
+        statusCode: 401
+      });
+    }
+
+    const { eventId, badgeId } = req.params;
+
+    // Validate IDs
+    if (!eventId || !badgeId) {
+      return res.status(400).json({ 
+        error: 'Bad Request',
+        message: 'Invalid eventId or badgeId format',
+        statusCode: 400
+      });
+    }
+
+    try {
+      const badgeDetail = await eventService.getEventBadgeDetail(eventId, badgeId, String(userId));
+      return res.json(badgeDetail);
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      
+      if (errorMessageIncludes(error, 'Badge not found')) {
+        return res.status(404).json({ 
+          error: 'Not Found',
+          message: 'Badge not found',
+          statusCode: 404
+        });
+      }
+      
+      if (errorMessageIncludes(error, 'Event not found')) {
+        return res.status(404).json({ 
+          error: 'Not Found',
+          message: 'Event not found',
+          statusCode: 404
+        });
+      }
+      
+      if (errorMessageIncludes(error, 'does not belong to this event')) {
+        return res.status(404).json({ 
+          error: 'Not Found',
+          message: 'Badge does not belong to this event',
+          statusCode: 404
+        });
+      }
+      
+      logger.error(`Error getting event badge detail ${badgeId} for event ${eventId}:`, error);
+      return res.status(500).json({ 
+        error: 'Internal Server Error',
+        message: 'An unexpected error occurred',
+        statusCode: 500
+      });
+    }
+  })
+);
+
 export default router;
 
 

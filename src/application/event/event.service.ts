@@ -18,6 +18,7 @@ import {
   EventLeaderboard,
   BadgeProgress,
   LeaderboardEntry,
+  EventBadgeDetailResponse,
 } from '../../interfaces/event/event.dto';
 import { FeedItem, FeedItemType } from '../../interfaces/feed/feed.dto';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
@@ -1318,6 +1319,123 @@ export class EventService {
       };
     } catch (error) {
       logger.error(`Failed to get event leaderboard for ${eventId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Event badge detail'i ve user progress'i getir
+   * Badge'in detay bilgilerini ve kullanıcının o badge'deki ilerlemesini döner
+   */
+  async getEventBadgeDetail(
+    eventId: string,
+    badgeId: string,
+    userId: string
+  ): Promise<EventBadgeDetailResponse> {
+    try {
+      // Badge'i getir
+      const badge = await this.prisma.badge.findUnique({
+        where: { id: badgeId },
+        include: {
+          category: true,
+          achievementGoals: {
+            select: {
+              requirement: true,
+            },
+          },
+        },
+      });
+
+      if (!badge) {
+        throw new Error('Badge not found');
+      }
+
+      // Event'in varlığını kontrol et
+      const event = await this.prisma.wishboxEvent.findUnique({
+        where: { id: eventId },
+        select: { id: true },
+      });
+
+      if (!event) {
+        throw new Error('Event not found');
+      }
+
+      // Badge'in bu event'e ait olup olmadığını kontrol et
+      // (Badge requirement'ında eventId kontrolü yapabilirsiniz)
+      // Şimdilik badge type'ı EVENT ise devam et
+      if (badge.type !== 'EVENT') {
+        throw new Error('Badge does not belong to this event');
+      }
+
+      // Badge requirement'ı parse et
+      const achievementGoal = badge.achievementGoals[0];
+      if (!achievementGoal) {
+        throw new Error('Badge requirement not found');
+      }
+
+      const requirement = JSON.parse(achievementGoal.requirement);
+      const requirementType = requirement.type; // 'POSTS_COUNT' or 'LIKES_RECEIVED'
+      const threshold = requirement.threshold;
+
+      // Kullanıcının event metriklerini al
+      const metrics = await this.eventMetricsService.getUserMetrics(userId, eventId);
+
+      // Current progress'i belirle
+      let currentProgress = 0;
+      switch (requirementType) {
+        case 'POSTS_COUNT':
+          currentProgress = metrics.postsCount;
+          break;
+        case 'LIKES_RECEIVED':
+          currentProgress = metrics.likesReceivedCount;
+          break;
+        default:
+          currentProgress = 0;
+      }
+
+      // Badge kazanılmış mı kontrol et
+      const userBadge = await this.prisma.userBadge.findUnique({
+        where: {
+          userId_badgeId: {
+            userId,
+            badgeId,
+          },
+        },
+        select: {
+          claimed: true,
+          claimedAt: true,
+          createdAt: true,
+        },
+      });
+
+      const isCompleted = userBadge !== null;
+      const completedAt = userBadge?.createdAt || null; // Badge verildiği zaman
+
+      // Progress percentage hesapla (max 100)
+      const progressPercentage = Math.min(100, Math.round((currentProgress / threshold) * 100));
+
+      return {
+        id: badge.id,
+        title: badge.name,
+        description: badge.description || '',
+        imageUrl: resolveMediaUrl(badge.imageUrl),
+        rarity: badge.rarity,
+        userProgress: {
+          current: currentProgress,
+          target: threshold,
+          isCompleted,
+          completedAt: completedAt ? completedAt.toISOString() : null,
+          progressPercentage,
+        },
+        category: badge.category?.name || 'Event',
+        eventId: eventId,
+        createdAt: badge.createdAt.toISOString(),
+      };
+    } catch (error) {
+      logger.error(
+        `Failed to get event badge detail for badge ${badgeId} in event ${eventId} for user ${userId}:`,
+        error
+      );
       throw error;
     }
   }
