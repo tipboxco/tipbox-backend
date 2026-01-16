@@ -20,14 +20,20 @@ import { FeedItem, FeedItemType } from '../../interfaces/feed/feed.dto';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import { CacheService } from '../../infrastructure/cache/cache.service';
 import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
+import { EventMetricsService } from './event-metrics.service';
+import { BadgeEligibilityService } from '../gamification/badge-eligibility.service';
 
 export class EventService {
   private prisma: ReturnType<typeof getPrisma>;
   private cacheService: CacheService;
+  private eventMetricsService: EventMetricsService;
+  private badgeEligibilityService: BadgeEligibilityService;
 
   constructor() {
     this.prisma = getPrisma();
     this.cacheService = CacheService.getInstance();
+    this.eventMetricsService = new EventMetricsService();
+    this.badgeEligibilityService = new BadgeEligibilityService();
   }
 
   /**
@@ -44,24 +50,60 @@ export class EventService {
         keysToDelete.push(`events:active:${userId}:first:20`);
       }
 
-      // Event posts cache (eventId'ye özel, tüm cursor'lar için pattern match)
-      // Redis pattern matching ile events:posts:eventId:* şeklinde silebiliriz
-      // Ancak şimdilik sadece ilk sayfa için silelim
-      keysToDelete.push(`events:posts:${eventId}:first:20`);
+      // ✅ Event posts cache - TÜM cursor'lar için pattern matching
+      // Pattern: events:posts:eventId:*
+      const eventPostsPattern = `events:posts:${eventId}:*`;
+      try {
+        let cursor = '0';
+        let totalScanned = 0;
+        const maxIterations = 100; // Safety limit
+        let iterations = 0;
+
+        do {
+          const scanResult = await this.cacheService.scan(cursor, eventPostsPattern, 100);
+          cursor = scanResult.cursor;
+          
+          if (scanResult.keys.length > 0) {
+            keysToDelete.push(...scanResult.keys);
+            totalScanned += scanResult.keys.length;
+          }
+          
+          iterations++;
+        } while (cursor !== '0' && iterations < maxIterations);
+
+        logger.info({
+          message: 'Event posts cache keys scanned',
+          eventId,
+          pattern: eventPostsPattern,
+          keysFound: totalScanned,
+          iterations
+        });
+      } catch (scanError) {
+        logger.warn({
+          message: 'Failed to scan event posts cache, falling back to first page',
+          eventId,
+          error: scanError
+        });
+        // Fallback: Sadece ilk sayfayı sil
+        keysToDelete.push(`events:posts:${eventId}:first:20`);
+      }
 
       // Guest için de active events cache'i temizle
       keysToDelete.push(`events:active:guest:first:20`);
 
       // Tüm cache key'lerini sil
+      let deletedCount = 0;
       for (const key of keysToDelete) {
-        await this.cacheService.del(key);
+        const deleted = await this.cacheService.delete(key);
+        if (deleted) deletedCount++;
       }
 
       logger.info({ 
         message: 'Event caches invalidated', 
         eventId, 
         userId,
-        keysInvalidated: keysToDelete.length 
+        keysToDelete: keysToDelete.length,
+        keysDeleted: deletedCount
       });
     } catch (error) {
       logger.warn({ 
@@ -137,7 +179,6 @@ export class EventService {
             startDate: event.startDate.toISOString(),
             endDate: event.endDate.toISOString(),
             interaction,
-            eventType: 'default', // eventType alanı migration ile kaldırıldı, varsayılan olarak 'default' kullanıyoruz
             participants,
           };
         })
@@ -216,7 +257,6 @@ export class EventService {
             startDate: event.startDate.toISOString(),
             endDate: event.endDate.toISOString(),
             interaction,
-            eventType: 'default', // eventType alanı migration ile kaldırıldı, varsayılan olarak 'default' kullanıyoruz
             participants,
           };
         })
@@ -315,7 +355,6 @@ export class EventService {
             startDate: event.startDate.toISOString(),
             endDate: event.endDate.toISOString(),
             interaction,
-            eventType: 'default', // eventType alanı migration ile kaldırıldı, varsayılan olarak 'default' kullanıyoruz
             participants,
             userPostCount, // Kullanıcının post sayısı
           };
@@ -407,7 +446,6 @@ export class EventService {
         startDate: event.startDate.toISOString(),
         endDate: event.endDate.toISOString(),
         interaction,
-        eventType: 'default', // eventType alanı migration ile kaldırıldı, varsayılan olarak 'default' kullanıyoruz
         isJoined,
         status,
         rewards: rewardBadges,
@@ -719,6 +757,130 @@ export class EventService {
   }
 
   /**
+   * Event'in tüm badge'lerini kullanıcı progress'i ile birlikte getir
+   * Yeni format: rarity, category, userProgress dahil
+   */
+  async getEventBadgesWithProgress(
+    eventId: string,
+    userId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<EventBadgesResponse> {
+    try {
+      const limit = Math.min(options?.limit || 20, 50); // Max 50 badges
+
+      // Event'in varlığını doğrula
+      const event = await this.prisma.wishboxEvent.findUnique({
+        where: { id: eventId },
+      });
+
+      if (!event) {
+        throw new Error('Event not found');
+      }
+
+      // ✅ GÜNCELLENDI: EventBadge tablosundan event'e özel badge'leri al
+      // @ts-ignore - Prisma type inference issue with EventBadge model
+      const eventBadges: any = await this.prisma.eventBadge.findMany({
+        where: {
+          eventId,
+          enabled: true,
+        },
+        include: {
+          badge: {
+            include: {
+              category: true,
+            },
+          },
+        },
+        orderBy: {
+          displayOrder: 'asc',
+        },
+        take: limit,
+      });
+
+      // Kullanıcının event metriklerini al
+      const userMetrics = await this.eventMetricsService.getUserMetrics(userId, eventId);
+
+      // Kullanıcının kazandığı badge'leri al
+      const userBadges = await this.prisma.userBadge.findMany({
+        where: {
+          userId,
+          badgeId: { in: eventBadges.map((eb: any) => eb.badgeId) },
+        },
+        select: {
+          badgeId: true,
+          claimedAt: true,
+        },
+      });
+
+      const userBadgeMap = new Map(
+        userBadges.map((ub) => [ub.badgeId, ub.claimedAt])
+      );
+
+      // Badge'leri map et
+      const badgeItems: EventBadgeItem[] = eventBadges.map((eventBadge: any) => {
+        const badge = eventBadge.badge;
+        
+        // ✅ GÜNCELLENDI: Threshold EventBadge'den geliyor
+        const targetProgress = eventBadge.threshold;
+        const requirementType = eventBadge.requirementType;
+
+        // Current progress'i belirle
+        let currentProgress = 0;
+        switch (requirementType) {
+          case 'POSTS_COUNT':
+            currentProgress = userMetrics.postsCount;
+            break;
+          case 'LIKES_RECEIVED':
+            currentProgress = userMetrics.likesReceivedCount;
+            break;
+          default:
+            currentProgress = 0;
+        }
+
+        // Badge kazanılmış mı?
+        const completedAt = userBadgeMap.get(badge.id);
+        const isCompleted = completedAt !== undefined;
+
+        // Progress percentage (max 100)
+        const progressPercentage = Math.min(
+          100,
+          Math.round((currentProgress / targetProgress) * 100)
+        );
+
+        return {
+          id: badge.id,
+          title: badge.name,
+          description: badge.description || '',
+          imageUrl: resolveMediaUrl(badge.imageUrl),
+          rarity: badge.rarity.toLowerCase(), // 'common', 'rare', 'epic'
+          category: badge.category?.name || 'Event',
+          userProgress: {
+            current: currentProgress,
+            target: targetProgress,
+            isCompleted,
+            completedAt: completedAt ? completedAt.toISOString() : undefined,
+            progressPercentage,
+          },
+          eventId,
+          createdAt: badge.createdAt.toISOString(),
+        };
+      });
+
+      return {
+        items: badgeItems,
+        pagination: {
+          cursor: undefined, // Şimdilik cursor pagination yok
+          hasMore: false, // Tüm badge'leri tek seferde döndürüyoruz
+          limit,
+        },
+      };
+    } catch (error) {
+      logger.error(`Failed to get event badges with progress for ${eventId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Limited Time Event - leaderboard ve kullanıcı skoru ile tek bir aktif event döner
    */
   async getLimitedTimeEvent(userId: string): Promise<LimitedTimeEventResponse | null> {
@@ -869,16 +1031,6 @@ export class EventService {
       avatar: resolveMediaUrl(stat.user.avatars?.[0]?.imageUrl || null, true),
       userName: stat.user.profile?.displayName || stat.user.email || 'Anonymous',
     }));
-  }
-
-  /**
-   * Helper: Map WishboxEventType to EventType
-   * NOTE: eventType alanı migration ile kaldırıldı, artık kullanılmıyor
-   * Tüm event'ler varsayılan olarak 'default' döndürülüyor
-   */
-  private mapEventType(eventType?: string): EventType {
-    // eventType alanı migration ile kaldırıldı, varsayılan olarak 'default' döndürüyoruz
-    return 'default';
   }
 
   /**
@@ -1126,167 +1278,268 @@ export class EventService {
   }
 
   /**
-   * Event güncelleme (Admin için)
+   * Kullanıcının event ilerlemesini ve badge'lerini getir
    */
-  async updateEvent(
-    userId: string,
-    eventId: string,
-    request: UpdateEventRequest
-  ): Promise<EventDetail> {
+  async getUserEventProgress(userId: string, eventId: string): Promise<EventUserProgress> {
     try {
-      // Admin kontrolü
-      const { isAdmin } = await import('../../infrastructure/auth/role-checker');
-      const userIsAdmin = await isAdmin(userId);
-      if (!userIsAdmin) {
-        throw new Error('Forbidden: Only admins can update events');
-      }
+      // Kullanıcının metriklerini al
+      const metrics = await this.eventMetricsService.getUserMetrics(userId, eventId);
 
-      // Event'i bul
-      const event = await this.prisma.wishboxEvent.findUnique({
-        where: { id: eventId },
+      // Event için tanımlı badge'leri ve requirement'ları al
+      const requirements = await this.badgeEligibilityService.getEventBadgeRequirements(eventId);
+
+      // Kullanıcının badge'lerini al
+      const userBadges = await this.prisma.userBadge.findMany({
+        where: {
+          userId,
+          badgeId: {
+            in: requirements.map((r) => r.badgeId),
+          },
+        },
+        select: {
+          badgeId: true,
+        },
       });
 
-      if (!event) {
-        throw new Error('Event not found');
+      const earnedBadgeIds = new Set(userBadges.map((ub) => ub.badgeId));
+
+      // Badge progress bilgilerini oluştur
+      const badges: BadgeProgress[] = [];
+      for (const requirement of requirements) {
+        const badge = await this.prisma.badge.findUnique({
+          where: { id: requirement.badgeId },
+        });
+
+        if (!badge) continue;
+
+        let currentProgress = 0;
+        switch (requirement.type) {
+          case 'POSTS_COUNT':
+            currentProgress = metrics.postsCount;
+            break;
+          case 'LIKES_RECEIVED':
+            currentProgress = metrics.likesReceivedCount;
+            break;
+        }
+
+        const progressPercentage = Math.min(
+          100,
+          Math.round((currentProgress / requirement.threshold) * 100)
+        );
+
+        badges.push({
+          badgeId: badge.id,
+          badgeName: badge.name,
+          badgeDescription: badge.description || '',
+          badgeImage: resolveMediaUrl(badge.imageUrl),
+          badgeRarity: badge.rarity,
+          requirement: {
+            type: requirement.type,
+            threshold: requirement.threshold,
+          },
+          currentProgress,
+          isEarned: earnedBadgeIds.has(badge.id),
+          progressPercentage,
+        });
       }
 
-      // Update data hazırla
-      const updateData: any = {};
-      if (request.title !== undefined) {
-        updateData.title = request.title;
-      }
-      if (request.description !== undefined) {
-        updateData.description = request.description;
-      }
-      if (request.startDate !== undefined) {
-        updateData.startDate = new Date(request.startDate);
-      }
-      if (request.endDate !== undefined) {
-        updateData.endDate = new Date(request.endDate);
-      }
-      if (request.banner !== undefined) {
-        updateData.banner = request.banner;
-      }
-      if (request.status !== undefined) {
-        updateData.status = request.status;
-      }
+      // Leaderboard'u al (ilk 10 kullanıcı)
+      const leaderboardData = await this.eventMetricsService.getLeaderboard(eventId, 10);
+      
+      const leaderboard: LeaderboardEntry[] = await Promise.all(
+        leaderboardData.map(async (entry, index) => {
+          const user = await this.prisma.user.findUnique({
+            where: { id: entry.userId },
+            include: {
+              profile: true,
+              avatars: {
+                where: { isActive: true },
+                take: 1,
+              },
+            },
+          });
 
-      // Event'i güncelle
-      const updatedEvent = await this.prisma.wishboxEvent.update({
-        where: { id: eventId },
-        data: updateData,
-      });
+          return {
+            rank: index + 1,
+            userId: entry.userId,
+            userName: user?.profile?.displayName || user?.email || 'Unknown',
+            avatar: resolveMediaUrl(user?.avatars?.[0]?.imageUrl || null, true),
+            postsCount: entry.postsCount,
+            likesReceived: entry.likesReceivedCount,
+          };
+        })
+      );
 
-      // Cache invalidation
-      await this.invalidateEventCaches(eventId, userId);
-
-      // Event detail response oluştur
-      const eventDetail: EventDetail = {
-        eventId: updatedEvent.id,
-        banner: updatedEvent.imageUrl ? resolveMediaUrl(updatedEvent.imageUrl) : null,
-        title: updatedEvent.title,
-        description: updatedEvent.description,
-        startDate: updatedEvent.startDate.toISOString(),
-        endDate: updatedEvent.endDate.toISOString(),
-        interaction: 0, // Bu bilgiyi ayrı bir query ile almak gerekebilir
-        eventType: 'default', // eventType alanı migration ile kaldırıldı, varsayılan olarak 'default' kullanıyoruz
-        isJoined: false, // Bu bilgiyi ayrı bir query ile almak gerekebilir
-        status: updatedEvent.status === 'PUBLISHED' ? 'active' : 'upcoming',
-        rewards: [], // Bu bilgiyi ayrı bir query ile almak gerekebilir
+      return {
+        userId,
+        eventId,
+        metrics: {
+          postsCount: metrics.postsCount,
+          likesReceived: metrics.likesReceivedCount,
+        },
+        badges,
+        leaderboard,
       };
-
-      logger.info({
-        message: 'Event updated',
-        eventId,
-        userId,
-      });
-
-      return eventDetail;
     } catch (error) {
-      logger.error({
-        message: 'Error updating event',
-        eventId,
-        userId,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      logger.error(`Failed to get user event progress for user ${userId} in event ${eventId}:`, error);
       throw error;
     }
   }
 
   /**
-   * Event silme (Admin için - soft delete)
+   * Event leaderboard'unu getir
    */
-  async deleteEvent(userId: string, eventId: string): Promise<void> {
+  async getEventLeaderboard(eventId: string, limit: number = 50): Promise<EventLeaderboard> {
     try {
-      // Admin kontrolü
-      const { isAdmin } = await import('../../infrastructure/auth/role-checker');
-      const userIsAdmin = await isAdmin(userId);
-      if (!userIsAdmin) {
-        throw new Error('Forbidden: Only admins can delete events');
-      }
+      const leaderboardData = await this.eventMetricsService.getLeaderboard(eventId, limit);
+      
+      const items: LeaderboardEntry[] = await Promise.all(
+        leaderboardData.map(async (entry, index) => {
+          const user = await this.prisma.user.findUnique({
+            where: { id: entry.userId },
+            include: {
+              profile: true,
+              avatars: {
+                where: { isActive: true },
+                take: 1,
+              },
+            },
+          });
 
-      // Event'i bul
-      const event = await this.prisma.wishboxEvent.findUnique({
-        where: { id: eventId },
+          return {
+            rank: index + 1,
+            userId: entry.userId,
+            userName: user?.profile?.displayName || user?.email || 'Unknown',
+            avatar: resolveMediaUrl(user?.avatars?.[0]?.imageUrl || null, true),
+            postsCount: entry.postsCount,
+            likesReceived: entry.likesReceivedCount,
+          };
+        })
+      );
+
+      return {
+        eventId,
+        items,
+      };
+    } catch (error) {
+      logger.error(`Failed to get event leaderboard for ${eventId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Event badge detail'i ve user progress'i getir
+   * Badge'in detay bilgilerini ve kullanıcının o badge'deki ilerlemesini döner
+   */
+  async getEventBadgeDetail(
+    eventId: string,
+    badgeId: string,
+    userId: string
+  ): Promise<EventBadgeDetailResponse> {
+    try {
+      // Badge'i getir
+      const badge = await this.prisma.badge.findUnique({
+        where: { id: badgeId },
         include: {
-          participants: {
-            select: { userId: true },
-            distinct: ['userId'],
+          category: true,
+          achievementGoals: {
+            select: {
+              requirement: true,
+            },
           },
         },
+      });
+
+      if (!badge) {
+        throw new Error('Badge not found');
+      }
+
+      // Event'in varlığını kontrol et
+      const event = await this.prisma.wishboxEvent.findUnique({
+        where: { id: eventId },
+        select: { id: true },
       });
 
       if (!event) {
         throw new Error('Event not found');
       }
 
-      // Event'i soft delete: status = ARCHIVED
-      await this.prisma.wishboxEvent.update({
-        where: { id: eventId },
-        data: { status: 'ARCHIVED' },
-      });
-
-      // Event'e katılan kullanıcıları bilgilendirme (notification)
-      const participantIds = event.participants.map((p) => p.userId);
-      if (participantIds.length > 0) {
-        const { NotificationService } = await import('../notification/notification.service');
-        const notificationService = new NotificationService();
-        for (const participantId of participantIds) {
-          try {
-            await notificationService.sendNotification(
-              participantId,
-              'EVENT_CANCELLED' as any, // NotificationType enum'ına eklenmeli
-              {
-                eventId: event.id,
-                eventTitle: event.title,
-              }
-            );
-          } catch (error) {
-            logger.warn({
-              message: 'Failed to send event cancellation notification',
-              participantId,
-              eventId,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
-        }
+      // Badge'in bu event'e ait olup olmadığını kontrol et
+      // (Badge requirement'ında eventId kontrolü yapabilirsiniz)
+      // Şimdilik badge type'ı EVENT ise devam et
+      if (badge.type !== 'EVENT') {
+        throw new Error('Badge does not belong to this event');
       }
 
-      // Cache invalidation
-      await this.invalidateEventCaches(eventId, userId);
+      // Badge requirement'ı parse et
+      const achievementGoal = badge.achievementGoals[0];
+      if (!achievementGoal) {
+        throw new Error('Badge requirement not found');
+      }
 
-      logger.info({
-        message: 'Event deleted (archived)',
-        eventId,
-        userId,
+      const requirement = JSON.parse(achievementGoal.requirement);
+      const requirementType = requirement.type; // 'POSTS_COUNT' or 'LIKES_RECEIVED'
+      const threshold = requirement.threshold;
+
+      // Kullanıcının event metriklerini al
+      const metrics = await this.eventMetricsService.getUserMetrics(userId, eventId);
+
+      // Current progress'i belirle
+      let currentProgress = 0;
+      switch (requirementType) {
+        case 'POSTS_COUNT':
+          currentProgress = metrics.postsCount;
+          break;
+        case 'LIKES_RECEIVED':
+          currentProgress = metrics.likesReceivedCount;
+          break;
+        default:
+          currentProgress = 0;
+      }
+
+      // Badge kazanılmış mı kontrol et
+      const userBadge = await this.prisma.userBadge.findUnique({
+        where: {
+          userId_badgeId: {
+            userId,
+            badgeId,
+          },
+        },
+        select: {
+          claimed: true,
+          claimedAt: true,
+          // createdAt: true, // ❌ UserBadge'de createdAt field'ı yok!
+        },
       });
+
+      const isCompleted = userBadge !== null;
+      const completedAt = userBadge?.claimedAt || null; // ✅ claimedAt kullan
+
+      // Progress percentage hesapla (max 100)
+      const progressPercentage = Math.min(100, Math.round((currentProgress / threshold) * 100));
+
+      return {
+        id: badge.id,
+        title: badge.name,
+        description: badge.description || '',
+        imageUrl: resolveMediaUrl(badge.imageUrl),
+        rarity: badge.rarity,
+        userProgress: {
+          current: currentProgress,
+          target: threshold,
+          isCompleted,
+          completedAt: completedAt ? completedAt.toISOString() : null,
+          progressPercentage,
+        },
+        category: badge.category?.name || 'Event',
+        eventId: eventId,
+        createdAt: badge.createdAt.toISOString(),
+      };
     } catch (error) {
-      logger.error({
-        message: 'Error deleting event',
-        eventId,
-        userId,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      logger.error(
+        `Failed to get event badge detail for badge ${badgeId} in event ${eventId} for user ${userId}:`,
+        error
+      );
       throw error;
     }
   }

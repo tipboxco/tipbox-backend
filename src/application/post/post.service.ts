@@ -34,6 +34,8 @@ import { EventService } from '../event/event.service';
 import { S3Service } from '../../infrastructure/s3/s3.service';
 import { CacheService } from '../../infrastructure/cache/cache.service';
 import { invalidateCatalogPostsCache } from '../../infrastructure/cache/cache-invalidation';
+import { EventMetricsService } from '../event/event-metrics.service';
+import { BadgeEligibilityService } from '../gamification/badge-eligibility.service';
 
 export class PostService {
   private postRepo: ContentPostPrismaRepository;
@@ -46,6 +48,8 @@ export class PostService {
   private eventService: EventService;
   private experienceSnippetRepo: AiExperienceSplitPrismaRepository;
   private s3Service: S3Service;
+  private eventMetricsService: EventMetricsService;
+  private badgeEligibilityService: BadgeEligibilityService;
 
   /**
    * Search posts by title and body
@@ -105,6 +109,8 @@ export class PostService {
     this.experienceSnippetRepo = new AiExperienceSplitPrismaRepository();
     this.eventService = new EventService();
     this.s3Service = new S3Service();
+    this.eventMetricsService = new EventMetricsService();
+    this.badgeEligibilityService = new BadgeEligibilityService();
   }
 
   /**
@@ -171,7 +177,11 @@ export class PostService {
           include: { mainCategory: true },
         });
         if (!subCategory) {
-          throw new Error(`Sub category not found: ${contextId}`);
+          logger.warn({
+            message: 'Sub-category not found in post creation',
+            contextId,
+          });
+          throw new Error(`Sub-category does not exist or has been deleted. Please select a valid category.`);
         }
         return {
           subCategoryId: contextId,
@@ -204,7 +214,13 @@ export class PostService {
           },
         });
         if (!product) {
-          throw new Error(`Product not found: ${contextId}`);
+          // Daha açıklayıcı hata mesajı
+          logger.warn({
+            message: 'Product not found in post creation',
+            contextId,
+            userId: 'unknown', // userId buraya gelemez, stack'te ekleyelim
+          });
+          throw new Error(`Product does not exist or has been deleted. Please select a valid product.`);
         }
         return {
           productId: contextId,
@@ -238,6 +254,25 @@ export class PostService {
     request: CreatePostRequest
   ): Promise<{ id: string; message: string; success: boolean }> {
     try {
+      // ✅ YENİ: InventoryId varsa, productId'yi inventory'den çek
+      let actualContextId = request.contextId;
+      
+      if (request.inventoryId && request.contextType === ContextType.PRODUCT) {
+        // InventoryId'den productId'yi resolve et
+        const productId = await this.resolveProductIdFromInventory(
+          request.inventoryId,
+          userId
+        );
+        actualContextId = productId;
+        
+        logger.info({
+          message: 'Using productId from inventory',
+          inventoryId: request.inventoryId,
+          productId,
+          originalContextId: request.contextId,
+        });
+      }
+
       // Context validation
       if (
         request.contextType !== ContextType.SUB_CATEGORY &&
@@ -249,33 +284,37 @@ export class PostService {
         );
       }
 
-      // Event validation (if eventId is provided)
+      // Event validation and membership check (if eventId is provided)
       if (request.eventId) {
         await this.validateEvent(request.eventId);
+        await this.validateEventMembership(userId, request.eventId);
       }
 
       const contextIds = await this.resolveContextIds(
         request.contextType,
-        request.contextId
+        actualContextId // ✅ InventoryId'den gelen productId veya direkt contextId
       );
 
+      // Support both 'body' (new) and 'description' (old) fields
+      const postContent = request.body || request.description || '';
+      
       const bodyWithImages = this.appendImagesToBody(
-        request.description,
+        postContent,
         request.images
       );
 
       const post = await this.postRepo.create(
         userId,
         ContentPostType.FREE,
-        '', // Title will be auto-generated or empty
+        request.title || '',
         bodyWithImages,
         contextIds.subCategoryId,
         contextIds.mainCategoryId,
         contextIds.productGroupId,
         contextIds.productId,
-        false, // inventoryRequired
-        false, // isBoosted
-        request.eventId // eventId
+        false,
+        false,
+        request.eventId
       );
 
       // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
@@ -285,18 +324,58 @@ export class PostService {
             postId: post.id,
             userId: userId,
             mediaUrl: imageUrl,
-            orderIndex: index, // Kullanıcının yüklediği sırada
+            orderIndex: index,
           })),
         });
       }
 
-      logger.info(`Free post created: ${post.id} by user ${userId}`);
+      // Update user event stats if eventId is provided
+      if (request.eventId) {
+        try {
+          // Increment post count for user's event stats
+          await this.prisma.wishboxStats.updateMany({
+            where: {
+              userId: userId,
+              eventId: request.eventId,
+            },
+            data: {
+              totalParticipated: { increment: 1 },
+              updatedAt: new Date(),
+            },
+          });
+        } catch (error) {
+          // Log error but don't fail the post creation
+          logger.warn({
+            message: 'Failed to update event stats',
+            eventId: request.eventId,
+            userId,
+            postId: post.id,
+            error,
+          });
+        }
+      }
+
+      logger.info(`Free post created: ${post.id} by user ${userId}`, {
+        eventId: request.eventId || null,
+        contextType: request.contextType,
+        contextId: actualContextId,
+        inventoryId: request.inventoryId || null,
+      });
       
       // Event cache'i invalidate et (eventId varsa)
       if (request.eventId) {
         this.eventService.invalidateEventCaches(request.eventId, userId).catch((err) => {
           logger.warn({ message: 'Failed to invalidate event caches', eventId: request.eventId, error: err });
         });
+        
+        // Event metrik ve badge kontrolü (async, hata olsa bile devam et)
+        this.eventMetricsService.incrementUserPostCount(userId, request.eventId)
+          .then((metrics) => {
+            return this.badgeEligibilityService.checkAndGrantEventBadges(userId, request.eventId!, metrics);
+          })
+          .catch((err) => {
+            logger.warn({ message: 'Failed to update event metrics or check badges', userId, eventId: request.eventId, error: err });
+          });
       }
       
       // Catalog posts cache'ini invalidate et
@@ -315,20 +394,77 @@ export class PostService {
       
       return { 
         id: post.id,
-        message: 'Post başarıyla oluşturuldu',
-        success: true,
-        context: {
-          contextType: request.contextType,
-          contextId: request.contextId,
-          subCategoryId: contextIds.subCategoryId,
-          productGroupId: contextIds.productGroupId,
-          productId: contextIds.productId,
-        }
+        message: 'Post created successfully',
+        success: true
       };
     } catch (error) {
       logger.error(`Failed to create free post:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Event membership validation - kullanıcı event'e katılmış mı?
+   */
+  private async validateEventMembership(userId: string, eventId: string): Promise<void> {
+    const userStats = await this.prisma.wishboxStats.findUnique({
+      where: {
+        userId_eventId: {
+          userId: userId,
+          eventId: eventId,
+        },
+      },
+    });
+
+    if (!userStats) {
+      throw new Error('You must join this event before sharing a post');
+    }
+  }
+
+  /**
+   * InventoryId'den ProductId'yi çeker
+   * ✅ YENİ: App inventoryId gönderdiğinde productId'yi buradan çekiyoruz
+   */
+  private async resolveProductIdFromInventory(
+    inventoryId: string,
+    userId: string
+  ): Promise<string> {
+    const inventory = await this.prisma.inventory.findUnique({
+      where: { id: inventoryId },
+      select: { 
+        productId: true,
+        userId: true 
+      },
+    });
+
+    if (!inventory) {
+      logger.warn({
+        message: 'Inventory not found',
+        inventoryId,
+        userId,
+      });
+      throw new Error('Inventory item not found. Please select a valid product from your inventory.');
+    }
+
+    // Security: Inventory kullanıcıya ait mi kontrol et
+    if (inventory.userId !== userId) {
+      logger.warn({
+        message: 'Inventory ownership mismatch',
+        inventoryId,
+        inventoryUserId: inventory.userId,
+        requestUserId: userId,
+      });
+      throw new Error('This inventory item does not belong to you.');
+    }
+
+    logger.info({
+      message: 'ProductId resolved from inventoryId',
+      inventoryId,
+      productId: inventory.productId,
+      userId,
+    });
+
+    return inventory.productId;
   }
 
   /**
@@ -412,6 +548,15 @@ export class PostService {
         this.eventService.invalidateEventCaches(request.eventId, userId).catch((err) => {
           logger.warn({ message: 'Failed to invalidate event caches', eventId: request.eventId, error: err });
         });
+        
+        // Event metrik ve badge kontrolü (async, hata olsa bile devam et)
+        this.eventMetricsService.incrementUserPostCount(userId, request.eventId)
+          .then((metrics) => {
+            return this.badgeEligibilityService.checkAndGrantEventBadges(userId, request.eventId!, metrics);
+          })
+          .catch((err) => {
+            logger.warn({ message: 'Failed to update event metrics or check badges', userId, eventId: request.eventId, error: err });
+          });
       }
       
       // Catalog posts cache'ini invalidate et
@@ -555,6 +700,15 @@ export class PostService {
         this.eventService.invalidateEventCaches(request.eventId, userId).catch((err) => {
           logger.warn({ message: 'Failed to invalidate event caches', eventId: request.eventId, error: err });
         });
+        
+        // Event metrik ve badge kontrolü (async, hata olsa bile devam et)
+        this.eventMetricsService.incrementUserPostCount(userId, request.eventId)
+          .then((metrics) => {
+            return this.badgeEligibilityService.checkAndGrantEventBadges(userId, request.eventId!, metrics);
+          })
+          .catch((err) => {
+            logger.warn({ message: 'Failed to update event metrics or check badges', userId, eventId: request.eventId, error: err });
+          });
       }
       
       // Catalog posts cache'ini invalidate et
@@ -731,6 +885,15 @@ export class PostService {
         this.eventService.invalidateEventCaches(request.eventId, userId).catch((err) => {
           logger.warn({ message: 'Failed to invalidate event caches', eventId: request.eventId, error: err });
         });
+        
+        // Event metrik ve badge kontrolü (async, hata olsa bile devam et)
+        this.eventMetricsService.incrementUserPostCount(userId, request.eventId)
+          .then((metrics) => {
+            return this.badgeEligibilityService.checkAndGrantEventBadges(userId, request.eventId!, metrics);
+          })
+          .catch((err) => {
+            logger.warn({ message: 'Failed to update event metrics or check badges', userId, eventId: request.eventId, error: err });
+          });
       }
       
       // Catalog posts cache'ini invalidate et
@@ -851,6 +1014,15 @@ export class PostService {
         this.eventService.invalidateEventCaches(request.eventId, userId).catch((err) => {
           logger.warn({ message: 'Failed to invalidate event caches', eventId: request.eventId, error: err });
         });
+        
+        // Event metrik ve badge kontrolü (async, hata olsa bile devam et)
+        this.eventMetricsService.incrementUserPostCount(userId, request.eventId)
+          .then((metrics) => {
+            return this.badgeEligibilityService.checkAndGrantEventBadges(userId, request.eventId!, metrics);
+          })
+          .catch((err) => {
+            logger.warn({ message: 'Failed to update event metrics or check badges', userId, eventId: request.eventId, error: err });
+          });
       }
       
       // Catalog posts cache'ini invalidate et
@@ -1014,6 +1186,15 @@ export class PostService {
         this.eventService.invalidateEventCaches(request.eventId, userId).catch((err) => {
           logger.warn({ message: 'Failed to invalidate event caches', eventId: request.eventId, error: err });
         });
+        
+        // Event metrik ve badge kontrolü (async, hata olsa bile devam et)
+        this.eventMetricsService.incrementUserPostCount(userId, request.eventId)
+          .then((metrics) => {
+            return this.badgeEligibilityService.checkAndGrantEventBadges(userId, request.eventId!, metrics);
+          })
+          .catch((err) => {
+            logger.warn({ message: 'Failed to update event metrics or check badges', userId, eventId: request.eventId, error: err });
+          });
       }
       
       // Catalog posts cache'ini invalidate et

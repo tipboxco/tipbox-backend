@@ -222,6 +222,207 @@ router.get('/my-nfts', authMiddleware, asyncHandler(async (req: Request, res: Re
   
   logger.info({
     message: 'my-nfts response',
+    userId,
+    itemCount: nfts.items.length
+  });
+  
+  res.json(nfts);
+}));
+
+/**
+ * @swagger
+ * /marketplace/my-listings:
+ *   get:
+ *     tags: [Marketplace]
+ *     summary: Kullanıcının ACTIVE listing'lerini getirir
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *           maximum: 100
+ *         description: Sayfa başına item sayısı
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *         description: Son alınan item'ın ID'si (cursor)
+ *     responses:
+ *       200:
+ *         description: Başarılı - Kullanıcının ACTIVE listing listesi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       title:
+ *                         type: string
+ *                       username:
+ *                         type: string
+ *                       image:
+ *                         type: string
+ *                       description:
+ *                         type: string
+ *                       type:
+ *                         type: string
+ *                         enum: [BADGE, COSMETIC, LOOTBOX]
+ *                       rarity:
+ *                         type: string
+ *                         enum: [COMMON, RARE, EPIC]
+ *                       listing:
+ *                         type: object
+ *                         required: true
+ *                         description: Always present and ACTIVE status
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                           price:
+ *                             type: number
+ *                           listedAt:
+ *                             type: string
+ *                             format: date-time
+ *                           status:
+ *                             type: string
+ *                             enum: [ACTIVE]
+ *                             description: Always ACTIVE
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: number
+ *       401:
+ *         description: Yetkisiz erişim
+ *       500:
+ *         description: Sunucu hatası
+ */
+router.get('/my-listings', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  const user = req.user;
+  const userId = user?.sub || user?.userId || user?.id;
+  
+  if (!userId) {
+    return res.status(401).json({ 
+      message: 'Unauthorized', 
+      debug: 'User ID not found in token',
+    });
+  }
+
+  const query = {
+    limit: req.query.limit ? Number(req.query.limit) : undefined,
+    cursor: typeof req.query.cursor === 'string' ? req.query.cursor : undefined,
+  };
+
+  const listings = await marketplaceService.listMyListings(userId, query);
+  
+  logger.info({
+    message: 'my-listings response',
+    userId,
+    itemCount: listings.items.length
+  });
+  
+  res.json(listings);
+}));
+
+/**
+ * @swagger
+ * /marketplace/available-nfts:
+ *   get:
+ *     tags: [Marketplace]
+ *     summary: Kullanıcının satışa koyabileceği NFT'leri getirir (listing'i olmayan)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *           maximum: 100
+ *         description: Sayfa başına item sayısı
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *         description: Son alınan item'ın ID'si (cursor)
+ *     responses:
+ *       200:
+ *         description: Başarılı - Satışa koyulabilecek NFT listesi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       title:
+ *                         type: string
+ *                       username:
+ *                         type: string
+ *                       image:
+ *                         type: string
+ *                       description:
+ *                         type: string
+ *                       type:
+ *                         type: string
+ *                         enum: [BADGE, COSMETIC, LOOTBOX]
+ *                       rarity:
+ *                         type: string
+ *                         enum: [COMMON, RARE, EPIC]
+ *                       listing:
+ *                         type: null
+ *                         description: Always null for available NFTs
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: number
+ *       401:
+ *         description: Yetkisiz erişim
+ *       500:
+ *         description: Sunucu hatası
+ */
+router.get('/available-nfts', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  const user = req.user;
+  const userId = user?.sub || user?.userId || user?.id;
+  
+  if (!userId) {
+    return res.status(401).json({ 
+      message: 'Unauthorized', 
+      debug: 'User ID not found in token',
+    });
+  }
+
+  const query = {
+    limit: req.query.limit ? Number(req.query.limit) : undefined,
+    cursor: typeof req.query.cursor === 'string' ? req.query.cursor : undefined,
+  };
+
+  const nfts = await marketplaceService.listAvailableNFTs(userId, query);
+  
+  logger.info({
+    message: 'available-nfts response',
     userId: userId,
     nftCount: nfts.items.length
   });

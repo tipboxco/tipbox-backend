@@ -221,3 +221,131 @@ export async function invalidateAllCache(): Promise<void> {
   }
 }
 
+/**
+ * NFT marketplace listing cache'ini invalidate eder
+ * Kullanım: Yeni NFT listelendiğinde, listing güncellendiğinde
+ */
+export async function invalidateMarketplaceListings(): Promise<void> {
+  try {
+    // Marketplace listing cache'lerini temizle
+    await cacheService.delPattern('marketplace:listings:*');
+    await cacheService.del(CACHE_KEYS.MARKETPLACE_FEATURED());
+
+    logger.info({
+      message: 'Marketplace listings cache invalidated',
+    });
+  } catch (error) {
+    logger.error('Error invalidating marketplace listings cache', { error });
+  }
+}
+
+/**
+ * NFT detail cache'ini invalidate eder
+ * Kullanım: NFT satıldığında, transfer edildiğinde, bilgileri güncellendiğinde
+ */
+export async function invalidateNFTCache(nftId: string): Promise<void> {
+  try {
+    const keysToDelete = [
+      CACHE_KEYS.NFT_DETAIL(nftId),
+      CACHE_KEYS.NFT_PRICE_HISTORY(nftId),
+      CACHE_KEYS.MARKETPLACE_NFT_DETAIL(nftId),
+    ];
+
+    for (const key of keysToDelete) {
+      await cacheService.del(key);
+    }
+
+    logger.info({
+      message: 'NFT cache invalidated',
+      nftId,
+      keys: keysToDelete,
+    });
+  } catch (error) {
+    logger.error('Error invalidating NFT cache', { error, nftId });
+  }
+}
+
+/**
+ * User'ın NFT'lerinin cache'ini invalidate eder
+ * Kullanım: User NFT aldığında, sattığında, listelediğinde
+ */
+export async function invalidateUserNFTCache(userId: string): Promise<void> {
+  try {
+    // User'ın tüm my-nfts cache'lerini temizle
+    await cacheService.delPattern(`nft:${userId}:*`);
+
+    logger.info({
+      message: 'User NFT cache invalidated',
+      userId,
+    });
+  } catch (error) {
+    logger.error('Error invalidating user NFT cache', { error, userId });
+  }
+}
+
+/**
+ * NFT buy/sell işlemi sonrası cache'i temizler
+ * Kullanım: NFT satın alındığında veya satıldığında
+ * - Buyer ve seller'ın my-nfts cache'i
+ * - NFT detail cache'i
+ * - Marketplace listings cache'i
+ */
+export async function invalidateNFTTransactionCache(params: {
+  nftId: string;
+  sellerId: string;
+  buyerId: string;
+}): Promise<void> {
+  try {
+    const { nftId, sellerId, buyerId } = params;
+
+    // NFT detail cache
+    await invalidateNFTCache(nftId);
+
+    // Seller ve buyer'ın NFT cache'leri
+    await invalidateUserNFTCache(sellerId);
+    await invalidateUserNFTCache(buyerId);
+
+    // Marketplace listings
+    await invalidateMarketplaceListings();
+
+    logger.info({
+      message: 'NFT transaction cache invalidated',
+      nftId,
+      sellerId,
+      buyerId,
+    });
+  } catch (error) {
+    logger.error('Error invalidating NFT transaction cache', { error, params });
+  }
+}
+
+/**
+ * NFT listing oluşturulduğunda veya iptal edildiğinde cache'i temizler
+ * Kullanım: NFT marketplace'e listelendiğinde veya listing iptal edildiğinde
+ */
+export async function invalidateNFTListingCache(params: {
+  nftId: string;
+  userId: string;
+}): Promise<void> {
+  try {
+    const { nftId, userId } = params;
+
+    // NFT detail cache
+    await invalidateNFTCache(nftId);
+
+    // User'ın NFT cache'i
+    await invalidateUserNFTCache(userId);
+
+    // Marketplace listings
+    await invalidateMarketplaceListings();
+
+    logger.info({
+      message: 'NFT listing cache invalidated',
+      nftId,
+      userId,
+    });
+  } catch (error) {
+    logger.error('Error invalidating NFT listing cache', { error, params });
+  }
+}
+

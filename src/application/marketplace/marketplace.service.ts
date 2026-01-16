@@ -27,6 +27,10 @@ import {
 import { NFTMarketListingStatus } from '../../domain/crypto/nft-market-listing-status.enum';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import logger from '../../infrastructure/logger/logger';
+import { 
+  invalidateNFTListingCache, 
+  invalidateNFTTransactionCache 
+} from '../../infrastructure/cache/cache-invalidation';
 
 export class MarketplaceService {
   private readonly nftRepo: NFTPrismaRepository;
@@ -257,6 +261,14 @@ export class MarketplaceService {
         logger.error('Error sending NFT listed notification:', error);
       });
 
+      // Invalidate cache (async, don't wait)
+      invalidateNFTListingCache({
+        nftId: nft.id,
+        userId,
+      }).catch(error => {
+        logger.error('Error invalidating NFT listing cache:', error);
+      });
+
       return {
         id: listing.id,
         title: nft.name,
@@ -365,6 +377,14 @@ export class MarketplaceService {
 
       // Listing'i iptal et
       await this.listingRepo.cancel(listingId);
+
+      // Invalidate cache (async, don't wait)
+      invalidateNFTListingCache({
+        nftId: listing.nftId,
+        userId,
+      }).catch(error => {
+        logger.error('Error invalidating NFT listing cache:', error);
+      });
     } catch (error) {
       logger.error({
         message: 'Error cancelling listing',
@@ -688,6 +708,15 @@ export class MarketplaceService {
         listingId: listing.id,
       });
 
+      // Invalidate cache (async, don't wait)
+      invalidateNFTTransactionCache({
+        nftId: nft.id,
+        sellerId: listing.listedByUserId,
+        buyerId: userId,
+      }).catch(error => {
+        logger.error('Error invalidating NFT transaction cache:', error);
+      });
+
       return {
         success: true,
         nftId: nft.id,
@@ -711,6 +740,152 @@ export class MarketplaceService {
         message: 'Error buying NFT',
         userId,
         listingId: request.listingId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Kullanıcının oluşturduğu ACTIVE listing'leri getirir
+   * My Listings ekranı için
+   */
+  async listMyListings(userId: string, query: ListUserNFTsQuery = {}): Promise<{
+    items: UserNFTResponse[];
+    pagination: { cursor?: string; hasMore: boolean; limit: number };
+  }> {
+    try {
+      const limit = query.limit && query.limit > 0 ? Math.min(query.limit, 100) : 50;
+      
+      // Kullanıcının oluşturduğu ACTIVE listing'leri al
+      const prisma = getPrisma();
+      const listings = await prisma.nFTMarketListing.findMany({
+        where: {
+          listedByUserId: userId,
+          status: 'ACTIVE', // Sadece ACTIVE listing'ler
+        },
+        orderBy: { listedAt: 'desc' },
+        take: limit + 1,
+        cursor: query.cursor ? { id: query.cursor } : undefined,
+        skip: query.cursor ? 1 : 0,
+        include: {
+          nft: true,
+        },
+      });
+
+      const hasMore = listings.length > limit;
+      const paginated = hasMore ? listings.slice(0, limit) : listings;
+
+      // Kullanıcı profilini bir kez al
+      const profile = await this.profileRepo.findByUserId(userId);
+      const username = profile?.userName || 'Unknown';
+
+      const results: UserNFTResponse[] = paginated.map(listing => {
+        const nft = listing.nft;
+        
+        return {
+          id: nft.id,
+          title: nft.name,
+          username,
+          image: resolveMediaUrl(nft.imageUrl) || nft.imageUrl,
+          description: nft.description || undefined,
+          type: nft.type,
+          rarity: nft.rarity,
+          listing: {
+            id: listing.id,
+            price: listing.price,
+            listedAt: listing.listedAt.toISOString(),
+            status: listing.status as 'ACTIVE' | 'SOLD' | 'CANCELLED',
+          },
+        };
+      });
+
+      const nextCursor = hasMore && results.length > 0 ? paginated[paginated.length - 1].id : undefined;
+
+      return {
+        items: results,
+        pagination: {
+          cursor: nextCursor,
+          hasMore,
+          limit,
+        },
+      };
+    } catch (error) {
+      logger.error({
+        message: 'Error listing user listings',
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Kullanıcının satışa koyabileceği NFT'leri getirir
+   * Sadece listing'i olmayan NFT'ler döner
+   */
+  async listAvailableNFTs(userId: string, query: ListUserNFTsQuery = {}): Promise<{
+    items: UserNFTResponse[];
+    pagination: { cursor?: string; hasMore: boolean; limit: number };
+  }> {
+    try {
+      const limit = query.limit && query.limit > 0 ? Math.min(query.limit, 100) : 50;
+      
+      // Kullanıcının tüm NFT'lerini al
+      const nfts = await this.nftRepo.findByOwnerId(userId, limit + 1, query.cursor);
+      const hasMore = nfts.length > limit;
+      const paginated = hasMore ? nfts.slice(0, limit) : nfts;
+
+      // Kullanıcı profilini bir kez al
+      const profile = await this.profileRepo.findByUserId(userId);
+      const username = profile?.userName || 'Unknown';
+
+      // Get all NFT IDs to check for active listings
+      const nftIds = paginated.map(nft => nft.id);
+      
+      // Fetch ACTIVE listings for these NFTs
+      const prisma = getPrisma();
+      const activeListings = await prisma.nFTMarketListing.findMany({
+        where: {
+          nftId: { in: nftIds },
+          listedByUserId: userId,
+          status: 'ACTIVE', // Sadece ACTIVE listing'leri kontrol et
+        },
+      });
+
+      // Create a set of NFT IDs that have active listings
+      const listedNftIds = new Set(activeListings.map(listing => listing.nftId));
+
+      // Filter out NFTs that have active listings
+      const availableNfts = paginated.filter(nft => !listedNftIds.has(nft.id));
+
+      const results: UserNFTResponse[] = availableNfts.map(nft => {
+        return {
+          id: nft.id,
+          title: nft.name,
+          username,
+          image: resolveMediaUrl(nft.imageUrl) || nft.imageUrl,
+          description: nft.description || undefined,
+          type: nft.type,
+          rarity: nft.rarity,
+          listing: undefined, // Listing yok
+        };
+      });
+
+      const nextCursor = hasMore && results.length > 0 ? paginated[paginated.length - 1].id : undefined;
+
+      return {
+        items: results,
+        pagination: {
+          cursor: nextCursor,
+          hasMore,
+          limit,
+        },
+      };
+    } catch (error) {
+      logger.error({
+        message: 'Error listing available NFTs',
+        userId,
         error: error instanceof Error ? error.message : String(error),
       });
       throw error;

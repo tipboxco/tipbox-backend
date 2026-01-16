@@ -178,7 +178,53 @@ router.post(
  *             schema:
  *               type: array
  *               items:
- *                 $ref: '#/components/schemas/InventoryListItemResponse'
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                     description: Inventory item ID
+ *                     example: "c505c6c2-1234-5678-90ab-cdef12345678"
+ *                   productId:
+ *                     type: string
+ *                     description: Product ID (ULID format)
+ *                     example: "01H8PRO123456789ABCDEFGH"
+ *                   brand:
+ *                     type: object
+ *                     properties:
+ *                       name:
+ *                         type: string
+ *                         description: Marka adı
+ *                         example: "Apple"
+ *                       model:
+ *                         type: string
+ *                         description: Model adı
+ *                         example: "iPhone 15 Pro"
+ *                       specs:
+ *                         type: string
+ *                         description: Ürün özellikleri
+ *                         example: "256GB Storage, Titanium Blue"
+ *                   image:
+ *                     type: string
+ *                     nullable: true
+ *                     description: Ürün görseli URL
+ *                     example: "https://storage.example.com/image.jpg"
+ *                   reviews:
+ *                     type: array
+ *                     items:
+ *                       type: object
+ *                       properties:
+ *                         title:
+ *                           type: string
+ *                         description:
+ *                           type: string
+ *                         rating:
+ *                           type: number
+ *                   tags:
+ *                     type: array
+ *                     items:
+ *                       type: string
+ *                     description: Ürün etiketleri
+ *                     example: ["Recent", "Owned", "Premium"]
  *       401:
  *         description: Unauthorized
  */
@@ -599,6 +645,65 @@ router.post(
     }
 
     const result = await inventoryService.splitExperienceWithAI(userId, productId, experienceText);
+    return res.json(result);
+  })
+);
+
+/**
+ * @openapi
+ * /inventory/cache/clear:
+ *   post:
+ *     summary: Inventory cache'ini temizle
+ *     description: Belirli bir kullanıcının veya tüm kullanıcıların inventory cache'ini temizler
+ *     tags: [Inventory]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               userId:
+ *                 type: string
+ *                 description: Belirli bir kullanıcının cache'ini temizlemek için (boş bırakılırsa mevcut kullanıcının cache'i temizlenir)
+ *               all:
+ *                 type: boolean
+ *                 description: true ise tüm inventory cache'lerini temizler
+ *     responses:
+ *       200:
+ *         description: Cache başarıyla temizlendi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 cleared:
+ *                   type: number
+ *       401:
+ *         description: Unauthorized
+ */
+router.post(
+  '/cache/clear',
+  authMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const currentUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!currentUserId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { userId, all } = req.body;
+
+    const result = await inventoryService.clearInventoryCache(
+      userId || String(currentUserId),
+      all || false
+    );
+
     return res.json(result);
   })
 );

@@ -10,6 +10,8 @@ import { DEFAULT_AVATAR_PATH } from '../src/infrastructure/config/media.config'
 import { ProgressBar } from './seed/helpers/progress-bar'
 import { seedTaxonomy } from './seed/taxonomy.seed'
 import { seedProductCatalog } from './seed/product-catalog.seed'
+import { ensureEventBadgeSystem } from './seed/helpers/ensure-event-badge-system'
+import { ensureMarketplaceBadges } from './seed/helpers/ensure-marketplace-badges'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { markSeedStart, markSeedEnd, addSeedUserId } = require('./seed/seed-metadata')
 
@@ -5593,6 +5595,103 @@ function getProductConfigsForBrand(brandName: string): Array<{
   }
 
   return configs[brandName] || []
+}
+
+/**
+ * Priority kullanıcılar için NFT'ler oluştur ve bazılarını marketplace'e listele
+ */
+async function seedPriorityUserNFTs() {
+  console.log('🖼️  Creating NFTs for priority users...');
+
+  // Priority kullanıcı ID'leri
+  const priorityUserIds = [
+    '480f5de9-b691-4d70-a6a8-2789226f4e07', // omer
+    '11111111-1111-4111-a111-111111111111', // tuna
+    '22222222-2222-4222-a222-222222222222', // mehmet
+    '33333333-3333-4333-a333-333333333333', // ibrahim
+    '44444444-4444-4444-a444-444444444444', // burakcan
+    '55555555-5555-4555-a555-555555555555', // mihrac
+    'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa', // irem
+    'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb', // furkan
+    'cccccccc-cccc-4ccc-cccc-cccccccccccc', // aycan
+    '99999999-9999-4999-9999-999999999999', // ozan
+  ];
+
+  // NFT templates
+  const nftTemplates = [
+    { type: 'BADGE', rarity: 'COMMON', name: 'Early Adopter Badge', description: 'Awarded to early platform members', imageUrl: 'https://images.unsplash.com/photo-1634193295627-1cdddf751ebf?w=800' },
+    { type: 'BADGE', rarity: 'RARE', name: 'Verified Reviewer Badge', description: 'Given to trusted reviewers', imageUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800' },
+    { type: 'BADGE', rarity: 'EPIC', name: 'Community Leader Badge', description: 'Top contributors to the community', imageUrl: 'https://images.unsplash.com/photo-1614624532983-4ce03382d63d?w=800' },
+    { type: 'COSMETIC', rarity: 'COMMON', name: 'Blue Avatar Frame', description: 'A cool blue frame for your avatar', imageUrl: 'https://images.unsplash.com/photo-1557672172-298e090bd0f1?w=800' },
+    { type: 'COSMETIC', rarity: 'RARE', name: 'Golden Profile Theme', description: 'Exclusive golden theme', imageUrl: 'https://images.unsplash.com/photo-1557672199-6414e6bfa3b6?w=800' },
+    { type: 'COSMETIC', rarity: 'EPIC', name: 'Animated Background', description: 'Dynamic animated profile background', imageUrl: 'https://images.unsplash.com/photo-1557672199-6414e6bfa3b6?w=800' },
+  ];
+
+  let nftCount = 0;
+  let listingCount = 0;
+
+  for (const userId of priorityUserIds) {
+    // Her kullanıcıya 2-4 random NFT ver
+    const nftCountForUser = Math.floor(Math.random() * 3) + 2; // 2-4 NFT
+    const selectedTemplates = nftTemplates
+      .sort(() => Math.random() - 0.5)
+      .slice(0, nftCountForUser);
+
+    for (const template of selectedTemplates) {
+      try {
+        // NFT oluştur
+        const nft = await prisma.nFT.create({
+          data: {
+            name: template.name,
+            description: template.description,
+            imageUrl: template.imageUrl,
+            type: template.type as any,
+            rarity: template.rarity as any,
+            currentOwnerId: userId,
+            isTransferable: true, // NFT transfer edilebilir
+            viewCount: Math.floor(Math.random() * 100), // Random view count
+          },
+        });
+
+        nftCount++;
+
+        // NFT Transaction kaydet (MINT)
+        await prisma.nFTTransaction.create({
+          data: {
+            nftId: nft.id,
+            fromUserId: null, // Mint için fromUserId null
+            toUserId: userId,
+            transactionType: 'MINT',
+            price: null,
+          },
+        });
+
+        // %40 ihtimalle marketplace'e listele
+        if (Math.random() < 0.4) {
+          const price = Math.floor(Math.random() * 450) + 50; // 50-500 TIPS
+
+          await prisma.nFTMarketListing.create({
+            data: {
+              nftId: nft.id,
+              listedByUserId: userId,
+              price,
+              status: 'ACTIVE',
+              listedAt: new Date(),
+            },
+          });
+
+          listingCount++;
+          console.log(`   ✅ NFT listed: ${template.name} by user ${userId.substring(0, 8)}... for ${price} TIPS`);
+        }
+
+      } catch (error) {
+        console.error(`   ❌ Error creating NFT for user ${userId}:`, error);
+      }
+    }
+  }
+
+  console.log(`✅ Created ${nftCount} NFTs for ${priorityUserIds.length} priority users`);
+  console.log(`   📊 ${listingCount} NFTs listed on marketplace`);
 }
 
 async function main() {
@@ -12079,6 +12178,64 @@ async function main() {
       console.error('   Stack:', error.stack)
     }
     console.log('⚠️  Seed devam ediyor ama transaction verileri oluşturulamadı')
+  }
+
+  // ===== REWARD CLAIM SEEDING =====
+  console.log('\n🎁 Reward Claim seeding başlatılıyor...')
+  progress.increment('Reward claim verileri oluşturuluyor...')
+  
+  try {
+    const { seedRewardClaims } = await import('./seed/reward-claim-seed')
+    await seedRewardClaims()
+    
+    progress.increment('Reward claim seeding tamamlandı')
+    console.log('✅ Reward claim seeding completed')
+  } catch (error) {
+    console.error('❌ Reward claim seeding hatası:', error)
+    if (error instanceof Error) {
+      console.error('   Message:', error.message)
+      console.error('   Stack:', error.stack)
+    }
+    console.log('⚠️  Seed devam ediyor ama reward claim verileri oluşturulamadı')
+  }
+
+  // ===== EVENT BADGES & MARKETPLACE BADGES SEEDING =====
+  console.log('\n🏆 Event Badge Sistemi ve Marketplace Badge\'leri oluşturuluyor...')
+  progress.increment('Event & Marketplace badges seeding...')
+  
+  try {
+    // Event badge sistemi (badge + event + EventBadge join table)
+    await ensureEventBadgeSystem(prisma)
+    
+    // Marketplace badge'leri
+    await ensureMarketplaceBadges(prisma)
+    
+    progress.increment('Event & Marketplace badges tamamlandı')
+    console.log('✅ Event & Marketplace badges seeding completed')
+  } catch (error) {
+    console.error('❌ Event/Marketplace badges seeding hatası:', error)
+    if (error instanceof Error) {
+      console.error('   Message:', error.message)
+      console.error('   Stack:', error.stack)
+    }
+    console.log('⚠️  Seed devam ediyor ama event/marketplace badges oluşturulamadı')
+  }
+
+  // ===== NFT SEEDING FOR PRIORITY USERS =====
+  console.log('\n🖼️  NFT seeding başlatılıyor (priority users)...')
+  progress.increment('NFT verileri oluşturuluyor...')
+  
+  try {
+    await seedPriorityUserNFTs()
+    progress.increment('NFT seeding tamamlandı')
+    console.log('✅ NFT seeding completed')
+  } catch (error) {
+    console.error('❌ NFT seeding hatası:', error)
+    if (error instanceof Error) {
+      console.error('   Message:', error.message)
+      console.error('   Stack:', error.stack)
+    }
+    console.log('⚠️  Seed devam ediyor ama NFT verileri oluşturulamadı')
   }
 
   // ===== SUMMARY =====

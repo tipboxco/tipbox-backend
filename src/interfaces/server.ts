@@ -23,6 +23,10 @@ async function startServer() {
 
     // Prisma client'ı başlat (ID middleware ile birlikte)
     const prisma = getPrisma();
+    
+    // Prisma'yı veritabanına bağla
+    await prisma.$connect();
+    logger.info({ message: 'Prisma connected to database successfully' });
 
     // Redis konfigürasyonunu başlat
     const redisConfig = await RedisConfigManager.getInstance().initialize();
@@ -76,6 +80,10 @@ async function startServer() {
         logger.info('HTTP server closed');
       });
       
+      // Prisma bağlantısını kapat
+      await prisma.$disconnect();
+      logger.info('Prisma disconnected');
+      
       // Cache ve queue servislerini kapat
       await cacheService.disconnect();
       await queueProvider.closeAllQueues();
@@ -92,6 +100,10 @@ async function startServer() {
       httpServer.close(() => {
         logger.info('HTTP server closed');
       });
+      
+      // Prisma bağlantısını kapat
+      await prisma.$disconnect();
+      logger.info('Prisma disconnected');
       
       // Cache ve queue servislerini kapat
       await cacheService.disconnect();

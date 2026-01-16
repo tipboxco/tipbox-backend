@@ -194,6 +194,7 @@ export class InventoryService {
 
         result.push({
           id: inventory.id,
+          productId: inventory.productId, // ✅ YENİ: Product ID eklendi
           brand: {
             name: product.brand || 'Unknown',
             model: product.name,
@@ -583,6 +584,69 @@ export class InventoryService {
         : 'Product and Usage Experience';
     const safeRating = Math.min(Math.max(Math.round(experience.rating), 1), 5);
     return `${readable} (${safeRating}/5)`;
+  }
+
+  /**
+   * Inventory cache'ini temizle
+   */
+  async clearInventoryCache(userId: string, clearAll: boolean = false): Promise<{ message: string; cleared: number }> {
+    try {
+      let cleared = 0;
+
+      if (clearAll) {
+        // Tüm inventory cache'lerini temizle
+        const pattern = 'inventory:user:*:list';
+        const keys: string[] = [];
+        
+        // Redis scan ile tüm matching keys'leri bul
+        let cursor = '0';
+        do {
+          const result = await this.cacheService.scan(cursor, pattern);
+          cursor = result.cursor;
+          keys.push(...result.keys);
+        } while (cursor !== '0');
+
+        // Tüm keys'leri sil
+        for (const key of keys) {
+          await this.cacheService.delete(key);
+          cleared++;
+        }
+
+        logger.info({
+          message: 'All inventory cache cleared',
+          pattern,
+          cleared,
+        });
+
+        return {
+          message: `All inventory cache cleared (${cleared} entries)`,
+          cleared,
+        };
+      } else {
+        // Belirli bir kullanıcının cache'ini temizle
+        const cacheKey = `inventory:user:${userId}:list`;
+        const deleted = await this.cacheService.delete(cacheKey);
+        
+        if (deleted) {
+          cleared = 1;
+          logger.info({
+            message: 'User inventory cache cleared',
+            userId,
+            cacheKey,
+          });
+        }
+
+        return {
+          message: deleted 
+            ? `Inventory cache cleared for user ${userId}` 
+            : `No cache found for user ${userId}`,
+          cleared,
+        };
+      }
+    } catch (error) {
+      logger.error('Failed to clear inventory cache:', error);
+      throw error;
+    }
   }
 }
 
