@@ -315,11 +315,13 @@ export class SupportRequestService {
           payload.recipientUserId,
           NotificationType.DM_REQUEST_RECEIVED,
           {
-            requesterName: sender.name || sender.email,
-            requesterId: sender.id,
+            // Mobil navigasyon için gerekli fieldlar
+            userId: sender.id, // Mesaj atan kişinin ID'si (avatar için)
+            userName: sender.name || sender.email,
             requestId: request.id,
-            message: payload.message,
-            amount: payload.amount,
+            threadId: dmThreadId || null, // Thread varsa ID, yoksa null
+            message: payload.message, // Mesaj içeriği
+            amount: payload.amount, // Support request için amount
           }
         );
       }
@@ -386,23 +388,28 @@ export class SupportRequestService {
     socketHandler.sendMessageToUser(request.fromUserId, 'support_request_accepted', acceptedEvent);
     socketHandler.sendMessageToUser(request.toUserId, 'support_request_accepted', acceptedEvent);
 
-    // Request gönderen kullanıcıya bildirim gönder (SUPPORT_REQUEST_ACCEPTED)
+    // Request gönderen kullanıcıya bildirim gönder
+    // Her zaman DM_REQUEST_ACCEPTED gönder (1-on-1 request kabul edildi)
     try {
-      const expert = await this.userRepo.findById(expertUserId);
+      const expert = await this.prisma.user.findUnique({
+        where: { id: expertUserId },
+        include: { profile: true },
+      });
       if (expert) {
+        const userName = expert.profile?.displayName || expert.profile?.userName || expert.email || 'Kullanıcı';
         await this.notificationService.sendNotification(
           request.fromUserId,
-          NotificationType.SUPPORT_REQUEST_ACCEPTED,
+          NotificationType.DM_REQUEST_ACCEPTED,
           {
-            accepterName: expert.name || expert.email,
-            accepterId: expert.id,
-            requestId: request.id,
-            threadId: supportThread.id,
+            // Mobil navigasyon için gerekli fieldlar
+            userId: expert.id, // Request'i kabul eden kişinin ID'si (avatar için)
+            userName: userName, // Kullanıcı adı (displayName, userName veya email)
+            threadId: supportThread.id, // Thread ID (direkt thread'e yönlendirme için)
           }
         );
       }
     } catch (error) {
-      logger.error(`Failed to send SUPPORT_REQUEST_ACCEPTED notification:`, error);
+      logger.error(`Failed to send DM_REQUEST_ACCEPTED notification:`, error);
       // Don't throw - notification failure shouldn't break the accept flow
     }
 
@@ -494,6 +501,25 @@ export class SupportRequestService {
 
     // Göndericiye bildir
     socketHandler.sendMessageToUser(request.fromUserId, 'support_request_rejected', rejectedEvent);
+
+    // Request gönderen kullanıcıya bildirim gönder (DM_REQUEST_DECLINED)
+    try {
+      const expert = await this.userRepo.findById(expertUserId);
+      if (expert) {
+        await this.notificationService.sendNotification(
+          request.fromUserId,
+          NotificationType.DM_REQUEST_DECLINED,
+          {
+            // Mobil navigasyon için gerekli fieldlar
+            userId: expert.id, // Request'i reddeden kişinin ID'si (avatar için)
+            userName: expert.name || expert.email,
+          }
+        );
+      }
+    } catch (error) {
+      logger.error(`Failed to send DM_REQUEST_DECLINED notification:`, error);
+      // Don't throw - notification failure shouldn't break the reject flow
+    }
 
     logger.info(`Support request ${requestId} rejected by ${expertUserId}`);
   }

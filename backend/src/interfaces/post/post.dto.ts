@@ -24,7 +24,6 @@ import { ExperienceStatus } from '../../domain/content/experience-status.enum';
  *       required:
  *         - contextType
  *         - contextId
- *         - description
  *       properties:
  *         contextType:
  *           $ref: '#/components/schemas/ContextType'
@@ -32,6 +31,14 @@ import { ExperienceStatus } from '../../domain/content/experience-status.enum';
  *           type: string
  *         description:
  *           type: string
+ *           description: Post description (deprecated, use 'body' instead)
+ *         body:
+ *           type: string
+ *           maxLength: 2000
+ *           description: Post content/body (preferred field)
+ *         title:
+ *           type: string
+ *           description: Optional post title
  *         images:
  *           type: array
  *           items:
@@ -262,8 +269,11 @@ import { ExperienceStatus } from '../../domain/content/experience-status.enum';
 
 export interface CreatePostRequest {
   contextType: ContextType;
-  contextId: string;
-  description: string;
+  contextId: string; // Can be productId OR inventoryId (will be resolved in service)
+  inventoryId?: string; // ✅ YENİ: If provided, productId will be fetched from inventory
+  description?: string; // Optional for backward compatibility
+  body?: string; // New field for event posts
+  title?: string; // Optional title field
   images?: string[];
   eventId?: string; // Optional event ID to link post to event
 }
@@ -335,6 +345,12 @@ export interface CreateUpdatePostRequest {
   content: string;
   images?: string[];
   eventId?: string; // Optional event ID to link post to event
+}
+
+export interface UpdatePostRequest {
+  description?: string;
+  images?: string[];
+  eventId?: string;
 }
 
 export interface SplitExperienceRequest {

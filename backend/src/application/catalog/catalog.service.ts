@@ -5,6 +5,7 @@ import { withCache } from '../../infrastructure/cache/cache-wrapper.helper';
 import { CACHE_KEYS } from '../../infrastructure/cache/cache-keys';
 import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
 import { FeedItem, FeedItemType } from '../../interfaces/feed/feed.dto';
+import { ContextType } from '../../domain/content/context-type.enum';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
 
 const prisma = getPrisma();
@@ -329,11 +330,18 @@ export class CatalogService {
 
   /**
    * Product'a ait post'ları getir
+   * Filtreler: all, free, tips_and_tricks, questions, updates, benchmarks, reviews
+   * Sıralama: newest, oldest, most_popular
    */
   async getProductPosts(
     productId: string,
     userId?: string,
-    options?: { cursor?: string; limit?: number; type?: string }
+    options?: { 
+      cursor?: string; 
+      limit?: number; 
+      filter?: string; // all, free, tips_and_tricks, questions, updates, benchmarks, reviews
+      sort?: string; // newest, oldest, most_popular
+    }
   ): Promise<{
     items: Array<{ type: string; data: any }>;
     pagination: { cursor?: string; hasMore: boolean; limit: number };
@@ -350,18 +358,25 @@ export class CatalogService {
 
       const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
       const cursor = options?.cursor;
-      const postType = options?.type; // experience, comments, benchmark
+      const filter = options?.filter || 'all'; // all, free, tips_and_tricks, questions, updates, benchmarks, reviews
+      const sort = options?.sort || 'newest'; // newest, oldest, most_popular
 
-      // Post type'a göre filtreleme
+      // Filtreleme: Product için
       let typeFilter: ContentPostType[] | undefined;
-      if (postType === 'experience') {
-        typeFilter = [ContentPostType.EXPERIENCE, ContentPostType.UPDATE];
-      } else if (postType === 'comments') {
-        typeFilter = [ContentPostType.FREE, ContentPostType.QUESTION];
-      } else if (postType === 'benchmark') {
+      if (filter === 'free') {
+        typeFilter = [ContentPostType.FREE];
+      } else if (filter === 'tips_and_tricks') {
+        typeFilter = [ContentPostType.TIPS];
+      } else if (filter === 'questions') {
+        typeFilter = [ContentPostType.QUESTION];
+      } else if (filter === 'updates') {
+        typeFilter = [ContentPostType.UPDATE];
+      } else if (filter === 'benchmarks') {
         typeFilter = [ContentPostType.COMPARE];
+      } else if (filter === 'reviews') {
+        typeFilter = [ContentPostType.EXPERIENCE];
       }
-      // postType yoksa tüm post tipleri
+      // filter === 'all' ise tüm post tipleri (typeFilter undefined)
 
       const whereClause: any = {
         productId: productId,
@@ -427,7 +442,15 @@ export class CatalogService {
             orderBy: { orderIndex: 'asc' },
           },
         },
-        orderBy: { createdAt: 'desc' },
+        // Sıralama
+        ...(sort === 'most_popular' 
+          ? {} // Most popular için önce tüm postları alıp sonra sıralayacağız
+          : {
+              orderBy: sort === 'oldest' 
+                ? { createdAt: 'asc' } 
+                : { createdAt: 'desc' }
+            }
+        ),
         take: limit + 1,
         ...(cursor && {
           cursor: { id: cursor },
@@ -435,8 +458,18 @@ export class CatalogService {
         }),
       });
 
-      const hasMore = posts.length > limit;
-      const resultPosts = hasMore ? posts.slice(0, limit) : posts;
+      // Most popular sıralaması için beğeni + yorum + kaydetme sayısına göre sırala
+      let sortedPosts = posts;
+      if (sort === 'most_popular') {
+        sortedPosts = posts.sort((a, b) => {
+          const aScore = (a.likes?.length || 0) + (a.comments?.length || 0) + (a.favorites?.length || 0);
+          const bScore = (b.likes?.length || 0) + (b.comments?.length || 0) + (b.favorites?.length || 0);
+          return bScore - aScore; // Yüksekten düşüğe
+        });
+      }
+
+      const hasMore = sortedPosts.length > limit;
+      const resultPosts = hasMore ? sortedPosts.slice(0, limit) : sortedPosts;
       const nextCursor = hasMore && resultPosts.length > 0 ? resultPosts[resultPosts.length - 1].id : undefined;
 
       // Map ContentPostType to FeedItemType
@@ -459,13 +492,7 @@ export class CatalogService {
       // Convert posts to feed items
       const feedItems: Array<{ type: string; data: any }> = resultPosts.map((post: any) => {
         const baseType = mapContentPostTypeToFeedItemType(post.type);
-
-        // Product image için fallback chain
-        const product = post.product as any;
-        const group = product?.group;
-        const subCategory = group?.subCategory;
-        const mainCategory = subCategory?.mainCategory;
-        const imagePath = product?.imageUrl || group?.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
+        const contextData = this.buildContextDataFromPost(post);
 
         const baseData = {
           id: post.id,
@@ -482,11 +509,8 @@ export class CatalogService {
             bookmarks: (post as any).favoritesCount ?? post.favorites?.length ?? 0,
           },
           createdAt: post.createdAt.toISOString(),
-          product: {
-            id: product?.id || '',
-            name: product?.name || '',
-            image: resolveMediaUrl(imagePath),
-          },
+          contextType: post.product ? ContextType.PRODUCT : post.productGroup ? ContextType.PRODUCT_GROUP : ContextType.SUB_CATEGORY,
+          contextData: contextData,
           content: post.body,
           images: (post.media || []).map((m: any) => resolveMediaUrl(m.mediaUrl)).filter((url: string | null): url is string => url !== null),
         };
@@ -507,6 +531,539 @@ export class CatalogService {
       };
     } catch (error) {
       logger.error(`Failed to get product posts for ${productId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Context seviyesine göre izin verilen post tiplerini döndürür
+   */
+  private getAllowedPostTypesForContext(contextType: ContextType): ContentPostType[] {
+    switch (contextType) {
+      case ContextType.SUB_CATEGORY:
+      case ContextType.PRODUCT_GROUP:
+        // Sub category ve product group için sadece Free, Tips, Question
+        return [ContentPostType.FREE, ContentPostType.TIPS, ContentPostType.QUESTION];
+      case ContextType.PRODUCT:
+        // Product için tüm post tipleri
+        return [
+          ContentPostType.FREE,
+          ContentPostType.TIPS,
+          ContentPostType.QUESTION,
+          ContentPostType.EXPERIENCE,
+          ContentPostType.UPDATE,
+          ContentPostType.COMPARE,
+        ];
+      default:
+        return [];
+    }
+  }
+
+  /**
+   * Post'tan context data oluşturur
+   */
+  private buildContextDataFromPost(post: any): any {
+    // Product context
+    if (post.product) {
+      const product = post.product;
+      const group = product.group;
+      const subCategory = group?.subCategory;
+      const mainCategory = subCategory?.mainCategory;
+      const imagePath = product.imageUrl || group?.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
+
+      return {
+        id: product.id,
+        name: product.name,
+        subName: group?.name || subCategory?.name || '',
+        image: resolveMediaUrl(imagePath),
+      };
+    }
+
+    // Product Group context
+    if (post.productGroup) {
+      const group = post.productGroup;
+      const subCategory = group.subCategory;
+      const mainCategory = subCategory?.mainCategory;
+      const imagePath = group.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
+
+      return {
+        id: group.id,
+        name: group.name,
+        subName: subCategory?.name || mainCategory?.name || '',
+        image: resolveMediaUrl(imagePath),
+      };
+    }
+
+    // Sub Category context
+    if (post.subCategory) {
+      const subCategory = post.subCategory;
+      const mainCategory = subCategory.mainCategory;
+      const imagePath = subCategory.imageUrl || mainCategory?.imageUrl || null;
+
+      return {
+        id: subCategory.id,
+        name: subCategory.name,
+        subName: mainCategory?.name || '',
+        image: resolveMediaUrl(imagePath),
+      };
+    }
+
+    return {
+      id: '',
+      name: '',
+      subName: '',
+      image: null,
+    };
+  }
+
+  /**
+   * Sub category'ye ait post'ları getir (hiyerarşik feed)
+   * Sub category'ye ait + alt product group'ların + alt product'ların gönderilerini getirir
+   * Filtreler: all, free, tips_and_tricks, questions
+   * Sıralama: newest, oldest, most_popular
+   */
+  async getSubCategoryPosts(
+    subCategoryId: string,
+    userId?: string,
+    options?: { 
+      cursor?: string; 
+      limit?: number; 
+      filter?: string; // all, free, tips_and_tricks, questions
+      sort?: string; // newest, oldest, most_popular
+    }
+  ): Promise<{
+    items: Array<{ type: string; data: any }>;
+    pagination: { cursor?: string; hasMore: boolean; limit: number };
+  }> {
+    try {
+      // Sub category'nin var olup olmadığını kontrol et
+      const subCategory = await prisma.subCategory.findUnique({
+        where: { id: subCategoryId },
+      });
+
+      if (!subCategory) {
+        throw new Error(`Sub category not found: ${subCategoryId}`);
+      }
+
+      const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+      const cursor = options?.cursor;
+      const filter = options?.filter || 'all'; // all, free, tips_and_tricks, questions
+      const sort = options?.sort || 'newest'; // newest, oldest, most_popular
+
+      // Alt product group'ları getir
+      const productGroups = await prisma.productGroup.findMany({
+        where: { subCategoryId: subCategoryId },
+        select: { id: true },
+      });
+      const productGroupIds = productGroups.map((pg) => pg.id);
+
+      // Alt product'ları getir
+      const products = await prisma.product.findMany({
+        where: { groupId: { in: productGroupIds } },
+        select: { id: true },
+      });
+      const productIds = products.map((p) => p.id);
+
+      // Filtreleme: Sub category için
+      let typeFilter: ContentPostType[] | undefined;
+      if (filter === 'free') {
+        typeFilter = [ContentPostType.FREE];
+      } else if (filter === 'tips_and_tricks') {
+        typeFilter = [ContentPostType.TIPS];
+      } else if (filter === 'questions') {
+        typeFilter = [ContentPostType.QUESTION];
+      } else {
+        // filter === 'all' ise context seviyesine göre otomatik filtreleme
+        typeFilter = this.getAllowedPostTypesForContext(ContextType.SUB_CATEGORY);
+      }
+
+      // Hiyerarşik where clause: sub category + alt product groups + alt products
+      const whereClause: any = {
+        OR: [
+          { subCategoryId: subCategoryId },
+          ...(productGroupIds.length > 0 ? [{ productGroupId: { in: productGroupIds } }] : []),
+          ...(productIds.length > 0 ? [{ productId: { in: productIds } }] : []),
+        ],
+      };
+
+      // Post type filtreleme
+      if (typeFilter) {
+        whereClause.type = { in: typeFilter };
+      }
+
+      const posts = await prisma.contentPost.findMany({
+        where: whereClause,
+        include: {
+          user: {
+            include: {
+              profile: true,
+              titles: {
+                orderBy: { earnedAt: 'desc' },
+                take: 1,
+              },
+              avatars: {
+                where: { isActive: true },
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+              },
+            },
+          },
+          product: {
+            include: {
+              group: {
+                include: {
+                  subCategory: {
+                    include: {
+                      mainCategory: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          productGroup: {
+            include: {
+              subCategory: {
+                include: {
+                  mainCategory: true,
+                },
+              },
+            },
+          },
+          subCategory: {
+            include: {
+              mainCategory: true,
+            },
+          },
+          mainCategory: true,
+          comparison: {
+            include: {
+              product1: true,
+              product2: true,
+              scores: true,
+            },
+          },
+          question: true,
+          tip: true,
+          tags: true,
+          likes: true,
+          comments: true,
+          favorites: true,
+          media: {
+            orderBy: { orderIndex: 'asc' },
+          },
+        },
+        // Sıralama
+        ...(sort === 'most_popular' 
+          ? {} // Most popular için önce tüm postları alıp sonra sıralayacağız
+          : {
+              orderBy: sort === 'oldest' 
+                ? { createdAt: 'asc' } 
+                : { createdAt: 'desc' }
+            }
+        ),
+        take: limit + 1,
+        ...(cursor && {
+          cursor: { id: cursor },
+          skip: 1,
+        }),
+      });
+
+      // Most popular sıralaması için beğeni + yorum + kaydetme sayısına göre sırala
+      let sortedPosts = posts;
+      if (sort === 'most_popular') {
+        sortedPosts = posts.sort((a, b) => {
+          const aScore = (a.likes?.length || 0) + (a.comments?.length || 0) + (a.favorites?.length || 0);
+          const bScore = (b.likes?.length || 0) + (b.comments?.length || 0) + (b.favorites?.length || 0);
+          return bScore - aScore; // Yüksekten düşüğe
+        });
+      }
+
+      const hasMore = sortedPosts.length > limit;
+      const resultPosts = hasMore ? sortedPosts.slice(0, limit) : sortedPosts;
+      const nextCursor = hasMore && resultPosts.length > 0 ? resultPosts[resultPosts.length - 1].id : undefined;
+
+      // Map ContentPostType to FeedItemType
+      const mapContentPostTypeToFeedItemType = (type: ContentPostType): FeedItemType => {
+        switch (type) {
+          case ContentPostType.EXPERIENCE:
+          case ContentPostType.UPDATE:
+            return FeedItemType.EXPERIENCE;
+          case ContentPostType.COMPARE:
+            return FeedItemType.BENCHMARK;
+          case ContentPostType.QUESTION:
+            return FeedItemType.QUESTION;
+          case ContentPostType.TIPS:
+            return FeedItemType.TIPS_AND_TRICKS;
+          default:
+            return FeedItemType.POST;
+        }
+      };
+
+      // Convert posts to feed items
+      const feedItems: Array<{ type: string; data: any }> = resultPosts.map((post) => {
+        const baseType = mapContentPostTypeToFeedItemType(post.type);
+        const contextData = this.buildContextDataFromPost(post);
+
+        const baseData = {
+          id: post.id,
+          type: baseType,
+          user: {
+            id: post.user.id,
+            name: post.user.profile?.displayName || post.user.email || 'Anonymous',
+            avatar: resolveMediaUrl(post.user.avatars?.[0]?.imageUrl || null, true) || '',
+          },
+          stats: {
+            likes: (post as any).likesCount ?? post.likes?.length ?? 0,
+            comments: (post as any).commentsCount ?? post.comments?.length ?? 0,
+            shares: (post as any).sharesCount ?? 0,
+            bookmarks: (post as any).favoritesCount ?? post.favorites?.length ?? 0,
+          },
+          createdAt: post.createdAt.toISOString(),
+          contextType: post.product ? ContextType.PRODUCT : post.productGroup ? ContextType.PRODUCT_GROUP : ContextType.SUB_CATEGORY,
+          contextData: contextData,
+          content: post.body,
+          images: (post.media || []).map((m: any) => resolveMediaUrl(m.mediaUrl)).filter((url: string | null): url is string => url !== null),
+        };
+
+        return {
+          type: baseType,
+          data: baseData,
+        };
+      });
+
+      return {
+        items: feedItems,
+        pagination: {
+          cursor: nextCursor,
+          hasMore,
+          limit,
+        },
+      };
+    } catch (error) {
+      logger.error(`Failed to get sub category posts for ${subCategoryId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Product group'a ait post'ları getir (hiyerarşik feed)
+   * Product group'a ait + alt product'ların gönderilerini getirir
+   * Filtreler: all, free, tips_and_tricks, questions
+   * Sıralama: newest, oldest, most_popular
+   */
+  async getProductGroupPosts(
+    productGroupId: string,
+    userId?: string,
+    options?: { 
+      cursor?: string; 
+      limit?: number; 
+      filter?: string; // all, free, tips_and_tricks, questions
+      sort?: string; // newest, oldest, most_popular
+    }
+  ): Promise<{
+    items: Array<{ type: string; data: any }>;
+    pagination: { cursor?: string; hasMore: boolean; limit: number };
+  }> {
+    try {
+      // Product group'un var olup olmadığını kontrol et
+      const productGroup = await prisma.productGroup.findUnique({
+        where: { id: productGroupId },
+      });
+
+      if (!productGroup) {
+        throw new Error(`Product group not found: ${productGroupId}`);
+      }
+
+      const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+      const cursor = options?.cursor;
+      const filter = options?.filter || 'all'; // all, free, tips_and_tricks, questions
+      const sort = options?.sort || 'newest'; // newest, oldest, most_popular
+
+      // Alt product'ları getir
+      const products = await prisma.product.findMany({
+        where: { groupId: productGroupId },
+        select: { id: true },
+      });
+      const productIds = products.map((p) => p.id);
+
+      // Filtreleme: Product group için
+      let typeFilter: ContentPostType[] | undefined;
+      if (filter === 'free') {
+        typeFilter = [ContentPostType.FREE];
+      } else if (filter === 'tips_and_tricks') {
+        typeFilter = [ContentPostType.TIPS];
+      } else if (filter === 'questions') {
+        typeFilter = [ContentPostType.QUESTION];
+      } else {
+        // filter === 'all' ise context seviyesine göre otomatik filtreleme
+        typeFilter = this.getAllowedPostTypesForContext(ContextType.PRODUCT_GROUP);
+      }
+
+      // Hiyerarşik where clause: product group + alt products
+      const whereClause: any = {
+        OR: [
+          { productGroupId: productGroupId },
+          ...(productIds.length > 0 ? [{ productId: { in: productIds } }] : []),
+        ],
+      };
+
+      // Post type filtreleme
+      if (typeFilter) {
+        whereClause.type = { in: typeFilter };
+      }
+
+      const posts = await prisma.contentPost.findMany({
+        where: whereClause,
+        include: {
+          user: {
+            include: {
+              profile: true,
+              titles: {
+                orderBy: { earnedAt: 'desc' },
+                take: 1,
+              },
+              avatars: {
+                where: { isActive: true },
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+              },
+            },
+          },
+          product: {
+            include: {
+              group: {
+                include: {
+                  subCategory: {
+                    include: {
+                      mainCategory: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          productGroup: {
+            include: {
+              subCategory: {
+                include: {
+                  mainCategory: true,
+                },
+              },
+            },
+          },
+          subCategory: {
+            include: {
+              mainCategory: true,
+            },
+          },
+          mainCategory: true,
+          comparison: {
+            include: {
+              product1: true,
+              product2: true,
+              scores: true,
+            },
+          },
+          question: true,
+          tip: true,
+          tags: true,
+          likes: true,
+          comments: true,
+          favorites: true,
+          media: {
+            orderBy: { orderIndex: 'asc' },
+          },
+        },
+        // Sıralama
+        ...(sort === 'most_popular' 
+          ? {} // Most popular için önce tüm postları alıp sonra sıralayacağız
+          : {
+              orderBy: sort === 'oldest' 
+                ? { createdAt: 'asc' } 
+                : { createdAt: 'desc' }
+            }
+        ),
+        take: limit + 1,
+        ...(cursor && {
+          cursor: { id: cursor },
+          skip: 1,
+        }),
+      });
+
+      // Most popular sıralaması için beğeni + yorum + kaydetme sayısına göre sırala
+      let sortedPosts = posts;
+      if (sort === 'most_popular') {
+        sortedPosts = posts.sort((a, b) => {
+          const aScore = (a.likes?.length || 0) + (a.comments?.length || 0) + (a.favorites?.length || 0);
+          const bScore = (b.likes?.length || 0) + (b.comments?.length || 0) + (b.favorites?.length || 0);
+          return bScore - aScore; // Yüksekten düşüğe
+        });
+      }
+
+      const hasMore = sortedPosts.length > limit;
+      const resultPosts = hasMore ? sortedPosts.slice(0, limit) : sortedPosts;
+      const nextCursor = hasMore && resultPosts.length > 0 ? resultPosts[resultPosts.length - 1].id : undefined;
+
+      // Map ContentPostType to FeedItemType
+      const mapContentPostTypeToFeedItemType = (type: ContentPostType): FeedItemType => {
+        switch (type) {
+          case ContentPostType.EXPERIENCE:
+          case ContentPostType.UPDATE:
+            return FeedItemType.EXPERIENCE;
+          case ContentPostType.COMPARE:
+            return FeedItemType.BENCHMARK;
+          case ContentPostType.QUESTION:
+            return FeedItemType.QUESTION;
+          case ContentPostType.TIPS:
+            return FeedItemType.TIPS_AND_TRICKS;
+          default:
+            return FeedItemType.POST;
+        }
+      };
+
+      // Convert posts to feed items
+      const feedItems: Array<{ type: string; data: any }> = resultPosts.map((post) => {
+        const baseType = mapContentPostTypeToFeedItemType(post.type);
+        const contextData = this.buildContextDataFromPost(post);
+
+        const baseData = {
+          id: post.id,
+          type: baseType,
+          user: {
+            id: post.user.id,
+            name: post.user.profile?.displayName || post.user.email || 'Anonymous',
+            avatar: resolveMediaUrl(post.user.avatars?.[0]?.imageUrl || null, true) || '',
+          },
+          stats: {
+            likes: (post as any).likesCount ?? post.likes?.length ?? 0,
+            comments: (post as any).commentsCount ?? post.comments?.length ?? 0,
+            shares: (post as any).sharesCount ?? 0,
+            bookmarks: (post as any).favoritesCount ?? post.favorites?.length ?? 0,
+          },
+          createdAt: post.createdAt.toISOString(),
+          contextType: post.product ? ContextType.PRODUCT : post.productGroup ? ContextType.PRODUCT_GROUP : ContextType.SUB_CATEGORY,
+          contextData: contextData,
+          content: post.body,
+          images: (post.media || []).map((m: any) => resolveMediaUrl(m.mediaUrl)).filter((url: string | null): url is string => url !== null),
+        };
+
+        return {
+          type: baseType,
+          data: baseData,
+        };
+      });
+
+      return {
+        items: feedItems,
+        pagination: {
+          cursor: nextCursor,
+          hasMore,
+          limit,
+        },
+      };
+    } catch (error) {
+      logger.error(`Failed to get product group posts for ${productGroupId}:`, error);
       throw error;
     }
   }

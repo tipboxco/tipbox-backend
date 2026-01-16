@@ -7,6 +7,7 @@ import { authMiddleware } from '../auth/auth.middleware';
 import { S3Service } from '../../infrastructure/s3/s3.service';
 import { v4 as uuidv4 } from 'uuid';
 import logger from '../../infrastructure/logger/logger';
+import { UpdateExpertRequestRequest } from './expert.dto';
 
 const router = Router();
 const expertService = new ExpertService();
@@ -1136,6 +1137,158 @@ router.post(
           return res.status(404).json({ message: error.message });
         }
         if (error.message.includes('Cannot accept') || error.message.includes('already answered')) {
+          return res.status(400).json({ message: error.message });
+        }
+      }
+      throw error;
+    }
+  })
+);
+
+/**
+ * @openapi
+ * /expert/request/{requestId}:
+ *   put:
+ *     summary: Expert request güncelle
+ *     description: Sadece request sahibi, PENDING durumundaki request'leri güncelleyebilir. Description ve media güncellenebilir.
+ *     tags: [Expert]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: requestId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Güncellenecek expert request ID'si
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               description:
+ *                 type: string
+ *                 description: Request açıklaması
+ *               mediaUrls:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     url:
+ *                       type: string
+ *                     type:
+ *                       type: string
+ *                       enum: [IMAGE, VIDEO]
+ *     responses:
+ *       200:
+ *         description: Expert request başarıyla güncellendi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ExpertRequestResponse'
+ *       400:
+ *         description: Request PENDING durumunda değil
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Request kullanıcıya ait değil
+ *       404:
+ *         description: Expert request not found
+ */
+router.put(
+  '/request/:requestId',
+  authMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { requestId } = req.params;
+    const request: UpdateExpertRequestRequest = {
+      description: req.body.description,
+      mediaUrls: req.body.mediaUrls,
+    };
+
+    try {
+      const result = await expertService.updateExpertRequest(String(userId), requestId, request);
+      return res.json(result);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes('not found')) {
+          return res.status(404).json({ message: error.message });
+        }
+        if (error.message.includes('Unauthorized') || error.message.includes('does not belong')) {
+          return res.status(403).json({ message: error.message });
+        }
+        if (error.message.includes('PENDING status')) {
+          return res.status(400).json({ message: error.message });
+        }
+      }
+      throw error;
+    }
+  })
+);
+
+/**
+ * @openapi
+ * /expert/request/{requestId}:
+ *   delete:
+ *     summary: Expert request sil
+ *     description: Sadece request sahibi, PENDING durumundaki request'leri silebilir. Eğer TIPS gönderilmişse, geri iade edilir.
+ *     tags: [Expert]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: requestId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Silinecek expert request ID'si
+ *     responses:
+ *       204:
+ *         description: Expert request başarıyla silindi
+ *       400:
+ *         description: Request PENDING durumunda değil
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Request kullanıcıya ait değil
+ *       404:
+ *         description: Expert request not found
+ */
+router.delete(
+  '/request/:requestId',
+  authMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { requestId } = req.params;
+
+    try {
+      await expertService.deleteExpertRequest(String(userId), requestId);
+      return res.status(204).send();
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message.includes('not found')) {
+          return res.status(404).json({ message: error.message });
+        }
+        if (error.message.includes('Unauthorized') || error.message.includes('does not belong')) {
+          return res.status(403).json({ message: error.message });
+        }
+        if (error.message.includes('PENDING status')) {
           return res.status(400).json({ message: error.message });
         }
       }

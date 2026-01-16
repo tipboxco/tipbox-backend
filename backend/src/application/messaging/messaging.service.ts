@@ -124,19 +124,8 @@ export class MessagingService {
     // Göndericiye message_sent event'i gönder
     socketHandler.sendMessageToUser(senderId, 'message_sent', newMessageEvent);
 
-    // Notification servisine bildir
-    if (sender) {
-      await this.notificationService.sendNotification(
-        recipientId,
-        NotificationType.NEW_MESSAGE,
-        {
-          senderName: sender.name || sender.email,
-          senderId: sender.id,
-          messagePreview: message.substring(0, 50),
-          threadId: thread.id,
-        }
-      );
-    }
+    // NEW_MESSAGE bildirimi kaldırıldı - zaten inbox ekranında görüntülenecek
+    // Sadece önemli durumlar için bildirim gönderilecek (DM_REQUEST_ACCEPTED, SUPPORT_REQUEST_ACCEPTED)
 
     logger.info(`Direct message sent from ${senderId} to ${recipientId}, socket events emitted`);
   }
@@ -1108,6 +1097,191 @@ export class MessagingService {
       logger.info(`Support chat message sent from ${senderId} to ${recipientId} in thread ${threadId}, socket events emitted`);
     } catch (error) {
       logger.error(`Failed to send support chat message:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Mesaj güncelleme
+   * Sadece gönderen kullanıcı, mesajı gönderdikten sonra belirli bir süre içinde (örn: 5 dakika) güncelleyebilir
+   */
+  async updateMessage(
+    userId: string,
+    messageId: string,
+    newMessage: string
+  ): Promise<void> {
+    try {
+      const message = await this.prisma.dMMessage.findUnique({
+        where: { id: messageId },
+        include: { thread: true },
+      });
+
+      if (!message) {
+        throw new Error('Message not found');
+      }
+
+      // Mesaj sahibi kontrolü
+      if (message.senderId !== userId) {
+        throw new Error('Forbidden: user does not own this message');
+      }
+
+      // Zaman kontrolü (5 dakika içinde güncellenebilir)
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      if (message.sentAt < fiveMinutesAgo) {
+        throw new Error('Message can only be updated within 5 minutes of sending');
+      }
+
+      // Mesajı güncelle
+      await this.prisma.dMMessage.update({
+        where: { id: messageId },
+        data: { message: newMessage },
+      });
+
+      // Thread updatedAt timestamp'ini güncelle
+      await this.prisma.dMThread.update({
+        where: { id: message.threadId },
+        data: { updatedAt: new Date() },
+      });
+
+      // Socket.IO ile real-time bildirim
+      const socketHandler = SocketManager.getInstance().getSocketHandler();
+      const updatedEvent = {
+        messageId: message.id,
+        threadId: message.threadId,
+        senderId: userId,
+        message: newMessage,
+        messageType: 'message' as const,
+        context: message.context,
+        timestamp: new Date().toISOString(),
+      };
+
+      // Thread room'una gönder
+      socketHandler.sendToRoom(`thread:${message.threadId}`, 'message_updated', updatedEvent);
+
+      // Her iki kullanıcıya da gönder
+      if (message.thread.userOneId) {
+        socketHandler.sendMessageToUser(message.thread.userOneId, 'message_updated', updatedEvent);
+      }
+      if (message.thread.userTwoId) {
+        socketHandler.sendMessageToUser(message.thread.userTwoId, 'message_updated', updatedEvent);
+      }
+
+      logger.info(`Message updated: ${messageId} by user ${userId}`);
+    } catch (error) {
+      logger.error(`Failed to update message ${messageId} by user ${userId}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Mesaj silme (soft delete)
+   */
+  async deleteMessage(userId: string, messageId: string): Promise<void> {
+    try {
+      const message = await this.prisma.dMMessage.findUnique({
+        where: { id: messageId },
+        include: { thread: true },
+      });
+
+      if (!message) {
+        throw new Error('Message not found');
+      }
+
+      // Mesaj sahibi kontrolü
+      if (message.senderId !== userId) {
+        throw new Error('Forbidden: user does not own this message');
+      }
+
+      // Soft delete: isDeleted flag ekle (eğer schema'da varsa) veya hard delete
+      // Şimdilik hard delete yapıyoruz, gerekirse schema'ya isDeleted field'ı eklenebilir
+      await this.prisma.dMMessage.delete({
+        where: { id: messageId },
+      });
+
+      // Thread updatedAt timestamp'ini güncelle
+      await this.prisma.dMThread.update({
+        where: { id: message.threadId },
+        data: { updatedAt: new Date() },
+      });
+
+      // Socket.IO ile real-time bildirim
+      const socketHandler = SocketManager.getInstance().getSocketHandler();
+      const deletedEvent = {
+        messageId: message.id,
+        threadId: message.threadId,
+        senderId: userId,
+        messageType: 'message' as const,
+        context: message.context,
+        timestamp: new Date().toISOString(),
+      };
+
+      // Thread room'una gönder
+      socketHandler.sendToRoom(`thread:${message.threadId}`, 'message_deleted', deletedEvent);
+
+      // Her iki kullanıcıya da gönder
+      if (message.thread.userOneId) {
+        socketHandler.sendMessageToUser(message.thread.userOneId, 'message_deleted', deletedEvent);
+      }
+      if (message.thread.userTwoId) {
+        socketHandler.sendMessageToUser(message.thread.userTwoId, 'message_deleted', deletedEvent);
+      }
+
+      logger.info(`Message deleted: ${messageId} by user ${userId}`);
+    } catch (error) {
+      logger.error(`Failed to delete message ${messageId} by user ${userId}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Thread silme (soft delete)
+   */
+  async deleteThread(userId: string, threadId: string): Promise<void> {
+    try {
+      const thread = await this.prisma.dMThread.findUnique({
+        where: { id: threadId },
+      });
+
+      if (!thread) {
+        throw new Error('Thread not found');
+      }
+
+      // Thread'deki kullanıcılardan biri olma kontrolü
+      if (thread.userOneId !== userId && thread.userTwoId !== userId) {
+        throw new Error('Forbidden: user is not part of this thread');
+      }
+
+      // Thread'i soft delete: isActive = false
+      await this.prisma.dMThread.update({
+        where: { id: threadId },
+        data: { isActive: false },
+      });
+
+      // Thread'deki tüm mesajları soft delete (eğer schema'da isDeleted field'ı varsa)
+      // Şimdilik mesajları silmiyoruz, sadece thread'i inactive yapıyoruz
+
+      // Socket.IO ile real-time bildirim
+      const socketHandler = SocketManager.getInstance().getSocketHandler();
+      const deletedEvent = {
+        threadId: thread.id,
+        userId: userId,
+        timestamp: new Date().toISOString(),
+      };
+
+      // Thread room'una gönder
+      socketHandler.sendToRoom(`thread:${threadId}`, 'thread_deleted', deletedEvent);
+
+      // Her iki kullanıcıya da gönder
+      if (thread.userOneId) {
+        socketHandler.sendMessageToUser(thread.userOneId, 'thread_deleted', deletedEvent);
+      }
+      if (thread.userTwoId) {
+        socketHandler.sendMessageToUser(thread.userTwoId, 'thread_deleted', deletedEvent);
+      }
+
+      logger.info(`Thread deleted: ${threadId} by user ${userId}`);
+    } catch (error) {
+      logger.error(`Failed to delete thread ${threadId} by user ${userId}`, error);
       throw error;
     }
   }

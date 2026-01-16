@@ -249,3 +249,7 @@ export interface SendTipsCreate {
   timestamp: string;
 }
 
+export interface UpdateMessageRequest {
+  message: string;
+}
+

@@ -5,6 +5,8 @@ import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { authMiddleware } from '../auth/auth.middleware';
 import { getErrorMessage, hasErrorMessage, errorMessageIncludes } from '../../infrastructure/errors/error-helper';
 import logger from '../../infrastructure/logger/logger';
+import { UpdateEventRequest } from './event.dto';
+import { isAdmin } from '../../infrastructure/auth/role-checker';
 
 const router = Router();
 const eventService = new EventService();
@@ -525,8 +527,8 @@ router.get(
  * @openapi
  * /events/{eventId}/badges:
  *   get:
- *     summary: Event badge'lerini getir
- *     description: Event'te kazanılabilecek tüm badge'lerin listesini getirir. Scroll ile pagination destekler.
+ *     summary: Event badge'lerini kullanıcı progress'i ile getir
+ *     description: Event'te kazanılabilecek tüm badge'lerin listesini kullanıcının ilerleme bilgisi ile birlikte getirir. Her badge için rarity, category ve detaylı progress bilgisi içerir.
  *     tags: [Events]
  *     security:
  *       - bearerAuth: []
@@ -561,7 +563,41 @@ router.get(
  *                 items:
  *                   type: array
  *                   items:
- *                     $ref: '#/components/schemas/Badge'
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       title:
+ *                         type: string
+ *                       description:
+ *                         type: string
+ *                       imageUrl:
+ *                         type: string
+ *                         nullable: true
+ *                       rarity:
+ *                         type: string
+ *                         enum: [common, rare, epic]
+ *                       category:
+ *                         type: string
+ *                       userProgress:
+ *                         type: object
+ *                         properties:
+ *                           current:
+ *                             type: integer
+ *                           target:
+ *                             type: integer
+ *                           isCompleted:
+ *                             type: boolean
+ *                           completedAt:
+ *                             type: string
+ *                             format: date-time
+ *                           progressPercentage:
+ *                             type: number
+ *                       eventId:
+ *                         type: string
+ *                       createdAt:
+ *                         type: string
+ *                         format: date-time
  *                 pagination:
  *                   type: object
  *                   properties:
@@ -600,10 +636,14 @@ router.get(
       return res.status(400).json({ message: 'Limit must be between 1 and 50' });
     }
 
-    const eventBadges = await eventService.getEventBadges(eventId, userId, {
-      cursor,
-      ...(typeof limitParam === 'number' ? { limit: limitParam } : {}),
-    });
+    const eventBadges = await eventService.getEventBadgesWithProgress(
+      eventId,
+      String(userId),
+      {
+        cursor,
+        ...(typeof limitParam === 'number' ? { limit: limitParam } : {}),
+      }
+    );
 
     return res.json(eventBadges);
   })
@@ -734,6 +774,128 @@ router.post(
 
 /**
  * @openapi
+ * /events/{eventId}/progress:
+ *   get:
+ *     summary: Kullanıcının event ilerlemesini getir
+ *     description: Kullanıcının event'teki metriklerini, badge progress'ini ve leaderboard'unu getirir
+ *     tags: [Events]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: eventId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Event ID
+ *     responses:
+ *       200:
+ *         description: Event progress bilgisi başarıyla getirildi
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Event not found
+ */
+router.get(
+  '/:eventId/progress',
+  authMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const eventId = req.params.eventId;
+
+    if (!eventId) {
+      return res.status(400).json({ message: 'Event ID is required' });
+    }
+
+    try {
+      const progress = await eventService.getUserEventProgress(String(userId), eventId);
+      return res.json(progress);
+    } catch (error: unknown) {
+      if (hasErrorMessage(error, 'Event not found')) {
+        return res.status(404).json({ message: 'Event not found' });
+      }
+      logger.error(`Error getting event progress ${eventId}:`, error);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  })
+);
+
+/**
+ * @openapi
+ * /events/{eventId}/leaderboard:
+ *   get:
+ *     summary: Event leaderboard'unu getir
+ *     description: Event'in sıralı kullanıcı listesini getirir
+ *     tags: [Events]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: eventId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Event ID
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 50
+ *         description: Sayfa başına item sayısı
+ *     responses:
+ *       200:
+ *         description: Event leaderboard başarıyla getirildi
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Event not found
+ */
+router.get(
+  '/:eventId/leaderboard',
+  authMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const eventId = req.params.eventId;
+
+    if (!eventId) {
+      return res.status(400).json({ message: 'Event ID is required' });
+    }
+
+    const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
+
+    if (limitParam < 1 || limitParam > 100) {
+      return res.status(400).json({ message: 'Limit must be between 1 and 100' });
+    }
+
+    try {
+      const leaderboard = await eventService.getEventLeaderboard(eventId, limitParam);
+      return res.json(leaderboard);
+    } catch (error: unknown) {
+      if (hasErrorMessage(error, 'Event not found')) {
+        return res.status(404).json({ message: 'Event not found' });
+      }
+      logger.error(`Error getting event leaderboard ${eventId}:`, error);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
+  })
+);
+
+/**
+ * @openapi
  * /events/{eventId}/requirements:
  *   get:
  *     summary: Event gereksinimlerini ve ilerlemeyi getir
@@ -821,6 +983,158 @@ router.get(
       }
       logger.error(`Error getting event requirements ${eventId}:`, error);
       return res.status(500).json({ message: 'Internal server error' });
+    }
+  })
+);
+
+/**
+ * @openapi
+ * /events/{eventId}/badges/{badgeId}:
+ *   get:
+ *     summary: Event badge detayı ve kullanıcı ilerlemesi
+ *     description: Belirli bir event badge'inin detaylarını ve kullanıcının o badge'deki ilerlemesini getirir.
+ *     tags: [Events]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: eventId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Event ID (ULID)
+ *       - in: path
+ *         name: badgeId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Badge ID (ULID)
+ *     responses:
+ *       200:
+ *         description: Badge detayı başarıyla getirildi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                   description: Badge ID
+ *                 title:
+ *                   type: string
+ *                   description: Badge ismi
+ *                 description:
+ *                   type: string
+ *                   description: Badge açıklaması
+ *                 imageUrl:
+ *                   type: string
+ *                   nullable: true
+ *                   description: Badge görseli URL
+ *                 rarity:
+ *                   type: string
+ *                   enum: [COMMON, RARE, EPIC]
+ *                   description: Badge nadir değeri
+ *                 userProgress:
+ *                   type: object
+ *                   properties:
+ *                     current:
+ *                       type: integer
+ *                       description: Kullanıcının mevcut ilerleme değeri
+ *                     target:
+ *                       type: integer
+ *                       description: Hedef değer
+ *                     isCompleted:
+ *                       type: boolean
+ *                       description: Badge tamamlandı mı
+ *                     completedAt:
+ *                       type: string
+ *                       format: date-time
+ *                       nullable: true
+ *                       description: Tamamlanma tarihi (ISO 8601)
+ *                     progressPercentage:
+ *                       type: number
+ *                       description: İlerleme yüzdesi (0-100)
+ *                 category:
+ *                   type: string
+ *                   description: Badge kategorisi
+ *                 eventId:
+ *                   type: string
+ *                   description: İlişkili event ID
+ *                 createdAt:
+ *                   type: string
+ *                   format: date-time
+ *                   description: Badge oluşturulma tarihi
+ *       400:
+ *         description: Geçersiz eventId veya badgeId formatı
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Event veya badge bulunamadı
+ *       500:
+ *         description: Internal server error
+ */
+router.get(
+  '/:eventId/badges/:badgeId',
+  authMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ 
+        error: 'Unauthorized',
+        message: 'Invalid or missing authentication token',
+        statusCode: 401
+      });
+    }
+
+    const { eventId, badgeId } = req.params;
+
+    // Validate IDs
+    if (!eventId || !badgeId) {
+      return res.status(400).json({ 
+        error: 'Bad Request',
+        message: 'Invalid eventId or badgeId format',
+        statusCode: 400
+      });
+    }
+
+    try {
+      const badgeDetail = await eventService.getEventBadgeDetail(eventId, badgeId, String(userId));
+      return res.json(badgeDetail);
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      
+      if (errorMessageIncludes(error, 'Badge not found')) {
+        return res.status(404).json({ 
+          error: 'Not Found',
+          message: 'Badge not found',
+          statusCode: 404
+        });
+      }
+      
+      if (errorMessageIncludes(error, 'Event not found')) {
+        return res.status(404).json({ 
+          error: 'Not Found',
+          message: 'Event not found',
+          statusCode: 404
+        });
+      }
+      
+      if (errorMessageIncludes(error, 'does not belong to this event')) {
+        return res.status(404).json({ 
+          error: 'Not Found',
+          message: 'Badge does not belong to this event',
+          statusCode: 404
+        });
+      }
+      
+      logger.error(`Error getting event badge detail ${badgeId} for event ${eventId}:`, error);
+      return res.status(500).json({ 
+        error: 'Internal Server Error',
+        message: 'An unexpected error occurred',
+        statusCode: 500
+      });
     }
   })
 );

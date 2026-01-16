@@ -9,6 +9,12 @@ export interface UpdateExpertRequestTipsDto {
   tipsAmount: number;
 }
 
+export interface UpdateExpertRequestRequest {
+  title?: string;
+  description?: string;
+  mediaUrls?: Array<{ url: string; type: 'IMAGE' | 'VIDEO' }>;
+}
+
 export interface ExpertRequestMediaResponse {
   id: string;
   mediaUrl: string;

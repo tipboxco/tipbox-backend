@@ -208,22 +208,70 @@ export class CacheService {
   /**
    * Belirtilen anahtarı ve verisini cache'ten siler
    * @param key - Silinecek cache anahtarı
+   * @returns Silinen key sayısı (0 veya 1)
    */
-  public async del(key: string): Promise<void> {
+  public async delete(key: string): Promise<boolean> {
     if (isCacheDisabled) {
-      return;
+      return false;
     }
 
     if (!this.client || !this.isConnected) {
       logger.warn('Cache client not connected, skipping cache delete');
-      return;
+      return false;
     }
 
     try {
-      await this.client.del(key);
+      const result = await this.client.del(key);
       logger.debug(`Cache deleted for key: ${key}`);
+      return result > 0;
     } catch (error) {
       logger.error(`Error deleting cache key ${key}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Belirtilen anahtarı ve verisini cache'ten siler
+   * @param key - Silinecek cache anahtarı
+   */
+  public async del(key: string): Promise<void> {
+    await this.delete(key);
+  }
+
+  /**
+   * Redis SCAN komutu ile pattern'e uyan key'leri arar
+   * @param cursor - Scan cursor (başlangıç için '0')
+   * @param pattern - Arama pattern'i (örn: "inventory:user:*:list")
+   * @param count - Her scan'de döndürülecek max key sayısı
+   * @returns { cursor: string, keys: string[] }
+   */
+  public async scan(
+    cursor: string = '0',
+    pattern: string,
+    count: number = 100
+  ): Promise<{ cursor: string; keys: string[] }> {
+    if (isCacheDisabled) {
+      return { cursor: '0', keys: [] };
+    }
+
+    if (!this.client || !this.isConnected) {
+      logger.warn('Cache client not connected, skipping scan');
+      return { cursor: '0', keys: [] };
+    }
+
+    try {
+      const result = await this.client.scan(Number(cursor), {
+        MATCH: pattern,
+        COUNT: count,
+      });
+
+      return {
+        cursor: result.cursor.toString(),
+        keys: result.keys,
+      };
+    } catch (error) {
+      logger.error(`Error scanning cache with pattern ${pattern}:`, error);
+      return { cursor: '0', keys: [] };
     }
   }
 

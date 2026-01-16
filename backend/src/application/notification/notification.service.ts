@@ -6,6 +6,7 @@ import { NotificationCategory } from '../../domain/notification/notification-cat
 import QueueProvider from '../../infrastructure/queue/queue.provider';
 import logger from '../../infrastructure/logger/logger';
 import { Notification } from '../../domain/notification/notification.entity';
+import { enrichNotificationData } from './notification-enricher';
 
 export class NotificationService {
   private notificationRepo: NotificationPrismaRepository;
@@ -48,13 +49,20 @@ export class NotificationService {
       // Create notification using factory
       const notification = this.notificationFactory.createNotification(type, data);
 
+      // Enrich notification data with avatarUrl and imageUrl
+      const enrichedData = await enrichNotificationData(type, notification.data);
+      const finalData = {
+        ...notification.data,
+        ...enrichedData,
+      };
+
       // Add to queue for async processing
       await this.queueProvider.addNotificationJob({
         type,
         userId,
         title: notification.title,
         message: notification.message,
-        data: notification.data,
+        data: finalData, // Enriched data with avatarUrl and imageUrl
         // Channel preferences
         sendEmail: settings?.notificationEmailEnabled ?? false,
         sendPush: settings?.notificationPushEnabled ?? true,

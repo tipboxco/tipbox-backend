@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, NotificationType as PrismaNotificationType } from '@prisma/client';
 import { Notification } from '../../domain/notification/notification.entity';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
 import { NotificationCategory } from '../../domain/notification/notification-category.enum';
@@ -28,7 +28,7 @@ export class NotificationPrismaRepository {
       const notification = await this.prisma.notification.create({
         data: {
           userId: data.userId,
-          type: data.type,
+          type: data.type as PrismaNotificationType,
           title: data.title,
           message: data.message,
           data: data.data || null,

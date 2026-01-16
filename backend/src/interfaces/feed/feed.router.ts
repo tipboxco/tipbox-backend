@@ -29,6 +29,21 @@ const feedService = new FeedService();
  *           maximum: 50
  *           default: 20
  *         description: Sayfa başına item sayısı
+ *       - in: query
+ *         name: contextType
+ *         schema:
+ *           type: string
+ *           enum: [sub_category, product_group, product]
+ *           default: null
+ *         description: Context type for context-based filtering (optional)
+ *         style: form
+ *         explode: false
+ *       - in: query
+ *         name: contextId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Context ID for context-based filtering (optional, required if contextType is provided)
  *     responses:
  *       200:
  *         description: Feed başarıyla getirildi
@@ -99,6 +114,8 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
 
   const cursor = req.query.cursor as string | undefined;
   const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+  const contextType = req.query.contextType as string | undefined;
+  const contextId = req.query.contextId as string | undefined;
 
   if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 200)) {
     return res.status(400).json({ message: 'Limit must be between 1 and 200' });
@@ -107,6 +124,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const feed = await feedService.getUserFeed(String(userId), {
     cursor,
     ...(typeof limitParam === 'number' ? { limit: limitParam } : {}),
+    ...(contextType && contextId ? { contextType: contextType as any, contextId } : {}),
   });
   return res.json(feed);
 }));
@@ -129,6 +147,8 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  *             type: string
  *             enum: [TRUSTER, CATEGORY_MATCH, TRENDING, NEW_USER, BOOSTED, INVENTORY_MATCH, PRODUCT_GROUP_MATCH]
  *         description: Feed source filtreleri. Kullanılabilir değerler: TRUSTER, CATEGORY_MATCH, TRENDING, NEW_USER, BOOSTED, INVENTORY_MATCH, PRODUCT_GROUP_MATCH
+ *         style: form
+ *         explode: true
  *       - in: query
  *         name: tags
  *         schema:
@@ -137,6 +157,8 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  *             type: string
  *             enum: [Review, Benchmark, Tips, Question, Experience, Update]
  *         description: İçerik etiketleri veya post type'ları. Review=FREE, Benchmark=COMPARE, Tips=TIPS, Question=QUESTION, Experience=EXPERIENCE, Update=UPDATE
+ *         style: form
+ *         explode: true
  *       - in: query
  *         name: category
  *         schema:
@@ -148,7 +170,10 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  *         schema:
  *           type: string
  *           enum: [recent, top]
+ *           default: recent
  *         description: Sıralama tipi (recent = en yeni postlar, top = relevance score'a göre popüler olanlar)
+ *         style: form
+ *         explode: false
  *       - in: query
  *         name: types
  *         schema:
@@ -157,6 +182,8 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  *             type: string
  *             enum: [benchmark, post, question, tipsAndTricks, experience, update]
  *         description: Feed item type'larına göre filtrele
+ *         style: form
+ *         explode: true
  *       - in: query
  *         name: cursor
  *         schema:
@@ -170,6 +197,18 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  *           maximum: 50
  *           default: 20
  *         description: Sayfa başına item sayısı
+ *       - in: query
+ *         name: contextType
+ *         schema:
+ *           type: string
+ *           enum: [sub_category, product_group, product]
+ *         description: Context type for context-based filtering (optional)
+ *       - in: query
+ *         name: contextId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Context ID for context-based filtering (optional, required if contextType is provided)
  *     responses:
  *       200:
  *         description: Filtrelenmiş feed başarıyla getirildi
@@ -277,6 +316,14 @@ router.get('/filtered', asyncHandler(async (req: Request, res: Response) => {
     if (sort === 'recent' || sort === 'top') {
       filters.sort = sort;
     }
+  }
+
+  // Context parameters
+  if (req.query.contextType) {
+    filters.contextType = req.query.contextType as any;
+  }
+  if (req.query.contextId) {
+    filters.contextId = req.query.contextId as string;
   }
 
   const feed = await feedService.getFilteredFeed(String(userId), filters, {

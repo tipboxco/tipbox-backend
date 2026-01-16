@@ -4,10 +4,19 @@ import { generateIdForModel } from '../ids/id.strategy';
 // Bu middleware, publicId alanı olan modellerde create sırasında otomatik ID üretir
 // Prisma 6.x'te $use kaldırıldı, $extends kullanılıyor
 export function createPrismaWithIdMiddleware() {
+<<<<<<< HEAD:backend/src/infrastructure/repositories/prisma-id-middleware.ts
   return new PrismaClient({
     // Query loglarını kapat, sadece error'ları göster
     log: ['error'],
   }).$extends({
+=======
+  const baseClient = new PrismaClient({
+    // Query loglarını kapat, sadece error'ları göster
+    log: ['error'],
+  });
+
+  const extendedClient = baseClient.$extends({
+>>>>>>> developer:src/infrastructure/repositories/prisma-id-middleware.ts
     query: {
       $allModels: {
         async create({ model, args, query }) {
@@ -24,6 +33,14 @@ export function createPrismaWithIdMiddleware() {
       },
     },
   });
+
+  // Prisma Client'ı açıkça bağla (async olarak, arka planda)
+  // İlk query'de zaten otomatik bağlanır, ama bu explicit bağlantıyı garanti eder
+  baseClient.$connect().catch((error) => {
+    console.error('Failed to connect to database:', error);
+  });
+
+  return extendedClient;
 }
 
 
