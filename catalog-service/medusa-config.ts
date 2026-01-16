@@ -49,10 +49,12 @@ module.exports = defineConfig({
               secret_access_key: process.env.MINIO_ROOT_PASSWORD || "minioadmin123",
               region: process.env.S3_REGION || "eu-central-1",
               bucket: process.env.S3_BUCKET_NAME || "tipbox-medusa",
-              // Dosyaların yükleneceği klasör prefix'i
-              prefix: "/media/",
+              
+              // Dosyaların yükleneceği klasör prefix'i (sonunda slash olmalı, başında olmamalı)
+              prefix: "media/",
               // MinIO için gerekli ek ayarlar
               additional_client_config: {
+                
                 forcePathStyle: true, // MinIO için gerekli
               },
             },
