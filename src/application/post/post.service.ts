@@ -340,6 +340,15 @@ export class PostService {
         this.eventService.invalidateEventCaches(request.eventId, userId).catch((err) => {
           logger.warn({ message: 'Failed to invalidate event caches', eventId: request.eventId, error: err });
         });
+        
+        // Event metrik ve badge kontrolü (async, hata olsa bile devam et)
+        this.eventMetricsService.incrementUserPostCount(userId, request.eventId)
+          .then((metrics) => {
+            return this.badgeEligibilityService.checkAndGrantEventBadges(userId, request.eventId!, metrics);
+          })
+          .catch((err) => {
+            logger.warn({ message: 'Failed to update event metrics or check badges', userId, eventId: request.eventId, error: err });
+          });
       }
       
       // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
@@ -921,6 +930,15 @@ export class PostService {
         this.eventService.invalidateEventCaches(request.eventId, userId).catch((err) => {
           logger.warn({ message: 'Failed to invalidate event caches', eventId: request.eventId, error: err });
         });
+        
+        // Event metrik ve badge kontrolü (async, hata olsa bile devam et)
+        this.eventMetricsService.incrementUserPostCount(userId, request.eventId)
+          .then((metrics) => {
+            return this.badgeEligibilityService.checkAndGrantEventBadges(userId, request.eventId!, metrics);
+          })
+          .catch((err) => {
+            logger.warn({ message: 'Failed to update event metrics or check badges', userId, eventId: request.eventId, error: err });
+          });
       }
       
       // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)
@@ -1068,6 +1086,15 @@ export class PostService {
         this.eventService.invalidateEventCaches(request.eventId, userId).catch((err) => {
           logger.warn({ message: 'Failed to invalidate event caches', eventId: request.eventId, error: err });
         });
+        
+        // Event metrik ve badge kontrolü (async, hata olsa bile devam et)
+        this.eventMetricsService.incrementUserPostCount(userId, request.eventId)
+          .then((metrics) => {
+            return this.badgeEligibilityService.checkAndGrantEventBadges(userId, request.eventId!, metrics);
+          })
+          .catch((err) => {
+            logger.warn({ message: 'Failed to update event metrics or check badges', userId, eventId: request.eventId, error: err });
+          });
       }
       
       // Post'u ilgili kullanıcıların feed'ine ekle (async, hata olsa bile devam et)

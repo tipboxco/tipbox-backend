@@ -185,7 +185,6 @@ export class EventService {
             startDate: event.startDate.toISOString(),
             endDate: event.endDate.toISOString(),
             interaction,
-            eventType: this.mapEventType(event.eventType),
             participants,
           };
         })
@@ -264,7 +263,6 @@ export class EventService {
             startDate: event.startDate.toISOString(),
             endDate: event.endDate.toISOString(),
             interaction,
-            eventType: this.mapEventType(event.eventType),
             participants,
           };
         })
@@ -363,7 +361,6 @@ export class EventService {
             startDate: event.startDate.toISOString(),
             endDate: event.endDate.toISOString(),
             interaction,
-            eventType: this.mapEventType(event.eventType),
             participants,
             userPostCount, // Kullanıcının post sayısı
           };
@@ -455,7 +452,6 @@ export class EventService {
         startDate: event.startDate.toISOString(),
         endDate: event.endDate.toISOString(),
         interaction,
-        eventType: this.mapEventType(event.eventType),
         isJoined,
         status,
         rewards: rewardBadges,
@@ -787,24 +783,22 @@ export class EventService {
         throw new Error('Event not found');
       }
 
-      // Tüm EVENT tipindeki badge'leri al (name'de [Event] olanlar)
-      const allBadges = await this.prisma.badge.findMany({
+      // ✅ GÜNCELLENDI: EventBadge tablosundan event'e özel badge'leri al
+      // @ts-ignore - Prisma type inference issue with EventBadge model
+      const eventBadges: any = await this.prisma.eventBadge.findMany({
         where: {
-          type: 'EVENT',
-          name: {
-            startsWith: '[Event]',
-          },
+          eventId,
+          enabled: true,
         },
         include: {
-          category: true,
-          achievementGoals: {
-            select: {
-              requirement: true,
+          badge: {
+            include: {
+              category: true,
             },
           },
         },
         orderBy: {
-          createdAt: 'asc',
+          displayOrder: 'asc',
         },
         take: limit,
       });
@@ -816,11 +810,11 @@ export class EventService {
       const userBadges = await this.prisma.userBadge.findMany({
         where: {
           userId,
-          badgeId: { in: allBadges.map((b) => b.id) },
+          badgeId: { in: eventBadges.map((eb: any) => eb.badgeId) },
         },
         select: {
           badgeId: true,
-          claimedAt: true, // ✅ UserBadge'de createdAt yok, claimedAt kullan
+          claimedAt: true,
         },
       });
 
@@ -829,33 +823,24 @@ export class EventService {
       );
 
       // Badge'leri map et
-      const badgeItems: EventBadgeItem[] = allBadges.map((badge) => {
-        // Badge requirement'ı parse et
-        const achievementGoal = badge.achievementGoals[0];
+      const badgeItems: EventBadgeItem[] = eventBadges.map((eventBadge: any) => {
+        const badge = eventBadge.badge;
+        
+        // ✅ GÜNCELLENDI: Threshold EventBadge'den geliyor
+        const targetProgress = eventBadge.threshold;
+        const requirementType = eventBadge.requirementType;
+
+        // Current progress'i belirle
         let currentProgress = 0;
-        let targetProgress = 1;
-        let requirementType = 'UNKNOWN';
-
-        if (achievementGoal) {
-          try {
-            const requirement = JSON.parse(achievementGoal.requirement);
-            requirementType = requirement.type;
-            targetProgress = requirement.threshold || 1;
-
-            // Current progress'i belirle
-            switch (requirementType) {
-              case 'POSTS_COUNT':
-                currentProgress = userMetrics.postsCount;
-                break;
-              case 'LIKES_RECEIVED':
-                currentProgress = userMetrics.likesReceivedCount;
-                break;
-              default:
-                currentProgress = 0;
-            }
-          } catch (e) {
-            logger.warn(`Failed to parse requirement for badge ${badge.id}:`, e);
-          }
+        switch (requirementType) {
+          case 'POSTS_COUNT':
+            currentProgress = userMetrics.postsCount;
+            break;
+          case 'LIKES_RECEIVED':
+            currentProgress = userMetrics.likesReceivedCount;
+            break;
+          default:
+            currentProgress = 0;
         }
 
         // Badge kazanılmış mı?
@@ -1052,18 +1037,6 @@ export class EventService {
       avatar: resolveMediaUrl(stat.user.avatars?.[0]?.imageUrl || null, true),
       userName: stat.user.profile?.displayName || stat.user.email || 'Anonymous',
     }));
-  }
-
-  /**
-   * Helper: Map WishboxEventType to EventType
-   */
-  private mapEventType(eventType: string): EventType {
-    // Map WishboxEventType to 'default' or 'product'
-    // For now, all are 'default' unless we have product-specific events
-    if (eventType === 'PROMOTION') {
-      return 'product';
-    }
-    return 'default';
   }
 
   /**

@@ -41,39 +41,28 @@ export class BadgeEligibilityService {
 
   /**
    * Event için tanımlı badge requirement'ları getir
+   * ✅ GÜNCELLEND İ: EventBadge tablosundan getirir
    */
   async getEventBadgeRequirements(eventId: string): Promise<EventBadgeRequirement[]> {
     try {
-      // AchievementGoal tablosundan EVENT type badge'leri ve requirement'larını getir
-      const goals = await this.prisma.achievementGoal.findMany({
+      // EventBadge tablosundan event'e özgü badge'leri getir
+      const eventBadges = await this.prisma.eventBadge.findMany({
         where: {
-          rewardBadge: {
-            type: 'EVENT',
-          },
+          eventId,
+          enabled: true,
         },
-        include: {
-          rewardBadge: true,
+        select: {
+          badgeId: true,
+          requirementType: true,
+          threshold: true,
         },
       });
 
-      const requirements: EventBadgeRequirement[] = [];
-
-      for (const goal of goals) {
-        if (!goal.rewardBadgeId) continue;
-
-        try {
-          // requirement field'ında JSON olarak saklanan threshold bilgisini parse et
-          const requirementData = JSON.parse(goal.requirement);
-          
-          requirements.push({
-            badgeId: goal.rewardBadgeId,
-            type: requirementData.type as EventBadgeRequirementType,
-            threshold: requirementData.threshold,
-          });
-        } catch (parseError) {
-          logger.warn(`Failed to parse requirement for goal ${goal.id}:`, parseError);
-        }
-      }
+      const requirements: EventBadgeRequirement[] = eventBadges.map((eb) => ({
+        badgeId: eb.badgeId,
+        type: eb.requirementType as EventBadgeRequirementType,
+        threshold: eb.threshold,
+      }));
 
       return requirements;
     } catch (error) {

@@ -222,6 +222,22 @@ async function clearAndSeed(clearAll: boolean = false): Promise<void> {
       // Media upload hatası seed işlemini durdurmaz
     }
     
+    // ADIM 3.1: Event Badge ve Marketplace Badge görselleri yükle
+    console.log('\n🎨 Event & Marketplace Badge görselleri hazırlanıyor...\n');
+    try {
+      const uploadBadgeImagesPath = path.join(process.cwd(), 'scripts', 'upload-all-badge-images.ts');
+      execSync(`npx ts-node ${uploadBadgeImagesPath}`, {
+        stdio: 'inherit',
+        cwd: process.cwd(),
+      });
+      console.log('✅ Badge görselleri MinIO\'ya yüklendi\n');
+    } catch (error) {
+      console.warn('⚠️  Badge görselleri yüklenemedi, seed devam edecek...');
+      console.warn('   Hata:', error instanceof Error ? error.message : String(error));
+      console.warn('   💡 Manuel olarak çalıştırabilirsiniz: npx ts-node scripts/upload-all-badge-images.ts\n');
+      // Badge upload hatası seed işlemini durdurmaz
+    }
+    
     // ADIM 4: Seed.ts çalıştır
     console.log('\n🌱 Seed.ts çalıştırılıyor...\n');
     

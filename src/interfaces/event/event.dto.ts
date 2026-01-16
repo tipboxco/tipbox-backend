@@ -18,7 +18,7 @@ export interface EventCard {
   startDate: string; // ISO 8601 DateTime
   endDate: string; // ISO 8601 DateTime
   interaction?: number; // Total interactions (participants, comments, etc.)
-  eventType: EventType;
+  eventType?: EventType; // Optional - may not be present in WishboxEvent model
   participants?: EventParticipant[];
   userPostCount?: number; // Kullanıcının bu event'teki post sayısı (sadece my-events için)
 }
@@ -59,7 +59,7 @@ export interface EventDetail {
   startDate: string; // ISO 8601 DateTime
   endDate: string; // ISO 8601 DateTime
   interaction: number;
-  eventType: EventType;
+  eventType?: EventType; // Optional - may not be present in WishboxEvent model
   isJoined: boolean;
   status: EventStatus;
   rewards: RewardBadge[];

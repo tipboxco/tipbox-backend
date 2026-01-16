@@ -10,8 +10,8 @@ import { DEFAULT_AVATAR_PATH } from '../src/infrastructure/config/media.config'
 import { ProgressBar } from './seed/helpers/progress-bar'
 import { seedTaxonomy } from './seed/taxonomy.seed'
 import { seedProductCatalog } from './seed/product-catalog.seed'
-import { ensureEventBadges } from './seed/helpers/ensure-event-badges'
-import { ensureTestEvent } from './seed/helpers/ensure-test-event'
+import { ensureEventBadgeSystem } from './seed/helpers/ensure-event-badge-system'
+import { ensureMarketplaceBadges } from './seed/helpers/ensure-marketplace-badges'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { markSeedStart, markSeedEnd, addSeedUserId } = require('./seed/seed-metadata')
 
@@ -12199,23 +12199,26 @@ async function main() {
     console.log('⚠️  Seed devam ediyor ama reward claim verileri oluşturulamadı')
   }
 
-  // ===== EVENT BADGES & TEST EVENT SEEDING =====
-  console.log('\n🏆 Event badges ve test event oluşturuluyor...')
-  progress.increment('Event badges seeding...')
+  // ===== EVENT BADGES & MARKETPLACE BADGES SEEDING =====
+  console.log('\n🏆 Event Badge Sistemi ve Marketplace Badge\'leri oluşturuluyor...')
+  progress.increment('Event & Marketplace badges seeding...')
   
   try {
-    await ensureEventBadges(prisma)
-    const testEventId = await ensureTestEvent(prisma)
-    progress.increment('Event badges ve test event tamamlandı')
-    console.log('✅ Event badges ve test event seeding completed')
-    console.log(`   Test Event ID: ${testEventId}`)
+    // Event badge sistemi (badge + event + EventBadge join table)
+    await ensureEventBadgeSystem(prisma)
+    
+    // Marketplace badge'leri
+    await ensureMarketplaceBadges(prisma)
+    
+    progress.increment('Event & Marketplace badges tamamlandı')
+    console.log('✅ Event & Marketplace badges seeding completed')
   } catch (error) {
-    console.error('❌ Event badges seeding hatası:', error)
+    console.error('❌ Event/Marketplace badges seeding hatası:', error)
     if (error instanceof Error) {
       console.error('   Message:', error.message)
       console.error('   Stack:', error.stack)
     }
-    console.log('⚠️  Seed devam ediyor ama event badges oluşturulamadı')
+    console.log('⚠️  Seed devam ediyor ama event/marketplace badges oluşturulamadı')
   }
 
   // ===== NFT SEEDING FOR PRIORITY USERS =====
