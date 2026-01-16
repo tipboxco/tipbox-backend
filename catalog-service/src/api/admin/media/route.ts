@@ -18,13 +18,17 @@ let minioService: MinioStorageService | null = null
 
 function getMinioService(): MinioStorageService {
   if (!minioService) {
+    // Docker-compose.yml ile uyumlu default değerler
+    // Docker içinde: minio:9000 (container name)
+    // Local'de: localhost:9000
     const params = {
-      endpoint: process.env.MINIO_ENDPOINT || "localhost:9000",
-      bucket: process.env.MINIO_BUCKET || "medusa",
-      accessKeyId: process.env.MINIO_ACCESS_KEY || "",
-      secretAccessKey: process.env.MINIO_SECRET_KEY || "",
+      endpoint: process.env.S3_ENDPOINT || "http://localhost:9000",
+      bucket: process.env.S3_BUCKET_NAME || "medusa-media",
+      accessKeyId: process.env.MINIO_ROOT_USER || "minioadmin",
+      secretAccessKey: process.env.MINIO_ROOT_PASSWORD || "minioadmin123",
       useSSL: process.env.MINIO_USE_SSL === "true",
-      region: process.env.MINIO_REGION,
+      region: process.env.S3_REGION || "eu-central-1",
+      externalEndpoint: process.env.S3_ENDPOINT_EXTERNAL, // Public erişim için external endpoint
     }
     minioService = new MinioStorageService(params)
   }
@@ -32,12 +36,19 @@ function getMinioService(): MinioStorageService {
 }
 
 // GET /admin/media
+// Query params: page (default: 1), limit (default: 20), search (optional)
 export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   try {
+    // Pagination parametreleri
+    const page = Math.max(1, parseInt(req.query.page as string) || 1)
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20))
+    const search = (req.query.search as string)?.toLowerCase() || ""
+
     const minioService = getMinioService()
     const files = await minioService.listFiles("media/")
 
-    const mediaFiles: MediaFile[] = files
+    // Filtrele ve map'le
+    let mediaFiles: MediaFile[] = files
       .filter((file) => {
         const ext = path.extname(file.key).toLowerCase()
         return [".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"].includes(ext)
@@ -54,14 +65,38 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
         }
       })
 
+    // Arama filtresi
+    if (search) {
+      mediaFiles = mediaFiles.filter((file) =>
+        file.filename.toLowerCase().includes(search)
+      )
+    }
+
+    // Tarihe göre sırala (en yeni önce)
     mediaFiles.sort(
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     )
 
+    // Toplam sayı (pagination öncesi)
+    const totalCount = mediaFiles.length
+    const totalPages = Math.ceil(totalCount / limit)
+
+    // Pagination uygula
+    const startIndex = (page - 1) * limit
+    const endIndex = startIndex + limit
+    const paginatedFiles = mediaFiles.slice(startIndex, endIndex)
+
     res.json({
-      files: mediaFiles,
-      count: mediaFiles.length,
+      files: paginatedFiles,
+      pagination: {
+        page,
+        limit,
+        totalCount,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      },
     })
   } catch (error: any) {
     console.error("Media listesi alınırken hata:", error)

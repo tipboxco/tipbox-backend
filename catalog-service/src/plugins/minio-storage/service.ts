@@ -10,6 +10,7 @@ export interface MinioStorageOptions {
   region?: string
   useSSL?: boolean
   port?: number
+  externalEndpoint?: string // Public erişim için external endpoint (opsiyonel)
 }
 
 export class MinioStorageService {
@@ -136,30 +137,27 @@ export class MinioStorageService {
 
   /**
    * Get file URL from MinIO
+   * Returns public URL instead of presigned URL (no signature parameters)
    */
   async getFileUrl(key: string): Promise<string> {
-    try {
-      // Try to generate presigned URL (valid for 7 days)
-      // This works even if bucket is not public
-      const url = await this.client.presignedGetObject(this.bucket, key, 7 * 24 * 60 * 60)
-      return url
-    } catch (error: any) {
-      console.error("MinIO presigned URL oluşturma hatası:", error)
-      // Fallback: construct public URL manually
-      // This assumes bucket is configured for public access
-      return this.getPublicUrl(key)
-    }
+    // Direct public URL, no presigned URL with signatures
+    return this.getPublicUrl(key)
   }
 
   /**
    * Get public URL for a file (assumes bucket is public)
+   * Uses externalEndpoint if provided, otherwise uses internal endpoint
    */
   private getPublicUrl(key: string): string {
+    // Use external endpoint if provided (for public access from outside Docker network)
+    // Otherwise use internal endpoint
+    const endpoint = this.options.externalEndpoint || this.options.endpoint
+    
     const protocol = this.options.useSSL ? "https" : "http"
     const endpointUrl = new URL(
-      this.options.endpoint.startsWith("http")
-        ? this.options.endpoint
-        : `${protocol}://${this.options.endpoint}`
+      endpoint.startsWith("http")
+        ? endpoint
+        : `${protocol}://${endpoint}`
     )
     const port = this.options.port || parseInt(endpointUrl.port) || (this.options.useSSL ? 443 : 9000)
     const portSuffix = (port === 443 && this.options.useSSL) || (port === 80 && !this.options.useSSL) ? "" : `:${port}`

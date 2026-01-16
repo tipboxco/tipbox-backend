@@ -88,7 +88,7 @@ export class SyncReceiverService {
                 name: record.name || record.title || 'Unnamed Brand',
                 description: record.description || null,
                 logoUrl: record.logo_url || record.image_url || null,
-                imageUrl: record.image_url || record.logo_url || null,
+                imageUrl: record.image_url ?? record.logo_url,
                 category: categoryName,
                 categoryId: categoryId || record.category_id || null,
               };

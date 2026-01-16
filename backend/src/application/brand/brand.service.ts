@@ -4,7 +4,14 @@ import { ContentPostType } from '../../domain/content/content-post-type.enum';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import logger from '../../infrastructure/logger/logger';
 import { NotFoundError } from '../../infrastructure/errors/custom-errors';
-
+import { brandToWebsite } from '../../data/brandToWebsite';
+var slugify = require('slugify');
+const slugifyOptions = {
+  lower: true,
+  strict: true,
+  locale: 'tr',
+  trim: true,
+};
 export interface BrandCategoryItem {
   categoryId: string;
   name: string;
@@ -311,8 +318,15 @@ export class BrandService {
         },
       });
 
-      return brands.map((brand) => {
-        const imageUrl = resolveMediaUrl(brand.imageUrl);
+      const brandMap: { [key: string]: any } = {};
+      brandToWebsite.forEach((brand) => {
+        brandMap[slugify(brand.brand, slugifyOptions)] = brand;
+      });
+      return brands.map((brand: any) => {
+        const slugbrand = slugify(brand.name, slugifyOptions);
+        const website = brandMap?.[slugbrand]?.website;
+        console.log({brand});
+        const imageUrl = ((brand?.imageUrl)?.length>0 && brand?.imageUrl!=="NULL")? resolveMediaUrl(brand?.imageUrl):website?`https://img.logo.dev/name/${website}?token=pk_WgZMkY5cTXCH41Z0yJ_Txw`:'';
 
         return {
           brandId: brand.id,

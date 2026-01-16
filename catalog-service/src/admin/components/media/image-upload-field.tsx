@@ -8,16 +8,18 @@ import type { MediaFieldConfig } from "./types"
 type ImageUploadFieldProps = {
   /** Field configuration */
   config: MediaFieldConfig
-  /** Current image value */
-  value: string | null
+  /** Current image value (single or multiple) */
+  value: string | string[] | null
   /** Whether editing mode is active */
   isEditing: boolean
   /** Whether saving is in progress */
   isSaving: boolean
   /** Callback when image changes */
-  onChange: (value: string | null) => void
+  onChange: (value: string | string[] | null) => void
   /** Callback when image is removed */
-  onRemove: () => void
+  onRemove: (index?: number) => void
+  /** Whether to allow multiple file uploads */
+  multiple?: boolean
 }
 
 /**
@@ -31,15 +33,24 @@ export function ImageUploadField({
   isSaving,
   onChange,
   onRemove,
+  multiple = false,
 }: ImageUploadFieldProps) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
-  const { handleFileSelect, isUploading } = useImageUpload({
+  const { handleFileSelect, handleMultipleFileSelect, isUploading } = useImageUpload({
     onImageChange: onChange,
+    multiple,
   })
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    handleFileSelect(e.target.files?.[0] || null)
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    if (multiple) {
+      handleMultipleFileSelect(Array.from(files))
+    } else {
+      handleFileSelect(files[0] || null)
+    }
   }
 
   const handleButtonClick = () => {
@@ -47,9 +58,39 @@ export function ImageUploadField({
   }
 
   const handlePickerSelect = (url: string) => {
-    onChange(url)
+    if (multiple) {
+      const currentValues = Array.isArray(value) ? value : value ? [value] : []
+      if (!currentValues.includes(url)) {
+        onChange([...currentValues, url])
+      }
+    } else {
+      onChange(url)
+      setPickerOpen(false)
+    }
+  }
+
+  const handlePickerClose = (selectedUrls?: string[]) => {
+    if (multiple && selectedUrls && selectedUrls.length > 0) {
+      const currentValues = Array.isArray(value) ? value : value ? [value] : []
+      const newValues = [...currentValues, ...selectedUrls.filter(url => !currentValues.includes(url))]
+      onChange(newValues.length > 0 ? newValues : null)
+    }
     setPickerOpen(false)
   }
+
+  const handleRemove = (index?: number) => {
+    if (multiple && typeof index === 'number') {
+      const currentValues = Array.isArray(value) ? value : value ? [value] : []
+      const newValues = currentValues.filter((_, i) => i !== index)
+      onChange(newValues.length > 0 ? newValues : null)
+    } else {
+      onRemove(index)
+    }
+  }
+
+  const currentValues = multiple 
+    ? (Array.isArray(value) ? value : value ? [value] : [])
+    : (Array.isArray(value) ? value[0] : value)
 
   return (
     <div className="space-y-3">
@@ -64,13 +105,40 @@ export function ImageUploadField({
         )}
       </div>
 
-      <ImagePreview
-        src={value}
-        height={config.previewHeight || 32}
-        alt={config.label}
-        isEditing={isEditing}
-        onRemove={onRemove}
-      />
+      {multiple ? (
+        <div className="space-y-2">
+          {currentValues.length > 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {currentValues.map((src, index) => (
+                <ImagePreview
+                  key={index}
+                  src={src}
+                  height={config.previewHeight || 32}
+                  alt={`${config.label} ${index + 1}`}
+                  isEditing={isEditing}
+                  onRemove={() => handleRemove(index)}
+                />
+              ))}
+            </div>
+          ) : (
+            <ImagePreview
+              src={null}
+              height={config.previewHeight || 32}
+              alt={config.label}
+              isEditing={isEditing}
+              onRemove={() => handleRemove()}
+            />
+          )}
+        </div>
+      ) : (
+        <ImagePreview
+          src={currentValues}
+          height={config.previewHeight || 32}
+          alt={config.label}
+          isEditing={isEditing}
+          onRemove={onRemove}
+        />
+      )}
 
       {isEditing && (
         <div className="flex items-center gap-x-2">
@@ -78,6 +146,7 @@ export function ImageUploadField({
             ref={inputRef}
             type="file"
             accept="image/*"
+            multiple={true}
             onChange={handleInputChange}
             className="hidden"
             id={`${config.key}-upload`}
@@ -89,22 +158,23 @@ export function ImageUploadField({
             disabled={isSaving || isUploading}
             className="flex-1"
           >
-            {value ? "Değiştir" : "Kütüphaneden Seç"}
+            {multiple 
+              ? (currentValues.length > 0 ? "Daha Fazla Ekle" : "Kütüphaneden Seç")
+              : (currentValues ? "Değiştir" : "Kütüphaneden Seç")
+            }
           </Button>
-          {value && (
-            <Button
-              variant="transparent"
-              size="small"
-              onClick={() => inputRef.current?.click()}
-              disabled={isSaving || isUploading}
-              className="text-ui-fg-subtle hover:text-ui-fg-base"
-            >
-              Bilgisayardan Yükle
-            </Button>
-          )}
+          <Button
+            variant="transparent"
+            size="small"
+            onClick={() => inputRef.current?.click()}
+            disabled={isSaving || isUploading}
+            className="text-ui-fg-subtle hover:text-ui-fg-base"
+          >
+            {multiple ? "Bilgisayardan Yükle" : "Bilgisayardan Yükle"}
+          </Button>
         </div>
       )}
-      {!value && isEditing && (
+      {!currentValues && isEditing && (
         <Button
           variant="transparent"
           size="small"
@@ -118,9 +188,10 @@ export function ImageUploadField({
 
       <MediaPickerDialog
         open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
+        onClose={handlePickerClose}
         onSelect={handlePickerSelect}
-        selectedUrl={value}
+        selectedUrl={multiple ? undefined : (Array.isArray(value) ? value[0] : value)}
+        multiple={multiple}
       />
     </div>
   )
