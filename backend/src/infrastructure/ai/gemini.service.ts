@@ -60,6 +60,27 @@ export interface GeneratePostContentResponse {
   };
 }
 
+export interface BatchGeneratePostContentRequest {
+  requests: GeneratePostContentRequest[];
+}
+
+export interface BatchGeneratePostContentResponse {
+  results: Array<{
+    title: string;
+    body: string;
+    success: boolean;
+    error?: string;
+  }>;
+  metadata: {
+    tokensUsed: number | null;
+    processingTimeMs: number;
+    model: string;
+    totalRequests: number;
+    successfulRequests: number;
+    failedRequests: number;
+  };
+}
+
 export class GeminiService {
   private static instance: GeminiService;
   private genAI: GoogleGenerativeAI;
@@ -891,6 +912,348 @@ BAŞLIK: [başlık buraya]
         title: 'Başlıksız İçerik',
         body: 'İçerik üretilemedi',
       };
+    }
+  }
+
+  /**
+   * Birden fazla post içeriğini tek bir istekte üret (batch processing)
+   * Title gerektirmez, sadece body üretir
+   */
+  async batchGeneratePostContent(
+    batchRequest: BatchGeneratePostContentRequest
+  ): Promise<BatchGeneratePostContentResponse> {
+    const startTime = Date.now();
+    let lastError: Error | null = null;
+
+    // Retry mekanizması (timeout ve network hataları için)
+    for (let attempt = 1; attempt <= this.config.maxRetries; attempt++) {
+      try {
+        // Rate limiting check (batch için tek istek sayılır)
+        await this.checkRateLimit();
+
+        // Batch size kontrolü (çok büyük batch'ler token limitini aşabilir)
+        const MAX_BATCH_SIZE = 10;
+        if (batchRequest.requests.length > MAX_BATCH_SIZE) {
+          throw new Error(`Batch size ${batchRequest.requests.length} çok büyük. Maksimum ${MAX_BATCH_SIZE} istek destekleniyor.`);
+        }
+
+        // Build batch prompt
+        const prompt = this.buildBatchPostContentPrompt(batchRequest.requests);
+
+        // Batch için daha uzun timeout (batch'ler daha fazla token üretir)
+        // Normal timeout'un 2 katı (60 saniye)
+        const batchTimeout = this.config.timeout * 2;
+
+        // Call AI with timeout
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error(`timeout: AI request timed out after ${batchTimeout}ms`));
+          }, batchTimeout);
+        });
+
+        const aiPromise = (async () => {
+          const result = await this.model.generateContent({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.8,
+              topP: 0.95,
+              topK: 40,
+              maxOutputTokens: 8000, // Batch için daha fazla token
+            },
+          });
+
+          const response = await result.response;
+          let text = '';
+          let candidates: any[] = [];
+          
+          try {
+            text = response.text();
+          } catch (error) {
+            candidates = (response as any).candidates || [];
+            if (candidates.length > 0) {
+              const candidate = candidates[0];
+              const content = candidate.content;
+              if (content && content.parts) {
+                text = content.parts.map((part: any) => part.text || '').join('\n');
+              }
+            }
+          }
+
+          if (!text || text.trim().length === 0) {
+            throw new Error('AI response boş geldi');
+          }
+
+          // Token bilgisini al
+          const usageMetadata = response.usageMetadata;
+          const tokensUsed = usageMetadata?.totalTokenCount || null;
+
+          // Parse batch response
+          const parsed = this.parseBatchPostContentResponse(text, batchRequest.requests.length);
+
+          return {
+            results: parsed,
+            metadata: {
+              tokensUsed,
+              processingTimeMs: Date.now() - startTime,
+              model: this.config.model,
+              totalRequests: batchRequest.requests.length,
+              successfulRequests: parsed.filter(r => r.success).length,
+              failedRequests: parsed.filter(r => !r.success).length,
+            },
+          };
+        })();
+
+        const result = await Promise.race([aiPromise, timeoutPromise]);
+
+        // Record metrics
+        this.metrics.recordSuccess(
+          result.metadata.tokensUsed,
+          result.metadata.processingTimeMs,
+          false
+        );
+
+        logger.info({
+          message: 'Gemini AI batch post içeriği üretildi',
+          batchSize: batchRequest.requests.length,
+          successful: result.metadata.successfulRequests,
+          failed: result.metadata.failedRequests,
+          duration: `${result.metadata.processingTimeMs}ms`,
+          tokensUsed: result.metadata.tokensUsed,
+          attempt,
+        });
+
+        return result;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        const errorMessage = lastError.message;
+
+        // Retry yapılabilir hatalar: timeout, network, rate limit (geçici)
+        const isRetryable = 
+          errorMessage.includes('timeout') ||
+          errorMessage.includes('network') ||
+          (errorMessage.includes('rate limit') && attempt < this.config.maxRetries);
+
+        if (isRetryable && attempt < this.config.maxRetries) {
+          const backoffMs = Math.pow(2, attempt - 1) * 1000; // Exponential backoff: 1s, 2s, 4s
+          logger.warn({
+            message: `Gemini AI batch attempt ${attempt} failed, retrying...`,
+            batchSize: batchRequest.requests.length,
+            error: errorMessage,
+            nextAttempt: attempt + 1,
+            backoffMs,
+          });
+          await this.sleep(backoffMs);
+          continue; // Retry
+        }
+
+        // Retry yapılamaz veya tüm retry'lar tükendi
+        const duration = Date.now() - startTime;
+
+        // Record metrics for failure
+        if (errorMessage.includes('rate limit')) {
+          this.metrics.recordFailure('rate-limit');
+        } else if (errorMessage.includes('timeout')) {
+          this.metrics.recordFailure('timeout');
+        } else {
+          this.metrics.recordFailure('other');
+        }
+
+        logger.error({
+          message: 'Gemini AI batch post içeriği üretim hatası',
+          batchSize: batchRequest.requests.length,
+          duration: `${duration}ms`,
+          error: errorMessage,
+          attempts: attempt,
+        });
+
+        // Hata durumunda fallback: Her istek için boş body döndür
+        const fallbackResults = batchRequest.requests.map(() => ({
+          title: '',
+          body: '',
+          success: false,
+          error: errorMessage,
+        }));
+
+        return {
+          results: fallbackResults,
+          metadata: {
+            tokensUsed: null,
+            processingTimeMs: duration,
+            model: this.config.model,
+            totalRequests: batchRequest.requests.length,
+            successfulRequests: 0,
+            failedRequests: batchRequest.requests.length,
+          },
+        };
+      }
+    }
+
+    // Buraya gelmemeli (yukarıdaki catch'te return var) ama TypeScript için
+    throw lastError || new Error('Batch generation failed after all retries');
+  }
+
+  /**
+   * Batch post içeriği için prompt oluştur
+   */
+  private buildBatchPostContentPrompt(requests: GeneratePostContentRequest[]): string {
+    const postTypePrompts: Record<string, string> = {
+      QUESTION: 'Bir soru formatında içerik yaz. Kullanıcı bir ürün hakkında soru soruyor gibi görünsün.',
+      TIPS: 'Bir ipucu veya tavsiye formatında içerik yaz. Kullanıcı deneyimlerinden yola çıkarak pratik öneriler sunuyor gibi görünsün.',
+      FREE: 'Genel bilgilendirici bir içerik yaz. Kullanıcı ürün hakkında bilgi paylaşıyor gibi görünsün.',
+      EXPERIENCE: 'Bir deneyim paylaşımı formatında içerik yaz. Kullanıcı ürünü kullanma deneyimini anlatıyor gibi görünsün.',
+      COMPARE: 'Bir karşılaştırma formatında içerik yaz. Kullanıcı ürünü başka ürünlerle karşılaştırıyor gibi görünsün.',
+      UPDATE: 'Bir güncelleme veya haber formatında içerik yaz. Kullanıcı ürün hakkında güncel bilgi paylaşıyor gibi görünsün.',
+    };
+
+    // Her istek için context oluştur
+    const requestContexts = requests.map((req, index) => {
+      const productContext = [];
+      if (req.productName) {
+        productContext.push(`Ürün: ${req.productName}`);
+      }
+      if (req.productBrand) {
+        productContext.push(`Marka: ${req.productBrand}`);
+      }
+      if (req.productDescription) {
+        productContext.push(`Açıklama: ${req.productDescription.substring(0, 200)}`); // Kısa tut
+      }
+
+      const productInfo = productContext.length > 0
+        ? `\n${productContext.join('\n')}`
+        : '';
+
+      return `
+İSTEK ${index + 1}:
+Post Tipi: ${req.postType}
+${postTypePrompts[req.postType] || 'Genel içerik'}
+Persona: ${req.persona}
+${productInfo}
+`.trim();
+    });
+
+    return `Sen bir içerik yazarısın. Aşağıdaki ${requests.length} farklı post için sadece içerik metni (body) üret. BAŞLIK GEREKMİYOR, sadece içerik metni yaz.
+
+KRİTİK KURALLAR:
+- Her istek için 1-2 paragraf uzunluğunda, doğal ve akıcı bir içerik metni (150-300 kelime arası)
+- Ürün ismini içerikte tam olarak geçirme, sadece context olarak kullan
+- "Muhteşem", "harika" gibi aşırı pozitif ifadelerden kaçın
+- "İşimi gördü", "beklentimin üzerindeydi", "kurulumu zordu" gibi gerçekçi ifadeler kullan
+- Persona'nın bakış açısını yansıt
+- Doğal, samimi ve akıcı bir dil kullan
+- Türkçe dilbilgisi ve yazım kurallarına uy
+
+${requestContexts.join('\n\n---\n\n')}
+
+Lütfen her istek için sadece içerik metnini döndür. Format:
+İSTEK 1:
+İÇERİK: [içerik metni buraya]
+
+İSTEK 2:
+İÇERİK: [içerik metni buraya]
+
+...
+
+Her istek için ayrı bir İÇERİK bloğu oluştur. Toplam ${requests.length} adet içerik üretmelisin.`.trim();
+  }
+
+  /**
+   * Batch post içeriği yanıtını parse et
+   */
+  private parseBatchPostContentResponse(text: string, expectedCount: number): Array<{
+    title: string;
+    body: string;
+    success: boolean;
+    error?: string;
+  }> {
+    const results: Array<{
+      title: string;
+      body: string;
+      success: boolean;
+      error?: string;
+    }> = [];
+
+    try {
+      // Her istek için içeriği ayır
+      const requestPattern = /İSTEK\s+(\d+):\s*\n?İÇERİK:\s*([\s\S]*?)(?=\n\n?İSTEK\s+\d+:|$)/gi;
+      const matches = Array.from(text.matchAll(requestPattern));
+
+      // Eşleşmeleri index'e göre sırala
+      const sortedMatches = matches.sort((a, b) => parseInt(a[1]) - parseInt(b[1]));
+
+      // Her eşleşme için result oluştur
+      for (let i = 0; i < expectedCount; i++) {
+        const match = sortedMatches[i];
+        
+        if (match && match[2]) {
+          const body = match[2].trim();
+          if (body.length > 0) {
+            results.push({
+              title: '', // Title gerekmeyecek
+              body: body.substring(0, 5000), // Maksimum 5000 karakter
+              success: true,
+            });
+          } else {
+            results.push({
+              title: '',
+              body: '',
+              success: false,
+              error: 'İçerik boş',
+            });
+          }
+        } else {
+          // Eşleşme bulunamadı, alternatif parse dene
+          // Tüm metni satırlara böl ve her istek için bir bölüm bul
+          const lines = text.split('\n');
+          const startIndex = i * Math.floor(lines.length / expectedCount);
+          const endIndex = (i + 1) * Math.floor(lines.length / expectedCount);
+          const section = lines.slice(startIndex, endIndex).join('\n').trim();
+          
+          // İÇERİK: etiketini kaldır
+          const body = section.replace(/İÇERİK:\s*/i, '').trim();
+          
+          if (body.length > 0) {
+            results.push({
+              title: '',
+              body: body.substring(0, 5000),
+              success: true,
+            });
+          } else {
+            results.push({
+              title: '',
+              body: '',
+              success: false,
+              error: 'İçerik parse edilemedi',
+            });
+          }
+        }
+      }
+
+      // Eğer hala eksikse, kalanları boş ekle
+      while (results.length < expectedCount) {
+        results.push({
+          title: '',
+          body: '',
+          success: false,
+          error: 'İçerik üretilemedi',
+        });
+      }
+
+      return results;
+    } catch (error) {
+      logger.error({
+        message: 'Batch post içeriği yanıtı parse edilemedi',
+        error: error instanceof Error ? error.message : String(error),
+        rawText: text ? text.substring(0, 1000) : 'BOŞ',
+        expectedCount,
+      });
+
+      // Hata durumunda tüm sonuçları boş döndür
+      return Array(expectedCount).fill(null).map(() => ({
+        title: '',
+        body: '',
+        success: false,
+        error: 'Parse hatası',
+      }));
     }
   }
 }

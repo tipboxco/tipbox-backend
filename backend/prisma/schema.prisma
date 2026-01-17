@@ -1840,6 +1840,7 @@ enum BadgeType {
   ACHIEVEMENT
   EVENT
   COSMETIC
+  BRAND
 
   @@map("badge_type")
 }
