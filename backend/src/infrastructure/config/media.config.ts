@@ -83,8 +83,22 @@ export function resolveMediaUrl(mediaPath: string | null | undefined, useDefault
     }
     return null;
   }
-  // Eğer zaten tam bir URL ise (http:// veya https:// ile başlıyorsa), direkt döndür
+  // Eğer zaten tam bir URL ise (http:// veya https:// ile başlıyorsa)
   if (mediaPath.match(/^https?:\/\//)) {
+    // YOUR_DEVICE_IP placeholder'ını gerçek base URL ile değiştir
+    if (mediaPath.includes('YOUR_DEVICE_IP')) {
+      const baseUrl = getPublicMediaBaseUrl();
+      // URL'den hostname ve port'u çıkar
+      try {
+        const url = new URL(mediaPath);
+        const pathname = url.pathname;
+        // Base URL ile pathname'i birleştir
+        return `${baseUrl}${pathname}`;
+      } catch {
+        // URL parse edilemezse, YOUR_DEVICE_IP'i base URL ile değiştir
+        return mediaPath.replace(/http:\/\/YOUR_DEVICE_IP:9000/, baseUrl);
+      }
+    }
     return mediaPath;
   }
   // Path'i temizle (başındaki / ve tipbox-media/ prefix'ini kaldır)

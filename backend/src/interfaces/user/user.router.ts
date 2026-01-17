@@ -1,837 +1,1365 @@
 import { Router, Request, Response } from 'express';
-import multer, { FileFilterCallback } from 'multer';
-import {
-  PROFILE_FEED_CARD_TYPES,
-  ProfileFeedCardType,
-  UserService,
-} from '../../application/user/user.service';
-import { CreateUserRequest, UpdateUserProfileRequest, UserResponse } from './user.dto';
-import { asyncHandler } from '../../infrastructure/errors/async-handler';
-import { S3Service } from '../../infrastructure/s3/s3.service';
-import { v4 as uuidv4 } from 'uuid';
+import { NotificationService } from '../../application/notification/notification.service';
+import { PushTokenService } from '../../application/notification/push-token.service';
+import { UserSettingsPrismaRepository } from '../../infrastructure/repositories/user-settings-prisma.repository';
+import { RegisterPushTokenDto, UpdateNotificationSettingsDto, GetNotificationsQuery } from '../notification/notification.dto';
+import { authMiddleware } from '../auth/auth.middleware';
 import logger from '../../infrastructure/logger/logger';
-// ValidationError kullanılmıyor; mevcut mimaride router içinde direkt 400/409 dönüyoruz
+import { parseQueryInt, parseQueryBoolean } from '../../infrastructure/utils/query-parser';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
+import { resolveMediaUrl } from '../../infrastructure/config/media.config';
+import { NotificationType } from '../../domain/notification/notification-type.enum';
 
 const router = Router();
-const userService = new UserService();
-const s3Service = new S3Service();
+const notificationService = new NotificationService();
+const pushTokenService = new PushTokenService();
+const settingsRepo = new UserSettingsPrismaRepository();
+const prisma = getPrisma();
 
-const parseProfileFeedTypes = (value: unknown): ProfileFeedCardType[] | undefined => {
-  if (!value) {
-    return undefined;
+/**
+ * Notification'ları enrich eder - avatar URL'leri ve görseller ekler
+ * Tüm 22 notification type'ı destekler
+ */
+async function enrichNotifications(notifications: any[]): Promise<any[]> {
+  try {
+  // Tüm user ID'leri topla
+  const userIds = new Set<string>();
+  const eventIds = new Set<string>();
+  const badgeIds = new Set<string>();
+  const postIds = new Set<string>();
+  const productIds = new Set<string>();
+  const collectionIds = new Set<string>();
+  const expertRequestIds = new Set<string>();
+  const supportRequestIds = new Set<string>();
+
+  notifications.forEach((notification) => {
+    const data = notification.data || {};
+    const type = notification.type as NotificationType;
+    
+    // User etkileşimleri için user ID'leri topla
+    if (data.trusterId) userIds.add(data.trusterId);
+    if (data.trustedId) userIds.add(data.trustedId);
+    if (data.likerId) userIds.add(data.likerId);
+    if (data.commenterId) userIds.add(data.commenterId);
+    if (data.replierId) userIds.add(data.replierId);
+    if (data.sharerId) userIds.add(data.sharerId);
+    if (data.senderId) userIds.add(data.senderId);
+    if (data.requesterId) userIds.add(data.requesterId);
+    if (data.accepterId) userIds.add(data.accepterId);
+    if (data.expertId) userIds.add(data.expertId);
+    if (data.userId) userIds.add(data.userId);
+    
+    // Tips bildirimleri için senderId ve recipientId ekle
+    if (type === NotificationType.TIPS_RECEIVED) {
+      if (data.senderId) userIds.add(data.senderId);
+      if (data.senderUserId) userIds.add(data.senderUserId);
+    }
+    if (type === NotificationType.TIPS_SENT) {
+      if (data.recipientId) userIds.add(data.recipientId);
+      if (data.recipientUserId) userIds.add(data.recipientUserId);
+    }
+    
+    // Event bildirimleri için event ID'leri topla
+    if (data.eventId) eventIds.add(data.eventId);
+    
+    // Badge bildirimleri için badge ID'leri topla
+    if (data.badgeId) badgeIds.add(data.badgeId);
+    
+    // Post bildirimleri için post ID'leri topla
+    if (data.postId) postIds.add(data.postId);
+    
+    // Product bildirimleri için product ID'leri topla
+    if (data.productId) productIds.add(data.productId);
+    
+    // Collection bildirimleri için collection ID'leri topla
+    if (data.collectionId) collectionIds.add(data.collectionId);
+    
+    // Expert request ID'leri topla (hem AVAILABLE hem ANSWERED için)
+    if (data.requestId && (
+      type === NotificationType.EXPERT_REQUEST_AVAILABLE ||
+      type === NotificationType.EXPERT_REQUEST_ANSWERED
+    )) {
+      expertRequestIds.add(data.requestId);
+    }
+    
+    // Support request ID'leri topla (threadId'den bulunacak)
+    if (data.threadId && type === NotificationType.SUPPORT_REQUEST_ACCEPTED) {
+      // threadId'den request bulunacak
+    }
+  });
+
+  // Batch olarak user avatar'ları ve username'leri al
+  const userAvatars = new Map<string, string | null>();
+  const userNames = new Map<string, string | null>();
+  if (userIds.size > 0) {
+    // Her kullanıcı için en son aktif avatar'ı al
+    const userIdArray = Array.from(userIds);
+    const [avatars, profiles] = await Promise.all([
+      prisma.userAvatar.findMany({
+        where: {
+          userId: { in: userIdArray },
+          isActive: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.profile.findMany({
+        where: {
+          userId: { in: userIdArray },
+        },
+        select: {
+          userId: true,
+          userName: true,
+          displayName: true,
+        },
+      }),
+    ]);
+
+    // Her kullanıcı için sadece ilk (en yeni) avatar'ı al
+    avatars.forEach((avatar) => {
+      if (!userAvatars.has(avatar.userId)) {
+        userAvatars.set(avatar.userId, resolveMediaUrl(avatar.imageUrl, true));
+      }
+    });
+
+    // Username'leri map'e ekle
+    profiles.forEach((profile) => {
+      userNames.set(profile.userId, profile.userName || profile.displayName || null);
+    });
+
+    // Avatar'ı olmayan kullanıcılar için default avatar
+    userIdArray.forEach((userId) => {
+      if (!userAvatars.has(userId)) {
+        userAvatars.set(userId, resolveMediaUrl(null, true));
+      }
+      if (!userNames.has(userId)) {
+        userNames.set(userId, null);
+      }
+    });
+    
+    // Debug: userAvatars map'ini logla
+    logger.debug(`Loaded ${userAvatars.size} user avatars and ${userNames.size} usernames for ${userIds.size} users`);
   }
 
-  const rawValues = Array.isArray(value)
-    ? value
-    : typeof value === 'string'
-      ? value.split(',')
-      : [];
+  // Batch olarak event görselleri al
+  const eventImages = new Map<string, string | null>();
+  if (eventIds.size > 0) {
+    const events = await prisma.wishboxEvent.findMany({
+      where: { id: { in: Array.from(eventIds) } },
+      select: { id: true, imageUrl: true },
+    });
 
-  const normalized = rawValues
-    .map((item) => item.trim())
-    .filter(
-      (item): item is ProfileFeedCardType =>
-        (PROFILE_FEED_CARD_TYPES as readonly string[]).includes(item)
-    );
-
-  if (!normalized.length) {
-    return undefined;
+    events.forEach((event) => {
+      eventImages.set(event.id, resolveMediaUrl(event.imageUrl));
+    });
   }
 
-  return Array.from(new Set(normalized));
-};
+  // Batch olarak badge görselleri al
+  const badgeImages = new Map<string, string | null>();
+  if (badgeIds.size > 0) {
+    const badges = await prisma.badge.findMany({
+      where: { id: { in: Array.from(badgeIds) } },
+      select: { id: true, imageUrl: true },
+    });
+
+    badges.forEach((badge) => {
+      badgeImages.set(badge.id, resolveMediaUrl(badge.imageUrl));
+    });
+  }
+
+  // Batch olarak post görselleri al (post media'dan)
+  const postImages = new Map<string, string | null>();
+  if (postIds.size > 0) {
+    // Post'ların media'larını al
+    const postMediaList = await prisma.postMedia.findMany({
+      where: {
+        postId: { in: Array.from(postIds) },
+      },
+      orderBy: [{ orderIndex: 'asc' }, { createdAt: 'asc' }],
+      select: { postId: true, mediaUrl: true },
+    });
+
+    // Her post için ilk media'yı al
+    postMediaList.forEach((media) => {
+      if (!postImages.has(media.postId)) {
+        postImages.set(media.postId, resolveMediaUrl(media.mediaUrl));
+      }
+    });
+  }
+
+  // Batch olarak product görselleri al
+  const productImages = new Map<string, string | null>();
+  if (productIds.size > 0) {
+    const products = await prisma.product.findMany({
+      where: { id: { in: Array.from(productIds) } },
+      select: { id: true, imageUrl: true },
+    });
+
+    products.forEach((product) => {
+      productImages.set(product.id, resolveMediaUrl(product.imageUrl));
+    });
+  }
+
+  // Batch olarak collection görselleri al (ContentCollection'da imageUrl yok, random image kullan)
+  const collectionImages = new Map<string, string | null>();
+  // Collection'lar için görsel yok, random image kullanılacak
+
+  // Batch olarak expert request bilgilerini al (expert bilgileri için)
+  const expertRequestInfo = new Map<string, {
+    expertUserId?: string;
+    expertName?: string;
+    expertTitle?: string;
+    expertAvatar?: string | null;
+    threadId?: string;
+    requesterName?: string; // EXPERT_REQUEST_AVAILABLE için request sahibi bilgileri
+    requesterTitle?: string;
+    requesterAvatar?: string | null;
+  }>();
+  
+  if (expertRequestIds.size > 0) {
+    const expertRequests = await prisma.expertRequest.findMany({
+      where: { id: { in: Array.from(expertRequestIds) } },
+      include: {
+        user: {
+          include: {
+            profile: true,
+            titles: {
+              orderBy: { earnedAt: 'desc' },
+              take: 1,
+            },
+            avatars: {
+              where: { isActive: true },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+          },
+        },
+        answers: {
+          include: {
+            expertUser: {
+              include: {
+                profile: true,
+                titles: {
+                  orderBy: { earnedAt: 'desc' },
+                  take: 1,
+                },
+                avatars: {
+                  where: { isActive: true },
+                  orderBy: { createdAt: 'desc' },
+                  take: 1,
+                },
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+          take: 1, // İlk answer'dan expert bilgilerini al
+        },
+      },
+    });
+
+    expertRequests.forEach((request) => {
+      // Request sahibi bilgileri (EXPERT_REQUEST_AVAILABLE için)
+      const requester = request.user;
+      const requesterName = requester?.profile?.displayName || requester?.profile?.userName || requester?.email || 'Expert';
+      const requesterTitle = requester?.titles?.[0]?.title || '';
+      const requesterAvatar = requester?.avatars?.[0]?.imageUrl 
+        ? resolveMediaUrl(requester.avatars[0].imageUrl, true) 
+        : resolveMediaUrl(null, true);
+      
+      // Expert bilgileri (EXPERT_REQUEST_ANSWERED için)
+      const firstAnswer = request.answers[0];
+      if (firstAnswer && firstAnswer.expertUser) {
+        const expert = firstAnswer.expertUser;
+        expertRequestInfo.set(request.id, {
+          expertUserId: expert.id,
+          expertName: expert.profile?.displayName || expert.profile?.userName || expert.email || 'Expert',
+          expertTitle: expert.titles?.[0]?.title || '',
+          expertAvatar: expert.avatars?.[0]?.imageUrl 
+            ? resolveMediaUrl(expert.avatars[0].imageUrl, true) 
+            : resolveMediaUrl(null, true),
+          requesterName,
+          requesterTitle,
+          requesterAvatar,
+        });
+      } else {
+        // Expert bulunamadı (henüz answer yok), request sahibi bilgilerini kullan
+        expertRequestInfo.set(request.id, {
+          expertName: requesterName,
+          expertTitle: requesterTitle,
+          expertAvatar: requesterAvatar,
+          requesterName,
+          requesterTitle,
+          requesterAvatar,
+        });
+      }
+    });
+  }
+
+  // Batch olarak support request ID'lerini ve expert bilgilerini thread'lerden bul
+  const supportRequestMap = new Map<string, {
+    requestId: string;
+    expertUserId: string;
+    expertName: string;
+    expertTitle: string;
+    expertAvatar: string | null;
+  }>();
+  const supportThreadIds = new Set<string>();
+  
+  notifications.forEach((notification) => {
+    const data = notification.data || {};
+    const type = notification.type as NotificationType;
+    if (type === NotificationType.SUPPORT_REQUEST_ACCEPTED && data.threadId) {
+      supportThreadIds.add(data.threadId);
+    }
+  });
+  
+  if (supportThreadIds.size > 0) {
+    const dmRequests = await prisma.dMRequest.findMany({
+      where: {
+        threadId: { in: Array.from(supportThreadIds) },
+        status: 'ACCEPTED',
+      },
+      include: {
+        toUser: {
+          include: {
+            profile: true,
+            titles: {
+              orderBy: { earnedAt: 'desc' },
+              take: 1,
+            },
+            avatars: {
+              where: { isActive: true },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+    
+    dmRequests.forEach((request) => {
+      if (request.threadId && request.toUser) {
+        const expert = request.toUser;
+        supportRequestMap.set(request.threadId, {
+          requestId: request.id,
+          expertUserId: expert.id,
+          expertName: expert.profile?.displayName || expert.profile?.userName || expert.email || 'Expert',
+          expertTitle: expert.titles?.[0]?.title || '',
+          expertAvatar: expert.avatars?.[0]?.imageUrl 
+            ? resolveMediaUrl(expert.avatars[0].imageUrl, true) 
+            : resolveMediaUrl(null, true),
+        });
+      }
+    });
+  }
+
+  // Random görseli bir kez al (tüm notification'lar için cache)
+  let randomImageCache: string | null = null;
+  try {
+    // Badge'lerden random seç
+    const randomBadge = await prisma.badge.findFirst({
+      orderBy: { createdAt: 'desc' },
+      take: 1,
+      select: { imageUrl: true },
+    });
+    if (randomBadge?.imageUrl) {
+      randomImageCache = resolveMediaUrl(randomBadge.imageUrl);
+    } else {
+      // Product'lardan random seç
+      const randomProduct = await prisma.product.findFirst({
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: { imageUrl: true },
+      });
+      if (randomProduct?.imageUrl) {
+        randomImageCache = resolveMediaUrl(randomProduct.imageUrl);
+      } else {
+        // Event'lerden random seç
+        const randomEvent = await prisma.wishboxEvent.findFirst({
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { imageUrl: true },
+        });
+        if (randomEvent?.imageUrl) {
+          randomImageCache = resolveMediaUrl(randomEvent.imageUrl);
+        }
+      }
+    }
+  } catch (error) {
+    logger.error('Error getting random image:', error);
+  }
+
+
+  // Notification'ları enrich et
+  return notifications.map((notification) => {
+    // Minimal response structure (title, message, readAt, updatedAt kaldırıldı)
+    const enriched: {
+      id: string;
+      userId: string;
+      type: NotificationType;
+      avatar?: string | null;
+      data: any;
+      read: boolean;
+      createdAt: string;
+    } = {
+      id: notification.id,
+      userId: notification.userId,
+      type: notification.type,
+      avatar: undefined,
+      data: notification.data,
+      read: notification.read,
+      createdAt: notification.createdAt,
+    };
+    const data = notification.data || {};
+    const type = notification.type as NotificationType;
+
+    // Eğer data'da zaten avatar varsa (enricher'dan gelmişse), onu kullan
+    if (data.avatar) {
+      enriched.avatar = data.avatar;
+    }
+
+    // Avatar URL'leri ekle (tüm user etkileşimleri için)
+    // Post ile ilgili (4)
+    if (
+      type === NotificationType.POST_LIKED ||
+      type === NotificationType.POST_COMMENTED ||
+      type === NotificationType.POST_SHARED ||
+      type === NotificationType.POST_FAVORITED
+    ) {
+      // userId root'tan alınır (avatar ile eşleşir)
+      const userId = data.likerId || data.commenterId || data.sharerId || data.userId;
+      if (userId) {
+        // userId'yi root'a set et (avatar ile eşleşir)
+        enriched.userId = userId;
+        if (!enriched.avatar) {
+          enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
+        }
+      }
+      // Post görseli ekle (sadece data içine)
+      let postImageUrl = null;
+      if (data.postId && postImages.has(data.postId)) {
+        postImageUrl = postImages.get(data.postId);
+      } else if (data.productId && productImages.has(data.productId)) {
+        postImageUrl = productImages.get(data.productId);
+      } else if (randomImageCache) {
+        postImageUrl = randomImageCache;
+      }
+      // Data içine ekle (sadece navigation için gerekli)
+      if (!enriched.data) enriched.data = {};
+      enriched.data.postId = data.postId;
+      if (postImageUrl) enriched.data.imageUrl = postImageUrl;
+      // Username ekle
+      if (userId) {
+        const username = userNames.get(userId);
+        if (username) enriched.data.username = username;
+      }
+      // likerId, commenterId, sharerId, userId duplicate kaldırıldı (root'ta var)
+    }
+
+    // Yorum ile ilgili (2)
+    if (type === NotificationType.COMMENT_LIKED || type === NotificationType.COMMENT_REPLIED) {
+      // userId root'tan alınır (avatar ile eşleşir)
+      const userId = data.likerId || data.replierId || data.commenterId;
+      if (userId) {
+        enriched.userId = userId;
+        if (!enriched.avatar) {
+          enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
+        }
+      }
+      // Post görseli ekle (sadece data içine)
+      let postImageUrl = null;
+      if (data.postId && postImages.has(data.postId)) {
+        postImageUrl = postImages.get(data.postId);
+      } else if (randomImageCache) {
+        postImageUrl = randomImageCache;
+      }
+      // Data içine ekle (sadece navigation için)
+      if (!enriched.data) enriched.data = {};
+      enriched.data.postId = data.postId;
+      enriched.data.commentId = data.commentId;
+      if (postImageUrl) enriched.data.imageUrl = postImageUrl;
+      // Username ekle
+      if (userId) {
+        const username = userNames.get(userId);
+        if (username) enriched.data.username = username;
+      }
+      // likerId, replierId, commenterId kaldırıldı (root'ta var)
+    }
+
+    // Trust/Follow ile ilgili (2) - userId, avatar ve username
+    if (type === NotificationType.NEW_TRUSTER || type === NotificationType.NEW_TRUSTED_BY) {
+      // userId root'tan alınır (avatar ile eşleşir)
+      const userId = data.trusterId || data.trustedId;
+      if (userId) {
+        enriched.userId = userId;
+        if (!enriched.avatar) {
+          enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
+        }
+      }
+      // Data içine username ekle
+      if (!enriched.data) enriched.data = {};
+      if (userId) {
+        const username = userNames.get(userId);
+        if (username) enriched.data.username = username;
+      }
+    }
+
+    // Mesajlaşma ile ilgili bildirimler
+    // NEW_MESSAGE kaldırıldı - zaten inbox'ta görüntülenecek
+    if (
+      type === NotificationType.DM_REQUEST_RECEIVED ||
+      type === NotificationType.DM_REQUEST_ACCEPTED ||
+      type === NotificationType.DM_REQUEST_DECLINED ||
+      type === NotificationType.SUPPORT_REQUEST_ACCEPTED
+    ) {
+      // userId root'tan alınır (avatar ile eşleşir)
+      const userId = data.userId || data.requesterId || data.accepterId;
+      if (userId) {
+        enriched.userId = userId;
+        if (!enriched.avatar) {
+          enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
+        }
+      }
+      // Mesajlaşma bildirimleri için imageUrl field'ı eklenmez (root seviyede zaten yok)
+      
+      // Data hazırla (sadece navigation için gerekli)
+      if (!enriched.data) enriched.data = {};
+      
+      // Username ekle
+      if (userId) {
+        const username = userNames.get(userId);
+        if (username) enriched.data.username = username;
+      }
+      
+      if (type === NotificationType.DM_REQUEST_ACCEPTED) {
+        // Sadece threadId (userId root'ta zaten var)
+        if (data.threadId) enriched.data.threadId = data.threadId;
+      } else if (type === NotificationType.SUPPORT_REQUEST_ACCEPTED) {
+        // threadId, requestId ve expert bilgileri (SupportMessageDetail için gerekli)
+        if (data.threadId) enriched.data.threadId = data.threadId;
+        
+        // Thread'den support request ve expert bilgilerini al
+        const supportInfo = data.threadId ? supportRequestMap.get(data.threadId) : null;
+        if (supportInfo) {
+          enriched.data.requestId = supportInfo.requestId;
+          enriched.data.expertName = supportInfo.expertName;
+          enriched.data.expertTitle = supportInfo.expertTitle;
+          enriched.data.expertAvatar = supportInfo.expertAvatar;
+        } else {
+          // Bulunamazsa data'dan al veya default değerler (geçici)
+          enriched.data.requestId = data.requestId || 'default-request-id';
+          enriched.data.expertName = data.expertName || 'Expert';
+          enriched.data.expertTitle = data.expertTitle || '';
+          enriched.data.expertAvatar = data.expertAvatar || resolveMediaUrl(null, true);
+        }
+      } else if (type === NotificationType.DM_REQUEST_RECEIVED) {
+        // Sadece threadId
+        if (data.threadId) enriched.data.threadId = data.threadId;
+      } else {
+        // DM_REQUEST_DECLINED - data boş
+        enriched.data = {};
+      }
+    }
+
+    // Gamification ile ilgili (3)
+    if (
+      type === NotificationType.NEW_BADGE ||
+      type === NotificationType.ACHIEVEMENT_UNLOCKED ||
+      type === NotificationType.REWARD_EARNED
+    ) {
+      // Avatar null (gamification bildirimlerinde kullanıcı avatar'ı yok)
+      enriched.avatar = null;
+      
+      if (!enriched.data) enriched.data = {};
+      
+      if (type === NotificationType.NEW_BADGE) {
+        // NEW_BADGE için badgeId ve imageUrl (badgeName mesajda var)
+        if (data.badgeId) enriched.data.badgeId = data.badgeId;
+        let badgeImageUrl = null;
+        if (data.badgeId && badgeImages.has(data.badgeId)) {
+          badgeImageUrl = badgeImages.get(data.badgeId);
+        } else if (randomImageCache) {
+          badgeImageUrl = randomImageCache;
+        }
+        if (badgeImageUrl) enriched.data.imageUrl = badgeImageUrl;
+      } else if (type === NotificationType.ACHIEVEMENT_UNLOCKED) {
+        // ACHIEVEMENT_UNLOCKED için badgeId ve imageUrl (achievementId kaldırıldı)
+        if (data.badgeId) enriched.data.badgeId = data.badgeId;
+        let badgeImageUrl = null;
+        if (data.badgeId && badgeImages.has(data.badgeId)) {
+          badgeImageUrl = badgeImages.get(data.badgeId);
+        } else if (randomImageCache) {
+          badgeImageUrl = randomImageCache;
+        }
+        if (badgeImageUrl) enriched.data.imageUrl = badgeImageUrl;
+      } else if (type === NotificationType.REWARD_EARNED) {
+        // REWARD_EARNED için sadece amount (badgeId ve imageUrl kaldırıldı)
+        if (data.amount) enriched.data.amount = data.amount;
+      }
+    }
+
+    // Expert ile ilgili (2) - avatar null
+    if (
+      type === NotificationType.EXPERT_REQUEST_AVAILABLE ||
+      type === NotificationType.EXPERT_REQUEST_ANSWERED
+    ) {
+      // Avatar null (expert bildirimlerinde kullanıcı avatar'ı yok)
+      enriched.avatar = null;
+      
+      // Data içine ekle
+      if (!enriched.data) enriched.data = {};
+      if (data.requestId) enriched.data.requestId = data.requestId;
+      
+      // EXPERT_REQUEST_ANSWERED için expert bilgileri ve threadId ekle
+      if (type === NotificationType.EXPERT_REQUEST_ANSWERED) {
+        const expertInfo = data.requestId ? expertRequestInfo.get(data.requestId) : null;
+        if (expertInfo) {
+          enriched.data.expertName = expertInfo.expertName || 'Expert';
+          enriched.data.expertTitle = expertInfo.expertTitle || '';
+          enriched.data.expertAvatar = expertInfo.expertAvatar || resolveMediaUrl(null, true);
+        } else {
+          // Expert bilgisi bulunamadı, default değerler (geçici)
+          enriched.data.expertName = data.expertName || 'Expert';
+          enriched.data.expertTitle = data.expertTitle || '';
+          enriched.data.expertAvatar = data.expertAvatar || resolveMediaUrl(null, true);
+        }
+        // threadId ekle (data'dan al veya null - expert request'ler thread oluşturmuyor)
+        if (data.threadId) {
+          enriched.data.threadId = data.threadId;
+        } else {
+          // ThreadId yok, null bırak (expert request'ler thread oluşturmuyor)
+          enriched.data.threadId = null;
+        }
+      }
+      
+      // EXPERT_REQUEST_AVAILABLE için expert bilgileri ekle (request sahibi bilgileri - henüz expert bulunmamış)
+      if (type === NotificationType.EXPERT_REQUEST_AVAILABLE) {
+        const expertInfo = data.requestId ? expertRequestInfo.get(data.requestId) : null;
+        if (expertInfo) {
+          // Request sahibi bilgilerini expert olarak göster (henüz expert bulunmamış)
+          enriched.data.expertName = expertInfo.requesterName || expertInfo.expertName || 'Expert';
+          enriched.data.expertTitle = expertInfo.requesterTitle || expertInfo.expertTitle || '';
+          enriched.data.expertAvatar = expertInfo.requesterAvatar || expertInfo.expertAvatar || resolveMediaUrl(null, true);
+        } else {
+          // Default değerler
+          enriched.data.expertName = data.expertName || 'Expert';
+          enriched.data.expertTitle = data.expertTitle || '';
+          enriched.data.expertAvatar = data.expertAvatar || resolveMediaUrl(null, true);
+        }
+      }
+    }
+
+    // Sistem/Tips ile ilgili (3)
+    if (
+      type === NotificationType.SYSTEM_ANNOUNCEMENT ||
+      type === NotificationType.TIPS_RECEIVED ||
+      type === NotificationType.TIPS_SENT
+    ) {
+      // userId root'tan alınır (avatar ile eşleşir)
+      // TIPS_RECEIVED için senderId, TIPS_SENT için recipientId kullanılır
+      const userId = type === NotificationType.TIPS_RECEIVED 
+        ? (data.senderId || data.senderUserId || data.userId)
+        : type === NotificationType.TIPS_SENT
+        ? (data.recipientId || data.recipientUserId || data.userId)
+        : (data.senderId || data.userId);
+      
+      if (userId) {
+        enriched.userId = userId;
+        if (!enriched.avatar) {
+          enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
+        }
+      }
+      
+      // Data içine ekle
+      if (!enriched.data) enriched.data = {};
+      
+      if (type === NotificationType.TIPS_RECEIVED) {
+        // TIPS_RECEIVED için: amount, username (sender'dan)
+        if (data.amount) enriched.data.amount = data.amount;
+        if (userId) {
+          const username = userNames.get(userId);
+          if (username) enriched.data.username = username;
+        }
+        // imageUrl, avatar, senderId, userId duplicate kaldırıldı
+      } else if (type === NotificationType.TIPS_SENT) {
+        // TIPS_SENT için: amount, username (recipient'ten)
+        if (data.amount) enriched.data.amount = data.amount;
+        if (userId) {
+          const username = userNames.get(userId);
+          if (username) enriched.data.username = username;
+        }
+      } else {
+        // SYSTEM_ANNOUNCEMENT için
+        if (data.amount) enriched.data.amount = data.amount;
+      }
+    }
+
+    // Event ile ilgili (3) - avatar null
+    if (
+      type === NotificationType.EVENT_STARTED ||
+      type === NotificationType.EVENT_ENDING_SOON ||
+      type === NotificationType.EVENT_REWARD_AVAILABLE
+    ) {
+      // Avatar null (event bildirimlerinde kullanıcı avatar'ı yok)
+      enriched.avatar = null;
+      
+      let eventImageUrl = null;
+      if (data.eventId && eventImages.has(data.eventId)) {
+        eventImageUrl = eventImages.get(data.eventId);
+      } else if (randomImageCache) {
+        eventImageUrl = randomImageCache;
+      }
+      // Data içine ekle (sadece eventId ve imageUrl - eventName mesajda var)
+      if (!enriched.data) enriched.data = {};
+      enriched.data.eventId = data.eventId;
+      if (eventImageUrl) enriched.data.imageUrl = eventImageUrl;
+      // eventName kaldırıldı
+    }
+
+    // Collection ile ilgili (2) - avatar null
+    if (
+      type === NotificationType.COLLECTION_POST_ADDED ||
+      type === NotificationType.COLLECTION_SHARED
+    ) {
+      // Avatar null (collection bildirimlerinde kullanıcı avatar'ı yok)
+      enriched.avatar = null;
+      
+      // Data içine ekle (sadece collectionId - postId kaldırıldı)
+      if (!enriched.data) enriched.data = {};
+      if (data.collectionId) enriched.data.collectionId = data.collectionId;
+      // postId ve imageUrl kaldırıldı
+    }
+
+    // undefined değerleri null yap (response'da görünsün ama null olsun)
+    // Avatar için: null yerine random avatar veya default avatar kullan
+    if (enriched.avatar === undefined) {
+      enriched.avatar = randomImageCache || null;
+    }
+    // imageUrl artık sadece data içinde, root seviyede yok
+    // Mesajlaşma bildirimlerinde data içinde de imageUrl yok
+    const isMessagingNotification = 
+      type === NotificationType.DM_REQUEST_RECEIVED ||
+      type === NotificationType.DM_REQUEST_ACCEPTED ||
+      type === NotificationType.DM_REQUEST_DECLINED ||
+      type === NotificationType.SUPPORT_REQUEST_ACCEPTED ||
+      type === NotificationType.NEW_MESSAGE;
+    
+    // Root seviyedeki imageUrl yok (artık sadece data içinde)
+    
+    // Gereksiz alanları data'dan kaldır (minimal structure için)
+    if (enriched.data) {
+      // Genel temizlik
+      delete enriched.data.productId;
+      delete enriched.data.commenterId;
+      delete enriched.data.sharerId;
+      delete enriched.data.likerId;
+      delete enriched.data.replierId;
+      delete enriched.data.senderId;
+      delete enriched.data.requesterId;
+      delete enriched.data.accepterId;
+      delete enriched.data.expertId;
+      delete enriched.data.trusterId;
+      delete enriched.data.trustedId;
+      delete enriched.data.userName;
+      delete enriched.data.badgeName;
+      delete enriched.data.eventName;
+      delete enriched.data.achievementId;
+      delete enriched.data.tipsAmount;
+      delete enriched.data.avatar;
+      delete enriched.data.message;
+      delete enriched.data.requestId; // DM_REQUEST_RECEIVED için (threadId yeterli)
+      // amount genel olarak silinmemeli - sadece DM_REQUEST için silinecek
+      
+      // TIPS_RECEIVED için userId duplicate kaldır (root'ta var) - amount KALMALI
+      if (type === NotificationType.TIPS_RECEIVED) {
+        delete enriched.data.userId;
+        delete enriched.data.imageUrl;
+        // amount KALMALI - silme!
+      }
+      
+      // TIPS_SENT için de amount KALMALI
+      if (type === NotificationType.TIPS_SENT) {
+        // amount KALMALI - silme!
+      }
+      
+      // DM_REQUEST_ACCEPTED için userId ve userName kaldır (root'ta var)
+      if (type === NotificationType.DM_REQUEST_ACCEPTED) {
+        delete enriched.data.userId;
+        delete enriched.data.userName;
+        delete enriched.data.imageUrl;
+      }
+      
+      // DM_REQUEST_RECEIVED için gereksiz alanlar
+      if (type === NotificationType.DM_REQUEST_RECEIVED) {
+        delete enriched.data.userId;
+        delete enriched.data.requestId;
+        delete enriched.data.message;
+        delete enriched.data.amount;
+        delete enriched.data.imageUrl;
+      }
+      
+      // Collection için postId kaldır
+      if (type === NotificationType.COLLECTION_POST_ADDED || type === NotificationType.COLLECTION_SHARED) {
+        delete enriched.data.postId;
+        delete enriched.data.imageUrl;
+        delete enriched.data.avatar; // Collection bildirimlerinde avatar yok
+      }
+      
+      // Event bildirimlerinde avatar kaldır
+      if (
+        type === NotificationType.EVENT_STARTED ||
+        type === NotificationType.EVENT_ENDING_SOON ||
+        type === NotificationType.EVENT_REWARD_AVAILABLE
+      ) {
+        delete enriched.data.avatar; // Event bildirimlerinde avatar yok
+      }
+      
+      // Badge/Gamification bildirimlerinde avatar kaldır
+      if (
+        type === NotificationType.NEW_BADGE ||
+        type === NotificationType.ACHIEVEMENT_UNLOCKED ||
+        type === NotificationType.REWARD_EARNED
+      ) {
+        delete enriched.data.avatar; // Badge bildirimlerinde avatar yok
+      }
+      
+      // Expert için imageUrl kaldır
+      if (type === NotificationType.EXPERT_REQUEST_AVAILABLE || type === NotificationType.EXPERT_REQUEST_ANSWERED) {
+        delete enriched.data.imageUrl;
+        delete enriched.data.avatar; // Expert bildirimlerinde avatar yok
+      }
+      
+      // REWARD_EARNED için badgeId ve imageUrl kaldır
+      if (type === NotificationType.REWARD_EARNED) {
+        delete enriched.data.badgeId;
+        delete enriched.data.imageUrl;
+      }
+    }
+    
+    return enriched;
+  });
+  } catch (error) {
+    logger.error('Error in enrichNotifications:', error);
+    // Hata durumunda original notification'ları döndür
+    return notifications;
+  }
+}
 
 /**
  * @openapi
- * /users/me/profile:
+ * /notifications:
  *   get:
- *     summary: Hesabın profil bilgileri (self profile)
- *     description: Giriş yapan kullanıcının detaylı profil bilgisini döner.
- *     tags: [Users]
+ *     tags:
+ *       - Notifications
+ *     summary: Get user notifications
+ *     description: Retrieve a paginated list of user notifications
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *         description: Number of notifications to return
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *         description: Number of notifications to skip
+ *       - in: query
+ *         name: unreadOnly
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         description: Filter only unread notifications
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *         description: Filter by notification type (e.g., POST_LIKED, NEW_MESSAGE, NEW_TRUSTER)
+ *       - in: query
+ *         name: category
+ *         schema:
+ *           type: string
+ *           enum: [POST, TRUST, MESSAGE, SUPPORT, COLLECTION, GAMIFICATION, EXPERT, EVENT, SYSTEM]
+ *         description: Filter by notification category
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search in notification title and message
  *     responses:
  *       200:
- *         description: Profil bilgileri
+ *         description: Notifications retrieved successfully
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 id: { type: string }
- *                 name: { type: string }
- *                 avatarUrl: { type: string, nullable: true }
- *                 bannerUrl: { type: string, nullable: true }
- *                 biography: { type: string, nullable: true }
- *                 titles:
- *                   type: array
- *                   items: { type: string }
- *                 stats:
- *                   type: object
- *                   properties:
- *                     posts: { type: integer }
- *                     trust: { type: integer }
- *                     truster: { type: integer }
- *                 badges:
+ *                 success:
+ *                   type: boolean
+ *                 data:
  *                   type: array
  *                   items:
- *                     type: object
- *                     properties:
- *                       id: { type: string }
- *                       title: { type: string }
- *                       image: { type: string, nullable: true }
- *                 cosmetics:
+ *                     $ref: '#/components/schemas/Notification'
+ *                 pagination:
  *                   type: object
  *                   properties:
- *                     activeBadge:
- *                       type: object
- *                       properties:
- *                         id: { type: string }
- *                         title: { type: string }
- *                         image: { type: string, nullable: true }
- *                     activeBanner:
- *                       type: object
- *                       properties:
- *                         id: { type: string }
- *                         image: { type: string, nullable: true }
- *                 isTrusted: { type: boolean }
- *       401:
- *         description: Unauthorized
+ *                     total:
+ *                       type: integer
+ *                       description: Total number of notifications
+ *                     limit:
+ *                       type: integer
+ *                       description: Number of notifications per page
+ *                     offset:
+ *                       type: integer
+ *                       description: Number of notifications skipped
+ *                     hasMore:
+ *                       type: boolean
+ *                       description: Whether there are more notifications available
+ *       500:
+ *         description: Server error
  */
-router.get('/me/profile', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+router.get('/', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
 
-  const profile = await userService.getSelfUserProfile(String(userId));
-  if (!profile) return res.status(404).json({ message: 'User not found' });
-  return res.json(profile);
-}));
+    const { limit, offset, unreadOnly, type } = req.query as unknown as GetNotificationsQuery;
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
+
+    // Import enums and repository
+    const { NotificationType } = await import('../../domain/notification/notification-type.enum');
+    const { NotificationPrismaRepository } = await import('../../infrastructure/repositories/notification-prisma.repository');
+
+    const notificationRepo = new NotificationPrismaRepository();
+    
+    // Mobil uygulama kategorileri: all, tips, truster, replies
+    // Kategori isimlerini notification type'larına çevir
+    let types: NotificationType[] | undefined = undefined;
+    
+    if (type) {
+      const category = (type as string).toLowerCase();
+      
+      switch (category) {
+        case 'all':
+          // Tüm bildirimler
+          types = undefined;
+          break;
+        case 'tips':
+          // Tips bildirimleri - sadece kullanıcıya gelen tips'ler (TIPS_RECEIVED)
+          types = [NotificationType.TIPS_RECEIVED];
+          break;
+        case 'truster':
+        case 'trust':
+          // Trust/Follow bildirimleri
+          types = [NotificationType.NEW_TRUSTER, NotificationType.NEW_TRUSTED_BY];
+          break;
+        case 'replies':
+        case 'reply':
+          // Yorum ve cevap bildirimleri
+          types = [
+            NotificationType.POST_COMMENTED,
+            NotificationType.COMMENT_REPLIED,
+            NotificationType.COMMENT_LIKED
+          ];
+          break;
+        default:
+          // Direkt notification type ise (örn: POST_LIKED)
+          // NotificationType enum'ında var mı kontrol et
+          if (Object.values(NotificationType).includes(type as NotificationType)) {
+            types = [type as NotificationType];
+          } else {
+            // Geçersiz kategori/type, tüm bildirimleri göster
+            types = undefined;
+          }
+      }
+    }
+
+    // Repository'de types array desteği eklendi, direkt kullanabiliriz
+    const [notifications, total] = await Promise.all([
+      notificationRepo.findByUserId(userId, {
+        limit: parseQueryInt(limit, 20),
+        offset: parseQueryInt(offset, 0),
+        unreadOnly: parseQueryBoolean(unreadOnly),
+        types: types, // undefined = tüm tipler
+        search,
+      }),
+      notificationRepo.getTotalCount(userId, {
+        unreadOnly: parseQueryBoolean(unreadOnly),
+        types: types, // undefined = tüm tipler
+        search,
+      }),
+    ]);
+
+    // Notification'ları JSON'a çevir
+    const notificationJSONs = notifications.map((n) => n.toJSON());
+    
+    // Avatar URL'leri ve görselleri ekle
+    let enrichedNotifications;
+    try {
+      enrichedNotifications = await enrichNotifications(notificationJSONs);
+    } catch (enrichError) {
+      logger.error('Error enriching notifications:', enrichError);
+      // Enrich hatası olsa bile notification'ları döndür
+      enrichedNotifications = notificationJSONs;
+    }
+
+    return res.json({
+      success: true,
+      data: enrichedNotifications,
+      pagination: {
+        total,
+        limit: parseQueryInt(limit, 20),
+        offset: parseQueryInt(offset, 0),
+        hasMore: parseQueryInt(offset, 0) + notifications.length < total,
+      },
+    });
+  } catch (error) {
+    logger.error('Error getting notifications:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to get notifications',
+    });
+  }
+});
 
 /**
  * @openapi
- * /users/me/profile:
- *   put:
- *     summary: Profil bilgilerini güncelle
- *     tags: [Users]
+ * /notifications/unread-count:
+ *   get:
+ *     tags:
+ *       - Notifications
+ *     summary: Get unread notifications count
+ *     description: Get the total count of unread notifications for the current user
  *     security:
  *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/UpdateUserProfileRequest'
  *     responses:
  *       200:
- *         description: Güncellenmiş profil
+ *         description: Count retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     count:
+ *                       type: integer
+ *       500:
+ *         description: Server error
  */
-router.put('/me/profile', asyncHandler(async (req: Request<{}, {}, UpdateUserProfileRequest>, res: Response) => {
-  const userPayload = req.user;
-  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!userId) {
-    logger.warn('[updateProfile] Unauthorized request - no userId found');
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
-
-  const body = req.body || {};
-  logger.info('[updateProfile] Request received', { userId, bodyKeys: Object.keys(body) });
-
-  if (body.name && body.name.trim().length < 2) {
-    return res.status(400).json({ message: 'İsim en az 2 karakter olmalıdır' });
-  }
-
-  if (body.biography && body.biography.length > 500) {
-    return res.status(400).json({ message: 'Biyografi en fazla 500 karakter olabilir' });
-  }
-
-  if (body.badge && !Array.isArray(body.badge)) {
-    return res.status(400).json({ message: 'badge alanı bir dizi olmalıdır' });
-  }
+router.get('/unread-count', authMiddleware, async (req: Request, res: Response) => {
+  // Timeout kontrolü için timer
+  const timeout = setTimeout(() => {
+    if (!res.headersSent) {
+      logger.warn('Unread count endpoint timeout - request taking too long');
+      res.status(504).json({
+        success: false,
+        message: 'Request timeout - please try again',
+      });
+    }
+  }, 8000); // 8 saniye timeout (mobil client 10 saniye bekliyor)
 
   try {
-    await userService.updateProfileDetails(String(userId), {
-      name: body.name,
-      biography: body.biography,
-      banner: typeof body.banner !== 'undefined' ? body.banner : undefined,
-      avatar: body.avatar ?? undefined,
-      cosmeticId: typeof body.cosmetic !== 'undefined' ? body.cosmetic : undefined,
-      badges: body.badge?.map(badge => ({ id: badge })) ?? undefined,
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    
+    if (!userId) {
+      clearTimeout(timeout);
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const count = await notificationService.getUnreadCount(userId);
+
+    clearTimeout(timeout);
+    return res.json({
+      success: true,
+      data: { count },
     });
-
-    logger.info('[updateProfile] Profile updated successfully', { userId });
-
-    const profile = await userService.getSelfUserProfile(String(userId));
-    if (!profile) {
-      logger.error('[updateProfile] Profile not found after update', { userId });
-      return res.status(404).json({ 
+  } catch (error: any) {
+    clearTimeout(timeout);
+    logger.error('Error getting unread count:', error);
+    
+    // Timeout hatası için özel mesaj
+    if (error.code === 'P2024' || error.message?.includes('timeout')) {
+      return res.status(504).json({
         success: false,
-        message: 'Profil bulunamadı' 
+        message: 'Database query timeout - please try again',
+      });
+    }
+    
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to get unread count',
+    });
+  }
+});
+
+/**
+ * @openapi
+ * /notifications/{id}/read:
+ *   put:
+ *     tags:
+ *       - Notifications
+ *     summary: Mark notification as read
+ *     description: Mark a specific notification as read
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Notification ID
+ *     responses:
+ *       200:
+ *         description: Notification marked as read
+ *       500:
+ *         description: Server error
+ */
+router.put('/:id/read', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    
+    await notificationService.markAsRead(id);
+
+    // Mobil için: Socket ile unread count güncellemesi gönder
+    if (userId) {
+      try {
+        const { default: SocketManager } = await import('../../infrastructure/realtime/socket-manager');
+        const socketManager = SocketManager.getInstance();
+        const socketHandler = socketManager.getSocketHandler();
+        
+        const unreadCount = await notificationService.getUnreadCount(userId);
+        socketHandler.sendMessageToUser(userId, 'notification_count_updated', {
+          unreadCount,
+        });
+      } catch (socketError) {
+        // Socket hatası durumunda devam et, sadece log'la
+        logger.debug('Failed to send unread count update via socket:', socketError);
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: 'Notification marked as read',
+    });
+  } catch (error) {
+    logger.error('Error marking notification as read:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to mark notification as read',
+    });
+  }
+});
+
+/**
+ * @openapi
+ * /notifications/mark-all-read:
+ *   put:
+ *     tags:
+ *       - Notifications
+ *     summary: Mark all notifications as read
+ *     description: Mark all user notifications as read
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: All notifications marked as read
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     count:
+ *                       type: integer
+ *       500:
+ *         description: Server error
+ */
+router.put('/mark-all-read', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const count = await notificationService.markAllAsRead(userId);
+
+    // Mobil için: Socket ile unread count güncellemesi gönder (0 olmalı)
+    try {
+      const { default: SocketManager } = await import('../../infrastructure/realtime/socket-manager');
+      const socketManager = SocketManager.getInstance();
+      const socketHandler = socketManager.getSocketHandler();
+      
+      const unreadCount = await notificationService.getUnreadCount(userId);
+      socketHandler.sendMessageToUser(userId, 'notification_count_updated', {
+        unreadCount,
+      });
+    } catch (socketError) {
+      // Socket hatası durumunda devam et, sadece log'la
+      logger.debug('Failed to send unread count update via socket:', socketError);
+    }
+
+    return res.json({
+      success: true,
+      message: `${count} notifications marked as read`,
+      data: { count },
+    });
+  } catch (error) {
+    logger.error('Error marking all notifications as read:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to mark all notifications as read',
+    });
+  }
+});
+
+/**
+ * @openapi
+ * /notifications/{id}:
+ *   delete:
+ *     tags:
+ *       - Notifications
+ *     summary: Delete a notification
+ *     description: Delete a specific notification
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Notification ID
+ *     responses:
+ *       200:
+ *         description: Notification deleted successfully
+ *       500:
+ *         description: Server error
+ */
+router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await notificationService.deleteNotification(id);
+
+    return res.json({
+      success: true,
+      message: 'Notification deleted',
+    });
+  } catch (error) {
+    logger.error('Error deleting notification:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to delete notification',
+    });
+  }
+});
+
+/**
+ * @openapi
+ * /notifications/settings:
+ *   get:
+ *     tags:
+ *       - Notifications
+ *     summary: Get notification settings
+ *     description: Get user's notification preferences
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Settings retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/NotificationSettings'
+ *       500:
+ *         description: Server error
+ */
+router.get('/settings', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const settings = await settingsRepo.findByUserId(userId);
+
+    if (!settings) {
+      return res.json({
+        success: true,
+        data: {
+          trustNotifications: true,
+          supportNotifications: true,
+          messageNotifications: true,
+          collectionNotifications: true,
+          postNotifications: true,
+          notificationEmailEnabled: true,
+          notificationPushEnabled: true,
+          notificationInAppEnabled: true,
+        },
       });
     }
 
     return res.json({
       success: true,
-      profile,
+      data: {
+        trustNotifications: settings.trustNotifications,
+        supportNotifications: settings.supportNotifications,
+        messageNotifications: settings.messageNotifications,
+        collectionNotifications: settings.collectionNotifications,
+        postNotifications: settings.postNotifications,
+        notificationEmailEnabled: settings.notificationEmailEnabled,
+        notificationPushEnabled: settings.notificationPushEnabled,
+        notificationInAppEnabled: settings.notificationInAppEnabled,
+      },
     });
   } catch (error) {
-    logger.error('[updateProfile] Error updating profile', { 
-      userId, 
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined
+    logger.error('Error getting notification settings:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to get notification settings',
     });
-    throw error; // asyncHandler'a bırak
   }
-}));
-
-/**
- * @openapi
- * /users/{id}/profile:
- *   get:
- *     summary: Kullanıcı profili (diğer kullanıcı)
- *     description: Ziyaret edilen kullanıcının profilini ve "isTrusted" durumunu döner.
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: Ziyaret edilen kullanıcı ID'si
- *     responses:
- *       200:
- *         description: Profil bilgileri
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 id: { type: string }
- *                 name: { type: string }
- *                 avatarUrl: { type: string, nullable: true }
- *                 bannerUrl: { type: string, nullable: true }
- *                 biography: { type: string, nullable: true }
- *                 titles:
- *                   type: array
- *                   items: { type: string }
- *                 stats:
- *                   type: object
- *                   properties:
- *                     posts: { type: integer }
- *                     trust: { type: integer }
- *                     truster: { type: integer }
- *                 badges:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       id: { type: string }
- *                       title: { type: string }
- *                       image: { type: string, nullable: true }
- *                 isTrusted: { type: boolean }
- *       401:
- *         description: Unauthorized
- *       404:
- *         description: User not found
- */
-router.get('/:id/profile', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const viewerId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!viewerId) return res.status(401).json({ message: 'Unauthorized' });
-
-  const targetUserId = req.params.id;
-  if (!targetUserId) return res.status(400).json({ message: 'User id is required' });
-
-  const profile = await userService.getUserProfileForViewer(String(viewerId), String(targetUserId));
-  if (!profile) return res.status(404).json({ message: 'User not found' });
-  return res.json(profile);
-}));
-
-/**
- * @openapi
- * /users/suggested:
- *   get:
- *     summary: Önerilen kullanıcıları getir (Suggested Users)
- *     description: |
- *       Trust edilmemiş kullanıcılardan öneriler döner. 
- *       Pagination, search ve mutual trust count desteği vardır.
- *       
- *       **Öneri Algoritması:**
- *       - Ortak trust'lar
- *       - Popülerlik (truster count)
- *       - Aktiflik (post count)
- *       
- *       **Hariç Tutulanlar:**
- *       - Kullanıcının kendisi
- *       - Zaten trust edilmiş kullanıcılar
- *       - Engellenmiş (blocked) kullanıcılar
- *       - Susturulmuş (muted) kullanıcılar
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 50
- *           default: 20
- *         description: Döndürülecek maksimum kullanıcı sayısı
- *       - in: query
- *         name: cursor
- *         schema:
- *           type: string
- *         description: Pagination için cursor (son kullanıcının ID'si)
- *       - in: query
- *         name: q
- *         schema:
- *           type: string
- *         description: Kullanıcı adı veya isim araması için search query
- *     responses:
- *       200:
- *         description: Önerilen kullanıcılar listesi
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 items:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       id:
- *                         type: string
- *                         example: "248cc91f-b551-4ecc-a885-db1163571330"
- *                       userName:
- *                         type: string
- *                         nullable: true
- *                         example: "michael_clark"
- *                       name:
- *                         type: string
- *                         nullable: true
- *                         example: "Michael Clark"
- *                       avatar:
- *                         type: string
- *                         nullable: true
- *                         example: "https://cdn.tipbox.co/avatars/user-123.jpg"
- *                       titles:
- *                         type: array
- *                         items:
- *                           type: string
- *                         example: ["Technology Enthusiast", "Hardware Expert", "Digital Innovation Specialist"]
- *                       isTrusted:
- *                         type: boolean
- *                         example: false
- *                         description: Kullanıcının bu kişiyi trust edip etmediği (suggested users'da her zaman false)
- *                       mutualTrustCount:
- *                         type: integer
- *                         example: 3
- *                         description: Ortak trust sayısı ("3 ortak arkadaş" gibi gösterilebilir)
- *                       stats:
- *                         type: object
- *                         properties:
- *                           posts:
- *                             type: integer
- *                             example: 87
- *                           trust:
- *                             type: integer
- *                             example: 245
- *                           truster:
- *                             type: integer
- *                             example: 189
- *                 pagination:
- *                   type: object
- *                   properties:
- *                     nextCursor:
- *                       type: string
- *                       nullable: true
- *                       example: "user-456"
- *                       description: Bir sonraki sayfa için cursor (null ise son sayfa)
- *                     hasMore:
- *                       type: boolean
- *                       example: true
- *                       description: Daha fazla kullanıcı var mı?
- *             examples:
- *               success:
- *                 value:
- *                   items:
- *                     - id: "user-123"
- *                       userName: "michael_clark"
- *                       name: "Michael Clark"
- *                       avatar: "https://cdn.tipbox.com/avatars/user-123.jpg"
- *                       titles: ["Technology Enthusiast", "Hardware Expert", "Digital Innovation Specialist"]
- *                       isTrusted: false
- *                       mutualTrustCount: 3
- *                       stats:
- *                         trust: 245
- *                         truster: 189
- *                         posts: 87
- *                   pagination:
- *                     nextCursor: "user-456"
- *                     hasMore: true
- *       401:
- *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: "Unauthorized"
- */
-router.get('/suggested', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
-
-  // Query parameters
-  const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
-  const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
-  const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
-  const searchQuery = req.query.q ? String(req.query.q) : undefined;
-
-  const suggestions = await userService.getSuggestedUsers(String(userId), {
-    cursor,
-    limit,
-    searchQuery,
-  });
-
-  return res.json(suggestions);
-}));
-
-/**
- * @openapi
- * /users/{id}/trusts:
- *   get:
- *     summary: Kullanıcının trust listesini getirir
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *       - in: query
- *         name: q
- *         schema: { type: string }
- *         description: İsim veya kullanıcı adına göre arama (case-insensitive)
- *     responses:
- *       200:
- *         description: Trust list
- */
-router.get('/:id/trusts', asyncHandler(async (req: Request, res: Response) => {
-  const id = String(req.params.id);
-  const q = typeof req.query.q === 'string' ? req.query.q.trim() : undefined;
-  const list = await userService.listTrustedUsers(id, q);
-  return res.json(list);
-}));
-
-/**
- * @openapi
- * /users/{id}/trusters:
- *   get:
- *     summary: Kullanıcının truster listesini getirir
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *       - in: query
- *         name: q
- *         schema: { type: string }
- *         description: İsim veya kullanıcı adına göre arama (case-insensitive)
- *       - in: query
- *         name: sort
- *         schema:
- *           type: string
- *           enum: [name_asc, name_desc, date_asc, date_desc, trusted_first]
- *           default: date_desc
- *         description: Sıralama kriteri (name_asc: A-Z, name_desc: Z-A, date_asc: Eski-yeni, date_desc: Yeni-eski, trusted_first: Önce trust edilenler)
- *     responses:
- *       200:
- *         description: Truster listesi
- */
-router.get('/:id/trusters', asyncHandler(async (req: Request, res: Response) => {
-  const id = String(req.params.id);
-  const q = typeof req.query.q === 'string' ? req.query.q.trim() : undefined;
-  const sort = typeof req.query.sort === 'string' 
-    ? req.query.sort as 'name_asc' | 'name_desc' | 'date_asc' | 'date_desc' | 'trusted_first'
-    : 'date_desc'; // Default sort
-  const list = await userService.listTrusters(id, q, sort);
-  return res.json(list);
-}));
-
-/**
- * @openapi
- * /users/{id}/trusts/{targetUserId}:
- *   delete:
- *     summary: Trust listesinden kullanıcı kaldır
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *       - in: path
- *         name: targetUserId
- *         required: true
- *         schema: { type: string }
- *     responses:
- *       204:
- *         description: Kaldırıldı
- *       401:
- *         description: Unauthorized
- */
-router.delete('/:id/trusts/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
-  const id = String(req.params.id);
-  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
-  const targetUserId = String(req.params.targetUserId);
-  const ok = await userService.removeTrust(id, targetUserId);
-  if (!ok) return res.status(404).json({ message: 'Kayıt bulunamadı' });
-  return res.status(204).end();
-}));
-
-/**
- * @openapi
- * /users/trust:
- *   post:
- *     summary: Trust ekle
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [ targetUserId ]
- *             properties:
- *               targetUserId:
- *                 type: string
- *                 description: Trust edilecek kullanıcı ID'si
- *                 example: "248cc91f-b551-4ecc-a885-db1163571330"
- *     responses:
- *       201:
- *         description: Trust işlemi başarıyla gerçekleştirildi ve trust/truster sayıları güncellendi
- *       400:
- *         description: Geçersiz parametreler
- *       401:
- *         description: Unauthorized
- */
-router.post('/trust', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
-  
-  const { targetUserId } = req.body || {};
-  const id = String(authUserId);
-
-  if (!targetUserId || typeof targetUserId !== 'string') {
-    return res.status(400).json({ message: 'targetUserId is required and must be a string' });
-  }
-  
-  await userService.addTrust(id, targetUserId);
-  return res.status(201).json({ message: 'Trust added successfully' });
-}));
-
-/**
- * @openapi
- * /users/{id}/block:
- *   post:
- *     summary: Kullanıcıyı engelle
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [ targetUserId ]
- *             properties:
- *               targetUserId: { type: string }
- */
-router.post('/:id/block', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
-  const id = String(req.params.id);
-  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
-  const { targetUserId } = req.body || {};
-  if (!targetUserId || typeof targetUserId !== 'string') return res.status(400).json({ message: 'targetUserId is required' });
-  await userService.blockUser(id, targetUserId);
-  return res.status(201).end();
-}));
-
-/**
- * @openapi
- * /users/{id}/unblock:
- *   post:
- *     summary: Kullanıcı blok kaldır
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [ targetUserId ]
- *             properties:
- *               targetUserId: { type: string }
- *     responses:
- *       204:
- *         description: Blok kaldırıldı
- */
-router.post('/:id/unblock', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
-  const id = String(req.params.id);
-  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
-  const { targetUserId } = req.body || {};
-  if (!targetUserId || typeof targetUserId !== 'string') return res.status(400).json({ message: 'targetUserId is required' });
-  const ok = await userService.unblockUser(id, targetUserId);
-  return res.status(ok ? 204 : 404).end();
-}));
-
-/**
- * @openapi
- * /users/{id}/mute:
- *   post:
- *     summary: Kullanıcıyı sustur
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [ targetUserId ]
- *             properties:
- *               targetUserId: { type: string }
- *     responses:
- *       201:
- *         description: Susturma ayarlandı
- */
-router.post('/:id/mute', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
-  const id = String(req.params.id);
-  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
-  const { targetUserId } = req.body || {};
-  if (!targetUserId || typeof targetUserId !== 'string') return res.status(400).json({ message: 'targetUserId is required' });
-  await userService.muteUser(id, targetUserId);
-  return res.status(201).end();
-}));
-
-/**
- * @openapi
- * /users/{id}/unmute:
- *   post:
- *     summary: Susturma kaldır
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [ targetUserId ]
- *             properties:
- *               targetUserId: { type: string }
- *     responses:
- *       204:
- *         description: Susturma kaldırıldı
- */
-router.post('/:id/unmute', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
-  const id = String(req.params.id);
-  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
-  const { targetUserId } = req.body || {};
-  if (!targetUserId || typeof targetUserId !== 'string') return res.status(400).json({ message: 'targetUserId is required' });
-  const ok = await userService.unmuteUser(id, targetUserId);
-  return res.status(ok ? 204 : 404).end();
-}));
-
-/**
- * @openapi
- * /users/{id}/collections/bridges:
- *   get:
- *     summary: Bridge badge koleksiyonu
- *     tags: [Users]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *       - in: query
- *         name: q
- *         schema: { type: string }
- *         description: İsim veya kullanıcı adına göre arama (case-insensitive)
- *       - in: query
- *         name: cursor
- *         required: false
- *         schema:
- *           type: string
- *         description: Pagination cursor (son item'ın id'si)
- *       - in: query
- *         name: limit
- *         required: false
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 50
- *           default: 20
- *         description: Sayfa başına item sayısı
- *     responses:
- *       200:
- *         description: Kullanıcının bridge koleksiyon rozetleri
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 items:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       id:
- *                         type: string
- *                         example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
- *                       image:
- *                         type: string
- *                         nullable: true
- *                         example: "http://localhost:9000/tipbox-media/badges/480f5de9-b691-4d70-a6a8-2789226f4e07/bridge-ambassador.png"
- *                       title:
- *                         type: string
- *                         example: "Bridge Ambassador"
- *                       rarity:
- *                         type: string
- *                         enum: [Usual, Rare, Epic, Legendary]
- *                         example: "Rare"
- *                       isClaimed:
- *                         type: boolean
- *                         example: true
- *                       nftAddress:
- *                         type: string
- *                         nullable: true
- *                         example: null
- *                       totalEarned:
- *                         type: integer
- *                         example: 3
- *                       earnedDate:
- *                         type: string
- *                         format: date-time
- *                         nullable: true
- *                         example: "2024-02-10T10:30:00.000Z"
- *                       tasks:
- *                         type: array
- *                         items:
- *                           type: object
- *                           properties:
- *                             id:
- *                               type: string
- *                               example: "goal-123"
- *                             title:
- *                               type: string
- *                               example: "10 Yorum Yap"
- *                             type:
- *                               type: string
- *                               enum: [Comment, Like, Share]
- *                               example: "Comment"
- */
-router.get('/:id/collections/bridges', asyncHandler(async (req: Request, res: Response) => {
-  const id = String(req.params.id);
-  if (!/^[0-9a-fA-F-]{36}$/.test(id)) {
-    return res.status(400).json({ message: 'Invalid user id format' });
-  }
-  const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
-  const q = typeof req.query.q === 'string' ? req.query.q.trim() : undefined;
-  const keyword = q || search || undefined;
-  const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
-  const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
-  const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
-  const list = await userService.listBridgeBadges(id, keyword, { cursor, limit });
-  return res.json(list);
-}));
-
-/**
- * @openapi
- * /collections/achievements/{badgeId}/claim:
- *   post:
- *     summary: Achievement badge claim et
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
- */
-router.post('/collections/achievements/:badgeId/claim', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
-  const badgeId = String(req.params.badgeId);
-  const result = await userService.claimAchievementBadge(String(userId), badgeId);
-  return res.status(result.success ? 201 : 400).json(result);
-}));
-
-router.post('/collections/bridges/:badgeId/claim', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
-  const badgeId = String(req.params.badgeId);
-  const result = await userService.claimBridgeBadge(String(userId), badgeId);
-  return res.status(result.success ? 201 : 400).json(result);
-}));
-// Multer configuration - memory storage (dosya buffer'da tutulacak)
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
-  },
-  fileFilter: (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
-    // Sadece resim dosyalarına izin ver
-    const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-    
-    if (file.mimetype && allowedMimeTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Sadece resim dosyaları yüklenebilir (JPG, PNG, GIF, WebP)'));
-    }
-  },
 });
 
 /**
  * @openapi
- * /users:
- *   post:
- *     summary: Yeni kullanıcı oluştur
- *     description: Email ve display name ile yeni kullanıcı oluşturur (admin işlemi)
- *     tags: [Users]
+ * /notifications/settings:
+ *   put:
+ *     tags:
+ *       - Notifications
+ *     summary: Update notification settings
+ *     description: Update user's notification preferences
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -839,1624 +1367,122 @@ const upload = multer({
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required:
- *               - email
- *               - displayName
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *                 example: yeni.kullanici@tipbox.com
- *                 description: Kullanıcının email adresi (benzersiz olmalı)
- *               displayName:
- *                 type: string
- *                 minLength: 2
- *                 maxLength: 50
- *                 example: Yeni Kullanıcı
- *                 description: Kullanıcının görünen adı
- *               bio:
- *                 type: string
- *                 maxLength: 500
- *                 example: Merhaba! Ben yeni bir kullanıcıyım ve Tipbox'ı keşfediyorum.
- *                 description: Kullanıcının kısa biyografisi (opsiyonel)
- *     responses:
- *       201:
- *         description: Kullanıcı başarıyla oluşturuldu
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 id:
- *                   type: string
- *                   example: "a2y7c1m4xk9q0v3b5n8d6p1r0s"
- *                   description: Oluşturulan kullanıcının benzersiz ID'si
- *                 email:
- *                   type: string
- *                   format: email
- *                   example: yeni.kullanici@tipbox.com
- *                   description: Kullanıcının email adresi
- *                 name:
- *                   type: string
- *                   example: Yeni Kullanıcı
- *                   description: Kullanıcının tam adı
- *                 status:
- *                   type: string
- *                   example: ACTIVE
- *                   description: Kullanıcının hesap durumu
- *                 auth0Id:
- *                   type: string
- *                   nullable: true
- *                   example: null
- *                   description: Auth0 kullanıcı ID'si
- *                 walletAddress:
- *                   type: string
- *                   nullable: true
- *                   example: null
- *                   description: Kullanıcının cüzdan adresi
- *                 kycStatus:
- *                   type: string
- *                   example: PENDING
- *                   description: KYC doğrulama durumu
- *                 createdAt:
- *                   type: string
- *                   format: date-time
- *                   example: "2024-01-15T14:30:00.000Z"
- *                   description: Hesap oluşturulma tarihi
- *                 updatedAt:
- *                   type: string
- *                   format: date-time
- *                   example: "2024-01-15T14:30:00.000Z"
- *                   description: Son güncelleme tarihi
- *       400:
- *         description: Geçersiz istek formatı
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: Email ve displayName alanları zorunludur
- *       409:
- *         description: Email zaten kayıtlı
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: Bu email adresi zaten kayıtlı
- *       401:
- *         description: Yetkisiz erişim
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: Geçersiz token
- *       500:
- *         description: Sunucu hatası
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: Kullanıcı oluşturulurken bir hata oluştu
- */
-router.post('/', asyncHandler(async (req: Request, res: Response) => {
-  let { email, displayName, bio } = req.body as CreateUserRequest;
-  // Normalize leading/trailing whitespace on string inputs
-  if (typeof email === 'string') email = email.trim();
-  if (typeof displayName === 'string') displayName = displayName.trim();
-  if (typeof bio === 'string') bio = bio.trim();
-  
-  // Validation: Email zorunlu ve kontrolü (undefined/null kontrolü önce)
-  if (email === undefined || email === null) {
-    return res.status(400).json({ error: { message: 'Email adresi zorunludur ve boş olamaz.' } });
-  }
-  
-  if (typeof email !== 'string') {
-    return res.status(400).json({ error: { message: 'Email adresi string olmalıdır.' } });
-  }
-  
-  if (email === '') {
-    return res.status(400).json({ error: { message: 'Email adresi zorunludur ve boş olamaz.' } });
-  }
-  
-  // Email format kontrolü
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    return res.status(400).json({ error: { message: 'Geçerli bir email adresi giriniz.' } });
-  }
-  
-  // Validation: DisplayName zorunlu ve kontrolü
-  if (displayName === undefined || displayName === null) {
-    return res.status(400).json({ error: { message: 'DisplayName zorunludur ve boş olamaz.' } });
-  }
-  
-  if (typeof displayName !== 'string') {
-    return res.status(400).json({ error: { message: 'DisplayName string olmalıdır.' } });
-  }
-  
-  if (displayName === '') {
-    return res.status(400).json({ error: { message: 'DisplayName zorunludur ve boş olamaz.' } });
-  }
-  
-  // DisplayName minLength kontrolü (OpenAPI: minLength: 2)
-  if (displayName.length < 2) {
-    return res.status(400).json({ error: { message: 'DisplayName en az 2 karakter olmalıdır.' } });
-  }
-  
-  // DisplayName maxLength kontrolü (OpenAPI: maxLength: 50)
-  if (displayName.length > 50) {
-    return res.status(400).json({ error: { message: 'DisplayName en fazla 50 karakter olabilir.' } });
-  }
-  
-  // Bio maxLength kontrolü (OpenAPI: maxLength: 500)
-  if (bio !== undefined && bio !== null && typeof bio === 'string' && bio.length > 500) {
-    return res.status(400).json({ error: { message: 'Bio en fazla 500 karakter olabilir.' } });
-  }
-  
-  // Tüm validation'lar geçildi, şimdi user oluştur
-  try {
-    const user = await userService.createUser(email, displayName);
-    const response: UserResponse = {
-      id: user.id,
-      email: user.email ?? email,
-      name: user.name ?? displayName,
-      status: user.status || 'ACTIVE',
-      auth0Id: user.auth0Id || null,
-      walletAddress: user.walletAddress || null,
-      kycStatus: user.kycStatus || '',
-      createdAt: user.createdAt.toISOString(),
-      updatedAt: user.updatedAt.toISOString()
-    };
-    return res.status(201).json(response);
-  } catch (error: unknown) {
-    const code = getErrorCode(error);
-    if (code === 'P2002' && 
-        typeof error === 'object' && 
-        error !== null && 
-        'meta' in error &&
-        typeof (error as { meta: unknown }).meta === 'object' &&
-        (error as { meta: { target?: unknown } }).meta?.target &&
-        Array.isArray((error as { meta: { target: unknown[] } }).meta.target) &&
-        (error as { meta: { target: string[] } }).meta.target.includes('email')) {
-      return res.status(409).json({ error: { message: 'Bu email adresi zaten kullanılıyor.' } });
-    }
-    throw error;
-  }
-}));
-
-/**
- * @openapi
- * /users/setup-profile:
- *   post:
- *     summary: Kullanıcı profilini tamamlar (Set Up Profile)
- *     description: Email doğrulaması sonrası kullanıcı profilini tamamlar. FullName, UserName, Avatar, Banner ve ilgi alanlarını kaydeder.
- *     operationId: setupUserProfile
- *     tags:
- *       - Users
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         multipart/form-data:
- *           schema:
- *             type: object
- *             required:
- *               - FullName
- *               - UserName
- *               - selectCategories
- *             properties:
- *               FullName:
- *                 type: string
- *                 minLength: 2
- *                 maxLength: 100
- *                 example: Ömer Faruk
- *                 description: Kullanıcının tam adı
- *               UserName:
- *                 type: string
- *                 minLength: 3
- *                 maxLength: 30
- *                 pattern: '^[a-zA-Z0-9_]+$'
- *                 example: omerfaruk
- *                 description: Kullanıcının benzersiz kullanıcı adı
- *               Avatar:
- *                 type: string
- *                 format: binary
- *                 description: Profil fotoğrafı (opsiyonel, max 5MB)
- *               Banner:
- *                 type: string
- *                 format: binary
- *                 description: Profil banner görseli (opsiyonel, max 5MB)
- *               selectCategories:
- *                 type: string
- *                 example: '{"userId":"1","selectedCategories":[{"categoryId":"1","subCategoryIds":["1","2"]}]}'
- *                 description: JSON string formatında ilgi alanları
+ *             $ref: '#/components/schemas/UpdateNotificationSettings'
  *     responses:
  *       200:
- *         description: Profil başarıyla tamamlandı
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 message:
- *                   type: string
- *                   example: Profil başarıyla tamamlandı
- *                 user:
- *                   $ref: '#/components/schemas/UserResponse'
- *       400:
- *         description: Geçersiz istek formatı veya eksik alanlar
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: false
- *                 message:
- *                   type: string
- *                   example: FullName, UserName ve selectCategories alanları zorunludur
- *       401:
- *         description: Yetkisiz erişim veya email doğrulanmamış
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: false
- *                 message:
- *                   type: string
- *                   example: Email doğrulanmamış
- *       409:
- *         description: Kullanıcı adı zaten kullanılıyor
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: false
- *                 message:
- *                   type: string
- *                   example: Bu kullanıcı adı zaten kullanılıyor
+ *         description: Settings updated successfully
  *       500:
- *         description: Sunucu hatası
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: false
- *                 message:
- *                   type: string
- *                   example: Profil tamamlanırken bir hata oluştu
+ *         description: Server error
  */
-router.post('/setup-profile', upload.fields([{ name: 'Avatar', maxCount: 1 }, { name: 'Banner', maxCount: 1 }]), asyncHandler(async (req: Request & { files?: { [fieldname: string]: Express.Multer.File[] } }, res: Response) => {
-  const userPayload = req.user;
-  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
-  if (!userId) {
-    return res.status(401).json({
-      success: false,
-      message: 'Yetkisiz erişim',
-    });
-  }
-
-  // ID artık string (UUID/ULID)
-  const userIdStr = String(userId);
-
-  const { FullName, UserName, selectCategories } = req.body;
-
-  // Validasyon
-  if (!FullName || !UserName || !selectCategories) {
-    return res.status(400).json({
-      success: false,
-      message: 'FullName, UserName ve selectCategories alanları zorunludur',
-    });
-  }
-
-  // selectCategories JSON parse
-  let categoriesData;
+router.put('/settings', authMiddleware, async (req: Request, res: Response) => {
   try {
-    categoriesData = typeof selectCategories === 'string' 
-      ? JSON.parse(selectCategories) 
-      : selectCategories;
-  } catch (error) {
-    return res.status(400).json({
-      success: false,
-      message: 'selectCategories geçerli bir JSON formatında olmalıdır',
-    });
-  }
-
-  // Helper function: Dosya yükleme
-  const uploadImageFile = async (file: Express.Multer.File, folder: string, fileType: string): Promise<string> => {
-    // File extension'ı güvenli şekilde al (dosya adından veya MIME type'dan)
-    let fileExtension = 'jpg'; // Default extension
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     
-    // Önce dosya adından extension al
-    if (file.originalname && file.originalname.includes('.')) {
-      const parts = file.originalname.split('.');
-      if (parts.length > 1) {
-        fileExtension = parts[parts.length - 1].toLowerCase();
-      }
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
-    
-    // MIME type'dan extension mapping (güvenlik için)
-    const mimeToExtension: Record<string, string> = {
-      'image/jpeg': 'jpg',
-      'image/jpg': 'jpg',
-      'image/png': 'png',
-      'image/gif': 'gif',
-      'image/webp': 'webp',
-      'image/svg+xml': 'svg',
-    };
-    
-    // MIME type varsa onu kullan (daha güvenilir)
-    if (file.mimetype && mimeToExtension[file.mimetype]) {
-      fileExtension = mimeToExtension[file.mimetype];
+
+    const updates: UpdateNotificationSettingsDto = req.body;
+
+    let settings = await settingsRepo.findByUserId(userId);
+
+    if (!settings) {
+      settings = await settingsRepo.create(userId);
     }
-    
-    // Extension'ı validate et (sadece izin verilen formatlar)
-    const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-    if (!allowedExtensions.includes(fileExtension)) {
-      throw new Error('Desteklenmeyen dosya formatı. Sadece JPG, PNG, GIF ve WebP formatları desteklenmektedir.');
-    }
-    
-    // Dosya adını oluştur
-    const fileName = `${folder}/${userIdStr}/${uuidv4()}.${fileExtension}`;
-    
-    // Dosyayı yükle
-    const fileUrl = await s3Service.uploadFile(fileName, file.buffer, file.mimetype);
-    
-    logger.info({
-      message: `${fileType} başarıyla yüklendi`,
-      userId: userIdStr,
-      fileName,
-      fileSize: file.size,
-      mimeType: file.mimetype,
-    });
-    
-    return fileUrl;
-  };
 
-  // Avatar yükleme
-  let avatar: string | undefined;
-  const avatarFile = req.files?.['Avatar']?.[0];
-  if (avatarFile) {
-    try {
-      avatar = await uploadImageFile(avatarFile, 'profile-pictures', 'Avatar');
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata';
-      logger.error({
-        message: 'Avatar yükleme hatası',
-        error: errorMessage,
-        userId: userIdStr,
-        fileName: avatarFile.originalname,
-        fileSize: avatarFile.size,
-        mimeType: avatarFile.mimetype,
-      });
-      
-      return res.status(500).json({
-        success: false,
-        message: `Avatar yüklenirken bir hata oluştu: ${errorMessage}`,
-      });
-    }
-  }
+    await settingsRepo.updateByUserId(userId, updates);
 
-  // Banner yükleme
-  let bannerUrl: string | undefined;
-  const bannerFile = req.files?.['Banner']?.[0];
-  if (bannerFile) {
-    try {
-      bannerUrl = await uploadImageFile(bannerFile, 'profile-banners', 'Banner');
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata';
-      logger.error({
-        message: 'Banner yükleme hatası',
-        error: errorMessage,
-        userId: userIdStr,
-        fileName: bannerFile.originalname,
-        fileSize: bannerFile.size,
-        mimeType: bannerFile.mimetype,
-      });
-      
-      return res.status(500).json({
-        success: false,
-        message: `Banner yüklenirken bir hata oluştu: ${errorMessage}`,
-      });
-    }
-  }
-
-  // Profil setup
-  try {
-    const user = await userService.setupProfile(userIdStr, {
-      fullName: FullName,
-      userName: UserName,
-      avatar: avatar,
-      bannerUrl,
-      selectedCategories: categoriesData.selectedCategories || [],
-    });
-
-    const response: UserResponse = {
-      id: user.id,
-      email: user.email ?? '',
-      name: user.name ?? '',
-      status: user.status || 'ACTIVE',
-      auth0Id: user.auth0Id || null,
-      walletAddress: user.walletAddress || null,
-      kycStatus: user.kycStatus || '',
-      createdAt: user.createdAt.toISOString(),
-      updatedAt: user.updatedAt.toISOString(),
-    };
-
-    return res.status(200).json({
+    return res.json({
       success: true,
-      message: 'Profil başarıyla tamamlandı',
-      user: response,
+      message: 'Notification settings updated',
     });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata';
-    
-    if (errorMessage.includes('zaten kullanılıyor')) {
-      return res.status(409).json({
-        success: false,
-        message: errorMessage,
-      });
-    }
-    
-    if (errorMessage.includes('Email doğrulanmamış')) {
-      return res.status(401).json({
-        success: false,
-        message: errorMessage,
-      });
-    }
-
+    logger.error('Error updating notification settings:', error);
     return res.status(500).json({
       success: false,
-      message: `Profil tamamlanırken bir hata oluştu: ${errorMessage}`,
+      message: 'Failed to update notification settings',
     });
   }
-}));
+});
 
 /**
  * @openapi
- * /users/{id}:
- *   get:
- *     summary: Kullanıcıyı ID ile getir
- *     description: Belirtilen ID'ye sahip kullanıcının detaylı bilgilerini döner
- *     tags: [Users]
+ * /notifications/push-token:
+ *   post:
+ *     tags:
+ *       - Notifications
+ *     summary: Register push token
+ *     description: Register an Expo push notification token for the current user
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         schema:
- *           type: string
- *         required: true
- *         description: Kullanıcının benzersiz ID'si
- *         example: 1
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *               - deviceType
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 description: Expo push notification token
+ *               deviceType:
+ *                 type: string
+ *                 enum: [ios, android, web]
+ *                 description: Device type
  *     responses:
  *       200:
- *         description: Kullanıcı başarıyla bulundu
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 id:
- *                   type: integer
- *                   example: 1
- *                   description: Kullanıcının benzersiz ID'si
- *                 email:
- *                   type: string
- *                   format: email
- *                   example: omer@tipbox.co
- *                   description: Kullanıcının email adresi
- *                 name:
- *                   type: string
- *                   example: Ömer Faruk
- *                   description: Kullanıcının tam adı
- *                 status:
- *                   type: string
- *                   example: ACTIVE
- *                   description: Kullanıcının hesap durumu
- *                 auth0Id:
- *                   type: string
- *                   nullable: true
- *                   example: auth0|60f7b3b3b3b3b3b3b3b3b3b3
- *                   description: Auth0 kullanıcı ID'si
- *                 walletAddress:
- *                   type: string
- *                   nullable: true
- *                   example: 0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6
- *                   description: Kullanıcının cüzdan adresi
- *                 kycStatus:
- *                   type: string
- *                   example: VERIFIED
- *                   description: KYC doğrulama durumu
- *                 createdAt:
- *                   type: string
- *                   format: date-time
- *                   example: "2024-01-15T10:30:00.000Z"
- *                   description: Hesap oluşturulma tarihi
- *                 updatedAt:
- *                   type: string
- *                   format: date-time
- *                   example: "2024-01-15T10:30:00.000Z"
- *                   description: Son güncelleme tarihi
- *       404:
- *         description: Kullanıcı bulunamadı
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: Kullanıcı bulunamadı
- *       401:
- *         description: Yetkisiz erişim
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: Geçersiz token
+ *         description: Push token registered successfully
+ *       400:
+ *         description: Invalid request body
  *       500:
- *         description: Sunucu hatası
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: Kullanıcı bilgileri alınırken bir hata oluştu
+ *         description: Server error
  */
-router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = req.params.id;
-  const user = await userService.getUserById(id);
-  if (!user) return res.status(404).json({ message: 'User not found' });
-  const response: UserResponse = {
-    id: user.id,
-    email: user.email ?? '',
-    name: user.name ?? '',
-    status: user.status || 'ACTIVE',
-    auth0Id: user.auth0Id || null,
-    walletAddress: user.walletAddress || null,
-    kycStatus: user.kycStatus || '',
-    createdAt: user.createdAt.toISOString(),
-    updatedAt: user.updatedAt.toISOString()
-  };
-  return res.json(response);
-}));
-
-
-/**
- * @openapi
- * /users/{id}/profile-card:
- *   get:
- *     summary: Kullanıcının profil kartını getir
- *     description: Profil kartı için isim, avatar, banner, açıklama, unvanlar, istatistikler ve rozetleri döner
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: Kullanıcı ID (UUID/ULID)
- *         example: "b6d8c1f2-4a9b-4d1c-9e2a-123456789abc"
- *     responses:
- *       200:
- *         description: Profil kartı
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 id:
- *                   type: string
- *                   example: "b6d8c1f2-4a9b-4d1c-9e2a-123456789abc"
- *                 name:
- *                   type: string
- *                   example: "Ömer Faruk"
- *                 avatarUrl:
- *                   type: string
- *                   nullable: true
- *                   example: "https://cdn.tipbox.co/profile-pictures/omer.jpg"
- *                 bannerUrl:
- *                   type: string
- *                   nullable: true
- *                   example: "https://cdn.tipbox.co/profile-banners/omer-banner.jpg"
- *                 description:
- *                   type: string
- *                   nullable: true
- *                   example: "Teknoloji meraklısı. Donanım ve yazılım üzerine yazıyorum."
- *                 titles:
- *                   type: array
- *                   items:
- *                     type: string
- *                   example: ["Technology Enthusiast", "Digital Surfer", "Hardware Expert"]
- *                 stats:
- *                   type: object
- *                   properties:
- *                     posts:
- *                       type: integer
- *                       example: 42
- *                     trust:
- *                       type: integer
- *                       example: 15
- *                     truster:
- *                       type: integer
- *                       example: 28
- *                 badges:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       imageUrl:
- *                         type: string
- *                         nullable: true
- *                         example: "https://cdn.tipbox.co/badges/rare-builder.png"
- *                       title:
- *                         type: string
- *                         example: "Rare Builder"
- *       404:
- *         description: Kullanıcı bulunamadı
- */
-router.get('/:id/profile-card', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const card = await userService.getUserProfileCard(id);
-  if (!card) {
-    return res.status(404).json({ message: 'Kullanıcı bulunamadı' });
-  }
-  return res.json(card);
-}));
-
-
-
-
-/**
- * @openapi
- * /users/{id}/trusts/{targetUserId}:
- *   delete:
- *     summary: Trust listesinden kaldır
- *     tags: [Users]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *       - in: path
- *         name: targetUserId
- *         required: true
- *         schema: { type: string }
- *     responses:
- *       204: { description: Başarılı }
- *       404: { description: Kayıt bulunamadı }
- */
-router.delete('/:id/trusts/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
-  const { id, targetUserId } = req.params;
-  const ok = await userService.removeTrust(id, targetUserId);
-  if (!ok) return res.status(404).json({ message: 'Kayıt bulunamadı' });
-  return res.status(204).send();
-}));
-
-/**
- * @openapi
- * /users/{id}/block/{targetUserId}:
- *   post:
- *     summary: Bir kullanıcıyı engelle (block)
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *         description: Kullanıcı ID (engelleyen)
- *       - in: path
- *         name: targetUserId
- *         required: true
- *         schema: { type: string }
- *         description: Engellenecek kullanıcı ID
- *     responses:
- *       204:
- *         description: Kullanıcı başarıyla engellendi
- *       400:
- *         description: Geçersiz istek
- */
-router.post('/:id/block/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
-  const id = String(req.params.id);
-  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
-  const targetUserId = String(req.params.targetUserId);
-  await userService.blockUser(id, targetUserId);
-  return res.status(204).send();
-}));
-
-/**
- * @openapi
- * /users/{id}/block/{targetUserId}:
- *   delete:
- *     summary: Bir kullanıcının engelini kaldır (unblock)
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *         description: Kullanıcı ID (engeli kaldıran)
- *       - in: path
- *         name: targetUserId
- *         required: true
- *         schema: { type: string }
- *         description: Engeli kaldırılacak kullanıcı ID
- *     responses:
- *       204:
- *         description: Engel başarıyla kaldırıldı
- *       404:
- *         description: Engelleme kaydı bulunamadı
- */
-router.delete('/:id/block/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
-  const id = String(req.params.id);
-  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
-  const targetUserId = String(req.params.targetUserId);
-  const ok = await userService.unblockUser(id, targetUserId);
-  if (!ok) return res.status(404).json({ message: 'Engelleme kaydı bulunamadı' });
-  return res.status(204).send();
-}));
-
-/**
- * @openapi
- * /users/{id}/report/{targetUserId}:
- *   post:
- *     summary: Bir kullanıcıyı raporla (report)
- *     description: Bir kullanıcıyı belirtilen kategori ve açıklama ile raporlar
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *         description: Kullanıcı ID (raporlayan)
- *       - in: path
- *         name: targetUserId
- *         required: true
- *         schema: { type: string }
- *         description: Raporlanacak kullanıcı ID
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - category
- *             properties:
- *               category:
- *                 type: string
- *                 enum: [SPAM, HARASSMENT, SCAM, INAPPROPRIATE_CONTENT, FAKE_ACCOUNT, OTHER]
- *                 description: Rapor kategorisi
- *               description:
- *                 type: string
- *                 maxLength: 500
- *                 description: Rapor açıklaması (opsiyonel)
- *     responses:
- *       201:
- *         description: Kullanıcı başarıyla raporlandı
- *       400:
- *         description: Geçersiz istek (kendini raporlama, geçersiz kategori, vb.)
- *       409:
- *         description: Bu kullanıcı zaten raporlanmış
- *       404:
- *         description: Raporlanan kullanıcı bulunamadı
- */
-router.post('/:id/report/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
-  const id = String(req.params.id);
-  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
-  const targetUserId = String(req.params.targetUserId);
-  const { category, description } = req.body || {};
-  
-  if (!category || typeof category !== 'string') {
-    return res.status(400).json({ message: 'Category is required' });
-  }
-
+router.post('/push-token', authMiddleware, async (req: Request, res: Response) => {
   try {
-    await userService.reportUser(id, targetUserId, category, description);
-    return res.status(201).json({ message: 'Kullanıcı başarıyla raporlandı' });
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const { token, deviceType }: RegisterPushTokenDto = req.body;
+
+    if (!token || !deviceType) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token and deviceType are required',
+      });
+    }
+
+    const pushToken = await pushTokenService.registerPushToken(userId, token, deviceType);
+
+    return res.json({
+      success: true,
+      message: 'Push token registered successfully',
+      data: pushToken.toJSON(),
+    });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata';
-    if (errorMessage.includes('zaten raporlanmış')) {
-      return res.status(409).json({ message: errorMessage });
-    }
-    if (errorMessage.includes('bulunamadı')) {
-      return res.status(404).json({ message: errorMessage });
-    }
-    return res.status(400).json({ message: errorMessage });
+    logger.error('Error registering push token:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to register push token',
+    });
   }
-}));
+});
 
 /**
  * @openapi
- * /users/{id}/mute/{targetUserId}:
- *   post:
- *     summary: Bir kullanıcıyı sustur (mute)
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *         description: Kullanıcı ID (susturan)
- *       - in: path
- *         name: targetUserId
- *         required: true
- *         schema: { type: string }
- *         description: Susturulacak kullanıcı ID
- *     responses:
- *       204:
- *         description: Kullanıcı başarıyla susturuldu
- *       400:
- *         description: Geçersiz istek
- */
-router.post('/:id/mute/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
-  const id = String(req.params.id);
-  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
-  const targetUserId = String(req.params.targetUserId);
-  await userService.muteUser(id, targetUserId);
-  return res.status(204).send();
-}));
-
-/**
- * @openapi
- * /users/{id}/mute/{targetUserId}:
+    * /notifications/push-token:
  *   delete:
- *     summary: Bir kullanıcının susturulmasını kaldır (unmute)
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *         description: Kullanıcı ID (susturmayı kaldıran)
- *       - in: path
- *         name: targetUserId
- *         required: true
- *         schema: { type: string }
- *         description: Susturulması kaldırılacak kullanıcı ID
- *     responses:
- *       204:
- *         description: Susturma başarıyla kaldırıldı
- *       404:
- *         description: Susturma kaydı bulunamadı
- */
-router.delete('/:id/mute/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
-  const id = String(req.params.id);
-  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
-  const targetUserId = String(req.params.targetUserId);
-  const ok = await userService.unmuteUser(id, targetUserId);
-  if (!ok) return res.status(404).json({ message: 'Susturma kaydı bulunamadı' });
-  return res.status(204).send();
-}));
-
-/**
- * @openapi
- * /users/{id}/collections/achievements:
- *   get:
- *     summary: Kullanıcının Achievement Badge koleksiyonunu listele
- *     description: Kullanıcının kazandığı achievement badge'leri döner. Arama parametresi ile filtreleme yapılabilir.
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *         description: Kullanıcı ID
- *       - in: query
- *         name: q
- *         schema: { type: string }
- *         description: Badge adı veya açıklamasına göre arama (case-insensitive)
- *       - in: query
- *         name: cursor
- *         required: false
- *         schema:
- *           type: string
- *         description: Pagination cursor (son item'ın id'si)
- *       - in: query
- *         name: limit
- *         required: false
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 50
- *           default: 20
- *         description: Sayfa başına item sayısı
- *     responses:
- *       200:
- *         description: Achievement Badge listesi
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 items:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       id:
- *                         type: string
- *                         example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
- *                       image:
- *                         type: string
- *                         nullable: true
- *                         example: "https://cdn.tipbox.co/badges/builder.png"
- *                       title:
- *                         type: string
- *                         example: "Builder Badge"
- *                       rarity:
- *                         type: string
- *                         enum: [Usual, Rare, Epic, Legendary]
- *                         example: "Rare"
- *                       isClaimed:
- *                         type: boolean
- *                         example: true
- *                       nftAddress:
- *                         type: string
- *                         nullable: true
- *                         example: null
- *                       totalEarned:
- *                         type: integer
- *                         example: 1
- *                       earnedDate:
- *                         type: string
- *                         format: date-time
- *                         nullable: true
- *                         example: "2024-01-15T10:30:00.000Z"
- *                       tasks:
- *                         type: array
- *                         items:
- *                           type: object
- *                           properties:
- *                             id:
- *                               type: string
- *                               example: "goal-123"
- *                             title:
- *                               type: string
- *                               example: "10 Yorum Yap"
- *                             type:
- *                               type: string
- *                               enum: [Comment, Like, Share]
- *                               example: "Comment"
- *                 pagination:
- *                   type: object
- *                   properties:
- *                     cursor:
- *                       type: string
- *                       nullable: true
- *                     hasMore:
- *                       type: boolean
- *                     limit:
- *                       type: integer
- */
-router.get('/:id/collections/achievements', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
-  if (!/^[0-9a-fA-F-]{36}$/.test(id)) {
-    return res.status(400).json({ message: 'Invalid user id format' });
-  }
-  const querySearch = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
-  const queryQ = typeof req.query.q === 'string' ? req.query.q.trim() : undefined;
-  const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
-  const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
-  const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
-  const badges = await userService.listAchievementBadges(id, queryQ || querySearch || undefined, { cursor, limit });
-  return res.json(badges);
-}));
-
-/**
- * @openapi
- * /users/{id}/feed:
- *   get:
- *     summary: Kullanıcının paylaştığı feed gönderilerini listele
- *     tags: [Users]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *       - in: query
- *         name: limit
- *         required: false
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 100
- *         description: Döndürülecek maksimum card sayısı (varsayılan tümü)
- *       - in: query
- *         name: cursor
- *         required: false
- *         schema:
- *           type: string
- *         description: Pagination cursor (son item id)
- *       - in: query
- *         name: types
- *         required: false
- *         schema:
- *           type: string
- *           example: "post,benchmark,tipsAndTricks"
- *         description: Virgülle ayrılmış CardType listesi (örn. post,benchmark)
- *     responses:
- *       200:
- *         description: Card listesi (timestamp'e göre sıralı)
- */
-router.get('/:id/feed', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const rawLimit = Array.isArray(req.query.limit) ? req.query.limit[0] : req.query.limit;
-  const parsedLimit =
-    typeof rawLimit === 'string'
-      ? Number.parseInt(rawLimit, 10)
-      : typeof rawLimit === 'number'
-        ? rawLimit
-        : undefined;
-  const limit = Number.isFinite(parsedLimit) && parsedLimit! > 0 ? Math.min(parsedLimit!, 100) : undefined;
-  const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
-  const types = parseProfileFeedTypes(req.query.types);
-  const feed = await userService.getUserProfileFeed(id, { limit, types, cursor });
-  return res.json(feed);
-}));
-
-/**
- * @openapi
- * /users/{id}/reviews:
- *   get:
- *     summary: Kullanıcının paylaştığı review'ları listele
- *     tags: [Users]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *       - in: query
- *         name: cursor
- *         required: false
- *         schema:
- *           type: string
- *         description: Pagination cursor (son item'ın id'si)
- *       - in: query
- *         name: limit
- *         required: false
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 50
- *           default: 20
- *         description: Sayfa başına item sayısı
- *     responses:
- *       200:
- *         description: Review listesi
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 items:
- *                   type: array
- *                   items:
- *                     type: object
- *                 pagination:
- *                   type: object
- *                   properties:
- *                     cursor:
- *                       type: string
- *                       nullable: true
- *                     hasMore:
- *                       type: boolean
- *                     limit:
- *                       type: integer
- */
-router.get('/:id/reviews', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
-  const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
-  const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
-  const reviews = await userService.getUserReviews(id, { cursor, limit });
-  return res.json(reviews);
-}));
-
-/**
- * @openapi
- * /users/{id}/benchmarks:
- *   get:
- *     summary: Kullanıcının paylaştığı benchmark'ları listele
- *     tags: [Users]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *       - in: query
- *         name: cursor
- *         required: false
- *         schema:
- *           type: string
- *         description: Pagination cursor (son item'ın id'si)
- *       - in: query
- *         name: limit
- *         required: false
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 50
- *           default: 20
- *         description: Sayfa başına item sayısı
- *     responses:
- *       200:
- *         description: Benchmark listesi
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 items:
- *                   type: array
- *                   items:
- *                     type: object
- *                 pagination:
- *                   type: object
- *                   properties:
- *                     cursor:
- *                       type: string
- *                       nullable: true
- *                     hasMore:
- *                       type: boolean
- *                     limit:
- *                       type: integer
- */
-router.get('/:id/benchmarks', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
-  const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
-  const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
-  const benchmarks = await userService.getUserBenchmarks(id, { cursor, limit });
-  return res.json(benchmarks);
-}));
-
-/**
- * @openapi
- * /users/{id}/tips:
- *   get:
- *     summary: Kullanıcının paylaştığı tips&tricks'leri listele
- *     tags: [Users]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *       - in: query
- *         name: cursor
- *         required: false
- *         schema:
- *           type: string
- *         description: Pagination cursor (son item'ın id'si)
- *       - in: query
- *         name: limit
- *         required: false
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 50
- *           default: 20
- *         description: Sayfa başına item sayısı
- *     responses:
- *       200:
- *         description: Tips&Tricks listesi
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 items:
- *                   type: array
- *                   items:
- *                     type: object
- *                 pagination:
- *                   type: object
- *                   properties:
- *                     cursor:
- *                       type: string
- *                       nullable: true
- *                     hasMore:
- *                       type: boolean
- *                     limit:
- *                       type: integer
- */
-router.get('/:id/tips', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
-  const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
-  const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
-  const tips = await userService.getUserTips(id, { cursor, limit });
-  return res.json(tips);
-}));
-
-/**
- * @openapi
- * /users/{id}/questions:
- *   get:
- *     summary: Kullanıcının soru cevaplarını (reply) listele
- *     tags: [Users]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *       - in: query
- *         name: cursor
- *         required: false
- *         schema:
- *           type: string
- *         description: Pagination cursor (son item'ın id'si)
- *       - in: query
- *         name: limit
- *         required: false
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 50
- *           default: 20
- *         description: Sayfa başına item sayısı
- *     responses:
- *       200:
- *         description: Question reply listesi
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 items:
- *                   type: array
- *                   items:
- *                     type: object
- *                 pagination:
- *                   type: object
- *                   properties:
- *                     cursor:
- *                       type: string
- *                       nullable: true
- *                     hasMore:
- *                       type: boolean
- *                     limit:
- *                       type: integer
- */
-router.get('/:id/questions', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
-  const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
-  const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
-  const replies = await userService.getUserReplies(id, { cursor, limit });
-  return res.json(replies);
-}));
-
-/**
- * @openapi
- * /users/{id}/ladder/badges:
- *   get:
- *     summary: Kullanıcının başarım merdivenlerinden kazandığı badge'leri listele
- *     tags: [Users]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *       - in: query
- *         name: cursor
- *         required: false
- *         schema:
- *           type: string
- *         description: Pagination cursor (son item'ın id'si)
- *       - in: query
- *         name: limit
- *         required: false
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 50
- *           default: 20
- *         description: Sayfa başına item sayısı
- *     responses:
- *       200:
- *         description: Ladder badge listesi
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 items:
- *                   type: array
- *                   items:
- *                     type: object
- *                 pagination:
- *                   type: object
- *                   properties:
- *                     cursor:
- *                       type: string
- *                       nullable: true
- *                     hasMore:
- *                       type: boolean
- *                     limit:
- *                       type: integer
- */
-router.get('/:id/ladder/badges', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
-  const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
-  const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
-  const badges = await userService.getUserLadderBadges(id, { cursor, limit });
-  return res.json(badges);
-}));
-
-/**
- * @openapi
- * /users/{id}/bookmarks:
- *   get:
- *     summary: Kullanıcının bookmark ettiği gönderileri listele
- *     description: |
- *       Kullanıcının favorite (bookmark) ettiği tüm gönderileri getirir.
- *       Her gönderi kendi tipine göre (feed, benchmark, post, question, tipsAndTricks) formatlanmış olarak döner.
- *       
- *       **Post Tipleri:**
- *       - `FREE` -> `post` tipi
- *       - `COMPARE` -> `benchmark` tipi
- *       - `TIPS` -> `tipsAndTricks` tipi
- *       - `QUESTION` -> `question` tipi
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *         description: Kullanıcı ID (UUID)
- *         example: "248cc91f-b551-4ecc-a885-db1163571330"
- *       - in: query
- *         name: cursor
- *         required: false
- *         schema:
- *           type: string
- *         description: Pagination cursor (son item'ın id'si)
- *       - in: query
- *         name: limit
- *         required: false
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 50
- *           default: 20
- *         description: Sayfa başına item sayısı
- *     responses:
- *       200:
- *         description: Bookmark edilmiş gönderiler listesi
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 items:
- *                   type: array
- *                   items:
- *                 oneOf:
- *                   - type: object
- *                     properties:
- *                       id: { type: string, example: "01ARZ3NDEKTSV4RRFFQ69G5FAV" }
- *                       type: { type: string, enum: ["post"], example: "post" }
- *                       user:
- *                         type: object
- *                         properties:
- *                           id: { type: string }
- *                           name: { type: string, example: "Ömer Faruk" }
- *                           title: { type: string, example: "Technology Enthusiast" }
- *                           avatarUrl: { type: string, nullable: true }
- *                       stats:
- *                         type: object
- *                         properties:
- *                           likes: { type: number, example: 15 }
- *                           comments: { type: number, example: 3 }
- *                           shares: { type: number, example: 0 }
- *                           bookmarks: { type: number, example: 5 }
- *                       createdAt: { type: string, format: date-time }
- *                       product:
- *                         type: object
- *                         nullable: true
- *                         properties:
- *                           id: { type: string }
- *                           name: { type: string }
- *                           subName: { type: string }
- *                           image: { type: string, nullable: true }
- *                       content: { type: string, example: "This is a great product..." }
- *                       images: { type: array, items: { type: string } }
- *                   - type: object
- *                     properties:
- *                       id: { type: string }
- *                       type: { type: string, enum: ["benchmark"], example: "benchmark" }
- *                       user: { type: object }
- *                       stats: { type: object }
- *                       createdAt: { type: string }
- *                       products:
- *                         type: array
- *                         items:
- *                           type: object
- *                           properties:
- *                             id: { type: string }
- *                             name: { type: string }
- *                             subName: { type: string }
- *                             image: { type: string, nullable: true }
- *                             isOwned: { type: boolean }
- *                             choice: { type: boolean }
- *                       content: { type: string }
- *                   - type: object
- *                     properties:
- *                       id: { type: string }
- *                       type: { type: string, enum: ["tipsAndTricks"], example: "tipsAndTricks" }
- *                       user: { type: object }
- *                       stats: { type: object }
- *                       createdAt: { type: string }
- *                       product: { type: object, nullable: true }
- *                       content: { type: string }
- *                       tag: { type: string, example: "Maintenance" }
- *                       images: { type: array }
- *                   - type: object
- *                     properties:
- *                       id: { type: string }
- *                       type: { type: string, enum: ["question"], example: "question" }
- *                       user: { type: object }
- *                       stats: { type: object }
- *                       createdAt: { type: string }
- *                       product: { type: object, nullable: true }
- *                       content: { type: string }
- *                       expectedAnswerFormat: { type: string, enum: ["short", "long", "poll", "choice"] }
- *                       images: { type: array }
- *                   - type: object
- *                     properties:
- *                       id: { type: string }
- *                       type: { type: string, enum: ["feed"], example: "feed" }
- *                       user: { type: object }
- *                       stats: { type: object }
- *                       createdAt: { type: string }
- *                       product: { type: object, nullable: true }
- *                       content: { type: string }
- *                       images: { type: array }
- *             example:
- *               - id: "01ARZ3NDEKTSV4RRFFQ69G5FAV"
- *                 type: "post"
- *                 user:
- *                   id: "248cc91f-b551-4ecc-a885-db1163571330"
- *                   name: "Ömer Faruk"
- *                   title: "Technology Enthusiast"
- *                   avatarUrl: "https://cdn.tipbox.co/avatars/omer.jpg"
- *                 stats:
- *                   likes: 15
- *                   comments: 3
- *                   shares: 0
- *                   bookmarks: 5
- *                 createdAt: "2024-01-15T10:30:00.000Z"
- *                 product:
- *                   id: "550e8400-e29b-41d4-a716-446655440000"
- *                   name: "Dyson V15s Detect Submarine"
- *                   subName: "Dyson"
- *                   image: null
- *                 content: "Using the Dyson V15s Submarine daily has completely changed how I clean my home."
- *                 images: []
- *               - id: "01ARZ3NDEKTSV4RRFFQ69G5FAW"
- *                 type: "benchmark"
- *                 user:
- *                   id: "248cc91f-b551-4ecc-a885-db1163571330"
- *                   name: "Ömer Faruk"
- *                   title: "Hardware Expert"
- *                   avatarUrl: "https://cdn.tipbox.co/avatars/omer.jpg"
- *                 stats:
- *                   likes: 20
- *                   comments: 5
- *                   shares: 2
- *                   bookmarks: 8
- *                 createdAt: "2024-01-14T09:15:00.000Z"
- *                 products:
- *                   - id: "550e8400-e29b-41d4-a716-446655440000"
- *                     name: "Dyson V15s Detect Submarine"
- *                     subName: "Dyson"
- *                     image: null
- *                     isOwned: true
- *                     choice: false
- *                   - id: "550e8400-e29b-41d4-a716-446655440001"
- *                     name: "Dyson V12 Detect Slim"
- *                     subName: "Dyson"
- *                     image: null
- *                     isOwned: false
- *                     choice: false
- *                 content: "Her iki modeli de test ettim. V15s daha güçlü..."
- *                 pagination:
- *                   type: object
- *                   properties:
- *                     cursor:
- *                       type: string
- *                       nullable: true
- *                     hasMore:
- *                       type: boolean
- *                     limit:
- *                       type: integer
- */
-router.get('/:id/bookmarks', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
-  const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
-  const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
-  const bookmarks = await userService.getUserBookmarks(id, { cursor, limit });
-  return res.json(bookmarks);
-}));
-
-
-
-
-// ===== SETTINGS ENDPOINTS =====
-
-/**
- * @openapi
- * /users/settings/change-password:
- *   post:
- *     summary: Şifre değiştir
- *     description: Kullanıcının şifresini değiştirir
- *     tags: [User Settings]
+ *     tags:
+ *       - Notifications
+ *     summary: Delete push token
+ *     description: Remove a registered push notification token
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -2466,452 +1492,44 @@ router.get('/:id/bookmarks', asyncHandler(async (req: Request, res: Response) =>
  *           schema:
  *             type: object
  *             required:
- *               - currentPassword
- *               - newPassword
+ *               - token
  *             properties:
- *               currentPassword:
+ *               token:
  *                 type: string
- *                 example: oldPassword123
- *               newPassword:
- *                 type: string
- *                 minLength: 6
- *                 example: newPassword123
+ *                 description: Expo push notification token to remove
  *     responses:
  *       200:
- *         description: Şifre başarıyla değiştirildi
+ *         description: Push token deleted successfully
  *       400:
- *         description: Geçersiz istek
+ *         description: Invalid request body
+ *       500:
+ *         description: Server error
  */
-router.post('/settings/change-password', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
-  if (!userId) {
-    return res.status(401).json({ error: { message: 'Unauthorized' } });
-  }
-
-  const { currentPassword, newPassword } = req.body;
-  if (!currentPassword || !newPassword) {
-    return res.status(400).json({ error: { message: 'Current password and new password are required' } });
-  }
-
-  const result = await userService.changePassword(String(userId), currentPassword, newPassword);
-  if (!result.success) {
-    return res.status(400).json({ error: { message: result.message || 'Password change failed' } });
-  }
-
-  return res.json(result);
-}));
-
-/**
- * @openapi
- * /users/settings/notifications:
- *   get:
- *     summary: Bildirim ayarlarını getir
- *     description: Kullanıcının bildirim ayarlarını getirir
- *     tags: [User Settings]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Bildirim ayarları
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   notificationCode:
- *                     type: integer
- *                     example: 0
- *                   value:
- *                     type: boolean
- *                     example: true
- */
-router.get('/settings/notifications', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
-  if (!userId) {
-    return res.status(401).json({ error: { message: 'Unauthorized' } });
-  }
-
-  const settings = await userService.getNotificationSettings(String(userId));
-  return res.json(settings);
-}));
-
-/**
- * @openapi
- * /users/settings/notifications:
- *   put:
- *     summary: Bildirim ayarlarını güncelle
- *     description: Kullanıcının bildirim ayarlarını günceller
- *     tags: [User Settings]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: array
- *             items:
- *               type: object
- *               properties:
- *                 notificationCode:
- *                   type: integer
- *                   example: 0
- *                 value:
- *                   type: boolean
- *                   example: true
- *     responses:
- *       200:
- *         description: Bildirim ayarları güncellendi
- */
-router.put('/settings/notifications', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
-  if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
-
-  const settings = req.body;
-  if (!Array.isArray(settings)) {
-    return res.status(400).json({ message: 'Settings must be an array' });
-  }
-
-  const result = await userService.updateNotificationSettings(String(userId), settings);
-  if (!result.success) {
-    return res.status(400).json(result);
-  }
-
-  return res.json(result);
-}));
-
-/**
- * @openapi
- * /users/settings/privacy:
- *   get:
- *     summary: Gizlilik ayarlarını getir
- *     description: Kullanıcının gizlilik ayarlarını getirir
- *     tags: [User Settings]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Gizlilik ayarları
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   privacyCode:
- *                     type: integer
- *                     example: 0
- *                   selectedValue:
- *                     type: string
- *                     example: "trust-only"
- */
-router.get('/settings/privacy', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
-  if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
-
-  const settings = await userService.getPrivacySettings(String(userId));
-  return res.json(settings);
-}));
-
-/**
- * @openapi
- * /users/settings/privacy:
- *   put:
- *     summary: Gizlilik ayarlarını güncelle
- *     description: Kullanıcının gizlilik ayarlarını günceller
- *     tags: [User Settings]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: array
- *             items:
- *               type: object
- *               properties:
- *                 privacyCode:
- *                   type: integer
- *                   example: 0
- *                 selectedValue:
- *                   type: string
- *                   example: "trust-only"
- *     responses:
- *       200:
- *         description: Gizlilik ayarları güncellendi
- */
-router.put('/settings/privacy', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
-  if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
-
-  const settings = req.body;
-  if (!Array.isArray(settings)) {
-    return res.status(400).json({ message: 'Settings must be an array' });
-  }
-
-  const result = await userService.updatePrivacySettings(String(userId), settings);
-  if (!result.success) {
-    return res.status(400).json(result);
-  }
-
-  return res.json(result);
-}));
-
-/**
- * @openapi
- * /users/settings/support-session-price:
- *   get:
- *     summary: Destek oturumu fiyatını getir
- *     description: Kullanıcının destek oturumu fiyatını getirir
- *     tags: [User Settings]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Destek oturumu fiyatı
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 price:
- *                   type: number
- *                   nullable: true
- *                   example: 50
- */
-router.get('/settings/support-session-price', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
-  if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
-
-  const price = await userService.getSupportSessionPrice(String(userId));
-  return res.json({ price });
-}));
-
-/**
- * @openapi
- * /users/settings/support-session-price:
- *   put:
- *     summary: Destek oturumu fiyatını güncelle
- *     description: Kullanıcının destek oturumu fiyatını günceller (minimum 50 TIPS, 10 günde bir değiştirilebilir)
- *     tags: [User Settings]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - price
- *             properties:
- *               price:
- *                 type: number
- *                 minimum: 50
- *                 example: 50
- *     responses:
- *       200:
- *         description: Fiyat başarıyla güncellendi
- *       400:
- *         description: Geçersiz istek veya 10 gün beklemeden değiştirme denemesi
- */
-router.put('/settings/support-session-price', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
-  if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
-
-  const { price } = req.body;
-  if (!price || typeof price !== 'number') {
-    return res.status(400).json({ message: 'Price is required and must be a number' });
-  }
-
-  const result = await userService.updateSupportSessionPrice(String(userId), price);
-  if (!result.success) {
-    return res.status(400).json({ error: { message: result.message || 'Notification settings update failed' } } );
-  }
-
-  return res.json(result);
-}));
-
-/**
- * @openapi
- * /users/settings/devices:
- *   get:
- *     summary: Bağlı cihazları getir
- *     description: Kullanıcının bağlı cihazlarını getirir
- *     tags: [User Settings]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Bağlı cihazlar listesi
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   id:
- *                     type: string
- *                   name:
- *                     type: string
- *                   location:
- *                     type: string
- *                     nullable: true
- *                   date:
- *                     type: string
- *                   isActive:
- *                     type: boolean
- */
-router.get('/settings/devices', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
-  if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
-
-  const devices = await userService.getConnectedDevices(String(userId));
-  return res.json(devices);
-}));
-
-/**
- * @openapi
- * /users/settings/devices/{deviceId}:
- *   delete:
- *     summary: Cihazı kaldır
- *     description: Bağlı cihazı listeden kaldırır
- *     tags: [User Settings]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: deviceId
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Cihaz başarıyla kaldırıldı
- *       404:
- *         description: Cihaz bulunamadı
- */
-router.delete('/settings/devices/:deviceId', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
-  if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
-
-  const { deviceId } = req.params;
-  const result = await userService.removeDevice(String(userId), deviceId);
-  if (!result.success) {
-    return res.status(404).json(result);
-  }
-
-  return res.json(result);
-}));
-
-/**
- * @openapi
- * /users/settings/devices:
- *   delete:
- *     summary: Tüm cihazları kaldır
- *     description: Kullanıcının tüm bağlı cihazlarını listeden kaldırır
- *     tags: [User Settings]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Tüm cihazlar başarıyla kaldırıldı
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                 count:
- *                   type: integer
- */
-router.delete('/settings/devices', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
-  if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
-
-  const result = await userService.removeAllDevices(String(userId));
-  return res.json(result);
-}));
-
-/**
- * @openapi
- * /users/me:
- *   delete:
- *     summary: Kullanıcı hesabını sil
- *     description: Kullanıcının kendi hesabını siler. İlişkili veriler temizlenir ve GDPR uyumluluğu sağlanır.
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       204:
- *         description: Hesap başarıyla silindi
- *       401:
- *         description: Kimlik doğrulaması başarısız
- *       404:
- *         description: Kullanıcı bulunamadı
- */
-router.delete('/me', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
-  if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
-
+router.delete('/push-token', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const deleted = await userService.deleteUser(String(userId));
-    if (!deleted) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    return res.status(204).send();
-  } catch (error) {
-    logger.error(`Failed to delete user ${userId}`, error);
-    throw error;
-  }
-}));
+    const { token } = req.body;
 
-export default router; 
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token is required',
+      });
+    }
+
+    await pushTokenService.deletePushToken(token);
+
+    return res.json({
+      success: true,
+      message: 'Push token deleted successfully',
+    });
+  } catch (error) {
+    logger.error('Error deleting push token:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to delete push token',
+    });
+  }
+});
+
+export default router;
+
