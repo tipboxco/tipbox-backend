@@ -12,6 +12,7 @@ import { seedTaxonomy } from './seed/taxonomy.seed'
 import { seedProductCatalog } from './seed/product-catalog.seed'
 import { ensureEventBadgeSystem } from './seed/helpers/ensure-event-badge-system'
 import { ensureMarketplaceBadges } from './seed/helpers/ensure-marketplace-badges'
+import { GeminiService } from '../src/infrastructure/ai/gemini.service'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { markSeedStart, markSeedEnd, addSeedUserId } = require('./seed/seed-metadata')
 
@@ -2088,6 +2089,74 @@ async function seedUserInventories() {
 }
 
 /**
+ * 30 Persona Tanımları (GENERATE_POST_AI.md'den)
+ */
+const PERSONAS = {
+  // Grup A: Tüketici Elektroniği Odaklılar (15 Persona)
+  ELECTRONICS: [
+    'Teknoloji Gurusu: En küçük teknik detaya (ms, nits, ppi) takılan uzman.',
+    'Pratik Anne/Baba: "Çocuğun elinden düşmüyor, sağlammış" diyen ebeveyn.',
+    'Bütçe Dostu Öğrenci: Fiyat/performans canavarı arayan genç.',
+    'Minimalist Profesyonel: Sadece işini yapmasını ve şık durmasını isteyen beyaz yakalı.',
+    'Hardcore Gamer: FPS değerleri ve RGB aydınlatma tutkunu.',
+    'İçerik Üreticisi/Vlogger: Kamera kalitesi ve mikrofon odaklı yaşayan.',
+    'Dijital Göçebe: Taşınabilirlik ve pil ömrü hastası gezgin.',
+    'Ev Kuşu: Akıllı ev sistemleri ve konfor odaklı kullanıcı.',
+    'Sporcu/Fitness Tutkunu: Wearable (giyilebilir) teknoloji ve dayanıklılık odaklı.',
+    'Retro Sever: Modern cihazda nostalji veya sadelik arayan.',
+    'Hediye Alıcı: "Eşime aldım, çok sevindi" diyen duygusal alıcı.',
+    'Yaşlı Kullanıcı: "Karışık değil, kullanımı kolay" diyen emekli.',
+    'Ofis Müdürü: Kurumsal verimlilik ve dayanıklılık odaklı.',
+    'Yazılımcı: Fonksiyonellik ve özelleştirilebilirlik arayan.',
+    'Müzik Tutkunu: Ses kalitesi ve izolasyon odaklı.',
+  ],
+  // Grup B: Kozmetik ve Bakım Odaklılar (15 Persona)
+  COSMETICS: [
+    'Skincare Minimalisti: Sadece 3 ürünle rutinini bitiren.',
+    'Makyaj Artisti: Ürünün pigmentasyonu ve kalıcılığına odaklanan profesyonel.',
+    'Organik Yaşam Savunucusu: İçerik listesi (temiz içerik) okuyan bilinçli tüketici.',
+    'Hassas Ciltli: "Asla sivilce yapmadı" diyen temkinli kullanıcı.',
+    'Lüks Marka Tutkunu: Paketleme ve prestij odaklı kullanıcı.',
+    'K-Beauty Hayranı: Kore cilt bakımı trendlerini takip eden.',
+    'Yoğun Çalışan Kadın: "Sabah sürdüm akşam hala duruyor" diyen pratik kullanıcı.',
+    'Güzellik Influencer\'ı: Trendleri takip eden ve karşılaştırma yapan.',
+    'Erkek Bakım Meraklısı: Sakal, saç veya basit cilt bakımı odaklı erkek kullanıcı.',
+    'Anti-Aging Odaklı: İnce çizgiler ve sıkılaşma bekleyen 40+ kullanıcı.',
+    'Genç/Ergen: Sivilce karşıtı ve uygun fiyatlı ürün arayan.',
+    'Vegan/Cruelty-Free: Hayvan deneyi yapılmayan ürünleri tercih eden.',
+    'Dermokozmetik Takipçisi: Eczane ürünlerini ve bilimsel içeriği seven.',
+    'Koku Hassasiyeti Olan: Parfümsüz veya çok güzel kokan ürün arayan.',
+    'Hızlı Hazırlanan: "5 dakikada günlük makyajımı bitiriyorum" diyen kişi.',
+  ],
+};
+
+/**
+ * Rastgele bir persona seç
+ */
+function getRandomPersona(productCategory?: string): string {
+  const allPersonas = [...PERSONAS.ELECTRONICS, ...PERSONAS.COSMETICS];
+  
+  // Eğer kategori bilgisi varsa, uygun gruptan seç
+  if (productCategory) {
+    const categoryLower = productCategory.toLowerCase();
+    const isElectronics = categoryLower.includes('electron') || 
+                         categoryLower.includes('tech') ||
+                         categoryLower.includes('phone') ||
+                         categoryLower.includes('laptop') ||
+                         categoryLower.includes('tablet');
+    
+    if (isElectronics) {
+      return PERSONAS.ELECTRONICS[Math.floor(Math.random() * PERSONAS.ELECTRONICS.length)];
+    } else {
+      return PERSONAS.COSMETICS[Math.floor(Math.random() * PERSONAS.COSMETICS.length)];
+    }
+  }
+  
+  // Kategori bilgisi yoksa rastgele seç
+  return allPersonas[Math.floor(Math.random() * allPersonas.length)];
+}
+
+/**
  * 2800 Post oluştur (40 kullanıcı x 70 post)
  */
 async function seedPosts() {
@@ -2108,9 +2177,33 @@ async function seedPosts() {
   const locations = await prisma.experienceLocation.findMany()
   const purposes = await prisma.experiencePurpose.findMany()
   
-  // Ürünleri getir (category bilgileri ile birlikte - yeni hierarchical Category yapısı)
-  const products = await prisma.product.findMany({
-    take: 500,
+  // Popüler marka ve kategori tanımları (case-insensitive eşleşme için normalize edilmiş)
+  const POPULAR_BRAND_NAMES = [
+    // Elektronik
+    'Apple', 'Samsung', 'Sony', 'LG', 'Microsoft', 'HP', 'Dell', 'Lenovo',
+    'ASUS', 'Acer', 'MSI', 'NVIDIA', 'Intel', 'AMD', 'Canon', 'Nikon',
+    'Logitech', 'Razer', 'Corsair', 'Gigabyte', 'Panasonic', 'Philips',
+    'Xiaomi', 'Huawei', 'OnePlus', 'Google', 'Amazon', 'Bose', 'JBL',
+    'Sennheiser', 'Beats', 'SteelSeries', 'HyperX', 'ROG', 'Alienware'
+  ]
+
+  const POPULAR_CATEGORY_NAMES = [
+    'Electronics', 'Cosmetics', 'Beauty', 'Skincare', 'Makeup',
+    'Phones', 'Laptops', 'Tablets', 'Cameras', 'Headphones',
+    'Watches', 'Gaming', 'Home & Kitchen', 'Fashion', 'Accessories',
+    'Smartphones', 'Computers', 'Audio', 'Wearables', 'Smart Home'
+  ]
+
+  // Normalize edilmiş listeler (case-insensitive karşılaştırma için)
+  const normalizedBrandNames = new Set(
+    POPULAR_BRAND_NAMES.map(name => name.toLowerCase().trim())
+  )
+  const normalizedCategoryNames = new Set(
+    POPULAR_CATEGORY_NAMES.map(name => name.toLowerCase().trim())
+  )
+
+  // Tüm ürünleri çek (brand ve category ile birlikte)
+  const allProducts = await prisma.product.findMany({
     include: {
       category: {
         select: {
@@ -2119,18 +2212,76 @@ async function seedPosts() {
           mpath: true,
           parentId: true
         }
+      },
+      brand: {
+        select: {
+          id: true,
+          name: true
+        }
       }
-    }
+    },
+    take: 2000 // Daha fazla çek ki filtreleme sonrası yeterli ürün olsun
   })
+
+  // Case-insensitive filtreleme (popüler markalar veya kategoriler)
+  let products = allProducts.filter(product => {
+    const brandName = product.brand?.name?.toLowerCase().trim() || ''
+    const categoryName = product.category?.name?.toLowerCase().trim() || ''
+    
+    // Marka veya kategori popüler listede mi kontrol et
+    const isPopularBrand = brandName && normalizedBrandNames.has(brandName)
+    const isPopularCategory = categoryName && normalizedCategoryNames.has(categoryName)
+    
+    return isPopularBrand || isPopularCategory
+  })
+
+  // İlk 500 popüler ürünü al
+  products = products.slice(0, 500)
   
+  // Eğer popüler ürün bulunamazsa fallback
   if (products.length === 0) {
-    throw new Error('❌ Ürün bulunamadı! Önce Phase 5 tamamlanmalı.')
+    console.warn('⚠️ Popüler ürün bulunamadı, tüm ürünler kullanılacak...')
+    const fallbackProducts = await prisma.product.findMany({
+      take: 500,
+      include: {
+        category: {
+          select: {
+            id: true,
+            name: true,
+            mpath: true,
+            parentId: true
+          }
+        },
+        brand: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
+    })
+    
+    if (fallbackProducts.length === 0) {
+      throw new Error('❌ Ürün bulunamadı! Önce Phase 5 tamamlanmalı.')
+    }
+    
+    products = fallbackProducts
   }
   
+  console.log(`📊 ${products.length} popüler ürün bulundu (popüler markalar/kategoriler)\n`)
+  
   let totalPosts = 0
+  let successfulPosts = 0
+  let failedPosts = 0
   const postTypes: Array<'QUESTION' | 'TIPS' | 'FREE' | 'EXPERIENCE' | 'COMPARE' | 'UPDATE'> = [
     'QUESTION', 'TIPS', 'FREE', 'EXPERIENCE', 'COMPARE', 'UPDATE'
   ]
+  
+  // GeminiService instance'ı
+  const geminiService = GeminiService.getInstance()
+  
+  // Rate limiting için delay (Gemini 2.5 Pro: ~360 req/min, güvenli için 200ms)
+  const AI_REQUEST_DELAY = 200
   
   // Her kullanıcı için random sayıda post
   for (const user of users) {
@@ -2154,6 +2305,12 @@ async function seedPosts() {
                 name: true,
                 mpath: true,
                 parentId: true
+              }
+            },
+            brand: {
+              select: {
+                id: true,
+                name: true
               }
             }
           }
@@ -2182,11 +2339,44 @@ async function seedPosts() {
         
         const createdAt = new Date(Date.now() - Math.random() * 90 * 24 * 60 * 60 * 1000) // Son 90 gün içinde
         
+        // Persona seç (kategori bilgisine göre)
+        const productCategory = selectedProduct.category?.name || ''
+        const persona = getRandomPersona(productCategory)
+        
+        // AI ile içerik üret
+        let title = `${postType} Post ${i} - ${selectedProduct.name}`
+        let body = `Bu bir ${postType} tipi içerik. ${selectedProduct.name} hakkında detaylı bilgi ve deneyimler paylaşılıyor. Ürünü kullanma deneyimim oldukça olumlu oldu. Kaliteli malzeme ve iyi tasarım dikkat çekiyor.`
+        
+        try {
+          const aiContent = await geminiService.generatePostContent({
+            postType,
+            persona,
+            productName: selectedProduct.name,
+            productBrand: selectedProduct.brand?.name,
+            productDescription: selectedProduct.description || undefined,
+          })
+          
+          title = aiContent.title
+          body = aiContent.body
+          successfulPosts++
+          
+          // Rate limiting için bekle
+          if (totalPosts < users.length * postTypes.length * 8 - 1) {
+            await new Promise(resolve => setTimeout(resolve, AI_REQUEST_DELAY))
+          }
+        } catch (error) {
+          // AI hatası durumunda fallback kullan
+          console.warn(`⚠️  AI içerik üretimi başarısız (${user.email}, ${postType}):`, error instanceof Error ? error.message : String(error))
+          failedPosts++
+          // Hata durumunda daha uzun bekle
+          await new Promise(resolve => setTimeout(resolve, 1000))
+        }
+        
         const post = await createPost({
           userId: user.id,
           type: postType,
-          title: `${postType} Post ${i} - ${selectedProduct.name}`,
-          body: `Bu bir ${postType} tipi içerik. ${selectedProduct.name} hakkında detaylı bilgi ve deneyimler paylaşılıyor. Ürünü kullanma deneyimim oldukça olumlu oldu. Kaliteli malzeme ve iyi tasarım dikkat çekiyor.`,
+          title,
+          body,
           productId: selectedProduct.id,
           categoryId: selectedProduct.categoryId || undefined, // Product'ın categoryId'sini ekle
           productGroupId: selectedProduct.groupId ?? undefined,
@@ -2234,6 +2424,12 @@ async function seedPosts() {
         
         totalPosts++
         userPostCount++
+        
+        // Her 10 post'ta bir ilerleme göster
+        if (totalPosts % 10 === 0) {
+          const progress = ((totalPosts / (users.length * postTypes.length * 8)) * 100).toFixed(1)
+          console.log(`    ⏳ İlerleme: ${totalPosts} post | Başarılı: ${successfulPosts} | Başarısız: ${failedPosts} (${progress}%)`)
+        }
       }
     }
     
@@ -2250,7 +2446,9 @@ async function seedPosts() {
   
   console.log(`\n✨ Toplam ${totalPosts} post oluşturuldu!\n`)
   console.log(`   📊 Kullanıcı sayısı: ${users.length}`)
-  console.log(`   📝 Her kullanıcı: Her tipten 1-8 arası random sayıda post\n`)
+  console.log(`   📝 Her kullanıcı: Her tipten 1-8 arası random sayıda post`)
+  console.log(`   ✅ AI ile başarılı: ${successfulPosts}`)
+  console.log(`   ❌ AI ile başarısız (fallback kullanıldı): ${failedPosts}\n`)
 }
 
 // ==================== PHASE 7: SOCIAL FEATURES ====================

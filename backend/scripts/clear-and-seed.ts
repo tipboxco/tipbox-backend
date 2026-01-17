@@ -18,7 +18,67 @@
 
 import { execSync } from 'child_process';
 import path from 'path';
+import fs from 'fs';
 import { clearUserContentMedia, clearAllMedia } from '../prisma/seed/helpers/clear-minio-media';
+
+/**
+ * P3005 hatası için baseline işlemi yapar
+ * Database schema boş değilse migration'ı applied olarak işaretler
+ */
+async function handleP3005Baseline(): Promise<void> {
+  console.log('\n⚠️  Database schema boş değil, baseline yapılıyor...\n');
+  
+  try {
+    const migrationsPath = path.join(process.cwd(), 'prisma', 'migrations');
+    const migrationDirs = fs.readdirSync(migrationsPath, { withFileTypes: true })
+      .filter(dirent => dirent.isDirectory())
+      .map(dirent => dirent.name)
+      .filter(dir => !dir.includes('lock'));
+    
+    if (migrationDirs.length > 0) {
+      const lastMigration = migrationDirs[migrationDirs.length - 1];
+      console.log(`📝 Migration baseline yapılıyor: ${lastMigration}\n`);
+      
+      try {
+        execSync(`npx prisma migrate resolve --applied ${lastMigration}`, {
+          stdio: 'inherit',
+          cwd: process.cwd(),
+        });
+        console.log('✅ Migration baseline tamamlandı\n');
+        
+        // Tekrar deploy dene
+        execSync('npx prisma migrate deploy', {
+          stdio: 'inherit',
+          cwd: process.cwd(),
+        });
+        console.log('✅ Migration\'lar uygulandı\n');
+      } catch (resolveError) {
+        // Resolve başarısız olursa, db push kullan
+        console.log('⚠️  Migration resolve başarısız, schema push kullanılıyor...\n');
+        execSync('npx prisma db push --accept-data-loss', {
+          stdio: 'inherit',
+          cwd: process.cwd(),
+        });
+        console.log('✅ Schema database\'e uygulandı (db push)\n');
+      }
+    } else {
+      // Migration dosyası yoksa, sadece db push yap
+      console.log('⚠️  Migration dosyası bulunamadı, schema push kullanılıyor...\n');
+      execSync('npx prisma db push --accept-data-loss', {
+        stdio: 'inherit',
+        cwd: process.cwd(),
+      });
+      console.log('✅ Schema database\'e uygulandı (db push)\n');
+    }
+  } catch (baselineError) {
+    console.error('❌ Baseline işlemi başarısız!');
+    console.error('💡 Manuel olarak şu komutları çalıştırın:');
+    console.error('   1. npx prisma migrate resolve --applied <migration_name>');
+    console.error('   2. npx prisma migrate deploy');
+    console.error('   VEYA: npx prisma db push --accept-data-loss');
+    throw baselineError;
+  }
+}
 
 async function clearAndSeed(clearAll: boolean = false): Promise<void> {
   console.log('🔍 Prisma schema kontrol ediliyor...\n');
@@ -76,15 +136,38 @@ async function clearAndSeed(clearAll: boolean = false): Promise<void> {
           fullOutput.includes('Following migrations have not yet been applied')) {
         console.log('\n⚠️  Uygulanmamış migration\'lar bulundu, uygulanıyor...\n');
         try {
+          // Önce pipe ile çalıştırıp hatayı yakalayalım
           execSync('npx prisma migrate deploy', {
-            stdio: 'inherit',
+            stdio: 'pipe',
             cwd: process.cwd(),
+            encoding: 'utf-8',
           });
           console.log('✅ Migration\'lar uygulandı\n');
-        } catch (deployError) {
-          console.error('❌ Migration deploy başarısız!');
-          console.error('💡 Manuel olarak migration uygulayın: npx prisma migrate deploy');
-          process.exit(1);
+        } catch (deployError: any) {
+          // Hata mesajını tüm kaynaklardan topla
+          const stdout = deployError.stdout?.toString() || '';
+          const stderr = deployError.stderr?.toString() || '';
+          const message = deployError.message?.toString() || '';
+          const deployErrorOutput = (stdout + stderr + message).toLowerCase();
+          
+          console.log('🔍 Hata detayları kontrol ediliyor...\n');
+          
+          // P3005 hatası: Database schema boş değil, baseline gerekli
+          if (deployErrorOutput.includes('p3005') || 
+              deployErrorOutput.includes('database schema is not empty') ||
+              deployErrorOutput.includes('baseline') ||
+              stdout.includes('P3005') ||
+              stderr.includes('P3005') ||
+              message.includes('P3005')) {
+            await handleP3005Baseline();
+          } else {
+            console.error('❌ Migration deploy başarısız!');
+            if (stdout) console.error('📤 stdout:', stdout.substring(0, 500));
+            if (stderr) console.error('📤 stderr:', stderr.substring(0, 500));
+            if (message) console.error('📤 message:', message.substring(0, 500));
+            console.error('💡 Manuel olarak migration uygulayın: npx prisma migrate deploy');
+            process.exit(1);
+          }
         }
       } else if (errorOutput.includes('database schema is not in sync') ||
                  errorOutput.includes('drift detected')) {
@@ -106,15 +189,38 @@ async function clearAndSeed(clearAll: boolean = false): Promise<void> {
         // Migration history yoksa veya başka bir hata varsa, migrate deploy dene
         console.log('\n⚠️  Migration history kontrolü başarısız, migration\'ları uygulamayı deniyoruz...\n');
         try {
+          // Önce pipe ile çalıştırıp hatayı yakalayalım
           execSync('npx prisma migrate deploy', {
-            stdio: 'inherit',
+            stdio: 'pipe',
             cwd: process.cwd(),
+            encoding: 'utf-8',
           });
           console.log('✅ Migration\'lar uygulandı\n');
-        } catch (deployError) {
-          console.error('❌ Migration deploy başarısız!');
-          console.error('💡 Hata:', errorOutput.substring(0, 500));
-          process.exit(1);
+        } catch (deployError: any) {
+          // Hata mesajını tüm kaynaklardan topla
+          const stdout = deployError.stdout?.toString() || '';
+          const stderr = deployError.stderr?.toString() || '';
+          const message = deployError.message?.toString() || '';
+          const deployErrorOutput = (stdout + stderr + message).toLowerCase();
+          
+          console.log('🔍 Hata detayları kontrol ediliyor...\n');
+          
+          // P3005 hatası: Database schema boş değil, baseline gerekli
+          if (deployErrorOutput.includes('p3005') || 
+              deployErrorOutput.includes('database schema is not empty') ||
+              deployErrorOutput.includes('baseline') ||
+              stdout.includes('P3005') ||
+              stderr.includes('P3005') ||
+              message.includes('P3005')) {
+            await handleP3005Baseline();
+          } else {
+            console.error('❌ Migration deploy başarısız!');
+            if (stdout) console.error('📤 stdout:', stdout.substring(0, 500));
+            if (stderr) console.error('📤 stderr:', stderr.substring(0, 500));
+            if (message) console.error('📤 message:', message.substring(0, 500));
+            console.error('💡 Manuel olarak migration uygulayın: npx prisma migrate deploy');
+            process.exit(1);
+          }
         }
       }
     }

@@ -42,6 +42,24 @@ export interface SplitExperienceResponse {
   };
 }
 
+export interface GeneratePostContentRequest {
+  postType: string;
+  persona: string;
+  productName?: string;
+  productBrand?: string;
+  productDescription?: string;
+}
+
+export interface GeneratePostContentResponse {
+  title: string;
+  body: string;
+  metadata: {
+    tokensUsed: number | null;
+    processingTimeMs: number;
+    model: string;
+  };
+}
+
 export class GeminiService {
   private static instance: GeminiService;
   private genAI: GoogleGenerativeAI;
@@ -604,6 +622,276 @@ Lütfen aşağıdaki JSON formatında yanıt ver:
     const num = Number(rating);
     if (isNaN(num)) return 3;
     return Math.max(1, Math.min(5, Math.round(num)));
+  }
+
+  /**
+   * Post içeriği üret (title ve body)
+   */
+  async generatePostContent(
+    request: GeneratePostContentRequest
+  ): Promise<GeneratePostContentResponse> {
+    const startTime = Date.now();
+
+    try {
+      // Rate limiting check
+      await this.checkRateLimit();
+
+      // Build prompt
+      const prompt = this.buildPostContentPrompt(request);
+
+      // Call AI with timeout
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error(`timeout: AI request timed out after ${this.config.timeout}ms`));
+        }, this.config.timeout);
+      });
+
+      const aiPromise = (async () => {
+        const result = await this.model.generateContent({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.8,
+            topP: 0.95,
+            topK: 40,
+            maxOutputTokens: 4000, // Artırıldı: thoughts + output için yeterli alan
+          },
+        });
+
+        const response = await result.response;
+        
+        // Response'u al
+        let text = '';
+        let candidates: any[] = [];
+        
+        try {
+          text = response.text();
+        } catch (error) {
+          // Eğer text() metodu çalışmazsa, candidates'dan al
+          candidates = (response as any).candidates || [];
+          if (candidates.length > 0) {
+            const candidate = candidates[0];
+            const content = candidate.content;
+            if (content && content.parts) {
+              text = content.parts.map((part: any) => part.text || '').join('\n');
+            }
+          }
+        }
+
+        // Finish reason kontrolü
+        if (candidates.length === 0) {
+          candidates = (response as any).candidates || [];
+        }
+        if (candidates.length > 0) {
+          const finishReason = candidates[0].finishReason;
+            if (finishReason === 'MAX_TOKENS') {
+              logger.warn({
+                message: 'Gemini API MAX_TOKENS limitine ulaştı, response kesilmiş olabilir',
+                finishReason,
+                maxOutputTokens: 4000,
+                thoughtsTokenCount: (response as any).usageMetadata?.thoughtsTokenCount,
+              });
+            }
+        }
+
+        // Eğer hala boşsa, raw response'u logla
+        if (!text || text.trim().length === 0) {
+          logger.warn({
+            message: 'Gemini API response boş',
+            finishReason: candidates?.[0]?.finishReason,
+            response: JSON.stringify(response, null, 2).substring(0, 1000),
+          });
+          throw new Error('AI response boş geldi');
+        }
+
+        // Token bilgisini al
+        const usageMetadata = response.usageMetadata;
+        const tokensUsed = usageMetadata?.totalTokenCount || null;
+
+        // Parse response
+        const parsed = this.parsePostContentResponse(text);
+
+        return {
+          ...parsed,
+          metadata: {
+            tokensUsed,
+            processingTimeMs: Date.now() - startTime,
+            model: this.config.model,
+          },
+        };
+      })();
+
+      const result = await Promise.race([aiPromise, timeoutPromise]);
+
+      // Record metrics
+      this.metrics.recordSuccess(
+        result.metadata.tokensUsed,
+        result.metadata.processingTimeMs,
+        false
+      );
+
+      logger.info({
+        message: 'Gemini AI post içeriği üretildi',
+        postType: request.postType,
+        persona: request.persona,
+        duration: `${result.metadata.processingTimeMs}ms`,
+        tokensUsed: result.metadata.tokensUsed,
+      });
+
+      return result;
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      // Record metrics for failure
+      if (errorMessage.includes('rate limit')) {
+        this.metrics.recordFailure('rate-limit');
+      } else if (errorMessage.includes('timeout')) {
+        this.metrics.recordFailure('timeout');
+      } else {
+        this.metrics.recordFailure('other');
+      }
+
+      logger.error({
+        message: 'Gemini AI post içeriği üretim hatası',
+        postType: request.postType,
+        persona: request.persona,
+        duration: `${duration}ms`,
+        error: errorMessage,
+      });
+
+      throw new ExternalServiceError(`AI içerik üretim hatası: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Post içeriği için prompt oluştur
+   */
+  private buildPostContentPrompt(request: GeneratePostContentRequest): string {
+    const postTypePrompts: Record<string, string> = {
+      QUESTION: 'Bir soru formatında içerik yaz. Kullanıcı bir ürün hakkında soru soruyor gibi görünsün.',
+      TIPS: 'Bir ipucu veya tavsiye formatında içerik yaz. Kullanıcı deneyimlerinden yola çıkarak pratik öneriler sunuyor gibi görünsün.',
+      FREE: 'Genel bilgilendirici bir içerik yaz. Kullanıcı ürün hakkında bilgi paylaşıyor gibi görünsün.',
+      EXPERIENCE: 'Bir deneyim paylaşımı formatında içerik yaz. Kullanıcı ürünü kullanma deneyimini anlatıyor gibi görünsün.',
+      COMPARE: 'Bir karşılaştırma formatında içerik yaz. Kullanıcı ürünü başka ürünlerle karşılaştırıyor gibi görünsün.',
+      UPDATE: 'Bir güncelleme veya haber formatında içerik yaz. Kullanıcı ürün hakkında güncel bilgi paylaşıyor gibi görünsün.',
+    };
+
+    const productContext = [];
+    if (request.productName) {
+      productContext.push(`Ürün: ${request.productName}`);
+    }
+    if (request.productBrand) {
+      productContext.push(`Marka: ${request.productBrand}`);
+    }
+    if (request.productDescription) {
+      productContext.push(`Açıklama: ${request.productDescription}`);
+    }
+
+    const productInfo = productContext.length > 0
+      ? `\nÜrün Bilgileri (Sadece context için, içerikte tam isim geçirme):\n${productContext.join('\n')}\n`
+      : '';
+
+    return `Sen bir içerik yazarısın. Türkçe olarak ${postTypePrompts[request.postType] || 'genel bir içerik'} yaz.
+
+${productInfo}
+Persona: ${request.persona}
+
+Lütfen şunları hazırla:
+1. İlgi çekici bir başlık (maksimum 100 karakter, doğal ve samimi)
+2. 1-2 paragraf uzunluğunda, doğal ve akıcı bir içerik metni (150-300 kelime arası)
+
+KRİTİK KURALLAR:
+- Ürün ismini içerikte tam olarak geçirme, sadece context olarak kullan
+- "Muhteşem", "harika" gibi aşırı pozitif ifadelerden kaçın
+- "İşimi gördü", "beklentimin üzerindeydi", "kurulumu zordu" gibi gerçekçi ifadeler kullan
+- Persona'nın bakış açısını yansıt
+- Doğal, samimi ve akıcı bir dil kullan
+- Türkçe dilbilgisi ve yazım kurallarına uy
+
+Sadece başlık ve içerik metnini döndür. Format:
+BAŞLIK: [başlık buraya]
+İÇERİK: [içerik metni buraya]`.trim();
+  }
+
+  /**
+   * Post içeriği yanıtını parse et
+   */
+  private parsePostContentResponse(text: string): { title: string; body: string } {
+    try {
+      // Eğer text boşsa hata fırlat
+      if (!text || text.trim().length === 0) {
+        throw new Error('Response metni boş');
+      }
+
+      // Başlık ve içeriği parse et - farklı formatları dene
+      let titleMatch = text.match(/BAŞLIK:\s*(.+?)(?:\n|İÇERİK:)/i);
+      let contentMatch = text.match(/İÇERİK:\s*(.+)/is);
+
+      // Alternatif formatlar
+      if (!titleMatch) {
+        titleMatch = text.match(/^Başlık:\s*(.+?)(?:\n|İçerik:)/i);
+      }
+      if (!contentMatch) {
+        contentMatch = text.match(/İçerik:\s*(.+)/is);
+      }
+      if (!contentMatch) {
+        contentMatch = text.match(/İÇERİK:\s*(.+)/is);
+      }
+
+      // Eğer hala bulunamazsa, satır bazlı parse dene
+      const lines = text.split('\n').filter(line => line.trim());
+      
+      let title = titleMatch?.[1]?.trim();
+      let body = contentMatch?.[1]?.trim();
+
+      // Eğer format bulunamazsa, ilk satırı başlık, geri kalanını body yap
+      if (!title && lines.length > 0) {
+        title = lines[0].substring(0, 100).trim();
+      }
+      if (!body && lines.length > 1) {
+        body = lines.slice(1).join('\n').trim();
+      }
+
+      // Eğer hala boşsa, tüm metni body yap
+      if (!body) {
+        body = text.trim();
+      }
+      if (!title) {
+        title = body.split('\n')[0]?.substring(0, 100) || 'Başlıksız İçerik';
+      }
+
+      // Son kontrol
+      if (!title || !body) {
+        throw new Error('Title veya body bulunamadı');
+      }
+
+      return {
+        title: title.substring(0, 200), // Maksimum 200 karakter
+        body: body.substring(0, 5000), // Maksimum 5000 karakter
+      };
+    } catch (error) {
+      logger.error({
+        message: 'Post içeriği yanıtı parse edilemedi',
+        error: error instanceof Error ? error.message : String(error),
+        rawText: text ? text.substring(0, 500) : 'BOŞ',
+        textLength: text?.length || 0,
+      });
+
+      // Fallback: İlk satırı başlık, geri kalanını body yap
+      if (text && text.trim().length > 0) {
+        const lines = text.split('\n').filter(line => line.trim());
+        return {
+          title: lines[0]?.substring(0, 200) || 'Başlıksız İçerik',
+          body: lines.slice(1).join('\n').substring(0, 5000) || text.substring(0, 5000),
+        };
+      }
+
+      // Son çare: Boş değerler döndür
+      return {
+        title: 'Başlıksız İçerik',
+        body: 'İçerik üretilemedi',
+      };
+    }
   }
 }
 
