@@ -417,18 +417,30 @@ export class EventService {
       // Get interaction count
       const interaction = await this.getEventInteraction(event.id);
 
-      // Get reward badges (unique badges from rewards)
-      // Note: rewardId is an integer, we need to find badges by matching with achievement goals or other methods
-      // For now, get all EVENT type badges as rewards
-      const eventBadges = await this.prisma.badge.findMany({
-        where: { type: 'EVENT' },
-        take: 10,
+      // Get reward badges from EventBadge table (same logic as /badges endpoint)
+      // @ts-ignore - Prisma type inference issue with EventBadge model
+      const eventBadges: any = await this.prisma.eventBadge.findMany({
+        where: {
+          eventId: event.id,
+          enabled: true,
+        },
+        include: {
+          badge: {
+            include: {
+              category: true,
+            },
+          },
+        },
+        orderBy: {
+          displayOrder: 'asc',
+        },
+        take: 20, // Limit to 20 badges like /badges endpoint
       });
 
-      const rewardBadges: RewardBadge[] = eventBadges.map((badge) => ({
-        id: badge.id,
-        image: resolveMediaUrl(badge.imageUrl || null),
-        title: badge.name,
+      const rewardBadges: RewardBadge[] = eventBadges.map((eventBadge: any) => ({
+        id: eventBadge.badge.id,
+        image: resolveMediaUrl(eventBadge.badge.imageUrl || null),
+        title: eventBadge.badge.name,
       }));
 
       // Event status (active / upcoming)

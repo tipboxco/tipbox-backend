@@ -172,14 +172,22 @@ export async function ensureEventBadgeSystem(prisma: PrismaClient): Promise<void
     });
 
     if (!event) {
+      // Event görselini al - Doğrudan Minio path'ini kullan
+      const imageKey = 'event.event-batarya';
+      const imageKeyParts = imageKey.split('.');
+      const imageName = imageKeyParts[imageKeyParts.length - 1]; // 'event-batarya'
+      const imageUrl = `events/new-events/${imageName}.png`;
+
       event = await prisma.wishboxEvent.create({
         data: {
           id: eventId,
-          title: 'Test Event 2026',
-          description: 'Badge sistemi test event\'i. Post paylaş, beğeni topla, rozet kazan!',
-          startDate: new Date('2025-12-31'),
-          endDate: new Date('2026-01-30'),
-          status: 'PUBLISHED'
+          title: 'Akıllı Telefon Batarya Performansı',
+          description: 'Hangi telefon en uzun süre dayanıyor? Günlük kullanımda gerçek batarya deneyiminizi paylaşın. Normal kullanımda kaç saat?, yoğun kullanımda ne kadar?, hızlı şarj var mı?',
+          startDate: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000),
+          endDate: new Date(Date.now() + 18 * 24 * 60 * 60 * 1000),
+          status: 'PUBLISHED',
+          imageUrl,
+          brandId: null
         }
       });
       console.log(`   ✅ Test Event: ${event.title}`);

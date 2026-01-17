@@ -1,44 +1,81 @@
 import { prisma, generateUlid, TEST_USER_ID, TARGET_USER_ID, TRUST_USER_IDS } from './types';
 import { getSeedMediaPath } from './helpers/media.helper';
+import { S3Service } from '../../src/infrastructure/s3/s3.service';
+import { readFileSync, existsSync } from 'fs';
+import path from 'path';
 
 // Wishbox istatistikleri için kullanılacak maksimum kullanıcı sayısı (default: 5)
 const MAX_WISHBOX_STATS_USERS = Number.parseInt(process.env.SEED_WISHBOX_USER_LIMIT || '5', 10);
 
 export async function seedExplore(): Promise<void> {
   console.log('🔍 [seed] explore (full)');
-  // Marketplace banners
-  await Promise.all([
-    prisma.marketplaceBanner.create({
-      data: {
-        title: 'Yeni Sezon NFT Koleksiyonu',
-        description: "Sınırlı sayıda özel avatar ve badge NFT'leri şimdi satışta!",
-        imageUrl: getSeedMediaPath('explore.event.primary'),
-        linkUrl: '/marketplace/listings?type=BADGE',
-        isActive: true,
-        displayOrder: 1,
-      },
-    }),
-    prisma.marketplaceBanner.create({
-      data: {
-        title: 'Epic Rarity İndirimi',
-        description: "%30 indirimli EPIC rarity NFT'lere göz at",
-        imageUrl: getSeedMediaPath('explore.event.primary'),
-        linkUrl: '/marketplace/listings?rarity=EPIC',
-        isActive: true,
-        displayOrder: 2,
-      },
-    }),
-    prisma.marketplaceBanner.create({
-      data: {
-        title: 'Yeni Markalar Platformda',
-        description: "Ünlü markalar TipBox'a katıldı! Hemen keşfet.",
-        imageUrl: getSeedMediaPath('explore.event.primary'),
-        linkUrl: '/explore/brands/new',
-        isActive: true,
-        displayOrder: 3,
-      },
-    }),
-  ]).catch(() => {});
+  
+  // Marketplace banner görsellerini MinIO'ya yükle
+  const s3Service = new S3Service();
+  const exploreImagePaths: string[] = [];
+  
+  const imageFiles = [
+    { localPath: path.join(__dirname, '../../../tests/assets/explore/hottest.jpg'), fileName: 'hottest.jpg' },
+    { localPath: path.join(__dirname, '../../../tests/assets/explore/hottest2.jpg'), fileName: 'hottest2.jpg' },
+  ];
+  
+  console.log('📸 Marketplace banner görselleri MinIO\'ya yükleniyor...');
+  for (const imageFile of imageFiles) {
+    try {
+      if (!existsSync(imageFile.localPath)) {
+        console.warn(`⚠️  Görsel dosyası bulunamadı: ${imageFile.localPath}`);
+        continue;
+      }
+      
+      const minioPath = `Explore/${imageFile.fileName}`;
+      
+      // MinIO'da dosyanın mevcut olup olmadığını kontrol et
+      const exists = await s3Service.fileExists(minioPath);
+      
+      if (!exists) {
+        const fileBuffer = readFileSync(imageFile.localPath);
+        await s3Service.uploadFile(minioPath, fileBuffer, 'image/jpeg');
+        console.log(`✅ Görsel yüklendi: ${minioPath}`);
+      } else {
+        console.log(`⏭️  Görsel zaten mevcut: ${minioPath}`);
+      }
+      
+      exploreImagePaths.push(minioPath);
+    } catch (error) {
+      console.error(`❌ Görsel yüklenemedi: ${imageFile.fileName}`, error);
+    }
+  }
+  
+  // Marketplace banners - 2 tane oluştur
+  if (exploreImagePaths.length >= 2) {
+    await Promise.all([
+      prisma.marketplaceBanner.create({
+        data: {
+          title: 'Yeni Sezon NFT Koleksiyonu',
+          description: "Sınırlı sayıda özel avatar ve badge NFT'leri şimdi satışta!",
+          imageUrl: exploreImagePaths[0]!,
+          linkUrl: '/marketplace/listings?type=BADGE',
+          isActive: true,
+          displayOrder: 1,
+        },
+      }),
+      prisma.marketplaceBanner.create({
+        data: {
+          title: 'Epic Rarity İndirimi',
+          description: "%30 indirimli EPIC rarity NFT'lere göz at",
+          imageUrl: exploreImagePaths[1]!,
+          linkUrl: '/marketplace/listings?rarity=EPIC',
+          isActive: true,
+          displayOrder: 2,
+        },
+      }),
+    ]).catch((error) => {
+      console.warn('⚠️  Marketplace banner oluşturulurken hata:', error);
+    });
+    console.log('✅ Marketplace banner\'lar oluşturuldu');
+  } else {
+    console.warn('⚠️  Yeterli görsel yüklenemedi, marketplace banner\'lar oluşturulamadı');
+  }
 
   // Brands (subset matching original names) - logoUrl seed media üzerinden
   await Promise.all(
