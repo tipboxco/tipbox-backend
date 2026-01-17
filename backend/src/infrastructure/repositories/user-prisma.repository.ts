@@ -57,6 +57,17 @@ export class UserPrismaRepository {
     return user ? this.toDomain(user) : null;
   }
 
+  async findByAuth0Id(auth0Id: string): Promise<User | null> {
+    const user = await this.prisma.user.findUnique({ 
+      where: { auth0Id },
+      include: { 
+        profile: true,
+        wallets: true
+      }
+    });
+    return user ? this.toDomain(user) : null;
+  }
+
   async createWithPassword(email: string, passwordHash: string, displayName?: string): Promise<User> {
     try {
       const user = await this.prisma.user.create({
@@ -81,6 +92,51 @@ export class UserPrismaRepository {
     } catch (err: any) {
       if (err.code === 'P2002' && err.meta?.target?.includes('email')) {
         throw new EmailAlreadyExistsError();
+      }
+      throw err;
+    }
+  }
+
+  async createWithAuth0(
+    auth0Id: string,
+    email: string,
+    displayName?: string,
+    emailVerified: boolean = true
+  ): Promise<User> {
+    try {
+      const user = await this.prisma.user.create({
+        data: { 
+          auth0Id,
+          email, 
+          emailVerified,
+          status: 'ACTIVE',
+          profile: displayName
+            ? {
+                create: {
+                  displayName,
+                  bannerUrl: DEFAULT_PROFILE_BANNER_URL,
+                },
+              }
+            : undefined,
+        },
+        include: { 
+          profile: true,
+          wallets: true
+        }
+      });
+      return this.toDomain(user);
+    } catch (err: any) {
+      if (err.code === 'P2002') {
+        if (err.meta?.target?.includes('email')) {
+          throw new EmailAlreadyExistsError();
+        }
+        // Auth0Id zaten varsa, mevcut kullanıcıyı döndür
+        if (err.meta?.target?.includes('auth0_id')) {
+          const existingUser = await this.findByAuth0Id(auth0Id);
+          if (existingUser) {
+            return existingUser;
+          }
+        }
       }
       throw err;
     }
@@ -152,8 +208,8 @@ export class UserPrismaRepository {
       prismaUser.updatedAt,
       // Profile'dan displayName'i al
       prismaUser.profile?.displayName || null,
-      // Auth0 - şimdilik null (schema'da yok)
-      null,
+      // Auth0 ID
+      prismaUser.auth0Id || null,
       // KYC - şimdilik null (ayrı tablo)
       null,
       // Email verified status

@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import path from 'path';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJSDoc from 'swagger-jsdoc';
+import { auth, requiresAuth } from 'express-openid-connect';
 
 // Routers
 import authRouter from './auth/auth.router';
@@ -27,6 +28,7 @@ import cacheRouter from './cache/cache.router';
 import notificationRouter from './notification/notification.router';
 import newsRouter from './news/news.router';
 import syncReceiverRouter from './sync-receiver/sync-receiver.router';
+import auth0Router from './auth0/auth0.router';
 
 // Middleware
 import { authMiddleware } from './auth/auth.middleware';
@@ -72,6 +74,50 @@ app.use(cors(getCorsOptions()));
 // Body parser
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Auth0 middleware (opsiyonel - sadece gerekli env değişkenleri varsa)
+const issuerBaseURL = process.env.ISSUER_BASE_URL;
+const clientID = process.env.CLIENT_ID;
+const clientSecret = process.env.CLIENT_SECRET;
+const secret = process.env.SECRET;
+const baseURL = process.env.BASE_URL || 'http://localhost:3000';
+
+if (issuerBaseURL && clientID && secret && !issuerBaseURL.includes('{yourDomain}') && !clientID.includes('{yourClientId}') && secret !== 'LONG_RANDOM_STRING') {
+  const auth0Config: any = {
+    authRequired: false,
+    auth0Logout: true,
+    baseURL: baseURL,
+    clientID: clientID,
+    issuerBaseURL: issuerBaseURL,
+    secret: secret,
+    // Authorization Code Flow için clientSecret gerekli (id_token almak için)
+    ...(clientSecret && { clientSecret: clientSecret }),
+    // ID Token almak için gerekli parametreler
+    authorizationParams: {
+      response_type: 'code', // Authorization Code Flow
+      scope: 'openid profile email', // openid scope'u mutlaka olmalı
+      response_mode: 'query' // veya 'form_post' (daha güvenli)
+    },
+    routes: {
+      callback: '/auth/auth0/callback',
+      postLogoutRedirect: '/auth/auth0/token' // Callback sonrasında token endpoint'ine yönlendir
+    },
+    // Callback sonrasında session'ı döndür
+    afterCallback: async (req: express.Request, res: express.Response, session: any) => {
+      return session;
+    }
+  };
+  
+  app.use(auth(auth0Config));
+  logger.info({ 
+    message: 'Auth0 middleware initialized',
+    hasClientSecret: !!clientSecret,
+    responseType: auth0Config.authorizationParams?.response_type,
+    scope: auth0Config.authorizationParams?.scope
+  });
+} else {
+  logger.warn({ message: 'Auth0 middleware skipped - missing or invalid configuration' });
+}
 
 // Request middleware
 app.use(requestContextMiddleware);
@@ -241,6 +287,7 @@ app.get('/metrics', async (req, res) => {
 
 // API Routes
 app.use('/auth', authRouter);
+app.use('/auth0', auth0Router);
 app.use('/users', authMiddleware, userRouter);
 app.use('/wallets', authMiddleware, walletRouter);
 app.use('/transactions', authMiddleware, transactionRouter);

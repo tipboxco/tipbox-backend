@@ -422,4 +422,102 @@ export class AuthService implements IAuthService {
       message: 'Şifre başarıyla güncellendi. Yeni şifrenizle giriş yapabilirsiniz.',
     };
   }
+
+  /**
+   * Auth0 ile kullanıcı oluştur veya güncelle
+   * Auth0 callback'ten gelen kullanıcı bilgileriyle DB'de kullanıcı oluşturur veya günceller
+   */
+  async createOrUpdateUserFromAuth0(
+    auth0Id: string,
+    email: string,
+    name?: string,
+    emailVerified: boolean = true,
+    picture?: string
+  ): Promise<User> {
+    // Önce auth0Id ile kontrol et
+    let user = await this.userRepo.findByAuth0Id(auth0Id);
+    
+    if (user) {
+      // Kullanıcı zaten varsa, email ve profile bilgilerini güncelle
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          email: email || user.email,
+          emailVerified: emailVerified,
+          profile: name && user.displayName !== name ? {
+            upsert: {
+              create: {
+                displayName: name,
+              },
+              update: {
+                displayName: name,
+              },
+            },
+          } : undefined,
+        },
+      });
+      
+      // Güncellenmiş kullanıcıyı döndür
+      const updatedUser = await this.userRepo.findById(user.id);
+      return updatedUser || user;
+    }
+
+    // Email ile de kontrol et (email ile kayıt olmuş ama auth0Id eklenmemiş olabilir)
+    if (email) {
+      const existingUserByEmail = await this.userRepo.findByEmail(email);
+      if (existingUserByEmail) {
+        // Mevcut kullanıcıya auth0Id ekle
+        await this.prisma.user.update({
+          where: { id: existingUserByEmail.id },
+          data: {
+            auth0Id,
+            emailVerified: emailVerified || existingUserByEmail.emailVerified,
+          },
+        });
+        
+        const updatedUser = await this.userRepo.findById(existingUserByEmail.id);
+        return updatedUser || existingUserByEmail;
+      }
+    }
+
+    // Yeni kullanıcı oluştur
+    const newUser = await this.userRepo.createWithAuth0(
+      auth0Id,
+      email || '',
+      name,
+      emailVerified
+    );
+
+    // Eğer picture varsa avatar olarak kaydet
+    if (picture && newUser) {
+      try {
+        await this.prisma.userAvatar.create({
+          data: {
+            userId: newUser.id,
+            imageUrl: picture,
+            isActive: true,
+          },
+        });
+      } catch (error) {
+        // Avatar kaydetme hatası kritik değil, log'la
+        logger.warn({
+          message: 'Failed to save Auth0 picture as avatar',
+          userId: newUser.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    return newUser;
+  }
+
+  /**
+   * Auth0 kullanıcısı için token oluştur
+   */
+  generateTokenForAuth0User(user: User): { token: string; refreshToken: string } {
+    return {
+      token: this.generateToken(user),
+      refreshToken: this.generateRefreshToken(user),
+    };
+  }
 } 
