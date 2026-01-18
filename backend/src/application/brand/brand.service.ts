@@ -1501,6 +1501,95 @@ export class BrandService {
   }
 
   /**
+   * Brand'e ait belirli bir product group'un ürünlerini listele
+   */
+  async getBrandGroupProducts(
+    brandId: string,
+    productGroupId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<BrandProductsResponse> {
+    try {
+      // Brand kontrolü
+      const brand = await this.prisma.brand.findUnique({
+        where: { id: brandId },
+        select: { name: true },
+      });
+
+      if (!brand) {
+        throw new NotFoundError('Brand not found');
+      }
+
+      // Product group kontrolü
+      const productGroup = await this.prisma.productGroup.findUnique({
+        where: { id: productGroupId },
+      });
+
+      if (!productGroup) {
+        throw new NotFoundError('Product group not found');
+      }
+
+      const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+      const cursor = options?.cursor;
+
+      const whereClause: any = {
+        groupId: productGroupId,
+        brand: brand.name, // Brand name'e göre filtrele
+      };
+
+      if (cursor) {
+        whereClause.id = {
+          gt: cursor,
+        };
+      }
+
+      const products = await this.prisma.product.findMany({
+        where: whereClause,
+        include: {
+          contentPosts: {
+            select: {
+              id: true,
+              likesCount: true,
+              sharesCount: true,
+              favoritesCount: true,
+            },
+          },
+        },
+        orderBy: {
+          id: 'asc',
+        },
+        take: limit + 1,
+      });
+
+      const hasMore = products.length > limit;
+      const resultProducts = hasMore ? products.slice(0, limit) : products;
+      const nextCursor = hasMore && resultProducts.length > 0 ? resultProducts[resultProducts.length - 1].id : undefined;
+
+      const items: BrandProduct[] = resultProducts.map((product) => {
+        const stats = this.calculateProductStats(product.contentPosts || []);
+
+        return {
+          productId: product.id,
+          name: product.name,
+          image: this.buildFullMediaUrl(product.imageUrl),
+          stats,
+        };
+      });
+
+      return {
+        items,
+        pagination: {
+          cursor: nextCursor,
+          hasMore,
+          limit,
+        },
+      };
+    } catch (error) {
+      logger.error(`Failed to get brand group products for ${brandId}/${productGroupId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Markaya ait ürünleri listele (infinity scroll için pagination ile)
    * Her product group içindeki products array'i için de pagination uygulanır
    * @deprecated Use getBrandProductsBatch instead

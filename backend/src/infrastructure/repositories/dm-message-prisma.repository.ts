@@ -59,10 +59,35 @@ export class DmMessagePrismaRepository {
         isRead: data.isRead || false,
         sentAt: data.sentAt || new Date(),
         createdAt: data.createdAt || new Date(),
+        mediaUrl: data.mediaUrl,
+        mediaType: data.mediaType,
+        thumbnailUrl: data.thumbnailUrl,
+        fileName: data.fileName,
+        fileSize: data.fileSize,
+        caption: data.caption,
+        replyToMessageId: data.replyToMessageId,
+        status: data.status || 'sent',
+        deliveredAt: data.deliveredAt,
+        readAt: data.readAt,
+        isDeleted: data.isDeleted || false,
+        deletedAt: data.deletedAt,
+        deletedBy: data.deletedBy,
+        isEdited: data.isEdited || false,
+        editedAt: data.editedAt,
       },
       include: {
         sender: true,
         thread: true
+      }
+    });
+
+    // Update thread's last message
+    await this.prisma.dMThread.update({
+      where: { id: threadIdStr },
+      data: {
+        lastMessageId: message.id,
+        lastMessageAt: message.sentAt,
+        updatedAt: new Date(),
       }
     });
 
@@ -228,6 +253,170 @@ export class DmMessagePrismaRepository {
     }
   }
 
+  async findByIdWithReactions(id: string): Promise<DMMessage | null> {
+    const message = await this.prisma.dMMessage.findUnique({ 
+      where: { id },
+      include: {
+        sender: true,
+        thread: true,
+        reactions: {
+          include: {
+            user: true
+          }
+        }
+      }
+    });
+    return message ? this.toDomain(message) : null;
+  }
+
+  async markAsDeleted(messageId: string, deletedBy: string): Promise<DMMessage | null> {
+    try {
+      const message = await this.prisma.dMMessage.update({
+        where: { id: messageId },
+        data: {
+          isDeleted: true,
+          deletedAt: new Date(),
+          deletedBy,
+          message: 'Bu mesaj silindi',
+          updatedAt: new Date(),
+        },
+        include: {
+          sender: true,
+          thread: true
+        }
+      });
+      return this.toDomain(message);
+    } catch {
+      return null;
+    }
+  }
+
+  async updateMessage(messageId: string, newMessage: string): Promise<DMMessage | null> {
+    try {
+      const message = await this.prisma.dMMessage.update({
+        where: { id: messageId },
+        data: {
+          message: newMessage,
+          isEdited: true,
+          editedAt: new Date(),
+          updatedAt: new Date(),
+        },
+        include: {
+          sender: true,
+          thread: true
+        }
+      });
+      return this.toDomain(message);
+    } catch {
+      return null;
+    }
+  }
+
+  async findByThreadWithPagination(
+    threadId: string, 
+    limit: number = 50, 
+    cursor?: Date,
+    isDeleted: boolean = false
+  ): Promise<{ messages: DMMessage[]; hasMore: boolean; nextCursor?: Date }> {
+    const whereClause: any = {
+      threadId,
+      isDeleted
+    };
+
+    if (cursor) {
+      whereClause.sentAt = {
+        lt: cursor
+      };
+    }
+
+    const messages = await this.prisma.dMMessage.findMany({
+      where: whereClause,
+      include: {
+        sender: true,
+        thread: true
+      },
+      orderBy: { sentAt: 'desc' },
+      take: limit + 1
+    });
+
+    const hasMore = messages.length > limit;
+    const resultMessages = hasMore ? messages.slice(0, limit) : messages;
+    const nextCursor = hasMore && resultMessages.length > 0 
+      ? resultMessages[resultMessages.length - 1].sentAt 
+      : undefined;
+
+    return {
+      messages: resultMessages.reverse().map(m => this.toDomain(m)),
+      hasMore,
+      nextCursor
+    };
+  }
+
+  async searchMessages(threadId: string, query: string, limit: number = 50, offset: number = 0): Promise<DMMessage[]> {
+    const messages = await this.prisma.dMMessage.findMany({
+      where: {
+        threadId,
+        isDeleted: false,
+        message: {
+          contains: query,
+          mode: 'insensitive'
+        }
+      },
+      include: {
+        sender: true,
+        thread: true
+      },
+      orderBy: { sentAt: 'desc' },
+      take: limit,
+      skip: offset
+    });
+    return messages.map(m => this.toDomain(m));
+  }
+
+  async markAsDelivered(messageId: string): Promise<void> {
+    await this.prisma.dMMessage.update({
+      where: { id: messageId },
+      data: {
+        status: 'delivered',
+        deliveredAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+  }
+
+  async markAsReadWithReceipt(messageId: string, userId: string): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      // Update message status
+      await tx.dMMessage.update({
+        where: { id: messageId },
+        data: {
+          isRead: true,
+          status: 'read',
+          readAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // Create read receipt
+      await tx.messageReadReceipt.upsert({
+        where: {
+          messageId_userId: {
+            messageId,
+            userId
+          }
+        },
+        create: {
+          messageId,
+          userId,
+          readAt: new Date(),
+        },
+        update: {
+          readAt: new Date(),
+        },
+      });
+    });
+  }
+
   private toDomain(prismaMessage: any): DMMessage {
     return new DMMessage(
       prismaMessage.id,
@@ -237,7 +426,22 @@ export class DmMessagePrismaRepository {
       prismaMessage.sentAt,
       prismaMessage.isRead,
       prismaMessage.createdAt,
-      prismaMessage.updatedAt
+      prismaMessage.updatedAt,
+      prismaMessage.mediaUrl,
+      prismaMessage.mediaType,
+      prismaMessage.thumbnailUrl,
+      prismaMessage.fileName,
+      prismaMessage.fileSize,
+      prismaMessage.caption,
+      prismaMessage.replyToMessageId,
+      prismaMessage.status,
+      prismaMessage.deliveredAt,
+      prismaMessage.readAt,
+      prismaMessage.isDeleted,
+      prismaMessage.deletedAt,
+      prismaMessage.deletedBy,
+      prismaMessage.isEdited,
+      prismaMessage.editedAt
     );
   }
 }

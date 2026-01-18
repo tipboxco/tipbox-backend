@@ -31,6 +31,7 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
   const collectionIds = new Set<string>();
   const expertRequestIds = new Set<string>();
   const supportRequestIds = new Set<string>();
+  const commentIds = new Set<string>();
 
   notifications.forEach((notification) => {
     const data = notification.data || {};
@@ -67,6 +68,9 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
     
     // Post bildirimleri için post ID'leri topla
     if (data.postId) postIds.add(data.postId);
+    
+    // Comment bildirimleri için comment ID'leri topla (POST_COMMENTED, COMMENT_LIKED, COMMENT_REPLIED)
+    if (data.commentId) commentIds.add(data.commentId);
     
     // Product bildirimleri için product ID'leri topla
     if (data.productId) productIds.add(data.productId);
@@ -166,8 +170,10 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
     });
   }
 
-  // Batch olarak post görselleri al (post media'dan)
+  // Batch olarak post görselleri ve post bilgileri al (post media'dan)
   const postImages = new Map<string, string | null>();
+  const postContents = new Map<string, string | null>();
+  const postTypes = new Map<string, string | null>();
   if (postIds.size > 0) {
     // Post'ların media'larını al
     const postMediaList = await prisma.postMedia.findMany({
@@ -183,6 +189,30 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       if (!postImages.has(media.postId)) {
         postImages.set(media.postId, resolveMediaUrl(media.mediaUrl));
       }
+    });
+
+    // Post'ların content ve type bilgilerini al
+    const posts = await prisma.contentPost.findMany({
+      where: { id: { in: Array.from(postIds) } },
+      select: { id: true, body: true, type: true },
+    });
+
+    posts.forEach((post) => {
+      postContents.set(post.id, post.body);
+      postTypes.set(post.id, post.type);
+    });
+  }
+
+  // Batch olarak comment bilgileri al
+  const commentDescriptions = new Map<string, string | null>();
+  if (commentIds.size > 0) {
+    const comments = await prisma.contentComment.findMany({
+      where: { id: { in: Array.from(commentIds) } },
+      select: { id: true, comment: true },
+    });
+
+    comments.forEach((comment) => {
+      commentDescriptions.set(comment.id, comment.comment);
     });
   }
 
@@ -397,6 +427,7 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       userId: string;
       type: NotificationType;
       avatar?: string | null;
+      username?: string | null;
       data: any;
       read: boolean;
       createdAt: string;
@@ -405,6 +436,7 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       userId: notification.userId,
       type: notification.type,
       avatar: undefined,
+      username: undefined,
       data: notification.data,
       read: notification.read,
       createdAt: notification.createdAt,
@@ -433,6 +465,11 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
         if (!enriched.avatar) {
           enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
         }
+        // Username'i root'a ekle
+        const username = userNames.get(userId);
+        if (username) {
+          enriched.username = username;
+        }
       }
       // Post görseli ekle (sadece data içine)
       let postImageUrl = null;
@@ -443,16 +480,43 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       } else if (randomImageCache) {
         postImageUrl = randomImageCache;
       }
-      // Data içine ekle (sadece navigation için gerekli)
+      // Data içine ekle
       if (!enriched.data) enriched.data = {};
       enriched.data.postId = data.postId;
       if (postImageUrl) enriched.data.imageUrl = postImageUrl;
-      // Username ekle
-      if (userId) {
-        const username = userNames.get(userId);
-        if (username) enriched.data.username = username;
+      // Post content ve type ekle
+      if (data.postId) {
+        if (postContents.has(data.postId)) {
+          enriched.data.postContent = postContents.get(data.postId);
+        }
+        if (postTypes.has(data.postId)) {
+          enriched.data.postType = postTypes.get(data.postId);
+        }
       }
-      // likerId, commenterId, sharerId, userId duplicate kaldırıldı (root'ta var)
+      // Comment ise description ekle (POST_COMMENTED için)
+      if (type === NotificationType.POST_COMMENTED) {
+        // commentId'yi data'dan al veya commenterId'den bul
+        const commentId = data.commentId;
+        if (commentId && commentDescriptions.has(commentId)) {
+          enriched.data.description = commentDescriptions.get(commentId);
+        }
+        // commentId'yi data'da tut (navigation için gerekli olabilir)
+        // Ama commenterId ve commenterName'i kaldır (root'ta userId ve username var)
+        if (enriched.data) {
+          delete enriched.data.commenterId;
+          delete enriched.data.commenterName;
+        }
+      } else {
+        // Diğer post bildirimleri için gereksiz alanları kaldır
+        if (enriched.data) {
+          delete enriched.data.likerId;
+          delete enriched.data.sharerId;
+          delete enriched.data.userId;
+          delete enriched.data.likerName;
+          delete enriched.data.sharerName;
+          delete enriched.data.userName;
+        }
+      }
     }
 
     // Yorum ile ilgili (2)
@@ -464,6 +528,11 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
         if (!enriched.avatar) {
           enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
         }
+        // Username'i root'a ekle
+        const username = userNames.get(userId);
+        if (username) {
+          enriched.username = username;
+        }
       }
       // Post görseli ekle (sadece data içine)
       let postImageUrl = null;
@@ -472,15 +541,23 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       } else if (randomImageCache) {
         postImageUrl = randomImageCache;
       }
-      // Data içine ekle (sadece navigation için)
+      // Data içine ekle
       if (!enriched.data) enriched.data = {};
       enriched.data.postId = data.postId;
       enriched.data.commentId = data.commentId;
       if (postImageUrl) enriched.data.imageUrl = postImageUrl;
-      // Username ekle
-      if (userId) {
-        const username = userNames.get(userId);
-        if (username) enriched.data.username = username;
+      // Post content ve type ekle
+      if (data.postId) {
+        if (postContents.has(data.postId)) {
+          enriched.data.postContent = postContents.get(data.postId);
+        }
+        if (postTypes.has(data.postId)) {
+          enriched.data.postType = postTypes.get(data.postId);
+        }
+      }
+      // Comment description ekle
+      if (data.commentId && commentDescriptions.has(data.commentId)) {
+        enriched.data.description = commentDescriptions.get(data.commentId);
       }
       // likerId, replierId, commenterId kaldırıldı (root'ta var)
     }
@@ -1010,9 +1087,13 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
       enrichedNotifications = notificationJSONs;
     }
 
+    // Bildirimleri grupla (backend'de gruplama)
+    const { groupNotifications } = await import('../../application/notification/notification-grouper');
+    const groupedNotifications = groupNotifications(enrichedNotifications);
+
     return res.json({
       success: true,
-      data: enrichedNotifications,
+      data: groupedNotifications,
       pagination: {
         total,
         limit: parseQueryInt(limit, 20),

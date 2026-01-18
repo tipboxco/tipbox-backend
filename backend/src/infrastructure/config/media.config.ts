@@ -88,17 +88,56 @@ export function resolveMediaUrl(mediaPath: string | null | undefined, useDefault
     // YOUR_DEVICE_IP placeholder'ını gerçek base URL ile değiştir
     if (mediaPath.includes('YOUR_DEVICE_IP')) {
       const baseUrl = getPublicMediaBaseUrl();
-      // URL'den hostname ve port'u çıkar
       try {
         const url = new URL(mediaPath);
         const pathname = url.pathname;
-        // Base URL ile pathname'i birleştir
         return `${baseUrl}${pathname}`;
       } catch {
-        // URL parse edilemezse, YOUR_DEVICE_IP'i base URL ile değiştir
         return mediaPath.replace(/http:\/\/YOUR_DEVICE_IP:9000/, baseUrl);
       }
     }
+    
+    // Eğer URL tipbox-media içeriyorsa (MinIO bucket path'leri), 
+    // eski base URL'i yeni base URL ile değiştir
+    const currentBaseUrl = getPublicMediaBaseUrl();
+    
+    // tipbox-media içeren URL'ler için pathname'i çıkar ve yeni base URL ile birleştir
+    if (mediaPath.includes('tipbox-media')) {
+      try {
+        const url = new URL(mediaPath);
+        const pathname = url.pathname;
+        // Pathname zaten /tipbox-media/ ile başlıyorsa, direkt kullan
+        // Değilse, tipbox-media ekle
+        if (pathname.startsWith('/tipbox-media/')) {
+          return `${currentBaseUrl}${pathname}`;
+        } else {
+          // Pathname'den başındaki /'yi kaldır
+          const cleanPath = pathname.replace(/^\//, '');
+          return `${currentBaseUrl}/tipbox-media/${cleanPath}`;
+        }
+      } catch {
+        // URL parse edilemezse, regex ile path'i çıkar
+        const pathMatch = mediaPath.match(/\/tipbox-media\/.+$/);
+        if (pathMatch) {
+          return `${currentBaseUrl}${pathMatch[0]}`;
+        }
+      }
+    }
+    
+    // tipbox-media içermeyen URL'ler için, sadece hostname/port farklıysa güncelle
+    try {
+      const url = new URL(mediaPath);
+      const currentUrl = new URL(currentBaseUrl);
+      
+      // Eğer hostname veya port farklıysa, yeni base URL ile değiştir
+      if (url.hostname !== currentUrl.hostname || url.port !== currentUrl.port) {
+        const pathname = url.pathname;
+        return `${currentBaseUrl}${pathname}`;
+      }
+    } catch {
+      // URL parse edilemezse, olduğu gibi döndür
+    }
+    
     return mediaPath;
   }
   // Path'i temizle (başındaki / ve tipbox-media/ prefix'ini kaldır)

@@ -1,7 +1,10 @@
 import { DMThread } from '../../domain/messaging/dm-thread.entity';
+import { DMMessage } from '../../domain/messaging/dm-message.entity';
 import { DmMessagePrismaRepository } from '../../infrastructure/repositories/dm-message-prisma.repository';
 import { DMThreadPrismaRepository } from '../../infrastructure/repositories/dm-thread-prisma.repository';
 import { UserPrismaRepository } from '../../infrastructure/repositories/user-prisma.repository';
+import { MessageReactionPrismaRepository } from '../../infrastructure/repositories/message-reaction-prisma.repository';
+import { MessageReadReceiptPrismaRepository } from '../../infrastructure/repositories/message-read-receipt-prisma.repository';
 import SocketManager from '../../infrastructure/realtime/socket-manager';
 import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
@@ -48,6 +51,8 @@ export class MessagingService {
   private dmMessageRepo = new DmMessagePrismaRepository();
   private dmThreadRepo = new DMThreadPrismaRepository();
   private userRepo = new UserPrismaRepository();
+  private messageReactionRepo = new MessageReactionPrismaRepository();
+  private messageReadReceiptRepo = new MessageReadReceiptPrismaRepository();
   private supportRequestService = new SupportRequestService();
   private notificationService = new NotificationService();
   private walletService = new WalletService();
@@ -1284,6 +1289,288 @@ export class MessagingService {
       logger.error(`Failed to delete thread ${threadId} by user ${userId}`, error);
       throw error;
     }
+  }
+
+  async editMessage(messageId: string, userId: string, newMessage: string): Promise<void> {
+    const message = await this.dmMessageRepo.findById(messageId);
+    if (!message) {
+      throw new Error('Message not found');
+    }
+
+    if (message.senderId !== userId) {
+      throw new Error('Forbidden: You can only edit your own messages');
+    }
+
+    if (message.isDeleted()) {
+      throw new Error('Cannot edit deleted message');
+    }
+
+    if (!message.canBeEdited()) {
+      throw new Error('Message cannot be edited after 15 minutes');
+    }
+
+    const updatedMessage = await this.dmMessageRepo.updateMessage(messageId, newMessage);
+    if (!updatedMessage) {
+      throw new Error('Failed to update message');
+    }
+
+    // Emit socket event
+    const socketHandler = SocketManager.getInstance().getSocketHandler();
+    const editEvent = {
+      messageId,
+      threadId: message.threadId,
+      message: newMessage,
+      editedAt: updatedMessage.editedAt?.toISOString(),
+      timestamp: new Date().toISOString(),
+    };
+
+    socketHandler.sendToRoom(`thread:${message.threadId}`, 'message_edited', editEvent);
+    logger.info(`Message edited: ${messageId} by user ${userId}`);
+  }
+
+  async deleteMessage(messageId: string, userId: string): Promise<void> {
+    const message = await this.dmMessageRepo.findById(messageId);
+    if (!message) {
+      throw new Error('Message not found');
+    }
+
+    if (message.senderId !== userId) {
+      throw new Error('Forbidden: You can only delete your own messages');
+    }
+
+    const deletedMessage = await this.dmMessageRepo.markAsDeleted(messageId, userId);
+    if (!deletedMessage) {
+      throw new Error('Failed to delete message');
+    }
+
+    // Emit socket event
+    const socketHandler = SocketManager.getInstance().getSocketHandler();
+    const deleteEvent = {
+      messageId,
+      threadId: message.threadId,
+      deletedAt: deletedMessage.deletedAt?.toISOString(),
+      timestamp: new Date().toISOString(),
+    };
+
+    socketHandler.sendToRoom(`thread:${message.threadId}`, 'message_deleted', deleteEvent);
+    logger.info(`Message deleted: ${messageId} by user ${userId}`);
+  }
+
+  async addReaction(messageId: string, userId: string, emoji: string): Promise<void> {
+    const message = await this.dmMessageRepo.findById(messageId);
+    if (!message) {
+      throw new Error('Message not found');
+    }
+
+    if (message.isDeleted()) {
+      throw new Error('Cannot react to deleted message');
+    }
+
+    // Check if user already reacted with this emoji
+    const existingReaction = await this.messageReactionRepo.findByUserIdAndMessageId(userId, messageId, emoji);
+    if (existingReaction) {
+      throw new Error('Already reacted with this emoji');
+    }
+
+    const reaction = await this.messageReactionRepo.create({
+      messageId,
+      userId,
+      emoji
+    });
+
+    // Emit socket event
+    const socketHandler = SocketManager.getInstance().getSocketHandler();
+    const reactionEvent = {
+      messageId,
+      threadId: message.threadId,
+      emoji,
+      action: 'add',
+      userId,
+      reactionId: reaction.id,
+      timestamp: new Date().toISOString(),
+    };
+
+    socketHandler.sendToRoom(`thread:${message.threadId}`, 'message_reaction', reactionEvent);
+    logger.info(`Reaction added: ${emoji} to message ${messageId} by user ${userId}`);
+  }
+
+  async removeReaction(messageId: string, userId: string, emoji: string): Promise<void> {
+    const message = await this.dmMessageRepo.findById(messageId);
+    if (!message) {
+      throw new Error('Message not found');
+    }
+
+    const reaction = await this.messageReactionRepo.findByUserIdAndMessageId(userId, messageId, emoji);
+    if (!reaction) {
+      throw new Error('Reaction not found');
+    }
+
+    if (reaction.userId !== userId) {
+      throw new Error('Forbidden: You can only remove your own reactions');
+    }
+
+    await this.messageReactionRepo.delete(reaction.id);
+
+    // Emit socket event
+    const socketHandler = SocketManager.getInstance().getSocketHandler();
+    const reactionEvent = {
+      messageId,
+      threadId: message.threadId,
+      emoji,
+      action: 'remove',
+      userId,
+      reactionId: reaction.id,
+      timestamp: new Date().toISOString(),
+    };
+
+    socketHandler.sendToRoom(`thread:${message.threadId}`, 'message_reaction', reactionEvent);
+    logger.info(`Reaction removed: ${emoji} from message ${messageId} by user ${userId}`);
+  }
+
+  async getMessageReactions(messageId: string): Promise<Array<{ emoji: string; count: number; users: string[] }>> {
+    const message = await this.dmMessageRepo.findById(messageId);
+    if (!message) {
+      throw new Error('Message not found');
+    }
+
+    return await this.messageReactionRepo.findByMessageIdGrouped(messageId);
+  }
+
+  async searchMessages(threadId: string, query: string, limit: number = 50, offset: number = 0): Promise<DMMessage[]> {
+    // Validate thread access
+    const thread = await this.dmThreadRepo.findById(threadId);
+    if (!thread) {
+      throw new Error('Thread not found');
+    }
+
+    if (!query || query.trim().length === 0) {
+      throw new Error('Query parameter is required');
+    }
+
+    return await this.dmMessageRepo.searchMessages(threadId, query.trim(), limit, offset);
+  }
+
+  async uploadMedia(
+    threadId: string,
+    userId: string,
+    mediaUrl: string,
+    mediaType: 'image' | 'video' | 'audio' | 'file',
+    fileName?: string,
+    fileSize?: bigint,
+    thumbnailUrl?: string,
+    caption?: string
+  ): Promise<void> {
+    // Validate thread access
+    const thread = await this.dmThreadRepo.findById(threadId);
+    if (!thread) {
+      throw new Error('Thread not found');
+    }
+
+    if (thread.userOneId !== userId && thread.userTwoId !== userId) {
+      throw new Error('Forbidden: user is not part of this thread');
+    }
+
+    // Determine recipient
+    const recipientId = thread.userOneId === userId ? thread.userTwoId : thread.userOneId;
+
+    // Create message with media
+    const createdMessage = await this.dmMessageRepo.create({
+      threadId,
+      senderId: userId,
+      message: caption || '',
+      isRead: false,
+      sentAt: new Date(),
+      mediaUrl,
+      mediaType,
+      thumbnailUrl,
+      fileName,
+      fileSize,
+      caption,
+      status: 'sent',
+    });
+
+    // Emit socket event
+    const socketHandler = SocketManager.getInstance().getSocketHandler();
+    const newMessageEvent = {
+      messageId: createdMessage.id,
+      threadId,
+      senderId: userId,
+      recipientId,
+      message: caption || '',
+      messageType: mediaType,
+      mediaUrl,
+      thumbnailUrl,
+      fileName,
+      fileSize: fileSize ? Number(fileSize) : null,
+      caption,
+      timestamp: createdMessage.sentAt.toISOString(),
+    };
+
+    socketHandler.sendMessageToUser(recipientId, 'new_message', newMessageEvent);
+    socketHandler.sendToRoom(`thread:${threadId}`, 'new_message', newMessageEvent);
+    socketHandler.sendMessageToUser(userId, 'message_sent', newMessageEvent);
+
+    logger.info(`Media uploaded to thread ${threadId} by user ${userId}: ${mediaType}`);
+  }
+
+  async markMessageAsDelivered(messageId: string): Promise<void> {
+    const message = await this.dmMessageRepo.findById(messageId);
+    if (!message) {
+      throw new Error('Message not found');
+    }
+
+    if (message.status === 'delivered' || message.status === 'read') {
+      return; // Already delivered or read
+    }
+
+    await this.dmMessageRepo.markAsDelivered(messageId);
+
+    // Emit socket event
+    const socketHandler = SocketManager.getInstance().getSocketHandler();
+    const deliveredEvent = {
+      messageId,
+      threadId: message.threadId,
+      deliveredAt: new Date().toISOString(),
+    };
+
+    socketHandler.sendToRoom(`thread:${message.threadId}`, 'message_delivered', deliveredEvent);
+    logger.info(`Message marked as delivered: ${messageId}`);
+  }
+
+  async markMessageAsRead(messageId: string, userId: string): Promise<void> {
+    const message = await this.dmMessageRepo.findById(messageId);
+    if (!message) {
+      throw new Error('Message not found');
+    }
+
+    if (message.senderId === userId) {
+      return; // Don't mark own messages as read
+    }
+
+    // Validate thread access
+    const thread = await this.dmThreadRepo.findById(message.threadId);
+    if (!thread) {
+      throw new Error('Thread not found');
+    }
+
+    if (thread.userOneId !== userId && thread.userTwoId !== userId) {
+      throw new Error('Forbidden: user is not part of this thread');
+    }
+
+    await this.dmMessageRepo.markAsReadWithReceipt(messageId, userId);
+
+    // Emit socket event
+    const socketHandler = SocketManager.getInstance().getSocketHandler();
+    const readEvent = {
+      messageId,
+      threadId: message.threadId,
+      userId,
+      readAt: new Date().toISOString(),
+    };
+
+    socketHandler.sendMessageToUser(message.senderId, 'message_read', readEvent);
+    socketHandler.sendToRoom(`thread:${message.threadId}`, 'message_read', readEvent);
+    logger.info(`Message marked as read: ${messageId} by user ${userId}`);
   }
 
 }

@@ -34,7 +34,7 @@ export class TransactionPrismaRepository {
         amount: data.amount,
         fromAddress: data.fromAddress,
         toAddress: data.toAddress,
-        metadata: data.metadata || null,
+        metadata: data.metadata ?? {},
         txHash: null,
         provider: data.provider || 'backend',
         errorMessage: null,

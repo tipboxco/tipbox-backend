@@ -471,7 +471,7 @@ export class AuthService implements IAuthService {
           where: { id: existingUserByEmail.id },
           data: {
             auth0Id,
-            emailVerified: emailVerified || existingUserByEmail.emailVerified,
+            emailVerified: emailVerified ?? existingUserByEmail.emailVerified ?? false,
           },
         });
         

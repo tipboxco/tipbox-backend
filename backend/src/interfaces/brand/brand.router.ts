@@ -445,6 +445,104 @@ router.get(
 
 /**
  * @openapi
+ * /brands/{brandId}/groups/{groupId}/products:
+ *   get:
+ *     summary: Brand'e ait belirli bir product group'un ürünlerini listele
+ *     description: Brand'e ait belirli bir product group içindeki products'ların pagination ile listelendiği endpoint. "Tümünü gör" butonu için kullanılır.
+ *     tags: [Brand]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: brandId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Brand ID'si
+ *       - in: path
+ *         name: groupId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Product Group ID'si
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *         description: Sayfa başına dönecek product sayısı (varsayılan 20)
+ *       - in: query
+ *         name: cursor
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Bir sonraki sayfa için cursor (önceki sayfanın son product ID'si)
+ *     responses:
+ *       200:
+ *         description: Products başarıyla listelendi.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       productId:
+ *                         type: string
+ *                       name:
+ *                         type: string
+ *                       image:
+ *                         type: string
+ *                         nullable: true
+ *                       stats:
+ *                         type: object
+ *                         properties:
+ *                           reviews:
+ *                             type: integer
+ *                           likes:
+ *                             type: integer
+ *                           share:
+ *                             type: integer
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       nullable: true
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
+ *       401:
+ *         description: Kimlik doğrulaması başarısız.
+ *       404:
+ *         description: Brand veya product group bulunamadı.
+ */
+router.get(
+  '/:brandId/groups/:groupId/products',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { brandId, groupId } = req.params;
+    const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
+    const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
+    const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
+
+    const result = await brandService.getBrandGroupProducts(brandId, groupId, {
+      cursor,
+      limit,
+    });
+    return res.json(result);
+  }),
+);
+
+/**
+ * @openapi
  * /brands/{brandId}/surveys:
  *   get:
  *     summary: Brand Survey & Gamification - Anketler

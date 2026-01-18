@@ -34,11 +34,14 @@ model User {
   contentRatings          ContentRating[]
   contentShares           ContentShare[]
   dmMessages              DMMessage[]
+  dmMessagesDeleted      DMMessage[]              @relation("DMMessageDeletedBy")
   dmRequestsSent          DMRequest[]             @relation("DMRequestSender")
   dmRequestsReceived      DMRequest[]             @relation("DMRequestReceiver")
   dmSupportSessions       DMSupportSession[]
   dmThreadsAsUserOne      DMThread[]              @relation("DMThreadUserOne")
   dmThreadsAsUserTwo      DMThread[]              @relation("DMThreadUserTwo")
+  messageReactions        MessageReaction[]
+  messageReadReceipts      MessageReadReceipt[]
   emailVerificationCodes  EmailVerificationCode[]
   expertAnswers           ExpertAnswer[]
   expertRequests          ExpertRequest[]
@@ -85,6 +88,11 @@ model User {
   wallets                 Wallet[]
   wishboxRewards          WishboxReward[]
   wishboxStats            WishboxStats[]
+  newsLikes               NewsLike[]
+  newsComments            NewsComment[]
+  newsShares              NewsShare[]
+  newsFavorites           NewsFavorite[]
+  newsCommentLikes        NewsCommentLike[]
 
   @@map("users")
 }
@@ -827,7 +835,7 @@ model Badge {
   bridgeRewards    BridgeReward[]
   cosmeticProfiles Profile[]         @relation("ProfileCosmeticBadge")
   userBadges       UserBadge[]
-  eventBadges      EventBadge[]      // ✅ YENİ
+  eventBadges      EventBadge[] // ✅ YENİ
 
   @@map("badges")
 }
@@ -953,6 +961,7 @@ model Brand {
   userStats     BridgeUserStats[]
   products      Product[]
   wishboxEvents WishboxEvent[]
+  news          News[]
 
   @@map("brands")
 }
@@ -1078,6 +1087,116 @@ model BridgeReward {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("bridge_rewards")
+}
+
+model News {
+  id             String         @id @default(uuid()) @db.Uuid
+  brandId        String         @map("brand_id") @db.Uuid
+  title          String
+  content        String
+  bannerImageUrl String?        @map("banner_image_url")
+  source         String         @default("tipbox")
+  author         String?
+  tags           String[]       @default([])
+  likesCount     Int            @default(0) @map("likes_count")
+  commentsCount  Int            @default(0) @map("comments_count")
+  sharesCount    Int            @default(0) @map("shares_count")
+  favoritesCount Int            @default(0) @map("favorites_count")
+  viewsCount     Int            @default(0) @map("views_count")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+  brand          Brand          @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  likes          NewsLike[]
+  comments       NewsComment[]
+  shares         NewsShare[]
+  favorites      NewsFavorite[]
+
+  @@index([brandId])
+  @@index([createdAt])
+  @@map("news")
+}
+
+model NewsLike {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  newsId    String   @map("news_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  news      News     @relation(fields: [newsId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, newsId])
+  @@index([userId])
+  @@index([newsId])
+  @@map("news_likes")
+}
+
+model NewsComment {
+  id         String            @id @db.VarChar(26)
+  newsId     String            @map("news_id") @db.Uuid
+  userId     String            @map("user_id") @db.Uuid
+  parentId   String?           @map("parent_id") @db.VarChar(26)
+  comment    String
+  likesCount Int               @default(0) @map("likes_count")
+  createdAt  DateTime          @default(now()) @map("created_at")
+  updatedAt  DateTime          @updatedAt @map("updated_at")
+  news       News              @relation(fields: [newsId], references: [id], onDelete: Cascade)
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent     NewsComment?      @relation("NewsCommentReplies", fields: [parentId], references: [id])
+  replies    NewsComment[]     @relation("NewsCommentReplies")
+  likes      NewsCommentLike[]
+
+  @@index([newsId])
+  @@index([userId])
+  @@index([parentId])
+  @@map("news_comments")
+}
+
+model NewsCommentLike {
+  id        String      @id @default(uuid()) @db.Uuid
+  userId    String      @map("user_id") @db.Uuid
+  commentId String      @map("comment_id") @db.VarChar(26)
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+  comment   NewsComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, commentId])
+  @@index([userId])
+  @@index([commentId])
+  @@map("news_comment_likes")
+}
+
+model NewsShare {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  newsId    String    @map("news_id") @db.Uuid
+  shareType ShareType @map("share_type")
+  platform  String?
+  createdAt DateTime  @default(now()) @map("created_at")
+  news      News      @relation(fields: [newsId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, newsId])
+  @@index([newsId])
+  @@index([userId])
+  @@index([shareType])
+  @@map("news_shares")
+}
+
+model NewsFavorite {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  newsId    String   @map("news_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  news      News     @relation(fields: [newsId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, newsId])
+  @@index([userId])
+  @@index([newsId])
+  @@map("news_favorites")
 }
 
 model Wallet {
@@ -1264,7 +1383,7 @@ model WishboxEvent {
   subCategory    SubCategory?       @relation(fields: [subCategoryId], references: [id])
   rewards        WishboxReward[]
   stats          WishboxStats[]
-  eventBadges    EventBadge[]       // ✅ YENİ
+  eventBadges    EventBadge[] // ✅ YENİ
 
   @@index([brandId])
   @@index([status, startDate, endDate])
@@ -1338,35 +1457,105 @@ model DMThread {
   unreadCountUserOne Int                @default(0) @map("unread_count_user_one")
   unreadCountUserTwo Int                @default(0) @map("unread_count_user_two")
   isSupportThread    Boolean            @default(false) @map("is_support_thread")
+  lastMessageId      String?            @map("last_message_id") @db.Uuid
+  lastMessageAt      DateTime?          @map("last_message_at")
   messages           DMMessage[]
   supportRequests    DMRequest[]        @relation("DMRequestThread")
   supportSessions    DMSupportSession[]
+  lastMessage        DMMessage?         @relation("DMThreadLastMessage", fields: [lastMessageId], references: [id], onDelete: SetNull)
   userOne            User               @relation("DMThreadUserOne", fields: [userOneId], references: [id], onDelete: Cascade)
   userTwo            User               @relation("DMThreadUserTwo", fields: [userTwoId], references: [id], onDelete: Cascade)
 
   @@index([userOneId])
   @@index([userTwoId])
   @@index([isSupportThread])
+  @@index([lastMessageAt])
   @@map("dm_threads")
 }
 
 model DMMessage {
-  id        String           @id @default(uuid()) @db.Uuid
-  threadId  String           @map("thread_id") @db.Uuid
-  senderId  String           @map("sender_id") @db.Uuid
-  message   String
-  sentAt    DateTime         @default(now()) @map("sent_at")
-  isRead    Boolean          @map("is_read")
-  createdAt DateTime         @default(now()) @map("created_at")
-  updatedAt DateTime         @updatedAt @map("updated_at")
-  context   DMMessageContext @default(DM)
-  sender    User             @relation(fields: [senderId], references: [id], onDelete: Cascade)
-  thread    DMThread         @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  id               String                @id @default(uuid()) @db.Uuid
+  threadId         String                 @map("thread_id") @db.Uuid
+  senderId         String                 @map("sender_id") @db.Uuid
+  message          String
+  sentAt           DateTime               @default(now()) @map("sent_at")
+  isRead           Boolean                 @map("is_read")
+  createdAt        DateTime               @default(now()) @map("created_at")
+  updatedAt        DateTime               @updatedAt @map("updated_at")
+  context          DMMessageContext        @default(DM)
+  
+  // Media fields
+  mediaUrl         String?                @map("media_url")
+  mediaType        String?                 @map("media_type")
+  thumbnailUrl     String?                 @map("thumbnail_url")
+  fileName         String?                 @map("file_name")
+  fileSize         BigInt?                 @map("file_size")
+  caption          String?
+  
+  // Reply/Threading
+  replyToMessageId String?                @map("reply_to_message_id") @db.Uuid
+  
+  // Status Tracking
+  status           String                  @default("sent") // 'sending', 'sent', 'delivered', 'read'
+  deliveredAt      DateTime?               @map("delivered_at")
+  readAt           DateTime?               @map("read_at")
+  
+  // Deletion
+  isDeleted        Boolean                 @default(false) @map("is_deleted")
+  deletedAt        DateTime?               @map("deleted_at")
+  deletedBy        String?                 @map("deleted_by") @db.Uuid
+  
+  // Editing
+  isEdited         Boolean                 @default(false) @map("is_edited")
+  editedAt         DateTime?               @map("edited_at")
+  
+  // Relations
+  sender           User                    @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  thread           DMThread                @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  replyToMessage   DMMessage?              @relation("DMMessageReply", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies          DMMessage[]             @relation("DMMessageReply")
+  deletedByUser    User?                   @relation("DMMessageDeletedBy", fields: [deletedBy], references: [id], onDelete: SetNull)
+  reactions        MessageReaction[]
+  readReceipts     MessageReadReceipt[]
+  threadsAsLastMessage DMThread[]          @relation("DMThreadLastMessage")
 
   @@index([threadId])
   @@index([threadId, isRead])
+  @@index([threadId, sentAt(sort: Desc)])
   @@index([senderId])
+  @@index([replyToMessageId])
+  @@index([status])
+  @@index([isDeleted])
   @@map("dm_messages")
+}
+
+model MessageReaction {
+  id        String    @id @default(uuid()) @db.Uuid
+  messageId String    @map("message_id") @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  emoji     String
+  createdAt DateTime  @default(now()) @map("created_at")
+  message   DMMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+  @@index([userId])
+  @@map("message_reactions")
+}
+
+model MessageReadReceipt {
+  id        String    @id @default(uuid()) @db.Uuid
+  messageId String    @map("message_id") @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  readAt    DateTime  @default(now()) @map("read_at")
+  message   DMMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([messageId])
+  @@index([userId])
+  @@map("message_read_receipts")
 }
 
 model DMRequest {

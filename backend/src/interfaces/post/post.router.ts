@@ -841,6 +841,278 @@ router.get(
 
 /**
  * @openapi
+ * /posts/{id}/likes:
+ *   get:
+ *     summary: Post beğenenlerini listele
+ *     description: Belirli bir post'a beğeni atan kullanıcıları listeler. Instagram gibi bottom sheet'te gösterilmek için tasarlanmıştır.
+ *     tags: [Posts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Post ID'si
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 50
+ *         description: Sayfa başına kullanıcı sayısı
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           minimum: 0
+ *           default: 0
+ *         description: Atlanacak kullanıcı sayısı
+ *     responses:
+ *       200:
+ *         description: Post beğenenleri başarıyla getirildi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         description: Kullanıcı ID'si
+ *                       username:
+ *                         type: string
+ *                         nullable: true
+ *                         description: Kullanıcı adı
+ *                       avatar:
+ *                         type: string
+ *                         nullable: true
+ *                         description: Kullanıcı avatar URL'i
+ *                       tags:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             type:
+ *                               type: string
+ *                               enum: [verified, expert, cosmetic, title]
+ *                             label:
+ *                               type: string
+ *                               description: Tag etiketi (badge adı, title adı vb.)
+ *                             imageUrl:
+ *                               type: string
+ *                               nullable: true
+ *                               description: Tag görseli (badge görseli vb.)
+ *                       likedAt:
+ *                         type: string
+ *                         format: date-time
+ *                         description: Beğeni tarihi
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: integer
+ *                     limit:
+ *                       type: integer
+ *                     offset:
+ *                       type: integer
+ *                     hasMore:
+ *                       type: boolean
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ *       404:
+ *         description: Post bulunamadı
+ */
+router.get(
+  '/:id/likes',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    if (!userPayload?.id && !userPayload?.userId && !userPayload?.sub) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { id: postId } = req.params;
+    if (!postId) {
+      return res.status(400).json({ message: 'Post ID is required' });
+    }
+
+    // Post'un var olup olmadığını kontrol et
+    const { getPrisma } = await import('../../infrastructure/repositories/prisma.client');
+    const prisma = getPrisma();
+    const post = await prisma.contentPost.findUnique({
+      where: { id: postId },
+      select: { id: true },
+    });
+
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    // Pagination parametreleri
+    const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
+    const offsetParam = req.query.offset ? parseInt(req.query.offset as string, 10) : 0;
+    const limit = Math.min(Math.max(limitParam, 1), 100);
+    const offset = Math.max(offsetParam, 0);
+
+    // Media URL resolver
+    const { resolveMediaUrl } = await import('../../infrastructure/config/media.config');
+
+    // Post beğenilerini getir (user bilgileri ile)
+    const [likes, total] = await Promise.all([
+      prisma.contentLike.findMany({
+        where: {
+          postId,
+          commentId: null, // Sadece post beğenileri
+        },
+        include: {
+          user: {
+            include: {
+              profile: {
+                select: {
+                  userName: true,
+                  displayName: true,
+                  cosmeticBadgeId: true,
+                  cosmeticBadge: {
+                    select: {
+                      id: true,
+                      name: true,
+                      imageUrl: true,
+                      type: true,
+                    },
+                  },
+                },
+              },
+              avatars: {
+                where: { isActive: true },
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+              },
+              titles: {
+                orderBy: { earnedAt: 'desc' },
+                take: 1,
+              },
+              userBadges: {
+                where: {
+                  claimed: true,
+                  visibility: 'public',
+                },
+                include: {
+                  badge: {
+                    select: {
+                      id: true,
+                      name: true,
+                      imageUrl: true,
+                      type: true,
+                    },
+                  },
+                },
+                orderBy: { claimedAt: 'desc' },
+                take: 5, // En fazla 5 badge göster
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+      prisma.contentLike.count({
+        where: {
+          postId,
+          commentId: null,
+        },
+      }),
+    ]);
+
+    // Kullanıcı bilgilerini formatla
+    const users = likes.map((like) => {
+      const user = like.user;
+      const profile = user.profile;
+      const avatar = user.avatars[0];
+      const title = user.titles[0];
+      const cosmeticBadge = profile?.cosmeticBadge || null;
+      const expertBadges = user.userBadges
+        .filter((ub) => ub.badge.type === 'ACHIEVEMENT' || ub.badge.type === 'EVENT')
+        .map((ub) => ub.badge);
+
+      // Tags oluştur
+      const tags: Array<{
+        type: 'verified' | 'expert' | 'cosmetic' | 'title';
+        label: string;
+        imageUrl: string | null;
+      }> = [];
+
+      // Cosmetic badge (profil badge'i)
+      if (cosmeticBadge) {
+        tags.push({
+          type: 'cosmetic',
+          label: cosmeticBadge.name,
+          imageUrl: resolveMediaUrl(cosmeticBadge.imageUrl),
+        });
+      }
+
+      // Expert badges (achievement/event badges)
+      expertBadges.forEach((badge) => {
+        tags.push({
+          type: 'expert',
+          label: badge.name,
+          imageUrl: resolveMediaUrl(badge.imageUrl),
+        });
+      });
+
+      // User title
+      if (title) {
+        tags.push({
+          type: 'title',
+          label: title.title,
+          imageUrl: null,
+        });
+      }
+
+      // Verified tag (eğer verified badge varsa)
+      const verifiedBadge = user.userBadges.find((ub) =>
+        ub.badge.name.toLowerCase().includes('verified')
+      );
+      if (verifiedBadge) {
+        tags.push({
+          type: 'verified',
+          label: verifiedBadge.badge.name,
+          imageUrl: resolveMediaUrl(verifiedBadge.badge.imageUrl),
+        });
+      }
+
+      return {
+        id: user.id,
+        username: profile?.userName || null,
+        avatar: resolveMediaUrl(avatar?.imageUrl || null, true),
+        tags,
+        likedAt: like.createdAt.toISOString(),
+      };
+    });
+
+    return res.json({
+      success: true,
+      data: users,
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasMore: offset + users.length < total,
+      },
+    });
+  })
+);
+
+/**
+ * @openapi
  * /posts/{id}:
  *   put:
  *     summary: Gönderi güncelle
