@@ -31,7 +31,7 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
     }
     
     try {
-      const brandsCsvPath = path.join(csvDataPath, "brands.csv")
+      const brandsCsvPath = path.join(csvDataPath, "brands_2.csv")
       if (fs.existsSync(brandsCsvPath)) {
         const brandsCsvContent = fs.readFileSync(brandsCsvPath, "utf-8")
         const brandsData = Papa.parse(brandsCsvContent, {
@@ -66,7 +66,7 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
         },
         brands: {
           count: brandsCount,
-          file_exists: fs.existsSync(path.join(csvDataPath, "brands.csv")),
+          file_exists: fs.existsSync(path.join(csvDataPath, "brands_2.csv")),
         },
         products: {
           count: productsCount,

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import { defineRouteConfig } from "@medusajs/admin-sdk"
 import { 
@@ -66,6 +66,9 @@ const BrandsPage = () => {
   const [brandCategories, setBrandCategories] = useState<Array<{ id: string; title: string }>>([])
   const [saving, setSaving] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("")
+  const activeFetchRef = useRef<{ requestId: number; controller: AbortController } | null>(null)
+  const requestIdRef = useRef(0)
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
@@ -88,26 +91,58 @@ const BrandsPage = () => {
         params.append("q", search)
       }
       
+      // Cancel any in-flight request to avoid stale results overwriting UI
+      if (activeFetchRef.current) {
+        activeFetchRef.current.controller.abort()
+      }
+      const controller = new AbortController()
+      const requestId = ++requestIdRef.current
+      activeFetchRef.current = { requestId, controller }
+
       const response = await fetch(`/admin/brands?${params}`, {
         credentials: "include",
+        signal: controller.signal,
       })
+      if (!response.ok) {
+        throw new Error(`Brands fetch failed: ${response.status}`)
+      }
       const data: BrandsResponse = await response.json()
       
+      // Only apply the latest response (prevents race conditions)
+      if (activeFetchRef.current?.requestId !== requestId) {
+        return
+      }
+
       setBrands(data.brands || [])
       setTotalCount(data.count || 0)
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return
+      }
       console.error("Markalar yüklenirken hata:", error)
       toast.error("Hata", {
         description: "Markalar yüklenirken bir hata oluştu",
       })
     } finally {
-      setLoading(false)
+      // Avoid flipping loading=false for a request that is no longer the latest
+      const isLatest = activeFetchRef.current?.requestId === requestIdRef.current
+      if (isLatest) {
+        setLoading(false)
+      }
     }
   }, [itemsPerPage])
 
   useEffect(() => {
-    fetchBrands(currentPage, itemsPerPage, searchQuery)
-  }, [currentPage, itemsPerPage, fetchBrands])
+    const timeoutId = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery.trim())
+    }, 300)
+
+    return () => clearTimeout(timeoutId)
+  }, [searchQuery])
+
+  useEffect(() => {
+    fetchBrands(currentPage, itemsPerPage, debouncedSearchQuery)
+  }, [currentPage, itemsPerPage, debouncedSearchQuery, fetchBrands])
 
   // Fetch brand categories for dropdown
   useEffect(() => {
@@ -124,19 +159,6 @@ const BrandsPage = () => {
     }
     fetchBrandCategories()
   }, [])
-
-  // Search with debounce
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (currentPage === 1) {
-        fetchBrands(1, itemsPerPage, searchQuery)
-      } else {
-        setCurrentPage(1)
-      }
-    }, 300)
-
-    return () => clearTimeout(timeoutId)
-  }, [searchQuery])
 
   const totalPages = Math.ceil(totalCount / itemsPerPage)
   const startItem = totalCount === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1
@@ -180,7 +202,7 @@ const BrandsPage = () => {
             description: "Marka başarıyla güncellendi",
           })
           setDrawerOpen(false)
-          fetchBrands(currentPage, itemsPerPage, searchQuery)
+          fetchBrands(currentPage, itemsPerPage, debouncedSearchQuery)
         }
       } else {
         const response = await fetch("/admin/brands", {
@@ -199,7 +221,7 @@ const BrandsPage = () => {
             description: "Marka başarıyla oluşturuldu",
           })
           setDrawerOpen(false)
-          fetchBrands(currentPage, itemsPerPage, searchQuery)
+          fetchBrands(currentPage, itemsPerPage, debouncedSearchQuery)
         }
       }
     } catch (error) {
@@ -329,9 +351,17 @@ const BrandsPage = () => {
             <Input
               placeholder="Marka ara..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value
+                setSearchQuery(next)
+                // Always search from page 1 to avoid "random-looking" results
+                if (currentPage !== 1) {
+                  setCurrentPage(1)
+                }
+              }}
               className="pl-10"
               size="small"
+              disabled={saving}
             />
           </div>
           <div className="flex items-center gap-2 text-ui-fg-muted">
@@ -594,7 +624,11 @@ const BrandsPage = () => {
               value={brandLogoUrl}
               isEditing={true}
               isSaving={saving}
-              onChange={setBrandLogoUrl}
+              onChange={(value) => {
+                // ImageUploadField bazı durumlarda string[] döndürebiliyor
+                const next = Array.isArray(value) ? value[0] ?? null : value
+                setBrandLogoUrl(next)
+              }}
               onRemove={() => setBrandLogoUrl(null)}
             />
             <div className="flex flex-col gap-2">

@@ -3,6 +3,8 @@ import BrandCategory from "./brand-category"
 export const Brand = model.define("brand", {
   id: model.id().primaryKey(),
   name: model.text(),
+  handle:model.text().nullable(),
+  website_url:model.text().nullable(),
   logo_url: model.text().nullable(),
   metadata:model.json().nullable(),
   category: model
