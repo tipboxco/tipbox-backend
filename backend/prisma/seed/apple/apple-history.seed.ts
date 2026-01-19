@@ -1,21 +1,29 @@
-import { prisma, TRUST_USER_IDS } from '../types';
+import { prisma, TEST_USER_ID, TRUST_USER_IDS, TRUSTER_USER_IDS } from '../types';
 import { randomUUID } from 'crypto';
 import { RewardClaimType, RewardSourceType, RewardClaimStatus } from '@prisma/client';
+import { getAuthToken, makeAuthenticatedRequest, getUserTokens, getUserEmails } from './helpers/api-client.helper';
 
 /**
  * Apple brand history verileri oluştur
- * - BridgeUserStats
- * - RewardClaim (4 farklı tip: LADDER, SURVEY, EVENT, TIPS)
- * - BridgeReward (badge kazanımları)
- * - WishboxStats (event participation)
+ * - Event join: Endpoint üzerinden (POST /events/{eventId}/join)
+ * - Survey answer: Prisma ile (endpoint yok)
+ * - BridgeUserStats: Prisma ile (okuma ve hesaplama)
+ * - RewardClaim: Prisma ile (endpoint yok)
+ * - BridgeReward: Prisma ile (endpoint yok)
+ * - WishboxStats: Prisma ile (okuma ve hesaplama)
  */
-export async function seedAppleHistory(brandId: string, eventId: string): Promise<{
+export async function seedAppleHistory(
+  brandId: string,
+  eventId: string,
+  challengeBadges: Array<{ badgeId: string; name: string; threshold: number }>,
+  surveyIds: string[]
+): Promise<{
   userStats: number;
   rewardClaims: number;
   bridgeRewards: number;
   eventStats: number;
 }> {
-  console.log('📜 [seed] Apple brand history');
+  console.log('📜 [seed] Apple brand history (Endpoint-Based where possible)');
 
   // Apple brand'ı bul
   const appleBrand = await prisma.brand.findUnique({
@@ -42,13 +50,20 @@ export async function seedAppleHistory(brandId: string, eventId: string): Promis
     throw new Error('Event not found. Please run apple-events seed first.');
   }
 
-  // Kullanıcıları al
-  const allUsers = await prisma.user.findMany({
-    take: 20, // İlk 20 kullanıcı
-  });
+  // Gerçek kullanıcı email'lerini al
+  const users = getUserEmails();
 
-  if (allUsers.length === 0) {
-    throw new Error('No users found. Please run user seed first.');
+  // Tüm kullanıcılar için token'ları al
+  const tokenMap = await getUserTokens(users);
+
+  if (tokenMap.size === 0) {
+    throw new Error('No auth tokens obtained. Please check user credentials.');
+  }
+
+  // Ömer kullanıcısını öncelikli olarak al
+  const omerToken = tokenMap.get(TEST_USER_ID);
+  if (!omerToken) {
+    throw new Error('Ömer kullanıcısı için token alınamadı!');
   }
 
   let userStatsCount = 0;
@@ -57,23 +72,95 @@ export async function seedAppleHistory(brandId: string, eventId: string): Promis
   let eventStatsCount = 0;
 
   // Her kullanıcı için history verileri oluştur
-  for (const user of allUsers) {
-    // BridgeUserStats oluştur
+  for (const [userId, authResult] of tokenMap.entries()) {
+    const user = users.find(u => u.id === userId);
+    if (!user) continue;
+
+    const token = authResult.token;
+    const isOmer = userId === TEST_USER_ID;
+
+    console.log(`  👤 ${user.email} için history oluşturuluyor...`);
+
+    // 1. EVENT JOIN - Endpoint üzerinden
+    try {
+      const joinResult = await makeAuthenticatedRequest(
+        'POST',
+        `/events/${eventId}/join`,
+        token
+      );
+      if (joinResult) {
+        console.log(`    ✅ Event'e katıldı`);
+      }
+    } catch (error) {
+      // Zaten katılmış olabilir, hata yoksay
+    }
+
+    // 2. SURVEY ANSWERS - Prisma ile (endpoint yok)
+    // Ömer için tüm survey'lere cevap ver, diğerleri için rastgele
+    const surveysToAnswer = isOmer 
+      ? surveyIds 
+      : surveyIds.filter(() => Math.random() > 0.4); // %60 ihtimalle cevap ver
+
+    for (const surveyId of surveysToAnswer) {
+      const survey = await prisma.brandSurvey.findUnique({
+        where: { id: surveyId },
+        include: {
+          questions: true,
+        },
+      });
+
+      if (!survey) continue;
+
+      // Her soruya cevap ver
+      for (const question of survey.questions) {
+        let answerText: string;
+
+        if (question.type === 'SINGLE_CHOICE' || question.type === 'MULTIPLE_CHOICE') {
+          // Basit bir cevap oluştur (gerçek uygulamada options tablosu olurdu)
+          answerText = 'Option 1';
+        } else {
+          // TEXT tipi için örnek cevap
+          const sampleTexts = [
+            'Excellent performance, highly recommend.',
+            'Good overall, but some features need work.',
+            'Love the design and user experience.',
+            'Needs better battery optimization.',
+            'Very satisfied with the camera.',
+          ];
+          answerText = sampleTexts[Math.floor(Math.random() * sampleTexts.length)];
+        }
+
+        try {
+          await prisma.brandSurveyAnswer.create({
+            data: {
+              id: randomUUID(),
+              questionId: question.id,
+              userId: userId,
+              answerText: answerText,
+            },
+          });
+        } catch (e) {
+          // Zaten cevaplanmış olabilir
+        }
+      }
+    }
+
+    // 3. BRIDGEUSERSTATS - Prisma ile (okuma ve hesaplama)
     const userPosts = await prisma.contentPost.count({
       where: {
-        userId: user.id,
+        userId: userId,
         product: {
-          brandId: appleBrand.externalId,
+          brandId: appleBrand.externalId, // Product.brandId Brand.externalId'ye referans veriyor
         },
       },
     });
 
     const userComments = await prisma.contentComment.count({
       where: {
-        userId: user.id,
+        userId: userId,
         post: {
           product: {
-            brandId: appleBrand.externalId,
+            brandId: appleBrand.externalId, // Product.brandId Brand.externalId'ye referans veriyor
           },
         },
       },
@@ -82,7 +169,7 @@ export async function seedAppleHistory(brandId: string, eventId: string): Promis
     // Kullanıcının katıldığı survey sayısını hesapla
     const userSurveyAnswers = await prisma.brandSurveyAnswer.findMany({
       where: {
-        userId: user.id,
+        userId: userId,
         question: {
           survey: {
             brandId: brandId,
@@ -106,7 +193,7 @@ export async function seedAppleHistory(brandId: string, eventId: string): Promis
     const existingStats = await prisma.bridgeUserStats.findUnique({
       where: {
         userId_brandId: {
-          userId: user.id,
+          userId: userId,
           brandId: brandId,
         },
       },
@@ -116,11 +203,11 @@ export async function seedAppleHistory(brandId: string, eventId: string): Promis
       await prisma.bridgeUserStats.create({
         data: {
           id: randomUUID(),
-          userId: user.id,
+          userId: userId,
           brandId: brandId,
           commentsCount: userComments,
-          surveysParticipated: Math.floor(userSurveys / 4), // Her survey'de 4 soru var
-          trustScore: Math.random() * 50 + 50, // 50-100 arası
+          surveysParticipated: userSurveys,
+          trustScore: isOmer ? 95 : Math.floor(Math.random() * 50) + 50, // Ömer için yüksek skor
           lastInteractionAt: new Date(),
         },
       });
@@ -129,66 +216,89 @@ export async function seedAppleHistory(brandId: string, eventId: string): Promis
       await prisma.bridgeUserStats.update({
         where: {
           userId_brandId: {
-            userId: user.id,
+            userId: userId,
             brandId: brandId,
           },
         },
         data: {
           commentsCount: userComments,
-          surveysParticipated: Math.floor(userSurveys / 4),
+          surveysParticipated: userSurveys,
+          trustScore: isOmer ? 95 : Math.max(existingStats.trustScore, Math.floor(Math.random() * 50) + 50),
           lastInteractionAt: new Date(),
         },
       });
     }
 
-    // RewardClaim oluştur (4 farklı tip)
-    const rewardClaimConfigs = [
-      {
-        type: RewardClaimType.LADDER,
-        sourceType: RewardSourceType.LADDER_REWARD,
-        amount: 20,
-        metadata: {
-          rank: Math.floor(Math.random() * 10) + 1,
-          period: 'weekly',
-          description: 'Weekly leaderboard reward',
-        },
-      },
-      {
-        type: RewardClaimType.EVENT, // SURVEY type yok, EVENT kullanıyoruz
-        sourceType: RewardSourceType.EVENT_PARTICIPATION,
-        amount: 15,
-        metadata: {
-          surveyId: 'survey-1',
-          surveyTitle: 'iPhone User Experience Survey 2024',
-          description: 'Survey completion reward',
-        },
-      },
-      {
-        type: RewardClaimType.EVENT,
-        sourceType: RewardSourceType.EVENT_PARTICIPATION,
-        amount: 30,
-        metadata: {
-          eventId: eventId,
-          eventTitle: event.title,
-          description: 'Event participation reward',
-        },
-      },
-      {
-        type: RewardClaimType.TIPS,
-        sourceType: RewardSourceType.TIPS_RECEIVED,
-        amount: 25,
-        metadata: {
-          fromUserId: allUsers[0]?.id,
-          description: 'Tips received from community',
-        },
-      },
-    ];
+    // 4. REWARDCLAIMS - Prisma ile (endpoint yok)
+    // Ömer için daha fazla reward claim
+    const rewardClaimConfigs = isOmer
+      ? [
+          {
+            type: RewardClaimType.LADDER,
+            sourceType: RewardSourceType.LADDER_REWARD,
+            amount: 50,
+            metadata: {
+              rank: 1,
+              period: 'weekly',
+              description: 'Weekly leaderboard reward - 1st place',
+            },
+          },
+          {
+            type: RewardClaimType.LADDER,
+            sourceType: RewardSourceType.LADDER_REWARD,
+            amount: 40,
+            metadata: {
+              rank: 2,
+              period: 'monthly',
+              description: 'Monthly leaderboard reward - 2nd place',
+            },
+          },
+          {
+            type: RewardClaimType.EVENT,
+            sourceType: RewardSourceType.EVENT_PARTICIPATION,
+            amount: 30,
+            metadata: {
+              eventId: eventId,
+              eventTitle: event.title,
+              description: 'Event participation reward',
+            },
+          },
+          {
+            type: RewardClaimType.TIPS,
+            sourceType: RewardSourceType.TIPS_RECEIVED,
+            amount: 25,
+            metadata: {
+              description: 'Tips received from community',
+            },
+          },
+        ]
+      : [
+          {
+            type: RewardClaimType.LADDER,
+            sourceType: RewardSourceType.LADDER_REWARD,
+            amount: 20,
+            metadata: {
+              rank: Math.floor(Math.random() * 10) + 1,
+              period: 'weekly',
+              description: 'Weekly leaderboard reward',
+            },
+          },
+          {
+            type: RewardClaimType.EVENT,
+            sourceType: RewardSourceType.EVENT_PARTICIPATION,
+            amount: 15,
+            metadata: {
+              eventId: eventId,
+              eventTitle: event.title,
+              description: 'Event participation reward',
+            },
+          },
+        ];
 
     for (const config of rewardClaimConfigs) {
-      // sourceId UUID formatında olmalı, eventId VarChar(26) olduğu için null kullanıyoruz
       const existingClaim = await prisma.rewardClaim.findFirst({
         where: {
-          userId: user.id,
+          userId: userId,
           rewardType: config.type,
           sourceType: config.sourceType,
         },
@@ -198,11 +308,11 @@ export async function seedAppleHistory(brandId: string, eventId: string): Promis
         await prisma.rewardClaim.create({
           data: {
             id: randomUUID(),
-            userId: user.id,
+            userId: userId,
             rewardType: config.type,
             sourceType: config.sourceType,
             amount: config.amount,
-            status: Math.random() > 0.5 ? RewardClaimStatus.PENDING : RewardClaimStatus.CLAIMED,
+            status: isOmer ? RewardClaimStatus.CLAIMED : (Math.random() > 0.5 ? RewardClaimStatus.PENDING : RewardClaimStatus.CLAIMED),
             metadata: config.metadata as any,
             earnedAt: new Date(Date.now() - Math.floor(Math.random() * 7) * 24 * 60 * 60 * 1000),
             sourceId: null, // eventId VarChar(26) formatında, UUID değil
@@ -212,85 +322,117 @@ export async function seedAppleHistory(brandId: string, eventId: string): Promis
       }
     }
 
-    // BridgeReward oluştur (badge kazanımları)
-    // Event badge'lerinden bazılarını kullanıcılara ver
-    if (event.eventBadges.length > 0) {
-      const badgesToAward = event.eventBadges
-        .sort(() => Math.random() - 0.5)
-        .slice(0, Math.floor(Math.random() * 3) + 1); // 1-3 badge
+    // 5. BRIDGEREWARDS (Badges) - Prisma ile (endpoint yok)
+    // Ömer için daha fazla badge
+    const badgesToAward = isOmer
+      ? challengeBadges // Ömer için tüm badge'ler
+      : challengeBadges
+          .sort(() => Math.random() - 0.5)
+          .slice(0, Math.floor(Math.random() * 3) + 1); // 1-3 badge
 
-      for (const eventBadge of badgesToAward) {
-        const existingReward = await prisma.bridgeReward.findFirst({
-          where: {
-            userId: user.id,
+    for (const challenge of badgesToAward) {
+      const existingReward = await prisma.bridgeReward.findFirst({
+        where: {
+          userId: userId,
+          brandId: brandId,
+          badgeId: challenge.badgeId,
+        },
+      });
+
+      if (!existingReward) {
+        await prisma.bridgeReward.create({
+          data: {
+            id: randomUUID(),
+            userId: userId,
             brandId: brandId,
-            badgeId: eventBadge.badgeId,
+            badgeId: challenge.badgeId,
+            awardedAt: new Date(Date.now() - Math.floor(Math.random() * 5) * 24 * 60 * 60 * 1000),
           },
         });
-
-        if (!existingReward) {
-          await prisma.bridgeReward.create({
-            data: {
-              id: randomUUID(),
-              userId: user.id,
-              brandId: brandId,
-              badgeId: eventBadge.badgeId,
-              awardedAt: new Date(Date.now() - Math.floor(Math.random() * 5) * 24 * 60 * 60 * 1000),
-            },
-          });
-          bridgeRewardsCount++;
-        }
+        bridgeRewardsCount++;
       }
     }
 
-    // WishboxStats oluştur (event participation)
+    // 6. WISHBOXSTATS (Event Participation) - Prisma ile (okuma ve hesaplama)
+    // Ömer için gerçek veriler, diğerleri için hesaplanmış değerler
     const existingEventStats = await prisma.wishboxStats.findUnique({
       where: {
         userId_eventId: {
-          userId: user.id,
+          userId: userId,
           eventId: eventId,
         },
       },
     });
 
-    if (!existingEventStats) {
-      // Kullanıcının event'teki aktivitelerini hesapla
-      const eventPosts = await prisma.contentPost.count({
-        where: {
-          userId: user.id,
+    // Kullanıcının event'teki aktivitelerini hesapla
+    const eventPosts = await prisma.contentPost.count({
+      where: {
+        userId: userId,
+        eventId: eventId,
+      },
+    });
+
+    const eventComments = await prisma.contentComment.count({
+      where: {
+        userId: userId,
+        post: {
           eventId: eventId,
         },
-      });
+      },
+    });
 
-      const eventComments = await prisma.contentComment.count({
-        where: {
-          userId: user.id,
-          post: {
-            eventId: eventId,
-          },
+    // Kullanıcının event post'larına gelen like'ları say
+    const userEventPostIds = await prisma.contentPost.findMany({
+      where: {
+        userId: userId,
+        eventId: eventId,
+      },
+      select: { id: true },
+    });
+
+    const eventLikesReceived = await prisma.contentLike.count({
+      where: {
+        postId: {
+          in: userEventPostIds.map(p => p.id),
         },
-      });
+      },
+    });
 
-      const eventLikes = await prisma.contentLike.count({
-        where: {
-          userId: user.id,
-          post: {
-            eventId: eventId,
-          },
-        },
-      });
+    // Ömer için daha fazla aktivite göster
+    const finalEventPosts = isOmer ? Math.max(eventPosts, 5) : eventPosts;
+    const finalEventComments = isOmer ? Math.max(eventComments, 12) : eventComments;
+    const finalEventLikesReceived = isOmer ? Math.max(eventLikesReceived, 25) : eventLikesReceived;
 
+    if (!existingEventStats) {
       await prisma.wishboxStats.create({
         data: {
           id: randomUUID(),
-          userId: user.id,
+          userId: userId,
           eventId: eventId,
-          totalParticipated: eventPosts + eventComments,
-          totalComments: eventComments,
-          helpfulVotesReceived: eventLikes,
+          totalParticipated: finalEventPosts + finalEventComments,
+          totalComments: finalEventComments,
+          helpfulVotesReceived: finalEventLikesReceived,
+          eventPostsCount: finalEventPosts,
+          eventLikesReceived: finalEventLikesReceived,
         },
       });
       eventStatsCount++;
+    } else {
+      await prisma.wishboxStats.update({
+        where: {
+          userId_eventId: {
+            userId: userId,
+            eventId: eventId,
+          },
+        },
+        data: {
+          totalParticipated: finalEventPosts + finalEventComments,
+          totalComments: finalEventComments,
+          helpfulVotesReceived: finalEventLikesReceived,
+          eventPostsCount: finalEventPosts,
+          eventLikesReceived: finalEventLikesReceived,
+        },
+      });
     }
   }
 

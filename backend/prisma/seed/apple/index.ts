@@ -60,7 +60,13 @@ export async function seedApple(): Promise<void> {
 
     // 9. History
     console.log('📋 Adım 9/9: Brand History');
-    const historyResult = await seedAppleHistory(brandResult.brandId, eventsResult.eventId);
+    const surveyIds = surveysResult.surveys.map(s => s.id);
+    const historyResult = await seedAppleHistory(
+      brandResult.brandId,
+      eventsResult.eventId,
+      eventsResult.challenges,
+      surveyIds
+    );
     console.log(`✅ History verileri oluşturuldu: ${historyResult.userStats} user stats, ${historyResult.rewardClaims} reward claims, ${historyResult.bridgeRewards} bridge rewards, ${historyResult.eventStats} event stats\n`);
 
     console.log('🍎 ========================================');

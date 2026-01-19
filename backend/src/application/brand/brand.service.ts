@@ -349,7 +349,7 @@ export class BrandService {
     userId: string,
     options?: { cursor?: string; limit?: number }
   ): Promise<SurveyListResponse> {
-    // Brand kontrolü (store'dan alınacak ama response'da dönmeyeceğiz)
+    // Brand kontrolü
     const brand = await this.prisma.brand.findUnique({
       where: { id: brandId },
     });
@@ -360,12 +360,13 @@ export class BrandService {
 
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
     const cursor = options?.cursor;
+    const now = new Date();
 
-    // Sadece SURVEY tipindeki event'leri döndür
+    // BrandSurvey modelini kullan - aktif survey'leri getir (startsAt <= now <= endsAt)
     const whereClause: any = {
-      status: 'PUBLISHED',
       brandId,
-      eventType: 'SURVEY',
+      startsAt: { lte: now },
+      endsAt: { gte: now },
     };
 
     if (cursor) {
@@ -374,47 +375,64 @@ export class BrandService {
       };
     }
 
-    const events = await this.prisma.wishboxEvent.findMany({
-      where: whereClause as any,
-      orderBy: { startDate: 'asc' },
+    const surveys = await this.prisma.brandSurvey.findMany({
+      where: whereClause,
+      include: {
+        questions: true,
+      },
+      orderBy: { startsAt: 'asc' },
       take: limit + 1, // Bir fazla al ki hasMore'u kontrol edebilelim
     });
 
-    const hasMore = events.length > limit;
-    const resultEvents = hasMore ? events.slice(0, limit) : events;
-    const nextCursor = hasMore && resultEvents.length > 0 ? resultEvents[resultEvents.length - 1].id : undefined;
+    const hasMore = surveys.length > limit;
+    const resultSurveys = hasMore ? surveys.slice(0, limit) : surveys;
+    const nextCursor = hasMore && resultSurveys.length > 0 ? resultSurveys[resultSurveys.length - 1].id : undefined;
 
-    // Kullanıcının event istatistiklerine göre status/progress hesapla
-    const stats = await this.prisma.wishboxStats.findMany({
+    // Kullanıcının survey cevaplarını kontrol et
+    const surveyIds = resultSurveys.map((s) => s.id);
+    const userAnswers = await this.prisma.brandSurveyAnswer.findMany({
       where: {
         userId,
-        eventId: { in: resultEvents.map((e) => e.id) },
+        question: {
+          surveyId: { in: surveyIds },
+        },
+      },
+      include: {
+        question: {
+          select: {
+            surveyId: true,
+          },
+        },
       },
     });
 
-    const statsMap = new Map<string, (typeof stats)[number]>();
-    stats.forEach((s) => statsMap.set(s.eventId, s));
+    // Her survey için kullanıcının kaç soruya cevap verdiğini hesapla
+    const surveyAnswerCounts = new Map<string, number>();
+    userAnswers.forEach((answer) => {
+      const surveyId = answer.question.surveyId;
+      surveyAnswerCounts.set(surveyId, (surveyAnswerCounts.get(surveyId) || 0) + 1);
+    });
 
-    const surveyList: SurveyCard[] = resultEvents.map((event) => {
-      const eventStats = statsMap.get(event.id);
-      const totalParticipated = eventStats?.totalParticipated ?? 0;
+    const surveyList: SurveyCard[] = resultSurveys.map((survey) => {
+      const answeredCount = surveyAnswerCounts.get(survey.id) || 0;
+      const totalQuestions = survey.questions.length;
 
       let status: SurveyStatusType = 'start';
-      if (totalParticipated > 0 && totalParticipated < 3) {
+      if (answeredCount > 0 && answeredCount < totalQuestions) {
         status = 'continue';
-      } else if (totalParticipated >= 3) {
+      } else if (answeredCount >= totalQuestions) {
         status = 'viewresults';
       }
 
-      const progress = Math.min(100, totalParticipated * 25);
+      const progress = totalQuestions > 0 ? Math.min(100, Math.round((answeredCount / totalQuestions) * 100)) : 0;
 
       return {
-        id: event.id,
-        title: event.title,
-        description: event.description || '',
-        type: (event.eventType || 'SURVEY').toLowerCase(),
+        id: survey.id,
+        title: survey.title,
+        description: survey.description || '',
+        type: 'survey',
         duration: '5-10 dk',
-        points: 100 + (totalParticipated || 1) * 25,
+        points: 100 + answeredCount * 25,
         status,
         progress,
       };
@@ -511,7 +529,7 @@ export class BrandService {
       }
 
       const brandProducts = await this.prisma.product.findMany({
-        where: { brand: brand.name },
+        where: { brandId: brandId },
         select: { id: true },
       });
       const productIds = brandProducts.map((product) => product.id);
@@ -779,7 +797,7 @@ export class BrandService {
 
       // Brand'e ait product'ları bul
       const brandProducts = await this.prisma.product.findMany({
-        where: { brand: brand.name },
+        where: { brandId: brandId },
         select: { id: true },
       });
       const productIds = brandProducts.map((product) => product.id);
@@ -1286,7 +1304,7 @@ export class BrandService {
       const groups = await this.prisma.productGroup.findMany({
         where: {
           products: {
-            some: { brand: brand.name },
+            some: { brandId: brandId },
           },
           ...(cursor && {
             id: {
@@ -1300,7 +1318,7 @@ export class BrandService {
         take: limit + 1,
         include: {
           products: {
-            where: { brand: brand.name },
+            where: { brandId: brandId },
             orderBy: { id: 'asc' },
             take: productLimit + 1,
             include: {
@@ -1382,7 +1400,7 @@ export class BrandService {
       const cursor = options?.cursor;
 
       const whereClause: any = {
-        brand: brand.name,
+        brandId: brandId,
         groupId: productGroupId === 'ungrouped' ? null : productGroupId,
       };
 
@@ -1533,7 +1551,7 @@ export class BrandService {
 
       const whereClause: any = {
         groupId: productGroupId,
-        brand: brand.name, // Brand name'e göre filtrele
+        brandId: brandId, // Brand ID'ye göre filtrele
       };
 
       if (cursor) {
@@ -1621,9 +1639,9 @@ export class BrandService {
       const productLimit = options?.productLimit && options.productLimit > 0 ? Math.min(options.productLimit, 50) : 20;
       const cursor = options?.cursor;
 
-      // Brand name'e göre ürünleri bul (pagination ile)
+      // Brand ID'ye göre ürünleri bul (pagination ile)
       const whereClause: any = {
-        brand: brand.name,
+        brandId: brandId,
       };
 
       if (cursor) {
@@ -1729,10 +1747,10 @@ export class BrandService {
       // Product'ı kontrol et
       const product = await this.prisma.product.findUnique({
         where: { id: productId },
-        select: { id: true, brand: true },
+        select: { id: true, brandId: true },
       });
 
-      if (!product || product.brand !== brand.name) {
+      if (!product || product.brandId !== brandId) {
         throw new NotFoundError('Product not found or does not belong to this brand');
       }
 
@@ -1826,10 +1844,10 @@ export class BrandService {
       // Product'ı kontrol et
       const product = await this.prisma.product.findUnique({
         where: { id: productId },
-        select: { id: true, brand: true },
+        select: { id: true, brandId: true },
       });
 
-      if (!product || product.brand !== brand.name) {
+      if (!product || product.brandId !== brandId) {
         throw new NotFoundError('Product not found or does not belong to this brand');
       }
 
@@ -1944,10 +1962,10 @@ export class BrandService {
       // Product'ı kontrol et
       const product = await this.prisma.product.findUnique({
         where: { id: productId },
-        select: { id: true, brand: true },
+        select: { id: true, brandId: true },
       });
 
-      if (!product || product.brand !== brand.name) {
+      if (!product || product.brandId !== brandId) {
         throw new NotFoundError('Product not found or does not belong to this brand');
       }
 
@@ -2215,7 +2233,7 @@ export class BrandService {
     return {
       id: String(product.id),
       name: product.name,
-      subName: product.subName || product.brand || product.group?.name || '',
+      subName: product.subName || product.brand?.name || product.group?.name || '',
       image: this.buildFullMediaUrl(product.imageUrl),
     };
   }

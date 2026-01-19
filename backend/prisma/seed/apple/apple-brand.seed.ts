@@ -16,7 +16,6 @@ export async function seedAppleBrand(): Promise<{ brandId: string; categoryId: s
     brandCategory = await prisma.brandCategory.create({
       data: {
         name: 'Electronics',
-        description: 'Consumer electronics and technology products',
       },
     });
   }

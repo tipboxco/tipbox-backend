@@ -179,26 +179,17 @@ export async function seedAppleProducts(brandId: string): Promise<{
       let product = await prisma.product.findFirst({
         where: {
           name: productConfig.name,
-          brandId: appleBrand.externalId,
+          brandId: appleBrand.externalId, // Product.brandId Brand.externalId'ye referans veriyor
           groupId: productGroup.id,
         },
       });
 
       if (!product) {
-        // Brand'ı bul (externalId'ye göre)
-        const appleBrand = await prisma.brand.findFirst({
-          where: { name: 'Apple' },
-        });
-
-        if (!appleBrand) {
-          throw new Error('Apple brand not found. Please run apple-brand seed first.');
-        }
-
         product = await prisma.product.create({
           data: {
             id: randomUUID(),
             name: productConfig.name,
-            brandId: appleBrand.externalId, // Brand relation externalId kullanıyor
+            brandId: appleBrand.externalId, // Product.brandId Brand.externalId'ye referans veriyor
             description: productConfig.description,
             groupId: productGroup.id,
             imageUrl: productConfig.imageKey ? getSeedMediaPath(productConfig.imageKey, true) || undefined : undefined,

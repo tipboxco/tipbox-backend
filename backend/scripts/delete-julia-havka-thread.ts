@@ -2,8 +2,6 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-const prisma = getPrisma();
-
 async function deleteJuliaHavkaThread() {
   console.log('🔍 Julia-Havka thread\'i aranıyor...\n');
 
@@ -57,12 +55,14 @@ async function deleteJuliaHavkaThread() {
   });
 
   // Find thread with Havka (search by email or name)
+  // Havka = Julia Havk (julia.havk@tipbox.co)
   let havkaThread = null;
   for (const thread of threads) {
     const otherUser = thread.userOneId === JULIA_USER_ID ? thread.userTwo : thread.userOne;
     // Havka'yı email veya name'de ara
     if (
       otherUser.email?.toLowerCase().includes('havka') ||
+      otherUser.email?.toLowerCase().includes('havk') ||
       otherUser.email?.toLowerCase().includes('ozan')
     ) {
       havkaThread = thread;
@@ -70,8 +70,17 @@ async function deleteJuliaHavkaThread() {
     }
   }
 
+  // Eğer Havka thread'i bulunamadıysa ve sadece bir thread varsa, onu sil
+  if (!havkaThread && threads.length === 1) {
+    console.log('⚠️  Havka thread\'i bulunamadı, ancak Julia\'nın tek thread\'i var. Siliniyor...');
+    havkaThread = threads[0];
+  }
+
   if (!havkaThread) {
     console.log('ℹ️  Julia-Havka thread\'i bulunamadı (zaten silinmiş olabilir)');
+    if (threads.length > 0) {
+      console.log(`   Not: Julia'nın ${threads.length} thread'i var, hangisini silmek istediğinizi belirtin.`);
+    }
     return;
   }
 

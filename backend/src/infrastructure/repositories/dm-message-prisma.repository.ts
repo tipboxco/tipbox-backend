@@ -232,13 +232,15 @@ export class DmMessagePrismaRepository {
     });
 
     // Reset unread count for the user who marked messages as read
+    // ÖNEMLİ: Bu güncelleme transaction içinde yapılmalı ki GET /inbox hemen güncel veriyi döndürsün
     if (thread && unreadCount > 0) {
       if (thread.userOneId === userIdStr) {
         // UserOne marked as read, reset userOne's unread count
         await this.prisma.dMThread.update({
           where: { id: threadIdStr },
           data: {
-            unreadCountUserOne: 0
+            unreadCountUserOne: 0,
+            updatedAt: new Date(), // updatedAt'i güncelle ki thread listesinde en üste çıksın
           } as any
         });
       } else if (thread.userTwoId === userIdStr) {
@@ -246,7 +248,8 @@ export class DmMessagePrismaRepository {
         await this.prisma.dMThread.update({
           where: { id: threadIdStr },
           data: {
-            unreadCountUserTwo: 0
+            unreadCountUserTwo: 0,
+            updatedAt: new Date(), // updatedAt'i güncelle ki thread listesinde en üste çıksın
           } as any
         });
       }

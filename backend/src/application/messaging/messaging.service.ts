@@ -321,6 +321,24 @@ export class MessagingService {
         });
       }
 
+      // Thread okundu event'i gönder (mesaj listesinin anında güncellenmesi için)
+      // Bu event frontend'e thread'in okundu olduğunu bildirir ve mesaj listesindeki yeşil noktayı kaldırır
+      // ÖNEMLİ: threadId'nin doğru olduğundan emin ol - bu event frontend'de mesaj listesini güncellemek için kullanılır
+      const threadReadEvent = {
+        threadId,
+        readBy: userId,
+        timestamp,
+        unreadCount: 0, // Thread artık okundu, unread count 0
+        isUnread: false, // Thread artık okundu
+      };
+      
+      socketHandler.sendMessageToUser(userId, 'thread_read', threadReadEvent);
+
+      // Thread room'una da gönder (thread açık olan kullanıcılar için)
+      socketHandler.sendToRoom(`thread:${threadId}`, 'thread_read', threadReadEvent);
+      
+      logger.info(`Thread read event sent: threadId=${threadId}, userId=${userId}, unreadCount=0`);
+
       logger.info(`Marked ${unreadMessages.length} messages as read in thread ${threadId} by user ${userId}`);
     } catch (error) {
       logger.error(`Failed to mark all messages as read in thread ${threadId} by user ${userId}:`, error);

@@ -13,12 +13,30 @@ export const DEFAULT_AVATAR_PATH = 'defaultavatar/default-useravatar.png';
 export function getPublicMediaBaseUrl(): string {
   // Öncelik 1: SEED_MEDIA_BASE_URL (önerilen yöntem - nginx proxy için)
   const seedMediaBaseUrl = process.env.SEED_MEDIA_BASE_URL;
-  if (seedMediaBaseUrl) {
-    return seedMediaBaseUrl.replace(/\/$/, '');
-  }
-  // Öncelik 2: BASE_URL'den port 9000 türet (eski yöntem - geriye dönük uyumluluk)
   const baseUrl = process.env.BASE_URL;
   
+  // Eğer SEED_MEDIA_BASE_URL varsa ve BASE_URL ile uyumluysa kullan
+  if (seedMediaBaseUrl) {
+    // Eğer BASE_URL de varsa, IP/hostname uyumluluğunu kontrol et
+    if (baseUrl) {
+      try {
+        const seedUrl = new URL(seedMediaBaseUrl);
+        const baseUrlObj = new URL(baseUrl);
+        
+        // Eğer hostname'ler farklıysa (farklı IP), BASE_URL'den türet
+        if (seedUrl.hostname !== baseUrlObj.hostname) {
+          // BASE_URL'den port 9000 ile türet
+          const derivedMediaUrl = `${baseUrlObj.protocol}//${baseUrlObj.hostname}:9000`;
+          return derivedMediaUrl;
+        }
+      } catch {
+        // URL parse edilemezse, SEED_MEDIA_BASE_URL'i kullan
+      }
+    }
+    return seedMediaBaseUrl.replace(/\/$/, '');
+  }
+  
+  // Öncelik 2: BASE_URL'den port 9000 türet (eski yöntem - geriye dönük uyumluluk)
   if (!baseUrl) {
     throw new Error(
       'SEED_MEDIA_BASE_URL veya BASE_URL environment variable set edilmelidir! ' +
@@ -106,6 +124,7 @@ export function resolveMediaUrl(mediaPath: string | null | undefined, useDefault
       try {
         const url = new URL(mediaPath);
         const pathname = url.pathname;
+        
         // Pathname zaten /tipbox-media/ ile başlıyorsa, direkt kullan
         // Değilse, tipbox-media ekle
         if (pathname.startsWith('/tipbox-media/')) {
@@ -116,7 +135,7 @@ export function resolveMediaUrl(mediaPath: string | null | undefined, useDefault
           return `${currentBaseUrl}/tipbox-media/${cleanPath}`;
         }
       } catch {
-        // URL parse edilemezse, regex ile path'i çıkar
+        // URL parse edilemezse, regex ile path'i çıkar ve yeni base URL ile birleştir
         const pathMatch = mediaPath.match(/\/tipbox-media\/.+$/);
         if (pathMatch) {
           return `${currentBaseUrl}${pathMatch[0]}`;

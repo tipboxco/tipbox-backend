@@ -813,9 +813,11 @@ router.post(
     }
 
     try {
+      logger.info(`Accept support request endpoint called: requestId=${requestId}, expertUserId=${expertUserId}`);
       const result = await supportRequestService.acceptSupportRequest(requestId, String(expertUserId));
       return res.status(200).json(result);
     } catch (error: unknown) {
+      logger.error(`Accept support request error: requestId=${requestId}, expertUserId=${expertUserId}`, error);
       if (hasErrorMessage(error, 'Support request not found')) {
         return res.status(404).json({ message: getErrorMessage(error) });
       }
@@ -1365,12 +1367,25 @@ router.get(
     }
 
     try {
+      // Thread mesajlarını getir
       const feedItems = await messagingService.getThreadMessages(
         threadId,
         String(userId),
         limit || 100,
         offset || 0
       );
+
+      // Thread açıldığında tüm okunmamış mesajları otomatik olarak okundu işaretle
+      // WhatsApp mantığı: Mesaj listesinde mesaja tıklandığında thread açılır ve tüm mesajlar okundu olur
+      // Bu sayede mesaj listesindeki yeşil nokta (unread indicator) anında kaybolur
+      try {
+        await messagingService.markAllMessagesAsReadInThread(threadId, String(userId));
+      } catch (markReadError) {
+        // Okundu işaretleme hatası mesaj getirmeyi engellemez, sadece logla
+        // Bu sayede thread açılmaya devam eder, sadece okundu işaretleme başarısız olur
+        logger.warn(`Failed to mark messages as read in thread ${threadId} for user ${userId}:`, markReadError);
+      }
+
       return res.status(200).json(feedItems);
     } catch (error: unknown) {
       const message = getErrorMessage(error);

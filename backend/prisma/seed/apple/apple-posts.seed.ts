@@ -39,7 +39,7 @@ export async function seedApplePosts(brandId: string): Promise<{
   // Apple products'ları bul
   const appleProducts = await prisma.product.findMany({
     where: {
-      brandId: appleBrand.externalId,
+      brandId: appleBrand.externalId, // Product.brandId Brand.externalId'ye referans veriyor
     },
     take: 20, // İlk 20 product'ı al
   });
