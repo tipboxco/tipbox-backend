@@ -266,34 +266,27 @@ router.post('/login', validateBody(LoginSchema), asyncHandler(async (req: Reques
  *                   type: string
  *                   example: Email gönderilemedi. Lütfen tekrar deneyin.
  */
-router.post('/register', asyncHandler(async (req: Request, res: Response) => {
+router.post('/register', validateBody(RegisterSchema), asyncHandler(async (req: Request, res: Response) => {
   const { email, password, name } = req.body;
-
-  if (!email || !password || !name) {
-    return res.status(400).json({
-      success: false,
-      message: 'Email, şifre ve isim alanları zorunludur',
-    });
-  }
-
-  if (password.length < 6) {
-    return res.status(400).json({
-      success: false,
-      message: 'Şifre en az 6 karakter olmalıdır',
-    });
-  }
-
-  if (name.length < 2 || name.length > 50) {
-    return res.status(400).json({
-      success: false,
-      message: 'İsim en az 2, en fazla 50 karakter olmalıdır',
-    });
-  }
-
   const result = await authService.signup(email, password, name);
 
   if (!result.success) {
     const statusCode = result.message.includes('zaten kayıtlı') ? 409 : 500;
+    return res.status(statusCode).json(result);
+  }
+
+  return res.json(result);
+}));
+
+/**
+ * Email doğrulama kodunu yeniden gönderir
+ */
+router.post('/resend-verification', validateBody(ResendVerificationSchema), asyncHandler(async (req: Request, res: Response) => {
+  const { email } = req.body;
+  const result = await authService.sendEmailVerificationCode(email);
+
+  if (!result.success) {
+    const statusCode = result.message.includes('bulunamadı') ? 404 : 500;
     return res.status(statusCode).json(result);
   }
 

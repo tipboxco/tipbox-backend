@@ -19,6 +19,77 @@ export class AuthService implements IAuthService {
   private emailService = new EmailService();
   private prisma = getPrisma();
 
+  /**
+   * Mevcut kullanıcı için email doğrulama kodu üretir ve gönderir
+   * (kullanıcıyı silmez; önceki aktif kodları invalidate eder)
+   */
+  async sendEmailVerificationCode(email: string): Promise<{ success: boolean; message: string; devCode?: string }> {
+    const user = await this.userRepo.findByEmail(email);
+
+    if (!user) {
+      return {
+        success: false,
+        message: 'Kullanıcı bulunamadı',
+      };
+    }
+
+    if (user.emailVerified) {
+      return {
+        success: true,
+        message: 'Email adresiniz zaten doğrulanmış.',
+      };
+    }
+
+    const code = this.generateVerificationCode();
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + 10);
+
+    await this.emailVerificationRepo.create(user.id, email, code, expiresAt);
+
+    try {
+      await this.emailService.sendVerificationCode(email, code);
+      return {
+        success: true,
+        message: 'Email doğrulama kodu gönderildi.',
+      };
+    } catch (error) {
+      logger.error({
+        message: 'Failed to send verification code email',
+        email,
+        userId: user.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      const isProd = process.env.NODE_ENV === 'production';
+      const exposeCode = process.env.EXPOSE_VERIFICATION_CODE === 'true';
+
+      // Dev/Test ortamında email servis hatası kayıt akışını bloklamasın:
+      // Kod DB'de durur, gerekirse resend ile tekrar denenir.
+      if (!isProd) {
+        logger.warn({
+          message: 'Email service unavailable; verification code generated (dev fallback)',
+          email,
+          userId: user.id,
+          code: exposeCode ? code : undefined,
+        });
+
+        return {
+          success: true,
+          message: exposeCode
+            ? 'Email gönderilemedi (dev). Doğrulama kodu response içine eklendi.'
+            : 'Email gönderilemedi (dev). Doğrulama kodu loglara yazdırıldı.',
+          devCode: exposeCode ? code : undefined,
+        };
+      }
+
+      const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata';
+      return {
+        success: false,
+        message: `Email gönderilemedi: ${errorMessage}. Lütfen tekrar deneyin.`,
+      };
+    }
+  }
+
   async authenticate(email: string, password: string): Promise<User | null> {
     const user = await this.userRepo.findByEmail(email);
     if (!user) return null;
@@ -92,16 +163,32 @@ export class AuthService implements IAuthService {
         message: 'Kayıt başarılı. Email doğrulama kodu gönderildi.',
       };
     } catch (error) {
-      // Email gönderilemediyse kullanıcıyı ve verification code'u sil
-      try {
-        await this.emailVerificationRepo.deleteByUserId(user.id);
-        await this.prisma.user.delete({ where: { id: user.id } });
-      } catch (deleteError) {
-        // Silme hatası durumunda log'la ama devam et
-        console.error('Failed to cleanup user after email send failure:', deleteError);
+      logger.error({
+        message: 'Failed to send signup verification email',
+        email,
+        userId: user.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      const isProd = process.env.NODE_ENV === 'production';
+      const exposeCode = process.env.EXPOSE_VERIFICATION_CODE === 'true';
+
+      if (!isProd) {
+        logger.warn({
+          message: 'Email service unavailable; signup completed (dev fallback)',
+          email,
+          userId: user.id,
+          code: exposeCode ? code : undefined,
+        });
+
+        return {
+          success: true,
+          message: exposeCode
+            ? `Kayıt başarılı (dev). Email gönderilemedi; doğrulama kodu: ${code}`
+            : 'Kayıt başarılı (dev). Email gönderilemedi; doğrulama kodu loglara yazdırıldı.',
+        };
       }
-      
-      // Detaylı hata mesajı
+
       const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata';
       return {
         success: false,
@@ -443,7 +530,8 @@ export class AuthService implements IAuthService {
         where: { id: user.id },
         data: {
           email: email || user.email,
-          emailVerified: emailVerified,
+          emailVerified: !!emailVerified,
+          status: !!emailVerified ? 'ACTIVE' : user.status,
           profile: name && user.displayName !== name ? {
             upsert: {
               create: {
@@ -466,12 +554,14 @@ export class AuthService implements IAuthService {
     if (email) {
       const existingUserByEmail = await this.userRepo.findByEmail(email);
       if (existingUserByEmail) {
+        const nextEmailVerified = Boolean(emailVerified || existingUserByEmail.emailVerified);
         // Mevcut kullanıcıya auth0Id ekle
         await this.prisma.user.update({
           where: { id: existingUserByEmail.id },
           data: {
             auth0Id,
-            emailVerified: emailVerified || existingUserByEmail.emailVerified,
+            emailVerified: nextEmailVerified,
+            status: nextEmailVerified ? 'ACTIVE' : 'PENDING_VERIFICATION',
           },
         });
         

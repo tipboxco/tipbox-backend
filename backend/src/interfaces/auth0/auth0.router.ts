@@ -194,7 +194,7 @@ async function findOrCreateUser(
     const prisma = getPrisma();
     await prisma.user.update({
       where: { id: user.id },
-      data: { emailVerified: true }
+      data: { emailVerified: true, status: 'ACTIVE' }
     });
     user = await userRepo.findById(user.id);
   }
@@ -324,6 +324,7 @@ async function getAuth0Token(email: string, password: string, config: ReturnType
     timeout: 30000,
     validateStatus: (status) => status < 500
   });
+  logger.info({message: 'Auth0 token response', data: JSON.stringify(response.data)});
 
   return response;
 }
@@ -514,6 +515,24 @@ router.post('/email', validateBody(LoginSchema), asyncHandler(async (req: Reques
       });
     }
 
+    // Email doğrulanmadıysa: doğrulama kodu gönder ve token dönme
+    if (!user.emailVerified) {
+      const sendResult = await authService.sendEmailVerificationCode(decoded.email || email);
+      if (!sendResult.success) {
+        return res.status(500).json({
+          success: false,
+          error: 'verification_email_send_failed',
+          message: sendResult.message
+        });
+      }
+      return res.status(403).json({
+        success: true,
+        requiresEmailVerification: true,
+        email: decoded.email || email,
+        message: 'Email adresiniz doğrulanmamış. Doğrulama kodu gönderildi.'
+      });
+    }
+
     // Profil ve token bilgilerini al
     const { fullName, avatarUrl } = await getUserProfileData(user.id, decoded.name, decoded.picture);
     const { backendToken, backendRefreshToken } = await generateBackendTokens(user, req);
@@ -541,7 +560,6 @@ router.post('/email', validateBody(LoginSchema), asyncHandler(async (req: Reques
 router.post('/register', validateBody(RegisterSchema), asyncHandler(async (req: Request, res: Response) => {
   const { email, password, name } = req.body;
   const config = getAuth0Config();
-
   if (!config.isValid) {
     return res.status(500).json({
       success: false,
@@ -566,6 +584,7 @@ router.post('/register', validateBody(RegisterSchema), asyncHandler(async (req: 
       validateStatus: (status) => status < 500
     });
 
+    logger.info({message: 'Auth0 signup response', data: signupResponse.data});
     if (signupResponse.status >= 400) {
       const errorData = signupResponse.data || {};
       const errorMessage = errorData.error_description || errorData.error || 'Kayıt başarısız';
@@ -632,6 +651,24 @@ router.post('/register', validateBody(RegisterSchema), asyncHandler(async (req: 
       });
     }
 
+    // Email doğrulanmadıysa: doğrulama kodu gönder ve token dönme
+    if (!user.emailVerified) {
+      const sendResult = await authService.sendEmailVerificationCode(decoded.email || email);
+      if (!sendResult.success) {
+        return res.status(500).json({
+          success: false,
+          error: 'verification_email_send_failed',
+          message: sendResult.message
+        });
+      }
+      return res.status(201).json({
+        success: true,
+        requiresEmailVerification: true,
+        email: decoded.email || email,
+        message: 'Kayıt başarılı. Email doğrulama kodu gönderildi.'
+      });
+    }
+
     // Profil oluştur (yoksa)
     let profile = await profileRepo.findByUserId(user.id);
     if (!profile && name) {
@@ -651,6 +688,7 @@ router.post('/register', validateBody(RegisterSchema), asyncHandler(async (req: 
     const { fullName, avatarUrl } = await getUserProfileData(user.id, decoded.name || name, decoded.picture);
     const { backendToken, backendRefreshToken } = await generateBackendTokens(user, req);
 
+    
     return res.status(201).json(buildAuthResponse(
       user.id,
       user.email || decoded.email,
@@ -738,6 +776,24 @@ router.get('/token', requiresAuth(), asyncHandler(async (req: Request, res: Resp
       return res.status(500).json({
         success: false,
         error: 'Kullanıcı bulunamadı'
+      });
+    }
+
+    // Email doğrulanmadıysa: doğrulama kodu gönder ve token dönme
+    if (!user.emailVerified) {
+      const sendResult = await authService.sendEmailVerificationCode(auth0User.email);
+      if (!sendResult.success) {
+        return res.status(500).json({
+          success: false,
+          error: 'verification_email_send_failed',
+          message: sendResult.message
+        });
+      }
+      return res.status(403).json({
+        success: true,
+        requiresEmailVerification: true,
+        email: auth0User.email,
+        message: 'Email adresiniz doğrulanmamış. Doğrulama kodu gönderildi.'
       });
     }
 
