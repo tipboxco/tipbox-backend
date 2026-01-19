@@ -9,6 +9,7 @@ import { seedExplore } from './explore.seed';
 import { seedMessaging } from './messaging.seed';
 import { seedBrandProducts } from './brand-products.seed';
 import { seedProductCatalog } from './product-catalog.seed';
+import { seedNewsBanner } from './news-banner.seed';
 import { triggerFeedDistributionAfterSeed } from './trigger-feed-distribution';
 // Import from JS file (no ts-node issues)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -44,6 +45,7 @@ export async function runAllSeeds(): Promise<void> {
     await seedExplore();
     await seedMessaging();
     await seedBrandProducts();
+    await seedNewsBanner(); // News banner görselini MinIO'ya yükle
     
     // Seed sonunu işaretle
     markSeedEnd();

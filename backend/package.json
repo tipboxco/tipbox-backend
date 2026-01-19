@@ -20,6 +20,7 @@
     "db:update-trust-user-1-avatar": "docker-compose exec backend npx ts-node scripts/update-trust-user-1-avatar.ts",
     "db:update-marketplace-banners": "docker-compose exec backend npx ts-node scripts/update-marketplace-banners.ts",
     "db:seed:explore-banners": "docker-compose exec backend npx ts-node scripts/seed-explore-banners.ts",
+    "db:upload-news-banner": "docker-compose exec backend npx ts-node scripts/upload-news-banner.ts",
     "db:clear-marketplace-banners-cache": "docker-compose exec backend npx ts-node scripts/clear-marketplace-banners-cache.ts",
     "db:reset": "docker-compose exec backend npx ts-node prisma/seed/clear-user-content-data.ts",
     "db:reset:all": "docker-compose exec backend npx ts-node prisma/seed/clear-seed-data.ts --force",

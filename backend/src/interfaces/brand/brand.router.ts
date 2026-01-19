@@ -3,9 +3,11 @@ import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { authMiddleware } from '../auth/auth.middleware';
 import { BrandService } from '../../application/brand/brand.service';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
+import { NewsService } from '../../application/news/news.service';
 
 const router = Router();
 const brandService = new BrandService();
+const newsService = new NewsService();
 
 router.use(authMiddleware);
 
@@ -1941,6 +1943,119 @@ router.get(
     const page = req.query.page ? Number(req.query.page) : 1;
     const limit = req.query.limit ? Number(req.query.limit) : 12;
     const news = await brandService.getBrandProductNews(brandId, productId, userId, page, limit);
+    return res.json(news);
+  }),
+);
+
+/**
+ * @openapi
+ * /brands/{brandId}/products/{productId}/news/{newsId}:
+ *   get:
+ *     summary: Marka ürününe ait haber detayını getir
+ *     description: Marka ürününe ait belirli bir haberin detaylı bilgilerini getirir. Banner, title, content, interactions (beğeni, yorum, paylaşım, save) bilgilerini içerir.
+ *     tags: [Brand Catalog]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: brandId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Brand ID'si
+ *       - in: path
+ *         name: productId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Product ID'si
+ *       - in: path
+ *         name: newsId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: News ID'si
+ *     responses:
+ *       200:
+ *         description: Haber detayı başarıyla getirildi.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                 title:
+ *                   type: string
+ *                 content:
+ *                   type: string
+ *                   description: Haberin tam içeriği
+ *                 source:
+ *                   type: string
+ *                 date:
+ *                   type: string
+ *                   format: date-time
+ *                 banner:
+ *                   type: string
+ *                   nullable: true
+ *                   description: Banner image URL
+ *                 author:
+ *                   type: string
+ *                   nullable: true
+ *                 tags:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                 likesCount:
+ *                   type: integer
+ *                 commentsCount:
+ *                   type: integer
+ *                 sharesCount:
+ *                   type: integer
+ *                 favoritesCount:
+ *                   type: integer
+ *                 viewsCount:
+ *                   type: integer
+ *                 isLiked:
+ *                   type: boolean
+ *                   description: Kullanıcının bu news'i beğenip beğenmediği
+ *                 isFavorited:
+ *                   type: boolean
+ *                   description: Kullanıcının bu news'i favorilere ekleyip eklemediği
+ *                 isShared:
+ *                   type: boolean
+ *                   description: Kullanıcının bu news'i paylaşıp paylaşmadığı
+ *       401:
+ *         description: Kimlik doğrulaması başarısız.
+ *       404:
+ *         description: Brand, product veya news bulunamadı.
+ */
+router.get(
+  '/:brandId/products/:productId/news/:newsId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { brandId, productId, newsId } = req.params;
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    // Brand ve product kontrolü
+    const brand = await brandService.getBrandProductDetail(brandId, productId).catch(() => null);
+    if (!brand) {
+      return res.status(404).json({ message: 'Brand or product not found' });
+    }
+
+    // News detayını getir
+    const news = await newsService.getNewsById(newsId, userId);
+    if (!news) {
+      return res.status(404).json({ message: 'News not found' });
+    }
+
     return res.json(news);
   }),
 );

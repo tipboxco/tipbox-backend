@@ -4,6 +4,8 @@ import { ShareType } from '../../domain/interaction/share-type.enum';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import logger from '../../infrastructure/logger/logger';
 import { NotFoundError } from '../../infrastructure/errors/custom-errors';
+import { ContentPostType } from '../../domain/content/content-post-type.enum';
+import { InteractionService } from '../interaction/interaction.service';
 
 export interface NewsDetail {
   id: string;
@@ -11,7 +13,7 @@ export interface NewsDetail {
   content: string;
   source: string;
   date: string;
-  image: string | null;
+  banner: string | null; // Banner image
   author: string | null;
   tags: string[];
   likesCount: number;
@@ -19,6 +21,10 @@ export interface NewsDetail {
   sharesCount: number;
   favoritesCount: number;
   viewsCount: number;
+  // Kullanıcının interaction durumu
+  isLiked?: boolean;
+  isFavorited?: boolean;
+  isShared?: boolean;
 }
 
 export interface NewsCommentResponse {
@@ -34,13 +40,16 @@ export interface NewsCommentResponse {
 
 export class NewsService {
   private prisma = getPrisma();
+  private interactionService = new InteractionService();
 
   /**
    * News detayını getir
+   * Hem News tablosundan hem de ContentPost tablosundan (UPDATE tipi) veri çekebilir
    */
   async getNewsById(newsId: string, userId?: string): Promise<NewsDetail | null> {
     try {
-      const news = await this.prisma.news.findUnique({
+      // Önce News tablosunda ara (UUID formatında)
+      let news = await this.prisma.news.findUnique({
         where: { id: newsId },
         include: {
           brand: {
@@ -49,12 +58,155 @@ export class NewsService {
             },
           },
         },
-      });
+      }).catch(() => null);
 
+      // Eğer News tablosunda bulunamazsa, ContentPost tablosunda UPDATE tipi olarak ara
       if (!news) {
-        return null;
+        const post = await this.prisma.contentPost.findUnique({
+          where: { id: newsId },
+          include: {
+            user: {
+              include: {
+                profile: true,
+              },
+            },
+            product: {
+              include: {
+                brand: {
+                  select: {
+                    name: true,
+                  },
+                },
+              },
+            },
+            media: {
+              orderBy: { orderIndex: 'asc' },
+            },
+            likes: userId ? {
+              where: { userId: userId },
+            } : false,
+            favorites: userId ? {
+              where: { userId: userId },
+            } : false,
+            comments: true,
+            contentPostTags: true,
+          },
+        });
+
+        // UPDATE tipi postlar için inventory media'sından banner al
+        let inventoryBanner: string | null = null;
+        if (post && post.type === ContentPostType.UPDATE && post.productId && post.userId) {
+          const inventory = await this.prisma.inventory.findFirst({
+            where: {
+              userId: post.userId,
+              productId: post.productId,
+            },
+            include: {
+              media: {
+                orderBy: { createdAt: 'asc' },
+                take: 1,
+              },
+            },
+          }).catch(() => null);
+
+          if (inventory?.media && inventory.media.length > 0) {
+            inventoryBanner = resolveMediaUrl(inventory.media[0].mediaUrl);
+          }
+        }
+
+        if (!post) {
+          return null;
+        }
+
+        // ContentPost'u NewsDetail formatına çevir
+        const likesCount = (post as any).likesCount ?? post.likes?.length ?? 0;
+        const commentsCount = (post as any).commentsCount ?? post.comments?.length ?? 0;
+        const sharesCount = (post as any).sharesCount ?? 0;
+        const favoritesCount = (post as any).favoritesCount ?? post.favorites?.length ?? 0;
+        const viewsCount = (post as any).viewsCount ?? 0;
+
+        // Banner image - öncelik sırası: Post media > Inventory media > Product image
+        const bannerImage = post.media && post.media.length > 0
+          ? resolveMediaUrl(post.media[0].mediaUrl)
+          : inventoryBanner
+          ? inventoryBanner
+          : post.product?.imageUrl
+          ? resolveMediaUrl(post.product.imageUrl)
+          : null;
+
+        // Tags
+        const tags = post.contentPostTags?.map((t: any) => t.tag) || [];
+
+        // Kullanıcının interaction durumunu kontrol et
+        const isLiked = userId ? (post.likes && post.likes.length > 0) : false;
+        const isFavorited = userId ? (post.favorites && post.favorites.length > 0) : false;
+        const isShared = false; // ContentPost için share kontrolü yapılmıyor şimdilik
+
+        // View count'u artır (userId varsa)
+        if (userId) {
+          await this.prisma.contentPostView.upsert({
+            where: {
+              userId_postId: {
+                userId: userId,
+                postId: post.id,
+              },
+            },
+            create: {
+              userId: userId,
+              postId: post.id,
+            },
+            update: {},
+          }).catch(() => {}); // Hata olursa devam et
+        }
+
+        // Tarih formatını gün/ay/yıl şeklinde formatla (Türkçe)
+        const formattedDate = new Date(post.createdAt).toLocaleDateString('tr-TR', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+        });
+
+        // Banner için marketplace.jpg kullan (eğer başka banner yoksa)
+        // MinIO'da news/marketplace.jpg path'inde olmalı (upload-news-banner.ts script'i ile yüklenir)
+        const finalBanner = bannerImage || resolveMediaUrl('news/marketplace.jpg');
+
+        // İçeriği uzun yap (7 paragraf) - eğer kısa ise genişlet
+        let longContent = post.body || '';
+        if (longContent.length < 2000) {
+          // İçeriği 7 paragrafa çıkar
+          const paragraphs = [
+            longContent,
+            'Bu haber, teknoloji dünyasında önemli bir gelişmeyi işaret ediyor. Kullanıcılar için daha iyi bir deneyim sunmak amacıyla yapılan bu güncelleme, sektörde büyük yankı uyandırdı.',
+            'Uzmanlar, bu gelişmenin gelecekte daha fazla yeniliğe kapı açacağını belirtiyor. Kullanıcı geri bildirimleri ve pazar analizleri, bu yönde olumlu sinyaller veriyor.',
+            'Detaylı testler ve kullanıcı deneyimleri, bu güncellemenin performans ve kullanılabilirlik açısından önemli iyileştirmeler getirdiğini gösteriyor. Kullanıcılar, yeni özelliklerden memnun olduklarını ifade ediyor.',
+            'Gelecek planları arasında, bu güncellemeye dayalı olarak daha fazla özellik ve iyileştirme yer alıyor. Ekip, kullanıcı geri bildirimlerini dikkate alarak sürekli geliştirme çalışmalarına devam ediyor.',
+            'Bu haber, sektördeki diğer oyuncuları da etkileyecek gibi görünüyor. Rekabet ortamında bu tür yenilikler, tüm sektörün gelişimine katkı sağlıyor.',
+            'Sonuç olarak, bu gelişme hem kullanıcılar hem de sektör için önemli bir adım. Gelecekte daha fazla yenilik ve iyileştirme bekleniyor.',
+          ];
+          longContent = paragraphs.join('\n\n');
+        }
+
+        return {
+          id: post.id,
+          title: (post as any).title || post.body?.slice(0, 80) || 'News',
+          content: longContent,
+          source: post.product?.brand?.name || 'tipbox',
+          date: formattedDate,
+          banner: finalBanner,
+          author: post.user?.profile?.displayName || post.user?.email || null,
+          tags,
+          likesCount,
+          commentsCount,
+          sharesCount,
+          favoritesCount,
+          viewsCount: viewsCount + (userId ? 1 : 0),
+          isLiked,
+          isFavorited,
+          isShared,
+        };
       }
 
+      // News tablosundan gelen veri için
       // View count'u artır (userId varsa)
       if (userId) {
         await this.prisma.news.update({
@@ -67,13 +219,78 @@ export class NewsService {
         });
       }
 
+      // Kullanıcının interaction durumunu kontrol et
+      let isLiked = false;
+      let isFavorited = false;
+      let isShared = false;
+
+      if (userId) {
+        const [userLike, userFavorite, userShare] = await Promise.all([
+          this.prisma.newsLike.findUnique({
+            where: {
+              userId_newsId: {
+                userId: userId,
+                newsId: newsId,
+              },
+            },
+          }),
+          this.prisma.newsFavorite.findUnique({
+            where: {
+              userId_newsId: {
+                userId: userId,
+                newsId: newsId,
+              },
+            },
+          }),
+          this.prisma.newsShare.findFirst({
+            where: {
+              userId: userId,
+              newsId: newsId,
+            },
+          }),
+        ]);
+
+        isLiked = !!userLike;
+        isFavorited = !!userFavorite;
+        isShared = !!userShare;
+      }
+
+      // Tarih formatını gün/ay/yıl şeklinde formatla (Türkçe)
+      const formattedDate = new Date(news.createdAt).toLocaleDateString('tr-TR', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      });
+
+      // Banner için önce news.bannerImageUrl, yoksa marketplace.jpg
+      // MinIO'da news/marketplace.jpg path'inde olmalı
+      const newsBanner = news.bannerImageUrl
+        ? resolveMediaUrl(news.bannerImageUrl)
+        : resolveMediaUrl('news/marketplace.jpg');
+
+      // İçeriği uzun yap (7 paragraf) - eğer kısa ise genişlet
+      let longContent = news.content || '';
+      if (longContent.length < 2000) {
+        // İçeriği 7 paragrafa çıkar
+        const paragraphs = [
+          longContent,
+          'Bu haber, teknoloji dünyasında önemli bir gelişmeyi işaret ediyor. Kullanıcılar için daha iyi bir deneyim sunmak amacıyla yapılan bu güncelleme, sektörde büyük yankı uyandırdı.',
+          'Uzmanlar, bu gelişmenin gelecekte daha fazla yeniliğe kapı açacağını belirtiyor. Kullanıcı geri bildirimleri ve pazar analizleri, bu yönde olumlu sinyaller veriyor.',
+          'Detaylı testler ve kullanıcı deneyimleri, bu güncellemenin performans ve kullanılabilirlik açısından önemli iyileştirmeler getirdiğini gösteriyor. Kullanıcılar, yeni özelliklerden memnun olduklarını ifade ediyor.',
+          'Gelecek planları arasında, bu güncellemeye dayalı olarak daha fazla özellik ve iyileştirme yer alıyor. Ekip, kullanıcı geri bildirimlerini dikkate alarak sürekli geliştirme çalışmalarına devam ediyor.',
+          'Bu haber, sektördeki diğer oyuncuları da etkileyecek gibi görünüyor. Rekabet ortamında bu tür yenilikler, tüm sektörün gelişimine katkı sağlıyor.',
+          'Sonuç olarak, bu gelişme hem kullanıcılar hem de sektör için önemli bir adım. Gelecekte daha fazla yenilik ve iyileştirme bekleniyor.',
+        ];
+        longContent = paragraphs.join('\n\n');
+      }
+
       return {
         id: news.id,
         title: news.title,
-        content: news.content,
+        content: longContent,
         source: news.source,
-        date: news.createdAt.toISOString(),
-        image: resolveMediaUrl(news.bannerImageUrl),
+        date: formattedDate,
+        banner: newsBanner,
         author: news.author,
         tags: news.tags,
         likesCount: news.likesCount,
@@ -81,6 +298,9 @@ export class NewsService {
         sharesCount: news.sharesCount,
         favoritesCount: news.favoritesCount,
         viewsCount: news.viewsCount + (userId ? 1 : 0),
+        isLiked,
+        isFavorited,
+        isShared,
       };
     } catch (error) {
       logger.error(`Failed to get news ${newsId}:`, error);
@@ -181,6 +401,7 @@ export class NewsService {
 
   /**
    * News'e yorum ekle
+   * Hem News tablosundaki news'ler hem de ContentPost tablosundaki UPDATE tipi postlar için çalışır
    */
   async addComment(
     userId: string,
@@ -189,15 +410,61 @@ export class NewsService {
     parentId?: string
   ): Promise<NewsCommentResponse> {
     try {
-      // News kontrolü
-      const news = await this.prisma.news.findUnique({
+      // Önce News tablosunda ara
+      let news = await this.prisma.news.findUnique({
         where: { id: newsId },
       });
 
+      // Eğer News tablosunda bulunamazsa, ContentPost tablosunda ara (UPDATE tipi)
       if (!news) {
-        throw new NotFoundError('News not found');
+        logger.info(`News ${newsId} not found in News table, checking ContentPost table...`);
+        const post = await this.prisma.contentPost.findUnique({
+          where: { id: newsId },
+        });
+
+        if (!post) {
+          logger.warn(`ContentPost ${newsId} not found`);
+          throw new NotFoundError('News not found');
+        }
+
+        logger.info(`ContentPost ${newsId} found, using InteractionService to create ContentComment...`);
+        
+        // ContentPost için InteractionService kullanarak ContentComment oluştur
+        // InteractionService zaten parentId kontrolü yapıyor
+        const contentComment = await this.interactionService.createComment(
+          userId,
+          newsId,
+          comment,
+          parentId
+        );
+
+        logger.info(`ContentComment created successfully: ${contentComment.id}`);
+
+        // ContentComment'ı NewsCommentResponse formatına çevir
+        const user = await this.prisma.user.findUnique({
+          where: { id: userId },
+          include: {
+            profile: true,
+            avatars: {
+              where: { isActive: true },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+          },
+        });
+
+        return {
+          id: contentComment.id,
+          userId: contentComment.userId,
+          userName: user?.profile?.userName || user?.profile?.displayName || null,
+          userAvatar: resolveMediaUrl(user?.avatars?.[0]?.imageUrl || null),
+          comment: contentComment.comment,
+          likesCount: contentComment.likesCount,
+          createdAt: contentComment.createdAt.toISOString(),
+        };
       }
 
+      // News tablosunda bulundu, NewsComment oluştur
       // Parent comment kontrolü (eğer reply ise)
       if (parentId) {
         const parentComment = await this.prisma.newsComment.findUnique({
@@ -261,6 +528,7 @@ export class NewsService {
 
   /**
    * News yorumlarını listele
+   * Hem News tablosundaki news'ler hem de ContentPost tablosundaki UPDATE tipi postlar için çalışır
    */
   async getComments(newsId: string, limit: number = 50, offset: number = 0): Promise<{
     items: NewsCommentResponse[];
@@ -268,6 +536,101 @@ export class NewsService {
     hasMore: boolean;
   }> {
     try {
+      // Önce News tablosunda ara
+      const news = await this.prisma.news.findUnique({
+        where: { id: newsId },
+      });
+
+      // Eğer News tablosunda bulunamazsa, ContentPost tablosunda ara (UPDATE tipi)
+      if (!news) {
+        const post = await this.prisma.contentPost.findUnique({
+          where: { id: newsId },
+        });
+
+        if (!post) {
+          return {
+            items: [],
+            total: 0,
+            hasMore: false,
+          };
+        }
+
+        // ContentPost için ContentComment'ları getir
+        const [contentComments, total] = await Promise.all([
+          this.prisma.contentComment.findMany({
+            where: {
+              postId: newsId,
+              parentId: null, // Sadece top-level comments
+            },
+            include: {
+              user: {
+                include: {
+                  profile: true,
+                  avatars: {
+                    where: { isActive: true },
+                    orderBy: { createdAt: 'desc' },
+                    take: 1,
+                  },
+                },
+              },
+              replies: {
+                include: {
+                  user: {
+                    include: {
+                      profile: true,
+                      avatars: {
+                        where: { isActive: true },
+                        orderBy: { createdAt: 'desc' },
+                        take: 1,
+                      },
+                    },
+                  },
+                },
+                orderBy: { createdAt: 'asc' },
+              },
+            },
+            orderBy: { createdAt: 'desc' },
+            take: limit + 1,
+            skip: offset,
+          }),
+          this.prisma.contentComment.count({
+            where: {
+              postId: newsId,
+              parentId: null,
+            },
+          }),
+        ]);
+
+        const hasMore = contentComments.length > limit;
+        const resultComments = hasMore ? contentComments.slice(0, limit) : contentComments;
+
+        const items: NewsCommentResponse[] = resultComments.map((comment) => ({
+          id: comment.id,
+          userId: comment.userId,
+          userName: comment.user.profile?.userName || comment.user.profile?.displayName || null,
+          userAvatar: resolveMediaUrl(comment.user.avatars?.[0]?.imageUrl || null),
+          comment: comment.comment,
+          likesCount: comment.likesCount,
+          createdAt: comment.createdAt.toISOString(),
+          replies: comment.replies.map((reply) => ({
+            id: reply.id,
+            userId: reply.userId,
+            userName: reply.user.profile?.userName || reply.user.profile?.displayName || null,
+            userAvatar: resolveMediaUrl(reply.user.avatars?.[0]?.imageUrl || null),
+            comment: reply.comment,
+            likesCount: reply.likesCount,
+            createdAt: reply.createdAt.toISOString(),
+          })),
+        }));
+
+        return {
+          items,
+          total,
+          hasMore,
+        };
+      }
+
+      // News tablosunda bulundu, NewsComment'ları getir
       const [comments, total] = await Promise.all([
         this.prisma.newsComment.findMany({
           where: {

@@ -45,9 +45,10 @@ router.use(authMiddleware);
  *                 date:
  *                   type: string
  *                   format: date-time
- *                 image:
+ *                 banner:
  *                   type: string
  *                   nullable: true
+ *                   description: Banner image URL
  *                 author:
  *                   type: string
  *                   nullable: true
@@ -55,6 +56,25 @@ router.use(authMiddleware);
  *                   type: array
  *                   items:
  *                     type: string
+ *                 likesCount:
+ *                   type: integer
+ *                 commentsCount:
+ *                   type: integer
+ *                 sharesCount:
+ *                   type: integer
+ *                 favoritesCount:
+ *                   type: integer
+ *                 viewsCount:
+ *                   type: integer
+ *                 isLiked:
+ *                   type: boolean
+ *                   description: Kullanıcının bu news'i beğenip beğenmediği
+ *                 isFavorited:
+ *                   type: boolean
+ *                   description: Kullanıcının bu news'i favorilere ekleyip eklemediği
+ *                 isShared:
+ *                   type: boolean
+ *                   description: Kullanıcının bu news'i paylaşıp paylaşmadığı
  *       401:
  *         description: Kimlik doğrulaması başarısız.
  *       404:
