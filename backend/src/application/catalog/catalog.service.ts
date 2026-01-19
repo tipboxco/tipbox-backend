@@ -358,14 +358,12 @@ export class CatalogService {
 
       const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
       const cursor = options?.cursor;
-      const filter = options?.filter || 'all'; // all, free, tips_and_tricks, questions, updates, benchmarks, reviews
+      const filter = options?.filter || 'all'; // all, tips_and_tricks, questions, updates, benchmarks, reviews
       const sort = options?.sort || 'newest'; // newest, oldest, most_popular
 
-      // Filtreleme: Product için
+      // Filtreleme: Product için (FREE hariç: EXPERIENCE, TIPS, COMPARE, QUESTION, UPDATE)
       let typeFilter: ContentPostType[] | undefined;
-      if (filter === 'free') {
-        typeFilter = [ContentPostType.FREE];
-      } else if (filter === 'tips_and_tricks') {
+      if (filter === 'tips_and_tricks') {
         typeFilter = [ContentPostType.TIPS];
       } else if (filter === 'questions') {
         typeFilter = [ContentPostType.QUESTION];
@@ -375,8 +373,10 @@ export class CatalogService {
         typeFilter = [ContentPostType.COMPARE];
       } else if (filter === 'reviews') {
         typeFilter = [ContentPostType.EXPERIENCE];
+      } else if (filter === 'all') {
+        // Product için izin verilen tüm post tipleri (FREE hariç)
+        typeFilter = this.getAllowedPostTypesForContext(ContextType.PRODUCT);
       }
-      // filter === 'all' ise tüm post tipleri (typeFilter undefined)
 
       const whereClause: any = {
         productId: productId,
@@ -545,9 +545,8 @@ export class CatalogService {
         // Sub category ve product group için sadece Free, Tips, Question
         return [ContentPostType.FREE, ContentPostType.TIPS, ContentPostType.QUESTION];
       case ContextType.PRODUCT:
-        // Product için tüm post tipleri
+        // Product için: Experience, Tips, Compare, Question, Update (FREE hariç)
         return [
-          ContentPostType.FREE,
           ContentPostType.TIPS,
           ContentPostType.QUESTION,
           ContentPostType.EXPERIENCE,

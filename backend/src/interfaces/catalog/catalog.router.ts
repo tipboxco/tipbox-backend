@@ -14,7 +14,7 @@ router.use(authMiddleware);
  *   get:
  *     summary: Tüm kategorileri listele
  *     description: Kullanıcının app içerisindeki tüm kategorileri görüntülediği endpoint.
- *     tags: [Catalog]
+ *     tags: [Product Catalog]
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -50,7 +50,7 @@ router.get(
  *   get:
  *     summary: Kategoriye göre sub-kategorileri listele
  *     description: Kullanıcının seçtiği kategoriye göre app içerisindeki Sub Categoriesleri görüntülediği endpoint.
- *     tags: [Catalog]
+ *     tags: [Product Catalog]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -99,7 +99,7 @@ router.get(
  *   get:
  *     summary: Sub-kategoriye göre product group'ları listele
  *     description: Kullanıcının seçtiği sub kategoriye göre app içerisindeki Product Group listesini görüntülediği endpoint.
- *     tags: [Catalog]
+ *     tags: [Product Catalog]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -148,7 +148,7 @@ router.get(
  *   get:
  *     summary: Product group'a göre ürünleri listele
  *     description: Kullanıcının seçtiği Product Group'a göre app içerisindeki Product listesini görüntülediği endpoint.
- *     tags: [Catalog]
+ *     tags: [Product Catalog]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -203,7 +203,7 @@ router.get(
  *   get:
  *     summary: Sub category'ye ait post'ları getir
  *     description: Belirli bir sub category'ye ait post'ları getirir. Hiyerarşik feed mantığı ile alt product group ve product'ların gönderilerini de içerir. Feed formatında döner.
- *     tags: [Catalog]
+ *     tags: [Product Catalog]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -215,12 +215,21 @@ router.get(
  *           format: uuid
  *         description: Sub category ID'si
  *       - in: query
- *         name: type
+ *         name: filter
  *         schema:
  *           type: string
- *           enum: [tips, experience, comments, benchmark]
- *           default: null
- *         description: Post tipi filtresi (opsiyonel). Belirtilmezse sadece Free, Tips, Question gösterilir. tips = Tips gönderileri, experience = Experience ve Update gönderileri, comments = Free ve Question gönderileri, benchmark = Benchmark gönderileri
+ *           enum: [all, free, tips_and_tricks, questions]
+ *           default: all
+ *         description: Post tipi filtresi (opsiyonel). all = Tüm gönderiler (Free, Tips, Question), free = Free gönderiler, tips_and_tricks = Tips gönderileri, questions = Question gönderileri
+ *         style: form
+ *         explode: false
+ *       - in: query
+ *         name: sort
+ *         schema:
+ *           type: string
+ *           enum: [newest, oldest, most_popular]
+ *           default: newest
+ *         description: Sıralama tipi. newest = En yeni, oldest = En eski, most_popular = En popüler
  *         style: form
  *         explode: false
  *       - in: query
@@ -300,7 +309,7 @@ router.get(
  *   get:
  *     summary: Product group'a ait post'ları getir
  *     description: Belirli bir product group'a ait post'ları getirir. Hiyerarşik feed mantığı ile alt product'ların gönderilerini de içerir. Feed formatında döner.
- *     tags: [Catalog]
+ *     tags: [Product Catalog]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -312,12 +321,21 @@ router.get(
  *           format: uuid
  *         description: Product group ID'si
  *       - in: query
- *         name: type
+ *         name: filter
  *         schema:
  *           type: string
- *           enum: [tips, experience, comments, benchmark]
- *           default: null
- *         description: Post tipi filtresi (opsiyonel). Belirtilmezse sadece Free, Tips, Question gösterilir. tips = Tips gönderileri, experience = Experience ve Update gönderileri, comments = Free ve Question gönderileri, benchmark = Benchmark gönderileri
+ *           enum: [all, free, tips_and_tricks, questions]
+ *           default: all
+ *         description: Post tipi filtresi (opsiyonel). all = Tüm gönderiler (Free, Tips, Question), free = Free gönderiler, tips_and_tricks = Tips gönderileri, questions = Question gönderileri
+ *         style: form
+ *         explode: false
+ *       - in: query
+ *         name: sort
+ *         schema:
+ *           type: string
+ *           enum: [newest, oldest, most_popular]
+ *           default: newest
+ *         description: Sıralama tipi. newest = En yeni, oldest = En eski, most_popular = En popüler
  *         style: form
  *         explode: false
  *       - in: query
@@ -393,85 +411,13 @@ router.get(
 
 /**
  * @openapi
- * /catalog/products/{productId}:
- *   get:
- *     summary: Product detay bilgilerini getir
- *     description: Belirli bir product'ın detaylı bilgilerini getirir.
- *     tags: [Catalog]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: productId
- *         required: true
- *         schema:
- *           type: string
- *         description: Product ID'si
- *     responses:
- *       200:
- *         description: Product detayı başarıyla getirildi.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 productId:
- *                   type: string
- *                 name:
- *                   type: string
- *                 subName:
- *                   type: string
- *                   nullable: true
- *                 description:
- *                   type: string
- *                   nullable: true
- *                 image:
- *                   type: string
- *                   nullable: true
- *                 brand:
- *                   type: object
- *                   nullable: true
- *                   properties:
- *                     id:
- *                       type: string
- *                     name:
- *                       type: string
- *                     image:
- *                       type: string
- *                       nullable: true
- *                 specs:
- *                   type: array
- *                   items:
- *                     type: string
- *                 price:
- *                   type: number
- *                   nullable: true
- *                 currency:
- *                   type: string
- *                   nullable: true
- *       401:
- *         description: Kimlik doğrulaması başarısız.
- *       404:
- *         description: Product bulunamadı.
- */
-router.get(
-  '/products/:productId',
-  asyncHandler(async (req: Request, res: Response) => {
-    const { productId } = req.params;
-    const product = await catalogService.getProductById(productId);
-    return res.json(product);
-  }),
-);
-
-/**
- * @openapi
  * /catalog/products/{productId}/posts:
  *   get:
  *     summary: Product'a ait post'ları getir
- *     description: Belirli bir product'a ait post'ları getirir. Feed formatında döner.
- *     tags: [Catalog]
+ *     description: Belirli bir product'a ait post'ları getirir. Product için deneyim (EXPERIENCE), ipucu (TIPS), karşılaştırma (COMPARE), soru (QUESTION), güncelleme (UPDATE) gönderileri paylaşılabilir. Feed formatında döner.
+ *     tags: [Product Catalog]
  *     security:
- *       - bearerAuth: []
+ *       - bearerAuth:  []
  *     parameters:
  *       - in: path
  *         name: productId
@@ -480,12 +426,21 @@ router.get(
  *           type: string
  *         description: Product ID'si
  *       - in: query
- *         name: type
+ *         name: filter
  *         schema:
  *           type: string
- *           enum: [tips, experience, comments, benchmark]
- *           default: null
- *         description: Post tipi filtresi (opsiyonel). tips = Tips gönderileri, experience = Experience ve Update gönderileri, comments = Free ve Question gönderileri, benchmark = Benchmark gönderileri
+ *           enum: [all, tips_and_tricks, reviews, benchmarks, questions, updates]
+ *           default: all
+ *         description: Post tipi filtresi (opsiyonel). all = Tüm gönderiler, tips_and_tricks = Tips gönderileri, reviews = Experience gönderileri, benchmarks = Comparison gönderileri, questions = Question gönderileri, updates = Update gönderileri
+ *         style: form
+ *         explode: false
+ *       - in: query
+ *         name: sort
+ *         schema:
+ *           type: string
+ *           enum: [newest, oldest, most_popular]
+ *           default: newest
+ *         description: Sıralama tipi. newest = En yeni, oldest = En eski, most_popular = En popüler
  *         style: form
  *         explode: false
  *       - in: query
@@ -511,6 +466,7 @@ router.get(
  *               properties:
  *                 items:
  *                   type: array
+ * 
  *                   items:
  *                     type: object
  *                     properties:
@@ -539,7 +495,16 @@ router.get(
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     const { productId } = req.params;
-    const filter = req.query.filter as string | undefined; // all, free, tips_and_tricks, questions, updates, benchmarks, reviews
+    
+    const filterParam = req.query.filter as string | undefined;
+    
+    // Map filter to ContentPostType
+    let filter: string | undefined = filterParam;
+    if (!filter || filter === 'all') {
+      // Product için izin verilen tüm post tipleri: EXPERIENCE, TIPS, COMPARE, QUESTION, UPDATE
+      filter = 'all';
+    }
+    
     const sort = req.query.sort as string | undefined; // newest, oldest, most_popular
     const cursor = req.query.cursor as string | undefined;
     const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
@@ -556,96 +521,6 @@ router.get(
     });
 
     return res.json(posts);
-  }),
-);
-
-/**
- * @openapi
- * /catalog/products/{productId}/news:
- *   get:
- *     summary: Product'a ait haberleri getir
- *     description: Belirli bir product'a ait haberleri getirir. Cursor-based pagination destekler.
- *     tags: [Catalog]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: productId
- *         required: true
- *         schema:
- *           type: string
- *         description: Product ID'si
- *       - in: query
- *         name: cursor
- *         schema:
- *           type: string
- *         description: Pagination cursor
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 50
- *           default: 20
- *         description: Sayfa başına item sayısı
- *     responses:
- *       200:
- *         description: Product haberleri başarıyla getirildi.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 items:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       id:
- *                         type: string
- *                       title:
- *                         type: string
- *                       description:
- *                         type: string
- *                       source:
- *                         type: string
- *                       date:
- *                         type: string
- *                         format: date-time
- *                       image:
- *                         type: string
- *                 pagination:
- *                   type: object
- *                   properties:
- *                     cursor:
- *                       type: string
- *                       nullable: true
- *                     hasMore:
- *                       type: boolean
- *                     limit:
- *                       type: integer
- *       401:
- *         description: Kimlik doğrulaması başarısız.
- *       404:
- *         description: Product bulunamadı.
- */
-router.get(
-  '/products/:productId/news',
-  asyncHandler(async (req: Request, res: Response) => {
-    const { productId } = req.params;
-    const cursor = req.query.cursor as string | undefined;
-    const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
-
-    if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
-      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
-    }
-
-    const news = await catalogService.getProductNews(productId, {
-      cursor,
-      ...(typeof limitParam === 'number' ? { limit: limitParam } : {}),
-    });
-
-    return res.json(news);
   }),
 );
 

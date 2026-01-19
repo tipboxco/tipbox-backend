@@ -1289,11 +1289,15 @@ export class BrandService {
     try {
       const brand = await this.prisma.brand.findUnique({
         where: { id: brandId },
-        select: { name: true },
+        select: { name: true, externalId: true },
       });
 
       if (!brand) {
         throw new NotFoundError('Brand not found');
+      }
+
+      if (!brand.externalId) {
+        throw new NotFoundError('Brand externalId not found');
       }
 
       const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
@@ -1304,7 +1308,7 @@ export class BrandService {
       const groups = await this.prisma.productGroup.findMany({
         where: {
           products: {
-            some: { brandId: brandId },
+            some: { brandId: brand.externalId },
           },
           ...(cursor && {
             id: {
@@ -1318,7 +1322,7 @@ export class BrandService {
         take: limit + 1,
         include: {
           products: {
-            where: { brandId: brandId },
+            where: { brandId: brand.externalId },
             orderBy: { id: 'asc' },
             take: productLimit + 1,
             include: {
@@ -1530,11 +1534,15 @@ export class BrandService {
       // Brand kontrolü
       const brand = await this.prisma.brand.findUnique({
         where: { id: brandId },
-        select: { name: true },
+        select: { name: true, externalId: true },
       });
 
       if (!brand) {
         throw new NotFoundError('Brand not found');
+      }
+
+      if (!brand.externalId) {
+        throw new NotFoundError('Brand externalId not found');
       }
 
       // Product group kontrolü
@@ -1551,7 +1559,7 @@ export class BrandService {
 
       const whereClause: any = {
         groupId: productGroupId,
-        brandId: brandId, // Brand ID'ye göre filtrele
+        brandId: brand.externalId, // Brand externalId'ye göre filtrele
       };
 
       if (cursor) {
@@ -1725,19 +1733,25 @@ export class BrandService {
   }
 
   /**
-   * Marka ürününe ait deneyim paylaşımlarını listele (cursor-based pagination)
+   * Generic metod: Brand product'a ait belirli tip gönderileri getir (cursor-based pagination)
    */
-  async getBrandProductExperiences(
+  async getBrandProductPosts(
     brandId: string,
     productId: string,
     userId?: string,
+    postType?: ContentPostType | ContentPostType[],
     options?: { cursor?: string; limit?: number }
   ): Promise<FeedResponse> {
     try {
       // Brand name'i al
-      const brand = await this.prisma.brand.findUnique({
-        where: { id: brandId },
-        select: { name: true },
+      const brand = await this.prisma.brand.findFirst({
+        where: {
+          OR: [
+            { id: brandId },
+            { externalId: brandId },
+          ],
+        },
+        select: { id: true, externalId: true, name: true },
       });
 
       if (!brand) {
@@ -1750,7 +1764,160 @@ export class BrandService {
         select: { id: true, brandId: true },
       });
 
-      if (!product || product.brandId !== brandId) {
+      if (!product || product.brandId !== brand.externalId) {
+        throw new NotFoundError('Product not found or does not belong to this brand');
+      }
+
+      const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+      const cursor = options?.cursor;
+
+      const whereClause: any = {
+        productId: productId,
+      };
+
+      // Post type filtresi
+      if (postType) {
+        if (Array.isArray(postType)) {
+          whereClause.type = { in: postType };
+        } else {
+          whereClause.type = postType;
+        }
+      }
+
+      // Cursor-based pagination
+      if (cursor) {
+        whereClause.id = {
+          lt: cursor,
+        };
+      }
+
+      // Ürüne ait gönderileri getir - cursor-based pagination
+      const posts = await this.prisma.contentPost.findMany({
+        where: whereClause,
+        include: {
+          user: {
+            include: {
+              profile: true,
+              titles: {
+                orderBy: { earnedAt: 'desc' },
+                take: 1,
+              },
+              avatars: {
+                where: { isActive: true },
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+              },
+            },
+          },
+          product: {
+            include: {
+              group: true,
+            },
+          },
+          comparison: {
+            include: {
+              product1: true,
+              product2: true,
+              scores: true,
+            },
+          },
+          likes: true,
+          comments: true,
+          favorites: true,
+          media: {
+            orderBy: { orderIndex: 'asc' },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: limit + 1, // Bir fazla al ki hasMore'u kontrol edebilelim
+      });
+
+      const hasMore = posts.length > limit;
+      const resultPosts = hasMore ? posts.slice(0, limit) : posts;
+      const nextCursor = hasMore && resultPosts.length > 0 ? resultPosts[resultPosts.length - 1].id : undefined;
+
+      // Experience post'ları için inventory verilerini toplu olarak çek
+      // Inventory modelinde contentPostId yok, productId var. Her post'un productId'si var.
+      const experiencePosts = resultPosts.filter(
+        (p) => p.type === ContentPostType.EXPERIENCE || p.type === ContentPostType.UPDATE
+      );
+      
+      const inventoriesMap = new Map<string, any>();
+      if (experiencePosts.length > 0 && userId) {
+        // Post'ların productId'lerini al
+        const productIds = experiencePosts
+          .map((p) => p.productId)
+          .filter((id): id is string => id !== null);
+        
+        if (productIds.length > 0) {
+          const inventories = await this.prisma.inventory.findMany({
+            where: {
+              userId: userId,
+              productId: { in: productIds },
+            },
+            include: {
+              media: {
+                orderBy: { createdAt: 'asc' },
+              },
+            },
+          });
+
+          // Inventory'leri productId'ye göre map'le
+          for (const inv of inventories) {
+            inventoriesMap.set(inv.productId, inv);
+          }
+        }
+      }
+
+      // Feed items'a dönüştür
+      const feedItems = await this.mapPostsToFeedItems(resultPosts, userId, inventoriesMap);
+
+      return {
+        items: feedItems,
+        pagination: {
+          cursor: nextCursor,
+          hasMore,
+          limit,
+        },
+      };
+    } catch (error) {
+      logger.error(`Failed to get brand product posts for ${brandId}/${productId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Marka ürününe ait deneyim paylaşımlarını listele (cursor-based pagination)
+   */
+  async getBrandProductExperiences(
+    brandId: string,
+    productId: string,
+    userId?: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<FeedResponse> {
+    try {
+      // Brand'i kontrol et (hem id hem externalId ile kontrol et)
+      const brand = await this.prisma.brand.findFirst({
+        where: {
+          OR: [
+            { id: brandId },
+            { externalId: brandId },
+          ],
+        },
+        select: { id: true, externalId: true, name: true },
+      });
+
+      if (!brand) {
+        throw new NotFoundError('Brand not found');
+      }
+
+      // Product'ı kontrol et
+      const product = await this.prisma.product.findUnique({
+        where: { id: productId },
+        select: { id: true, brandId: true },
+      });
+
+      if (!product || product.brandId !== brand.externalId) {
         throw new NotFoundError('Product not found or does not belong to this brand');
       }
 
@@ -1831,10 +1998,15 @@ export class BrandService {
     limit: number = 12,
   ): Promise<FeedItem[]> {
     try {
-      // Brand name'i al
-      const brand = await this.prisma.brand.findUnique({
-        where: { id: brandId },
-        select: { name: true },
+      // Brand'i kontrol et (hem id hem externalId ile kontrol et)
+      const brand = await this.prisma.brand.findFirst({
+        where: {
+          OR: [
+            { id: brandId },
+            { externalId: brandId },
+          ],
+        },
+        select: { id: true, externalId: true, name: true },
       });
 
       if (!brand) {
@@ -1847,7 +2019,7 @@ export class BrandService {
         select: { id: true, brandId: true },
       });
 
-      if (!product || product.brandId !== brandId) {
+      if (!product || product.brandId !== brand.externalId) {
         throw new NotFoundError('Product not found or does not belong to this brand');
       }
 
@@ -1923,6 +2095,118 @@ export class BrandService {
   }
 
   /**
+   * Brand context'inde product detay bilgilerini getir
+   * Catalog context'indeki product detayından farklı olabilir (brand-specific bilgiler, stats vb.)
+   */
+  async getBrandProductDetail(
+    brandId: string,
+    productId: string,
+  ): Promise<{
+    productId: string;
+    name: string;
+    subName: string | null;
+    description: string | null;
+    image: string | null;
+    brand: {
+      id: string;
+      name: string;
+      image: string | null;
+    } | null;
+    specs: string[];
+    price: number | null;
+    currency: string | null;
+    stats?: {
+      reviews: number;
+      likes: number;
+      share: number;
+    };
+  }> {
+    try {
+      // Brand'i kontrol et (hem id hem externalId ile kontrol et)
+      const brand = await this.prisma.brand.findFirst({
+        where: {
+          OR: [
+            { id: brandId },
+            { externalId: brandId },
+          ],
+        },
+        select: { id: true, externalId: true, name: true, imageUrl: true },
+      });
+
+      if (!brand) {
+        throw new NotFoundError('Brand not found');
+      }
+
+      // Product'ı kontrol et ve brand'e ait olduğunu doğrula
+      const product = await this.prisma.product.findUnique({
+        where: { id: productId },
+        include: {
+          group: {
+            include: {
+              subCategory: {
+                include: {
+                  mainCategory: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!product) {
+        throw new NotFoundError(`Product not found: ${productId}`);
+      }
+
+      // Product'ın brand'e ait olduğunu kontrol et (brandId product'ta externalId olarak saklanıyor)
+      if (product.brandId !== brand.externalId) {
+        throw new NotFoundError('Product does not belong to this brand');
+      }
+
+      // Brand bilgisi
+      const brandData = {
+        id: brand.id,
+        name: brand.name,
+        image: resolveMediaUrl(brand.imageUrl),
+      };
+
+      // Product stats hesapla (reviews, likes, share)
+      const contentPosts = await this.prisma.contentPost.findMany({
+        where: { productId: productId },
+        select: {
+          likesCount: true,
+          sharesCount: true,
+          favoritesCount: true,
+        },
+      });
+
+      const stats = this.calculateProductStats(contentPosts);
+
+      // Specs'i parse et (şimdilik boş array)
+      const specs: string[] = [];
+
+      // Price ve currency şimdilik null
+      const price: number | null = null;
+      const currency: string | null = null;
+
+      return {
+        productId: product.id,
+        name: product.name,
+        subName: product.subName,
+        description: product.description,
+        image: resolveMediaUrl(product.imageUrl),
+        brand: brandData,
+        specs,
+        price,
+        currency,
+        stats,
+      };
+    } catch (error) {
+      logger.error(`Failed to get brand product detail for ${brandId}/${productId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Marka ürünlerine dair haberleri listele
    */
   async getBrandProductNews(
@@ -1949,10 +2233,15 @@ export class BrandService {
     }>
   > {
     try {
-      // Brand name'i al
-      const brand = await this.prisma.brand.findUnique({
-        where: { id: brandId },
-        select: { name: true },
+      // Brand'i kontrol et (hem id hem externalId ile kontrol et)
+      const brand = await this.prisma.brand.findFirst({
+        where: {
+          OR: [
+            { id: brandId },
+            { externalId: brandId },
+          ],
+        },
+        select: { id: true, externalId: true, name: true },
       });
 
       if (!brand) {
@@ -1965,7 +2254,7 @@ export class BrandService {
         select: { id: true, brandId: true },
       });
 
-      if (!product || product.brandId !== brandId) {
+      if (!product || product.brandId !== brand.externalId) {
         throw new NotFoundError('Product not found or does not belong to this brand');
       }
 
@@ -2274,8 +2563,8 @@ export class BrandService {
     // Önce inventory'den gelen experience verilerini kontrol et
     let experienceContent: ExperienceContent[] = [];
     if (inventoriesMap && post.userId && post.productId) {
-      const inventoryKey = `${post.userId}-${post.productId}`;
-      const inventory = inventoriesMap.get(inventoryKey);
+      // Inventory'ler productId ile map'lenmiş
+      const inventory = post.productId ? inventoriesMap.get(post.productId) : undefined;
       
       // Artık productExperiences yok, sadece inventory media'sını kullan
       if (inventory) {

@@ -298,7 +298,7 @@ app.use('/explore', exploreRouter);
 app.use('/expert', expertRouter);
 app.use('/inventory', inventoryRouter);
 app.use('/catalog', catalogRouter);
-app.use('/products', catalogRouter); // Product endpoints için
+app.use('/products', catalogRouter); // Backward compatibility için
 app.use('/brands', brandRouter);
 app.use('/search', searchRouter);
 app.use('/posts', postRouter);
