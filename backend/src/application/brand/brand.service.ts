@@ -517,6 +517,7 @@ export class BrandService {
         where: { id: brandId },
         select: {
           id: true,
+          externalId: true,
           name: true,
           description: true,
           imageUrl: true,
@@ -527,8 +528,22 @@ export class BrandService {
         throw new NotFoundError('Brand not found');
       }
 
+      // ✅ DÜZELTME: Product.brandId Brand.externalId'ye referans veriyor, Brand.id'ye değil
+      if (!brand.externalId) {
+        return {
+          brandId: brand.id,
+          name: brand.name,
+          posts: [],
+          pagination: {
+            cursor: undefined,
+            hasMore: false,
+            limit: options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 10,
+          },
+        };
+      }
+
       const brandProducts = await this.prisma.product.findMany({
-        where: { brandId: brandId },
+        where: { brandId: brand.externalId },
         select: { id: true },
       });
       const productIds = brandProducts.map((product) => product.id);
@@ -795,8 +810,20 @@ export class BrandService {
       }
 
       // Brand'e ait product'ları bul
+      // ✅ DÜZELTME: Product.brandId Brand.externalId'ye referans veriyor, Brand.id'ye değil
+      if (!brand.externalId) {
+        return {
+          items: [],
+          pagination: {
+            cursor: undefined,
+            hasMore: false,
+            limit: options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20,
+          },
+        };
+      }
+
       const brandProducts = await this.prisma.product.findMany({
-        where: { brandId: brandId },
+        where: { brandId: brand.externalId },
         select: { id: true },
       });
       const productIds = brandProducts.map((product) => product.id);

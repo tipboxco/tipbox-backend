@@ -1415,8 +1415,9 @@ export class UserService {
   }
 
   async getUserPosts(userId: string): Promise<any[]> {
+    // ✅ DÜZELTME: Tüm post tiplerini getir (sadece FREE değil)
     const posts = await this.prisma.contentPost.findMany({
-      where: { userId, type: 'FREE' } as any,
+      where: { userId },
       include: {
         product: {
           include: {
