@@ -437,17 +437,34 @@ export class FeedService {
     const postWhere: any = {};
 
     // Category filter - sadece main category (UUID, prefix'li ID veya name ile)
+    // Multiple category selection desteği
     if (filters.category) {
-      const resolvedCategoryId = await this.resolveCategoryId(filters.category);
-      if (resolvedCategoryId) {
-        postWhere.mainCategoryId = resolvedCategoryId;
+      // Category string olarak geliyor (comma-separated veya single value)
+      const categoryIds = typeof filters.category === 'string' 
+        ? filters.category.split(',').map(id => id.trim()).filter(Boolean)
+        : Array.isArray(filters.category)
+        ? filters.category
+        : [filters.category];
+      
+      const resolvedCategoryIds: string[] = [];
+      
+      for (const categoryId of categoryIds) {
+        const resolvedId = await this.resolveCategoryId(categoryId);
+        if (resolvedId) {
+          resolvedCategoryIds.push(resolvedId);
+        } else {
+          logger.warn({
+            message: 'Invalid category ID in feed filter',
+            categoryId,
+            userId,
+          });
+        }
+      }
+      
+      if (resolvedCategoryIds.length > 0) {
+        postWhere.mainCategoryId = { in: resolvedCategoryIds };
       } else {
-        // Geçersiz category ID - boş sonuç döndür
-        logger.warn({
-          message: 'Invalid category ID in feed filter',
-          categoryId: filters.category,
-          userId,
-        });
+        // Hiç geçerli category bulunamadı - boş sonuç döndür
         return {
           items: [],
           pagination: {
@@ -520,12 +537,15 @@ export class FeedService {
     if (filters.tags && filters.tags.length > 0) {
       // Map tag names to post types (case-insensitive)
       const tagToTypeMap: Record<string, ContentPostType> = {
-        'review': ContentPostType.FREE,
+        'free': ContentPostType.FREE,
         'benchmark': ContentPostType.COMPARE,
-        'tips': ContentPostType.TIPS,
-        'question': ContentPostType.QUESTION,
         'experience': ContentPostType.EXPERIENCE,
         'update': ContentPostType.UPDATE,
+        'question': ContentPostType.QUESTION,
+        'tips and tricks': ContentPostType.TIPS,
+        // Eski isimler için backward compatibility
+        'review': ContentPostType.FREE,
+        'tips': ContentPostType.TIPS,
       };
       
       const typeFilters: ContentPostType[] = [];
@@ -822,10 +842,6 @@ export class FeedService {
         }
       })
     );
-
-    if (filters.types && filters.types.length > 0) {
-      feedItems = this.prioritizeFeedItemsByType(feedItems, filters.types, 20);
-    }
 
     const limitedItems = feedItems.slice(0, limit);
     const finalHasMore = hasMoreFromDb || feedItems.length > limit;
