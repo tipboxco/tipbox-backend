@@ -1,5 +1,6 @@
 import { PrismaClient, TransactionActionType, TransactionStatus } from '@prisma/client';
 import logger from '../../src/infrastructure/logger/logger';
+import { seedConfig } from './config'
 
 const prisma = new PrismaClient();
 
@@ -118,9 +119,9 @@ export async function seedTransactions(): Promise<TransactionSeedResult> {
     byStatus: {}
   };
 
-  // 1. TÜM kullanıcıları al (40 seed kullanıcısı)
+  // 1. TÜM kullanıcıları al (config)
   const users = await prisma.user.findMany({
-    take: 40,
+    take: seedConfig.users.total,
     include: {
       profile: true
     }

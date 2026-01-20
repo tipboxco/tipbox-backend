@@ -196,6 +196,7 @@ function minutesAgoToDate(minutesAgo: number): Date {
 export type DMThreadSeedStats = {
   threads: number;
   messages: number;
+  threadIds: string[];
 };
 
 export async function seedDMThreads(existingClient?: typeof prisma): Promise<DMThreadSeedStats> {
@@ -203,6 +204,7 @@ export async function seedDMThreads(existingClient?: typeof prisma): Promise<DMT
   console.log('💬 DM Thread seed started...');
   let insertedMessages = 0;
   const threadMap = new Map<string, string>();
+  const createdThreadIds: string[] = [];
 
   // Create normal DM threads (not support threads)
   for (const threadSeed of NORMAL_DM_THREAD_SEEDS) {
@@ -234,6 +236,7 @@ export async function seedDMThreads(existingClient?: typeof prisma): Promise<DMT
       },
     });
     threadMap.set(`${threadSeed.userOneId}:${threadSeed.userTwoId}`, thread.id);
+    createdThreadIds.push(thread.id);
 
     if (threadSeed.messages.length > 0) {
       const data = threadSeed.messages.map((msg) => ({
@@ -254,6 +257,7 @@ export async function seedDMThreads(existingClient?: typeof prisma): Promise<DMT
   return {
     threads: NORMAL_DM_THREAD_SEEDS.length,
     messages: insertedMessages,
+    threadIds: createdThreadIds,
   };
 }
 

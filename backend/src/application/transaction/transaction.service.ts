@@ -5,8 +5,11 @@ import { TransactionPrismaRepository } from '../../infrastructure/repositories/t
 import { WalletPrismaRepository } from '../../infrastructure/repositories/wallet-prisma.repository';
 import { NFTPrismaRepository } from '../../infrastructure/repositories/nft-prisma.repository';
 import { NFTTransactionPrismaRepository } from '../../infrastructure/repositories/nft-transaction-prisma.repository';
+import { NFTMarketListingPrismaRepository } from '../../infrastructure/repositories/nft-market-listing-prisma.repository';
 import { ProfilePrismaRepository } from '../../infrastructure/repositories/profile-prisma.repository';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import { ValidationError, NotFoundError } from '../../infrastructure/errors/custom-errors';
+import { invalidateNFTCache, invalidateUserNFTCache } from '../../infrastructure/cache/cache-invalidation';
 import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
 import { NFTTransactionType } from '../../domain/crypto/nft-transaction-type.enum';
@@ -25,6 +28,13 @@ export interface TransactionHistoryOptions {
   limit?: number;
 }
 
+export interface TransferNFTRequest {
+  fromUserId: string;
+  toUserId: string;
+  nftId: string;
+  message?: string;
+}
+
 export interface GroupedTransactions {
   today: Transaction[];
   yesterday: Transaction[];
@@ -39,6 +49,7 @@ export class TransactionService {
     private readonly walletRepo = new WalletPrismaRepository(),
     private readonly nftRepo = new NFTPrismaRepository(),
     private readonly nftTransactionRepo = new NFTTransactionPrismaRepository(),
+    private readonly nftMarketListingRepo = new NFTMarketListingPrismaRepository(),
     private readonly notificationService = new NotificationService(),
     private readonly profileRepo = new ProfilePrismaRepository(),
     private readonly walletService = new WalletService()
@@ -548,6 +559,147 @@ export class TransactionService {
     });
 
     return { buyTransaction, sellTransaction };
+  }
+
+  /**
+   * NFT transfer işlemi (kullanıcıdan kullanıcıya)
+   * - Owner kontrolü
+   * - Transferable kontrolü
+   * - Marketplace'te ACTIVE listing varsa engeller
+   * - Owner günceller + nft_transactions tablosuna TRANSFER kaydı atar
+   * - Bildirim gönderir (NFT_SENT / NFT_RECEIVED)
+   */
+  async transferNFT(request: TransferNFTRequest): Promise<{
+    nftId: string;
+    fromUserId: string;
+    toUserId: string;
+    nftTransactionId: string;
+    transferredAt: Date;
+  }> {
+    const { fromUserId, toUserId, nftId, message } = request;
+
+    if (!nftId) {
+      throw new ValidationError('nftId is required');
+    }
+    if (!toUserId) {
+      throw new ValidationError('recipientId (toUserId) is required');
+    }
+    if (fromUserId === toUserId) {
+      throw new ValidationError('Cannot transfer NFT to yourself');
+    }
+
+    const nft = await this.nftRepo.findById(nftId);
+    if (!nft) {
+      throw new NotFoundError('NFT not found');
+    }
+    if (!nft.hasOwner() || !nft.belongsToUser(fromUserId)) {
+      throw new ValidationError('You are not the owner of this NFT');
+    }
+    if (!nft.canBeTransferred()) {
+      throw new ValidationError('This NFT is not transferable');
+    }
+
+    // Recipient user existence check (profile yoksa bile user olmalı)
+    const prisma = getPrisma();
+    const recipientUser = await prisma.user.findUnique({
+      where: { id: toUserId },
+      select: { id: true },
+    });
+    if (!recipientUser) {
+      throw new NotFoundError('Recipient user not found');
+    }
+
+    // Prevent transfer if NFT is actively listed on marketplace
+    const activeListing = await this.nftMarketListingRepo.findActiveByNftId(nftId);
+    if (activeListing) {
+      throw new ValidationError('NFT is currently listed for sale. Cancel the listing before transferring.');
+    }
+
+    // Profiles (for notification payloads)
+    const [fromProfile, toProfile] = await Promise.all([
+      this.profileRepo.findByUserId(fromUserId),
+      this.profileRepo.findByUserId(toUserId),
+    ]);
+
+    const senderName =
+      fromProfile?.displayName || fromProfile?.userName || 'Kullanıcı';
+    const recipientName =
+      toProfile?.displayName || toProfile?.userName || 'Kullanıcı';
+
+    // Atomic transfer: update owner + create nft_transaction
+    const nftTx = await prisma.$transaction(async (tx) => {
+      const updatedCount = await tx.$executeRawUnsafe(
+        `UPDATE nfts
+         SET current_owner_id = $1::uuid, updated_at = NOW()
+         WHERE id = $2::uuid AND current_owner_id = $3::uuid`,
+        toUserId,
+        nftId,
+        fromUserId
+      );
+
+      if (updatedCount === 0) {
+        throw new ValidationError('NFT ownership changed. Please retry.');
+      }
+
+      return await tx.nFTTransaction.create({
+        data: {
+          nftId,
+          fromUserId,
+          toUserId,
+          price: null,
+          transactionType: NFTTransactionType.TRANSFER as any,
+        },
+        select: {
+          id: true,
+          createdAt: true,
+        },
+      });
+    });
+
+    logger.info({
+      message: 'NFT transferred',
+      nftId,
+      fromUserId,
+      toUserId,
+      nftTransactionId: nftTx.id,
+    });
+
+    // Invalidate caches (best-effort)
+    Promise.all([
+      invalidateNFTCache(nftId),
+      invalidateUserNFTCache(fromUserId),
+      invalidateUserNFTCache(toUserId),
+    ]).catch((error) => {
+      logger.error('Error invalidating NFT transfer cache:', error);
+    });
+
+    // Notifications (best-effort)
+    Promise.all([
+      this.notificationService.sendNotification(fromUserId, NotificationType.NFT_SENT, {
+        nftId,
+        nftName: nft.name,
+        recipientUserId: toUserId,
+        recipientName,
+        message: message || null,
+      }),
+      this.notificationService.sendNotification(toUserId, NotificationType.NFT_RECEIVED, {
+        nftId,
+        nftName: nft.name,
+        senderUserId: fromUserId,
+        senderName,
+        message: message || null,
+      }),
+    ]).catch((error) => {
+      logger.error('Error sending NFT transfer notifications:', error);
+    });
+
+    return {
+      nftId,
+      fromUserId,
+      toUserId,
+      nftTransactionId: nftTx.id,
+      transferredAt: nftTx.createdAt,
+    };
   }
 }
 

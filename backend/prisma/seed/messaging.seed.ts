@@ -2,6 +2,7 @@
 import { prisma, TEST_USER_ID, TARGET_USER_ID, TRUST_USER_IDS, TRUSTER_USER_IDS } from './types';
 import { seedDMThreads } from './dmthread.seed';
 import { seedDMRequests } from './dmrequest.seed';
+import { seedMessageReactionsAndReadReceipts } from './helpers/seed-message-engagement';
 
 // Julia user ID (from user.seed.ts)
 const JULIA_USER_ID = '99999999-9999-4999-9999-999999999999';
@@ -72,6 +73,8 @@ export type MessagingSeedStats = {
   supportRequests: number;
   tipsTransfers: number;
   supportSessions: number;
+  messageReactions: number;
+  messageReadReceipts: number;
 };
 
 export async function seedMessaging(existingClient?: typeof prisma): Promise<MessagingSeedStats> {
@@ -83,6 +86,12 @@ export async function seedMessaging(existingClient?: typeof prisma): Promise<Mes
   
   // Seed DM requests (support requests + support threads)
   const requestStats = await seedDMRequests(client);
+
+  // Seed reactions + read receipts for seeded threads only
+  const engagement = await seedMessageReactionsAndReadReceipts({
+    client,
+    threadIds: [...threadStats.threadIds, ...requestStats.supportThreadIds],
+  });
   
   // Get thread map for TIPS and support sessions
   const threadMap = new Map<string, string>();
@@ -183,6 +192,8 @@ export async function seedMessaging(existingClient?: typeof prisma): Promise<Mes
     supportRequests: requestStats.supportRequests,
     tipsTransfers: TIPS_TRANSFER_SEEDS.length,
     supportSessions: supportSessionsInserted,
+    messageReactions: engagement.reactionsCreated,
+    messageReadReceipts: engagement.receiptsCreated,
   };
 }
 

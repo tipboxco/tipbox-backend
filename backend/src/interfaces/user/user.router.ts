@@ -803,7 +803,7 @@ router.get('/:id/trusts', asyncHandler(async (req: Request, res: Response) => {
  *           type: string
  *           enum: [name_asc, name_desc, date_asc, date_desc, trusted_first]
  *           default: date_desc
- *         description: Sıralama kriteri (name_asc: A-Z, name_desc: Z-A, date_asc: Eski-yeni, date_desc: Yeni-eski, trusted_first: Önce trust edilenler)
+ *         description: "Sıralama kriteri (name_asc: A-Z, name_desc: Z-A, date_asc: Eski-yeni, date_desc: Yeni-eski, trusted_first: Önce trust edilenler)"
  *     responses:
  *       200:
  *         description: Truster listesi

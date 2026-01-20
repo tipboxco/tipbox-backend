@@ -161,6 +161,7 @@ export type DMRequestSeedStats = {
   supportRequests: number;
   supportThreads: number;
   supportMessages: number;
+  supportThreadIds: string[];
 };
 
 export async function seedDMRequests(existingClient?: typeof prisma): Promise<DMRequestSeedStats> {
@@ -169,6 +170,7 @@ export async function seedDMRequests(existingClient?: typeof prisma): Promise<DM
   let supportThreadsCount = 0;
   let supportMessagesCount = 0;
   const supportRequestMap = new Map<string, { requestId: string; threadId: string | null }>();
+  const createdSupportThreadIds: string[] = [];
   
   for (const supportRequest of SUPPORT_REQUEST_SEEDS) {
     // Delete existing request if exists
@@ -196,6 +198,7 @@ export async function seedDMRequests(existingClient?: typeof prisma): Promise<DM
       });
       threadId = supportThread.id;
       supportThreadsCount++;
+      createdSupportThreadIds.push(supportThread.id);
       
       // Create support chat messages in the support thread
       const messages: Array<{
@@ -318,6 +321,7 @@ export async function seedDMRequests(existingClient?: typeof prisma): Promise<DM
     supportRequests: SUPPORT_REQUEST_SEEDS.length,
     supportThreads: supportThreadsCount,
     supportMessages: supportMessagesCount,
+    supportThreadIds: createdSupportThreadIds,
   };
 }
 
