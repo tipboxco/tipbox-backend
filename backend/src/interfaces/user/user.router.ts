@@ -855,6 +855,41 @@ router.delete('/:id/trusts/:targetUserId', asyncHandler(async (req: Request, res
 
 /**
  * @openapi
+ * /users/trusts/{targetUserId}:
+ *   delete:
+ *     summary: Trust listesinden kullanıcı kaldır (authenticated user için)
+ *     description: Authenticated user'ın trust listesinden belirtilen kullanıcıyı kaldırır. User ID auth token'dan alınır.
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: targetUserId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Trust listesinden kaldırılacak kullanıcı ID'si
+ *     responses:
+ *       204:
+ *         description: Kullanıcı trust listesinden başarıyla kaldırıldı
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Trust kaydı bulunamadı
+ */
+router.delete('/trusts/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
+  
+  const targetUserId = String(req.params.targetUserId);
+  const ok = await userService.removeTrust(authUserId, targetUserId);
+  if (!ok) return res.status(404).json({ message: 'Kayıt bulunamadı' });
+  return res.status(204).end();
+}));
+
+/**
+ * @openapi
  * /users/trust:
  *   post:
  *     summary: Trust ekle
