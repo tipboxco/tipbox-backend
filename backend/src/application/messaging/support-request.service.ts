@@ -345,9 +345,13 @@ export class SupportRequestService {
       throw new Error('Support request not found');
     }
 
+    // Debug: Request ve user bilgilerini logla
+    logger.info(`Accept support request attempt: requestId=${requestId}, expertUserId=${expertUserId}, request.fromUserId=${request.fromUserId}, request.toUserId=${request.toUserId}`);
+
     // Sadece alıcı (expert) accept edebilir
     if (request.toUserId !== expertUserId) {
-      throw new Error('Only the recipient can accept the support request');
+      logger.warn(`Authorization failed: expertUserId (${expertUserId}) does not match request.toUserId (${request.toUserId})`);
+      throw new Error(`Only the recipient can accept the support request. Request recipient: ${request.toUserId}, Current user: ${expertUserId}`);
     }
 
     // Sadece pending request'ler accept edilebilir

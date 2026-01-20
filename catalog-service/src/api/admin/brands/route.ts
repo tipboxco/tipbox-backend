@@ -50,46 +50,40 @@ export const GET = async (
   const search = (req.query.q as string) || ""
   const includeProductCount = req.query.include_product_count !== "false"
   
-  // Tüm brandleri getir (pagination için)
-  const brandsFromService = await brandModuleService.listBrands()
-  
-  // Brand'leri category bilgisi ile birlikte getir
-  const allBrandsWithCategory = await Promise.all(
-    brandsFromService.map(async (brand: any) => {
-      let category = null
-      if (brand.category_id) {
-        try {
-          const { data: categoryData } = await query.graph({
-            entity: "brand_category",
-            fields: ["id", "title"],
-            filters: {
-              id: brand.category_id,
-            },
-          })
-          if (categoryData[0]) {
-            category = {
-              id: categoryData[0].id,
-              title: categoryData[0].title,
-            }
-          }
-        } catch {
-          // Category bulunamazsa null
-        }
-      }
-      
-      return {
-        id: brand.id,
-        name: brand.name,
-        logo_url: brand.logo_url || null,
-        category_id: brand.category_id || null,
-        category,
-        created_at: brand.created_at?.toISOString(),
-        updated_at: brand.updated_at?.toISOString(),
-      }
-    })
+  // Brand'leri tek seferde relation ile çek (deterministik sonuç için ayrıca sort uygulanacak)
+  const brandsFromService = await brandModuleService.listBrands(
+    {},
+    {
+      relations: ["category"],
+    }
   )
-  
-  let allBrands: BrandBase[] = allBrandsWithCategory
+
+  const toISOStringSafe = (value: any): string | undefined => {
+    if (!value) return undefined
+    if (value instanceof Date) return value.toISOString()
+    if (typeof value === "string") return value
+    if (typeof value?.toISOString === "function") return value.toISOString()
+    return undefined
+  }
+
+  // Brand'leri stabil bir şekilde sırala (DB order opsiyonu her zaman garanti olmayabilir)
+  const normalized = brandsFromService
+    .slice()
+    .sort((a: any, b: any) =>
+      String(a?.name || "").localeCompare(String(b?.name || ""), "tr", { sensitivity: "base" })
+    )
+
+  let allBrands: BrandBase[] = normalized.map((brand: any) => ({
+    id: brand.id,
+    name: brand.name,
+    logo_url: brand.logo_url || null,
+    category_id: brand.category?.id || brand.category_id || null,
+    category: brand.category
+      ? { id: brand.category.id, title: brand.category.title }
+      : null,
+    created_at: toISOStringSafe(brand.created_at),
+    updated_at: toISOStringSafe(brand.updated_at),
+  }))
   
   // Search filtresi uygula
   if (search) {

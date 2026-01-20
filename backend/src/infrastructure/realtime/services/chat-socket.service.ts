@@ -10,6 +10,7 @@ export class ChatSocketService {
   private messagingService: MessagingService;
   private threadRepo = new DMThreadPrismaRepository();
   private messageRepo = new DmMessagePrismaRepository();
+  private typingTimeouts = new Map<string, NodeJS.Timeout>();
 
   constructor(socketHandler: SocketHandler) {
     this.socketHandler = socketHandler;
@@ -290,6 +291,272 @@ export class ChatSocketService {
         socket.emit('error', {
           message: error.message || 'Failed to mark thread as read',
         });
+      }
+    });
+
+    // Join thread room
+    socket.on('join_thread', async (data: { threadId: string }) => {
+      try {
+        const { threadId } = data;
+
+        if (!threadId) {
+          socket.emit('error', { message: 'threadId is required' });
+          return;
+        }
+
+        // Thread erişim kontrolü
+        const thread = await this.threadRepo.findById(threadId);
+        if (!thread) {
+          socket.emit('thread_join_error', {
+            threadId,
+            error: 'Thread not found'
+          });
+          return;
+        }
+
+        const isParticipant =
+          thread.userOneId === userId || thread.userTwoId === userId;
+
+        if (!isParticipant) {
+          socket.emit('thread_join_error', {
+            threadId,
+            error: 'Access denied'
+          });
+          return;
+        }
+
+        // Socket room'a join et
+        socket.join(`thread:${threadId}`);
+
+        socket.emit('thread_joined', {
+          threadId,
+          userId
+        });
+
+        logger.info(`User ${userId} joined thread ${threadId}`);
+      } catch (error: any) {
+        logger.error('Error in join_thread handler:', error);
+        socket.emit('error', {
+          message: error.message || 'Failed to join thread',
+        });
+      }
+    });
+
+    // Leave thread room
+    socket.on('leave_thread', (data: { threadId: string }) => {
+      try {
+        const { threadId } = data;
+
+        if (!threadId) {
+          socket.emit('error', { message: 'threadId is required' });
+          return;
+        }
+
+        socket.leave(`thread:${threadId}`);
+
+        // Clear typing timeout if exists
+        const typingKey = `${userId}-${threadId}`;
+        if (this.typingTimeouts.has(typingKey)) {
+          clearTimeout(this.typingTimeouts.get(typingKey)!);
+          this.typingTimeouts.delete(typingKey);
+        }
+
+        socket.emit('thread_left', {
+          threadId,
+          userId
+        });
+
+        logger.info(`User ${userId} left thread ${threadId}`);
+      } catch (error: any) {
+        logger.error('Error in leave_thread handler:', error);
+        socket.emit('error', {
+          message: error.message || 'Failed to leave thread',
+        });
+      }
+    });
+
+    // Start typing
+    socket.on('start_typing', (data: { threadId: string }) => {
+      try {
+        const { threadId } = data;
+
+        if (!threadId) {
+          socket.emit('error', { message: 'threadId is required' });
+          return;
+        }
+
+        const typingKey = `${userId}-${threadId}`;
+
+        // Clear existing timeout
+        if (this.typingTimeouts.has(typingKey)) {
+          clearTimeout(this.typingTimeouts.get(typingKey)!);
+        }
+
+        // Emit typing event to other users in thread
+        socket.to(`thread:${threadId}`).emit('user_typing', {
+          threadId,
+          userId,
+          timestamp: new Date().toISOString()
+        });
+
+        // Auto-stop after 3 seconds
+        const timeout = setTimeout(() => {
+          socket.to(`thread:${threadId}`).emit('user_stopped_typing', {
+            threadId,
+            userId,
+            timestamp: new Date().toISOString()
+          });
+          this.typingTimeouts.delete(typingKey);
+        }, 3000);
+
+        this.typingTimeouts.set(typingKey, timeout);
+      } catch (error: any) {
+        logger.error('Error in start_typing handler:', error);
+        socket.emit('error', {
+          message: error.message || 'Failed to start typing',
+        });
+      }
+    });
+
+    // Stop typing
+    socket.on('stop_typing', (data: { threadId: string }) => {
+      try {
+        const { threadId } = data;
+
+        if (!threadId) {
+          socket.emit('error', { message: 'threadId is required' });
+          return;
+        }
+
+        const typingKey = `${userId}-${threadId}`;
+
+        // Clear timeout
+        if (this.typingTimeouts.has(typingKey)) {
+          clearTimeout(this.typingTimeouts.get(typingKey)!);
+          this.typingTimeouts.delete(typingKey);
+        }
+
+        socket.to(`thread:${threadId}`).emit('user_stopped_typing', {
+          threadId,
+          userId,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error: any) {
+        logger.error('Error in stop_typing handler:', error);
+        socket.emit('error', {
+          message: error.message || 'Failed to stop typing',
+        });
+      }
+    });
+
+    // Edit message
+    socket.on('edit_message', async (data: { messageId: string; message: string }) => {
+      try {
+        const { messageId, message } = data;
+
+        if (!messageId || !message) {
+          socket.emit('error', {
+            message: 'messageId and message are required',
+          });
+          return;
+        }
+
+        if (message.trim().length === 0) {
+          socket.emit('error', { message: 'Message cannot be empty' });
+          return;
+        }
+
+        await this.messagingService.editMessage(messageId, userId, message);
+
+        logger.info(`Message edited via socket: ${messageId} by ${userId}`);
+      } catch (error: any) {
+        logger.error('Error in edit_message handler:', error);
+        socket.emit('error', {
+          message: error.message || 'Failed to edit message',
+        });
+      }
+    });
+
+    // Delete message
+    socket.on('delete_message', async (data: { messageId: string }) => {
+      try {
+        const { messageId } = data;
+
+        if (!messageId) {
+          socket.emit('error', { message: 'messageId is required' });
+          return;
+        }
+
+        await this.messagingService.deleteMessage(messageId, userId);
+
+        logger.info(`Message deleted via socket: ${messageId} by ${userId}`);
+      } catch (error: any) {
+        logger.error('Error in delete_message handler:', error);
+        socket.emit('error', {
+          message: error.message || 'Failed to delete message',
+        });
+      }
+    });
+
+    // Add reaction
+    socket.on('add_reaction', async (data: { messageId: string; emoji: string }) => {
+      try {
+        const { messageId, emoji } = data;
+
+        if (!messageId || !emoji) {
+          socket.emit('error', {
+            message: 'messageId and emoji are required',
+          });
+          return;
+        }
+
+        if (emoji.trim().length === 0) {
+          socket.emit('error', { message: 'Emoji cannot be empty' });
+          return;
+        }
+
+        await this.messagingService.addReaction(messageId, userId, emoji.trim());
+
+        logger.info(`Reaction added via socket: ${emoji} to message ${messageId} by ${userId}`);
+      } catch (error: any) {
+        logger.error('Error in add_reaction handler:', error);
+        socket.emit('error', {
+          message: error.message || 'Failed to add reaction',
+        });
+      }
+    });
+
+    // Remove reaction
+    socket.on('remove_reaction', async (data: { messageId: string; emoji: string }) => {
+      try {
+        const { messageId, emoji } = data;
+
+        if (!messageId || !emoji) {
+          socket.emit('error', {
+            message: 'messageId and emoji are required',
+          });
+          return;
+        }
+
+        await this.messagingService.removeReaction(messageId, userId, emoji.trim());
+
+        logger.info(`Reaction removed via socket: ${emoji} from message ${messageId} by ${userId}`);
+      } catch (error: any) {
+        logger.error('Error in remove_reaction handler:', error);
+        socket.emit('error', {
+          message: error.message || 'Failed to remove reaction',
+        });
+      }
+    });
+
+    // Cleanup on disconnect
+    socket.on('disconnect', () => {
+      // Clear all typing timeouts for this socket
+      for (const [key, timeout] of this.typingTimeouts.entries()) {
+        if (key.startsWith(`${userId}-`)) {
+          clearTimeout(timeout);
+          this.typingTimeouts.delete(key);
+        }
       }
     });
   }

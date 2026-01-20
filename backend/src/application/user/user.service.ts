@@ -342,12 +342,10 @@ export class UserService {
   async updateProfileDetails(userId: string, payload: {
     name?: string;
     biography?: string;
-    banner?: string | null;
-    avatar?: string;
     cosmeticId?: string | null;
     badges?: Array<{ id: string }>;
   }): Promise<void> {
-    const { name, biography, banner, avatar, cosmeticId, badges } = payload;
+    const { name, biography, cosmeticId, badges } = payload;
 
     await this.prisma.$transaction(async (tx) => {
       let validatedCosmeticId: string | null | undefined = undefined;
@@ -375,7 +373,6 @@ export class UserService {
       const profileData: {
         displayName?: string;
         bio?: string | null;
-        bannerUrl?: string;
         cosmeticBadgeId?: string | null;
       } = {};
       if (typeof name === 'string') {
@@ -387,9 +384,6 @@ export class UserService {
       }
       if (typeof biography !== 'undefined') {
         profileData.bio = biography ?? null;
-      }
-      if (typeof banner !== 'undefined') {
-        profileData.bannerUrl = banner || DEFAULT_PROFILE_BANNER_URL;
       }
       if (typeof validatedCosmeticId !== 'undefined') {
         profileData.cosmeticBadgeId = validatedCosmeticId;
@@ -409,25 +403,11 @@ export class UserService {
               displayName: profileData.displayName ?? name ?? 'Anonymous User',
               userName: null,
               bio: typeof biography !== 'undefined' ? biography : null,
-              bannerUrl: typeof banner !== 'undefined' ? (banner || DEFAULT_PROFILE_BANNER_URL) : DEFAULT_PROFILE_BANNER_URL,
+              bannerUrl: DEFAULT_PROFILE_BANNER_URL,
               cosmeticBadgeId: typeof validatedCosmeticId !== 'undefined' ? validatedCosmeticId : undefined,
             } as Parameters<typeof tx.profile.create>[0]['data'],
           });
         }
-      }
-
-      if (avatar) {
-        await tx.userAvatar.updateMany({
-          where: { userId, isActive: true },
-          data: { isActive: false },
-        });
-        await tx.userAvatar.create({
-          data: {
-            userId,
-            imageUrl: avatar,
-            isActive: true,
-          },
-        });
       }
 
       if (Array.isArray(badges)) {
@@ -1277,9 +1257,12 @@ export class UserService {
     await this.prisma.rewardClaim.create({
       data: {
         userId,
-        badgeId,
+        sourceId: badgeId,
+        rewardType: 'BADGE',
+        sourceType: 'BADGE_EARNED',
         amount: 0,
-        vestingStatus: 'COMPLETED',
+        status: 'CLAIMED',
+        metadata: { badgeId },
       },
     });
     return { success: true };
@@ -1335,6 +1318,7 @@ export class UserService {
             },
           },
         },
+        brand: true,
       }
     });
     if (!product) return null;
@@ -1349,7 +1333,7 @@ export class UserService {
     return {
       id: String(product.id),
       name: product.name,
-      subName: product.brand || group?.name || subCategory?.name || mainCategory?.name || '',
+      subName: product.brand?.name || group?.name || subCategory?.name || mainCategory?.name || '',
       image: resolveMediaUrl(imagePath),
     };
   }
@@ -1431,8 +1415,9 @@ export class UserService {
   }
 
   async getUserPosts(userId: string): Promise<any[]> {
+    // ✅ DÜZELTME: Tüm post tiplerini getir (sadece FREE değil)
     const posts = await this.prisma.contentPost.findMany({
-      where: { userId, type: 'FREE' } as any,
+      where: { userId },
       include: {
         product: {
           include: {

@@ -253,3 +253,106 @@ export interface UpdateMessageRequest {
   message: string;
 }
 
+export interface MessageDetail {
+  id: string;
+  threadId: string;
+  senderId: string;
+  message: string;
+  messageType: 'message' | 'image' | 'video' | 'audio' | 'file' | 'send-tips' | 'support-request';
+  mediaUrl?: string | null;
+  mediaType?: 'image' | 'video' | 'audio' | 'file' | null;
+  thumbnailUrl?: string | null;
+  fileName?: string | null;
+  fileSize?: number | null;
+  caption?: string | null;
+  replyToMessageId?: string | null;
+  replyToMessage?: {
+    id: string;
+    message: string;
+    senderName: string;
+  } | null;
+  status: 'sending' | 'sent' | 'delivered' | 'read';
+  isDeleted: boolean;
+  isEdited: boolean;
+  editedAt?: string | null;
+  sentAt: string;
+  deliveredAt?: string | null;
+  readAt?: string | null;
+  sender: SenderUser;
+  reactions?: Array<{
+    emoji: string;
+    count: number;
+    users: string[];
+  }>;
+}
+
+export interface AddReactionRequest {
+  emoji: string;
+}
+
+export interface AddReactionResponse {
+  reactionId: string;
+  messageId: string;
+  userId: string;
+  emoji: string;
+  createdAt: string;
+}
+
+export interface RemoveReactionResponse {
+  messageId: string;
+  reactionId: string;
+  deletedAt: string;
+}
+
+export interface GetReactionsResponse {
+  messageId: string;
+  reactions: Array<{
+    emoji: string;
+    count: number;
+    users: string[];
+  }>;
+}
+
+export interface EditMessageRequest {
+  message: string;
+}
+
+export interface EditMessageResponse {
+  messageId: string;
+  message: string;
+  editedAt: string;
+}
+
+export interface DeleteMessageResponse {
+  messageId: string;
+  deletedAt: string;
+}
+
+export interface MediaUploadRequest {
+  mediaType: 'image' | 'video' | 'audio' | 'file';
+  caption?: string;
+  fileName?: string;
+  fileSize?: number;
+}
+
+export interface MediaUploadResponse {
+  messageId: string;
+  threadId: string;
+  mediaUrl: string;
+  thumbnailUrl?: string | null;
+  mediaType: 'image' | 'video' | 'audio' | 'file';
+  caption?: string | null;
+  sentAt: string;
+}
+
+export interface SearchMessagesRequest {
+  q: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface SearchMessagesResponse {
+  messages: MessageDetail[];
+  total: number;
+  hasMore: boolean;
+}

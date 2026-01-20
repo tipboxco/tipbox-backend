@@ -562,6 +562,7 @@ export class AuthService implements IAuthService {
             auth0Id,
             emailVerified: nextEmailVerified,
             status: nextEmailVerified ? 'ACTIVE' : 'PENDING_VERIFICATION',
+            //emailVerified: emailVerified ?? existingUserByEmail.emailVerified ?? false,
           },
         });
         

@@ -1,23 +1,51 @@
 import { Router, Request, Response } from 'express';
+import multer, { FileFilterCallback } from 'multer';
+import { v4 as uuidv4 } from 'uuid';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { authMiddleware } from '../auth/auth.middleware';
 import { MessagingService } from '../../application/messaging/messaging.service';
 import { SupportRequestService } from '../../application/messaging/support-request.service';
 import { SupportRequestStatus } from '../../domain/messaging/support-request-status.enum';
-import { SendTipsCreate, SupportRequestCreate, SupportType } from './messaging.dto';
+import { SendTipsCreate, SupportRequestCreate, SupportType } from './inbox.dto';
 import { UserPrismaRepository } from '../../infrastructure/repositories/user-prisma.repository';
 import { getErrorMessage, hasErrorMessage, errorMessageIncludes } from '../../infrastructure/errors/error-helper';
+import { S3Service } from '../../infrastructure/s3/s3.service';
+import logger from '../../infrastructure/logger/logger';
 
 const router = Router();
 const messagingService = new MessagingService();
 const supportRequestService = new SupportRequestService();
 const userRepo = new UserPrismaRepository();
+const s3Service = new S3Service();
+
+// Multer configuration for media uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 50 * 1024 * 1024, // 50MB limit per file
+  },
+  fileFilter: (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
+    // Allow images, videos, audio, and files
+    const allowedMimeTypes = [
+      'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+      'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo',
+      'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg',
+      'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ];
+    
+    if (file.mimetype && allowedMimeTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Unsupported file type: ${file.mimetype}`));
+    }
+  },
+});
 
 router.use(authMiddleware);
 
 /**
  * @openapi
- * /messages:
+ * /inbox:
  *   get:
  *     summary: Messages - Kullanıcının mesaj kutusunu getirir
  *     description: Oturum açmış kullanıcının DM mesaj kutusundaki thread listesini döner.
@@ -96,7 +124,7 @@ router.use(authMiddleware);
  */
 /**
  * @openapi
- * /messages/feed:
+ * /inbox/feed:
  *   get:
  *     summary: Message Feed - Kullanıcının mesaj feed'ini getirir
  *     description: Kullanıcının mesajlarını, TIPS'leri ve 1-on-1 Support Request'lerini birleşik olarak getirir.
@@ -191,7 +219,7 @@ router.get(
 
 /**
  * @openapi
- * /messages:
+ * /inbox:
  *   post:
  *     summary: Direkt mesaj gönder
  *     description: Kullanıcıya direkt mesaj gönderir. Mesaj gönderildiğinde `new_message` ve `message_sent` socket event'leri tetiklenir.
@@ -234,7 +262,7 @@ router.post(
 
 /**
  * @openapi
- * /messages/threads:
+ * /inbox/threads:
  *   post:
  *     summary: Thread oluştur veya mevcut thread'i getir
  *     description: |
@@ -318,7 +346,7 @@ router.post(
 
 /**
  * @openapi
- * /messages/threads/{threadId}:
+ * /inbox/threads/{threadId}:
  *   get:
  *     summary: Thread detay bilgisini getir
  *     description: |
@@ -414,7 +442,7 @@ router.get(
 
 /**
  * @openapi
- * /messages/support-requests:
+ * /inbox/support-requests:
  *   get:
  *     summary: 1-On-1 Support Request - Kullanıcının birebir destek sohbetlerini getirir
  *     description: Oturum açmış kullanıcının geçmiş ve devam eden birebir destek sohbetlerinin listesini döner.
@@ -537,7 +565,7 @@ router.get(
 
 /**
  * @openapi
- * /messages/support-requests:
+ * /inbox/support-requests:
  *   post:
  *     summary: 1-on-1 destek talebi oluştur
  *     description: Bir kullanıcıya 1-on-1 destek talebi oluşturur. Talep oluşturulduğunda `new_message` socket event'i tetiklenir.
@@ -716,7 +744,7 @@ router.post(
 
 /**
  * @openapi
- * /messages/support-requests/{requestId}/accept:
+ * /inbox/support-requests/{requestId}/accept:
  *   post:
  *     summary: Support request'i accept et
  *     description: |
@@ -730,7 +758,7 @@ router.post(
  *       
  *       **Response:**
  *       - requestId: Accept edilen support request ID'si
- *       - threadId: Oluşturulan support thread ID'si (bu ID ile GET /messages/{threadId} çağrılarak support chat mesajları yüklenir)
+ *       - threadId: Oluşturulan support thread ID'si (bu ID ile GET /inbox/{threadId} çağrılarak support chat mesajları yüklenir)
  *     tags: [Inbox]
  *     security:
  *       - bearerAuth: []
@@ -757,7 +785,7 @@ router.post(
  *                 threadId:
  *                   type: string
  *                   format: uuid
- *                   description: Oluşturulan support thread ID'si. Bu ID ile GET /messages/{threadId} endpoint'i çağrılarak support chat mesajları yüklenir.
+ *                   description: Oluşturulan support thread ID'si. Bu ID ile GET /inbox/{threadId} endpoint'i çağrılarak support chat mesajları yüklenir.
  *             example:
  *               requestId: "ccef8c37-cc75-4141-8b99-573ca8d277bb"
  *               threadId: "1f2d6cb7-aef1-4221-8dba-2cd0601faae3"
@@ -785,9 +813,11 @@ router.post(
     }
 
     try {
+      logger.info(`Accept support request endpoint called: requestId=${requestId}, expertUserId=${expertUserId}`);
       const result = await supportRequestService.acceptSupportRequest(requestId, String(expertUserId));
       return res.status(200).json(result);
     } catch (error: unknown) {
+      logger.error(`Accept support request error: requestId=${requestId}, expertUserId=${expertUserId}`, error);
       if (hasErrorMessage(error, 'Support request not found')) {
         return res.status(404).json({ message: getErrorMessage(error) });
       }
@@ -804,7 +834,7 @@ router.post(
 
 /**
  * @openapi
- * /messages/support-requests/{requestId}/reject:
+ * /inbox/support-requests/{requestId}/reject:
  *   post:
  *     summary: Support request'i reject et
  *     description: Expert, support request'i reject eder.
@@ -864,7 +894,7 @@ router.post(
 
 /**
  * @openapi
- * /messages/support-requests/{requestId}/cancel:
+ * /inbox/support-requests/{requestId}/cancel:
  *   post:
  *     summary: Support request'i iptal et (sender)
  *     description: Destek talebini gönderen kullanıcı, talep kabul edilmeden önce iptal edebilir.
@@ -924,7 +954,7 @@ router.post(
 
 /**
  * @openapi
- * /messages/tips:
+ * /inbox/tips:
  *   post:
  *     summary: Kullanıcıya TIPS gönder
  *     description: Bir kullanıcıya TIPS gönderir. TIPS gönderildiğinde `new_message` socket event'i messageType alanı "send-tips" olacak şekilde tetiklenir.
@@ -1071,7 +1101,7 @@ router.post(
           error: {
             code: 'NOT_FOUND',
             message: getErrorMessage(error),
-            path: '/messages/tips',
+            path: '/inbox/tips',
             timestamp: new Date().toISOString(),
           },
         });
@@ -1084,7 +1114,7 @@ router.post(
 
 /**
  * @openapi
- * /messages/{messageId}/read:
+ * /inbox/{messageId}/read:
  *   post:
  *     summary: [DEPRECATED] Mesajı okundu olarak işaretle
  *     description: |
@@ -1154,14 +1184,14 @@ router.post(
 );
 
 // DEPRECATED ENDPOINTS (Removed):
-// - GET /messages/:supportThreadId/support-chat
-//   → Artık GET /messages/:threadId kullanılıyor (thread tipine göre otomatik olarak doğru veri döndürülüyor)
-// - POST /messages/:supportThreadId/support-chat
+// - GET /inbox/:supportThreadId/support-chat
+//   → Artık GET /inbox/:threadId kullanılıyor (thread tipine göre otomatik olarak doğru veri döndürülüyor)
+// - POST /inbox/:supportThreadId/support-chat
 //   → Artık socket üzerinden send_support_message event'i kullanılıyor
 
 /**
  * @openapi
- * /messages/{threadId}:
+ * /inbox/{threadId}:
  *   get:
  *     summary: Thread mesajlarını getir (DM veya Support Chat)
  *     description: |
@@ -1337,12 +1367,25 @@ router.get(
     }
 
     try {
+      // Thread mesajlarını getir
       const feedItems = await messagingService.getThreadMessages(
         threadId,
         String(userId),
         limit || 100,
         offset || 0
       );
+
+      // Thread açıldığında tüm okunmamış mesajları otomatik olarak okundu işaretle
+      // WhatsApp mantığı: Mesaj listesinde mesaja tıklandığında thread açılır ve tüm mesajlar okundu olur
+      // Bu sayede mesaj listesindeki yeşil nokta (unread indicator) anında kaybolur
+      try {
+        await messagingService.markAllMessagesAsReadInThread(threadId, String(userId));
+      } catch (markReadError) {
+        // Okundu işaretleme hatası mesaj getirmeyi engellemez, sadece logla
+        // Bu sayede thread açılmaya devam eder, sadece okundu işaretleme başarısız olur
+        logger.warn(`Failed to mark messages as read in thread ${threadId} for user ${userId}:`, markReadError);
+      }
+
       return res.status(200).json(feedItems);
     } catch (error: unknown) {
       const message = getErrorMessage(error);
@@ -1359,7 +1402,7 @@ router.get(
 
 /**
  * @openapi
- * /messaging/messages/{messageId}:
+ * /messaging/inbox/{messageId}:
  *   put:
  *     summary: Mesaj güncelle
  *     description: Sadece mesajın göndereni, mesajı gönderdikten sonra 5 dakika içinde güncelleyebilir.
@@ -1399,7 +1442,7 @@ router.get(
  *         description: Mesaj bulunamadı
  */
 router.put(
-  '/messages/:messageId',
+  '/inbox/:messageId',
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
@@ -1435,7 +1478,7 @@ router.put(
 
 /**
  * @openapi
- * /messaging/messages/{messageId}:
+ * /messaging/inbox/{messageId}:
  *   delete:
  *     summary: Mesaj sil
  *     description: Sadece mesajın göndereni kendi mesajını silebilir.
@@ -1461,7 +1504,7 @@ router.put(
  *         description: Mesaj bulunamadı
  */
 router.delete(
-  '/messages/:messageId',
+  '/inbox/:messageId',
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
@@ -1536,6 +1579,593 @@ router.delete(
       if (hasErrorMessage(error) && (message.includes('Forbidden') || message.includes('not part of'))) {
         return res.status(403).json({ message: 'You are not part of this thread' });
       }
+      throw error;
+    }
+  })
+);
+
+/**
+ * @openapi
+ * /inbox/{messageId}:
+ *   patch:
+ *     summary: Mesajı düzenle
+ *     description: Mesajı düzenler (15 dakika limit ile)
+ *     tags: [Inbox]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: messageId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [message]
+ *             properties:
+ *               message:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Mesaj başarıyla düzenlendi
+ *       400:
+ *         description: Geçersiz request veya zaman limiti aşıldı
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ *       403:
+ *         description: Mesaj sahibi değilsiniz
+ *       404:
+ *         description: Mesaj bulunamadı
+ */
+router.patch(
+  '/:messageId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { messageId } = req.params;
+    const { message } = req.body;
+
+    if (!message || typeof message !== 'string' || message.trim() === '') {
+      return res.status(400).json({ message: 'message is required' });
+    }
+
+    try {
+      await messagingService.editMessage(messageId, String(userId), message);
+      const { DmMessagePrismaRepository } = await import('../../infrastructure/repositories/dm-message-prisma.repository');
+      const messageRepo = new DmMessagePrismaRepository();
+      const updatedMessage = await messageRepo.findById(messageId);
+      return res.status(200).json({
+        messageId,
+        message,
+        editedAt: updatedMessage?.editedAt?.toISOString() || new Date().toISOString()
+      });
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      if (hasErrorMessage(error) && (message.includes('not found') || message.includes('Message not found'))) {
+        return res.status(404).json({ message: 'Message not found' });
+      }
+      if (hasErrorMessage(error) && (message.includes('Forbidden') || message.includes('own messages'))) {
+        return res.status(403).json({ message: 'You can only edit your own messages' });
+      }
+      if (hasErrorMessage(error) && message.includes('15 minutes')) {
+        return res.status(400).json({ message: 'Message cannot be edited after 15 minutes' });
+      }
+      throw error;
+    }
+  })
+);
+
+/**
+ * @openapi
+ * /inbox/{messageId}:
+ *   delete:
+ *     summary: Mesajı sil
+ *     description: Mesajı soft delete yapar
+ *     tags: [Inbox]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: messageId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Mesaj başarıyla silindi
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ *       403:
+ *         description: Mesaj sahibi değilsiniz
+ *       404:
+ *         description: Mesaj bulunamadı
+ */
+router.delete(
+  '/:messageId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { messageId } = req.params;
+
+    try {
+      await messagingService.deleteMessage(messageId, String(userId));
+      return res.status(200).json({
+        messageId,
+        deletedAt: new Date().toISOString()
+      });
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      if (hasErrorMessage(error) && (message.includes('not found') || message.includes('Message not found'))) {
+        return res.status(404).json({ message: 'Message not found' });
+      }
+      if (hasErrorMessage(error) && (message.includes('Forbidden') || message.includes('own messages'))) {
+        return res.status(403).json({ message: 'You can only delete your own messages' });
+      }
+      throw error;
+    }
+  })
+);
+
+/**
+ * @openapi
+ * /inbox/{messageId}/reactions:
+ *   post:
+ *     summary: Mesaja reaksiyon ekle
+ *     description: Mesaja emoji reaksiyon ekler
+ *     tags: [Inbox]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: messageId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [emoji]
+ *             properties:
+ *               emoji:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Reaksiyon başarıyla eklendi
+ *       400:
+ *         description: Geçersiz request veya zaten reaksiyon var
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ *       404:
+ *         description: Mesaj bulunamadı
+ */
+router.post(
+  '/:messageId/reactions',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { messageId } = req.params;
+    const { emoji } = req.body;
+
+    if (!emoji || typeof emoji !== 'string' || emoji.trim() === '') {
+      return res.status(400).json({ message: 'emoji is required' });
+    }
+
+    try {
+      await messagingService.addReaction(messageId, String(userId), emoji.trim());
+      return res.status(201).json({
+        messageId,
+        userId: String(userId),
+        emoji: emoji.trim(),
+        createdAt: new Date().toISOString()
+      });
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      if (hasErrorMessage(error) && (message.includes('not found') || message.includes('Message not found'))) {
+        return res.status(404).json({ message: 'Message not found' });
+      }
+      if (hasErrorMessage(error) && message.includes('Already reacted')) {
+        return res.status(400).json({ message: 'Already reacted with this emoji' });
+      }
+      throw error;
+    }
+  })
+);
+
+/**
+ * @openapi
+ * /inbox/{messageId}/reactions:
+ *   get:
+ *     summary: Mesajın reaksiyonlarını getir
+ *     description: Mesajın tüm reaksiyonlarını gruplu olarak getirir
+ *     tags: [Inbox]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: messageId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Reaksiyonlar başarıyla getirildi
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ *       404:
+ *         description: Mesaj bulunamadı
+ */
+router.get(
+  '/:messageId/reactions',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    if (!userPayload?.id && !userPayload?.userId && !userPayload?.sub) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { messageId } = req.params;
+
+    try {
+      const reactions = await messagingService.getMessageReactions(messageId);
+      return res.status(200).json({
+        messageId,
+        reactions
+      });
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      if (hasErrorMessage(error) && (message.includes('not found') || message.includes('Message not found'))) {
+        return res.status(404).json({ message: 'Message not found' });
+      }
+      throw error;
+    }
+  })
+);
+
+/**
+ * @openapi
+ * /inbox/{messageId}/reactions/{reactionId}:
+ *   delete:
+ *     summary: Reaksiyonu kaldır
+ *     description: Mesajdan reaksiyon kaldırır
+ *     tags: [Inbox]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: messageId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: path
+ *         name: reactionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Reaksiyon başarıyla kaldırıldı
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ *       403:
+ *         description: Reaksiyon sahibi değilsiniz
+ *       404:
+ *         description: Reaksiyon bulunamadı
+ */
+router.delete(
+  '/:messageId/reactions/:reactionId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { messageId, reactionId } = req.params;
+
+    // Get reaction to find emoji
+    const { MessageReactionPrismaRepository } = await import('../../infrastructure/repositories/message-reaction-prisma.repository');
+    const reactionRepo = new MessageReactionPrismaRepository();
+    const reaction = await reactionRepo.findById(reactionId);
+
+    if (!reaction) {
+      return res.status(404).json({ message: 'Reaction not found' });
+    }
+
+    if (reaction.userId !== String(userId)) {
+      return res.status(403).json({ message: 'You can only remove your own reactions' });
+    }
+
+    try {
+      await messagingService.removeReaction(messageId, String(userId), reaction.emoji);
+      return res.status(200).json({
+        messageId,
+        reactionId,
+        deletedAt: new Date().toISOString()
+      });
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      if (hasErrorMessage(error) && (message.includes('not found') || message.includes('Message not found'))) {
+        return res.status(404).json({ message: 'Message not found' });
+      }
+      throw error;
+    }
+  })
+);
+
+/**
+ * @openapi
+ * /inbox/threads/{threadId}/search:
+ *   get:
+ *     summary: Thread içinde mesaj ara
+ *     description: Thread içinde full-text search yapar
+ *     tags: [Inbox]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: threadId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: q
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Arama sorgusu
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *         description: Maksimum sonuç sayısı
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *         description: Atlanacak sonuç sayısı
+ *     responses:
+ *       200:
+ *         description: Arama sonuçları başarıyla getirildi
+ *       400:
+ *         description: Query parametresi eksik
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ *       403:
+ *         description: Thread'e erişim yok
+ */
+router.get(
+  '/threads/:threadId/search',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    if (!userPayload?.id && !userPayload?.userId && !userPayload?.sub) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { threadId } = req.params;
+    const { q, limit = 50, offset = 0 } = req.query;
+
+    if (!q || typeof q !== 'string' || q.trim().length === 0) {
+      return res.status(400).json({ message: 'Query parameter (q) is required' });
+    }
+
+    try {
+      const messages = await messagingService.searchMessages(
+        threadId,
+        q.trim(),
+        parseInt(limit as string) || 50,
+        parseInt(offset as string) || 0
+      );
+      return res.status(200).json({
+        messages: messages.map(m => ({
+          id: m.id,
+          threadId: m.threadId,
+          senderId: m.senderId,
+          message: m.message,
+          sentAt: m.sentAt.toISOString(),
+          sender: {
+            id: m.senderId,
+            senderName: '',
+            senderTitle: '',
+            senderAvatar: ''
+          }
+        })),
+        total: messages.length,
+        hasMore: messages.length >= (parseInt(limit as string) || 50)
+      });
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      if (hasErrorMessage(error) && (message.includes('not found') || message.includes('Thread not found'))) {
+        return res.status(404).json({ message: 'Thread not found' });
+      }
+      if (hasErrorMessage(error) && (message.includes('Forbidden') || message.includes('not part of'))) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+      throw error;
+    }
+  })
+);
+
+/**
+ * @openapi
+ * /inbox/threads/{threadId}/media:
+ *   post:
+ *     summary: Thread'e medya yükle
+ *     description: Thread'e görsel, video, ses veya dosya yükler
+ *     tags: [Inbox]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: threadId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [media]
+ *             properties:
+ *               media:
+ *                 type: string
+ *                 format: binary
+ *               mediaType:
+ *                 type: string
+ *                 enum: [image, video, audio, file]
+ *               caption:
+ *                 type: string
+ *               fileName:
+ *                 type: string
+ *               fileSize:
+ *                 type: number
+ *     responses:
+ *       201:
+ *         description: Medya başarıyla yüklendi
+ *       400:
+ *         description: Geçersiz dosya veya format
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ *       403:
+ *         description: Thread'e erişim yok
+ *       413:
+ *         description: Dosya çok büyük
+ */
+router.post(
+  '/threads/:threadId/media',
+  upload.single('media'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { threadId } = req.params;
+    const { mediaType, caption, fileName, fileSize } = req.body;
+    const file = (req as any).file;
+
+    if (!file) {
+      return res.status(400).json({ message: 'Media file is required' });
+    }
+
+    // Validate media type
+    const validMediaTypes = ['image', 'video', 'audio', 'file'];
+    let detectedMediaType = mediaType;
+    
+    if (!detectedMediaType) {
+      // Auto-detect from MIME type
+      if (file.mimetype.startsWith('image/')) {
+        detectedMediaType = 'image';
+      } else if (file.mimetype.startsWith('video/')) {
+        detectedMediaType = 'video';
+      } else if (file.mimetype.startsWith('audio/')) {
+        detectedMediaType = 'audio';
+      } else {
+        detectedMediaType = 'file';
+      }
+    }
+
+    if (!validMediaTypes.includes(detectedMediaType)) {
+      return res.status(400).json({ message: 'Invalid mediaType. Must be one of: image, video, audio, file' });
+    }
+
+    try {
+      // Determine file extension
+      const mimeToExtension: Record<string, string> = {
+        'image/jpeg': 'jpg',
+        'image/jpg': 'jpg',
+        'image/png': 'png',
+        'image/gif': 'gif',
+        'image/webp': 'webp',
+        'video/mp4': 'mp4',
+        'video/webm': 'webm',
+        'video/quicktime': 'mov',
+        'video/x-msvideo': 'avi',
+        'audio/mpeg': 'mp3',
+        'audio/mp3': 'mp3',
+        'audio/wav': 'wav',
+        'audio/ogg': 'ogg',
+      };
+
+      let fileExtension = 'jpg';
+      if (file.mimetype && mimeToExtension[file.mimetype]) {
+        fileExtension = mimeToExtension[file.mimetype];
+      } else if (file.originalname && file.originalname.includes('.')) {
+        const parts = file.originalname.split('.');
+        if (parts.length > 1) {
+          fileExtension = parts[parts.length - 1].toLowerCase();
+        }
+      }
+
+      // Create file path - diğer image saklama yapısıyla aynı mantıkta (userId bazlı)
+      const filePath = `messages/${userId}/${uuidv4()}.${fileExtension}`;
+      
+      // Upload to S3
+      const mediaUrl = await s3Service.uploadFile(filePath, file.buffer, file.mimetype);
+      
+      // For images and videos, we could generate thumbnails here
+      // For now, we'll use the same URL as thumbnail
+      const thumbnailUrl = (detectedMediaType === 'image' || detectedMediaType === 'video') ? mediaUrl : null;
+
+      // Upload media message
+      await messagingService.uploadMedia(
+        threadId,
+        String(userId),
+        mediaUrl,
+        detectedMediaType as 'image' | 'video' | 'audio' | 'file',
+        fileName || file.originalname,
+        BigInt(fileSize || file.size),
+        thumbnailUrl || undefined,
+        caption
+      );
+
+      return res.status(201).json({
+        threadId,
+        mediaUrl,
+        thumbnailUrl,
+        mediaType: detectedMediaType,
+        caption: caption || null,
+        sentAt: new Date().toISOString()
+      });
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      if (hasErrorMessage(error) && (message.includes('not found') || message.includes('Thread not found'))) {
+        return res.status(404).json({ message: 'Thread not found' });
+      }
+      if (hasErrorMessage(error) && (message.includes('Forbidden') || message.includes('not part of'))) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+      logger.error('Media upload error:', error);
       throw error;
     }
   })

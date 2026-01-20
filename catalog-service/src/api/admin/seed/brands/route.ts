@@ -6,9 +6,23 @@ import * as fs from "fs"
 import * as path from "path"
 import Papa from "papaparse"
 
+interface BrandCsvRow {
+  name: string
+  handle: string
+  root_category_name: string
+  second_category_name: string
+  third_category_name: string
+  website: string
+  metadata: string
+}
+
 /**
  * POST /admin/seed/brands
  * Brands seed işlemini başlatır (bulk ekleme)
+ * 1. Önce distinct root_category_name değerlerinden BrandCategory oluşturur
+ * 2. Ardından brandleri eklerken category_id ataması yapar
+ * 3. secondary_category_name ve third_category_name değerlerini metadata'ya ekler
+ * 4. website değerini website_url alanına atar
  */
 export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
   try {
@@ -17,30 +31,102 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
     const brandModuleService = container.resolve<BrandModuleService>(BRAND_MODULE)
     const csvDataPath = path.join(process.cwd(), "src", "scripts", "tipbox-datas")
 
-    // Brands CSV'yi oku
-    const brandsCsvPath = path.join(csvDataPath, "brands.csv")
+    // Brands CSV'yi oku (brands_2.csv)
+    const brandsCsvPath = path.join(csvDataPath, "brands_2.csv")
     if (!fs.existsSync(brandsCsvPath)) {
-      return res.status(404).json({ error: "Brands CSV dosyası bulunamadı" })
+      return res.status(404).json({ error: "Brands CSV dosyası bulunamadı (brands_2.csv)" })
     }
 
     const brandsCsvContent = fs.readFileSync(brandsCsvPath, "utf-8")
-    const brandsData = Papa.parse(brandsCsvContent, {
+    const brandsData = Papa.parse<BrandCsvRow>(brandsCsvContent, {
       header: true,
       skipEmptyLines: true,
-    }).data as any[]
+    }).data
 
-    // Bulk payload'u hazırla
-    // csv'den gelen id değerini metadata kolonuna kaydediyoruz
-    const brandsToCreate = brandsData.map((brandRow) => ({
-      name: brandRow.name,
-      category_id: null, // Gerekirse burada eşleştirip doldurabilirsiniz
-      metadata: {
-        ...(brandRow.metadata || {}),
-        brand_id: brandRow.id, // csv'den gelen id değerini metadata'ya ekle
-      },
-    }))
+    logger.info(`CSV'den ${brandsData.length} brand okundu`)
 
-    // Toplu ekle
+    // 1. Distinct root_category_name değerlerini al
+    const distinctCategories = [
+      ...new Set(
+        brandsData
+          .map((row) => row.root_category_name?.trim())
+          .filter((name) => name && name.length > 0)
+      ),
+    ]
+
+    logger.info(`${distinctCategories.length} farklı kategori bulundu: ${distinctCategories.join(", ")}`)
+
+    // 2. BrandCategory'leri oluştur
+    const categoryMap = new Map<string, string>() // root_category_name -> category_id
+
+    // Önce mevcut kategorileri kontrol et
+    const existingCategories = await brandModuleService.listBrandCategories()
+    for (const cat of existingCategories) {
+      categoryMap.set(cat.title, cat.id)
+    }
+
+    // Yeni kategorileri oluştur
+    const newCategoriesToCreate = distinctCategories.filter((name) => !categoryMap.has(name))
+    
+    if (newCategoriesToCreate.length > 0) {
+      const categoriesToCreate = newCategoriesToCreate.map((categoryName) => ({
+        title: categoryName,
+        handle: categoryName.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, ""),
+        metadata: null,
+      }))
+
+      try {
+        const createdCategories = await brandModuleService.createBrandCategories(categoriesToCreate)
+        for (const cat of createdCategories) {
+          categoryMap.set(cat.title, cat.id)
+        }
+        logger.info(`${createdCategories.length} yeni BrandCategory oluşturuldu`)
+      } catch (err: any) {
+        logger.error("BrandCategory oluşturulurken hata: " + err.message)
+        return res.status(500).json({ error: "BrandCategory oluşturulurken hata: " + err.message })
+      }
+    }
+
+    // 3. Brands'leri hazırla
+    const brandsToCreate = brandsData.map((brandRow) => {
+      // Metadata oluştur
+      const metadataObj: Record<string, any> = {}
+      
+      // Mevcut metadata'yı parse et (eğer varsa)
+      if (brandRow.metadata && brandRow.metadata.trim()) {
+        try {
+          const parsedMeta = JSON.parse(brandRow.metadata)
+          Object.assign(metadataObj, parsedMeta)
+        } catch {
+          // JSON parse hatası, boş bırak
+        }
+      }
+
+      // secondary ve third category bilgilerini metadata'ya ekle
+      if (brandRow.second_category_name?.trim()) {
+        metadataObj.second_category_name = brandRow.second_category_name.trim()
+      }
+      if (brandRow.third_category_name?.trim()) {
+        metadataObj.third_category_name = brandRow.third_category_name.trim()
+      }
+
+      // Category ID'yi bul
+      const categoryId = brandRow.root_category_name?.trim()
+        ? categoryMap.get(brandRow.root_category_name.trim()) || null
+        : null
+
+      const website = brandRow.website?.trim();
+      return {
+        name: brandRow.name,
+        handle: brandRow.handle || null,
+        website_url: brandRow.website?.trim() || null,
+        logo_url: website?.length > 0 ? `https://img.logo.dev/name/${website}?token=pk_WgZMkY5cTXCH41Z0yJ_Txw` : null,
+        category_id: categoryId,
+        metadata: Object.keys(metadataObj).length > 0 ? metadataObj : null,
+      }
+    })
+
+    // 4. Toplu ekle
     let createdBrands: any[] = []
     try {
       if (typeof brandModuleService.createBrands === "function") {
@@ -53,66 +139,12 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
       return res.status(500).json({ error: "Toplu marka oluşturulurken hata: " + err.message })
     }
 
-    // Id eşlemesi için - eski id : yeni id
-    const brandMap = new Map<string, string>()
-    // logo_url güncellenecek markalar
-    const brandsWithLogo = brandsData.filter((b: any) => b.logo_url)
-    let logoUpdateErrors: string[] = []
-
-    // Eşleşmeleri kur
-    for (let i = 0; i < brandsData.length; i++) {
-      const originalId = brandsData[i]?.id
-      const createdId = createdBrands[i]?.id
-      if (originalId && createdId) {
-        brandMap.set(originalId, createdId)
-      }
-    }
-
-    // logo_url veya metadata güncellenmesi gerekiyorsa topluca güncelle
-    if (
-      (brandsWithLogo.length > 0 || brandsData.some((b: any) => b.id)) &&
-      typeof brandModuleService.updateBrands === "function"
-    ) {
-      for (let i = 0; i < brandsData.length; i++) {
-        const brand = brandsData[i]
-        const createdBrandId = brandMap.get(brand.id)
-        if (!createdBrandId) continue
-        // Sadece logo_url ya da metadata güncellenmesi gerekiyorsa
-        const updatePayload: any = {}
-        if (brand.logo_url) updatePayload.logo_url = brand.logo_url
-        // Güncelleme ile yeni metadata'yı oraya da ekle (id zaten ilk seferde eklenmiş olabilir)
-        if (brand.id) {
-          updatePayload.metadata = {
-            ...(brand.metadata || {}),
-            brand_id: brand.id,
-          }
-        }
-        if (Object.keys(updatePayload).length === 0) continue // bir şey güncellenmeyecekse geç
-        try {
-          await brandModuleService.updateBrands({
-            selector: { id: createdBrandId },
-            data: updatePayload,
-          })
-        } catch (err: any) {
-          if (brand.logo_url) {
-            logoUpdateErrors.push(`Logo güncellenemedi (${brand.name}): ${err.message}`)
-            logger.warn(`Failed to update brand logo for ${brand.name}: ${err.message}`)
-          }
-          if (brand.id) {
-            // Diğer metadata update hatalarını da logla
-            logger.warn(
-              `Failed to update metadata for brand ${brand.name} (${brand.id}): ${err.message}`
-            )
-          }
-        }
-      }
-    }
-
     res.json({
       success: true,
       message: `${createdBrands.length} marka bulk olarak oluşturuldu`,
       count: createdBrands.length,
-      logo_update_errors: logoUpdateErrors.length > 0 ? logoUpdateErrors : undefined,
+      categories_created: newCategoriesToCreate.length,
+      total_categories: categoryMap.size,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error"
@@ -122,7 +154,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
 
 /**
  * DELETE /admin/seed/brands
- * Tüm markaları siler (aynı şekilde tek tek, bulk yoksa eski gibi)
+ * Tüm markaları ve brand kategorilerini siler
  */
 export const DELETE = async (req: MedusaRequest, res: MedusaResponse) => {
   try {
@@ -134,75 +166,88 @@ export const DELETE = async (req: MedusaRequest, res: MedusaResponse) => {
 
     // Tüm markaları getir
     const brands = await brandModuleService.listBrands()
+    const brandCategories = await brandModuleService.listBrandCategories()
 
-    if (!brands || brands.length === 0) {
-      return res.json({
-        success: true,
-        message: "Silinecek marka bulunamadı",
-        deleted_count: 0,
-      })
-    }
-
-    let deletedCount = 0
+    let deletedBrandCount = 0
+    let deletedCategoryCount = 0
     const errors: string[] = []
 
     // Önce tüm brand-product linklerini sil
-    for (const brand of brands) {
-      try {
-        // Brand'e bağlı ürünleri getir
-        const { data: brandData } = await query.graph({
-          entity: "brand",
-          fields: ["id", "product.id"],
-          filters: {
-            id: brand.id,
-          },
-        })
+    if (brands && brands.length > 0) {
+      for (const brand of brands) {
+        try {
+          // Brand'e bağlı ürünleri getir
+          const { data: brandData } = await query.graph({
+            entity: "brand",
+            fields: ["id", "product.id"],
+            filters: {
+              id: brand.id,
+            },
+          })
 
-        const brandWithProducts = brandData[0]
-        if (brandWithProducts?.product) {
-          const products = Array.isArray(brandWithProducts.product)
-            ? brandWithProducts.product
-            : [brandWithProducts.product]
+          const brandWithProducts = brandData[0]
+          if (brandWithProducts?.product) {
+            const products = Array.isArray(brandWithProducts.product)
+              ? brandWithProducts.product
+              : [brandWithProducts.product]
 
-          // Tüm linkleri sil
-          for (const product of products) {
-            try {
-              await remoteLink.dismiss({
-                [Modules.PRODUCT]: {
-                  product_id: product.id,
-                },
-                brand: {
-                  brand_id: brand.id,
-                },
-              })
-            } catch (error: any) {
-              logger.warn(`Failed to dismiss link for product ${product.id}: ${error.message}`)
+            // Tüm linkleri sil
+            for (const product of products) {
+              try {
+                await remoteLink.dismiss({
+                  [Modules.PRODUCT]: {
+                    product_id: product.id,
+                  },
+                  brand: {
+                    brand_id: brand.id,
+                  },
+                })
+              } catch (error: any) {
+                logger.warn(`Failed to dismiss link for product ${product.id}: ${error.message}`)
+              }
             }
           }
+        } catch (error: any) {
+          logger.warn(`Failed to get products for brand ${brand.id}: ${error.message}`)
         }
-      } catch (error: any) {
-        logger.warn(`Failed to get products for brand ${brand.id}: ${error.message}`)
+      }
+
+      // Tüm brandları sil
+      if (typeof brandModuleService.deleteBrands === "function") {
+        for (const brand of brands) {
+          try {
+            await brandModuleService.deleteBrands(brand.id)
+            deletedBrandCount++
+          } catch (error: any) {
+            errors.push(`Marka ${brand.name} (${brand.id}) silinirken hata: ${error.message}`)
+            logger.warn(`Failed to delete brand ${brand.name}: ${error.message}`)
+          }
+        }
       }
     }
 
-    // Bulk silme destekleniyorsa burada kullanılabilir
-    if (typeof brandModuleService.deleteBrands === "function" && brands.length > 0) {
-      for (const brand of brands) {
-        try {
-          await brandModuleService.deleteBrands(brand.id)
-          deletedCount++
-        } catch (error: any) {
-          errors.push(`Marka ${brand.name} (${brand.id}) silinirken hata: ${error.message}`)
-          logger.warn(`Failed to delete brand ${brand.name}: ${error.message}`)
+    // Tüm brand kategorilerini sil
+    if (brandCategories && brandCategories.length > 0) {
+      if (typeof brandModuleService.deleteBrandCategories === "function") {
+        for (const category of brandCategories) {
+          try {
+            await brandModuleService.deleteBrandCategories(category.id)
+            deletedCategoryCount++
+          } catch (error: any) {
+            errors.push(`Kategori ${category.title} (${category.id}) silinirken hata: ${error.message}`)
+            logger.warn(`Failed to delete brand category ${category.title}: ${error.message}`)
+          }
         }
       }
     }
 
     res.json({
       success: errors.length === 0,
-      message: `${deletedCount} marka silindi`,
-      deleted_count: deletedCount,
-      total_count: brands.length,
+      message: `${deletedBrandCount} marka ve ${deletedCategoryCount} kategori silindi`,
+      deleted_brand_count: deletedBrandCount,
+      deleted_category_count: deletedCategoryCount,
+      total_brand_count: brands?.length || 0,
+      total_category_count: brandCategories?.length || 0,
       errors: errors.length > 0 ? errors : undefined,
     })
   } catch (error) {

@@ -76,8 +76,8 @@ async function runTests() {
   const results: TestResult[] = [];
 
   // Test endpoints
-  console.log('\n[2/11] GET /messages - Inbox Listesi...');
-  const inboxResult = await testEndpoint('GET /messages', 'get', `${BASE_URL}/messages`, token);
+  console.log('\n[2/11] GET /inbox - Inbox Listesi...');
+  const inboxResult = await testEndpoint('GET /inbox', 'get', `${BASE_URL}/inbox`, token);
   results.push(inboxResult);
   if (inboxResult.success) {
     const count = Array.isArray(inboxResult.data) ? inboxResult.data.length : 0;
@@ -86,8 +86,8 @@ async function runTests() {
     console.log(`✗ Hata: ${inboxResult.message}`);
   }
 
-  console.log('\n[3/11] GET /messages/feed...');
-  const feedResult = await testEndpoint('GET /messages/feed', 'get', `${BASE_URL}/messages/feed`, token);
+  console.log('\n[3/11] GET /inbox/feed...');
+  const feedResult = await testEndpoint('GET /inbox/feed', 'get', `${BASE_URL}/inbox/feed`, token);
   results.push(feedResult);
   if (feedResult.success) {
     const count = Array.isArray(feedResult.data) ? feedResult.data.length : 0;
@@ -96,11 +96,11 @@ async function runTests() {
     console.log(`✗ Hata: ${feedResult.message}`);
   }
 
-  console.log('\n[4/11] GET /messages/support-requests...');
+  console.log('\n[4/11] GET /inbox/support-requests...');
   const supportRequestsResult = await testEndpoint(
-    'GET /messages/support-requests',
+    'GET /inbox/support-requests',
     'get',
-    `${BASE_URL}/messages/support-requests`,
+    `${BASE_URL}/inbox/support-requests`,
     token
   );
   results.push(supportRequestsResult);
@@ -111,8 +111,8 @@ async function runTests() {
     console.log(`✗ Hata: ${supportRequestsResult.message}`);
   }
 
-  console.log('\n[5/11] GET /messages?search=test...');
-  const searchResult = await testEndpoint('GET /messages?search=test', 'get', `${BASE_URL}/messages?search=test`, token);
+  console.log('\n[5/11] GET /inbox?search=test...');
+  const searchResult = await testEndpoint('GET /inbox?search=test', 'get', `${BASE_URL}/inbox?search=test`, token);
   results.push(searchResult);
   if (searchResult.success) {
     const count = Array.isArray(searchResult.data) ? searchResult.data.length : 0;
@@ -121,11 +121,11 @@ async function runTests() {
     console.log(`✗ Hata: ${searchResult.message}`);
   }
 
-  console.log('\n[6/11] GET /messages?unreadOnly=true...');
+  console.log('\n[6/11] GET /inbox?unreadOnly=true...');
   const unreadResult = await testEndpoint(
-    'GET /messages?unreadOnly=true',
+    'GET /inbox?unreadOnly=true',
     'get',
-    `${BASE_URL}/messages?unreadOnly=true`,
+    `${BASE_URL}/inbox?unreadOnly=true`,
     token
   );
   results.push(unreadResult);
@@ -136,8 +136,8 @@ async function runTests() {
     console.log(`✗ Hata: ${unreadResult.message}`);
   }
 
-  console.log('\n[7/11] GET /messages?limit=10...');
-  const limitResult = await testEndpoint('GET /messages?limit=10', 'get', `${BASE_URL}/messages?limit=10`, token);
+  console.log('\n[7/11] GET /inbox?limit=10...');
+  const limitResult = await testEndpoint('GET /inbox?limit=10', 'get', `${BASE_URL}/inbox?limit=10`, token);
   results.push(limitResult);
   if (limitResult.success) {
     const count = Array.isArray(limitResult.data) ? limitResult.data.length : 0;
@@ -146,11 +146,11 @@ async function runTests() {
     console.log(`✗ Hata: ${limitResult.message}`);
   }
 
-  console.log('\n[8/11] GET /messages/support-requests?status=pending...');
+  console.log('\n[8/11] GET /inbox/support-requests?status=pending...');
   const statusResult = await testEndpoint(
-    'GET /messages/support-requests?status=pending',
+    'GET /inbox/support-requests?status=pending',
     'get',
-    `${BASE_URL}/messages/support-requests?status=pending`,
+    `${BASE_URL}/inbox/support-requests?status=pending`,
     token
   );
   results.push(statusResult);
@@ -161,11 +161,11 @@ async function runTests() {
     console.log(`✗ Hata: ${statusResult.message}`);
   }
 
-  console.log('\n[9/11] GET /messages/feed?limit=20...');
+  console.log('\n[9/11] GET /inbox/feed?limit=20...');
   const feedLimitResult = await testEndpoint(
-    'GET /messages/feed?limit=20',
+    'GET /inbox/feed?limit=20',
     'get',
-    `${BASE_URL}/messages/feed?limit=20`,
+    `${BASE_URL}/inbox/feed?limit=20`,
     token
   );
   results.push(feedLimitResult);
@@ -177,13 +177,13 @@ async function runTests() {
   }
 
   // Thread mesajları testi (eğer thread varsa)
-  console.log('\n[10/11] GET /messages/:threadId...');
+  console.log('\n[10/11] GET /inbox/:threadId...');
   if (inboxResult.success && Array.isArray(inboxResult.data) && inboxResult.data.length > 0) {
     const threadId = inboxResult.data[0].id;
     const threadMessagesResult = await testEndpoint(
-      'GET /messages/:threadId',
+      'GET /inbox/:threadId',
       'get',
-      `${BASE_URL}/messages/${threadId}`,
+      `${BASE_URL}/inbox/${threadId}`,
       token
     );
     results.push(threadMessagesResult);
@@ -241,11 +241,11 @@ async function runTests() {
 
   // POST endpoint testleri
   if (juliaUserId) {
-    console.log('\n[12/15] POST /messages/threads - Thread Oluştur...');
+    console.log('\n[12/15] POST /inbox/threads - Thread Oluştur...');
     const threadResult = await testEndpoint(
-      'POST /messages/threads',
+      'POST /inbox/threads',
       'post',
-      `${BASE_URL}/messages/threads`,
+      `${BASE_URL}/inbox/threads`,
       token,
       { recipientId: juliaUserId }
     );
@@ -256,11 +256,11 @@ async function runTests() {
       console.log(`✗ Hata: ${threadResult.message}`);
     }
 
-    console.log('\n[13/15] POST /messages - Direkt Mesaj Gönder...');
+    console.log('\n[13/15] POST /inbox - Direkt Mesaj Gönder...');
     const messageResult = await testEndpoint(
-      'POST /messages',
+      'POST /inbox',
       'post',
-      `${BASE_URL}/messages`,
+      `${BASE_URL}/inbox`,
       token,
       {
         recipientUserId: juliaUserId,
@@ -274,11 +274,11 @@ async function runTests() {
       console.log(`✗ Hata: ${messageResult.message}`);
     }
 
-    console.log('\n[14/15] POST /messages/support-requests - Support Request Oluştur...');
+    console.log('\n[14/15] POST /inbox/support-requests - Support Request Oluştur...');
     const supportRequestResult = await testEndpoint(
-      'POST /messages/support-requests',
+      'POST /inbox/support-requests',
       'post',
-      `${BASE_URL}/messages/support-requests`,
+      `${BASE_URL}/inbox/support-requests`,
       token,
       {
         senderUserId: currentUserId,
@@ -297,11 +297,11 @@ async function runTests() {
       console.log(`✗ Hata: ${supportRequestResult.message}`);
     }
 
-    console.log('\n[15/15] POST /messages/tips - TIPS Gönder...');
+    console.log('\n[15/15] POST /inbox/tips - TIPS Gönder...');
     const tipsResult = await testEndpoint(
-      'POST /messages/tips',
+      'POST /inbox/tips',
       'post',
-      `${BASE_URL}/messages/tips`,
+      `${BASE_URL}/inbox/tips`,
       token,
       {
         senderUserId: currentUserId,

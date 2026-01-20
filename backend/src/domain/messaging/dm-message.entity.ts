@@ -7,7 +7,27 @@ export class DMMessage {
     public readonly sentAt: Date,
     public readonly isRead: boolean,
     public readonly createdAt: Date,
-    public readonly updatedAt: Date
+    public readonly updatedAt: Date,
+    // Media fields
+    public readonly mediaUrl?: string | null,
+    public readonly mediaType?: string | null,
+    public readonly thumbnailUrl?: string | null,
+    public readonly fileName?: string | null,
+    public readonly fileSize?: bigint | null,
+    public readonly caption?: string | null,
+    // Reply/Threading
+    public readonly replyToMessageId?: string | null,
+    // Status Tracking
+    public readonly status?: string,
+    public readonly deliveredAt?: Date | null,
+    public readonly readAt?: Date | null,
+    // Deletion
+    public readonly isDeleted?: boolean,
+    public readonly deletedAt?: Date | null,
+    public readonly deletedBy?: string | null,
+    // Editing
+    public readonly isEdited?: boolean,
+    public readonly editedAt?: Date | null
   ) {}
 
   // Essential business methods only
@@ -101,5 +121,43 @@ export class DMMessage {
 
   getReadStatusIcon(): string {
     return this.isRead ? '✓✓' : '✓';
+  }
+
+  // New business logic methods
+  isDeleted(): boolean {
+    return this.isDeleted ?? false;
+  }
+
+  isEdited(): boolean {
+    return this.isEdited ?? false;
+  }
+
+  getStatus(): 'sending' | 'sent' | 'delivered' | 'read' {
+    return (this.status as 'sending' | 'sent' | 'delivered' | 'read') || 'sent';
+  }
+
+  hasMedia(): boolean {
+    return !!this.mediaUrl;
+  }
+
+  isReply(): boolean {
+    return !!this.replyToMessageId;
+  }
+
+  canBeEdited(): boolean {
+    if (this.isDeleted()) return false;
+    const EDIT_TIME_LIMIT = 15 * 60 * 1000; // 15 dakika
+    const timeSinceSent = Date.now() - this.sentAt.getTime();
+    return timeSinceSent <= EDIT_TIME_LIMIT;
+  }
+
+  getMediaType(): 'image' | 'video' | 'audio' | 'file' | null {
+    if (!this.mediaType) return null;
+    return this.mediaType as 'image' | 'video' | 'audio' | 'file';
+  }
+
+  getFileSizeInMB(): number | null {
+    if (!this.fileSize) return null;
+    return Number(this.fileSize) / (1024 * 1024);
   }
 }

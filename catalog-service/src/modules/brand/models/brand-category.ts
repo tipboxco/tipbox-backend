@@ -5,6 +5,7 @@ import { Brand } from "./brand"
 export const BrandCategory = model.define("brand_category", {
   id: model.id().primaryKey(),
   title: model.text(),
+  handle:model.text().nullable(),
   thumbnail: model.text().nullable(),
   // Bir kategori birden fazla brand'e sahip
   brands: model.hasMany(() => Brand, {

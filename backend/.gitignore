@@ -63,3 +63,6 @@ certbot/
 backups/
 *.pem
 *.key
+
+# api config
+api-config.json

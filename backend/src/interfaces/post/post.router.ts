@@ -474,38 +474,136 @@ router.post(
     // Process images (from files or URLs)
     const images = await processPostImages(req, String(userId));
 
-    // Parse products if it's a JSON string (from multipart/form-data)
-    type ProductInput = Array<{ productId: string; isSelected: boolean }> | string | { productId: string; isSelected: boolean } | null | undefined;
-    let products: ProductInput = req.body.products as ProductInput;
+    // Parse products - support multiple input formats
+    let products: Array<{ productId: string; isSelected: boolean }> = [];
     
-    // Handle different input formats
-    if (typeof products === 'string') {
-      try {
-        products = JSON.parse(products);
-      } catch (e) {
-        logger.warn('Failed to parse products JSON', { products, error: e });
+    // Format 1: Frontend sends selectedProduct1, selectedProduct2, selectedChoice
+    if (req.body.selectedProduct1 || req.body.selectedProduct2) {
+      const selectedProduct1 = typeof req.body.selectedProduct1 === 'string' 
+        ? JSON.parse(req.body.selectedProduct1) 
+        : req.body.selectedProduct1;
+      const selectedProduct2 = typeof req.body.selectedProduct2 === 'string' 
+        ? JSON.parse(req.body.selectedProduct2) 
+        : req.body.selectedProduct2;
+      const selectedChoice = req.body.selectedChoice || req.body.selectedchoice;
+      
+      if (!selectedProduct1 || !selectedProduct2) {
         return res.status(400).json({
-          message: 'products field must be a valid JSON array',
+          message: 'selectedProduct1 and selectedProduct2 are required',
+        });
+      }
+
+      // Map id to productId and determine isSelected from selectedChoice
+      // Support both id, productId, and externalId fields
+      const product1IdOrExternalId = selectedProduct1.id || selectedProduct1.productId || selectedProduct1.externalId;
+      const product2IdOrExternalId = selectedProduct2.id || selectedProduct2.productId || selectedProduct2.externalId;
+      
+      if (!product1IdOrExternalId || !product2IdOrExternalId) {
+        return res.status(400).json({
+          message: 'Both products must have an id, productId, or externalId field',
+        });
+      }
+
+      // Resolve product IDs (supports both id and externalId)
+      let product1Id: string;
+      let product2Id: string;
+      try {
+        product1Id = await postService.resolveProductId(product1IdOrExternalId);
+        product2Id = await postService.resolveProductId(product2IdOrExternalId);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Failed to resolve product ID';
+        logger.error('Failed to resolve product ID', { 
+          product1IdOrExternalId, 
+          product2IdOrExternalId, 
+          error: errorMessage 
+        });
+        return res.status(400).json({
+          message: errorMessage,
+        });
+      }
+
+      // Determine which product is selected based on selectedChoice
+      // If selectedChoice is "product1", only product1 is selected
+      // If selectedChoice is "product2", only product2 is selected
+      // If no selectedChoice, both are selected (default for comparison)
+      const isProduct1Selected = selectedChoice 
+        ? (selectedChoice === 'product1' || selectedChoice === '1' || selectedChoice === selectedProduct1.id || selectedChoice === product1Id || selectedChoice === product1IdOrExternalId)
+        : true; // Default: both selected if no choice specified
+      const isProduct2Selected = selectedChoice 
+        ? (selectedChoice === 'product2' || selectedChoice === '2' || selectedChoice === selectedProduct2.id || selectedChoice === product2Id || selectedChoice === product2IdOrExternalId)
+        : true; // Default: both selected if no choice specified
+      
+      products = [
+        { productId: product1Id, isSelected: isProduct1Selected },
+        { productId: product2Id, isSelected: isProduct2Selected },
+      ];
+    }
+    // Format 2: products array (legacy format)
+    else if (req.body.products) {
+      type ProductInput = Array<{ productId: string; isSelected: boolean } | { id: string; isSelected?: boolean }> | string | { productId: string; isSelected: boolean } | { id: string; isSelected?: boolean } | null | undefined;
+      let productsInput: ProductInput = req.body.products as ProductInput;
+      
+      // Handle different input formats
+      if (typeof productsInput === 'string') {
+        try {
+          productsInput = JSON.parse(productsInput);
+        } catch (e) {
+          logger.warn('Failed to parse products JSON', { products: productsInput, error: e });
+          return res.status(400).json({
+            message: 'products field must be a valid JSON array',
+          });
+        }
+      }
+      
+      // If products is already an array, use it directly
+      // If it's an object, try to convert to array
+      if (!Array.isArray(productsInput)) {
+        if (typeof productsInput === 'object' && productsInput !== null) {
+          // Try to convert object to array
+          productsInput = [productsInput];
+        } else {
+          logger.error('Products is not an array or object', { 
+            type: typeof productsInput, 
+            products: productsInput,
+            bodyKeys: Object.keys(req.body),
+          });
+          return res.status(400).json({
+            message: `products must be an array, got: ${typeof productsInput}`,
+          });
+        }
+      }
+
+      // Map products array - handle id, productId, and externalId fields
+      try {
+        // Resolve all product IDs in parallel (supports both id and externalId)
+        const productIdPromises = productsInput.map(async (p: any) => {
+          const productIdOrExternalId = p.productId || p.id || p.externalId;
+          if (!productIdOrExternalId) {
+            throw new Error('Product must have either productId, id, or externalId field');
+          }
+          
+          // Resolve product ID (supports both id and externalId)
+          const resolvedProductId = await postService.resolveProductId(productIdOrExternalId);
+          
+          return {
+            productId: resolvedProductId,
+            isSelected: p.isSelected !== undefined ? p.isSelected : true, // Default to true if not specified
+          };
+        });
+        
+        products = await Promise.all(productIdPromises);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Invalid product format';
+        logger.error('Failed to resolve product IDs', { error: errorMessage });
+        return res.status(400).json({
+          message: errorMessage,
         });
       }
     }
-    
-    // If products is already an array, use it directly
-    // If it's an object, try to convert to array
-    if (!Array.isArray(products)) {
-      if (typeof products === 'object' && products !== null) {
-        // Try to convert object to array
-        products = [products];
-      } else {
-        logger.error('Products is not an array or object', { 
-          type: typeof products, 
-          products,
-          bodyKeys: Object.keys(req.body),
-        });
-        return res.status(400).json({
-          message: `products must be an array, got: ${typeof products}`,
-        });
-      }
+    else {
+      return res.status(400).json({
+        message: 'Either products array or selectedProduct1/selectedProduct2 must be provided',
+      });
     }
 
     // Validate products array structure
@@ -515,11 +613,19 @@ router.post(
       });
     }
 
+    // Validate that at least 2 products are selected
+    const selectedProducts = products.filter((p) => p.isSelected);
+    if (selectedProducts.length < 2) {
+      return res.status(400).json({
+        message: 'At least 2 products must be selected for comparison',
+      });
+    }
+
     const request: CreateBenchmarkPostRequest = {
       contextType: req.body.contextType as ContextType,
       contextId: req.body.contextId,
-      products: products as Array<{ productId: string; isSelected: boolean }>,
-      description: req.body.description,
+      products: products,
+      description: req.body.description || req.body.postText,
       images: images,
       eventId: normalizeEventId(req.body.eventId), // Optional event ID (normalized)
     };
@@ -836,6 +942,278 @@ router.get(
     }
 
     return res.json(post);
+  })
+);
+
+/**
+ * @openapi
+ * /posts/{id}/likes:
+ *   get:
+ *     summary: Post beğenenlerini listele
+ *     description: Belirli bir post'a beğeni atan kullanıcıları listeler. Instagram gibi bottom sheet'te gösterilmek için tasarlanmıştır.
+ *     tags: [Posts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Post ID'si
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 50
+ *         description: Sayfa başına kullanıcı sayısı
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           minimum: 0
+ *           default: 0
+ *         description: Atlanacak kullanıcı sayısı
+ *     responses:
+ *       200:
+ *         description: Post beğenenleri başarıyla getirildi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         description: Kullanıcı ID'si
+ *                       username:
+ *                         type: string
+ *                         nullable: true
+ *                         description: Kullanıcı adı
+ *                       avatar:
+ *                         type: string
+ *                         nullable: true
+ *                         description: Kullanıcı avatar URL'i
+ *                       tags:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             type:
+ *                               type: string
+ *                               enum: [verified, expert, cosmetic, title]
+ *                             label:
+ *                               type: string
+ *                               description: Tag etiketi (badge adı, title adı vb.)
+ *                             imageUrl:
+ *                               type: string
+ *                               nullable: true
+ *                               description: Tag görseli (badge görseli vb.)
+ *                       likedAt:
+ *                         type: string
+ *                         format: date-time
+ *                         description: Beğeni tarihi
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: integer
+ *                     limit:
+ *                       type: integer
+ *                     offset:
+ *                       type: integer
+ *                     hasMore:
+ *                       type: boolean
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ *       404:
+ *         description: Post bulunamadı
+ */
+router.get(
+  '/:id/likes',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    if (!userPayload?.id && !userPayload?.userId && !userPayload?.sub) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { id: postId } = req.params;
+    if (!postId) {
+      return res.status(400).json({ message: 'Post ID is required' });
+    }
+
+    // Post'un var olup olmadığını kontrol et
+    const { getPrisma } = await import('../../infrastructure/repositories/prisma.client');
+    const prisma = getPrisma();
+    const post = await prisma.contentPost.findUnique({
+      where: { id: postId },
+      select: { id: true },
+    });
+
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    // Pagination parametreleri
+    const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
+    const offsetParam = req.query.offset ? parseInt(req.query.offset as string, 10) : 0;
+    const limit = Math.min(Math.max(limitParam, 1), 100);
+    const offset = Math.max(offsetParam, 0);
+
+    // Media URL resolver
+    const { resolveMediaUrl } = await import('../../infrastructure/config/media.config');
+
+    // Post beğenilerini getir (user bilgileri ile)
+    const [likes, total] = await Promise.all([
+      prisma.contentLike.findMany({
+        where: {
+          postId,
+          commentId: null, // Sadece post beğenileri
+        },
+        include: {
+          user: {
+            include: {
+              profile: {
+                select: {
+                  userName: true,
+                  displayName: true,
+                  cosmeticBadgeId: true,
+                  cosmeticBadge: {
+                    select: {
+                      id: true,
+                      name: true,
+                      imageUrl: true,
+                      type: true,
+                    },
+                  },
+                },
+              },
+              avatars: {
+                where: { isActive: true },
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+              },
+              titles: {
+                orderBy: { earnedAt: 'desc' },
+                take: 1,
+              },
+              userBadges: {
+                where: {
+                  claimed: true,
+                  visibility: 'public',
+                },
+                include: {
+                  badge: {
+                    select: {
+                      id: true,
+                      name: true,
+                      imageUrl: true,
+                      type: true,
+                    },
+                  },
+                },
+                orderBy: { claimedAt: 'desc' },
+                take: 5, // En fazla 5 badge göster
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+      prisma.contentLike.count({
+        where: {
+          postId,
+          commentId: null,
+        },
+      }),
+    ]);
+
+    // Kullanıcı bilgilerini formatla
+    const users = likes.map((like) => {
+      const user = like.user;
+      const profile = user.profile;
+      const avatar = user.avatars[0];
+      const title = user.titles[0];
+      const cosmeticBadge = profile?.cosmeticBadge || null;
+      const expertBadges = user.userBadges
+        .filter((ub) => ub.badge.type === 'ACHIEVEMENT' || ub.badge.type === 'EVENT')
+        .map((ub) => ub.badge);
+
+      // Tags oluştur
+      const tags: Array<{
+        type: 'verified' | 'expert' | 'cosmetic' | 'title';
+        label: string;
+        imageUrl: string | null;
+      }> = [];
+
+      // Cosmetic badge (profil badge'i)
+      if (cosmeticBadge) {
+        tags.push({
+          type: 'cosmetic',
+          label: cosmeticBadge.name,
+          imageUrl: resolveMediaUrl(cosmeticBadge.imageUrl),
+        });
+      }
+
+      // Expert badges (achievement/event badges)
+      expertBadges.forEach((badge) => {
+        tags.push({
+          type: 'expert',
+          label: badge.name,
+          imageUrl: resolveMediaUrl(badge.imageUrl),
+        });
+      });
+
+      // User title
+      if (title) {
+        tags.push({
+          type: 'title',
+          label: title.title,
+          imageUrl: null,
+        });
+      }
+
+      // Verified tag (eğer verified badge varsa)
+      const verifiedBadge = user.userBadges.find((ub) =>
+        ub.badge.name.toLowerCase().includes('verified')
+      );
+      if (verifiedBadge) {
+        tags.push({
+          type: 'verified',
+          label: verifiedBadge.badge.name,
+          imageUrl: resolveMediaUrl(verifiedBadge.badge.imageUrl),
+        });
+      }
+
+      return {
+        id: user.id,
+        username: profile?.userName || null,
+        avatar: resolveMediaUrl(avatar?.imageUrl || null, true),
+        tags,
+        likedAt: like.createdAt.toISOString(),
+      };
+    });
+
+    return res.json({
+      success: true,
+      data: users,
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasMore: offset + users.length < total,
+      },
+    });
   })
 );
 

@@ -13,12 +13,30 @@ export const DEFAULT_AVATAR_PATH = 'defaultavatar/default-useravatar.png';
 export function getPublicMediaBaseUrl(): string {
   // Öncelik 1: SEED_MEDIA_BASE_URL (önerilen yöntem - nginx proxy için)
   const seedMediaBaseUrl = process.env.SEED_MEDIA_BASE_URL;
-  if (seedMediaBaseUrl) {
-    return seedMediaBaseUrl.replace(/\/$/, '');
-  }
-  // Öncelik 2: BASE_URL'den port 9000 türet (eski yöntem - geriye dönük uyumluluk)
   const baseUrl = process.env.BASE_URL;
   
+  // Eğer SEED_MEDIA_BASE_URL varsa ve BASE_URL ile uyumluysa kullan
+  if (seedMediaBaseUrl) {
+    // Eğer BASE_URL de varsa, IP/hostname uyumluluğunu kontrol et
+    if (baseUrl) {
+      try {
+        const seedUrl = new URL(seedMediaBaseUrl);
+        const baseUrlObj = new URL(baseUrl);
+        
+        // Eğer hostname'ler farklıysa (farklı IP), BASE_URL'den türet
+        if (seedUrl.hostname !== baseUrlObj.hostname) {
+          // BASE_URL'den port 9000 ile türet
+          const derivedMediaUrl = `${baseUrlObj.protocol}//${baseUrlObj.hostname}:9000`;
+          return derivedMediaUrl;
+        }
+      } catch {
+        // URL parse edilemezse, SEED_MEDIA_BASE_URL'i kullan
+      }
+    }
+    return seedMediaBaseUrl.replace(/\/$/, '');
+  }
+  
+  // Öncelik 2: BASE_URL'den port 9000 türet (eski yöntem - geriye dönük uyumluluk)
   if (!baseUrl) {
     throw new Error(
       'SEED_MEDIA_BASE_URL veya BASE_URL environment variable set edilmelidir! ' +
@@ -83,8 +101,62 @@ export function resolveMediaUrl(mediaPath: string | null | undefined, useDefault
     }
     return null;
   }
-  // Eğer zaten tam bir URL ise (http:// veya https:// ile başlıyorsa), direkt döndür
+  // Eğer zaten tam bir URL ise (http:// veya https:// ile başlıyorsa)
   if (mediaPath.match(/^https?:\/\//)) {
+    // YOUR_DEVICE_IP placeholder'ını gerçek base URL ile değiştir
+    if (mediaPath.includes('YOUR_DEVICE_IP')) {
+      const baseUrl = getPublicMediaBaseUrl();
+      try {
+        const url = new URL(mediaPath);
+        const pathname = url.pathname;
+        return `${baseUrl}${pathname}`;
+      } catch {
+        return mediaPath.replace(/http:\/\/YOUR_DEVICE_IP:9000/, baseUrl);
+      }
+    }
+    
+    // Eğer URL tipbox-media içeriyorsa (MinIO bucket path'leri), 
+    // eski base URL'i yeni base URL ile değiştir
+    const currentBaseUrl = getPublicMediaBaseUrl();
+    
+    // tipbox-media içeren URL'ler için pathname'i çıkar ve yeni base URL ile birleştir
+    if (mediaPath.includes('tipbox-media')) {
+      try {
+        const url = new URL(mediaPath);
+        const pathname = url.pathname;
+        
+        // Pathname zaten /tipbox-media/ ile başlıyorsa, direkt kullan
+        // Değilse, tipbox-media ekle
+        if (pathname.startsWith('/tipbox-media/')) {
+          return `${currentBaseUrl}${pathname}`;
+        } else {
+          // Pathname'den başındaki /'yi kaldır
+          const cleanPath = pathname.replace(/^\//, '');
+          return `${currentBaseUrl}/tipbox-media/${cleanPath}`;
+        }
+      } catch {
+        // URL parse edilemezse, regex ile path'i çıkar ve yeni base URL ile birleştir
+        const pathMatch = mediaPath.match(/\/tipbox-media\/.+$/);
+        if (pathMatch) {
+          return `${currentBaseUrl}${pathMatch[0]}`;
+        }
+      }
+    }
+    
+    // tipbox-media içermeyen URL'ler için, sadece hostname/port farklıysa güncelle
+    try {
+      const url = new URL(mediaPath);
+      const currentUrl = new URL(currentBaseUrl);
+      
+      // Eğer hostname veya port farklıysa, yeni base URL ile değiştir
+      if (url.hostname !== currentUrl.hostname || url.port !== currentUrl.port) {
+        const pathname = url.pathname;
+        return `${currentBaseUrl}${pathname}`;
+      }
+    } catch {
+      // URL parse edilemezse, olduğu gibi döndür
+    }
+    
     return mediaPath;
   }
   // Path'i temizle (başındaki / ve tipbox-media/ prefix'ini kaldır)

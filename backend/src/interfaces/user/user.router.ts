@@ -10,11 +10,48 @@ import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { S3Service } from '../../infrastructure/s3/s3.service';
 import { v4 as uuidv4 } from 'uuid';
 import logger from '../../infrastructure/logger/logger';
+import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 // ValidationError kullanılmıyor; mevcut mimaride router içinde direkt 400/409 dönüyoruz
 
 const router = Router();
 const userService = new UserService();
 const s3Service = new S3Service();
+
+// Multer configuration - memory storage (dosya buffer'da tutulacak)
+// Bu tanım endpoint'lerden ÖNCE olmalı (hoisting sorunu için)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+  fileFilter: (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
+    // Sadece resim dosyalarına izin ver (HEIC/HEIF iOS desteği ile)
+    const allowedMimeTypes = [
+      'image/jpeg', 
+      'image/jpg', 
+      'image/png', 
+      'image/gif', 
+      'image/webp',
+      'image/heic',
+      'image/heif'
+    ];
+    
+    if (file.mimetype && allowedMimeTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else if (file.originalname) {
+      // Fallback: Dosya uzantısına göre kontrol
+      const ext = file.originalname.split('.').pop()?.toLowerCase();
+      const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif'];
+      if (ext && allowedExtensions.includes(ext)) {
+        cb(null, true);
+      } else {
+        cb(new Error('Sadece resim dosyaları yüklenebilir (JPG, PNG, GIF, WebP, HEIC)'));
+      }
+    } else {
+      cb(new Error('Sadece resim dosyaları yüklenebilir (JPG, PNG, GIF, WebP, HEIC)'));
+    }
+  },
+});
 
 const parseProfileFeedTypes = (value: unknown): ProfileFeedCardType[] | undefined => {
   if (!value) {
@@ -113,6 +150,7 @@ router.get('/me/profile', asyncHandler(async (req: Request, res: Response) => {
  * /users/me/profile:
  *   put:
  *     summary: Profil bilgilerini güncelle
+ *     description: Profil bilgilerini günceller. Avatar ve banner için ayrı upload endpoint'leri kullanılmalıdır (POST /users/me/avatar ve POST /users/me/banner).
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -126,6 +164,314 @@ router.get('/me/profile', asyncHandler(async (req: Request, res: Response) => {
  *       200:
  *         description: Güncellenmiş profil
  */
+/**
+ * @openapi
+ * /users/me/avatar:
+ *   post:
+ *     summary: Avatar yükle
+ *     description: Multipart/form-data ile avatar dosyası yükler ve avatar URL'ini döner.
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - avatar
+ *             properties:
+ *               avatar:
+ *                 type: string
+ *                 format: binary
+ *                 description: Avatar görseli (JPG, PNG, GIF, WebP, HEIC - max 5MB)
+ *     responses:
+ *       200:
+ *         description: Avatar başarıyla yüklendi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     avatarUrl:
+ *                       type: string
+ *                       example: "http://192.168.1.178:9000/tipbox-media/profile-pictures/user123/avatar.jpg"
+ *       400:
+ *         description: Geçersiz dosya formatı veya dosya bulunamadı
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ */
+router.post(
+  '/me/avatar',
+  upload.single('avatar'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    // Debug: Request bilgilerini logla
+    logger.info({
+      message: '[uploadAvatar] Request received',
+      contentType: req.headers['content-type'],
+      hasFile: !!req.file,
+      fileField: req.file ? req.file.fieldname : null,
+      bodyKeys: Object.keys(req.body || {}),
+      filesKeys: Object.keys(req.files || {}),
+    });
+
+    const file = req.file;
+    if (!file) {
+      // Daha detaylı hata mesajı
+      logger.warn({
+        message: '[uploadAvatar] File not found',
+        contentType: req.headers['content-type'],
+        body: req.body,
+        files: req.files,
+      });
+      return res.status(400).json({ 
+        message: 'Avatar dosyası gerekli',
+        debug: {
+          contentType: req.headers['content-type'],
+          expectedField: 'avatar',
+          receivedFields: Object.keys(req.body || {}),
+        }
+      });
+    }
+
+    try {
+      // File extension'ı güvenli şekilde al
+      let fileExtension = 'jpg'; // Default extension
+      
+      // Önce dosya adından extension al
+      if (file.originalname && file.originalname.includes('.')) {
+        const parts = file.originalname.split('.');
+        if (parts.length > 1) {
+          fileExtension = parts[parts.length - 1].toLowerCase();
+        }
+      }
+      
+      // MIME type'dan extension mapping
+      const mimeToExtension: Record<string, string> = {
+        'image/jpeg': 'jpg',
+        'image/jpg': 'jpg',
+        'image/png': 'png',
+        'image/gif': 'gif',
+        'image/webp': 'webp',
+        'image/heic': 'heic',
+        'image/heif': 'heif',
+      };
+      
+      // MIME type varsa onu kullan (daha güvenilir)
+      if (file.mimetype && mimeToExtension[file.mimetype]) {
+        fileExtension = mimeToExtension[file.mimetype];
+      }
+      
+      // Extension'ı validate et
+      const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif'];
+      if (!allowedExtensions.includes(fileExtension)) {
+        return res.status(400).json({ 
+          message: 'Desteklenmeyen dosya formatı. Sadece JPG, PNG, GIF, WebP ve HEIC formatları desteklenmektedir.' 
+        });
+      }
+      
+      // Dosya adını oluştur
+      const fileName = `profile-pictures/${userId}/${uuidv4()}.${fileExtension}`;
+      
+      // Dosyayı S3'e yükle
+      const filePath = await s3Service.uploadFile(fileName, file.buffer, file.mimetype);
+      
+      // Tam URL'yi oluştur
+      const avatarUrl = resolveMediaUrl(filePath, false);
+      
+      logger.info({
+        message: 'Avatar başarıyla yüklendi',
+        userId,
+        fileName,
+        fileSize: file.size,
+        mimeType: file.mimetype,
+        avatarUrl,
+      });
+      
+      return res.json({
+        success: true,
+        data: {
+          avatarUrl: avatarUrl || filePath,
+        },
+      });
+    } catch (error) {
+      logger.error({
+        message: 'Avatar yükleme hatası',
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  })
+);
+
+/**
+ * @openapi
+ * /users/me/banner:
+ *   post:
+ *     summary: Banner yükle
+ *     description: Multipart/form-data ile banner dosyası yükler ve banner URL'ini döner.
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - banner
+ *             properties:
+ *               banner:
+ *                 type: string
+ *                 format: binary
+ *                 description: Banner görseli (JPG, PNG, GIF, WebP, HEIC - max 5MB)
+ *     responses:
+ *       200:
+ *         description: Banner başarıyla yüklendi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     bannerUrl:
+ *                       type: string
+ *                       example: "http://192.168.1.178:9000/tipbox-media/banners/user123/banner.jpg"
+ *       400:
+ *         description: Geçersiz dosya formatı veya dosya bulunamadı
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ */
+router.post(
+  '/me/banner',
+  upload.single('banner'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    // Debug: Request bilgilerini logla
+    logger.info({
+      message: '[uploadBanner] Request received',
+      contentType: req.headers['content-type'],
+      hasFile: !!req.file,
+      fileField: req.file ? req.file.fieldname : null,
+      bodyKeys: Object.keys(req.body || {}),
+      filesKeys: Object.keys(req.files || {}),
+    });
+
+    const file = req.file;
+    if (!file) {
+      // Daha detaylı hata mesajı
+      logger.warn({
+        message: '[uploadBanner] File not found',
+        contentType: req.headers['content-type'],
+        body: req.body,
+        files: req.files,
+      });
+      return res.status(400).json({ 
+        message: 'Banner dosyası gerekli',
+        debug: {
+          contentType: req.headers['content-type'],
+          expectedField: 'banner',
+          receivedFields: Object.keys(req.body || {}),
+        }
+      });
+    }
+
+    try {
+      // File extension'ı güvenli şekilde al
+      let fileExtension = 'jpg'; // Default extension
+      
+      // Önce dosya adından extension al
+      if (file.originalname && file.originalname.includes('.')) {
+        const parts = file.originalname.split('.');
+        if (parts.length > 1) {
+          fileExtension = parts[parts.length - 1].toLowerCase();
+        }
+      }
+      
+      // MIME type'dan extension mapping
+      const mimeToExtension: Record<string, string> = {
+        'image/jpeg': 'jpg',
+        'image/jpg': 'jpg',
+        'image/png': 'png',
+        'image/gif': 'gif',
+        'image/webp': 'webp',
+        'image/heic': 'heic',
+        'image/heif': 'heif',
+      };
+      
+      // MIME type varsa onu kullan (daha güvenilir)
+      if (file.mimetype && mimeToExtension[file.mimetype]) {
+        fileExtension = mimeToExtension[file.mimetype];
+      }
+      
+      // Extension'ı validate et
+      const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif'];
+      if (!allowedExtensions.includes(fileExtension)) {
+        return res.status(400).json({ 
+          message: 'Desteklenmeyen dosya formatı. Sadece JPG, PNG, GIF, WebP ve HEIC formatları desteklenmektedir.' 
+        });
+      }
+      
+      // Dosya adını oluştur
+      const fileName = `banners/${userId}/${uuidv4()}.${fileExtension}`;
+      
+      // Dosyayı S3'e yükle
+      const filePath = await s3Service.uploadFile(fileName, file.buffer, file.mimetype);
+      
+      // Tam URL'yi oluştur
+      const bannerUrl = resolveMediaUrl(filePath, false);
+      
+      logger.info({
+        message: 'Banner başarıyla yüklendi',
+        userId,
+        fileName,
+        fileSize: file.size,
+        mimeType: file.mimetype,
+        bannerUrl,
+      });
+      
+      return res.json({
+        success: true,
+        data: {
+          bannerUrl: bannerUrl || filePath,
+        },
+      });
+    } catch (error) {
+      logger.error({
+        message: 'Banner yükleme hatası',
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  })
+);
+
 router.put('/me/profile', asyncHandler(async (req: Request<{}, {}, UpdateUserProfileRequest>, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
@@ -149,12 +495,14 @@ router.put('/me/profile', asyncHandler(async (req: Request<{}, {}, UpdateUserPro
     return res.status(400).json({ message: 'badge alanı bir dizi olmalıdır' });
   }
 
+  if (body.badge && body.badge.length > 3) {
+    return res.status(400).json({ message: 'En fazla 3 badge seçilebilir' });
+  }
+
   try {
     await userService.updateProfileDetails(String(userId), {
       name: body.name,
       biography: body.biography,
-      banner: typeof body.banner !== 'undefined' ? body.banner : undefined,
-      avatar: body.avatar ?? undefined,
       cosmeticId: typeof body.cosmetic !== 'undefined' ? body.cosmetic : undefined,
       badges: body.badge?.map(badge => ({ id: badge })) ?? undefined,
     });
@@ -807,23 +1155,6 @@ router.post('/collections/bridges/:badgeId/claim', asyncHandler(async (req: Requ
   const result = await userService.claimBridgeBadge(String(userId), badgeId);
   return res.status(result.success ? 201 : 400).json(result);
 }));
-// Multer configuration - memory storage (dosya buffer'da tutulacak)
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
-  },
-  fileFilter: (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
-    // Sadece resim dosyalarına izin ver
-    const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-    
-    if (file.mimetype && allowedMimeTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Sadece resim dosyaları yüklenebilir (JPG, PNG, GIF, WebP)'));
-    }
-  },
-});
 
 /**
  * @openapi
@@ -1020,7 +1351,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     };
     return res.status(201).json(response);
   } catch (error: unknown) {
-    const code = getErrorCode(error);
+    const code = (error as any).code;
     if (code === 'P2002' && 
         typeof error === 'object' && 
         error !== null && 

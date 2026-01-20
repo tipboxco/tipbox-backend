@@ -29,9 +29,13 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
   const postIds = new Set<string>();
   const productIds = new Set<string>();
   const collectionIds = new Set<string>();
+  const expertRequestIds = new Set<string>();
+  const supportRequestIds = new Set<string>();
+  const commentIds = new Set<string>();
 
   notifications.forEach((notification) => {
     const data = notification.data || {};
+    const type = notification.type as NotificationType;
     
     // User etkileşimleri için user ID'leri topla
     if (data.trusterId) userIds.add(data.trusterId);
@@ -46,6 +50,16 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
     if (data.expertId) userIds.add(data.expertId);
     if (data.userId) userIds.add(data.userId);
     
+    // Tips bildirimleri için senderId ve recipientId ekle
+    if (type === NotificationType.TIPS_RECEIVED) {
+      if (data.senderId) userIds.add(data.senderId);
+      if (data.senderUserId) userIds.add(data.senderUserId);
+    }
+    if (type === NotificationType.TIPS_SENT) {
+      if (data.recipientId) userIds.add(data.recipientId);
+      if (data.recipientUserId) userIds.add(data.recipientUserId);
+    }
+    
     // Event bildirimleri için event ID'leri topla
     if (data.eventId) eventIds.add(data.eventId);
     
@@ -55,25 +69,54 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
     // Post bildirimleri için post ID'leri topla
     if (data.postId) postIds.add(data.postId);
     
+    // Comment bildirimleri için comment ID'leri topla (POST_COMMENTED, COMMENT_LIKED, COMMENT_REPLIED)
+    if (data.commentId) commentIds.add(data.commentId);
+    
     // Product bildirimleri için product ID'leri topla
     if (data.productId) productIds.add(data.productId);
     
     // Collection bildirimleri için collection ID'leri topla
     if (data.collectionId) collectionIds.add(data.collectionId);
+    
+    // Expert request ID'leri topla (hem AVAILABLE hem ANSWERED için)
+    if (data.requestId && (
+      type === NotificationType.EXPERT_REQUEST_AVAILABLE ||
+      type === NotificationType.EXPERT_REQUEST_ANSWERED
+    )) {
+      expertRequestIds.add(data.requestId);
+    }
+    
+    // Support request ID'leri topla (threadId'den bulunacak)
+    if (data.threadId && type === NotificationType.SUPPORT_REQUEST_ACCEPTED) {
+      // threadId'den request bulunacak
+    }
   });
 
-  // Batch olarak user avatar'ları al
+  // Batch olarak user avatar'ları ve username'leri al
   const userAvatars = new Map<string, string | null>();
+  const userNames = new Map<string, string | null>();
   if (userIds.size > 0) {
     // Her kullanıcı için en son aktif avatar'ı al
     const userIdArray = Array.from(userIds);
-    const avatars = await prisma.userAvatar.findMany({
-      where: {
-        userId: { in: userIdArray },
-        isActive: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    const [avatars, profiles] = await Promise.all([
+      prisma.userAvatar.findMany({
+        where: {
+          userId: { in: userIdArray },
+          isActive: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.profile.findMany({
+        where: {
+          userId: { in: userIdArray },
+        },
+        select: {
+          userId: true,
+          userName: true,
+          displayName: true,
+        },
+      }),
+    ]);
 
     // Her kullanıcı için sadece ilk (en yeni) avatar'ı al
     avatars.forEach((avatar) => {
@@ -82,15 +125,23 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       }
     });
 
+    // Username'leri map'e ekle
+    profiles.forEach((profile) => {
+      userNames.set(profile.userId, profile.userName || profile.displayName || null);
+    });
+
     // Avatar'ı olmayan kullanıcılar için default avatar
     userIdArray.forEach((userId) => {
       if (!userAvatars.has(userId)) {
         userAvatars.set(userId, resolveMediaUrl(null, true));
       }
+      if (!userNames.has(userId)) {
+        userNames.set(userId, null);
+      }
     });
     
     // Debug: userAvatars map'ini logla
-    logger.debug(`Loaded ${userAvatars.size} user avatars for ${userIds.size} users`);
+    logger.debug(`Loaded ${userAvatars.size} user avatars and ${userNames.size} usernames for ${userIds.size} users`);
   }
 
   // Batch olarak event görselleri al
@@ -119,8 +170,10 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
     });
   }
 
-  // Batch olarak post görselleri al (post media'dan)
+  // Batch olarak post görselleri ve post bilgileri al (post media'dan)
   const postImages = new Map<string, string | null>();
+  const postContents = new Map<string, string | null>();
+  const postTypes = new Map<string, string | null>();
   if (postIds.size > 0) {
     // Post'ların media'larını al
     const postMediaList = await prisma.postMedia.findMany({
@@ -136,6 +189,30 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       if (!postImages.has(media.postId)) {
         postImages.set(media.postId, resolveMediaUrl(media.mediaUrl));
       }
+    });
+
+    // Post'ların content ve type bilgilerini al
+    const posts = await prisma.contentPost.findMany({
+      where: { id: { in: Array.from(postIds) } },
+      select: { id: true, body: true, type: true },
+    });
+
+    posts.forEach((post) => {
+      postContents.set(post.id, post.body);
+      postTypes.set(post.id, post.type);
+    });
+  }
+
+  // Batch olarak comment bilgileri al
+  const commentDescriptions = new Map<string, string | null>();
+  if (commentIds.size > 0) {
+    const comments = await prisma.contentComment.findMany({
+      where: { id: { in: Array.from(commentIds) } },
+      select: { id: true, comment: true },
+    });
+
+    comments.forEach((comment) => {
+      commentDescriptions.set(comment.id, comment.comment);
     });
   }
 
@@ -155,6 +232,155 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
   // Batch olarak collection görselleri al (ContentCollection'da imageUrl yok, random image kullan)
   const collectionImages = new Map<string, string | null>();
   // Collection'lar için görsel yok, random image kullanılacak
+
+  // Batch olarak expert request bilgilerini al (expert bilgileri için)
+  const expertRequestInfo = new Map<string, {
+    expertUserId?: string;
+    expertName?: string;
+    expertTitle?: string;
+    expertAvatar?: string | null;
+    threadId?: string;
+    requesterName?: string; // EXPERT_REQUEST_AVAILABLE için request sahibi bilgileri
+    requesterTitle?: string;
+    requesterAvatar?: string | null;
+  }>();
+  
+  if (expertRequestIds.size > 0) {
+    const expertRequests = await prisma.expertRequest.findMany({
+      where: { id: { in: Array.from(expertRequestIds) } },
+      include: {
+        user: {
+          include: {
+            profile: true,
+            titles: {
+              orderBy: { earnedAt: 'desc' },
+              take: 1,
+            },
+            avatars: {
+              where: { isActive: true },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+          },
+        },
+        answers: {
+          include: {
+            expertUser: {
+              include: {
+                profile: true,
+                titles: {
+                  orderBy: { earnedAt: 'desc' },
+                  take: 1,
+                },
+                avatars: {
+                  where: { isActive: true },
+                  orderBy: { createdAt: 'desc' },
+                  take: 1,
+                },
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+          take: 1, // İlk answer'dan expert bilgilerini al
+        },
+      },
+    });
+
+    expertRequests.forEach((request) => {
+      // Request sahibi bilgileri (EXPERT_REQUEST_AVAILABLE için)
+      const requester = request.user;
+      const requesterName = requester?.profile?.displayName || requester?.profile?.userName || requester?.email || 'Expert';
+      const requesterTitle = requester?.titles?.[0]?.title || '';
+      const requesterAvatar = requester?.avatars?.[0]?.imageUrl 
+        ? resolveMediaUrl(requester.avatars[0].imageUrl, true) 
+        : resolveMediaUrl(null, true);
+      
+      // Expert bilgileri (EXPERT_REQUEST_ANSWERED için)
+      const firstAnswer = request.answers[0];
+      if (firstAnswer && firstAnswer.expertUser) {
+        const expert = firstAnswer.expertUser;
+        expertRequestInfo.set(request.id, {
+          expertUserId: expert.id,
+          expertName: expert.profile?.displayName || expert.profile?.userName || expert.email || 'Expert',
+          expertTitle: expert.titles?.[0]?.title || '',
+          expertAvatar: expert.avatars?.[0]?.imageUrl 
+            ? resolveMediaUrl(expert.avatars[0].imageUrl, true) 
+            : resolveMediaUrl(null, true),
+          requesterName,
+          requesterTitle,
+          requesterAvatar,
+        });
+      } else {
+        // Expert bulunamadı (henüz answer yok), request sahibi bilgilerini kullan
+        expertRequestInfo.set(request.id, {
+          expertName: requesterName,
+          expertTitle: requesterTitle,
+          expertAvatar: requesterAvatar,
+          requesterName,
+          requesterTitle,
+          requesterAvatar,
+        });
+      }
+    });
+  }
+
+  // Batch olarak support request ID'lerini ve expert bilgilerini thread'lerden bul
+  const supportRequestMap = new Map<string, {
+    requestId: string;
+    expertUserId: string;
+    expertName: string;
+    expertTitle: string;
+    expertAvatar: string | null;
+  }>();
+  const supportThreadIds = new Set<string>();
+  
+  notifications.forEach((notification) => {
+    const data = notification.data || {};
+    const type = notification.type as NotificationType;
+    if (type === NotificationType.SUPPORT_REQUEST_ACCEPTED && data.threadId) {
+      supportThreadIds.add(data.threadId);
+    }
+  });
+  
+  if (supportThreadIds.size > 0) {
+    const dmRequests = await prisma.dMRequest.findMany({
+      where: {
+        threadId: { in: Array.from(supportThreadIds) },
+        status: 'ACCEPTED',
+      },
+      include: {
+        toUser: {
+          include: {
+            profile: true,
+            titles: {
+              orderBy: { earnedAt: 'desc' },
+              take: 1,
+            },
+            avatars: {
+              where: { isActive: true },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+    
+    dmRequests.forEach((request) => {
+      if (request.threadId && request.toUser) {
+        const expert = request.toUser;
+        supportRequestMap.set(request.threadId, {
+          requestId: request.id,
+          expertUserId: expert.id,
+          expertName: expert.profile?.displayName || expert.profile?.userName || expert.email || 'Expert',
+          expertTitle: expert.titles?.[0]?.title || '',
+          expertAvatar: expert.avatars?.[0]?.imageUrl 
+            ? resolveMediaUrl(expert.avatars[0].imageUrl, true) 
+            : resolveMediaUrl(null, true),
+        });
+      }
+    });
+  }
 
   // Random görseli bir kez al (tüm notification'lar için cache)
   let randomImageCache: string | null = null;
@@ -195,31 +421,25 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
 
   // Notification'ları enrich et
   return notifications.map((notification) => {
-    // type'dan hemen sonra avatar ve imageUrl eklemek için sıralı object oluştur
+    // Minimal response structure (title, message, readAt, updatedAt kaldırıldı)
     const enriched: {
       id: string;
       userId: string;
       type: NotificationType;
       avatar?: string | null;
-      title: string;
-      message: string;
+      username?: string | null;
       data: any;
       read: boolean;
-      readAt?: string | null;
       createdAt: string;
-      updatedAt: string;
     } = {
       id: notification.id,
       userId: notification.userId,
       type: notification.type,
       avatar: undefined,
-      title: notification.title,
-      message: notification.message,
+      username: undefined,
       data: notification.data,
       read: notification.read,
-      readAt: notification.readAt,
       createdAt: notification.createdAt,
-      updatedAt: notification.updatedAt,
     };
     const data = notification.data || {};
     const type = notification.type as NotificationType;
@@ -237,10 +457,19 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       type === NotificationType.POST_SHARED ||
       type === NotificationType.POST_FAVORITED
     ) {
+      // userId root'tan alınır (avatar ile eşleşir)
       const userId = data.likerId || data.commenterId || data.sharerId || data.userId;
-      if (userId && !enriched.avatar) {
-        // Data'da avatar yoksa, userAvatars'tan al
-        enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
+      if (userId) {
+        // userId'yi root'a set et (avatar ile eşleşir)
+        enriched.userId = userId;
+        if (!enriched.avatar) {
+          enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
+        }
+        // Username'i root'a ekle
+        const username = userNames.get(userId);
+        if (username) {
+          enriched.username = username;
+        }
       }
       // Post görseli ekle (sadece data içine)
       let postImageUrl = null;
@@ -254,15 +483,56 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       // Data içine ekle
       if (!enriched.data) enriched.data = {};
       enriched.data.postId = data.postId;
-      enriched.data.imageUrl = postImageUrl;
-      // productId, userName, commenterId, sharerId kaldırıldı
+      if (postImageUrl) enriched.data.imageUrl = postImageUrl;
+      // Post content ve type ekle
+      if (data.postId) {
+        if (postContents.has(data.postId)) {
+          enriched.data.postContent = postContents.get(data.postId);
+        }
+        if (postTypes.has(data.postId)) {
+          enriched.data.postType = postTypes.get(data.postId);
+        }
+      }
+      // Comment ise description ekle (POST_COMMENTED için)
+      if (type === NotificationType.POST_COMMENTED) {
+        // commentId'yi data'dan al veya commenterId'den bul
+        const commentId = data.commentId;
+        if (commentId && commentDescriptions.has(commentId)) {
+          enriched.data.description = commentDescriptions.get(commentId);
+        }
+        // commentId'yi data'da tut (navigation için gerekli olabilir)
+        // Ama commenterId ve commenterName'i kaldır (root'ta userId ve username var)
+        if (enriched.data) {
+          delete enriched.data.commenterId;
+          delete enriched.data.commenterName;
+        }
+      } else {
+        // Diğer post bildirimleri için gereksiz alanları kaldır
+        if (enriched.data) {
+          delete enriched.data.likerId;
+          delete enriched.data.sharerId;
+          delete enriched.data.userId;
+          delete enriched.data.likerName;
+          delete enriched.data.sharerName;
+          delete enriched.data.userName;
+        }
+      }
     }
 
     // Yorum ile ilgili (2)
     if (type === NotificationType.COMMENT_LIKED || type === NotificationType.COMMENT_REPLIED) {
+      // userId root'tan alınır (avatar ile eşleşir)
       const userId = data.likerId || data.replierId || data.commenterId;
-      if (userId && !enriched.avatar) {
-        enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
+      if (userId) {
+        enriched.userId = userId;
+        if (!enriched.avatar) {
+          enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
+        }
+        // Username'i root'a ekle
+        const username = userNames.get(userId);
+        if (username) {
+          enriched.username = username;
+        }
       }
       // Post görseli ekle (sadece data içine)
       let postImageUrl = null;
@@ -275,24 +545,39 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       if (!enriched.data) enriched.data = {};
       enriched.data.postId = data.postId;
       enriched.data.commentId = data.commentId;
-      enriched.data.imageUrl = postImageUrl;
+      if (postImageUrl) enriched.data.imageUrl = postImageUrl;
+      // Post content ve type ekle
+      if (data.postId) {
+        if (postContents.has(data.postId)) {
+          enriched.data.postContent = postContents.get(data.postId);
+        }
+        if (postTypes.has(data.postId)) {
+          enriched.data.postType = postTypes.get(data.postId);
+        }
+      }
+      // Comment description ekle
+      if (data.commentId && commentDescriptions.has(data.commentId)) {
+        enriched.data.description = commentDescriptions.get(data.commentId);
+      }
+      // likerId, replierId, commenterId kaldırıldı (root'ta var)
     }
 
-    // Trust/Follow ile ilgili (2)
+    // Trust/Follow ile ilgili (2) - userId, avatar ve username
     if (type === NotificationType.NEW_TRUSTER || type === NotificationType.NEW_TRUSTED_BY) {
+      // userId root'tan alınır (avatar ile eşleşir)
       const userId = data.trusterId || data.trustedId;
-      if (userId && !enriched.avatar) {
-        enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
+      if (userId) {
+        enriched.userId = userId;
+        if (!enriched.avatar) {
+          enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
+        }
       }
-      let trustImageUrl = null;
-      if (randomImageCache) {
-        trustImageUrl = randomImageCache;
-      }
-      // Data içine ekle
+      // Data içine username ekle
       if (!enriched.data) enriched.data = {};
-      if (data.trusterId) enriched.data.trusterId = data.trusterId;
-      if (data.trustedId) enriched.data.trustedId = data.trustedId;
-      enriched.data.imageUrl = trustImageUrl;
+      if (userId) {
+        const username = userNames.get(userId);
+        if (username) enriched.data.username = username;
+      }
     }
 
     // Mesajlaşma ile ilgili bildirimler
@@ -303,23 +588,52 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       type === NotificationType.DM_REQUEST_DECLINED ||
       type === NotificationType.SUPPORT_REQUEST_ACCEPTED
     ) {
-      // userId field'ı kullan (requesterId/accepterId yerine)
+      // userId root'tan alınır (avatar ile eşleşir)
       const userId = data.userId || data.requesterId || data.accepterId;
-      if (userId && !enriched.avatar) {
-        enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
+      if (userId) {
+        enriched.userId = userId;
+        if (!enriched.avatar) {
+          enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
+        }
       }
-      // Mesajlaşma bildirimleri için imageUrl field'ı eklenmez (undefined kalır)
-      // imageUrl sadece event ve badge bildirimleri için kullanılır
-      delete enriched.imageUrl; // Eğer varsa kaldır
+      // Mesajlaşma bildirimleri için imageUrl field'ı eklenmez (root seviyede zaten yok)
       
-      // DM_REQUEST_ACCEPTED için data'yı hazırla
+      // Data hazırla (sadece navigation için gerekli)
+      if (!enriched.data) enriched.data = {};
+      
+      // Username ekle
+      if (userId) {
+        const username = userNames.get(userId);
+        if (username) enriched.data.username = username;
+      }
+      
       if (type === NotificationType.DM_REQUEST_ACCEPTED) {
-        if (!enriched.data) enriched.data = {};
-        // Sadece userId, userName ve threadId kalmalı
-        if (userId) enriched.data.userId = userId;
-        if (data.userName) enriched.data.userName = data.userName;
+        // Sadece threadId (userId root'ta zaten var)
         if (data.threadId) enriched.data.threadId = data.threadId;
-        // avatar ve diğer alanlar kaldırılacak
+      } else if (type === NotificationType.SUPPORT_REQUEST_ACCEPTED) {
+        // threadId, requestId ve expert bilgileri (SupportMessageDetail için gerekli)
+        if (data.threadId) enriched.data.threadId = data.threadId;
+        
+        // Thread'den support request ve expert bilgilerini al
+        const supportInfo = data.threadId ? supportRequestMap.get(data.threadId) : null;
+        if (supportInfo) {
+          enriched.data.requestId = supportInfo.requestId;
+          enriched.data.expertName = supportInfo.expertName;
+          enriched.data.expertTitle = supportInfo.expertTitle;
+          enriched.data.expertAvatar = supportInfo.expertAvatar;
+        } else {
+          // Bulunamazsa data'dan al veya default değerler (geçici)
+          enriched.data.requestId = data.requestId || 'default-request-id';
+          enriched.data.expertName = data.expertName || 'Expert';
+          enriched.data.expertTitle = data.expertTitle || '';
+          enriched.data.expertAvatar = data.expertAvatar || resolveMediaUrl(null, true);
+        }
+      } else if (type === NotificationType.DM_REQUEST_RECEIVED) {
+        // Sadece threadId
+        if (data.threadId) enriched.data.threadId = data.threadId;
+      } else {
+        // DM_REQUEST_DECLINED - data boş
+        enriched.data = {};
       }
     }
 
@@ -329,52 +643,86 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       type === NotificationType.ACHIEVEMENT_UNLOCKED ||
       type === NotificationType.REWARD_EARNED
     ) {
-      // Data içine ekle
+      // Avatar null (gamification bildirimlerinde kullanıcı avatar'ı yok)
+      enriched.avatar = null;
+      
       if (!enriched.data) enriched.data = {};
       
       if (type === NotificationType.NEW_BADGE) {
-        // NEW_BADGE için sadece badgeId ve badgeName
+        // NEW_BADGE için badgeId ve imageUrl (badgeName mesajda var)
         if (data.badgeId) enriched.data.badgeId = data.badgeId;
-        if (data.badgeName) enriched.data.badgeName = data.badgeName;
-        // imageUrl ve avatar eklenmez
-      } else {
-        // Diğer gamification bildirimleri için
         let badgeImageUrl = null;
         if (data.badgeId && badgeImages.has(data.badgeId)) {
           badgeImageUrl = badgeImages.get(data.badgeId);
         } else if (randomImageCache) {
           badgeImageUrl = randomImageCache;
         }
+        if (badgeImageUrl) enriched.data.imageUrl = badgeImageUrl;
+      } else if (type === NotificationType.ACHIEVEMENT_UNLOCKED) {
+        // ACHIEVEMENT_UNLOCKED için badgeId ve imageUrl (achievementId kaldırıldı)
         if (data.badgeId) enriched.data.badgeId = data.badgeId;
-        enriched.data.imageUrl = badgeImageUrl;
-        if (data.badgeName) enriched.data.badgeName = data.badgeName;
-        if (data.achievementId) enriched.data.achievementId = data.achievementId;
+        let badgeImageUrl = null;
+        if (data.badgeId && badgeImages.has(data.badgeId)) {
+          badgeImageUrl = badgeImages.get(data.badgeId);
+        } else if (randomImageCache) {
+          badgeImageUrl = randomImageCache;
+        }
+        if (badgeImageUrl) enriched.data.imageUrl = badgeImageUrl;
+      } else if (type === NotificationType.REWARD_EARNED) {
+        // REWARD_EARNED için sadece amount (badgeId ve imageUrl kaldırıldı)
         if (data.amount) enriched.data.amount = data.amount;
       }
     }
 
-    // Expert ile ilgili (2)
+    // Expert ile ilgili (2) - avatar null
     if (
       type === NotificationType.EXPERT_REQUEST_AVAILABLE ||
       type === NotificationType.EXPERT_REQUEST_ANSWERED
     ) {
-      const userId = data.expertId || data.requesterId;
-      if (userId && !enriched.avatar) {
-        enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
-      }
-      let expertImageUrl = null;
-      if (data.productId && productImages.has(data.productId)) {
-        expertImageUrl = productImages.get(data.productId);
-      } else if (randomImageCache) {
-        expertImageUrl = randomImageCache;
-      }
+      // Avatar null (expert bildirimlerinde kullanıcı avatar'ı yok)
+      enriched.avatar = null;
+      
       // Data içine ekle
       if (!enriched.data) enriched.data = {};
       if (data.requestId) enriched.data.requestId = data.requestId;
-      enriched.data.imageUrl = expertImageUrl;
-      if (data.expertId) enriched.data.expertId = data.expertId;
-      if (data.tipsAmount) enriched.data.tipsAmount = data.tipsAmount;
-      // productId kaldırıldı
+      
+      // EXPERT_REQUEST_ANSWERED için expert bilgileri ve threadId ekle
+      if (type === NotificationType.EXPERT_REQUEST_ANSWERED) {
+        const expertInfo = data.requestId ? expertRequestInfo.get(data.requestId) : null;
+        if (expertInfo) {
+          enriched.data.expertName = expertInfo.expertName || 'Expert';
+          enriched.data.expertTitle = expertInfo.expertTitle || '';
+          enriched.data.expertAvatar = expertInfo.expertAvatar || resolveMediaUrl(null, true);
+        } else {
+          // Expert bilgisi bulunamadı, default değerler (geçici)
+          enriched.data.expertName = data.expertName || 'Expert';
+          enriched.data.expertTitle = data.expertTitle || '';
+          enriched.data.expertAvatar = data.expertAvatar || resolveMediaUrl(null, true);
+        }
+        // threadId ekle (data'dan al veya null - expert request'ler thread oluşturmuyor)
+        if (data.threadId) {
+          enriched.data.threadId = data.threadId;
+        } else {
+          // ThreadId yok, null bırak (expert request'ler thread oluşturmuyor)
+          enriched.data.threadId = null;
+        }
+      }
+      
+      // EXPERT_REQUEST_AVAILABLE için expert bilgileri ekle (request sahibi bilgileri - henüz expert bulunmamış)
+      if (type === NotificationType.EXPERT_REQUEST_AVAILABLE) {
+        const expertInfo = data.requestId ? expertRequestInfo.get(data.requestId) : null;
+        if (expertInfo) {
+          // Request sahibi bilgilerini expert olarak göster (henüz expert bulunmamış)
+          enriched.data.expertName = expertInfo.requesterName || expertInfo.expertName || 'Expert';
+          enriched.data.expertTitle = expertInfo.requesterTitle || expertInfo.expertTitle || '';
+          enriched.data.expertAvatar = expertInfo.requesterAvatar || expertInfo.expertAvatar || resolveMediaUrl(null, true);
+        } else {
+          // Default değerler
+          enriched.data.expertName = data.expertName || 'Expert';
+          enriched.data.expertTitle = data.expertTitle || '';
+          enriched.data.expertAvatar = data.expertAvatar || resolveMediaUrl(null, true);
+        }
+      }
     }
 
     // Sistem/Tips ile ilgili (3)
@@ -383,64 +731,79 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       type === NotificationType.TIPS_RECEIVED ||
       type === NotificationType.TIPS_SENT
     ) {
-      const userId = data.senderId || data.userId;
-      if (userId && !enriched.avatar) {
-        enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
-      }
-      // Data içine ekle (sadece userId ve amount - TIPS_RECEIVED için)
-      if (!enriched.data) enriched.data = {};
-      if (type === NotificationType.TIPS_RECEIVED) {
-        // TIPS_RECEIVED için sadece userId ve amount
-        if (userId) enriched.data.userId = userId;
-        if (data.amount) enriched.data.amount = data.amount;
-        // imageUrl, avatar, senderId eklenmez
-      } else {
-        // Diğer sistem bildirimleri için
-        if (data.amount) enriched.data.amount = data.amount;
-        let tipsImageUrl = null;
-        if (randomImageCache) {
-          tipsImageUrl = randomImageCache;
+      // userId root'tan alınır (avatar ile eşleşir)
+      // TIPS_RECEIVED için senderId, TIPS_SENT için recipientId kullanılır
+      const userId = type === NotificationType.TIPS_RECEIVED 
+        ? (data.senderId || data.senderUserId || data.userId)
+        : type === NotificationType.TIPS_SENT
+        ? (data.recipientId || data.recipientUserId || data.userId)
+        : (data.senderId || data.userId);
+      
+      if (userId) {
+        enriched.userId = userId;
+        if (!enriched.avatar) {
+          enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
         }
-        enriched.data.imageUrl = tipsImageUrl;
+      }
+      
+      // Data içine ekle
+      if (!enriched.data) enriched.data = {};
+      
+      if (type === NotificationType.TIPS_RECEIVED) {
+        // TIPS_RECEIVED için: amount, username (sender'dan)
+        if (data.amount) enriched.data.amount = data.amount;
+        if (userId) {
+          const username = userNames.get(userId);
+          if (username) enriched.data.username = username;
+        }
+        // imageUrl, avatar, senderId, userId duplicate kaldırıldı
+      } else if (type === NotificationType.TIPS_SENT) {
+        // TIPS_SENT için: amount, username (recipient'ten)
+        if (data.amount) enriched.data.amount = data.amount;
+        if (userId) {
+          const username = userNames.get(userId);
+          if (username) enriched.data.username = username;
+        }
+      } else {
+        // SYSTEM_ANNOUNCEMENT için
+        if (data.amount) enriched.data.amount = data.amount;
       }
     }
 
-    // Event ile ilgili (3)
+    // Event ile ilgili (3) - avatar null
     if (
       type === NotificationType.EVENT_STARTED ||
       type === NotificationType.EVENT_ENDING_SOON ||
       type === NotificationType.EVENT_REWARD_AVAILABLE
     ) {
+      // Avatar null (event bildirimlerinde kullanıcı avatar'ı yok)
+      enriched.avatar = null;
+      
       let eventImageUrl = null;
       if (data.eventId && eventImages.has(data.eventId)) {
         eventImageUrl = eventImages.get(data.eventId);
       } else if (randomImageCache) {
         eventImageUrl = randomImageCache;
       }
-      // Data içine ekle
+      // Data içine ekle (sadece eventId ve imageUrl - eventName mesajda var)
       if (!enriched.data) enriched.data = {};
       enriched.data.eventId = data.eventId;
-      enriched.data.imageUrl = eventImageUrl;
-      if (data.eventName) enriched.data.eventName = data.eventName;
+      if (eventImageUrl) enriched.data.imageUrl = eventImageUrl;
+      // eventName kaldırıldı
     }
 
-    // Collection ile ilgili (2)
+    // Collection ile ilgili (2) - avatar null
     if (
       type === NotificationType.COLLECTION_POST_ADDED ||
       type === NotificationType.COLLECTION_SHARED
     ) {
-      // Collection için post görseli veya random image kullan
-      let collectionImageUrl = null;
-      if (data.postId && postImages.has(data.postId)) {
-        collectionImageUrl = postImages.get(data.postId);
-      } else if (randomImageCache) {
-        collectionImageUrl = randomImageCache;
-      }
-      // Data içine ekle
+      // Avatar null (collection bildirimlerinde kullanıcı avatar'ı yok)
+      enriched.avatar = null;
+      
+      // Data içine ekle (sadece collectionId - postId kaldırıldı)
       if (!enriched.data) enriched.data = {};
       if (data.collectionId) enriched.data.collectionId = data.collectionId;
-      if (data.postId) enriched.data.postId = data.postId;
-      enriched.data.imageUrl = collectionImageUrl;
+      // postId ve imageUrl kaldırıldı
     }
 
     // undefined değerleri null yap (response'da görünsün ama null olsun)
@@ -457,48 +820,94 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       type === NotificationType.SUPPORT_REQUEST_ACCEPTED ||
       type === NotificationType.NEW_MESSAGE;
     
-    // Root seviyedeki imageUrl'i kaldır (artık sadece data içinde)
-    delete enriched.imageUrl;
+    // Root seviyedeki imageUrl yok (artık sadece data içinde)
     
-    // Gereksiz alanları data'dan kaldır
+    // Gereksiz alanları data'dan kaldır (minimal structure için)
     if (enriched.data) {
+      // Genel temizlik
       delete enriched.data.productId;
       delete enriched.data.commenterId;
       delete enriched.data.sharerId;
+      delete enriched.data.likerId;
+      delete enriched.data.replierId;
+      delete enriched.data.senderId;
+      delete enriched.data.requesterId;
+      delete enriched.data.accepterId;
+      delete enriched.data.expertId;
+      delete enriched.data.trusterId;
+      delete enriched.data.trustedId;
+      delete enriched.data.userName;
+      delete enriched.data.badgeName;
+      delete enriched.data.eventName;
+      delete enriched.data.achievementId;
+      delete enriched.data.tipsAmount;
+      delete enriched.data.avatar;
+      delete enriched.data.message;
+      delete enriched.data.requestId; // DM_REQUEST_RECEIVED için (threadId yeterli)
+      // amount genel olarak silinmemeli - sadece DM_REQUEST için silinecek
       
-      // TIPS_RECEIVED için gereksiz alanları kaldır
+      // TIPS_RECEIVED için userId duplicate kaldır (root'ta var) - amount KALMALI
       if (type === NotificationType.TIPS_RECEIVED) {
-        delete enriched.data.avatar;
+        delete enriched.data.userId;
         delete enriched.data.imageUrl;
-        delete enriched.data.senderId;
-        delete enriched.data.userName; // TIPS_RECEIVED'de userName yok
-        // Sadece userId ve amount kalmalı
+        // amount KALMALI - silme!
       }
       
-      // NEW_BADGE için gereksiz alanları kaldır
-      if (type === NotificationType.NEW_BADGE) {
-        delete enriched.data.avatar;
-        delete enriched.data.imageUrl;
-        // Sadece badgeId ve badgeName kalmalı
+      // TIPS_SENT için de amount KALMALI
+      if (type === NotificationType.TIPS_SENT) {
+        // amount KALMALI - silme!
       }
       
-      // DM_REQUEST_ACCEPTED için gereksiz alanları kaldır
+      // DM_REQUEST_ACCEPTED için userId ve userName kaldır (root'ta var)
       if (type === NotificationType.DM_REQUEST_ACCEPTED) {
-        delete enriched.data.avatar;
+        delete enriched.data.userId;
+        delete enriched.data.userName;
         delete enriched.data.imageUrl;
-        delete enriched.data.requesterId;
-        delete enriched.data.accepterId;
-        // Sadece userId, userName ve threadId kalmalı
       }
       
-      // Diğer mesajlaşma bildirimleri için userName'i kaldır (DM_REQUEST_ACCEPTED hariç)
+      // DM_REQUEST_RECEIVED için gereksiz alanlar
+      if (type === NotificationType.DM_REQUEST_RECEIVED) {
+        delete enriched.data.userId;
+        delete enriched.data.requestId;
+        delete enriched.data.message;
+        delete enriched.data.amount;
+        delete enriched.data.imageUrl;
+      }
+      
+      // Collection için postId kaldır
+      if (type === NotificationType.COLLECTION_POST_ADDED || type === NotificationType.COLLECTION_SHARED) {
+        delete enriched.data.postId;
+        delete enriched.data.imageUrl;
+        delete enriched.data.avatar; // Collection bildirimlerinde avatar yok
+      }
+      
+      // Event bildirimlerinde avatar kaldır
       if (
-        type === NotificationType.DM_REQUEST_RECEIVED ||
-        type === NotificationType.DM_REQUEST_DECLINED ||
-        type === NotificationType.SUPPORT_REQUEST_ACCEPTED
+        type === NotificationType.EVENT_STARTED ||
+        type === NotificationType.EVENT_ENDING_SOON ||
+        type === NotificationType.EVENT_REWARD_AVAILABLE
       ) {
-        delete enriched.data.userName;
-        delete enriched.data.avatar;
+        delete enriched.data.avatar; // Event bildirimlerinde avatar yok
+      }
+      
+      // Badge/Gamification bildirimlerinde avatar kaldır
+      if (
+        type === NotificationType.NEW_BADGE ||
+        type === NotificationType.ACHIEVEMENT_UNLOCKED ||
+        type === NotificationType.REWARD_EARNED
+      ) {
+        delete enriched.data.avatar; // Badge bildirimlerinde avatar yok
+      }
+      
+      // Expert için imageUrl kaldır
+      if (type === NotificationType.EXPERT_REQUEST_AVAILABLE || type === NotificationType.EXPERT_REQUEST_ANSWERED) {
+        delete enriched.data.imageUrl;
+        delete enriched.data.avatar; // Expert bildirimlerinde avatar yok
+      }
+      
+      // REWARD_EARNED için badgeId ve imageUrl kaldır
+      if (type === NotificationType.REWARD_EARNED) {
+        delete enriched.data.badgeId;
         delete enriched.data.imageUrl;
       }
     }
@@ -678,9 +1087,13 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
       enrichedNotifications = notificationJSONs;
     }
 
+    // Bildirimleri grupla (backend'de gruplama)
+    const { groupNotifications } = await import('../../application/notification/notification-grouper');
+    const groupedNotifications = groupNotifications(enrichedNotifications);
+
     return res.json({
       success: true,
-      data: enrichedNotifications,
+      data: groupedNotifications,
       pagination: {
         total,
         limit: parseQueryInt(limit, 20),

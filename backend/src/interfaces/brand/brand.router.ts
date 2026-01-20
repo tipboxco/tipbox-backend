@@ -2,9 +2,12 @@ import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { authMiddleware } from '../auth/auth.middleware';
 import { BrandService } from '../../application/brand/brand.service';
+import { ContentPostType } from '../../domain/content/content-post-type.enum';
+import { NewsService } from '../../application/news/news.service';
 
 const router = Router();
 const brandService = new BrandService();
+const newsService = new NewsService();
 
 router.use(authMiddleware);
 
@@ -14,7 +17,7 @@ router.use(authMiddleware);
  *   get:
  *     summary: Tüm brand kategorilerini listele
  *     description: Kullanıcının app içerisindeki tüm brand categorilerini görüntülediği endpoint.
- *     tags: [Brand]
+ *     tags: [Brand Catalog]
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -51,7 +54,7 @@ router.get(
  *   get:
  *     summary: Kategoriye göre markaları listele
  *     description: Kullanıcının seçtiği categorye bağlı olarak markaların listelendiği endpoint.
- *     tags: [Brand]
+ *     tags: [Brand Catalog]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -97,7 +100,7 @@ router.get(
  *   get:
  *     summary: Brand catalog detayları
  *     description: Kullanıcının seçtiği markanın katalog sayfasının detaylarını listelendiği endpoint.
- *     tags: [Brand]
+ *     tags: [Brand Catalog]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -154,7 +157,7 @@ router.get(
  *   get:
  *     summary: Brand feed'ini getir
  *     description: Seçili marka için bridge post'lardan oluşan feed listesini döner.
- *     tags: [Brand]
+ *     tags: [Brand Catalog]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -242,7 +245,7 @@ router.get(
  *   get:
  *     summary: Markaya ait product group'ları listele
  *     description: Markaya ait product group'ların listelendiği endpoint. Her group içinde max ürün ön izlemesi (productLimit) ve hem grup hem ürün pagination bilgisi döner.
- *     tags: [Brand]
+ *     tags: [Brand Catalog]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -357,7 +360,7 @@ router.get(
  *   get:
  *     summary: Belirli bir product group için products listesi
  *     description: Belirli bir product group içindeki products'ların pagination ile listelendiği endpoint.
- *     tags: [Brand]
+ *     tags: [Brand Catalog]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -445,11 +448,109 @@ router.get(
 
 /**
  * @openapi
+ * /brands/{brandId}/groups/{groupId}/products:
+ *   get:
+ *     summary: Brand'e ait belirli bir product group'un ürünlerini listele
+ *     description: Brand'e ait belirli bir product group içindeki products'ların pagination ile listelendiği endpoint. "Tümünü gör" butonu için kullanılır.
+ *     tags: [Brand Catalog]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: brandId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Brand ID'si
+ *       - in: path
+ *         name: groupId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Product Group ID'si
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *         description: Sayfa başına dönecek product sayısı (varsayılan 20)
+ *       - in: query
+ *         name: cursor
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Bir sonraki sayfa için cursor (önceki sayfanın son product ID'si)
+ *     responses:
+ *       200:
+ *         description: Products başarıyla listelendi.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       productId:
+ *                         type: string
+ *                       name:
+ *                         type: string
+ *                       image:
+ *                         type: string
+ *                         nullable: true
+ *                       stats:
+ *                         type: object
+ *                         properties:
+ *                           reviews:
+ *                             type: integer
+ *                           likes:
+ *                             type: integer
+ *                           share:
+ *                             type: integer
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       nullable: true
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
+ *       401:
+ *         description: Kimlik doğrulaması başarısız.
+ *       404:
+ *         description: Brand veya product group bulunamadı.
+ */
+router.get(
+  '/:brandId/groups/:groupId/products',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { brandId, groupId } = req.params;
+    const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
+    const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
+    const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
+
+    const result = await brandService.getBrandGroupProducts(brandId, groupId, {
+      cursor,
+      limit,
+    });
+    return res.json(result);
+  }),
+);
+
+/**
+ * @openapi
  * /brands/{brandId}/surveys:
  *   get:
  *     summary: Brand Survey & Gamification - Anketler
  *     description: Seçili marka için survey/gamification kartlarını pagination ile döner. Brand bilgileri store'dan alınır, sadece surveyList döner.
- *     tags: [Brand]
+ *     tags: [Brand Catalog]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -541,7 +642,7 @@ router.get(
  *   get:
  *     summary: Brand Survey & Gamification - Eventler
  *     description: Seçili marka için event kartlarını pagination ile döner.
- *     tags: [Brand]
+ *     tags: [Brand Catalog]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -635,7 +736,7 @@ router.get(
  *   get:
  *     summary: Brand Survey & Gamification - Event detayı
  *     description: Seçili marka için belirli bir event'in detaylarını döner.
- *     tags: [Brand]
+ *     tags: [Brand Catalog]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -670,7 +771,7 @@ router.get(
  *   get:
  *     summary: Brand Survey & Gamification - Trendler
  *     description: Brand'e ait trend içerikleri (feed formatında) pagination ile döner.
- *     tags: [Brand]
+ *     tags: [Brand Catalog]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -749,7 +850,7 @@ router.get(
  *   get:
  *     summary: Marka geçmişi ana sayfa bilgilerini getir
  *     description: Kullanıcının seçtiği markaya ait geçmiş (puanlar, rozetler, istatistikler) bilgisini pagination ile döner.
- *     tags: [Brand]
+ *     tags: [Brand Catalog]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -849,7 +950,7 @@ router.get(
  *   get:
  *     summary: Marka geçmişine ait puan geçmişini getir
  *     description: Kullanıcının bu marka için kazandığı puanların pagination ile listelenmesi.
- *     tags: [Brand]
+ *     tags: [Brand Catalog]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -934,7 +1035,7 @@ router.get(
  *   get:
  *     summary: Marka geçmişine ait anketleri getir
  *     description: Geçmişteki survey kartlarını döner.
- *     tags: [Brand]
+ *     tags: [Brand Catalog]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -1025,7 +1126,7 @@ router.get(
  *   get:
  *     summary: Marka geçmişine ait paylaşımları getir
  *     description: Marka geçmişi için feed formatında paylaşımları pagination ile döner.
- *     tags: [Brand]
+ *     tags: [Brand Catalog]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -1104,7 +1205,7 @@ router.get(
  *   get:
  *     summary: Marka geçmişine ait event'leri getir
  *     description: Marka geçmişi ekranı için event kartlarını pagination ile döner.
- *     tags: [Brand]
+ *     tags: [Brand Catalog]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -1193,11 +1294,154 @@ router.get(
 
 /**
  * @openapi
- * /brands/{brandId}/products/{productId}/experiences:
+ * /brands/{brandId}/products/{productId}:
  *   get:
- *     summary: Marka ürününe ait deneyim paylaşımlarını listele
- *     description: Marka ürününe ait deneyim paylaşımlarının pagination ile listelendiği endpoint.
- *     tags: [Brand]
+ *     summary: Brand context'inde product detay bilgilerini getir
+ *     description: Belirli bir brand'e ait product'ın detaylı bilgilerini getirir. Catalog context'indeki product detayından farklı olabilir (brand-specific stats, brand context bilgileri vb.).
+ *     tags: [Brand Catalog]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: brandId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Brand ID'si
+ *       - in: path
+ *         name: productId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Product ID'si
+ *     responses:
+ *       200:
+ *         description: Product detayı başarıyla getirildi.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 productId:
+ *                   type: string
+ *                 name:
+ *                   type: string
+ *                 subName:
+ *                   type: string
+ *                   nullable: true
+ *                 description:
+ *                   type: string
+ *                   nullable: true
+ *                 image:
+ *                   type: string
+ *                   nullable: true
+ *                 brand:
+ *                   type: object
+ *                   nullable: true
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     name:
+ *                       type: string
+ *                     image:
+ *                       type: string
+ *                       nullable: true
+ *                 specs:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                 price:
+ *                   type: number
+ *                   nullable: true
+ *                 currency:
+ *                   type: string
+ *                   nullable: true
+ *                 stats:
+ *                   type: object
+ *                   properties:
+ *                     reviews:
+ *                       type: integer
+ *                     likes:
+ *                       type: integer
+ *                     share:
+ *                       type: integer
+ *       401:
+ *         description: Kimlik doğrulaması başarısız.
+ *       404:
+ *         description: Brand veya product bulunamadı.
+ */
+router.get(
+  '/:brandId/products/:productId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { brandId, productId } = req.params;
+    const product = await brandService.getBrandProductDetail(brandId, productId);
+    return res.json(product);
+  }),
+);
+
+/**
+ * @openapi
+ * /brands/{brandId}/stats:
+ *   get:
+ *     summary: Brand istatistiklerini getir
+ *     description: Kullanıcının brand için istatistiklerini getirir (surveys, shares, events, totalPoints).
+ *     tags: [Brand Catalog]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: brandId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Brand ID'si
+ *     responses:
+ *       200:
+ *         description: Brand istatistikleri başarıyla getirildi.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 surveys:
+ *                   type: integer
+ *                 shares:
+ *                   type: integer
+ *                 events:
+ *                   type: integer
+ *                 totalPoints:
+ *                   type: integer
+ *       401:
+ *         description: Kimlik doğrulaması başarısız.
+ *       404:
+ *         description: Brand bulunamadı.
+ */
+router.get(
+  '/:brandId/stats',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { brandId } = req.params;
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const stats = await brandService.getBrandStats(brandId, userId);
+    return res.json(stats);
+  }),
+);
+
+/**
+ * @openapi
+ * /brands/{brandId}/products/{productId}/feed:
+ *   get:
+ *     summary: Marka ürününe ait tüm gönderileri listele
+ *     description: Marka ürününe ait tüm gönderilerin cursor-based pagination ile listelendiği endpoint.
+ *     tags: [Brand Catalog]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -1231,7 +1475,7 @@ router.get(
  *         description: Bir sonraki sayfa için cursor (önceki sayfanın son post ID'si)
  *     responses:
  *       200:
- *         description: Deneyim paylaşımları başarıyla listelendi.
+ *         description: Tüm gönderiler başarıyla listelendi.
  *         content:
  *           application/json:
  *             schema:
@@ -1263,7 +1507,7 @@ router.get(
  *         description: Brand veya product bulunamadı.
  */
 router.get(
-  '/:brandId/products/:productId/experiences',
+  '/:brandId/products/:productId/feed',
   asyncHandler(async (req: Request, res: Response) => {
     const { brandId, productId } = req.params;
     const userPayload = req.user;
@@ -1271,21 +1515,21 @@ router.get(
     const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
     const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
     const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
-    const experiences = await brandService.getBrandProductExperiences(brandId, productId, userId, {
+    const result = await brandService.getBrandProductPosts(brandId, productId, userId, undefined, {
       cursor,
       limit,
     });
-    return res.json(experiences);
+    return res.json(result);
   }),
 );
 
 /**
  * @openapi
- * /brands/{brandId}/products/{productId}/comparisons:
+ * /brands/{brandId}/products/{productId}/reviews:
  *   get:
- *     summary: Marka ürününe ait karşılaştırma gönderilerini listele
- *     description: Marka ürününe ait karşılaştırma gönderilerinin listelendiği endpoint.
- *     tags: [Brand]
+ *     summary: Marka ürününe ait review gönderilerini listele
+ *     description: Marka ürününe ait review (experience) gönderilerinin cursor-based pagination ile listelendiği endpoint.
+ *     tags: [Brand Catalog]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -1304,70 +1548,330 @@ router.get(
  *           format: uuid
  *         description: Product ID'si
  *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           minimum: 1
- *           default: 1
- *         description: Sayfa numarası (1 tabanlı)
- *       - in: query
  *         name: limit
+ *         required: false
  *         schema:
  *           type: integer
  *           minimum: 1
  *           maximum: 50
- *           default: 12
- *         description: Sayfa başına gönderi sayısı
+ *         description: Sayfa başına dönecek kayıt sayısı (varsayılan 20)
+ *       - in: query
+ *         name: cursor
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Bir sonraki sayfa için cursor (önceki sayfanın son post ID'si)
  *     responses:
  *       200:
- *         description: Karşılaştırma gönderileri başarıyla listelendi.
+ *         description: Review gönderileri başarıyla listelendi.
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   id:
- *                     type: string
- *                   title:
- *                     type: string
- *                   description:
- *                     type: string
- *                   source:
- *                     type: string
- *                   date:
- *                     type: string
- *                     format: date-time
- *                   image:
- *                     type: string
- *                     format: uri
- *                   url:
- *                     type: string
- *                     format: uri
- *                     nullable: true
- *                   stats:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
  *                     type: object
  *                     properties:
- *                       likes: { type: integer }
- *                       comments: { type: integer }
- *                       share: { type: integer }
- *                       bookmarks: { type: integer }
+ *                       type:
+ *                         type: string
+ *                         enum: ['experience', 'update']
+ *                       data:
+ *                         type: object
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       nullable: true
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
  *       401:
  *         description: Kimlik doğrulaması başarısız.
  *       404:
  *         description: Brand veya product bulunamadı.
  */
 router.get(
-  '/:brandId/products/:productId/comparisons',
+  '/:brandId/products/:productId/reviews',
   asyncHandler(async (req: Request, res: Response) => {
     const { brandId, productId } = req.params;
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-    const page = req.query.page ? Number(req.query.page) : 1;
-    const limit = req.query.limit ? Number(req.query.limit) : 12;
-    const comparisons = await brandService.getBrandProductComparisons(brandId, productId, userId, page, limit);
-    return res.json(comparisons);
+    const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
+    const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
+    const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
+    const result = await brandService.getBrandProductPosts(brandId, productId, userId, ContentPostType.EXPERIENCE, {
+      cursor,
+      limit,
+    });
+    return res.json(result);
+  }),
+);
+
+/**
+ * @openapi
+ * /brands/{brandId}/products/{productId}/benchmarks:
+ *   get:
+ *     summary: Marka ürününe ait benchmark gönderilerini listele
+ *     description: Marka ürününe ait benchmark (comparison) gönderilerinin cursor-based pagination ile listelendiği endpoint.
+ *     tags: [Brand Catalog]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: brandId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Brand ID'si
+ *       - in: path
+ *         name: productId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Product ID'si
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *         description: Sayfa başına dönecek kayıt sayısı (varsayılan 20)
+ *       - in: query
+ *         name: cursor
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Bir sonraki sayfa için cursor (önceki sayfanın son post ID'si)
+ *     responses:
+ *       200:
+ *         description: Benchmark gönderileri başarıyla listelendi.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       type:
+ *                         type: string
+ *                         enum: ['benchmark']
+ *                       data:
+ *                         type: object
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       nullable: true
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
+ *       401:
+ *         description: Kimlik doğrulaması başarısız.
+ *       404:
+ *         description: Brand veya product bulunamadı.
+ */
+router.get(
+  '/:brandId/products/:productId/benchmarks',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { brandId, productId } = req.params;
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
+    const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
+    const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
+    const result = await brandService.getBrandProductPosts(brandId, productId, userId, ContentPostType.COMPARE, {
+      cursor,
+      limit,
+    });
+    return res.json(result);
+  }),
+);
+
+/**
+ * @openapi
+ * /brands/{brandId}/products/{productId}/tips:
+ *   get:
+ *     summary: Marka ürününe ait tips gönderilerini listele
+ *     description: Marka ürününe ait tips gönderilerinin cursor-based pagination ile listelendiği endpoint.
+ *     tags: [Brand Catalog]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: brandId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Brand ID'si
+ *       - in: path
+ *         name: productId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Product ID'si
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *         description: Sayfa başına dönecek kayıt sayısı (varsayılan 20)
+ *       - in: query
+ *         name: cursor
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Bir sonraki sayfa için cursor (önceki sayfanın son post ID'si)
+ *     responses:
+ *       200:
+ *         description: Tips gönderileri başarıyla listelendi.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       type:
+ *                         type: string
+ *                         enum: ['tipsAndTricks']
+ *                       data:
+ *                         type: object
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       nullable: true
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
+ *       401:
+ *         description: Kimlik doğrulaması başarısız.
+ *       404:
+ *         description: Brand veya product bulunamadı.
+ */
+router.get(
+  '/:brandId/products/:productId/tips',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { brandId, productId } = req.params;
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
+    const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
+    const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
+    const result = await brandService.getBrandProductPosts(brandId, productId, userId, ContentPostType.TIPS, {
+      cursor,
+      limit,
+    });
+    return res.json(result);
+  }),
+);
+
+/**
+ * @openapi
+ * /brands/{brandId}/products/{productId}/questions:
+ *   get:
+ *     summary: Marka ürününe ait question gönderilerini listele
+ *     description: Marka ürününe ait question gönderilerinin cursor-based pagination ile listelendiği endpoint.
+ *     tags: [Brand Catalog]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: brandId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Brand ID'si
+ *       - in: path
+ *         name: productId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Product ID'si
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *         description: Sayfa başına dönecek kayıt sayısı (varsayılan 20)
+ *       - in: query
+ *         name: cursor
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Bir sonraki sayfa için cursor (önceki sayfanın son post ID'si)
+ *     responses:
+ *       200:
+ *         description: Question gönderileri başarıyla listelendi.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       type:
+ *                         type: string
+ *                         enum: ['question']
+ *                       data:
+ *                         type: object
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       nullable: true
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
+ *       401:
+ *         description: Kimlik doğrulaması başarısız.
+ *       404:
+ *         description: Brand veya product bulunamadı.
+ */
+router.get(
+  '/:brandId/products/:productId/questions',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { brandId, productId } = req.params;
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
+    const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
+    const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
+    const result = await brandService.getBrandProductPosts(brandId, productId, userId, ContentPostType.QUESTION, {
+      cursor,
+      limit,
+    });
+    return res.json(result);
   }),
 );
 
@@ -1377,7 +1881,7 @@ router.get(
  *   get:
  *     summary: Marka ürünlerine dair haberleri listele
  *     description: Marka ürünlerine dair haberlerin listelendiği endpoint.
- *     tags: [Brand]
+ *     tags: [Brand Catalog]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -1445,11 +1949,11 @@ router.get(
 
 /**
  * @openapi
- * /brands/{brandId}/stats:
+ * /brands/{brandId}/products/{productId}/news/{newsId}:
  *   get:
- *     summary: Brand istatistiklerini getir
- *     description: Kullanıcının brand için istatistiklerini getirir (surveys, shares, events, totalPoints).
- *     tags: [Brand]
+ *     summary: Marka ürününe ait haber detayını getir
+ *     description: Marka ürününe ait belirli bir haberin detaylı bilgilerini getirir. Banner, title, content, interactions (beğeni, yorum, paylaşım, save) bilgilerini içerir.
+ *     tags: [Brand Catalog]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -1460,31 +1964,79 @@ router.get(
  *           type: string
  *           format: uuid
  *         description: Brand ID'si
+ *       - in: path
+ *         name: productId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Product ID'si
+ *       - in: path
+ *         name: newsId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: News ID'si
  *     responses:
  *       200:
- *         description: Brand istatistikleri başarıyla getirildi.
+ *         description: Haber detayı başarıyla getirildi.
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 surveys:
+ *                 id:
+ *                   type: string
+ *                 title:
+ *                   type: string
+ *                 content:
+ *                   type: string
+ *                   description: Haberin tam içeriği
+ *                 source:
+ *                   type: string
+ *                 date:
+ *                   type: string
+ *                   format: date-time
+ *                 banner:
+ *                   type: string
+ *                   nullable: true
+ *                   description: Banner image URL
+ *                 author:
+ *                   type: string
+ *                   nullable: true
+ *                 tags:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                 likesCount:
  *                   type: integer
- *                 shares:
+ *                 commentsCount:
  *                   type: integer
- *                 events:
+ *                 sharesCount:
  *                   type: integer
- *                 totalPoints:
+ *                 favoritesCount:
  *                   type: integer
+ *                 viewsCount:
+ *                   type: integer
+ *                 isLiked:
+ *                   type: boolean
+ *                   description: Kullanıcının bu news'i beğenip beğenmediği
+ *                 isFavorited:
+ *                   type: boolean
+ *                   description: Kullanıcının bu news'i favorilere ekleyip eklemediği
+ *                 isShared:
+ *                   type: boolean
+ *                   description: Kullanıcının bu news'i paylaşıp paylaşmadığı
  *       401:
  *         description: Kimlik doğrulaması başarısız.
  *       404:
- *         description: Brand bulunamadı.
+ *         description: Brand, product veya news bulunamadı.
  */
 router.get(
-  '/:brandId/stats',
+  '/:brandId/products/:productId/news/:newsId',
   asyncHandler(async (req: Request, res: Response) => {
-    const { brandId } = req.params;
+    const { brandId, productId, newsId } = req.params;
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
 
@@ -1492,8 +2044,19 @@ router.get(
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
-    const stats = await brandService.getBrandStats(brandId, userId);
-    return res.json(stats);
+    // Brand ve product kontrolü
+    const brand = await brandService.getBrandProductDetail(brandId, productId).catch(() => null);
+    if (!brand) {
+      return res.status(404).json({ message: 'Brand or product not found' });
+    }
+
+    // News detayını getir
+    const news = await newsService.getNewsById(newsId, userId);
+    if (!news) {
+      return res.status(404).json({ message: 'News not found' });
+    }
+
+    return res.json(news);
   }),
 );
 

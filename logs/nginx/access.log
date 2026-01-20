@@ -60,3 +60,6 @@
 172.18.0.1 - - [16/Jan/2026:19:18:22 +0000] "GET /wpad.dat HTTP/1.1" 301 169 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Slack/4.47.69 Chrome/142.0.7444.177 Electron/39.2.4 Safari/537.36"
 172.18.0.1 - - [16/Jan/2026:19:19:13 +0000] "GET /wpad.dat HTTP/1.1" 301 169 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Cursor/2.2.43 Chrome/138.0.7204.251 Electron/37.7.0 Safari/537.36"
 172.18.0.1 - - [16/Jan/2026:19:20:06 +0000] "GET /wpad.dat HTTP/1.1" 301 169 "-" "WinHttp-Autoproxy-Service/5.1"
+178.128.69.202 - - [18/Jan/2026:14:19:17 +0000] "GET /api HTTP/1.1" 200 101 "-" "curl/8.7.1"
+178.128.69.202 - - [18/Jan/2026:14:19:36 +0000] "GET /api HTTP/1.1" 200 103 "-" "curl/8.7.1"
+178.128.69.202 - - [18/Jan/2026:14:19:37 +0000] "GET /health HTTP/1.1" 200 555 "-" "curl/8.7.1"

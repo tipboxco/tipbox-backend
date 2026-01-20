@@ -20,6 +20,7 @@
     "db:update-trust-user-1-avatar": "docker-compose exec backend npx ts-node scripts/update-trust-user-1-avatar.ts",
     "db:update-marketplace-banners": "docker-compose exec backend npx ts-node scripts/update-marketplace-banners.ts",
     "db:seed:explore-banners": "docker-compose exec backend npx ts-node scripts/seed-explore-banners.ts",
+    "db:upload-news-banner": "docker-compose exec backend npx ts-node scripts/upload-news-banner.ts",
     "db:clear-marketplace-banners-cache": "docker-compose exec backend npx ts-node scripts/clear-marketplace-banners-cache.ts",
     "db:reset": "docker-compose exec backend npx ts-node prisma/seed/clear-user-content-data.ts",
     "db:reset:all": "docker-compose exec backend npx ts-node prisma/seed/clear-seed-data.ts --force",
@@ -40,6 +41,9 @@
     "dev:reset": "docker-compose exec backend bash scripts/reset-dev.sh",
     "test:socket-chat": "docker-compose exec backend npx ts-node scripts/test-socket-chat.ts",
     "test:transactions": "npx ts-node scripts/test-transaction-seed.ts",
+    "test:inbox": "docker-compose exec backend npx ts-node test-inbox-endpoints.ts",
+    "test:inbox:cli": "docker-compose exec backend npx ts-node test-inbox-comprehensive.ts",
+    "inbox:delete-julia-havka": "docker-compose exec backend npx ts-node scripts/delete-julia-havka-thread.ts",
     "sim:julia": "docker-compose exec backend npx ts-node scripts/julia-omer-simulation.ts julia",
     "sim:omer": "docker-compose exec backend npx ts-node scripts/julia-omer-simulation.ts omer"
   },
