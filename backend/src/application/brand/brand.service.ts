@@ -1234,7 +1234,7 @@ export class BrandService {
         id: event.id,
         title: event.title,
         description: event.description || '',
-        type: event.eventType || 'SURVEY',
+        type: 'SURVEY',
         duration: '5-10 dk',
         points: 100 + (totalParticipated || 1) * 25,
         status,

@@ -1,5 +1,6 @@
 import mediaMap from '../seed-media-map.json';
 import { S3Service } from '../../../src/infrastructure/s3/s3.service';
+import { getPublicMediaBaseUrl } from '../../../src/infrastructure/config/media.config';
 import { readFileSync, existsSync } from 'fs';
 import path from 'path';
 
@@ -15,54 +16,24 @@ export type SeedMediaKey = keyof typeof seedMedia;
 let seedMediaUploaded = false;
 const uploadedKeys = new Set<string>();
 
-// MinIO public endpoint'ini environment variable'lardan al
-function getMinioPublicEndpoint(): string {
-  /**
-   * Öncelik sırası:
-   * 1) SEED_MEDIA_BASE_URL    -> Seed görselleri için tek kontrol noktası (önerilen)
-   * 2) MINIO_PUBLIC_ENDPOINT  -> Frontend'in doğrudan eriştiği host
-   * 3) S3_ENDPOINT            -> Container içi endpoint (production'da kullanmayın!)
-   * 4) Varsayılan: http://localhost:9000
-   * 
-   * ÖNEMLİ: Production'da SEED_MEDIA_BASE_URL veya MINIO_PUBLIC_ENDPOINT set edilmelidir!
-   * Örnek: SEED_MEDIA_BASE_URL=http://api-test.tipbox.co:9000
-   */
+// Public media base URL'ini tek noktadan al (bkz: media.config.ts)
+function getSeedPublicMediaBaseUrl(): string {
   const isProduction = process.env.NODE_ENV === 'production';
-  const hasPublicEndpoint = Boolean(
-    process.env.SEED_MEDIA_BASE_URL || 
-    process.env.MINIO_PUBLIC_ENDPOINT
-  );
+  const hasExplicitPublic =
+    Boolean(process.env.MEDIA_PUBLIC_BASE_URL) ||
+    Boolean(process.env.SEED_MEDIA_BASE_URL) ||
+    Boolean(process.env.MINIO_PUBLIC_ENDPOINT);
 
-  // Production'da public endpoint set edilmemişse uyarı ver
-  if (isProduction && !hasPublicEndpoint) {
-    console.warn('⚠️  UYARI: Production ortamında SEED_MEDIA_BASE_URL veya MINIO_PUBLIC_ENDPOINT set edilmemiş!');
-    console.warn('   Seed görselleri localhost URL\'leri ile kaydedilecek ve frontend erişemeyecek.');
-    console.warn('   Lütfen .env dosyasına SEED_MEDIA_BASE_URL=http://api-test.tipbox.co:9000 ekleyin.');
+  if (isProduction && !hasExplicitPublic) {
+    console.warn(
+      '⚠️  UYARI: Production ortamında MEDIA_PUBLIC_BASE_URL (önerilen) veya SEED_MEDIA_BASE_URL/MINIO_PUBLIC_ENDPOINT set edilmemiş!'
+    );
+    console.warn(
+      '   Seed görselleri için dönen URL\'ler yanlış olabilir. Önerilen: MEDIA_PUBLIC_BASE_URL=https://api.yourdomain.com/media'
+    );
   }
 
-  const raw =
-    process.env.SEED_MEDIA_HOST || // Eski isim (seed.ts ile uyumlu)
-    process.env.SEED_MEDIA_BASE_URL ||
-    process.env.MINIO_PUBLIC_ENDPOINT ||
-    process.env.S3_ENDPOINT ||
-    'http://localhost:9000';
-
-  // Eğer SEED_MEDIA_BASE_URL veya MINIO_PUBLIC_ENDPOINT set edilmişse direkt kullan
-  // (Bu production endpoint'i olmalı, değiştirme)
-  if (hasPublicEndpoint) {
-    const endpoint = raw.replace(/\/$/, '');
-    if (isProduction) {
-      console.log(`✅ Production endpoint kullanılıyor: ${endpoint}`);
-    }
-    return endpoint;
-  }
-
-  // Sadece development'ta container içi "minio:9000" adresini localhost'a çevir
-  // Production'da bu durum olmamalı (SEED_MEDIA_BASE_URL set edilmeli)
-  const normalized = raw.replace('minio:9000', 'localhost:9000');
-
-  // Trailing slash'i temizle
-  return normalized.replace(/\/$/, '');
+  return getPublicMediaBaseUrl();
 }
 
 function getBucketName(): string {
@@ -105,9 +76,8 @@ export function getSeedMediaUrl(key: SeedMediaKey, fallbackUrl?: string): string
   }
 
   // Runtime'da URL oluştur
-  const baseUrl = getMinioPublicEndpoint();
-  const bucketName = getBucketName();
-  return `${baseUrl}/${bucketName}/${entry.targetKey}`;
+  const publicBase = getSeedPublicMediaBaseUrl();
+  return `${publicBase}/${entry.targetKey}`;
 }
 
 export function listSeedMedia(): Record<string, MediaEntry> {

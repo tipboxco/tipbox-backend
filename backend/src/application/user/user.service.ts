@@ -1039,40 +1039,21 @@ export class UserService {
   }> {
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
 
-    // Tüm ACHIEVEMENT tipindeki badgeleri kullanıcı progress'i ile birlikte çek
-    const badges = await this.prisma.badge.findMany({
-      where: {
-        type: 'ACHIEVEMENT',
-      },
-      include: {
-        achievementGoals: {
-          include: {
-            userAchievements: {
-              where: { userId },
-            },
-          },
-        },
-      },
-      orderBy: { createdAt: 'asc' },
-    });
-
     const mapStatus = (current: number, total: number): 'not-started' | 'in_progress' | 'completed' => {
       if (current <= 0) return 'not-started';
       if (current >= total) return 'completed';
       return 'in_progress';
     };
 
-    const mapped = badges.map((badge: any) => {
-      const goals = badge.achievementGoals || [];
-      const total = goals.reduce(
-        (sum: number, g: any) => sum + (g.pointsRequired || 0),
-        0
-      );
-      const current = goals.reduce(
-        (sum: number, g: any) => sum + (g.userAchievements?.[0]?.progress || 0),
-        0
-      );
+    const statusFilter = options?.status;
+    const isValidUuid = (value: unknown): value is string =>
+      typeof value === 'string' && /^[0-9a-fA-F-]{36}$/.test(value);
+    const initialCursor = isValidUuid(options?.cursor) ? options!.cursor : undefined;
 
+    const mapBadge = (badge: any) => {
+      const goals = badge.achievementGoals || [];
+      const total = goals.reduce((sum: number, g: any) => sum + (g.pointsRequired || 0), 0);
+      const current = goals.reduce((sum: number, g: any) => sum + (g.userAchievements?.[0]?.progress || 0), 0);
       const status = mapStatus(current, total || 1);
 
       return {
@@ -1084,32 +1065,87 @@ export class UserService {
         total: total || 1,
         status,
       };
-    });
+    };
 
-    // Status filtresi uygula
-    const filtered = options?.status
-      ? mapped.filter((b) => b.status === options.status)
-      : mapped;
+    // DB-level cursor pagination (deterministic order). Status filtresi için gerekirse birden çok batch çekilir.
+    const items: Array<{
+      id: string;
+      title: string;
+      image: string;
+      description: string;
+      current: number;
+      total: number;
+      status: 'not-started' | 'in_progress' | 'completed';
+    }> = [];
 
-    // Basit cursor: badge id'sine göre
-    let startIndex = 0;
-    if (options?.cursor) {
-      const idx = filtered.findIndex((b) => b.id === options.cursor);
-      if (idx >= 0) {
-        startIndex = idx + 1;
+    const take = limit; // client limit
+    const pageSize = limit; // internal batch size (limit<=50)
+    let cursor = initialCursor;
+    let moreRowsAvailable = true;
+    let hasMoreForResponse = false;
+    let iterations = 0;
+
+    while (items.length < take && moreRowsAvailable && iterations < 30) {
+      iterations += 1;
+
+      const batch = await this.prisma.badge.findMany({
+        where: { type: 'ACHIEVEMENT' },
+        include: {
+          achievementGoals: {
+            include: {
+              userAchievements: {
+                where: { userId },
+              },
+            },
+          },
+        },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        take: pageSize + 1,
+        ...(cursor && {
+          cursor: { id: cursor },
+          skip: 1,
+        }),
+      });
+
+      moreRowsAvailable = batch.length > pageSize;
+      const page = moreRowsAvailable ? batch.slice(0, pageSize) : batch;
+
+      if (page.length === 0) {
+        break;
       }
+
+      // Next query cursor: last row of the page (not filtered)
+      cursor = String(page[page.length - 1].id);
+
+      const mapped = page.map(mapBadge);
+      const filtered = statusFilter ? mapped.filter((b) => b.status === statusFilter) : mapped;
+
+      if (filtered.length === 0) {
+        continue;
+      }
+
+      const remaining = take - items.length;
+      if (filtered.length > remaining) {
+        items.push(...filtered.slice(0, remaining));
+        hasMoreForResponse = true; // Aynı batch'te bile daha fazla eşleşen var
+        break;
+      }
+
+      items.push(...filtered);
     }
 
-    const sliced = filtered.slice(startIndex, startIndex + limit + 1);
-    const hasMore = sliced.length > limit;
-    const items = hasMore ? sliced.slice(0, limit) : sliced;
-    const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].id : undefined;
+    // Eğer limit'e ulaştıysak ve daha fazla row varsa, hasMore=true sayabiliriz
+    if (!hasMoreForResponse) {
+      hasMoreForResponse = items.length >= take && moreRowsAvailable;
+    }
+
+    const nextCursor = items.length > 0 ? items[items.length - 1].id : undefined;
 
     return {
-      items,
+      items: items,
       pagination: {
         cursor: nextCursor,
-        hasMore,
+        hasMore: hasMoreForResponse,
         limit,
       },
     };

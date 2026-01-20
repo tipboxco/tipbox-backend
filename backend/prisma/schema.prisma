@@ -424,6 +424,7 @@ model Product {
   comparisonProduct1 PostComparison[]    @relation("ComparisonProduct1")
   comparisonProduct2 PostComparison[]    @relation("ComparisonProduct2")
   questionPosts      PostQuestion[]
+  wishboxEvents      WishboxEvent[]      @relation("WishboxEventProduct")
   brand              Brand?              @relation(fields: [brandId], references: [externalId])
   category           Category?           @relation(fields: [categoryId], references: [id])
   group              ProductGroup?       @relation(fields: [groupId], references: [id])
@@ -504,6 +505,7 @@ model ContentPost {
   categoryId           String?              @map("category_id")
   productGroupId       String?              @map("product_group_id") @db.Uuid
   productId            String?              @map("product_id")
+  productStatus        ContentPostProductStatus? @map("product_status")
   inventoryRequired    Boolean              @map("inventory_required")
   isBoosted            Boolean              @map("is_boosted")
   boostedUntil         DateTime?            @map("boosted_until")
@@ -552,6 +554,7 @@ model ContentPost {
   @@index([type])
   @@index([mainCategoryId])
   @@index([productId])
+  @@index([productStatus])
   @@index([createdAt])
   @@index([experienceSnippetId])
   @@index([experienceDurationId])
@@ -560,6 +563,13 @@ model ContentPost {
   @@index([eventId])
   @@index([eventId, createdAt])
   @@map("content_posts")
+}
+
+enum ContentPostProductStatus {
+  own
+  tried
+
+  @@map("content_post_product_status")
 }
 
 model PostMedia {
@@ -882,6 +892,7 @@ model AchievementGoal {
   chainId          String                @map("chain_id") @db.Uuid
   title            String
   requirement      String
+  goalType         AchievementGoalType?  @map("goal_type")
   rewardBadgeId    String?               @map("reward_badge_id") @db.Uuid
   pointsRequired   Int                   @map("points_required")
   difficulty       AchievementDifficulty
@@ -889,7 +900,18 @@ model AchievementGoal {
   rewardBadge      Badge?                @relation(fields: [rewardBadgeId], references: [id])
   userAchievements UserAchievement[]
 
+  @@index([goalType])
   @@map("achievement_goals")
+}
+
+enum AchievementGoalType {
+  POST
+  INVENTORY
+  LIKE_GIVEN
+  LIKE_RECEIVED
+  COMMENT
+
+  @@map("achievement_goal_type")
 }
 
 model UserAchievement {
@@ -1371,6 +1393,8 @@ model WishboxEvent {
   startDate      DateTime           @map("start_date")
   endDate        DateTime           @map("end_date")
   status         WishboxEventStatus @default(DRAFT)
+  feedType       WishboxEventFeedType @default(PICKS) @map("feed_type")
+  productId      String?            @map("product_id")
   createdAt      DateTime           @default(now()) @map("created_at")
   updatedAt      DateTime           @updatedAt @map("updated_at")
   imageUrl       String?            @map("image_url")
@@ -1378,6 +1402,7 @@ model WishboxEvent {
   mainCategoryId String?            @map("main_category_id") @db.Uuid
   subCategoryId  String?            @map("sub_category_id") @db.Uuid
   posts          ContentPost[]
+  product        Product?           @relation("WishboxEventProduct", fields: [productId], references: [id], onDelete: SetNull)
   brand          Brand?             @relation(fields: [brandId], references: [id], onDelete: Cascade)
   mainCategory   MainCategory?      @relation(fields: [mainCategoryId], references: [id])
   subCategory    SubCategory?       @relation(fields: [subCategoryId], references: [id])
@@ -1385,6 +1410,7 @@ model WishboxEvent {
   stats          WishboxStats[]
   eventBadges    EventBadge[] // ✅ YENİ
 
+  @@index([productId])
   @@index([brandId])
   @@index([status, startDate, endDate])
   @@index([mainCategoryId])
@@ -2160,6 +2186,13 @@ enum WishboxEventStatus {
   CLOSED
 
   @@map("wishbox_event_status")
+}
+
+enum WishboxEventFeedType {
+  PICKS
+  ROASTS
+
+  @@map("wishbox_event_feed_type")
 }
 
 enum WishboxRewardType {

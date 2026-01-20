@@ -3337,6 +3337,7 @@ async function seedEvents() {
       startDate: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
       endDate: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000),
       status: 'PUBLISHED' as const,
+      eventType: 'PICKS' as const,
       isActive: true,
       products: electronicsProducts.filter(p => p.name.toLowerCase().includes('macbook') || p.name.toLowerCase().includes('laptop'))
     },
@@ -3348,6 +3349,7 @@ async function seedEvents() {
       startDate: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000),
       endDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
       status: 'PUBLISHED' as const,
+      eventType: 'ROASTS' as const,
       isActive: true,
       products: electronicsProducts.filter(p => p.name.toLowerCase().includes('airpods') || p.name.toLowerCase().includes('buds') || p.name.toLowerCase().includes('earbuds'))
     },
@@ -3359,6 +3361,7 @@ async function seedEvents() {
       startDate: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
       endDate: new Date(Date.now() + 22 * 24 * 60 * 60 * 1000),
       status: 'PUBLISHED' as const,
+      eventType: 'PICKS' as const,
       isActive: true,
       products: electronicsProducts.filter(p => p.name.toLowerCase().includes('watch'))
     },
@@ -3370,6 +3373,7 @@ async function seedEvents() {
       startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
       endDate: new Date(Date.now() + 23 * 24 * 60 * 60 * 1000),
       status: 'PUBLISHED' as const,
+      eventType: 'PICKS' as const,
       isActive: true,
       products: electronicsProducts.filter(p => p.name.toLowerCase().includes('ipad') || p.name.toLowerCase().includes('tablet'))
     },
@@ -3383,6 +3387,7 @@ async function seedEvents() {
       startDate: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
       endDate: new Date(Date.now() + 16 * 24 * 60 * 60 * 1000),
       status: 'PUBLISHED' as const,
+      eventType: 'PICKS' as const,
       isActive: true,
       products: beautyProducts.filter(p => p.name.toLowerCase().includes('serum') || p.name.toLowerCase().includes('cream') || p.name.toLowerCase().includes('moisturizer'))
     },
@@ -3394,6 +3399,7 @@ async function seedEvents() {
       startDate: new Date(Date.now() - 11 * 24 * 60 * 60 * 1000),
       endDate: new Date(Date.now() + 19 * 24 * 60 * 60 * 1000),
       status: 'PUBLISHED' as const,
+      eventType: 'PICKS' as const,
       isActive: true,
       products: beautyProducts.slice(0, 10)
     },
@@ -3405,6 +3411,7 @@ async function seedEvents() {
       startDate: new Date(Date.now() - 9 * 24 * 60 * 60 * 1000),
       endDate: new Date(Date.now() + 21 * 24 * 60 * 60 * 1000),
       status: 'PUBLISHED' as const,
+      eventType: 'ROASTS' as const,
       isActive: true,
       products: beautyProducts.filter(p => p.name.toLowerCase().includes('lipstick') || p.name.toLowerCase().includes('foundation') || p.name.toLowerCase().includes('mascara'))
     },
@@ -3418,6 +3425,7 @@ async function seedEvents() {
       startDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
       endDate: new Date(Date.now() + 35 * 24 * 60 * 60 * 1000),
       status: 'PUBLISHED' as const,
+      eventType: 'PICKS' as const,
       isActive: false,
       products: electronicsProducts.slice(0, 10)
     },
@@ -3429,6 +3437,7 @@ async function seedEvents() {
       startDate: new Date(Date.now() + 8 * 24 * 60 * 60 * 1000),
       endDate: new Date(Date.now() + 38 * 24 * 60 * 60 * 1000),
       status: 'PUBLISHED' as const,
+      eventType: 'ROASTS' as const,
       isActive: false,
       products: electronicsProducts.filter(p => p.name.toLowerCase().includes('phone') || p.name.toLowerCase().includes('iphone'))
     },
@@ -3442,6 +3451,7 @@ async function seedEvents() {
       startDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       endDate: new Date(Date.now() + 37 * 24 * 60 * 60 * 1000),
       status: 'PUBLISHED' as const,
+      eventType: 'PICKS' as const,
       isActive: false,
       products: beautyProducts.filter(p => p.name.toLowerCase().includes('sunscreen') || p.name.toLowerCase().includes('spf'))
     },
@@ -3453,6 +3463,7 @@ async function seedEvents() {
       startDate: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
       endDate: new Date(Date.now() + 40 * 24 * 60 * 60 * 1000),
       status: 'PUBLISHED' as const,
+      eventType: 'PICKS' as const,
       isActive: false,
       products: beautyProducts.filter(p => p.name.toLowerCase().includes('hair') || p.name.toLowerCase().includes('shampoo'))
     }
@@ -3511,9 +3522,10 @@ async function seedEvents() {
         startDate: config.startDate,
         endDate: config.endDate,
         status: config.status,
+        feedType: config.eventType,
         imageUrl,
         brandId: null,
-      }
+      } as any
     })
     
     if (config.isActive) {
@@ -4068,13 +4080,13 @@ async function seedNFTMarketplace() {
   // 1. NFT OLUŞTURMA (Her kullanıcı 2-5 NFT)
   console.log('🎨 NFT\'ler oluşturuluyor...')
   
-  const nftTypes: Array<'BADGE' | 'COSMETIC' | 'LOOTBOX'> = ['BADGE', 'COSMETIC', 'LOOTBOX']
+  // LOOTBOX kaldırıldı (artık seed'lenmiyor)
+  const nftTypes: Array<'BADGE' | 'COSMETIC'> = ['BADGE', 'COSMETIC']
   const nftRarities: Array<'COMMON' | 'RARE' | 'EPIC'> = ['COMMON', 'RARE', 'EPIC']
   
   const nftNames = {
     BADGE: ['Pioneer Badge', 'Expert Badge', 'Contributor Badge', 'Elite Badge', 'Champion Badge'],
     COSMETIC: ['Golden Frame', 'Diamond Border', 'Neon Glow', 'Crystal Shine', 'Rainbow Aura'],
-    LOOTBOX: ['Mystery Box', 'Treasure Chest', 'Lucky Pack', 'Premium Box', 'Legendary Crate']
   }
   
   for (const user of users) {
@@ -4274,119 +4286,11 @@ async function seedNFTMarketplace() {
  */
 async function seedRemainingSystemTables() {
   console.log('\n🏅 Kalan sistem tabloları oluşturuluyor...\n')
-  
-  const users = await prisma.user.findMany({ take: 40 })
-  
-  if (users.length === 0) {
-    console.log('⚠️ Kullanıcı bulunamadı, atlanıyor...')
-    return
-  }
-  
-  let totalBadges = 0
-  let totalUserBadges = 0
-  
-  // 1. BADGE CATEGORIES
-  console.log('📁 Badge categories oluşturuluyor...')
-  
-  const categories = [
-    { name: 'Achievement Badges', description: 'Başarı rozetleri' },
-    { name: 'Event Badges', description: 'Etkinlik rozetleri' },
-    { name: 'Community Badges', description: 'Topluluk rozetleri' },
-    { name: 'Special Badges', description: 'Özel rozetler' },
-  ]
-  
-  const createdCategories: string[] = []
-  
-  for (const cat of categories) {
-    const category = await prisma.badgeCategory.create({
-      data: {
-        name: cat.name,
-        description: cat.description,
-      }
-    })
-    createdCategories.push(category.id)
-  }
-  
-  console.log(`  ✅ ${categories.length} badge category oluşturuldu`)
-  
-  // 2. BADGES
-  console.log('🏅 Badges oluşturuluyor...')
-  
-  const badgeTypes: Array<'ACHIEVEMENT' | 'EVENT' | 'COSMETIC'> = ['ACHIEVEMENT', 'EVENT', 'COSMETIC']
-  const badgeRarities: Array<'COMMON' | 'RARE' | 'EPIC'> = ['COMMON', 'RARE', 'EPIC']
-  
-  const badgeNames = [
-    'First Post', 'Power User', 'Trusted Member', 'Event Champion', 'Community Hero',
-    'Expert Reviewer', 'Influencer', 'Early Adopter', 'Beta Tester', 'Top Contributor',
-    'Golden User', 'Diamond Tier', 'Platinum Member', 'Elite User', 'VIP Member'
-  ]
-  
-  const createdBadges: string[] = []
-  
-  for (const name of badgeNames) {
-    const randomType = badgeTypes[Math.floor(Math.random() * badgeTypes.length)]
-    const randomRarity = badgeRarities[Math.floor(Math.random() * badgeRarities.length)]
-    const randomCategory = createdCategories[Math.floor(Math.random() * createdCategories.length)]
-    
-    const badge = await prisma.badge.create({
-      data: {
-        name,
-        description: `${name} badge - ${randomRarity}`,
-        imageUrl: null,
-        type: randomType,
-        rarity: randomRarity,
-        boostMultiplier: randomRarity === 'EPIC' ? 2.0 : (randomRarity === 'RARE' ? 1.5 : 1.0),
-        rewardMultiplier: randomRarity === 'EPIC' ? 3.0 : (randomRarity === 'RARE' ? 2.0 : 1.0),
-        categoryId: randomCategory,
-      }
-    })
-    
-    createdBadges.push(badge.id)
-    totalBadges++
-  }
-  
-  console.log(`  ✅ ${totalBadges} badge oluşturuldu`)
-  
-  // 3. USER BADGES (Her kullanıcı 2-5 badge)
-  console.log('🎖️ UserBadges oluşturuluyor...')
-  
-  const visibilities: Array<'PUBLIC' | 'FRIENDS' | 'TRUSTERS' | 'PRIVATE'> = ['PUBLIC', 'FRIENDS', 'TRUSTERS', 'PRIVATE']
-  
-  for (const user of users) {
-    const badgeCount = Math.floor(Math.random() * 4) + 2 // 2-5 badge
-    const userBadges = createdBadges
-      .sort(() => Math.random() - 0.5)
-      .slice(0, badgeCount)
-    
-    for (let i = 0; i < userBadges.length; i++) {
-      const badgeId = userBadges[i]
-      const visibility = visibilities[Math.floor(Math.random() * visibilities.length)]
-      
-      await prisma.userBadge.create({
-        data: {
-          userId: user.id,
-          badgeId,
-          isVisible: Math.random() > 0.2, // %80 visible
-          displayOrder: i + 1,
-          visibility,
-          claimed: Math.random() > 0.3, // %70 claimed
-          claimedAt: Math.random() > 0.3 ? new Date(Date.now() - Math.random() * 60 * 24 * 60 * 60 * 1000) : null,
-        }
-      })
-      totalUserBadges++
-    }
-  }
-  
-  console.log(`  ✅ ${totalUserBadges} user badge oluşturuldu`)
-  
-  // Özet
-  console.log('\n' + '═'.repeat(80))
-  console.log('✨ KALAN SİSTEMLER TAMAMLANDI\n')
-  console.log(`   📁 Badge Categories: ${categories.length}`)
-  console.log(`   🏅 Badges: ${totalBadges}`)
-  console.log(`   🎖️ User Badges: ${totalUserBadges}`)
-  console.log(`      👤 Kullanıcı başına ortalama: ${(totalUserBadges / users.length).toFixed(1)} badge`)
-  console.log('═'.repeat(80) + '\n')
+  console.log(
+    "ℹ️  Legacy badge seeding (badgeNames / random categories) devre dışı bırakıldı.\n" +
+      "   Badge kategorileri + ladder badge'ler aşağıdaki idempotent akışta seed'leniyor.\n"
+  )
+  return
 }
 
 /**
@@ -5630,7 +5534,7 @@ async function ensureAchievementChain(config: { name: string; description?: stri
 }
 
 // AchievementGoal için idempotent create/update
-async function ensureAchievementGoal(config: { chainId: string; title: string; requirement: string; rewardBadgeId?: string; pointsRequired: number; difficulty: string }): Promise<{ id: string; chainId: string; title: string }> {
+async function ensureAchievementGoal(config: { chainId: string; title: string; requirement: string; goalType?: any; rewardBadgeId?: string; pointsRequired: number; difficulty: string }): Promise<{ id: string; chainId: string; title: string }> {
   const existing = await prisma.achievementGoal.findFirst({
     where: { 
       chainId: config.chainId,
@@ -5644,10 +5548,162 @@ async function ensureAchievementGoal(config: { chainId: string; title: string; r
   
   return prisma.achievementGoal.create({
     data: {
-      ...config,
+      chainId: config.chainId,
+      title: config.title,
+      requirement: config.requirement,
+      goalType: config.goalType ? (config.goalType as any) : undefined,
+      rewardBadgeId: config.rewardBadgeId,
+      pointsRequired: config.pointsRequired,
       difficulty: config.difficulty as any,
-    }
+    } as any,
   });
+}
+
+/**
+ * Seed tamamlandıktan sonra kullanıcıların achievement progress'ini hesaplayıp yazar.
+ * - `achievement_goals.goal_type` dolu olan hedefler için çalışır
+ * - `user_achievements` tablosuna progress/completed yazar (geriye düşürmez)
+ * - Tamamlananlarda `user_badges` kaydı oluşturur (claimed=false)
+ */
+async function backfillAchievementProgressForSeed(): Promise<void> {
+  console.log('\n🧮 Backfilling achievement progress (seed)...')
+
+  // Tipli goal'ları al (SQL ile; prisma type drift'lerinden etkilenmesin)
+  const typedGoals = await prisma.$queryRawUnsafe<
+    Array<{ id: string; goal_type: string; points_required: number; reward_badge_id: string | null }>
+  >(
+    `select id, goal_type, points_required, reward_badge_id
+     from achievement_goals
+     where goal_type is not null`
+  )
+
+  if (!typedGoals.length) {
+    console.log('⚠️  goalType olan AchievementGoal bulunamadı, progress backfill atlandı')
+    return
+  }
+
+  const goalsByType = new Map<string, Array<{ id: string; pointsRequired: number; rewardBadgeId: string | null }>>()
+  for (const g of typedGoals as any[]) {
+    const typeKey = String(g.goal_type)
+    const list = goalsByType.get(typeKey) ?? []
+    list.push({
+      id: String(g.id),
+      pointsRequired: Number(g.points_required) || 0,
+      rewardBadgeId: g.reward_badge_id ? String(g.reward_badge_id) : null,
+    })
+    goalsByType.set(typeKey, list)
+  }
+
+  const users = await prisma.user.findMany({ select: { id: true } })
+  if (!users.length) {
+    console.log('⚠️  Kullanıcı bulunamadı, progress backfill atlandı')
+    return
+  }
+
+  const grantBadgeIfNeeded = async (userId: string, badgeId: string) => {
+    await prisma.userBadge.upsert({
+      where: { userId_badgeId: { userId, badgeId } },
+      update: {},
+      create: {
+        userId,
+        badgeId,
+        isVisible: true,
+        displayOrder: null,
+        visibility: 'PUBLIC',
+        claimed: false,
+        claimedAt: null,
+      },
+    })
+  }
+
+  const upsertUserAchievement = async (args: {
+    userId: string
+    goalId: string
+    total: number
+    pointsRequired: number
+    rewardBadgeId: string | null
+  }) => {
+    const { userId, goalId, total, pointsRequired, rewardBadgeId } = args
+    if (pointsRequired <= 0) return
+    if (!Number.isFinite(total) || total < 0) return
+
+    await prisma.$transaction(async (tx) => {
+      const existing = await tx.userAchievement.findUnique({
+        where: { userId_goalId: { userId, goalId } },
+      })
+
+      if (existing?.completed) return
+      const prev = existing?.progress ?? 0
+      if (prev >= total) return
+
+      const completedNow = total >= pointsRequired
+      const completedAt = completedNow ? existing?.completedAt ?? new Date() : null
+
+      if (existing) {
+        await tx.userAchievement.update({
+          where: { id: existing.id },
+          data: {
+            progress: total,
+            completed: completedNow,
+            completedAt,
+          },
+        })
+      } else {
+        await tx.userAchievement.create({
+          data: {
+            userId,
+            goalId,
+            progress: total,
+            completed: completedNow,
+            completedAt,
+          },
+        })
+      }
+    })
+
+    if (total >= pointsRequired && rewardBadgeId) {
+      await grantBadgeIfNeeded(userId, rewardBadgeId)
+    }
+  }
+
+  let processed = 0
+  for (const u of users) {
+    const userId = String(u.id)
+
+    const [postCount, inventoryCount, likeGivenCount, likeReceivedCount] = await Promise.all([
+      prisma.contentPost.count({ where: { userId, type: 'EXPERIENCE' } as any }),
+      prisma.inventory.count({ where: { userId } }),
+      prisma.contentLike.count({ where: { userId, postId: { not: null } } as any }),
+      prisma.contentLike.count({ where: { postId: { not: null }, post: { userId } } as any }),
+    ])
+
+    const typeTotals: Record<string, number> = {
+      POST: postCount,
+      INVENTORY: inventoryCount,
+      LIKE_GIVEN: likeGivenCount,
+      LIKE_RECEIVED: likeReceivedCount,
+    }
+
+    for (const [typeKey, total] of Object.entries(typeTotals)) {
+      const goals = goalsByType.get(typeKey) ?? []
+      for (const g of goals) {
+        await upsertUserAchievement({
+          userId,
+          goalId: g.id,
+          total,
+          pointsRequired: g.pointsRequired,
+          rewardBadgeId: g.rewardBadgeId,
+        })
+      }
+    }
+
+    processed += 1
+    if (processed % 200 === 0) {
+      console.log(`✅ Backfill processed users: ${processed}`)
+    }
+  }
+
+  console.log(`✅ Achievement progress backfill tamamlandı. Users: ${processed}`)
 }
 
 async function ensureProductImages(userIdToUse: string): Promise<void> {
@@ -6954,10 +7010,13 @@ async function main() {
   progress.increment('Badge kategorileri oluşturuluyor...')
   console.log('\n🏆 Creating badge categories...')
   const badgeCategoryConfigs = [
-    { name: 'Achievement', description: 'Başarı rozetleri - belirli hedeflere ulaşma' },
-    { name: 'Event', description: 'Etkinlik rozetleri - özel günler ve kampanyalar' },
-    { name: 'Cosmetic', description: 'Kozmetik rozetler - görsel özelleştirme' },
-    { name: 'Community', description: 'Topluluk rozetleri - sosyal aktiviteler' }
+    { name: 'Achievement', description: 'Achievement badges' },
+    { name: 'Event', description: 'Event badges' },
+    { name: 'Bridge', description: 'Bridge participation badges' },
+    { name: 'Brand', description: 'Brand-related badges' },
+    { name: 'Community', description: 'Community contribution badges' },
+    { name: 'Special', description: 'Special edition badges' },
+    { name: 'Cosmetic', description: 'Cosmetic / profile customization badges' },
   ]
   
   const badgeCategories = await Promise.all(
@@ -6966,6 +7025,175 @@ async function main() {
     })
   )
   console.log(`✅ ${badgeCategories.length} badge kategorisi oluşturuldu/güncellendi`)
+
+  // Achievement Ladder (event dışı) - 4 örnek badge + goal
+  progress.increment('Achievement Ladder hedefleri oluşturuluyor...')
+  console.log('\n🏆 Creating Achievement Ladder (non-event) badges & goals...')
+
+  const categoryByName = new Map(badgeCategories.map((c) => [c.name, c] as const))
+  const getCategoryId = (name: string): string =>
+    categoryByName.get(name)?.id || badgeCategories[0].id
+
+  const achievementCategory = categoryByName.get('Achievement') || badgeCategories[0]
+
+  const ladderChain = await ensureAchievementChain({
+    name: 'Achievement Ladder',
+    description: 'Event dışı, sürekli devam eden hedefler',
+    category: 'Ladder',
+  })
+
+  // Kategori seti sadeleştirildi (7 adet) + badge'ler İngilizce + imageKey zorunlu.
+  // Base set -> numaralandırılarak 2x çoğaltılır (toplam 14 badge/goal).
+  const ladderBadgeBaseConfigs: Array<{
+    baseName: string
+    baseGoalTitle: string
+    description: string
+    type: 'ACHIEVEMENT' | 'EVENT' | 'COSMETIC' | 'BRAND'
+    rarity: 'COMMON' | 'RARE' | 'EPIC'
+    categoryId: string
+    goalType: 'POST' | 'INVENTORY' | 'LIKE_GIVEN' | 'LIKE_RECEIVED' | 'COMMENT'
+    requirement: string
+    pointsRequired: number
+    difficulty: 'EASY' | 'MEDIUM' | 'HARD'
+    imageKey: SeedMediaKey
+  }> = [
+    {
+      baseName: 'Achievement Starter',
+      baseGoalTitle: 'Publish Posts',
+      description: 'Complete your first achievement milestone.',
+      type: 'ACHIEVEMENT',
+      rarity: 'COMMON',
+      categoryId: getCategoryId('Achievement'),
+      goalType: 'POST',
+      requirement: 'Publish 10 posts.',
+      pointsRequired: 10,
+      difficulty: 'EASY',
+      imageKey: 'badge.badge-1',
+    },
+    {
+      baseName: 'Event Regular',
+      baseGoalTitle: 'Participate in Events',
+      description: 'Stay active during events and campaigns.',
+      type: 'EVENT',
+      rarity: 'COMMON',
+      categoryId: getCategoryId('Event'),
+      goalType: 'COMMENT',
+      requirement: 'Leave 10 helpful comments.',
+      pointsRequired: 10,
+      difficulty: 'EASY',
+      imageKey: 'badge.badge-2',
+    },
+    {
+      baseName: 'Bridge Builder',
+      baseGoalTitle: 'Support Others',
+      description: 'Build bridges by engaging with the community.',
+      type: 'ACHIEVEMENT',
+      rarity: 'RARE',
+      categoryId: getCategoryId('Bridge'),
+      goalType: 'LIKE_GIVEN',
+      requirement: 'Give 50 likes.',
+      pointsRequired: 50,
+      difficulty: 'MEDIUM',
+      imageKey: 'badge.badge-3',
+    },
+    {
+      baseName: 'Brand Advocate',
+      baseGoalTitle: 'Build Your Collection',
+      description: 'Explore brands and curate your inventory.',
+      type: 'BRAND',
+      rarity: 'RARE',
+      categoryId: getCategoryId('Brand'),
+      goalType: 'INVENTORY',
+      requirement: 'Add 15 items to your inventory.',
+      pointsRequired: 15,
+      difficulty: 'MEDIUM',
+      imageKey: 'badge.badge-4',
+    },
+    {
+      baseName: 'Community Helper',
+      baseGoalTitle: 'Engage with the Community',
+      description: 'Be present and helpful in the community.',
+      type: 'ACHIEVEMENT',
+      rarity: 'COMMON',
+      categoryId: getCategoryId('Community'),
+      goalType: 'COMMENT',
+      requirement: 'Write 15 comments.',
+      pointsRequired: 15,
+      difficulty: 'EASY',
+      imageKey: 'badge.badge-5',
+    },
+    {
+      baseName: 'Special Star',
+      baseGoalTitle: 'Earn Recognition',
+      description: 'A special badge for consistent engagement.',
+      type: 'ACHIEVEMENT',
+      rarity: 'EPIC',
+      categoryId: getCategoryId('Special'),
+      goalType: 'LIKE_RECEIVED',
+      requirement: 'Receive 75 likes on your posts.',
+      pointsRequired: 75,
+      difficulty: 'HARD',
+      imageKey: 'badge.badge-6',
+    },
+    {
+      baseName: 'Cosmetic Collector',
+      baseGoalTitle: 'Customize Your Profile',
+      description: 'Collect cosmetic rewards through activity.',
+      type: 'COSMETIC',
+      rarity: 'COMMON',
+      categoryId: getCategoryId('Cosmetic'),
+      goalType: 'POST',
+      requirement: 'Publish 5 posts.',
+      pointsRequired: 5,
+      difficulty: 'EASY',
+      imageKey: 'badge.badge-7',
+    },
+  ]
+
+  const ladderBadgeConfigs = ladderBadgeBaseConfigs.flatMap((cfg) => {
+    const make = (n: 1 | 2) => ({
+      name: `${cfg.baseName} ${n}`,
+      description: cfg.description,
+      type: cfg.type,
+      rarity: cfg.rarity,
+      categoryId: cfg.categoryId,
+      goalType: cfg.goalType,
+      requirement:
+        n === 1 ? cfg.requirement : cfg.requirement.replace(/\b(\d+)\b/g, (m) => String(Number(m) * 2)),
+      pointsRequired: n === 1 ? cfg.pointsRequired : cfg.pointsRequired * 2,
+      difficulty: n === 1 ? cfg.difficulty : cfg.difficulty === 'EASY' ? 'MEDIUM' : 'HARD',
+      goalTitle: `${cfg.baseGoalTitle} ${n}`,
+      imageKey: cfg.imageKey,
+    })
+    return [make(1), make(2)]
+  })
+
+  const ladderBadges: Array<(typeof ladderBadgeConfigs)[number] & { badgeId: string }> = []
+  for (const cfg of ladderBadgeConfigs) {
+    const badge = await ensureBadge({
+      name: cfg.name,
+      description: cfg.description,
+      type: cfg.type,
+      rarity: cfg.rarity,
+      categoryId: cfg.categoryId,
+      imageKey: cfg.imageKey,
+    })
+    ladderBadges.push({ ...cfg, badgeId: badge.id })
+  }
+
+  for (const cfg of ladderBadges) {
+    await ensureAchievementGoal({
+      chainId: ladderChain.id,
+      title: cfg.goalTitle,
+      requirement: cfg.requirement,
+      goalType: cfg.goalType as any,
+      rewardBadgeId: cfg.badgeId,
+      pointsRequired: cfg.pointsRequired,
+      difficulty: cfg.difficulty,
+    })
+  }
+
+  console.log(`✅ Achievement Ladder seeded: ${ladderBadges.length} badges & goals`)
 
   // 4. Default Badges
   // NOT: Ana badge'ler (17 badge) artık setup-badges.ts script'i ile oluşturuluyor
@@ -7024,6 +7252,7 @@ async function main() {
   console.log(`✅ ${boostOptions.length} boost seçeneği oluşturuldu/güncellendi`)
 
   // Bridge achievement chain kodu eski badge'lere bağımlı olduğu için şimdilik devre dışı
+  /*
     {
       name: 'Gürültü Avcısı',
       description: 'Gürültü engelleme teknolojilerini en iyi anlattınız',
@@ -7282,6 +7511,7 @@ async function main() {
       categoryId: eventCategory.id,
     },
   ]
+  */
   /*
   // Create bridge achievement chain for bridge badges
   let bridgeAchievementChain = await prisma.achievementChain.findFirst({
@@ -7441,6 +7671,13 @@ async function main() {
   console.log('✅ Bridge badge achievement goals created')
   */
 
+  /*
+   * NOTE:
+   * Aşağıdaki "Comparison Metrics" + "Boost Options" bloğu dosyada daha önce zaten
+   * oluşturulduğu için burada tekrar edilmesi TS tarafında "redeclare" hatası üretir.
+   * Bu tekrar blok şimdilik devre dışı bırakıldı.
+   */
+  /*
   // 5. Comparison Metrics
   progress.increment('Karşılaştırma metrikleri oluşturuluyor...')
   console.log('\n📊 Creating comparison metrics...')
@@ -7487,6 +7724,7 @@ async function main() {
     })
   )
   console.log(`✅ ${boostOptions.length} boost option oluşturuldu/güncellendi`)
+  */
 
   // NOT: Sub Categories artık seedProductCategories() içinde oluşturuluyor
   // Electronics ve Beauty için tüm subcategory/product group yapısı orada
@@ -7864,6 +8102,20 @@ async function main() {
       console.error('   Stack:', error.stack)
     }
     console.log('⚠️  Seed devam ediyor ama marka logoları güncellenemedi')
+  }
+
+  // ===== ACHIEVEMENT PROGRESS BACKFILL (AFTER ALL CONTENT SEEDED) =====
+  progress.increment('Achievement progress backfill...')
+  try {
+    await backfillAchievementProgressForSeed()
+    progress.increment('Achievement progress backfill tamamlandı')
+  } catch (error) {
+    console.error('❌ Achievement progress backfill hatası:', error)
+    if (error instanceof Error) {
+      console.error('   Message:', error.message)
+      console.error('   Stack:', error.stack)
+    }
+    console.log('⚠️  Seed devam ediyor ama achievement progress backfill yapılamadı')
   }
 
   // ===== SUMMARY =====

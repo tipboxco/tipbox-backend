@@ -22,6 +22,7 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import { S3Service } from '../src/infrastructure/s3/s3.service';
+import { getPublicMediaBaseUrl } from '../src/infrastructure/config/media.config';
 
 interface SeedAsset {
   key: string;
@@ -35,14 +36,10 @@ const TEST_USER_ID = '480f5de9-b691-4d70-a6a8-2789226f4e07';
 const TARGET_USER_ID = '248cc91f-b551-4ecc-a885-db1163571330';
 const bucketName = process.env.S3_BUCKET_NAME || 'tipbox-media';
 
-// Frontend'in erişeceği public MinIO endpoint'i
-const rawPublicEndpoint =
-  process.env.SEED_MEDIA_BASE_URL ||
-  process.env.MINIO_PUBLIC_ENDPOINT ||
-  process.env.S3_ENDPOINT ||
-  'http://localhost:9000';
-const publicEndpoint = rawPublicEndpoint.replace('minio:9000', 'localhost:9000').replace(/\/$/, '');
-const publicBucketBase = `${publicEndpoint}/${bucketName}`;
+// Public base (object root). Örn:
+// - Direct MinIO: http://192.168.1.116:9000/tipbox-media
+// - Nginx proxy:  https://api-test.tipbox.co/media
+const publicBucketBase = getPublicMediaBaseUrl().replace(/\/$/, '');
 const outputMapPath = path.join(__dirname, '../prisma/seed/seed-media-map.json');
 
 const assetsBasePath = path.join(__dirname, '../tests/assets');
@@ -838,7 +835,7 @@ async function uploadSeedMedia(): Promise<void> {
   await fs.writeFile(outputMapPath, JSON.stringify(uploadResults, null, 2), 'utf-8');
 
   console.log(`\n📄 seed-media-map.json güncellendi: ${outputMapPath}`);
-  console.log(`ℹ️  URL'ler runtime'da ${publicEndpoint} endpoint'inden oluşturulacak`);
+  console.log(`ℹ️  URL'ler runtime'da ${publicBucketBase} base'inden oluşturulacak`);
   console.log(`\n📊 Yükleme Özeti:`);
   console.log(`   ✅ Yeni yüklenen: ${uploadedCount}`);
   console.log(`   ⏭️  Zaten mevcut (atlandı): ${skippedCount}`);

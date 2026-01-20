@@ -87,6 +87,7 @@ services:
     environment:
       - NODE_ENV=test
       - NODE_OPTIONS=--max-old-space-size=4096
+      - SKIP_DB_MIGRATIONS=${SKIP_DB_MIGRATIONS:-0}
       # Container içinde çalışırken servis isimlerini kullan
       - DATABASE_URL=postgresql://tipbox_user:tipbox_test_password@postgres:5432/tipbox_test
       - REDIS_URL=redis://redis:6379

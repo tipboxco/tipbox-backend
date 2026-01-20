@@ -15,6 +15,8 @@ import { CacheService } from '../../infrastructure/cache/cache.service';
 import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
 import { GeminiService } from '../../infrastructure/ai/gemini.service';
 import { AiExperienceSplitPrismaRepository } from '../../infrastructure/repositories/ai-experience-split-prisma.repository';
+import { AchievementProgressService } from '../gamification/achievement-progress.service';
+import { AchievementGoalType } from '../../domain/gamification/achievement-goal-type.enum';
 
 export class InventoryService {
   private readonly prisma: ReturnType<typeof getPrisma>;
@@ -23,6 +25,7 @@ export class InventoryService {
   private readonly cacheService: CacheService;
   private readonly geminiService: GeminiService;
   private readonly experienceSnippetRepo: AiExperienceSplitPrismaRepository;
+  private readonly achievementProgressService: AchievementProgressService;
 
   constructor() {
     this.prisma = getPrisma();
@@ -31,6 +34,7 @@ export class InventoryService {
     this.cacheService = CacheService.getInstance();
     this.geminiService = GeminiService.getInstance();
     this.experienceSnippetRepo = new AiExperienceSplitPrismaRepository();
+    this.achievementProgressService = new AchievementProgressService();
   }
 
   /**
@@ -423,6 +427,18 @@ export class InventoryService {
         productId: dto.productId,
         inventoryId: inventory.id,
       });
+
+      // Achievement Ladder progress (event dışı) - async
+      this.achievementProgressService
+        .incrementProgress(userId, AchievementGoalType.INVENTORY, 1)
+        .catch((err) => {
+          logger.warn({
+            message: 'Failed to increment achievement progress for inventory create',
+            userId,
+            inventoryId: inventory.id,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
 
       return {
         id: inventory.id,

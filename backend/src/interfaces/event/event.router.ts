@@ -5,12 +5,164 @@ import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { authMiddleware } from '../auth/auth.middleware';
 import { getErrorMessage, hasErrorMessage, errorMessageIncludes } from '../../infrastructure/errors/error-helper';
 import logger from '../../infrastructure/logger/logger';
-import { UpdateEventRequest } from './event.dto';
 import { isAdmin } from '../../infrastructure/auth/role-checker';
 
 const router = Router();
 const eventService = new EventService();
 const userService = new UserService();
+
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *     EventProductSummary:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *         name:
+ *           type: string
+ *         description:
+ *           type: string
+ *           nullable: true
+ *         imageUrl:
+ *           type: string
+ *           nullable: true
+ *     EventCard:
+ *       type: object
+ *       properties:
+ *         eventId:
+ *           type: string
+ *         image:
+ *           type: string
+ *           nullable: true
+ *         title:
+ *           type: string
+ *         description:
+ *           type: string
+ *           nullable: true
+ *         startDate:
+ *           type: string
+ *           format: date-time
+ *         endDate:
+ *           type: string
+ *           format: date-time
+ *         interaction:
+ *           type: integer
+ *         eventType:
+ *           type: string
+ *           enum: [PICKS, ROASTS]
+ *         product:
+ *           $ref: '#/components/schemas/EventProductSummary'
+ *           nullable: true
+ *         participants:
+ *           type: array
+ *           items:
+ *             type: object
+ *             properties:
+ *               userId:
+ *                 type: string
+ *               avatar:
+ *                 type: string
+ *                 nullable: true
+ *               userName:
+ *                 type: string
+ *     EventDetail:
+ *       type: object
+ *       properties:
+ *         eventId:
+ *           type: string
+ *         banner:
+ *           type: string
+ *           nullable: true
+ *         title:
+ *           type: string
+ *         description:
+ *           type: string
+ *           nullable: true
+ *         startDate:
+ *           type: string
+ *           format: date-time
+ *         endDate:
+ *           type: string
+ *           format: date-time
+ *         interaction:
+ *           type: integer
+ *         eventType:
+ *           type: string
+ *           enum: [PICKS, ROASTS]
+ *         product:
+ *           $ref: '#/components/schemas/EventProductSummary'
+ *           nullable: true
+ *         isJoined:
+ *           type: boolean
+ *         status:
+ *           type: string
+ *           enum: [active, upcoming]
+ *         rewards:
+ *           type: array
+ *           items:
+ *             type: object
+ *             properties:
+ *               id:
+ *                 type: string
+ *               image:
+ *                 type: string
+ *                 nullable: true
+ *               title:
+ *                 type: string
+ *     LimitedTimeEventLeaderboardUser:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *         avatar:
+ *           type: string
+ *           nullable: true
+ *         rank:
+ *           type: integer
+ *     LimitedTimeEventUser:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *         avatar:
+ *           type: string
+ *           nullable: true
+ *         rank:
+ *           type: integer
+ *         score:
+ *           type: integer
+ *     LimitedTimeEventResponse:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *         title:
+ *           type: string
+ *         description:
+ *           type: string
+ *           nullable: true
+ *         leaderboardUsers:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/LimitedTimeEventLeaderboardUser'
+ *         userScore:
+ *           $ref: '#/components/schemas/LimitedTimeEventUser'
+ *           nullable: true
+ *         backgroundImage:
+ *           type: string
+ *           nullable: true
+ *         eventImage:
+ *           type: string
+ *           nullable: true
+ *         startDate:
+ *           type: string
+ *           format: date-time
+ *         endDate:
+ *           type: string
+ *           format: date-time
+ */
 
 /**
  * @openapi

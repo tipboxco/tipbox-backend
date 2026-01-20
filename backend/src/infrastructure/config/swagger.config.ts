@@ -1,5 +1,36 @@
 import swaggerJSDoc from 'swagger-jsdoc';
+import fs from 'fs';
+import path from 'path';
 import config from './index';
+
+/**
+ * swagger-jsdoc `apis` path'leri process.cwd()'ye göre resolve edilir.
+ * Prod/test gibi ortamlarda proses farklı bir cwd ile başlayabildiği için
+ * relative path'ler (./src/...) bazen hiç eşleşmez ve components/schemas gibi
+ * tanımlar spec'e giremez. Bu yüzden backend root'u __dirname üzerinden sabitleyip
+ * absolute glob path'leri kullanıyoruz.
+ *
+ * - src runtime:  <backend>/src/infrastructure/config  -> ../../.. = <backend>
+ * - dist runtime: <backend>/dist/infrastructure/config -> ../../.. = <backend>
+ */
+const BACKEND_ROOT = path.resolve(__dirname, '../../..');
+function getSwaggerApis(): string[] {
+  const srcInterfacesDir = path.join(BACKEND_ROOT, 'src', 'interfaces');
+  const distInterfacesDir = path.join(BACKEND_ROOT, 'dist', 'interfaces');
+
+  // Aynı anda hem src hem dist varsa, duplicate/çakışma yaşamamak için src'yi tercih et.
+  if (fs.existsSync(srcInterfacesDir)) {
+    return [path.join(srcInterfacesDir, '**/*.ts')];
+  }
+
+  // Prod/test image'larda src yoksa dist'i kullan.
+  if (fs.existsSync(distInterfacesDir)) {
+    return [path.join(distInterfacesDir, '**/*.js')];
+  }
+
+  // Fallback: relative glob (en azından local geliştirmede çalışır)
+  return ['./src/interfaces/**/*.ts'];
+}
 
 export function getSwaggerServers() {
   const PORT = process.env.PORT || 3000;
@@ -69,9 +100,7 @@ export function getSwaggerOptions() {
       },
       security: [{ bearerAuth: [] }],
     },
-    apis: [
-      './src/interfaces/**/*.ts',
-    ],
+    apis: getSwaggerApis(),
   };
 }
 

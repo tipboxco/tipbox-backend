@@ -14,7 +14,13 @@ import {
   LimitedTimeEventResponse,
   LimitedTimeEventLeaderboardUser,
   LimitedTimeEventUser,
-  UpdateEventRequest,
+  EventBadgesResponse,
+  EventBadgeItem,
+  EventUserProgress,
+  BadgeProgress,
+  LeaderboardEntry,
+  EventLeaderboard,
+  EventBadgeDetailResponse,
 } from '../../interfaces/event/event.dto';
 import { FeedItem, FeedItemType } from '../../interfaces/feed/feed.dto';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
@@ -48,6 +54,8 @@ export class EventService {
       if (userId) {
         keysToDelete.push(`events:detail:${eventId}:${userId}`);
         keysToDelete.push(`events:active:${userId}:first:20`);
+        keysToDelete.push(`events:v2:active:${userId}:first:20`);
+        keysToDelete.push(`events:v3:active:${userId}:first:20`);
       }
 
       // ✅ Event posts cache - TÜM cursor'lar için pattern matching
@@ -90,6 +98,8 @@ export class EventService {
 
       // Guest için de active events cache'i temizle
       keysToDelete.push(`events:active:guest:first:20`);
+      keysToDelete.push(`events:v2:active:guest:first:20`);
+      keysToDelete.push(`events:v3:active:guest:first:20`);
 
       // Tüm cache key'lerini sil
       let deletedCount = 0;
@@ -122,7 +132,9 @@ export class EventService {
     userId?: string,
     options?: { cursor?: string; limit?: number }
   ): Promise<ActiveEvent> {
-    const cacheKey = `events:active:${userId || 'guest'}:${options?.cursor || 'first'}:${options?.limit || 20}`;
+    // NOTE: v2 -> eventType (PICKS/ROASTS) eklendiği için cache version bump
+    // NOTE: v3 -> product eklendiği için cache version bump
+    const cacheKey = `events:v3:active:${userId || 'guest'}:${options?.cursor || 'first'}:${options?.limit || 20}`;
 
     // Cache check (otomatik hit/miss işaretler)
     try {
@@ -146,15 +158,20 @@ export class EventService {
         endDate: { gte: now },
       };
 
-      const events = await this.prisma.wishboxEvent.findMany({
+      const events = (await this.prisma.wishboxEvent.findMany({
         where,
         orderBy: { startDate: 'asc' },
+        include: {
+          product: {
+            select: { id: true, name: true, description: true, imageUrl: true },
+          },
+        },
         take: limit + 1,
         ...(options?.cursor && {
           cursor: { id: options.cursor },
           skip: 1,
         }),
-      });
+      } as any)) as any[];
 
       const hasMore = events.length > limit;
       const resultEvents = hasMore ? events.slice(0, limit) : events;
@@ -162,7 +179,7 @@ export class EventService {
 
       // Map events to EventCard (aktif event'ler için interaction ve participants da dolduralım)
       const eventCards: EventCard[] = await Promise.all(
-        resultEvents.map(async (event) => {
+        resultEvents.map(async (event: any) => {
           const interaction = await this.getEventInteraction(event.id);
           const participants = await this.getEventParticipants(event.id, 2);
 
@@ -179,6 +196,15 @@ export class EventService {
             startDate: event.startDate.toISOString(),
             endDate: event.endDate.toISOString(),
             interaction,
+            eventType: (event as any).feedType,
+            product: event.product
+              ? {
+                  id: event.product.id,
+                  name: event.product.name,
+                  description: event.product.description,
+                  imageUrl: resolveMediaUrl(event.product.imageUrl || null),
+                }
+              : null,
             participants,
           };
         })
@@ -224,15 +250,20 @@ export class EventService {
         startDate: { gt: now },
       };
 
-      const events = await this.prisma.wishboxEvent.findMany({
+      const events = (await this.prisma.wishboxEvent.findMany({
         where,
         orderBy: { startDate: 'asc' },
+        include: {
+          product: {
+            select: { id: true, name: true, description: true, imageUrl: true },
+          },
+        },
         take: limit + 1,
         ...(options?.cursor && {
           cursor: { id: options.cursor },
           skip: 1,
         }),
-      });
+      } as any)) as any[];
 
       const hasMore = events.length > limit;
       const resultEvents = hasMore ? events.slice(0, limit) : events;
@@ -240,7 +271,7 @@ export class EventService {
 
       // Map events to EventCard
       const eventCards: EventCard[] = await Promise.all(
-        resultEvents.map(async (event) => {
+        resultEvents.map(async (event: any) => {
           const interaction = await this.getEventInteraction(event.id);
           const participants = await this.getEventParticipants(event.id, 2); // Get first 2 participants
 
@@ -257,6 +288,15 @@ export class EventService {
             startDate: event.startDate.toISOString(),
             endDate: event.endDate.toISOString(),
             interaction,
+            eventType: (event as any).feedType,
+            product: event.product
+              ? {
+                  id: event.product.id,
+                  name: event.product.name,
+                  description: event.product.description,
+                  imageUrl: resolveMediaUrl(event.product.imageUrl || null),
+                }
+              : null,
             participants,
           };
         })
@@ -308,12 +348,17 @@ export class EventService {
       }
 
       // Bu event'lerden aktif olanları getir
-      const events = await this.prisma.wishboxEvent.findMany({
+      const events = (await this.prisma.wishboxEvent.findMany({
         where: {
           id: { in: eventIds },
           status: 'PUBLISHED',
           startDate: { lte: now },
           endDate: { gte: now },
+        },
+        include: {
+          product: {
+            select: { id: true, name: true, description: true, imageUrl: true },
+          },
         },
         orderBy: { startDate: 'desc' },
         take: limit + 1,
@@ -321,7 +366,7 @@ export class EventService {
           cursor: { id: options.cursor },
           skip: 1,
         }),
-      });
+      } as any)) as any[];
 
       const hasMore = events.length > limit;
       const resultEvents = hasMore ? events.slice(0, limit) : events;
@@ -329,7 +374,7 @@ export class EventService {
 
       // EventCard formatına çevir
       const eventCards: EventCard[] = await Promise.all(
-        resultEvents.map(async (event) => {
+        resultEvents.map(async (event: any) => {
           const interaction = await this.getEventInteraction(event.id);
           const participants = await this.getEventParticipants(event.id, 2);
 
@@ -355,6 +400,15 @@ export class EventService {
             startDate: event.startDate.toISOString(),
             endDate: event.endDate.toISOString(),
             interaction,
+            eventType: (event as any).feedType,
+            product: event.product
+              ? {
+                  id: event.product.id,
+                  name: event.product.name,
+                  description: event.product.description,
+                  imageUrl: resolveMediaUrl(event.product.imageUrl || null),
+                }
+              : null,
             participants,
             userPostCount, // Kullanıcının post sayısı
           };
@@ -380,9 +434,12 @@ export class EventService {
    */
   async getEventDetail(eventId: string, userId?: string): Promise<EventDetail> {
     try {
-      const event = await this.prisma.wishboxEvent.findUnique({
+      const event = (await this.prisma.wishboxEvent.findUnique({
         where: { id: eventId },
         include: {
+          product: {
+            select: { id: true, name: true, description: true, imageUrl: true },
+          },
           rewards: {
             where: { rewardType: 'BADGE' },
             include: {
@@ -394,7 +451,7 @@ export class EventService {
             },
           },
         },
-      });
+      } as any)) as any;
 
       if (!event) {
         throw new Error('Event not found');
@@ -458,6 +515,15 @@ export class EventService {
         startDate: event.startDate.toISOString(),
         endDate: event.endDate.toISOString(),
         interaction,
+        eventType: (event as any).feedType,
+        product: event.product
+          ? {
+              id: event.product.id,
+              name: event.product.name,
+              description: event.product.description,
+              imageUrl: resolveMediaUrl(event.product.imageUrl || null),
+            }
+          : null,
         isJoined,
         status,
         rewards: rewardBadges,

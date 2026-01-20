@@ -19,6 +19,9 @@ import { ExperienceStatus } from '../../domain/content/experience-status.enum';
  *     ExperienceStatus:
  *       type: string
  *       enum: [own, tested]
+ *     ProductStatus:
+ *       type: string
+ *       enum: [own, tried]
  *     CreatePostRequest:
  *       type: object
  *       required:
@@ -47,6 +50,9 @@ import { ExperienceStatus } from '../../domain/content/experience-status.enum';
  *           type: string
  *           description: Optional event ID to link post to event
  *           example: "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+ *         productStatus:
+ *           $ref: '#/components/schemas/ProductStatus'
+ *           description: (Roasts) Product status for the event post
  *     CreateTipsAndTricksPostRequest:
  *       type: object
  *       required:
@@ -276,6 +282,7 @@ export interface CreatePostRequest {
   title?: string; // Optional title field
   images?: string[];
   eventId?: string; // Optional event ID to link post to event
+  productStatus?: 'own' | 'tried'; // ✅ YENİ: Roast event post product status
 }
 
 export interface CreateTipsAndTricksPostRequest {

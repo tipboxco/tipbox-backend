@@ -36,6 +36,8 @@ import { CacheService } from '../../infrastructure/cache/cache.service';
 import { invalidateCatalogPostsCache } from '../../infrastructure/cache/cache-invalidation';
 import { EventMetricsService } from '../event/event-metrics.service';
 import { BadgeEligibilityService } from '../gamification/badge-eligibility.service';
+import { AchievementProgressService } from '../gamification/achievement-progress.service';
+import { AchievementGoalType } from '../../domain/gamification/achievement-goal-type.enum';
 
 export class PostService {
   private postRepo: ContentPostPrismaRepository;
@@ -50,6 +52,7 @@ export class PostService {
   private s3Service: S3Service;
   private eventMetricsService: EventMetricsService;
   private badgeEligibilityService: BadgeEligibilityService;
+  private achievementProgressService: AchievementProgressService;
 
   /**
    * Search posts by title and body
@@ -111,6 +114,7 @@ export class PostService {
     this.s3Service = new S3Service();
     this.eventMetricsService = new EventMetricsService();
     this.badgeEligibilityService = new BadgeEligibilityService();
+    this.achievementProgressService = new AchievementProgressService();
   }
 
   /**
@@ -288,6 +292,20 @@ export class PostService {
       if (request.eventId) {
         await this.validateEvent(request.eventId);
         await this.validateEventMembership(userId, request.eventId);
+
+        // ✅ ROASTS event'lerde productStatus beklenir (app own|tried gönderir)
+        const event = await this.prisma.wishboxEvent.findUnique({
+          where: { id: request.eventId },
+          select: { feedType: true },
+        });
+        if ((event as any)?.feedType === 'ROASTS') {
+          if (!request.productStatus) {
+            throw new Error('productStatus is required for ROASTS event posts');
+          }
+          if (request.productStatus !== 'own' && request.productStatus !== 'tried') {
+            throw new Error("productStatus must be 'own' or 'tried'");
+          }
+        }
       }
 
       const contextIds = await this.resolveContextIds(
@@ -314,7 +332,8 @@ export class PostService {
         contextIds.productId,
         false,
         false,
-        request.eventId
+        request.eventId,
+        request.productStatus
       );
 
       // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
@@ -1008,6 +1027,18 @@ export class PostService {
       logger.info(`Experience post created: ${post.id} by user ${userId}`, {
         experienceSnippetId: request.experienceSnippetId || null
       });
+
+      // Achievement Ladder progress (event dışı) - async
+      this.achievementProgressService
+        .incrementProgress(userId, AchievementGoalType.POST, 1)
+        .catch((err) => {
+          logger.warn({
+            message: 'Failed to increment achievement progress for experience post',
+            userId,
+            postId: post.id,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
       
       // Event cache'i invalidate et (eventId varsa)
       if (request.eventId) {
