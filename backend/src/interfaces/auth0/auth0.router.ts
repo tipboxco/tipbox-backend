@@ -203,6 +203,30 @@ async function findOrCreateUser(
 }
 
 /**
+ * Kullanıcı için profil yoksa provider bilgileriyle oluşturur
+ */
+async function ensureProfileExists(userId: string, auth0Name: string | null | undefined) {
+  const profile = await profileRepo.findByUserId(userId);
+  
+  if (!profile && auth0Name) {
+    try {
+      await profileRepo.create(userId, auth0Name);
+      logger.info({
+        message: 'Profil provider bilgileriyle oluşturuldu',
+        userId,
+        displayName: auth0Name
+      });
+    } catch (error) {
+      logger.warn({
+        message: 'Profil oluşturulamadı',
+        userId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+}
+
+/**
  * Kullanıcı için profil ve avatar bilgilerini çeker
  */
 async function getUserProfileData(userId: string, auth0Name: string | null, auth0Picture: string | null) {
@@ -515,6 +539,9 @@ router.post('/email', validateBody(LoginSchema), asyncHandler(async (req: Reques
       });
     }
 
+    // Profil yoksa provider bilgileriyle oluştur
+    await ensureProfileExists(user.id, decoded.name || null);
+
     // Email doğrulanmadıysa: doğrulama kodu gönder ve token dönme
     if (!user.emailVerified) {
       const sendResult = await authService.sendEmailVerificationCode(decoded.email || email);
@@ -651,6 +678,9 @@ router.post('/register', validateBody(RegisterSchema), asyncHandler(async (req: 
       });
     }
 
+    // Profil yoksa provider bilgileriyle oluştur
+    await ensureProfileExists(user.id, decoded.name || name || null);
+
     // Email doğrulanmadıysa: doğrulama kodu gönder ve token dönme
     if (!user.emailVerified) {
       const sendResult = await authService.sendEmailVerificationCode(decoded.email || email);
@@ -667,21 +697,6 @@ router.post('/register', validateBody(RegisterSchema), asyncHandler(async (req: 
         email: decoded.email || email,
         message: 'Kayıt başarılı. Email doğrulama kodu gönderildi.'
       });
-    }
-
-    // Profil oluştur (yoksa)
-    let profile = await profileRepo.findByUserId(user.id);
-    if (!profile && name) {
-      try {
-        const { getPrisma } = await import('../../infrastructure/repositories/prisma.client');
-        const prisma = getPrisma();
-        await prisma.profile.create({
-          data: { userId: user.id, displayName: name }
-        });
-        profile = await profileRepo.findByUserId(user.id);
-      } catch (error) {
-        logger.warn({ message: 'Profile oluşturulamadı', error });
-      }
     }
 
     // Profil ve token bilgilerini al
@@ -778,6 +793,9 @@ router.get('/token', requiresAuth(), asyncHandler(async (req: Request, res: Resp
         error: 'Kullanıcı bulunamadı'
       });
     }
+
+    // Profil yoksa provider bilgileriyle oluştur
+    await ensureProfileExists(user.id, auth0User.name || null);
 
     // Email doğrulanmadıysa: doğrulama kodu gönder ve token dönme
     if (!user.emailVerified) {
