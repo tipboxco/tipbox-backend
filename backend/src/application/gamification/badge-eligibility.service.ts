@@ -73,6 +73,7 @@ export class BadgeEligibilityService {
 
   /**
    * Kullanıcının event badge'lerini kontrol et ve hak ettiği badge'leri ver
+   * ✅ ÖNEMLİ: Kullanıcının event'e join olması gerekir (ödül/rozet almak için)
    */
   async checkAndGrantEventBadges(
     userId: string,
@@ -84,6 +85,24 @@ export class BadgeEligibilityService {
       const isActive = await this.isEventActive(eventId);
       if (!isActive) {
         logger.info(`Event ${eventId} is not active, skipping badge check for user ${userId}`);
+        return;
+      }
+
+      // ✅ YENİ: Kullanıcının event'e join olup olmadığını kontrol et
+      const userStats = await this.prisma.wishboxStats.findUnique({
+        where: {
+          userId_eventId: {
+            userId,
+            eventId,
+          },
+        },
+      });
+
+      if (!userStats) {
+        logger.info(
+          `User ${userId} has not joined event ${eventId}, skipping badge check. ` +
+          `User must join the event before receiving badges/rewards.`
+        );
         return;
       }
 
@@ -148,6 +167,44 @@ export class BadgeEligibilityService {
     } catch (error) {
       logger.error(`Failed to check and grant badges for user ${userId} in event ${eventId}:`, error);
       // Badge kontrolü başarısız olsa da ana işlem devam etsin
+    }
+  }
+
+  /**
+   * Kullanıcının survey'e cevap verip vermediğini kontrol et
+   * ✅ ÖNEMLİ: Survey reward/badge almak için kullanıcının survey'e cevap vermiş olması gerekir
+   * @param userId - Kullanıcı ID'si
+   * @param surveyId - Survey ID'si
+   * @returns Kullanıcı survey'e cevap vermişse true, aksi halde false
+   */
+  async hasUserAnsweredSurvey(userId: string, surveyId: string): Promise<boolean> {
+    try {
+      // Survey'in sorularını getir
+      const survey = await this.prisma.brandSurvey.findUnique({
+        where: { id: surveyId },
+        include: {
+          questions: true,
+        },
+      });
+
+      if (!survey || survey.questions.length === 0) {
+        return false;
+      }
+
+      // Kullanıcının survey'in tüm sorularına cevap verip vermediğini kontrol et
+      const questionIds = survey.questions.map((q) => q.id);
+      const userAnswers = await this.prisma.brandSurveyAnswer.findMany({
+        where: {
+          userId,
+          questionId: { in: questionIds },
+        },
+      });
+
+      // Tüm sorulara cevap verilmişse true döndür
+      return userAnswers.length === questionIds.length;
+    } catch (error) {
+      logger.error(`Failed to check if user ${userId} answered survey ${surveyId}:`, error);
+      return false;
     }
   }
 }
