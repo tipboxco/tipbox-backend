@@ -92,34 +92,53 @@ export class CatalogService {
   }
 
   /**
-   * Kategoriye göre sub-kategorileri listele
+   * Kategoriye göre sub-kategorileri listele (cursor-based pagination)
    */
-  async getSubCategoriesByCategoryId(categoryId: string): Promise<SubCategoryItem[]> {
-    return withCache(
-      CACHE_KEYS.CATEGORY(categoryId),
-      async () => this.fetchSubCategories(categoryId),
-      CACHE_TTL.CATEGORY, // 2 saat
-      { logPrefix: 'CatalogService' }
-    );
-  }
+  async getSubCategoriesByCategoryId(
+    categoryId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{
+    items: SubCategoryItem[];
+    pagination: {
+      cursor?: string;
+      hasMore: boolean;
+      limit: number;
+    };
+  }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
 
-  private async fetchSubCategories(categoryId: string): Promise<SubCategoryItem[]> {
     try {
+      const whereClause: any = {
+        parentId: categoryId,
+      };
+
+      if (cursor) {
+        whereClause.id = {
+          gt: cursor,
+        };
+      }
+
       const subCategories = await prisma.category.findMany({
-        where: {
-          parentId: categoryId,
-        },
+        where: whereClause,
         select: {
           id: true,
           name: true,
           thumbnail: true,
         },
         orderBy: {
-          name: 'asc',
+          id: 'asc', // Cursor-based pagination için id'ye göre sırala
         },
+        take: limit + 1, // Bir fazla al ki hasMore'u kontrol edebilelim
       });
 
-      return subCategories.map((subCategory: any) => {
+      const hasMore = subCategories.length > limit;
+      const resultSubCategories = hasMore ? subCategories.slice(0, limit) : subCategories;
+      const nextCursor = hasMore && resultSubCategories.length > 0 
+        ? resultSubCategories[resultSubCategories.length - 1].id 
+        : undefined;
+
+      const items = resultSubCategories.map((subCategory: any) => {
         const imageUrl = resolveMediaUrl(subCategory.thumbnail);
 
         return {
@@ -129,6 +148,15 @@ export class CatalogService {
           image: imageUrl,
         };
       });
+
+      return {
+        items,
+        pagination: {
+          cursor: nextCursor,
+          hasMore,
+          limit,
+        },
+      };
     } catch (error) {
       logger.error(`Failed to get sub-categories for category ${categoryId}:`, error);
       throw error;
@@ -136,23 +164,35 @@ export class CatalogService {
   }
 
   /**
-   * Sub-kategoriye göre product group'ları listele
+   * Sub-kategoriye göre product group'ları listele (cursor-based pagination)
    */
-  async getProductGroupsBySubCategoryId(subCategoryId: string): Promise<ProductGroupItem[]> {
-    return withCache(
-      CACHE_KEYS.SUB_CATEGORY(subCategoryId),
-      async () => this.fetchProductGroups(subCategoryId),
-      CACHE_TTL.SUB_CATEGORY, // 2 saat
-      { logPrefix: 'CatalogService' }
-    );
-  }
+  async getProductGroupsBySubCategoryId(
+    subCategoryId: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{
+    items: ProductGroupItem[];
+    pagination: {
+      cursor?: string;
+      hasMore: boolean;
+      limit: number;
+    };
+  }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
 
-  private async fetchProductGroups(subCategoryId: string): Promise<ProductGroupItem[]> {
     try {
+      const whereClause: any = {
+        parentId: subCategoryId,
+      };
+
+      if (cursor) {
+        whereClause.id = {
+          gt: cursor,
+        };
+      }
+
       const productGroups = await prisma.category.findMany({
-        where: {
-          parentId: subCategoryId
-        },
+        where: whereClause,
         select: {
           id: true,
           name: true,
@@ -160,11 +200,18 @@ export class CatalogService {
           parentId: true,
         },
         orderBy: {
-          name: 'asc',
+          id: 'asc', // Cursor-based pagination için id'ye göre sırala
         },
+        take: limit + 1, // Bir fazla al ki hasMore'u kontrol edebilelim
       });
 
-      return productGroups.map((group: any) => {
+      const hasMore = productGroups.length > limit;
+      const resultProductGroups = hasMore ? productGroups.slice(0, limit) : productGroups;
+      const nextCursor = hasMore && resultProductGroups.length > 0 
+        ? resultProductGroups[resultProductGroups.length - 1].id 
+        : undefined;
+
+      const items = resultProductGroups.map((group: any) => {
         const imageUrl = resolveMediaUrl(group.thumbnail);
 
         return {
@@ -174,6 +221,15 @@ export class CatalogService {
           subCategoryId: group.parentId || '',
         };
       });
+
+      return {
+        items,
+        pagination: {
+          cursor: nextCursor,
+          hasMore,
+          limit,
+        },
+      };
     } catch (error) {
       logger.error(`Failed to get product groups for sub-category ${subCategoryId}:`, error);
       throw error;
@@ -181,24 +237,23 @@ export class CatalogService {
   }
 
   /**
-   * Product group'a göre ürünleri listele
+   * Product group'a göre ürünleri listele (cursor-based pagination)
    */
-  async getProductsByProductGroupId(productGroupId: string, search?: string): Promise<ProductItem[]> {
+  async getProductsByProductGroupId(
+    productGroupId: string,
+    search?: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{
+    items: ProductItem[];
+    pagination: {
+      cursor?: string;
+      hasMore: boolean;
+      limit: number;
+    };
+  }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
     const searchTrimmed = search?.trim();
-    const cacheKey = `product-group:${productGroupId}:products:${searchTrimmed || 'all'}+1`;
-    return this.fetchProducts(productGroupId, searchTrimmed);
-    return withCache(
-      cacheKey,
-      async () => this.fetchProducts(productGroupId, searchTrimmed),
-      CACHE_TTL.CATEGORY_PRODUCTS, // 1 saat
-      { logPrefix: 'CatalogService' }
-    );
-  }
-
-  private async fetchProducts(productGroupId: string, search?: string): Promise<ProductItem[]> {
-   
-    // Gelen productGroupId aslında bir üst kategori veya ara kategori olabilir.
-    // O yüzden, öncelikle bu kategorinin altındaki tüm alt kategori id'lerini (children'lar dahil rekürsif olarak) bulmamız lazım, sonra ilgili id'lere sahip ürünleri getireceğiz.
 
     // Helper: kategori için tüm alt kategori id'lerini rekürsif olarak bul (kendisi dahil)
     async function getAllDescendantCategoryIds(categoryId: string): Promise<string[]> {
@@ -217,20 +272,30 @@ export class CatalogService {
 
       return ids;
     }
-    // productGroupId ile başla, tüm child/alt kategorilerin id'lerini bul
-    const categoryIds = await getAllDescendantCategoryIds(productGroupId);
+
     try {
+      // productGroupId ile başla, tüm child/alt kategorilerin id'lerini bul
+      const categoryIds = await getAllDescendantCategoryIds(productGroupId);
+
+      const whereClause: any = {
+        categoryId: { in: categoryIds },
+        ...(searchTrimmed && {
+          OR: [
+            { name: { contains: searchTrimmed, mode: 'insensitive' } },
+            { brand: { name: { contains: searchTrimmed, mode: 'insensitive' } } },
+            { description: { contains: searchTrimmed, mode: 'insensitive' } },
+          ],
+        }),
+      };
+
+      if (cursor) {
+        whereClause.id = {
+          gt: cursor,
+        };
+      }
+
       const products = await prisma.product.findMany({
-        where: {
-          categoryId: {in:categoryIds},
-          ...(search && {
-            OR: [
-              { name: { contains: search, mode: 'insensitive' } },
-              { brand: { name: { contains: search, mode: 'insensitive' } } },
-              { description: { contains: search, mode: 'insensitive' } },
-            ],
-          }),
-        },
+        where: whereClause,
         select: {
           id: true,
           name: true,
@@ -238,11 +303,18 @@ export class CatalogService {
           categoryId: true,
         },
         orderBy: {
-          name: 'asc',
+          id: 'asc', // Cursor-based pagination için id'ye göre sırala
         },
+        take: limit + 1, // Bir fazla al ki hasMore'u kontrol edebilelim
       });
 
-      return products.map((product: any) => {
+      const hasMore = products.length > limit;
+      const resultProducts = hasMore ? products.slice(0, limit) : products;
+      const nextCursor = hasMore && resultProducts.length > 0 
+        ? resultProducts[resultProducts.length - 1].id 
+        : undefined;
+
+      const items = resultProducts.map((product: any) => {
         const imageUrl = resolveMediaUrl(product.imageUrl);
 
         return {
@@ -252,6 +324,15 @@ export class CatalogService {
           productGroupId: product.categoryId || '',
         };
       });
+
+      return {
+        items,
+        pagination: {
+          cursor: nextCursor,
+          hasMore,
+          limit,
+        },
+      };
     } catch (error) {
       logger.error(`Failed to get products for product group ${productGroupId}:`, error);
       throw error;

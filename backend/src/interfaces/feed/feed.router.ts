@@ -320,7 +320,17 @@ router.get('/filtered', asyncHandler(async (req: Request, res: Response) => {
 
   // Context parameters
   if (req.query.contextType) {
-    filters.contextType = req.query.contextType as any;
+    const contextTypeValue = req.query.contextType;
+    // Boolean true ise default context type kullan (sub_category)
+    if (contextTypeValue === 'true' || contextTypeValue === true) {
+      filters.contextType = 'sub_category' as any;
+    } else if (typeof contextTypeValue === 'string') {
+      // Enum değerlerini kontrol et
+      const validContextTypes = ['sub_category', 'product_group', 'product'];
+      if (validContextTypes.includes(contextTypeValue)) {
+        filters.contextType = contextTypeValue as any;
+      }
+    }
   }
   if (req.query.contextId) {
     filters.contextId = req.query.contextId as string;
