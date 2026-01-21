@@ -309,7 +309,7 @@ router.post(
       });
     } catch (error) {
       logger.error({
-        message: 'Avatar yükleme hatası',
+        message: 'Avatar upload error',
         userId,
         error: error instanceof Error ? error.message : String(error),
       });
@@ -484,19 +484,19 @@ router.put('/me/profile', asyncHandler(async (req: Request<{}, {}, UpdateUserPro
   logger.info('[updateProfile] Request received', { userId, bodyKeys: Object.keys(body) });
 
   if (body.name && body.name.trim().length < 2) {
-    return res.status(400).json({ message: 'İsim en az 2 karakter olmalıdır' });
+    return res.status(400).json({ message: 'Name must be at least 2 characters long' });
   }
 
   if (body.biography && body.biography.length > 500) {
-    return res.status(400).json({ message: 'Biyografi en fazla 500 karakter olabilir' });
+    return res.status(400).json({ message: 'Biography can be at most 500 characters' });
   }
 
   if (body.badge && !Array.isArray(body.badge)) {
-    return res.status(400).json({ message: 'badge alanı bir dizi olmalıdır' });
+    return res.status(400).json({ message: 'Badge field must be an array' });
   }
 
   if (body.badge && body.badge.length > 3) {
-    return res.status(400).json({ message: 'En fazla 3 badge seçilebilir' });
+    return res.status(400).json({ message: 'Maximum 3 badges can be selected' });
   }
 
   try {
@@ -514,7 +514,7 @@ router.put('/me/profile', asyncHandler(async (req: Request<{}, {}, UpdateUserPro
       logger.error('[updateProfile] Profile not found after update', { userId });
       return res.status(404).json({ 
         success: false,
-        message: 'Profil bulunamadı' 
+        message: 'Profile not found' 
       });
     }
 
@@ -818,38 +818,39 @@ router.get('/:id/trusters', asyncHandler(async (req: Request, res: Response) => 
   return res.json(list);
 }));
 
+
 /**
  * @openapi
- * /users/{id}/trusts/{targetUserId}:
+ * /users/trusts/{targetUserId}:
  *   delete:
- *     summary: Trust listesinden kullanıcı kaldır
+ *     summary: Trust listesinden kullanıcı kaldır (authenticated user için)
+ *     description: Authenticated user'ın trust listesinden belirtilen kullanıcıyı kaldırır. User ID auth token'dan alınır.
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *       - in: path
  *         name: targetUserId
  *         required: true
- *         schema: { type: string }
+ *         schema:
+ *           type: string
+ *         description: Trust listesinden kaldırılacak kullanıcı ID'si
  *     responses:
  *       204:
- *         description: Kaldırıldı
+ *         description: Kullanıcı trust listesinden başarıyla kaldırıldı
  *       401:
  *         description: Unauthorized
+ *       404:
+ *         description: Trust kaydı bulunamadı
  */
-router.delete('/:id/trusts/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
+router.delete('/trusts/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
-  const id = String(req.params.id);
-  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
+  
   const targetUserId = String(req.params.targetUserId);
-  const ok = await userService.removeTrust(id, targetUserId);
-  if (!ok) return res.status(404).json({ message: 'Kayıt bulunamadı' });
+  const ok = await userService.removeTrust(authUserId, targetUserId);
+  if (!ok) return res.status(404).json({ message: 'Record not found' });
   return res.status(204).end();
 }));
 
@@ -897,134 +898,6 @@ router.post('/trust', asyncHandler(async (req: Request, res: Response) => {
   return res.status(201).json({ message: 'Trust added successfully' });
 }));
 
-/**
- * @openapi
- * /users/{id}/block:
- *   post:
- *     summary: Kullanıcıyı engelle
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [ targetUserId ]
- *             properties:
- *               targetUserId: { type: string }
- */
-router.post('/:id/block', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
-  const id = String(req.params.id);
-  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
-  const { targetUserId } = req.body || {};
-  if (!targetUserId || typeof targetUserId !== 'string') return res.status(400).json({ message: 'targetUserId is required' });
-  await userService.blockUser(id, targetUserId);
-  return res.status(201).end();
-}));
-
-/**
- * @openapi
- * /users/{id}/unblock:
- *   post:
- *     summary: Kullanıcı blok kaldır
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [ targetUserId ]
- *             properties:
- *               targetUserId: { type: string }
- *     responses:
- *       204:
- *         description: Blok kaldırıldı
- */
-router.post('/:id/unblock', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
-  const id = String(req.params.id);
-  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
-  const { targetUserId } = req.body || {};
-  if (!targetUserId || typeof targetUserId !== 'string') return res.status(400).json({ message: 'targetUserId is required' });
-  const ok = await userService.unblockUser(id, targetUserId);
-  return res.status(ok ? 204 : 404).end();
-}));
-
-/**
- * @openapi
- * /users/{id}/mute:
- *   post:
- *     summary: Kullanıcıyı sustur
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [ targetUserId ]
- *             properties:
- *               targetUserId: { type: string }
- *     responses:
- *       201:
- *         description: Susturma ayarlandı
- */
-router.post('/:id/mute', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
-  const id = String(req.params.id);
-  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
-  const { targetUserId } = req.body || {};
-  if (!targetUserId || typeof targetUserId !== 'string') return res.status(400).json({ message: 'targetUserId is required' });
-  await userService.muteUser(id, targetUserId);
-  return res.status(201).end();
-}));
-
-/**
- * @openapi
- * /users/{id}/unmute:
- *   post:
- *     summary: Susturma kaldır
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [ targetUserId ]
- *             properties:
- *               targetUserId: { type: string }
- *     responses:
- *       204:
- *         description: Susturma kaldırıldı
- */
-router.post('/:id/unmute', asyncHandler(async (req: Request, res: Response) => {
-  const userPayload = req.user;
-  const authUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!authUserId) return res.status(401).json({ message: 'Unauthorized' });
-  const id = String(req.params.id);
-  if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
-  const { targetUserId } = req.body || {};
-  if (!targetUserId || typeof targetUserId !== 'string') return res.status(400).json({ message: 'targetUserId is required' });
-  const ok = await userService.unmuteUser(id, targetUserId);
-  return res.status(ok ? 204 : 404).end();
-}));
 
 /**
  * @openapi
@@ -1322,17 +1195,17 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   
   // DisplayName minLength kontrolü (OpenAPI: minLength: 2)
   if (displayName.length < 2) {
-    return res.status(400).json({ error: { message: 'DisplayName en az 2 karakter olmalıdır.' } });
+    return res.status(400).json({ error: { message: 'DisplayName must be at least 2 characters long.' } });
   }
   
   // DisplayName maxLength kontrolü (OpenAPI: maxLength: 50)
   if (displayName.length > 50) {
-    return res.status(400).json({ error: { message: 'DisplayName en fazla 50 karakter olabilir.' } });
+    return res.status(400).json({ error: { message: 'DisplayName can be at most 50 characters long.' } });
   }
   
   // Bio maxLength kontrolü (OpenAPI: maxLength: 500)
   if (bio !== undefined && bio !== null && typeof bio === 'string' && bio.length > 500) {
-    return res.status(400).json({ error: { message: 'Bio en fazla 500 karakter olabilir.' } });
+    return res.status(400).json({ error: { message: 'Bio can be at most 500 characters long.' } });
   }
   
   // Tüm validation'lar geçildi, şimdi user oluştur
@@ -1360,7 +1233,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
         (error as { meta: { target?: unknown } }).meta?.target &&
         Array.isArray((error as { meta: { target: unknown[] } }).meta.target) &&
         (error as { meta: { target: string[] } }).meta.target.includes('email')) {
-      return res.status(409).json({ error: { message: 'Bu email adresi zaten kullanılıyor.' } });
+      return res.status(409).json({ error: { message: 'This email address is already in use.' } });
     }
     throw error;
   }
@@ -1411,8 +1284,8 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
  *                 description: Profil banner görseli (opsiyonel, max 5MB)
  *               selectCategories:
  *                 type: string
- *                 example: '{"userId":"1","selectedCategories":[{"categoryId":"1","subCategoryIds":["1","2"]}]}'
- *                 description: JSON string formatında ilgi alanları
+ *                 example: '{"userId":"1","selectedCategories":[{"categoryId":"1","subCategoryIds":["1","2"]},{"categoryId":"2","subCategoryIds":["3"]},{"categoryId":"3","subCategoryIds":["4","5"]}]}'
+ *                 description: JSON string formatında ilgi alanları. En az 3 farklı alan (category veya subCategory) seçilmelidir.
  *     responses:
  *       200:
  *         description: Profil başarıyla tamamlandı
@@ -1441,7 +1314,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
  *                   example: false
  *                 message:
  *                   type: string
- *                   example: FullName, UserName ve selectCategories alanları zorunludur
+ *                   example: En az 3 farklı alan seçmelisiniz. Şu anda 2 alan seçtiniz.
  *       401:
  *         description: Yetkisiz erişim veya email doğrulanmamış
  *         content:
@@ -1519,6 +1392,38 @@ router.post('/setup-profile', upload.fields([{ name: 'Avatar', maxCount: 1 }, { 
     });
   }
 
+  // En az 3 farklı alan seçimi validasyonu
+  const selectedCategories = categoriesData.selectedCategories || [];
+  
+  if (!Array.isArray(selectedCategories) || selectedCategories.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'You must select at least 3 different fields',
+    });
+  }
+
+  // Toplam seçilen alan sayısını hesapla (category + subCategory'ler)
+  const selectedFields = new Set<string>();
+  
+  for (const category of selectedCategories) {
+    if (category.categoryId) {
+      selectedFields.add(`category_${category.categoryId}`);
+    }
+    if (Array.isArray(category.subCategoryIds)) {
+      for (const subCategoryId of category.subCategoryIds) {
+        selectedFields.add(`subcategory_${subCategoryId}`);
+      }
+    }
+  }
+
+  // En az 3 farklı alan kontrolü
+  if (selectedFields.size < 3) {
+    return res.status(400).json({
+      success: false,
+      message: `You must select at least 3 different fields. Currently you have selected ${selectedFields.size} field(s).`,
+    });
+  }
+
   // Helper function: Dosya yükleme
   const uploadImageFile = async (file: Express.Multer.File, folder: string, fileType: string): Promise<string> => {
     // File extension'ı güvenli şekilde al (dosya adından veya MIME type'dan)
@@ -1550,7 +1455,7 @@ router.post('/setup-profile', upload.fields([{ name: 'Avatar', maxCount: 1 }, { 
     // Extension'ı validate et (sadece izin verilen formatlar)
     const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
     if (!allowedExtensions.includes(fileExtension)) {
-      throw new Error('Desteklenmeyen dosya formatı. Sadece JPG, PNG, GIF ve WebP formatları desteklenmektedir.');
+      throw new Error('Unsupported file format. Only JPG, PNG, GIF and WebP formats are supported.');
     }
     
     // Dosya adını oluştur
@@ -1560,7 +1465,7 @@ router.post('/setup-profile', upload.fields([{ name: 'Avatar', maxCount: 1 }, { 
     const fileUrl = await s3Service.uploadFile(fileName, file.buffer, file.mimetype);
     
     logger.info({
-      message: `${fileType} başarıyla yüklendi`,
+      message: `${fileType} uploaded successfully`,
       userId: userIdStr,
       fileName,
       fileSize: file.size,
@@ -1577,9 +1482,9 @@ router.post('/setup-profile', upload.fields([{ name: 'Avatar', maxCount: 1 }, { 
     try {
       avatar = await uploadImageFile(avatarFile, 'profile-pictures', 'Avatar');
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata';
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       logger.error({
-        message: 'Avatar yükleme hatası',
+        message: 'Avatar upload error',
         error: errorMessage,
         userId: userIdStr,
         fileName: avatarFile.originalname,
@@ -1589,7 +1494,7 @@ router.post('/setup-profile', upload.fields([{ name: 'Avatar', maxCount: 1 }, { 
       
       return res.status(500).json({
         success: false,
-        message: `Avatar yüklenirken bir hata oluştu: ${errorMessage}`,
+        message: `An error occurred while uploading avatar: ${errorMessage}`,
       });
     }
   }
@@ -1601,9 +1506,9 @@ router.post('/setup-profile', upload.fields([{ name: 'Avatar', maxCount: 1 }, { 
     try {
       bannerUrl = await uploadImageFile(bannerFile, 'profile-banners', 'Banner');
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata';
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       logger.error({
-        message: 'Banner yükleme hatası',
+        message: 'Banner upload error',
         error: errorMessage,
         userId: userIdStr,
         fileName: bannerFile.originalname,
@@ -1613,7 +1518,7 @@ router.post('/setup-profile', upload.fields([{ name: 'Avatar', maxCount: 1 }, { 
       
       return res.status(500).json({
         success: false,
-        message: `Banner yüklenirken bir hata oluştu: ${errorMessage}`,
+        message: `An error occurred while uploading banner: ${errorMessage}`,
       });
     }
   }
@@ -1642,20 +1547,20 @@ router.post('/setup-profile', upload.fields([{ name: 'Avatar', maxCount: 1 }, { 
 
     return res.status(200).json({
       success: true,
-      message: 'Profil başarıyla tamamlandı',
+      message: 'Profile completed successfully',
       user: response,
     });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata';
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     
-    if (errorMessage.includes('zaten kullanılıyor')) {
+    if (errorMessage.includes('already in use') || errorMessage.includes('already exists')) {
       return res.status(409).json({
         success: false,
         message: errorMessage,
       });
     }
     
-    if (errorMessage.includes('Email doğrulanmamış')) {
+    if (errorMessage.includes('not verified') || errorMessage.includes('email not verified')) {
       return res.status(401).json({
         success: false,
         message: errorMessage,
@@ -1664,7 +1569,261 @@ router.post('/setup-profile', upload.fields([{ name: 'Avatar', maxCount: 1 }, { 
 
     return res.status(500).json({
       success: false,
-      message: `Profil tamamlanırken bir hata oluştu: ${errorMessage}`,
+      message: `An error occurred while completing profile: ${errorMessage}`,
+    });
+  }
+}));
+
+/**
+ * @openapi
+ * /users/username/check:
+ *   get:
+ *     summary: Username müsaitlik ve geçerlilik kontrolü
+ *     description: Kullanıcı input'a girdikçe real-time olarak username'in geçerli ve müsait olup olmadığını kontrol eder
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: username
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: Kontrol edilecek username
+ *         example: tunab
+ *     responses:
+ *       200:
+ *         description: Username kontrolü başarılı
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 isValid:
+ *                   type: boolean
+ *                   example: true
+ *                   description: Username formatı geçerli mi?
+ *                 isAvailable:
+ *                   type: boolean
+ *                   example: true
+ *                   description: Username müsait mi?
+ *                 message:
+ *                   type: string
+ *                   nullable: true
+ *                   example: null
+ *                   description: Hata mesajı (varsa)
+ *       400:
+ *         description: Geçersiz istek
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: Username parametresi zorunludur
+ *       500:
+ *         description: Sunucu hatası
+ */
+router.get('/username/check', asyncHandler(async (req: Request, res: Response) => {
+  const { username } = req.query;
+
+  if (!username || typeof username !== 'string') {
+    return res.status(400).json({
+      success: false,
+      message: 'Username parametresi zorunludur',
+    });
+  }
+
+  try {
+    // Mevcut kullanıcı ID'sini al (eğer varsa)
+    const userPayload = req.user;
+    const currentUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    const result = await userService.checkUsernameAvailability(
+      username,
+      currentUserId ? String(currentUserId) : undefined
+    );
+
+    return res.json(result);
+  } catch (error) {
+    logger.error({
+      message: 'Error checking username availability',
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(500).json({
+      isValid: false,
+      isAvailable: false,
+      message: 'An error occurred while checking username',
+    });
+  }
+}));
+
+/**
+ * @openapi
+ * /users/username/suggestions:
+ *   get:
+ *     summary: Username önerileri (Instagram benzeri)
+ *     description: Verilen username müsait değilse, benzer ve müsait username önerileri döner
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: username
+ *         schema:
+ *           type: string
+ *         required: true
+ *         description: Temel username (öneriler buna göre oluşturulur)
+ *         example: tunab
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 5
+ *           minimum: 1
+ *           maximum: 10
+ *         required: false
+ *         description: Döndürülecek öneri sayısı
+ *         example: 5
+ *     responses:
+ *       200:
+ *         description: Username önerileri başarıyla döndürüldü
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 suggestions:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                   example: ["tunab1", "tunab_1", "tunab123", "tunabreal", "1tunab"]
+ *                   description: Önerilen username'ler listesi
+ *       400:
+ *         description: Geçersiz istek
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: Username parametresi zorunludur
+ *       500:
+ *         description: Sunucu hatası
+ */
+router.get('/username/suggestions', asyncHandler(async (req: Request, res: Response) => {
+  const { username, limit } = req.query;
+
+  if (!username || typeof username !== 'string') {
+    return res.status(400).json({
+      success: false,
+      message: 'Username parametresi zorunludur',
+    });
+  }
+
+  const limitNum = limit ? parseInt(String(limit), 10) : 5;
+  const validLimit = Math.min(Math.max(limitNum, 1), 10); // 1-10 arası
+
+  try {
+    const suggestions = await userService.suggestUsernames(username, validLimit);
+    return res.json({
+      suggestions,
+    });
+  } catch (error) {
+    logger.error({
+      message: 'Error generating username suggestions',
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(500).json({
+      suggestions: [],
+      message: 'An error occurred while generating username suggestions',
+    });
+  }
+}));
+
+/**
+ * @openapi
+ * /users/categories:
+ *   get:
+ *     summary: Kullanıcı kayıt için kategori ve sub-kategori listesi
+ *     description: Her kategori için dinamik olarak en fazla 10 sub-kategoriyi döner. Alfabetik sıraya göre ilk 10 sub-kategori getirilir.
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Kategori ve sub-kategori listesi başarıyla getirildi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   categoryId:
+ *                     type: string
+ *                     example: "pcat_01KFBPP9QBEJE1ZW7DFHBP6T2B"
+ *                     description: Kategori benzersiz ID'si
+ *                   name:
+ *                     type: string
+ *                     example: "Electronics"
+ *                     description: Kategori adı
+ *                   subCategories:
+ *                     type: array
+ *                     items:
+ *                       type: object
+ *                       properties:
+ *                         subCategoryId:
+ *                           type: string
+ *                           example: "pcat_01KFBPP9YH0YHNBMBGVNZBYD1S"
+ *                           description: Sub-kategori benzersiz ID'si
+ *                         name:
+ *                           type: string
+ *                           example: "Cell Phones & Accessories"
+ *                           description: Sub-kategori adı
+ *                     maxItems: 10
+ *                     description: En fazla 10 sub-kategori (alfabetik sıraya göre)
+ *       401:
+ *         description: Yetkisiz erişim
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Geçersiz token
+ *       500:
+ *         description: Sunucu hatası
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Kategori listesi alınırken bir hata oluştu
+ */
+router.get('/categories', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const categories = await userService.getUserCategories();
+    return res.json(categories);
+  } catch (error) {
+    logger.error({
+      message: 'Error getting user categories',
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    return res.status(500).json({
+      message: 'An error occurred while fetching category list',
     });
   }
 }));
@@ -1864,7 +2023,7 @@ router.get('/:id/profile-card', asyncHandler(async (req: Request, res: Response)
   const { id } = req.params;
   const card = await userService.getUserProfileCard(id);
   if (!card) {
-    return res.status(404).json({ message: 'Kullanıcı bulunamadı' });
+    return res.status(404).json({ message: 'User not found' });
   }
   return res.json(card);
 }));
@@ -1894,7 +2053,7 @@ router.get('/:id/profile-card', asyncHandler(async (req: Request, res: Response)
 router.delete('/:id/trusts/:targetUserId', asyncHandler(async (req: Request, res: Response) => {
   const { id, targetUserId } = req.params;
   const ok = await userService.removeTrust(id, targetUserId);
-  if (!ok) return res.status(404).json({ message: 'Kayıt bulunamadı' });
+  if (!ok) return res.status(404).json({ message: 'Record not found' });
   return res.status(204).send();
 }));
 
@@ -1967,7 +2126,7 @@ router.delete('/:id/block/:targetUserId', asyncHandler(async (req: Request, res:
   if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
   const targetUserId = String(req.params.targetUserId);
   const ok = await userService.unblockUser(id, targetUserId);
-  if (!ok) return res.status(404).json({ message: 'Engelleme kaydı bulunamadı' });
+  if (!ok) return res.status(404).json({ message: 'Block record not found' });
   return res.status(204).send();
 }));
 
@@ -2039,7 +2198,7 @@ router.post('/:id/report/:targetUserId', asyncHandler(async (req: Request, res: 
     if (errorMessage.includes('zaten raporlanmış')) {
       return res.status(409).json({ message: errorMessage });
     }
-    if (errorMessage.includes('bulunamadı')) {
+    if (errorMessage.includes('not found')) {
       return res.status(404).json({ message: errorMessage });
     }
     return res.status(400).json({ message: errorMessage });
@@ -2115,7 +2274,7 @@ router.delete('/:id/mute/:targetUserId', asyncHandler(async (req: Request, res: 
   if (authUserId !== id) return res.status(401).json({ message: 'Unauthorized' });
   const targetUserId = String(req.params.targetUserId);
   const ok = await userService.unmuteUser(id, targetUserId);
-  if (!ok) return res.status(404).json({ message: 'Susturma kaydı bulunamadı' });
+  if (!ok) return res.status(404).json({ message: 'Mute record not found' });
   return res.status(204).send();
 }));
 

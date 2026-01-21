@@ -258,7 +258,7 @@ export class FeedScoringService {
 
   /**
    * Basit kategori match kontrolü (fast scoring için de kullanılır)
-   * Kullanıcının inventory'sindeki ürünlerin kategorilerine göre kontrol eder
+   * Önce kullanıcının preferredCategories'ine bakır, yoksa inventory'ye bakar
    */
   private async checkSimpleCategoryMatch(
     userId: string,
@@ -268,9 +268,47 @@ export class FeedScoringService {
     }
   ): Promise<boolean> {
     const postCategoryId = postData.mainCategoryId || postData.subCategoryId;
-    if (!postCategoryId) return false;
+    const postSubCategoryId = postData.subCategoryId;
+    if (!postCategoryId && !postSubCategoryId) return false;
 
-    // Kullanıcının inventory'sindeki ürünlerin kategorilerini al
+    // 1. Önce kullanıcının preferredCategories'ini kontrol et
+    const userPreferences = await this.prisma.userFeedPreferences.findUnique({
+      where: { userId },
+      select: { preferredCategories: true },
+    });
+
+    if (userPreferences?.preferredCategories) {
+      try {
+        // JSON formatında saklanan kategori tercihlerini parse et
+        const selectedCategories = JSON.parse(userPreferences.preferredCategories);
+        
+        if (Array.isArray(selectedCategories)) {
+          // Her selectedCategory objesi: { categoryId: string, subCategoryIds: string[] }
+          for (const category of selectedCategories) {
+            // Main category eşleşmesi
+            if (category.categoryId && postData.mainCategoryId && category.categoryId === postData.mainCategoryId) {
+              return true;
+            }
+            
+            // Sub category eşleşmesi
+            if (Array.isArray(category.subCategoryIds) && postSubCategoryId) {
+              if (category.subCategoryIds.includes(postSubCategoryId)) {
+                return true;
+              }
+            }
+          }
+        }
+      } catch (error) {
+        // JSON parse hatası - eski format olabilir, inventory'ye bak
+        logger.warn({
+          message: 'Failed to parse preferredCategories JSON',
+          userId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    // 2. Eğer preferredCategories yoksa veya eşleşme bulunamadıysa, inventory'ye bak
     const userInventory = await this.prisma.inventory.findMany({
       where: { userId },
       include: {
@@ -305,7 +343,14 @@ export class FeedScoringService {
     }
 
     // Post'un kategorisi kullanıcının inventory kategorilerinde var mı?
-    return userCategoryIds.has(postCategoryId);
+    if (postCategoryId && userCategoryIds.has(postCategoryId)) {
+      return true;
+    }
+    if (postSubCategoryId && userCategoryIds.has(postSubCategoryId)) {
+      return true;
+    }
+
+    return false;
   }
 
   /**

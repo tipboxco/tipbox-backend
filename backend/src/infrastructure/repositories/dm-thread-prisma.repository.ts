@@ -70,7 +70,7 @@ export class DMThreadPrismaRepository {
 
   async findDetailedByUserId(
     userId: string,
-    options: { search?: string; unreadOnly?: boolean; limit?: number; threadType?: 'DM' | 'SUPPORT' | 'ALL' } = {},
+    options: { search?: string; unreadOnly?: boolean; limit?: number; threadType?: 'DM' | 'SUPPORT' | 'ALL'; cursor?: string } = {},
   ): Promise<ThreadWithRelations[]> {
     const userIdStr = String(userId);
 
@@ -83,17 +83,22 @@ export class DMThreadPrismaRepository {
     }
     // If threadType is 'ALL' or undefined, don't filter by isSupportThread
 
+    // Cursor-based pagination: cursor'dan önceki (daha eski) thread'leri getir
+    const cursorDate = options.cursor ? new Date(options.cursor) : undefined;
+    const whereClause: any = {
+      OR: [
+        { userOneId: userIdStr },
+        { userTwoId: userIdStr },
+      ],
+      ...(isSupportThreadFilter !== undefined && { isSupportThread: isSupportThreadFilter }),
+      ...(cursorDate && { updatedAt: { lt: cursorDate } }),
+    };
+
     const threads = await this.prisma.dMThread.findMany({
-      where: {
-        OR: [
-          { userOneId: userIdStr },
-          { userTwoId: userIdStr },
-        ],
-        ...(isSupportThreadFilter !== undefined && { isSupportThread: isSupportThreadFilter }),
-      } as any,
+      where: whereClause,
       include: THREAD_INCLUDE,
       orderBy: { updatedAt: 'desc' },
-      take: options.limit ?? 50,
+      take: options.limit ? options.limit + 1 : 51, // hasMore kontrolü için +1
     }) as ThreadWithRelations[];
 
     let filteredThreads = threads;

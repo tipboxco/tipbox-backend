@@ -40,128 +40,277 @@ export class AuthService implements IAuthService {
 
   /**
    * Manuel signup - Email, password ve name ile kayıt başlatır, verification code gönderir
+   * Kullanıcı henüz oluşturulmaz, sadece verification code oluşturulur ve email gönderilir
+   * Kullanıcı email doğrulandığında oluşturulacak
    */
   async signup(email: string, password: string, name?: string): Promise<{ success: boolean; message: string }> {
-    // Email kontrolü
-    const existingUser = await this.userRepo.findByEmail(email);
-    if (existingUser) {
-      return {
-        success: false,
-        message: 'Bu email adresi zaten kayıtlı',
-      };
-    }
-
-    // Şifre hash'le
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    // Kullanıcı oluştur (emailVerified false olarak)
-    // Eğer name varsa profile da oluştur
-    const user = await this.prisma.user.create({
-      data: {
-        email,
-        passwordHash,
-        emailVerified: false,
-        status: 'PENDING_VERIFICATION',
-        profile: name ? {
-          create: {
-            displayName: name,
-          },
-        } : undefined,
-      },
-      include: {
-        profile: true,
-        wallets: true,
-      },
-    });
-
-    // 6 haneli kod oluştur
-    const code = this.generateVerificationCode();
-
-    // Kod süresi: 10 dakika
-    const expiresAt = new Date();
-    expiresAt.setMinutes(expiresAt.getMinutes() + 10);
-
-    // Verification code kaydet
-    await this.emailVerificationRepo.create(user.id, email, code, expiresAt);
-
-    // Email gönder
     try {
-      await this.emailService.sendVerificationCode(email, code);
-      return {
-        success: true,
-        message: 'Kayıt başarılı. Email doğrulama kodu gönderildi.',
-      };
-    } catch (error) {
-      // Email gönderilemediyse kullanıcıyı ve verification code'u sil
-      try {
-        await this.emailVerificationRepo.deleteByUserId(user.id);
-        await this.prisma.user.delete({ where: { id: user.id } });
-      } catch (deleteError) {
-        // Silme hatası durumunda log'la ama devam et
-        console.error('Failed to cleanup user after email send failure:', deleteError);
+      // Email kontrolü - zaten kayıtlı kullanıcı var mı?
+      const existingUser = await this.userRepo.findByEmail(email);
+      if (existingUser) {
+        return {
+          success: false,
+          message: 'This email address is already registered',
+        };
       }
+
+      // Şifre hash'le
+      const passwordHash = await bcrypt.hash(password, 10);
+
+      // 6 haneli kod oluştur
+      const code = this.generateVerificationCode();
+
+      // Kod süresi: 10 dakika
+      const expiresAt = new Date();
+      expiresAt.setMinutes(expiresAt.getMinutes() + 10);
+
+      // Verification code kaydet (kullanıcı oluşturulmadan, passwordHash ve name ile)
+      let verificationCode;
+      try {
+        verificationCode = await this.emailVerificationRepo.create(
+          email, 
+          code, 
+          expiresAt, 
+          passwordHash, 
+          name
+        );
+      } catch (codeError) {
+        logger.error({
+          message: 'Failed to create verification code during signup',
+          email,
+          error: codeError instanceof Error ? codeError.message : String(codeError),
+        });
+        
+        return {
+          success: false,
+          message: 'An error occurred while creating the verification code. Please try again.',
+        };
+      }
+
+      // Email gönder
+      try {
+        await this.emailService.sendVerificationCode(email, code);
+        return {
+          success: true,
+          message: 'Registration successful. Email verification code has been sent.',
+        };
+      } catch (error) {
+        logger.error({
+          message: 'Failed to send verification email during signup',
+          email,
+          verificationCodeId: verificationCode.id,
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+        
+        // Email servisi hatası olsa bile verification code oluşturuldu
+        // Kullanıcı daha sonra email doğrulama kodunu kullanabilir (email servisi düzeltildikten sonra)
+        // Veya admin tarafından manuel olarak doğrulama yapılabilir
+        logger.warn({
+          message: 'Email service failed but verification code created. User can verify later when email service is fixed.',
+          email,
+          verificationCodeId: verificationCode.id,
+          code: code, // Log code for manual verification if needed
+        });
+        
+        // Development ortamında verification code'u response'a ekle (güvenlik için sadece development)
+        const isDevelopment = process.env.NODE_ENV !== 'production';
+        
+        return {
+          success: true,
+          message: 'Registration successful. Verification code has been created. Please contact support if you did not receive the verification email.',
+          ...(isDevelopment && { verificationCode: code }), // Sadece development'ta göster
+        };
+      }
+    } catch (error) {
+      // Beklenmeyen hatalar için genel catch
+      logger.error({
+        message: 'Unexpected error during signup',
+        email,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       
-      // Detaylı hata mesajı
-      const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata';
       return {
         success: false,
-        message: `Email gönderilemedi: ${errorMessage}. Lütfen tekrar deneyin veya sistem yöneticisiyle iletişime geçin.`,
+        message: 'An error occurred during registration. Please try again.',
       };
     }
   }
 
   /**
-   * Email doğrulama - Code ile email'i doğrular
+   * Email doğrulama - Code ile email'i doğrular ve kullanıcıyı oluşturur
    */
   async verifyEmail(email: string, code: string): Promise<{ success: boolean; token?: string; message: string }> {
-    // Code'u bul
-    const verificationCode = await this.emailVerificationRepo.findByCodeAndEmail(code, email);
-    
-    if (!verificationCode) {
+    try {
+      // Code'u bul
+      const verificationCode = await this.emailVerificationRepo.findByCodeAndEmail(code, email);
+      
+      if (!verificationCode) {
+        return {
+          success: false,
+          message: 'Invalid or expired verification code',
+        };
+      }
+
+      // Eğer passwordHash yoksa, eski sistem (kullanıcı zaten oluşturulmuş)
+      if (!verificationCode.passwordHash) {
+        // Eski sistem - kullanıcı zaten var
+        if (!verificationCode.userId) {
+          return {
+            success: false,
+            message: 'Invalid verification code',
+          };
+        }
+
+        const user = await this.userRepo.findById(verificationCode.userId);
+        if (!user) {
+          return {
+            success: false,
+            message: 'User not found',
+          };
+        }
+
+        // Email doğrulandı olarak işaretle
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: {
+            emailVerified: true,
+            status: 'ACTIVE',
+          },
+        });
+
+        // Code'u kullanıldı olarak işaretle
+        await this.emailVerificationRepo.markAsUsed(verificationCode.id);
+
+        const updatedUser = await this.userRepo.findById(user.id);
+        if (!updatedUser) {
+          return {
+            success: false,
+            message: 'Failed to update user',
+          };
+        }
+
+        const token = this.generateToken(updatedUser);
+        return {
+          success: true,
+          token,
+          message: 'Email verification successful',
+        };
+      }
+
+      // Yeni sistem - kullanıcı henüz oluşturulmamış, şimdi oluştur
+      // Email kontrolü - zaten kayıtlı kullanıcı var mı?
+      const existingUser = await this.userRepo.findByEmail(email);
+      if (existingUser) {
+        // Code'u kullanıldı olarak işaretle
+        await this.emailVerificationRepo.markAsUsed(verificationCode.id);
+        return {
+          success: false,
+          message: 'This email address is already registered',
+        };
+      }
+
+      // Kullanıcı oluştur (emailVerified true olarak, çünkü email doğrulandı)
+      let user;
+      try {
+        user = await this.prisma.user.create({
+          data: {
+            email,
+            passwordHash: verificationCode.passwordHash,
+            emailVerified: true,
+            status: 'ACTIVE',
+            profile: verificationCode.name ? {
+              create: {
+                displayName: verificationCode.name,
+              },
+            } : undefined,
+          },
+          include: {
+            profile: true,
+            wallets: true,
+          },
+        });
+      } catch (createError) {
+        logger.error({
+          message: 'Failed to create user during email verification',
+          email,
+          error: createError instanceof Error ? createError.message : String(createError),
+          stack: createError instanceof Error ? createError.stack : undefined,
+        });
+        
+        // Code'u kullanıldı olarak işaretle (hata olsa bile)
+        await this.emailVerificationRepo.markAsUsed(verificationCode.id);
+        
+        // Prisma unique constraint hatası (email zaten var)
+        if (createError instanceof Error && createError.message.includes('Unique constraint')) {
+          return {
+            success: false,
+            message: 'This email address is already registered',
+          };
+        }
+        
+        return {
+          success: false,
+          message: 'An error occurred while creating the user. Please try again.',
+        };
+      }
+
+      // Verification code'un userId'sini güncelle
+      try {
+        await this.prisma.emailVerificationCode.update({
+          where: { id: verificationCode.id },
+          data: { userId: user.id },
+        });
+      } catch (updateError) {
+        // Kritik değil, log'la
+        logger.warn({
+          message: 'Failed to update verification code userId',
+          verificationCodeId: verificationCode.id,
+          userId: user.id,
+          error: updateError instanceof Error ? updateError.message : String(updateError),
+        });
+      }
+
+      // Code'u kullanıldı olarak işaretle
+      await this.emailVerificationRepo.markAsUsed(verificationCode.id);
+
+      // Prisma result'ı User entity'ye dönüştür
+      const domainUser = await this.userRepo.findById(user.id);
+      if (!domainUser) {
+        return {
+          success: false,
+          message: 'Failed to retrieve created user',
+        };
+      }
+
+      // Token oluştur ve döndür
+      const token = this.generateToken(domainUser);
+
+      logger.info({
+        message: 'User created and email verified successfully',
+        userId: user.id,
+        email,
+      });
+
+      return {
+        success: true,
+        token,
+        message: 'Email verification successful',
+      };
+    } catch (error) {
+      logger.error({
+        message: 'Unexpected error during email verification',
+        email,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      
       return {
         success: false,
-        message: 'Geçersiz veya süresi dolmuş doğrulama kodu',
+        message: 'An error occurred during email verification. Please try again.',
       };
     }
-
-    // Kullanıcıyı bul
-    const user = await this.userRepo.findById(verificationCode.userId);
-    if (!user) {
-      return {
-        success: false,
-        message: 'Kullanıcı bulunamadı',
-      };
-    }
-
-    // Email doğrulandı olarak işaretle
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: {
-        emailVerified: true,
-        status: 'ACTIVE',
-      },
-    });
-
-    // Code'u kullanıldı olarak işaretle
-    await this.emailVerificationRepo.markAsUsed(verificationCode.id);
-
-    // Domain entity'yi güncelle (emailVerified true olarak)
-    const updatedUser = await this.userRepo.findById(user.id);
-    if (!updatedUser) {
-      return {
-        success: false,
-        message: 'Kullanıcı güncellenemedi',
-      };
-    }
-
-    // Token oluştur ve döndür
-    const token = this.generateToken(updatedUser);
-
-    return {
-      success: true,
-      token,
-      message: 'Email doğrulama başarılı',
-    };
   }
 
   /**
@@ -209,7 +358,7 @@ export class AuthService implements IAuthService {
       });
       return {
         success: true,
-        message: 'Eğer bu email adresi kayıtlıysa, şifre sıfırlama kodu gönderildi.',
+        message: 'If this email address is registered, a password reset code has been sent.',
       };
     }
 
@@ -217,7 +366,7 @@ export class AuthService implements IAuthService {
     if (!user.emailVerified) {
       return {
         success: false,
-        message: 'Email adresiniz doğrulanmamış. Lütfen önce email adresinizi doğrulayın.',
+        message: 'Your email address is not verified. Please verify your email address first.',
       };
     }
 
@@ -241,7 +390,7 @@ export class AuthService implements IAuthService {
       });
       return {
         success: true,
-        message: 'Şifre sıfırlama kodu gönderildi.',
+        message: 'Password reset code has been sent.',
       };
     } catch (error) {
       logger.error({
@@ -251,10 +400,10 @@ export class AuthService implements IAuthService {
         error: error instanceof Error ? error.message : String(error),
       });
       
-      const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata';
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       return {
         success: false,
-        message: `Email gönderilemedi: ${errorMessage}. Lütfen tekrar deneyin.`,
+        message: `Failed to send email: ${errorMessage}. Please try again.`,
       };
     }
   }
@@ -269,7 +418,7 @@ export class AuthService implements IAuthService {
     if (!resetCode) {
       return {
         success: false,
-        message: 'Geçersiz veya süresi dolmuş kod',
+        message: 'Invalid or expired code',
       };
     }
 
@@ -278,7 +427,7 @@ export class AuthService implements IAuthService {
     if (!user) {
       return {
         success: false,
-        message: 'Kullanıcı bulunamadı',
+        message: 'User not found',
       };
     }
 
@@ -291,7 +440,7 @@ export class AuthService implements IAuthService {
 
     return {
       success: true,
-      message: 'Kod doğrulandı. Yeni şifrenizi oluşturabilirsiniz.',
+      message: 'Code verified. You can now create a new password.',
     };
   }
 
@@ -364,7 +513,7 @@ export class AuthService implements IAuthService {
     if (!user.emailVerified) {
       return {
         success: false,
-        message: 'Email adresiniz doğrulanmamış',
+        message: 'Your email address is not verified',
       };
     }
 
@@ -384,7 +533,7 @@ export class AuthService implements IAuthService {
     if (!newPassword || newPassword.length < 6) {
       return {
         success: false,
-        message: 'Şifre en az 6 karakter olmalıdır',
+        message: 'Password must be at least 6 characters long',
       };
     }
 
@@ -419,7 +568,7 @@ export class AuthService implements IAuthService {
 
     return {
       success: true,
-      message: 'Şifre başarıyla güncellendi. Yeni şifrenizle giriş yapabilirsiniz.',
+      message: 'Password updated successfully. You can now login with your new password.',
     };
   }
 

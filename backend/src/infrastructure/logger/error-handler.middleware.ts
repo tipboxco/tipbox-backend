@@ -16,15 +16,15 @@ export function errorHandler(err: any, req: Request, res: Response, next: NextFu
   if (err.code === 'P2002') {
     code = ErrorCode.DUPLICATE_ENTRY;
     if (err.meta?.target?.includes('email')) {
-      message = 'Sistemde kayıtlı mail adresi bulunuyor.';
+      message = 'This email address is already registered in the system.';
       code = ErrorCode.EMAIL_ALREADY_EXISTS;
     }
   } else if (err.code === 'P2025') {
     code = ErrorCode.NOT_FOUND;
-    message = 'Kayıt bulunamadı.';
+    message = 'Record not found.';
   } else if (err.code?.startsWith('P')) {
     code = ErrorCode.DATABASE_ERROR;
-    message = 'Veritabanı hatası oluştu.';
+    message = 'A database error occurred.';
   }
 
   // Structured error logging

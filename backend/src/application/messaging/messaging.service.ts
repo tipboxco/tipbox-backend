@@ -45,6 +45,7 @@ export interface InboxQueryOptions {
   unreadOnly?: boolean;
   limit?: number;
   threadType?: 'DM' | 'SUPPORT' | 'ALL'; // Thread tipi filtresi
+  cursor?: string; // Pagination cursor (timestamp)
 }
 
 export class MessagingService {
@@ -379,8 +380,15 @@ export class MessagingService {
 
   /**
    * Thread'deki tüm mesajları al (DMMessage, TIPS, Support Request birleşik)
+   * Cursor-based pagination ile WhatsApp benzeri çalışır
+   * @param cursor - Timestamp (ISO string) - bu timestamp'ten önceki (daha eski) mesajlar getirilir
    */
-  async getThreadMessages(threadId: string, userId: string, limit = 100, offset = 0): Promise<MessageFeedItem[]> {
+  async getThreadMessages(
+    threadId: string, 
+    userId: string, 
+    limit: number = 50, 
+    cursor?: string
+  ): Promise<{ items: MessageFeedItem[]; hasMore: boolean; nextCursor?: string }> {
     try {
       // Thread'e erişim kontrolü
       const thread = await this.dmThreadRepo.findById(threadId);
@@ -388,24 +396,33 @@ export class MessagingService {
         throw new Error('Thread not found');
       }
 
-        const userIdStr = userId;
+      const userIdStr = userId;
       const isParticipant = thread.userOneId === userIdStr || thread.userTwoId === userIdStr;
       if (!isParticipant) {
         throw new Error('User is not a participant of this thread');
       }
 
-      const threadItems: MessageFeedItem[] = [];
-
+      // Cursor'ı Date'e çevir (cursor yoksa undefined)
+      const cursorDate = cursor ? new Date(cursor) : undefined;
+      
       // Thread tipi kontrolü: Support thread ise sadece SUPPORT context'li mesajlar döndür
       const isSupportThread = thread.isSupportContext();
 
       // SUPPORT THREAD: Sadece SUPPORT context'li mesajları döndür
       if (isSupportThread) {
-        // Sadece SUPPORT context'li mesajları getir (DM, NULL veya TIPS mesajlarını hariç tut)
-        const allMessages = await this.prisma.dMMessage.findMany({
-          where: { 
-            threadId,
-          },
+        // Cursor-based pagination: cursor'dan önceki (daha eski) mesajları getir
+        const whereClause: any = {
+          threadId,
+          context: "SUPPORT",
+        };
+        
+        if (cursorDate) {
+          whereClause.sentAt = { lt: cursorDate };
+        }
+
+        // Limit + 1 al (hasMore kontrolü için)
+        const messages = await this.prisma.dMMessage.findMany({
+          where: whereClause,
           include: {
             sender: {
               include: {
@@ -415,25 +432,18 @@ export class MessagingService {
               },
             },
           },
-          orderBy: { sentAt: 'asc' },
-          take: Math.min(limit * 2, 1000), // Biraz fazla al, sonra filtrele
+          orderBy: { sentAt: 'desc' }, // En yeni önce (WhatsApp tarzı)
+          take: limit + 1, // hasMore kontrolü için +1
         });
 
-        // Sadece SUPPORT context'li ve TIPS olmayan mesajları dahil et
-        const supportMessages = allMessages.filter((msg) => {
-          const context = msg.context;
+        // TIPS mesajlarını filtrele
+        const supportMessages = messages.filter((msg) => {
           const messageText = msg.message || '';
-          
-          // SUPPORT context kontrolü
-          const isSupportContext = context === "SUPPORT";
-          
-          // TIPS mesajı kontrolü - TIPS mesajlarını hariç tut
           const isTipsMessage = messageText.includes('Sent') && messageText.includes('TIPS');
-          
-          // Sadece SUPPORT context'li ve TIPS olmayan mesajları dahil et
-          return isSupportContext && !isTipsMessage;
+          return !isTipsMessage;
         });
 
+        const threadItems: MessageFeedItem[] = [];
         for (const message of supportMessages) {
           const sender = message.sender;
           if (!sender) continue;
@@ -465,20 +475,36 @@ export class MessagingService {
           });
         }
 
-        // Support thread'lerde sadece mesajlar var, TIPS ve support-request yok
-        // Timestamp'e göre sırala (zaten asc ile geliyor)
-        const paginatedItems = threadItems.slice(offset, offset + limit);
-        logger.info(`Support thread ${threadId} messages: total=${threadItems.length}, messages=${threadItems.length}`);
-        return paginatedItems;
+        // hasMore kontrolü
+        const hasMore = threadItems.length > limit;
+        const items = hasMore ? threadItems.slice(0, limit) : threadItems;
+        const nextCursor = hasMore && items.length > 0 
+          ? this.getTimestampFromFeedItem(items[items.length - 1])
+          : undefined;
+
+        logger.info(`Support thread ${threadId} messages: returned=${items.length}, hasMore=${hasMore}`);
+        return { items, hasMore, nextCursor };
       }
 
       // NORMAL DM THREAD: DM context'li mesajlar + TIPS + support-request
+      // Cursor-based pagination: Her tabloyu cursor ile sorgula, sonra birleştir
+      
       // 1. DMMessage'ları getir (DM context'li veya context'i olmayan mesajlar)
-      // Eski mesajların context'i NULL olabilir, onları da dahil et
+      const messageWhere: any = {
+        threadId,
+        OR: [
+          { context: null },
+          { context: undefined },
+          { context: "DM" },
+        ],
+      };
+      
+      if (cursorDate) {
+        messageWhere.sentAt = { lt: cursorDate };
+      }
+
       const allMessages = await this.prisma.dMMessage.findMany({
-        where: { 
-          threadId,
-        },
+        where: messageWhere,
         include: {
           sender: {
             include: {
@@ -488,21 +514,83 @@ export class MessagingService {
             },
           },
         },
-        orderBy: { sentAt: 'asc' }, // En eski önce al, sonra timestamp'e göre sıralayacağız
-        take: 1000, // Tüm mesajları al, sonra sıralayacağız
+        orderBy: { sentAt: 'desc' }, // En yeni önce
+        take: limit + 1, // hasMore kontrolü için +1
       });
+
+      // 2. Thread kullanıcıları arasındaki TIPS transferlerini getir
+      const tipsWhere: any = {
+        OR: [
+          { fromUserId: thread.userOneId, toUserId: thread.userTwoId },
+          { fromUserId: thread.userTwoId, toUserId: thread.userOneId },
+        ],
+      };
       
-      // DM context'li mesajları filtrele (SUPPORT context'li mesajları hariç tut)
-      const messages = allMessages.filter((msg) => {
-        const context = msg.context;
-        // NULL, undefined veya DM olan mesajları dahil et, SUPPORT olanları hariç tut
-        return context === null || context === undefined || context === "DM";
+      if (cursorDate) {
+        tipsWhere.createdAt = { lt: cursorDate };
+      }
+
+      const tipsTransfers = await this.prisma.tipsTokenTransfer.findMany({
+        where: tipsWhere,
+        include: {
+          fromUser: {
+            include: {
+              profile: true,
+              titles: { orderBy: { earnedAt: 'desc' }, take: 1 },
+              avatars: { where: { isActive: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' }, // En yeni önce
+        take: limit + 1, // hasMore kontrolü için +1
       });
+
+      // 3. Thread kullanıcıları arasındaki Support Request'leri getir
+      const requestWhere: any = {
+        OR: [
+          { fromUserId: thread.userOneId, toUserId: thread.userTwoId },
+          { fromUserId: thread.userTwoId, toUserId: thread.userOneId },
+        ],
+        description: { not: null }, // Sadece support request'ler
+      };
       
-      for (const message of messages) {
-        // Sender bilgilerini al
+      if (cursorDate) {
+        requestWhere.sentAt = { lt: cursorDate };
+      }
+
+      const supportRequests = await this.prisma.dMRequest.findMany({
+        where: requestWhere,
+        orderBy: { sentAt: 'desc' }, // En yeni önce
+        take: limit + 1, // hasMore kontrolü için +1
+        include: {
+          fromUser: {
+            include: {
+              profile: true,
+              titles: { orderBy: { earnedAt: 'desc' }, take: 1 },
+              avatars: { where: { isActive: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+            },
+          },
+          toUser: {
+            include: {
+              profile: true,
+              titles: { orderBy: { earnedAt: 'desc' }, take: 1 },
+              avatars: { where: { isActive: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+            },
+          },
+        },
+      });
+
+      // 4. Tüm item'ları oluştur ve birleştir
+      const threadItems: MessageFeedItem[] = [];
+
+      // DMMessage'ları ekle
+      for (const message of allMessages) {
         const sender = message.sender;
         if (!sender) continue;
+
+        // TIPS mesajlarını atla (duplicate önlemek için)
+        const isTipsMessage = message.message.includes('Sent') && message.message.includes('TIPS');
+        if (isTipsMessage) continue;
 
         const senderName = sender.profile?.displayName
           || sender.profile?.userName
@@ -516,15 +604,6 @@ export class MessagingService {
           senderAvatar: resolveMediaUrl(sender.avatars?.[0]?.imageUrl, true) || '',
         };
 
-        // TIPS mesajı kontrolü - message içeriğine göre
-        const isTipsMessage = message.message.includes('Sent') && message.message.includes('TIPS');
-        
-        // TIPS mesajlarını atla - zaten TipsTokenTransfer'den alıyoruz (duplicate önlemek için)
-        if (isTipsMessage) {
-          continue; // TIPS mesajlarını DMMessage'den ekleme, sadece TipsTokenTransfer'den al
-        }
-
-        // Normal mesaj
         const messageData: Message = {
           id: message.id,
           sender: senderUser,
@@ -540,26 +619,7 @@ export class MessagingService {
         });
       }
 
-      // 2. Thread kullanıcıları arasındaki TIPS transferlerini getir
-      const tipsTransfers = await this.prisma.tipsTokenTransfer.findMany({
-        where: {
-          OR: [
-            { fromUserId: thread.userOneId, toUserId: thread.userTwoId },
-            { fromUserId: thread.userTwoId, toUserId: thread.userOneId },
-          ],
-        },
-        include: {
-          fromUser: {
-            include: {
-              profile: true,
-              titles: { orderBy: { earnedAt: 'desc' }, take: 1 },
-              avatars: { where: { isActive: true }, orderBy: { createdAt: 'desc' }, take: 1 },
-            },
-          },
-        },
-        orderBy: { createdAt: 'asc' }, // En eski önce, sonra timestamp'e göre sıralayacağız
-      });
-
+      // TIPS transferlerini ekle
       for (const transfer of tipsTransfers) {
         const sender = transfer.fromUser;
         if (!sender) continue;
@@ -591,55 +651,24 @@ export class MessagingService {
         });
       }
 
-      // 3. Thread kullanıcıları arasındaki Support Request'leri getir
-      // Sadece normal DM thread'lerde support request'leri göster (support thread'lerde değil)
-        const supportRequests = await this.prisma.dMRequest.findMany({
-          where: {
-            OR: [
-              { fromUserId: thread.userOneId, toUserId: thread.userTwoId },
-              { fromUserId: thread.userTwoId, toUserId: thread.userOneId },
-            ],
-            description: { not: null }, // Sadece support request'ler (description olanlar)
-          },
-          orderBy: { sentAt: 'asc' }, // En eski önce (sıralama için)
-          include: {
-            fromUser: {
-              include: {
-                profile: true,
-                titles: { orderBy: { earnedAt: 'desc' }, take: 1 },
-                avatars: { where: { isActive: true }, orderBy: { createdAt: 'desc' }, take: 1 },
-              },
-            },
-            toUser: {
-              include: {
-                profile: true,
-                titles: { orderBy: { earnedAt: 'desc' }, take: 1 },
-                avatars: { where: { isActive: true }, orderBy: { createdAt: 'desc' }, take: 1 },
-              },
-            },
-          },
-        });
+      // Support Request'leri ekle
+      for (const request of supportRequests) {
+        if (!request.description) continue;
 
-      // Her support request için threadId artık direkt DMRequest.threadId field'ından alınacak
-      // Her request accept edildiğinde yeni bir thread oluşturulur ve threadId DMRequest'e kaydedilir
-        for (const request of supportRequests) {
-          if (!request.description) continue;
+        const senderUser = request.fromUser;
+        if (!senderUser) continue;
 
-          // Sender her zaman request'i oluşturan kişidir (fromUser)
-          const senderUser = request.fromUser;
-          if (!senderUser) continue;
+        const senderName = senderUser.profile?.displayName
+          || senderUser.profile?.userName
+          || senderUser.email
+          || 'Unknown';
 
-          const senderName = senderUser.profile?.displayName
-            || senderUser.profile?.userName
-            || senderUser.email
-            || 'Unknown';
-
-          const sender: SenderUser = {
-            id: request.fromUserId,
-            senderName,
-            senderTitle: senderUser.titles?.[0]?.title ?? '',
-            senderAvatar: resolveMediaUrl(senderUser.avatars?.[0]?.imageUrl, true) || '',
-          };
+        const sender: SenderUser = {
+          id: request.fromUserId,
+          senderName,
+          senderTitle: senderUser.titles?.[0]?.title ?? '',
+          senderAvatar: resolveMediaUrl(senderUser.avatars?.[0]?.imageUrl, true) || '',
+        };
 
         // Map DMRequestStatus to SupportRequestStatus
         let status: SupportRequestStatus;
@@ -660,7 +689,6 @@ export class MessagingService {
           status = 'rejected';
         }
 
-        // SupportType mapping
         const dmRequestWithType = request as typeof request & { type: string; amount: number | any };
         const prismaType = dmRequestWithType.type;
         const supportType: SupportType = 
@@ -672,9 +700,6 @@ export class MessagingService {
           ? dmRequestWithType.amount
           : Number(dmRequestWithType.amount) || 0;
 
-        // DM ekranında support chat mesajlarını yüklemiyoruz
-        // Support chat açıldığında threadId ile GET /messages/{threadId} çağrısı yapılacak
-        // ThreadId artık direkt DMRequest.threadId field'ından alınacak
         const requestThreadId = request.threadId ?? null;
         const supportRequest: SupportRequest = {
           id: request.id,
@@ -697,21 +722,24 @@ export class MessagingService {
         });
       }
 
-      // 4. Tüm item'ları timestamp'e göre sırala (en eski önce - WhatsApp tarzı)
+      // 5. Tüm item'ları timestamp'e göre DESC sırala (en yeni önce - WhatsApp tarzı)
       threadItems.sort((a, b) => {
         const timestampA = this.getTimestampFromFeedItem(a);
         const timestampB = this.getTimestampFromFeedItem(b);
-        return new Date(timestampA).getTime() - new Date(timestampB).getTime();
+        return new Date(timestampB).getTime() - new Date(timestampA).getTime(); // DESC
       });
 
-      // Debug log: Support request sayısını kontrol et
-      const supportRequestCount = threadItems.filter(item => item.type === 'support-request').length;
-      logger.info(`DM thread ${threadId} messages: total=${threadItems.length}, support-requests=${supportRequestCount}, messages=${threadItems.filter(item => item.type === 'message').length}, tips=${threadItems.filter(item => item.type === 'send-tips').length}`);
+      // 6. Pagination uygula
+      const hasMore = threadItems.length > limit;
+      const items = hasMore ? threadItems.slice(0, limit) : threadItems;
+      const nextCursor = hasMore && items.length > 0 
+        ? this.getTimestampFromFeedItem(items[items.length - 1])
+        : undefined;
 
-      // 5. Limit ve offset uygula
-      const paginatedItems = threadItems.slice(offset, offset + limit);
+      const supportRequestCount = items.filter(item => item.type === 'support-request').length;
+      logger.info(`DM thread ${threadId} messages: returned=${items.length}, hasMore=${hasMore}, support-requests=${supportRequestCount}, messages=${items.filter(item => item.type === 'message').length}, tips=${items.filter(item => item.type === 'send-tips').length}`);
 
-      return paginatedItems;
+      return { items, hasMore, nextCursor };
     } catch (error) {
       logger.error(`Failed to get messages for thread ${threadId}:`, error);
       throw error;
@@ -758,12 +786,20 @@ export class MessagingService {
     }
   }
 
-  async getUserInboxMessages(userId: string, options: InboxQueryOptions = {}): Promise<InboxMessageItem[]> {
+  async getUserInboxMessages(
+    userId: string, 
+    options: InboxQueryOptions = {}
+  ): Promise<{ items: InboxMessageItem[]; hasMore: boolean; nextCursor?: string }> {
     try {
       const threads = await this.dmThreadRepo.findDetailedByUserId(userId, options);
       const userIdStr = String(userId);
 
-      return threads.map((thread) => {
+      // hasMore kontrolü (limit + 1 aldık)
+      const limit = options.limit ?? 50;
+      const hasMore = threads.length > limit;
+      const resultThreads = hasMore ? threads.slice(0, limit) : threads;
+
+      const items = resultThreads.map((thread) => {
         const isUserOne = thread.userOneId === userIdStr;
         const counterpart = isUserOne ? thread.userTwo : thread.userOne;
         const recipientUserId = isUserOne ? thread.userTwoId : thread.userOneId; // Karşı tarafın ID'si
@@ -794,6 +830,13 @@ export class MessagingService {
           threadType: thread.isSupportThread ? 'SUPPORT' : 'DM', // Thread tipi bilgisi
         } satisfies InboxMessageItem;
       });
+
+      // nextCursor hesapla (son thread'in updatedAt'ı veya lastMessage timestamp'i)
+      const nextCursor = hasMore && items.length > 0
+        ? items[items.length - 1].timestamp
+        : undefined;
+
+      return { items, hasMore, nextCursor };
     } catch (error) {
       logger.error(`Failed to get inbox messages for user ${userId}:`, error);
       throw error;
@@ -802,14 +845,23 @@ export class MessagingService {
 
   /**
    * Kullanıcının mesaj feed'ini getir (mesajlar, support request'ler, TIPS birleşik)
+   * Cursor-based pagination ile WhatsApp benzeri çalışır
    */
-  async getUserMessageFeed(userId: string, limit = 50): Promise<MessageFeed> {
+  async getUserMessageFeed(
+    userId: string, 
+    limit: number = 50, 
+    cursor?: string
+  ): Promise<{ items: MessageFeedItem[]; hasMore: boolean; nextCursor?: string }> {
     try {
       const userIdStr = userId;
       const feedItems: MessageFeedItem[] = [];
+      const cursorDate = cursor ? new Date(cursor) : undefined;
 
-      // 1. Mesajları getir (thread'lerden)
-      const threads = await this.dmThreadRepo.findDetailedByUserId(userIdStr, { limit: 100 });
+      // 1. Mesajları getir (thread'lerden) - cursor ile
+      const threads = await this.dmThreadRepo.findDetailedByUserId(userIdStr, { 
+        limit: limit + 1, // hasMore kontrolü için +1
+        cursor,
+      });
       for (const thread of threads) {
         const isUserOne = thread.userOneId === userIdStr;
         const counterpart = isUserOne ? thread.userTwo : thread.userOne;
@@ -849,9 +901,17 @@ export class MessagingService {
         });
       }
 
-      // 2. Support Request'leri getir
-      const supportRequests = await this.supportRequestService.getUserSupportRequests(userIdStr, { limit: 100 });
-      for (const request of supportRequests) {
+      // 2. Support Request'leri getir - cursor ile (support request service'de cursor desteği eklenmeli)
+      // Şimdilik limit + 1 al, sonra cursor ile filtrele
+      const supportRequests = await this.supportRequestService.getUserSupportRequests(userIdStr, { 
+        limit: limit + 1, // hasMore kontrolü için +1
+      });
+      
+      // Cursor ile filtrele (timestamp'e göre)
+      const filteredSupportRequests = cursorDate
+        ? supportRequests.filter(req => new Date(req.timestamp) < cursorDate)
+        : supportRequests;
+      for (const request of filteredSupportRequests) {
         // Support request'ten sender bilgilerini al
         const dmRequest = await this.prisma.dMRequest.findUnique({
           where: { id: request.id },
@@ -960,14 +1020,20 @@ export class MessagingService {
         });
       }
 
-      // 3. TIPS transferlerini getir
+      // 3. TIPS transferlerini getir - cursor ile
+      const tipsWhere: any = {
+        OR: [
+          { fromUserId: userIdStr },
+          { toUserId: userIdStr },
+        ],
+      };
+      
+      if (cursorDate) {
+        tipsWhere.createdAt = { lt: cursorDate };
+      }
+
       const tipsTransfers = await this.prisma.tipsTokenTransfer.findMany({
-        where: {
-          OR: [
-            { fromUserId: userIdStr },
-            { toUserId: userIdStr },
-          ],
-        },
+        where: tipsWhere,
         include: {
           fromUser: {
             include: {
@@ -985,7 +1051,7 @@ export class MessagingService {
           },
         },
         orderBy: { createdAt: 'desc' },
-        take: 100,
+        take: limit + 1, // hasMore kontrolü için +1
       });
 
       for (const transfer of tipsTransfers) {
@@ -1022,17 +1088,21 @@ export class MessagingService {
         });
       }
 
-      // Tüm feed item'larını timestamp'e göre sırala (en eski önce - WhatsApp tarzı)
+      // Tüm feed item'larını timestamp'e göre DESC sırala (en yeni önce - WhatsApp tarzı)
       feedItems.sort((a, b) => {
         const timestampA = this.getTimestampFromFeedItem(a);
         const timestampB = this.getTimestampFromFeedItem(b);
-        return new Date(timestampA).getTime() - new Date(timestampB).getTime();
+        return new Date(timestampB).getTime() - new Date(timestampA).getTime(); // DESC
       });
 
-      // Limit uygula
-      const limitedItems = feedItems.slice(0, limit);
+      // Pagination uygula
+      const hasMore = feedItems.length > limit;
+      const items = hasMore ? feedItems.slice(0, limit) : feedItems;
+      const nextCursor = hasMore && items.length > 0
+        ? this.getTimestampFromFeedItem(items[items.length - 1])
+        : undefined;
 
-      return { messages: limitedItems };
+      return { items, hasMore, nextCursor };
     } catch (error) {
       logger.error(`Failed to get message feed for user ${userId}:`, error);
       throw error;

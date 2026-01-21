@@ -165,6 +165,165 @@ export class PostService {
   /**
    * Context type'dan category ID'lerini resolve eder
    */
+  /**
+   * Product ID'yi resolve eder - hem id hem externalId (metadata içinde) ile arama yapar
+   * Public metod - router'dan da kullanılabilir
+   * Tüm ID formatlarını kabul eder (UUID, ULID, Medusa ID, vb.)
+   */
+  async resolveProductId(productIdOrExternalId: string): Promise<string> {
+    // Önce direkt id ile ara (herhangi bir format olabilir)
+    let product = await this.prisma.product.findUnique({
+      where: { id: productIdOrExternalId },
+      select: { id: true },
+    });
+
+    if (product) {
+      return product.id;
+    }
+
+    // Eğer bulunamazsa, metadata içindeki externalId ile ara
+    // PostgreSQL JSONB için raw SQL query kullan (Prisma JSON query syntax'ı sınırlı)
+    try {
+      const result = await this.prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT id 
+        FROM products 
+        WHERE metadata->>'externalId' = ${productIdOrExternalId}
+        LIMIT 1
+      `;
+
+      if (result && result.length > 0) {
+        return result[0].id;
+      }
+    } catch (error) {
+      // Raw query hatası - log'la ve devam et
+      logger.warn({
+        message: 'Failed to query product by externalId',
+        productIdOrExternalId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    // Hala bulunamazsa, hata fırlat
+    throw new Error(`Product not found with id or externalId: ${productIdOrExternalId}`);
+  }
+
+  /**
+   * SubCategory ID'yi resolve eder - hem id hem externalId ile arama yapar
+   * Tüm ID formatlarını kabul eder (UUID, ULID, Medusa ID, vb.)
+   */
+  async resolveSubCategoryId(subCategoryIdOrExternalId: string): Promise<string> {
+    // Önce direkt id ile ara
+    let subCategory = await this.prisma.subCategory.findUnique({
+      where: { id: subCategoryIdOrExternalId },
+      select: { id: true },
+    });
+
+    if (subCategory) {
+      return subCategory.id;
+    }
+
+    // Eğer bulunamazsa, metadata içindeki externalId ile ara (eğer metadata field'ı varsa)
+    try {
+      const result = await this.prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT id 
+        FROM sub_categories 
+        WHERE metadata->>'externalId' = ${subCategoryIdOrExternalId}
+        LIMIT 1
+      `;
+
+      if (result && result.length > 0) {
+        return result[0].id;
+      }
+    } catch (error) {
+      // Metadata field'ı yoksa veya query hatası - devam et
+      logger.debug({
+        message: 'SubCategory metadata query failed or not available',
+        subCategoryIdOrExternalId,
+      });
+    }
+
+    // Hala bulunamazsa, hata fırlat
+    throw new Error(`SubCategory not found with id or externalId: ${subCategoryIdOrExternalId}`);
+  }
+
+  /**
+   * ProductGroup ID'yi resolve eder - hem id hem externalId ile arama yapar
+   * Tüm ID formatlarını kabul eder (UUID, ULID, Medusa ID, vb.)
+   */
+  async resolveProductGroupId(productGroupIdOrExternalId: string): Promise<string> {
+    // Önce direkt id ile ara
+    let productGroup = await this.prisma.productGroup.findUnique({
+      where: { id: productGroupIdOrExternalId },
+      select: { id: true },
+    });
+
+    if (productGroup) {
+      return productGroup.id;
+    }
+
+    // Eğer bulunamazsa, metadata içindeki externalId ile ara (eğer metadata field'ı varsa)
+    try {
+      const result = await this.prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT id 
+        FROM product_groups 
+        WHERE metadata->>'externalId' = ${productGroupIdOrExternalId}
+        LIMIT 1
+      `;
+
+      if (result && result.length > 0) {
+        return result[0].id;
+      }
+    } catch (error) {
+      // Metadata field'ı yoksa veya query hatası - devam et
+      logger.debug({
+        message: 'ProductGroup metadata query failed or not available',
+        productGroupIdOrExternalId,
+      });
+    }
+
+    // Hala bulunamazsa, hata fırlat
+    throw new Error(`ProductGroup not found with id or externalId: ${productGroupIdOrExternalId}`);
+  }
+
+  /**
+   * MainCategory ID'yi resolve eder - hem id hem externalId ile arama yapar
+   * Tüm ID formatlarını kabul eder (UUID, ULID, Medusa ID, vb.)
+   */
+  async resolveMainCategoryId(mainCategoryIdOrExternalId: string): Promise<string> {
+    // Önce direkt id ile ara
+    let mainCategory = await this.prisma.mainCategory.findUnique({
+      where: { id: mainCategoryIdOrExternalId },
+      select: { id: true },
+    });
+
+    if (mainCategory) {
+      return mainCategory.id;
+    }
+
+    // Eğer bulunamazsa, metadata içindeki externalId ile ara (eğer metadata field'ı varsa)
+    try {
+      const result = await this.prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT id 
+        FROM main_categories 
+        WHERE metadata->>'externalId' = ${mainCategoryIdOrExternalId}
+        LIMIT 1
+      `;
+
+      if (result && result.length > 0) {
+        return result[0].id;
+      }
+    } catch (error) {
+      // Metadata field'ı yoksa veya query hatası - devam et
+      logger.debug({
+        message: 'MainCategory metadata query failed or not available',
+        mainCategoryIdOrExternalId,
+      });
+    }
+
+    // Hala bulunamazsa, hata fırlat
+    throw new Error(`MainCategory not found with id or externalId: ${mainCategoryIdOrExternalId}`);
+  }
+
   private async resolveContextIds(
     contextType: ContextType,
     contextId: string
@@ -176,39 +335,46 @@ export class PostService {
   }> {
     switch (contextType) {
       case ContextType.SUB_CATEGORY:
+        // ExternalId desteği ile subCategory'ı resolve et
+        const resolvedSubCategoryId = await this.resolveSubCategoryId(contextId);
         const subCategory = await this.prisma.subCategory.findUnique({
-          where: { id: contextId },
+          where: { id: resolvedSubCategoryId },
           include: { mainCategory: true },
         });
         if (!subCategory) {
           logger.warn({
             message: 'Sub-category not found in post creation',
             contextId,
+            resolvedSubCategoryId,
           });
           throw new Error(`Sub-category does not exist or has been deleted. Please select a valid category.`);
         }
         return {
-          subCategoryId: contextId,
+          subCategoryId: resolvedSubCategoryId, // Resolved subCategory ID kullan
           mainCategoryId: subCategory.mainCategoryId || undefined,
         };
 
       case ContextType.PRODUCT_GROUP:
+        // ExternalId desteği ile productGroup'ı resolve et
+        const resolvedProductGroupId = await this.resolveProductGroupId(contextId);
         const productGroup = await this.prisma.productGroup.findUnique({
-          where: { id: contextId },
+          where: { id: resolvedProductGroupId },
           include: { subCategory: { include: { mainCategory: true } } },
         });
         if (!productGroup) {
           throw new Error(`Product group not found: ${contextId}`);
         }
         return {
-          productGroupId: contextId,
+          productGroupId: resolvedProductGroupId, // Resolved productGroup ID kullan
           subCategoryId: productGroup.subCategoryId || undefined,
           mainCategoryId: productGroup.subCategory?.mainCategoryId || undefined,
         };
 
       case ContextType.PRODUCT:
+        // ExternalId desteği ile product'ı resolve et
+        const resolvedProductId = await this.resolveProductId(contextId);
         const product = await this.prisma.product.findUnique({
-          where: { id: contextId },
+          where: { id: resolvedProductId },
           include: {
             group: {
               include: {
@@ -222,12 +388,13 @@ export class PostService {
           logger.warn({
             message: 'Product not found in post creation',
             contextId,
+            resolvedProductId,
             userId: 'unknown', // userId buraya gelemez, stack'te ekleyelim
           });
           throw new Error(`Product does not exist or has been deleted. Please select a valid product.`);
         }
         return {
-          productId: contextId,
+          productId: resolvedProductId, // Resolved product ID kullan
           productGroupId: product.groupId || undefined,
           subCategoryId: product.group?.subCategoryId || undefined,
           mainCategoryId: product.group?.subCategory?.mainCategoryId || undefined,

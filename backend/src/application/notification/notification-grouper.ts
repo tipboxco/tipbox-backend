@@ -50,16 +50,17 @@ export interface GroupedNotification {
 export interface UngroupedNotification {
   id: string;
   type: NotificationType;
-  isGrouped: false;
-  userId: string;
-  username: string | null;
-  avatar: string | null;
+  // isGrouped sadece gruplanabilir bildirimlerde (POST_LIKED, POST_COMMENTED, POST_FAVORITED, COMMENT_LIKED, COMMENT_REPLIED) olur
+  userId?: string;
+  username?: string | null;
+  avatar?: string | null;
   postId?: string;
   commentId?: string;
   postContent?: string | null;
   postType?: string | null;
   description?: string | null;
   imageUrl?: string | null;
+  amount?: number | null; // TIPS_RECEIVED için root seviyede
   createdAt: Date;
   read: boolean;
   title?: string;
@@ -96,26 +97,91 @@ export function groupNotifications(
   // Gruplanabilir bildirimleri grupla
   const grouped = groupNotificationsByPostAndType(groupableNotifications);
 
-  // Gruplanmamış bildirimleri de ekle
-  const ungrouped: UngroupedNotification[] = ungroupableNotifications.map((notif) => ({
-    id: notif.id,
-    type: notif.type as NotificationType,
-    isGrouped: false,
-    userId: notif.userId || notif.data?.likerId || notif.data?.commenterId || notif.data?.userId || '',
-    username: notif.username || null,
-    avatar: notif.avatar || null,
-    postId: notif.data?.postId,
-    commentId: notif.data?.commentId,
-    postContent: notif.data?.postContent || null,
-    postType: notif.data?.postType || null,
-    description: notif.data?.description || null,
-    imageUrl: notif.data?.imageUrl || null,
-    createdAt: new Date(notif.createdAt),
-    read: notif.read || false,
-    title: notif.title,
-    message: notif.message,
-    data: notif.data,
-  }));
+  // Gruplanmamış bildirimleri de ekle (isGrouped alanı eklenmez)
+  const ungrouped: UngroupedNotification[] = ungroupableNotifications.map((notif) => {
+    const notifType = notif.type as NotificationType;
+    const baseNotification: UngroupedNotification = {
+      id: notif.id,
+      type: notifType,
+      // isGrouped alanı eklenmez - sadece gruplanabilir bildirimlerde olur
+      userId: notif.userId || notif.data?.likerId || notif.data?.commenterId || notif.data?.userId || undefined,
+      username: notif.username || null,
+      avatar: notif.avatar || null,
+      postId: notif.data?.postId,
+      commentId: notif.data?.commentId,
+      postContent: notif.data?.postContent || null,
+      postType: notif.data?.postType || null,
+      description: notif.data?.description || null,
+      imageUrl: notif.data?.imageUrl || null,
+      createdAt: new Date(notif.createdAt),
+      read: notif.read || false,
+      title: notif.title,
+      message: notif.message,
+      data: notif.data,
+    };
+
+    // EVENT_STARTED için sadece eventName, eventId ve imageUrl (root seviyede imageUrl olabilir)
+    if (notifType === NotificationType.EVENT_STARTED) {
+      return {
+        ...baseNotification,
+        data: {
+          eventId: notif.data?.eventId,
+          eventName: notif.data?.eventName,
+          imageUrl: notif.data?.imageUrl || null,
+        },
+        imageUrl: notif.data?.imageUrl || null, // Root seviyede de olabilir
+        // Gereksiz alanları kaldır
+        userId: undefined,
+        username: undefined,
+        avatar: null,
+        postId: undefined,
+        commentId: undefined,
+        postContent: undefined,
+        postType: undefined,
+        description: undefined,
+      };
+    }
+
+    // Mesajlaşma bildirimleri için (DM_REQUEST_RECEIVED, DM_REQUEST_ACCEPTED, DM_REQUEST_DECLINED, SUPPORT_REQUEST_ACCEPTED)
+    // Post ile ilgili tüm alanları kaldır, sadece userId, avatar, username ve request bilgileri
+    if (
+      notifType === NotificationType.DM_REQUEST_RECEIVED ||
+      notifType === NotificationType.DM_REQUEST_ACCEPTED ||
+      notifType === NotificationType.DM_REQUEST_DECLINED ||
+      notifType === NotificationType.SUPPORT_REQUEST_ACCEPTED
+    ) {
+      return {
+        ...baseNotification,
+        // Post ile ilgili alanları kaldır
+        postId: undefined,
+        commentId: undefined,
+        postContent: undefined,
+        postType: undefined,
+        description: undefined,
+        imageUrl: undefined,
+        // userId, avatar, username ve data kalacak
+      };
+    }
+
+    // TIPS_RECEIVED için özel işlem: sadece userId, username, avatar, type ve amount (root seviyede)
+    if (notifType === NotificationType.TIPS_RECEIVED) {
+      const amount = notif.amount || notif.data?.amount || null;
+      return {
+        id: notif.id,
+        type: notifType,
+        userId: notif.userId || notif.data?.senderId || notif.data?.senderUserId || notif.data?.userId || undefined,
+        username: notif.username || null,
+        avatar: notif.avatar || null,
+        amount: amount,
+        createdAt: new Date(notif.createdAt),
+        read: notif.read || false,
+        // Post ile ilgili tüm alanlar kaldırıldı
+        // data objesi kaldırıldı
+      };
+    }
+
+    return baseNotification;
+  });
 
   // Gruplanmış ve gruplanmamış bildirimleri birleştir ve tarihe göre sırala
   const allNotifications: ProcessedNotification[] = [...grouped, ...ungrouped];
@@ -170,14 +236,14 @@ function groupNotificationsByPostAndType(notifications: any[]): GroupedNotificat
       return timeB - timeA;
     });
 
-    // Eğer tek bildirim varsa, gruplama yapma
+    // Eğer tek bildirim varsa, gruplama yapma (isGrouped alanı eklenmez)
     if (groupNotifs.length === 1) {
       const notif = groupNotifs[0];
       groupedNotifications.push({
         id: notif.id,
         type: notif.type as NotificationType,
-        isGrouped: false as const,
-        userId: notif.userId || notif.data?.likerId || notif.data?.commenterId || notif.data?.userId || '',
+        // isGrouped alanı eklenmez - sadece gruplanabilir bildirimlerde olur
+        userId: notif.userId || notif.data?.likerId || notif.data?.commenterId || notif.data?.userId || undefined,
         username: notif.username || null,
         avatar: notif.avatar || null,
         postId: notif.data?.postId,
@@ -219,13 +285,13 @@ function groupNotificationsByPostAndType(notifications: any[]): GroupedNotificat
     // Her window için gruplanmış bildirim oluştur
     windowGroups.forEach((windowNotifs) => {
       if (windowNotifs.length === 1) {
-        // Tek bildirim, gruplama yapma - ayrı bildirim olarak ekle
+        // Tek bildirim, gruplama yapma - ayrı bildirim olarak ekle (isGrouped alanı eklenmez)
         const notif = windowNotifs[0];
         groupedNotifications.push({
           id: notif.id,
           type: notif.type as NotificationType,
-          isGrouped: false as const,
-          userId: notif.userId || notif.data?.likerId || notif.data?.commenterId || notif.data?.userId || '',
+          // isGrouped alanı eklenmez - sadece gruplanabilir bildirimlerde olur
+          userId: notif.userId || notif.data?.likerId || notif.data?.commenterId || notif.data?.userId || undefined,
           username: notif.username || null,
           avatar: notif.avatar || null,
           postId: notif.data?.postId,

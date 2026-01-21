@@ -146,69 +146,68 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  *           items:
  *             type: string
  *             enum: [TRUSTER, CATEGORY_MATCH, TRENDING, NEW_USER, BOOSTED, INVENTORY_MATCH, PRODUCT_GROUP_MATCH]
- *         description: Feed source filtreleri. Kullanılabilir değerler: TRUSTER, CATEGORY_MATCH, TRENDING, NEW_USER, BOOSTED, INVENTORY_MATCH, PRODUCT_GROUP_MATCH
+ *         description: "Feed source filtreleri. Kullanılabilir değerler: TRUSTER, CATEGORY_MATCH, TRENDING, NEW_USER, BOOSTED, INVENTORY_MATCH, PRODUCT_GROUP_MATCH"
  *         style: form
  *         explode: true
+ *         required: false
  *       - in: query
  *         name: tags
  *         schema:
  *           type: array
  *           items:
  *             type: string
- *             enum: [Review, Benchmark, Tips, Question, Experience, Update]
- *         description: İçerik etiketleri veya post type'ları. Review=FREE, Benchmark=COMPARE, Tips=TIPS, Question=QUESTION, Experience=EXPERIENCE, Update=UPDATE
+ *             enum: [Free, Benchmark, Experience, Update, Question, Tips and Tricks]
+ *         description: "Post type'larına göre filtrele. Free=FREE, Benchmark=COMPARE, Experience=EXPERIENCE, Update=UPDATE, Question=QUESTION, Tips and Tricks=TIPS"
  *         style: form
  *         explode: true
+ *         required: false
  *       - in: query
  *         name: category
  *         schema:
- *           type: string
- *           format: uuid
- *         description: Birincil kategori ID'si (mainCategoryId veya subCategoryId). Kategorileri listelemek için GET /catalog/categories endpoint'ini kullanın.
+ *           type: array
+ *           items:
+ *             type: string
+ *         description: "Birincil kategori ID'leri (mainCategoryId). UUID, ULID, prefix'li ID (pcat_, mcat_, scat_) veya kategori adı kabul edilir. Kategorileri listelemek için GET /catalog/categories endpoint'ini kullanın."
+ *         style: form
+ *         explode: true
+ *         required: false
  *       - in: query
  *         name: sort
  *         schema:
  *           type: string
  *           enum: [recent, top]
- *           default: recent
- *         description: Sıralama tipi (recent = en yeni postlar, top = relevance score'a göre popüler olanlar)
+ *         description: "Sıralama tipi (recent = en yeni postlar, top = relevance score'a göre popüler olanlar)"
  *         style: form
  *         explode: false
- *       - in: query
- *         name: types
- *         schema:
- *           type: array
- *           items:
- *             type: string
- *             enum: [benchmark, post, question, tipsAndTricks, experience, update]
- *         description: Feed item type'larına göre filtrele
- *         style: form
- *         explode: true
+ *         required: false
  *       - in: query
  *         name: cursor
  *         schema:
  *           type: string
- *         description: Pagination cursor (son item'ın id'si)
+ *         description: "Pagination cursor (son item'ın id'si)"
+ *         required: false
  *       - in: query
  *         name: limit
  *         schema:
  *           type: integer
  *           minimum: 1
  *           maximum: 50
- *           default: 20
- *         description: Sayfa başına item sayısı
+ *         description: "Sayfa başına item sayısı"
+ *         required: false
  *       - in: query
  *         name: contextType
  *         schema:
  *           type: string
  *           enum: [sub_category, product_group, product]
- *         description: Context type for context-based filtering (optional)
+ *         description: "Context type for context-based filtering (optional)"
+ *         required: false
  *       - in: query
  *         name: contextId
  *         schema:
  *           type: string
  *           format: uuid
- *         description: Context ID for context-based filtering (optional, required if contextType is provided)
+ *         description: "Context ID for context-based filtering (optional, required if contextType is provided)"
+ *         required: false
  *     responses:
  *       200:
  *         description: Filtrelenmiş feed başarıyla getirildi
@@ -296,19 +295,24 @@ router.get('/filtered', asyncHandler(async (req: Request, res: Response) => {
   const filters: FeedFilterOptions = {};
 
   if (req.query.interests) {
+    // Array olarak parse et (multiple selection)
     filters.interests = Array.isArray(req.query.interests)
       ? (req.query.interests as string[])
       : [req.query.interests as string];
   }
 
   if (req.query.tags) {
+    // Array olarak parse et (multiple selection)
     filters.tags = Array.isArray(req.query.tags)
       ? (req.query.tags as string[])
       : [req.query.tags as string];
   }
 
   if (req.query.category) {
-    filters.category = req.query.category as string;
+    // Array olarak parse et (multiple selection)
+    filters.category = Array.isArray(req.query.category)
+      ? (req.query.category as string[]).join(',')
+      : (req.query.category as string);
   }
 
   if (req.query.sort) {
@@ -320,7 +324,17 @@ router.get('/filtered', asyncHandler(async (req: Request, res: Response) => {
 
   // Context parameters
   if (req.query.contextType) {
-    filters.contextType = req.query.contextType as any;
+    const contextTypeValue = req.query.contextType;
+    // Boolean true ise default context type kullan (sub_category)
+    if (contextTypeValue === 'true' || contextTypeValue === true) {
+      filters.contextType = 'sub_category' as any;
+    } else if (typeof contextTypeValue === 'string') {
+      // Enum değerlerini kontrol et
+      const validContextTypes = ['sub_category', 'product_group', 'product'];
+      if (validContextTypes.includes(contextTypeValue)) {
+        filters.contextType = contextTypeValue as any;
+      }
+    }
   }
   if (req.query.contextId) {
     filters.contextId = req.query.contextId as string;

@@ -8,6 +8,7 @@ import { RewardSourceType } from '../../domain/reward/reward-source-type.enum';
 import { RewardClaimStatus } from '../../domain/reward/reward-claim-status.enum';
 import { TransactionActionType } from '../../domain/transaction/transaction-action-type.enum';
 import { CreateRewardClaimDTO } from '../../infrastructure/repositories/reward-claim.repository.interface';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import logger from '../../infrastructure/logger/logger';
 
 export interface ClaimRewardResult {
@@ -44,11 +45,13 @@ export class RewardClaimService {
   private readonly rewardClaimRepo: RewardClaimPrismaRepository;
   private readonly transactionService: TransactionService;
   private readonly notificationService: NotificationService;
+  private readonly prisma: ReturnType<typeof getPrisma>;
 
   constructor() {
     this.rewardClaimRepo = new RewardClaimPrismaRepository();
     this.transactionService = new TransactionService();
     this.notificationService = new NotificationService();
+    this.prisma = getPrisma();
   }
 
   /**
@@ -171,6 +174,7 @@ export class RewardClaimService {
 
   /**
    * Tek bir reward'ı claim et
+   * ✅ ÖNEMLİ: Event reward'ları için kullanıcının event'e join olması gerekir
    */
   async claimReward(userId: string, rewardClaimId: string): Promise<ClaimRewardResult> {
     try {
@@ -190,6 +194,28 @@ export class RewardClaimService {
           success: false,
           error: 'Unauthorized',
         };
+      }
+
+      // ✅ YENİ: Event reward'ları için join kontrolü
+      if (rewardClaim.sourceType === RewardSourceType.EVENT_PARTICIPATION) {
+        const eventId = rewardClaim.metadata?.eventId;
+        if (eventId) {
+          const userStats = await this.prisma.wishboxStats.findUnique({
+            where: {
+              userId_eventId: {
+                userId,
+                eventId: eventId as string,
+              },
+            },
+          });
+
+          if (!userStats) {
+            return {
+              success: false,
+              error: 'You must join the event before claiming rewards',
+            };
+          }
+        }
       }
 
       // Claimable mı kontrol et

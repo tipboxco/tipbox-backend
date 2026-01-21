@@ -61,6 +61,77 @@ export class FeedService {
   }
 
   /**
+   * Category ID'yi MainCategory ID'sine çevirir
+   * Farklı ID formatlarını destekler: UUID, ULID, prefix'li ID'ler (pcat_, mcat_, scat_), ve diğer formatlar
+   * 
+   * Arama sırası:
+   * 1. Direkt MainCategory'de ID ile ara (herhangi bir format - UUID, ULID, prefix'li, vs.)
+   * 2. Bulunamazsa Category tablosunda ara (prefix'li ID'ler için)
+   * 3. Bulunamazsa name ile MainCategory'de ara
+   * 
+   * @param categoryId - Category ID (herhangi bir format: UUID, ULID, prefix'li ID veya name)
+   * @returns MainCategory ID veya null
+   */
+  private async resolveCategoryId(categoryId: string): Promise<string | null> {
+    if (!categoryId || categoryId.trim() === '') {
+      return null;
+    }
+
+    const trimmedId = categoryId.trim();
+
+    // 1. Önce direkt MainCategory'de ID ile ara (herhangi bir format - UUID, ULID, prefix'li, vs.)
+    try {
+      const mainCategory = await this.prisma.mainCategory.findUnique({
+        where: { id: trimmedId },
+        select: { id: true },
+      });
+      if (mainCategory) {
+        return mainCategory.id;
+      }
+    } catch (error) {
+      // ID formatı Prisma için geçersiz olabilir (örn. prefix'li ID'ler UUID field'ında)
+      // Devam et, diğer yöntemleri dene
+    }
+
+    // 2. MainCategory'de bulunamadı - Category tablosunda ara (eski sistem - prefix'li ID'ler)
+    try {
+      const category = await this.prisma.category.findUnique({
+        where: { id: trimmedId },
+        select: { id: true, name: true },
+      });
+
+      if (category) {
+        // Category bulundu - name ile MainCategory'de eşleştir
+        const mainCategory = await this.prisma.mainCategory.findFirst({
+          where: { name: category.name },
+          select: { id: true },
+        });
+        if (mainCategory) {
+          return mainCategory.id;
+        }
+      }
+    } catch (error) {
+      // Category tablosunda da bulunamadı veya hata oluştu
+      // Devam et, name ile ara
+    }
+
+    // 3. Category tablosunda bulunamadı - direkt name olarak MainCategory'de ara
+    try {
+      const mainCategoryByName = await this.prisma.mainCategory.findFirst({
+        where: { name: trimmedId },
+        select: { id: true },
+      });
+      if (mainCategoryByName) {
+        return mainCategoryByName.id;
+      }
+    } catch (error) {
+      // Name ile de bulunamadı
+    }
+
+    return null;
+  }
+
+  /**
    * Get User Feed - Kullanıcının feed'ini getirir (performans için cache ve pagination ile)
    */
   async getUserFeed(
@@ -85,15 +156,62 @@ export class FeedService {
       cursor: feedCursor,
     });
 
-    // Feed tablosu boşsa boş feed döndür (fallback mekanizması kaldırıldı)
-    // Production'da feed tablosu her zaman dolu olmalı (FeedDistributionWorker tarafından doldurulur)
+    // Feed tablosu boşsa, kullanıcının tercihlerine göre filtreli feed döndür
     if (feeds.length === 0) {
-      logger.warn({
-        message: 'Feed table is empty for user - feed distribution may not be working',
+      logger.info({
+        message: 'Feed table is empty for user - returning filtered feed based on preferences',
         userId,
-        suggestion: 'Check FeedDistributionWorker is running and processing jobs',
       });
 
+      // Kullanıcının tercihlerine göre filtreli feed getir
+      const userPreferences = await this.prisma.userFeedPreferences.findUnique({
+        where: { userId },
+        select: { preferredCategories: true },
+      });
+
+      if (userPreferences?.preferredCategories) {
+        try {
+          const selectedCategories = JSON.parse(userPreferences.preferredCategories);
+          
+          if (Array.isArray(selectedCategories) && selectedCategories.length > 0) {
+            // Kullanıcının seçtiği category ve subCategory ID'lerini topla
+            const categoryIds: string[] = [];
+            const subCategoryIds: string[] = [];
+            
+            for (const category of selectedCategories) {
+              if (category.categoryId) {
+                categoryIds.push(category.categoryId);
+              }
+              if (Array.isArray(category.subCategoryIds)) {
+                subCategoryIds.push(...category.subCategoryIds);
+              }
+            }
+
+            // Tercihlere göre filtreli feed getir
+            const filters: FeedFilterOptions = {};
+            
+            if (categoryIds.length > 0) {
+              filters.category = categoryIds.join(',');
+            }
+
+            // CATEGORY_MATCH source'lu feed'leri önceliklendir
+            filters.interests = ['CATEGORY_MATCH', 'TRUSTER', 'BOOSTED', 'TRENDING', 'NEW_USER'];
+
+            return await this.getFilteredFeed(userId, filters, {
+              cursor: options?.cursor,
+              limit,
+            });
+          }
+        } catch (error) {
+          logger.warn({
+            message: 'Failed to parse preferredCategories for feed fallback',
+            userId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      // Tercih yoksa veya parse edilemediyse boş feed döndür
       return {
         items: [],
         pagination: {
@@ -189,6 +307,68 @@ export class FeedService {
     let orderedPosts = feeds
       .map((feed) => postMap.get(feed.postId))
       .filter((p): p is typeof posts[number] => Boolean(p));
+
+    // Kullanıcının tercihlerine göre post'ları önceliklendir (ilk giriş için)
+    // Eğer kullanıcının preferredCategories'i varsa, CATEGORY_MATCH source'lu post'ları öne al
+    const userPreferences = await this.prisma.userFeedPreferences.findUnique({
+      where: { userId },
+      select: { preferredCategories: true },
+    });
+
+    if (userPreferences?.preferredCategories) {
+      try {
+        const selectedCategories = JSON.parse(userPreferences.preferredCategories);
+        
+        if (Array.isArray(selectedCategories) && selectedCategories.length > 0) {
+          // Kullanıcının seçtiği category ve subCategory ID'lerini topla
+          const preferredCategoryIds = new Set<string>();
+          const preferredSubCategoryIds = new Set<string>();
+          
+          for (const category of selectedCategories) {
+            if (category.categoryId) {
+              preferredCategoryIds.add(category.categoryId);
+            }
+            if (Array.isArray(category.subCategoryIds)) {
+              category.subCategoryIds.forEach((id: string) => preferredSubCategoryIds.add(id));
+            }
+          }
+
+          // Post'ları tercihlere göre sırala
+          orderedPosts = orderedPosts.sort((a, b) => {
+            const aSource = feedSourceMap.get(a.id) || '';
+            const bSource = feedSourceMap.get(b.id) || '';
+            
+            // CATEGORY_MATCH source'lu post'ları önceliklendir
+            const aIsCategoryMatch = aSource === FeedSource.CATEGORY_MATCH;
+            const bIsCategoryMatch = bSource === FeedSource.CATEGORY_MATCH;
+            
+            if (aIsCategoryMatch && !bIsCategoryMatch) return -1;
+            if (!aIsCategoryMatch && bIsCategoryMatch) return 1;
+            
+            // Eğer ikisi de category match değilse, relevance score'a göre sırala
+            const aFeed = feeds.find(f => f.postId === a.id);
+            const bFeed = feeds.find(f => f.postId === b.id);
+            
+            if (aFeed && bFeed) {
+              if (aFeed.relevanceScore !== bFeed.relevanceScore) {
+                return bFeed.relevanceScore - aFeed.relevanceScore; // Descending
+              }
+            }
+            
+            // Son olarak tarihe göre sırala
+            const aTime = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt).getTime();
+            const bTime = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt).getTime();
+            return bTime - aTime;
+          });
+        }
+      } catch (error) {
+        logger.warn({
+          message: 'Failed to parse preferredCategories for feed prioritization',
+          userId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
 
     // Context-based filtering
     if (options?.contextType && options?.contextId) {
@@ -365,12 +545,44 @@ export class FeedService {
     // Build filter query
     const postWhere: any = {};
 
-    // Category filter (separate from interests)
+    // Category filter - sadece main category (UUID, prefix'li ID veya name ile)
+    // Multiple category selection desteği
     if (filters.category) {
-      postWhere.OR = [
-        { mainCategoryId: filters.category },
-        { subCategoryId: filters.category },
-      ];
+      // Category string olarak geliyor (comma-separated veya single value)
+      const categoryIds = typeof filters.category === 'string' 
+        ? filters.category.split(',').map(id => id.trim()).filter(Boolean)
+        : Array.isArray(filters.category)
+        ? filters.category
+        : [filters.category];
+      
+      const resolvedCategoryIds: string[] = [];
+      
+      for (const categoryId of categoryIds) {
+        const resolvedId = await this.resolveCategoryId(categoryId);
+        if (resolvedId) {
+          resolvedCategoryIds.push(resolvedId);
+        } else {
+          logger.warn({
+            message: 'Invalid category ID in feed filter',
+            categoryId,
+            userId,
+          });
+        }
+      }
+      
+      if (resolvedCategoryIds.length > 0) {
+        postWhere.mainCategoryId = { in: resolvedCategoryIds };
+      } else {
+        // Hiç geçerli category bulunamadı - boş sonuç döndür
+        return {
+          items: [],
+          pagination: {
+            hasMore: false,
+            limit,
+            cursor: undefined,
+          },
+        };
+      }
     }
 
     // Interests filter - şu feed source'lar kabul edilir: TRUSTER, CATEGORY_MATCH, TRENDING, NEW_USER, BOOSTED, INVENTORY_MATCH, PRODUCT_GROUP_MATCH
@@ -387,9 +599,30 @@ export class FeedService {
         FeedSource.PRODUCT_GROUP_MATCH,
       ];
       
-      // Feed source'larını validate et ve filtrele
+      // Case-insensitive mapping: new_user -> NEW_USER, boosted -> BOOSTED, vb.
+      const sourceMapping: Record<string, FeedSource> = {
+        'new_user': FeedSource.NEW_USER,
+        'boosted': FeedSource.BOOSTED,
+        'truster': FeedSource.TRUSTER,
+        'trending': FeedSource.TRENDING,
+        'category_match': FeedSource.CATEGORY_MATCH,
+        'inventory_match': FeedSource.INVENTORY_MATCH,
+        'product_group_match': FeedSource.PRODUCT_GROUP_MATCH,
+      };
+      
+      // Feed source'larını normalize et ve validate et
       const validSources = filters.interests
-        .filter((source) => allowedSources.includes(source as FeedSource));
+        .map((source) => {
+          const normalized = source.toUpperCase();
+          // Önce direkt enum değeri olarak kontrol et
+          if (allowedSources.includes(normalized as FeedSource)) {
+            return normalized as FeedSource;
+          }
+          // Sonra mapping'den kontrol et
+          const mapped = sourceMapping[source.toLowerCase()];
+          return mapped || null;
+        })
+        .filter((source): source is FeedSource => source !== null && allowedSources.includes(source));
       
       if (validSources.length > 0) {
         feedWhere.source = { in: validSources };
@@ -411,24 +644,29 @@ export class FeedService {
 
     // Tag-based filtering (contentPostTags, tags relations, or post type mapping)
     if (filters.tags && filters.tags.length > 0) {
-      // Map tag names to post types
+      // Map tag names to post types (case-insensitive)
       const tagToTypeMap: Record<string, ContentPostType> = {
-        'Review': ContentPostType.FREE,
-        'Benchmark': ContentPostType.COMPARE,
-        'Tips': ContentPostType.TIPS,
-        'Question': ContentPostType.QUESTION,
-        'Experience': ContentPostType.EXPERIENCE,
-        'Update': ContentPostType.UPDATE,
+        'free': ContentPostType.FREE,
+        'benchmark': ContentPostType.COMPARE,
+        'experience': ContentPostType.EXPERIENCE,
+        'update': ContentPostType.UPDATE,
+        'question': ContentPostType.QUESTION,
+        'tips and tricks': ContentPostType.TIPS,
+        // Eski isimler için backward compatibility
+        'review': ContentPostType.FREE,
+        'tips': ContentPostType.TIPS,
       };
       
       const typeFilters: ContentPostType[] = [];
       const tagFilters: string[] = [];
       
       filters.tags.forEach((tag) => {
-        const mappedType = tagToTypeMap[tag];
+        const normalizedTag = tag.toLowerCase();
+        const mappedType = tagToTypeMap[normalizedTag];
         if (mappedType) {
           typeFilters.push(mappedType);
         } else {
+          // Tag name olarak kullan (case-insensitive matching için hem orijinal hem lowercase)
           tagFilters.push(tag);
         }
       });
@@ -440,12 +678,20 @@ export class FeedService {
         tagConditions.push({ type: { in: typeFilters } });
       }
       
-      // Add tag-based filtering (contentPostTags or post_tags)
+      // Add tag-based filtering (contentPostTags or post_tags) - case-insensitive
       if (tagFilters.length > 0) {
+        // Hem orijinal hem lowercase versiyonları ara
+        const allTagVariants = [
+          ...tagFilters,
+          ...tagFilters.map(t => t.toLowerCase()),
+          ...tagFilters.map(t => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()),
+        ];
+        const uniqueTags = Array.from(new Set(allTagVariants));
+        
         tagConditions.push({
           OR: [
-            { contentPostTags: { some: { tag: { in: tagFilters } } } },
-            { tags: { some: { tag: { in: tagFilters } } } },
+            { contentPostTags: { some: { tag: { in: uniqueTags } } } },
+            { tags: { some: { tag: { in: uniqueTags } } } },
           ],
         });
       }
@@ -477,10 +723,11 @@ export class FeedService {
 
     // Fetch feeds with post filters
     // Sort logic:
-    // - recent: En yeni postlar (createdAt'a göre)
+    // - recent: En yeni postlar (createdAt'a göre) - default
     // - top: Relevance score'a göre popüler olanlar
+    const sortType = filters.sort || 'recent'; // Default: recent
     const orderBy =
-      filters.sort === 'top'
+      sortType === 'top'
         ? [
             { relevanceScore: 'desc' as const },
             { post: { createdAt: 'desc' as const } },
@@ -704,10 +951,6 @@ export class FeedService {
         }
       })
     );
-
-    if (filters.types && filters.types.length > 0) {
-      feedItems = this.prioritizeFeedItemsByType(feedItems, filters.types, 20);
-    }
 
     const limitedItems = feedItems.slice(0, limit);
     const finalHasMore = hasMoreFromDb || feedItems.length > limit;

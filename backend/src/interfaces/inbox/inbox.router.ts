@@ -78,14 +78,23 @@ router.use(authMiddleware);
  *           maximum: 100
  *           default: 50
  *         description: Döndürülecek maksimum thread sayısı.
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: Pagination cursor (timestamp) - bu timestamp'ten önceki (daha eski) thread'ler getirilir. İlk yüklemede boş bırakılır.
  *     responses:
  *       200:
- *         description: Mesaj kutusu başarıyla listelendi.
+ *         description: Mesaj kutusu başarıyla listelendi. Cursor-based pagination ile WhatsApp benzeri çalışır.
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
  *                 type: object
  *                 properties:
  *                   id:
@@ -114,11 +123,19 @@ router.use(authMiddleware);
  *                     type: boolean
  *                   unreadCount:
  *                     type: integer
- *                   threadType:
- *                     type: string
- *                     enum: [DM, SUPPORT]
- *                     nullable: true
- *                     description: Thread tipi bilgisi (DM veya SUPPORT)
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Sonraki sayfa için cursor (timestamp)
+ *                     hasMore:
+ *                       type: boolean
+ *                       description: Daha fazla thread var mı?
+ *                     limit:
+ *                       type: integer
+ *                       description: Sayfa başına thread sayısı
  *       401:
  *         description: Kimlik doğrulaması başarısız.
  */
@@ -140,13 +157,37 @@ router.use(authMiddleware);
  *           maximum: 100
  *           default: 50
  *         description: Döndürülecek maksimum feed item sayısı.
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: Pagination cursor (timestamp) - bu timestamp'ten önceki (daha eski) feed item'ları getirilir. İlk yüklemede boş bırakılır.
  *     responses:
  *       200:
- *         description: Message feed başarıyla getirildi.
+ *         description: Message feed başarıyla getirildi. Cursor-based pagination ile WhatsApp benzeri çalışır.
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/MessageFeed'
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/MessageFeedItem'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Sonraki sayfa için cursor (timestamp)
+ *                     hasMore:
+ *                       type: boolean
+ *                       description: Daha fazla feed item var mı?
+ *                     limit:
+ *                       type: integer
+ *                       description: Sayfa başına feed item sayısı
  *       401:
  *         description: Kimlik doğrulaması başarısız.
  */
@@ -168,8 +209,17 @@ router.get(
       }
     }
 
-    const feed = await messagingService.getUserMessageFeed(String(userId), limit);
-    return res.json(feed);
+    const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined;
+
+    const result = await messagingService.getUserMessageFeed(String(userId), limit, cursor);
+    return res.json({
+      items: result.items,
+      pagination: {
+        cursor: result.nextCursor,
+        hasMore: result.hasMore,
+        limit: limit || 50,
+      },
+    });
   }),
 );
 
@@ -206,14 +256,24 @@ router.get(
       }
     }
 
-    const inbox = await messagingService.getUserInboxMessages(String(userId), {
+    const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined;
+
+    const result = await messagingService.getUserInboxMessages(String(userId), {
       search,
       unreadOnly,
       limit,
       threadType,
+      cursor,
     });
 
-    return res.json(inbox);
+    return res.json({
+      items: result.items,
+      pagination: {
+        cursor: result.nextCursor,
+        hasMore: result.hasMore,
+        limit: limit || 50,
+      },
+    });
   }),
 );
 
@@ -469,14 +529,23 @@ router.get(
  *           maximum: 100
  *           default: 50
  *         description: Döndürülecek maksimum destek sohbeti sayısı.
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: Pagination cursor (timestamp) - bu timestamp'ten önceki (daha eski) request'ler getirilir. İlk yüklemede boş bırakılır.
  *     responses:
  *       200:
- *         description: Birebir destek sohbetleri başarıyla listelendi.
+ *         description: Birebir destek sohbetleri başarıyla listelendi. Cursor-based pagination ile WhatsApp benzeri çalışır.
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
  *                 type: object
  *                 properties:
  *                   id:
@@ -506,6 +575,19 @@ router.get(
  *                       - accepted: support thread ID (accept edildiğinde oluşturulan unique thread ID)
  *                       - rejected: null
  *                       Her support request accept edildiğinde yeni bir unique thread oluşturulur ve threadId bu thread'e kaydedilir.
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Sonraki sayfa için cursor (timestamp)
+ *                     hasMore:
+ *                       type: boolean
+ *                       description: Daha fazla request var mı?
+ *                     limit:
+ *                       type: integer
+ *                       description: Sayfa başına request sayısı
  *       401:
  *         description: Kimlik doğrulaması başarısız.
  */
@@ -548,18 +630,28 @@ router.get(
       }
     }
 
-    const supportRequests = await supportRequestService.getUserSupportRequests(String(userId), {
+    const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined;
+
+    const result = await supportRequestService.getUserSupportRequests(String(userId), {
       status,
       search,
       limit,
+      cursor,
     });
     
     // Debug: Log results count
     if (search) {
-      console.log('[Support Requests] Search results count:', supportRequests.length);
+      console.log('[Support Requests] Search results count:', result.items.length);
     }
 
-    return res.json(supportRequests);
+    return res.json({
+      items: result.items,
+      pagination: {
+        cursor: result.nextCursor,
+        hasMore: result.hasMore,
+        limit: limit || 50,
+      },
+    });
   }),
 );
 
@@ -1229,21 +1321,36 @@ router.post(
  *           default: 50
  *         description: Döndürülecek maksimum mesaj sayısı.
  *       - in: query
- *         name: offset
+ *         name: cursor
  *         schema:
- *           type: integer
- *           minimum: 0
- *           default: 0
- *         description: Atlanacak mesaj sayısı (pagination için).
+ *           type: string
+ *           format: date-time
+ *         description: Pagination cursor (timestamp) - bu timestamp'ten önceki (daha eski) mesajlar getirilir. İlk yüklemede boş bırakılır.
  *     responses:
  *       200:
- *         description: Thread mesajları başarıyla getirildi. Thread tipine göre farklı içerik döner.
+ *         description: Thread mesajları başarıyla getirildi. Thread tipine göre farklı içerik döner. Cursor-based pagination ile WhatsApp benzeri çalışır.
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/MessageFeedItem'
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/MessageFeedItem'
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Sonraki sayfa için cursor (timestamp)
+ *                     hasMore:
+ *                       type: boolean
+ *                       description: Daha fazla mesaj var mı?
+ *                     limit:
+ *                       type: integer
+ *                       description: Sayfa başına mesaj sayısı
  *             examples:
  *               dm-thread:
  *                 summary: DM Thread örneği
@@ -1358,21 +1465,15 @@ router.get(
       }
     }
 
-    let offset: number | undefined;
-    if (typeof req.query.offset === 'string') {
-      const parsed = parseInt(req.query.offset, 10);
-      if (!Number.isNaN(parsed)) {
-        offset = Math.max(parsed, 0);
-      }
-    }
+    const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined;
 
     try {
-      // Thread mesajlarını getir
-      const feedItems = await messagingService.getThreadMessages(
+      // Thread mesajlarını getir (cursor-based pagination)
+      const result = await messagingService.getThreadMessages(
         threadId,
         String(userId),
-        limit || 100,
-        offset || 0
+        limit || 50,
+        cursor
       );
 
       // Thread açıldığında tüm okunmamış mesajları otomatik olarak okundu işaretle
@@ -1386,7 +1487,14 @@ router.get(
         logger.warn(`Failed to mark messages as read in thread ${threadId} for user ${userId}:`, markReadError);
       }
 
-      return res.status(200).json(feedItems);
+      return res.status(200).json({
+        items: result.items,
+        pagination: {
+          cursor: result.nextCursor,
+          hasMore: result.hasMore,
+          limit: limit || 50,
+        },
+      });
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       if (message === 'Thread not found') {
