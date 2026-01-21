@@ -16,6 +16,7 @@ import { pickSeedContentCommentTemplate } from './seed/helpers/content-comment-t
 import { seedMessageReactionsAndReadReceipts } from './seed/helpers/seed-message-engagement'
 import { GeminiService } from '../src/infrastructure/ai/gemini.service'
 import { brandToWebsite } from '../src/data/brandToWebsite'
+import { buildPairMap, pickProductFromPairMap } from './seed/helpers/product-pick-strategies'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const slugify = require('slugify')
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -67,6 +68,24 @@ const PREFERRED_BRAND_CATEGORY_PAIRS = [
   { brand: 'Apple', category: 'Carrier Cell Phones' },
 ]
 
+// Script (`scripts/analyze-popular-intersection-picks.ts`) ile aynı yaklaşım:
+// - POPULAR intersection dışına çıkma
+// - Varsayılan dağılım: %40 beauty / %60 elektronik (non-beauty)
+const BEAUTY_BRAND_NAMES = ["L'Oreal Paris", 'NYX PROFESSIONAL MAKEUP', 'MAYBELLINE', 'Neutrogena', 'REVLON', 'Bath & Body Works']
+const BEAUTY_CATEGORY_NAMES = [
+  'Sets & Kits',
+  'Masks',
+  'Face Moisturizers',
+  'Face Mists',
+  'Soaps',
+  'Gels',
+  'Balms & Moisturizers',
+  'Lip Sunscreens',
+]
+const normalizedBeautyBrandNames = new Set(BEAUTY_BRAND_NAMES.map(name => name.toLowerCase().trim()))
+const normalizedBeautyCategoryNames = new Set(BEAUTY_CATEGORY_NAMES.map(name => name.toLowerCase().trim()))
+const DEFAULT_BEAUTY_TARGET_RATIO = 0.4
+
 function normalizeName(value?: string | null): string {
   return (value || '').toLowerCase().trim()
 }
@@ -75,6 +94,66 @@ function isPopularIntersectionProduct(product: { brand?: { name?: string | null 
   const brandName = normalizeName(product.brand?.name)
   const categoryName = normalizeName(product.category?.name)
   return Boolean(brandName && categoryName && normalizedPopularBrandNames.has(brandName) && normalizedPopularCategoryNames.has(categoryName))
+}
+
+function isBeautyProduct(product: { brand?: { name?: string | null } | null; category?: { name?: string | null } | null }): boolean {
+  const brandName = normalizeName(product.brand?.name)
+  const categoryName = normalizeName(product.category?.name)
+  return Boolean((brandName && normalizedBeautyBrandNames.has(brandName)) || (categoryName && normalizedBeautyCategoryNames.has(categoryName)))
+}
+
+function createPopularIntersectionBeautyRatioPicker<
+  T extends { id: string; brand?: { name?: string | null } | null; category?: { name?: string | null } | null },
+>(opts: { pool: T[]; pairMap: Map<string, T[]>; totalPicks: number; beautyTargetRatio: number; dedupe: boolean }): () => T {
+  const pool = opts.pool
+  const beautyPool = pool.filter(p => isBeautyProduct(p))
+  const nonBeautyPool = pool.filter(p => !isBeautyProduct(p))
+  const beautyTarget = Math.round(Math.max(0, opts.totalPicks) * Math.min(1, Math.max(0, opts.beautyTargetRatio)))
+
+  let pickedCount = 0
+  let beautyPicked = 0
+  const seenProductIds = new Set<string>()
+
+  const tryPickFromPool = (arr: T[]): T | null => {
+    if (arr.length === 0) return null
+    for (let attempt = 0; attempt < 35; attempt++) {
+      const p = arr[Math.floor(Math.random() * arr.length)]!
+      if (!opts.dedupe) return p
+      if (!seenProductIds.has(p.id)) return p
+    }
+    return null
+  }
+
+  const pickBase = (): T => {
+    return pickProductFromPairMap(opts.pairMap, pool, {
+      preferredPairs: [],
+      preferredChance: 0,
+      strategy: 'uniform-pair',
+      topk: 5,
+    }) as T
+  }
+
+  return () => {
+    const remaining = Math.max(0, opts.totalPicks - pickedCount)
+    const needBeauty = Math.max(0, beautyTarget - beautyPicked)
+
+    const mustPickBeauty = beautyPool.length > 0 && needBeauty >= remaining && remaining > 0
+    const mustPickNonBeauty = nonBeautyPool.length > 0 && needBeauty <= 0
+
+    const beautyProb = mustPickBeauty ? 1 : mustPickNonBeauty ? 0 : remaining > 0 ? needBeauty / remaining : 0
+    const chooseBeauty = Math.random() < beautyProb
+
+    let picked: T | null = null
+    if (chooseBeauty) picked = tryPickFromPool(beautyPool)
+    else picked = tryPickFromPool(nonBeautyPool)
+
+    picked = picked ?? pickBase()
+
+    pickedCount += 1
+    if (opts.dedupe) seenProductIds.add(picked.id)
+    if (isBeautyProduct(picked)) beautyPicked += 1
+    return picked
+  }
 }
 
 function buildPopularIntersectionPairMap<T extends { brand?: { name?: string | null } | null; category?: { name?: string | null } | null }>(
@@ -544,7 +623,7 @@ function daysAgo(days: number): Date {
  */
 async function createPost(data: {
   userId: string
-  type: 'QUESTION' | 'TIPS' | 'FREE' | 'EXPERIENCE' | 'COMPARE' | 'UPDATE'
+  type: 'QUESTION' | 'TIPS' | 'FREE' | 'COMPARE'
   title: string
   body: string
   productId?: string
@@ -706,12 +785,24 @@ async function seedUserInventories() {
   console.log('\n🎒 Kullanıcı inventory\'leri oluşturuluyor...\n')
   
   const users = await prisma.user.findMany({ take: seedConfig.users.total })
+  const popularBrandWhere = POPULAR_BRAND_NAMES.map((name) => ({
+    name: { equals: name, mode: 'insensitive' as const },
+  }))
+  const popularCategoryWhere = POPULAR_CATEGORY_NAMES.map((name) => ({
+    name: { equals: name, mode: 'insensitive' as const },
+  }))
   const allProducts = await prisma.product.findMany({
     include: {
       category: { select: { id: true, name: true } },
       brand: { select: { id: true, name: true } },
     },
-    take: 2000,
+    take: 20000,
+    where: {
+      AND: [
+        { brand: { is: { OR: popularBrandWhere } } },
+        { category: { is: { OR: popularCategoryWhere } } },
+      ],
+    },
   })
   
   if (allProducts.length === 0) {
@@ -719,9 +810,18 @@ async function seedUserInventories() {
     return
   }
 
-  const intersectionProducts = allProducts.filter(isPopularIntersectionProduct)
-  const popularPool = intersectionProducts.length > 0 ? intersectionProducts : allProducts
-  const popularPairMap = buildPopularIntersectionPairMap(intersectionProducts)
+  // POPULAR_BRAND_NAMES + POPULAR_CATEGORY_NAMES dışına çıkma:
+  // Inventory havuzunu da "popular intersection" ile sınırla ki UGC/post'lar alakasız ürünlere kaymasın.
+  const basePool = allProducts.filter(p => Boolean(p.brand?.name) && Boolean(p.category?.name))
+  const intersectionPool = basePool.filter(p => isPopularIntersectionProduct(p))
+  if (intersectionPool.length === 0) {
+    throw new Error(
+      `❌ Inventory için popular intersection pool boş. ` +
+        `POPULAR_BRAND_NAMES/POPULAR_CATEGORY_NAMES ile DB ürünleri eşleşmiyor olabilir. (basePool=${basePool.length})`,
+    )
+  }
+  const pool = intersectionPool
+  const pairMap = buildPairMap(pool)
 
   // Inventory media için fallback görseller (seed-media-map.json key'leri)
   const availableProductImages: SeedMediaKey[] = [
@@ -741,22 +841,25 @@ async function seedUserInventories() {
     const minInv = isFeatured ? seedConfig.inventories.featuredProductsMin : seedConfig.inventories.otherProductsMin
     const maxInv = isFeatured ? seedConfig.inventories.featuredProductsMax : seedConfig.inventories.otherProductsMax
     const inventoryCount = Math.floor(Math.random() * (Math.max(maxInv, minInv) - Math.min(maxInv, minInv) + 1)) + Math.min(maxInv, minInv)
-    const selected: typeof popularPool = []
+    const selected: typeof pool = []
 
-    // 1) Öncelik: Apple + Carrier Cell Phones (varsa en az 1 tane)
-    if (intersectionProducts.length > 0) {
-      const preferred = pickFromPopularIntersection(popularPairMap, popularPool)
-      if (preferred) selected.push(preferred)
-    }
-
-    // 2) Kalanı: popüler kesişim havuzundan (fallback: tüm ürünler)
-    const shuffled = [...popularPool].sort(() => Math.random() - 0.5)
-    for (const p of shuffled) {
-      if (selected.length >= Math.min(inventoryCount, popularPool.length)) break
+    // Kullanıcı inventory'sini global picker ile doldur (duplicate engelli)
+    const targetCount = Math.min(inventoryCount, pool.length)
+    const pickGlobalProduct = createPopularIntersectionBeautyRatioPicker({
+      pool,
+      pairMap,
+      totalPicks: targetCount,
+      beautyTargetRatio: DEFAULT_BEAUTY_TARGET_RATIO,
+      dedupe: true,
+    })
+    let guard = 0
+    while (selected.length < targetCount && guard < targetCount * 25) {
+      guard++
+      const p = pickGlobalProduct()
       if (selected.some(x => x.id === p.id)) continue
       selected.push(p)
     }
-    const userProducts = selected
+    const userProducts = selected.length > 0 ? selected : pool.slice(0, targetCount)
     
     for (const product of userProducts) {
       // Inventory kaydı oluştur
@@ -1093,12 +1196,18 @@ async function seedPosts() {
   const durations = await prisma.experienceDuration.findMany()
   const locations = await prisma.experienceLocation.findMany()
   const purposes = await prisma.experiencePurpose.findMany()
-  
-  // Popüler marka/kategori listeleri global const'lardan gelir
-  const normalizedBrandNames = normalizedPopularBrandNames
-  const normalizedCategoryNames = normalizedPopularCategoryNames
 
+  // Hedef post sayısı
+  const TARGET_TOTAL_POSTS = Math.max(0, seedConfig.posts.total)
+  let currentPostCount = 0
+  
   // Tüm ürünleri çek (brand ve category ile birlikte)
+  const popularBrandWhere = POPULAR_BRAND_NAMES.map((name) => ({
+    name: { equals: name, mode: 'insensitive' as const },
+  }))
+  const popularCategoryWhere = POPULAR_CATEGORY_NAMES.map((name) => ({
+    name: { equals: name, mode: 'insensitive' as const },
+  }))
   const allProducts = await prisma.product.findMany({
     include: {
       category: {
@@ -1116,52 +1225,44 @@ async function seedPosts() {
         }
       }
     },
-    take: 2000 // Daha fazla çek ki filtreleme sonrası yeterli ürün olsun
+    take: 20000, // POPULAR intersection filtresi ile gerçek adet zaten sınırlı kalıyor
+    where: {
+      AND: [
+        { brand: { is: { OR: popularBrandWhere } } },
+        { category: { is: { OR: popularCategoryWhere } } },
+      ],
+    },
   })
 
-  // Kesişim kümesi: popüler marka ∩ popüler kategori
-  let products = allProducts.filter(product => {
-    const brandName = product.brand?.name?.toLowerCase().trim() || ''
-    const categoryName = product.category?.name?.toLowerCase().trim() || ''
-    return Boolean(brandName && categoryName && normalizedBrandNames.has(brandName) && normalizedCategoryNames.has(categoryName))
-  })
+  // Çeşitlilik: tüm ürün havuzundan seç (brand+category olanlar öncelikli)
+  const basePool = allProducts.filter(p => Boolean(p.brand?.name) && Boolean(p.category?.name))
+  let products = basePool.length > 0 ? basePool : allProducts
 
-  // İlk 500 popüler ürünü al
-  products = products.slice(0, 500)
-
-  const popularPairMap = buildPopularIntersectionPairMap(products)
-  
-  // Eğer popüler ürün bulunamazsa fallback
-  if (products.length === 0) {
-    console.warn('⚠️ Popüler marka∩kategori kesişiminde ürün bulunamadı, tüm ürünler kullanılacak...')
-    const fallbackProducts = await prisma.product.findMany({
-      take: 500,
-      include: {
-        category: {
-          select: {
-            id: true,
-            name: true,
-            mpath: true,
-            parentId: true
-          }
-        },
-        brand: {
-          select: {
-            id: true,
-            name: true
-          }
-        }
-      }
-    })
-    
-    if (fallbackProducts.length === 0) {
-      throw new Error('❌ Ürün bulunamadı! Önce Phase 5 tamamlanmalı.')
-    }
-    
-    products = fallbackProducts
+  // POPULAR_BRAND_NAMES + POPULAR_CATEGORY_NAMES dışına çıkma:
+  // Post'larda kullanılacak ürünleri kesin olarak "popular intersection" ile sınırla.
+  const intersectionProducts = products.filter(p => isPopularIntersectionProduct(p))
+  if (intersectionProducts.length === 0) {
+    throw new Error(
+      `❌ Post için popular intersection pool boş. ` +
+        `POPULAR_BRAND_NAMES/POPULAR_CATEGORY_NAMES ile DB ürünleri eşleşmiyor olabilir. (products=${products.length})`,
+    )
   }
+  products = intersectionProducts
+
+  if (products.length === 0) {
+    throw new Error('❌ Ürün bulunamadı! Önce Phase 5 tamamlanmalı.')
+  }
+
+  const pairMap = buildPairMap(products)
+  const pickGlobalProduct = createPopularIntersectionBeautyRatioPicker({
+    pool: products,
+    pairMap,
+    totalPicks: TARGET_TOTAL_POSTS,
+    beautyTargetRatio: DEFAULT_BEAUTY_TARGET_RATIO,
+    dedupe: false,
+  })
   
-  console.log(`📊 ${products.length} ürün bulundu (popüler marka∩kategori kesişimi)\n`)
+  console.log(`📊 ${products.length} ürün bulundu (çeşitli ürün havuzu)\n`)
   
   let totalPosts = 0
   let successfulPosts = 0
@@ -1188,10 +1289,6 @@ async function seedPosts() {
   }
   
   const allPostRequests: PostRequest[] = []
-  
-  // Hedef post sayısı
-  const TARGET_TOTAL_POSTS = Math.max(0, seedConfig.posts.total)
-  let currentPostCount = 0
 
   // Varsayılan: sadece featured user’lar post paylaşsın
   const postAuthors = seedConfig.posts.featuredOnly ? featuredUsers : users
@@ -1251,16 +1348,13 @@ async function seedPosts() {
         }
         
         let selectedProduct
-        
-        const pickGlobalProduct = () => pickFromPopularIntersection(popularPairMap, products)
 
-        // EXPERIENCE ve UPDATE: inventory'den, ama öncelik popüler marka∩kategori kesişimindeki ürünler
+        // EXPERIENCE ve UPDATE: inventory'den seç (yoksa global havuzdan seçip inventory'ye ekle)
         if (postType === 'EXPERIENCE' || postType === 'UPDATE') {
-          const intersectionInventory = userInventoryProducts.filter(isPopularIntersectionProduct)
-          if (intersectionInventory.length > 0) {
-            selectedProduct = intersectionInventory[Math.floor(Math.random() * intersectionInventory.length)]
+          if (userInventoryProducts.length > 0) {
+            selectedProduct = userInventoryProducts[Math.floor(Math.random() * userInventoryProducts.length)]
           } else {
-            // Inventory'de kesişim ürünü yoksa: kesişim havuzundan seç, inventory'ye ekle ve onu kullan
+            // Inventory boşsa: global havuzdan seç, inventory'ye ekle ve onu kullan
             selectedProduct = pickGlobalProduct()
             await prisma.inventory.upsert({
               where: {
@@ -1280,7 +1374,7 @@ async function seedPosts() {
             userInventoryProducts.push(selectedProduct)
           }
         } else {
-          // Diğer tipler: doğrudan popüler marka∩kategori kesişiminden ürün seç
+          // Diğer tipler: doğrudan çeşitli havuzdan ürün seç
           selectedProduct = pickGlobalProduct()
         }
         
@@ -1325,7 +1419,7 @@ async function seedPosts() {
         // Other users: inventory bağımlılığı olan tipleri üretme (EXPERIENCE/UPDATE)
         const otherAllowedTypes = postTypes.filter(t => t !== 'EXPERIENCE' && t !== 'UPDATE')
         const postType = otherAllowedTypes[Math.floor(Math.random() * otherAllowedTypes.length)]
-        const selectedProduct = pickFromPopularIntersection(popularPairMap, products)
+        const selectedProduct = pickGlobalProduct()
         const createdAt = new Date(Date.now() - Math.random() * 90 * 24 * 60 * 60 * 1000)
         const persona = getRandomPersona(selectedProduct.category?.name || '')
 
@@ -1386,13 +1480,10 @@ async function seedPosts() {
         
         const postType = postTypes[Math.floor(Math.random() * postTypes.length)]
         let selectedProduct
-        
-        const pickGlobalProduct = () => pickFromPopularIntersection(popularPairMap, products)
 
         if (postType === 'EXPERIENCE' || postType === 'UPDATE') {
-          const intersectionInventory = userInventoryProducts.filter(isPopularIntersectionProduct)
-          if (intersectionInventory.length > 0) {
-            selectedProduct = intersectionInventory[Math.floor(Math.random() * intersectionInventory.length)]
+          if (userInventoryProducts.length > 0) {
+            selectedProduct = userInventoryProducts[Math.floor(Math.random() * userInventoryProducts.length)]
           } else {
             selectedProduct = pickGlobalProduct()
             await prisma.inventory.upsert({
@@ -1515,10 +1606,23 @@ async function seedPosts() {
       } else if (req.postType === 'TIPS') {
         await createPostTip(post.id)
       } else if (req.postType === 'COMPARE') {
-        let product2 = pickFromPopularIntersection(popularPairMap, products)
-        for (let attempt = 0; attempt < 5; attempt++) {
-          if (product2.id !== req.selectedProduct.id) break
-          product2 = pickFromPopularIntersection(popularPairMap, products)
+        // Aynı kategorideki ürünleri filtrele
+        const sameCategoryProducts = products.filter(
+          p => p.id !== req.selectedProduct.id && 
+               p.category?.id === req.selectedProduct.category?.id
+        )
+        
+        let product2: typeof products[0]
+        if (sameCategoryProducts.length > 0) {
+          // Aynı kategoride başka ürün varsa onlardan seç
+          product2 = sameCategoryProducts[Math.floor(Math.random() * sameCategoryProducts.length)]
+        } else {
+          // Aynı kategoride başka ürün yoksa, farklı bir ürün seç (fallback)
+          let attempts = 0
+          do {
+            product2 = pickGlobalProduct()
+            attempts++
+          } while (product2.id === req.selectedProduct.id && attempts < 10)
         }
         await createPostComparison(post.id, req.selectedProduct.id, product2.id)
       } else if (req.postType === 'EXPERIENCE' && durations.length > 0 && locations.length > 0 && purposes.length > 0) {
@@ -2470,8 +2574,16 @@ async function seedEvents() {
         ? productsInCategory.filter((p) => includeTokens.some((t) => p.name.toLowerCase().includes(t)))
         : productsInCategory
 
-      // Bazı config'lerde filtre çok dar olabilir → boşsa kategori içinden fallback
-      const finalProducts = filteredProducts.length > 0 ? filteredProducts : productsInCategory
+      // POPULAR_BRAND_NAMES + POPULAR_CATEGORY_NAMES dışına çıkma:
+      // Event ürünlerini de "popular intersection" ile sınırla (category zaten popular).
+      const popularIntersectionProducts = filteredProducts.filter((p) => isPopularIntersectionProduct(p))
+      if (popularIntersectionProducts.length === 0) {
+        console.warn(
+          `  ⚠️ Event "${config.title}" için popular intersection ürün bulunamadı ` +
+            `(category="${popularCategoryName}", fetched=${productsInCategory.length}). Event ürünleri boş bırakıldı.`,
+        )
+      }
+      const finalProducts = popularIntersectionProducts
 
       return { ...config, categoryId, products: finalProducts }
     }),
@@ -2675,12 +2787,22 @@ async function seedEvents() {
       const user = contributors[j];
       
       // Her post için rastgele farklı bir ürün seç
-      const intersectionEventProducts = eventProducts.filter(isPopularIntersectionProduct)
-      const eventPairMap = buildPopularIntersectionPairMap(intersectionEventProducts)
-      const selectedProduct = pickFromPopularIntersection(
-        eventPairMap,
-        intersectionEventProducts.length > 0 ? intersectionEventProducts : eventProducts,
-      )
+      const baseEventPool = eventProducts.filter(p => Boolean(p.brand?.name) && Boolean(p.category?.name))
+      const eventPoolRaw = baseEventPool.length > 0 ? baseEventPool : eventProducts
+      const eventPool = eventPoolRaw.filter((p) => isPopularIntersectionProduct(p))
+      if (eventPool.length === 0) {
+        console.warn(
+          `  ⚠️ Event "${config.title}" için popular intersection eventPool boş; post atlandı.`,
+        )
+        continue
+      }
+      const eventPairMap = buildPairMap(eventPool)
+      const selectedProduct = pickProductFromPairMap(eventPairMap, eventPool, {
+        preferredPairs: [],
+        preferredChance: 0,
+        strategy: 'uniform-pair',
+        topk: 5,
+      })
       
       // Template'i döngüsel olarak kullan (tekrar olmaması için)
       const template = shuffledTemplates[j % shuffledTemplates.length];

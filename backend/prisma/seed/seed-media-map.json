@@ -35,6 +35,36 @@
   "badge.wishmarker": {
     "targetKey": "badges/custom/WishMarker.png"
   },
+  "badge.badge-1": {
+    "targetKey": "badges/custom/badge-1.png"
+  },
+  "badge.badge-10": {
+    "targetKey": "badges/custom/badge-10.png"
+  },
+  "badge.badge-2": {
+    "targetKey": "badges/custom/badge-2.png"
+  },
+  "badge.badge-3": {
+    "targetKey": "badges/custom/badge-3.png"
+  },
+  "badge.badge-4": {
+    "targetKey": "badges/custom/badge-4.png"
+  },
+  "badge.badge-5": {
+    "targetKey": "badges/custom/badge-5.png"
+  },
+  "badge.badge-6": {
+    "targetKey": "badges/custom/badge-6.png"
+  },
+  "badge.badge-7": {
+    "targetKey": "badges/custom/badge-7.png"
+  },
+  "badge.badge-8": {
+    "targetKey": "badges/custom/badge-8.png"
+  },
+  "badge.badge-9": {
+    "targetKey": "badges/custom/badge-9.png"
+  },
   "badge.brand.brandbadge1": {
     "targetKey": "badges/brand/brandbadge1.png"
   },
@@ -169,102 +199,6 @@
   },
   "event.eventcardbg": {
     "targetKey": "events/eventcardbg.png"
-  },
-  "product.dyson": {
-    "targetKey": "products/seed/dyson.png"
-  },
-  "product.electronic-post-1": {
-    "targetKey": "products/seed/electronic-post-1.jpg"
-  },
-  "product.electronic-post-10": {
-    "targetKey": "products/seed/electronic-post-10.jpg"
-  },
-  "product.electronic-post-2": {
-    "targetKey": "products/seed/electronic-post-2.jpg"
-  },
-  "product.electronic-post-3": {
-    "targetKey": "products/seed/electronic-post-3.jpg"
-  },
-  "product.electronic-post-4": {
-    "targetKey": "products/seed/electronic-post-4.jpg"
-  },
-  "product.electronic-post-5": {
-    "targetKey": "products/seed/electronic-post-5.jpg"
-  },
-  "product.electronic-post-6": {
-    "targetKey": "products/seed/electronic-post-6.jpg"
-  },
-  "product.electronic-post-7": {
-    "targetKey": "products/seed/electronic-post-7.jpg"
-  },
-  "product.electronic-post-8": {
-    "targetKey": "products/seed/electronic-post-8.jpg"
-  },
-  "product.electronic-post-9": {
-    "targetKey": "products/seed/electronic-post-9.jpg"
-  },
-  "product.headphone": {
-    "targetKey": "products/seed/headphone.png"
-  },
-  "product.headphone2": {
-    "targetKey": "products/seed/headphone2.png"
-  },
-  "product.macbook": {
-    "targetKey": "products/seed/macbook.png"
-  },
-  "product.makeup-post-1": {
-    "targetKey": "products/seed/makeup-post-1.jpg"
-  },
-  "product.makeup-post-10": {
-    "targetKey": "products/seed/makeup-post-10.jpg"
-  },
-  "product.makeup-post-2": {
-    "targetKey": "products/seed/makeup-post-2.jpg"
-  },
-  "product.makeup-post-3": {
-    "targetKey": "products/seed/makeup-post-3.jpg"
-  },
-  "product.makeup-post-4": {
-    "targetKey": "products/seed/makeup-post-4.jpg"
-  },
-  "product.makeup-post-5": {
-    "targetKey": "products/seed/makeup-post-5.jpg"
-  },
-  "product.makeup-post-6": {
-    "targetKey": "products/seed/makeup-post-6.jpg"
-  },
-  "product.makeup-post-7": {
-    "targetKey": "products/seed/makeup-post-7.jpg"
-  },
-  "product.makeup-post-8": {
-    "targetKey": "products/seed/makeup-post-8.jpg"
-  },
-  "product.makeup-post-9": {
-    "targetKey": "products/seed/makeup-post-9.jpg"
-  },
-  "product.phone1": {
-    "targetKey": "products/seed/phone1.png"
-  },
-  "product.phone2": {
-    "targetKey": "products/seed/phone2.png"
-  },
-  "product.phone3": {
-    "targetKey": "products/seed/phone3.png"
-  },
-  "product.phone4": {
-    "targetKey": "products/seed/phone4.png"
-  },
-  "product.phone5": {
-    "targetKey": "products/seed/phone5.png"
-  },
-  "product.phone6": {
-    "targetKey": "products/seed/phone6.png"
-  },
-  "product.samsun": {
-    "targetKey": "products/seed/samsun.png"
-  },
-  "product.smartwatch": {
-    "targetKey": "products/seed/smartwatch.png"
   },
   "news.event": {
     "targetKey": "news/event.jpg"

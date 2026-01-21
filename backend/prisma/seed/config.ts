@@ -58,7 +58,7 @@ export const seedConfig = {
   },
 
   interactions: {
-    enabled: asBool(process.env.SEED_INTERACTIONS_ENABLED, false),
+    enabled: asBool(process.env.SEED_INTERACTIONS_ENABLED, true),
     likesPerPostMin: asInt(process.env.SEED_LIKES_PER_POST_MIN, 0),
     likesPerPostMax: asInt(process.env.SEED_LIKES_PER_POST_MAX, 6),
     viewsPerPostMin: asInt(process.env.SEED_VIEWS_PER_POST_MIN, 0),
@@ -72,7 +72,7 @@ export const seedConfig = {
   },
 
   trust: {
-    enabled: asBool(process.env.SEED_TRUST_ENABLED, false),
+    enabled: asBool(process.env.SEED_TRUST_ENABLED, true),
     perUserMin: asInt(process.env.SEED_TRUST_PER_USER_MIN, 2),
     perUserMax: asInt(process.env.SEED_TRUST_PER_USER_MAX, 8),
   },
@@ -80,11 +80,11 @@ export const seedConfig = {
   events: {
     enabled: asBool(process.env.SEED_EVENTS_ENABLED, true),
     activeMax: asInt(process.env.SEED_ACTIVE_EVENTS_MAX, 5),
-    createUgc: asBool(process.env.SEED_EVENTS_CREATE_UGC, false),
+    createUgc: asBool(process.env.SEED_EVENTS_CREATE_UGC, true),
   },
 
   messaging: {
-    enabled: asBool(process.env.SEED_MESSAGING_ENABLED, false),
+    enabled: asBool(process.env.SEED_MESSAGING_ENABLED, true),
     threadsMin: asInt(process.env.SEED_DM_THREADS_MIN, 10),
     threadsMax: asInt(process.env.SEED_DM_THREADS_MAX, 20),
     messagesPerThreadMin: asInt(process.env.SEED_DM_MESSAGES_PER_THREAD_MIN, 2),
@@ -94,7 +94,7 @@ export const seedConfig = {
   },
 
   nft: {
-    enabled: asBool(process.env.SEED_NFT_ENABLED, false),
+    enabled: asBool(process.env.SEED_NFT_ENABLED, true),
     perUserMin: asInt(process.env.SEED_NFTS_PER_USER_MIN, 0),
     perUserMax: asInt(process.env.SEED_NFTS_PER_USER_MAX, 2),
   },
