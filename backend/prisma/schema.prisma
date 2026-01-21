@@ -34,14 +34,14 @@ model User {
   contentRatings          ContentRating[]
   contentShares           ContentShare[]
   dmMessages              DMMessage[]
-  dmMessagesDeleted      DMMessage[]              @relation("DMMessageDeletedBy")
+  dmMessagesDeleted       DMMessage[]             @relation("DMMessageDeletedBy")
   dmRequestsSent          DMRequest[]             @relation("DMRequestSender")
   dmRequestsReceived      DMRequest[]             @relation("DMRequestReceiver")
   dmSupportSessions       DMSupportSession[]
   dmThreadsAsUserOne      DMThread[]              @relation("DMThreadUserOne")
   dmThreadsAsUserTwo      DMThread[]              @relation("DMThreadUserTwo")
   messageReactions        MessageReaction[]
-  messageReadReceipts      MessageReadReceipt[]
+  messageReadReceipts     MessageReadReceipt[]
   emailVerificationCodes  EmailVerificationCode[]
   expertAnswers           ExpertAnswer[]
   expertRequests          ExpertRequest[]
@@ -322,15 +322,18 @@ model PasswordResetToken {
 }
 
 model EmailVerificationCode {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  email     String
-  code      String   @db.VarChar(6)
-  isUsed    Boolean  @default(false) @map("is_used")
-  expiresAt DateTime @map("expires_at")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String?  @map("user_id") @db.Uuid
+  email        String
+  code         String   @db.VarChar(6)
+  passwordHash String?  @map("password_hash") // Şifre hash'i (email doğrulanmadan önce)
+  name         String? // Kullanıcı adı (email doğrulanmadan önce)
+  auth0Id      String?  @map("auth0_id") // Auth0 kullanıcı ID'si (signup sırasında Auth0'da oluşturulduysa)
+  isUsed       Boolean  @default(false) @map("is_used")
+  expiresAt    DateTime @map("expires_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  user         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, code])
   @@index([email, code])
@@ -1474,50 +1477,50 @@ model DMThread {
 }
 
 model DMMessage {
-  id               String                @id @default(uuid()) @db.Uuid
-  threadId         String                 @map("thread_id") @db.Uuid
-  senderId         String                 @map("sender_id") @db.Uuid
-  message          String
-  sentAt           DateTime               @default(now()) @map("sent_at")
-  isRead           Boolean                 @map("is_read")
-  createdAt        DateTime               @default(now()) @map("created_at")
-  updatedAt        DateTime               @updatedAt @map("updated_at")
-  context          DMMessageContext        @default(DM)
-  
+  id        String           @id @default(uuid()) @db.Uuid
+  threadId  String           @map("thread_id") @db.Uuid
+  senderId  String           @map("sender_id") @db.Uuid
+  message   String
+  sentAt    DateTime         @default(now()) @map("sent_at")
+  isRead    Boolean          @map("is_read")
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+  context   DMMessageContext @default(DM)
+
   // Media fields
-  mediaUrl         String?                @map("media_url")
-  mediaType        String?                 @map("media_type")
-  thumbnailUrl     String?                 @map("thumbnail_url")
-  fileName         String?                 @map("file_name")
-  fileSize         BigInt?                 @map("file_size")
-  caption          String?
-  
+  mediaUrl     String? @map("media_url")
+  mediaType    String? @map("media_type")
+  thumbnailUrl String? @map("thumbnail_url")
+  fileName     String? @map("file_name")
+  fileSize     BigInt? @map("file_size")
+  caption      String?
+
   // Reply/Threading
-  replyToMessageId String?                @map("reply_to_message_id") @db.Uuid
-  
+  replyToMessageId String? @map("reply_to_message_id") @db.Uuid
+
   // Status Tracking
-  status           String                  @default("sent") // 'sending', 'sent', 'delivered', 'read'
-  deliveredAt      DateTime?               @map("delivered_at")
-  readAt           DateTime?               @map("read_at")
-  
+  status      String    @default("sent") // 'sending', 'sent', 'delivered', 'read'
+  deliveredAt DateTime? @map("delivered_at")
+  readAt      DateTime? @map("read_at")
+
   // Deletion
-  isDeleted        Boolean                 @default(false) @map("is_deleted")
-  deletedAt        DateTime?               @map("deleted_at")
-  deletedBy        String?                 @map("deleted_by") @db.Uuid
-  
+  isDeleted Boolean   @default(false) @map("is_deleted")
+  deletedAt DateTime? @map("deleted_at")
+  deletedBy String?   @map("deleted_by") @db.Uuid
+
   // Editing
-  isEdited         Boolean                 @default(false) @map("is_edited")
-  editedAt         DateTime?               @map("edited_at")
-  
+  isEdited Boolean   @default(false) @map("is_edited")
+  editedAt DateTime? @map("edited_at")
+
   // Relations
-  sender           User                    @relation(fields: [senderId], references: [id], onDelete: Cascade)
-  thread           DMThread                @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  replyToMessage   DMMessage?              @relation("DMMessageReply", fields: [replyToMessageId], references: [id], onDelete: SetNull)
-  replies          DMMessage[]             @relation("DMMessageReply")
-  deletedByUser    User?                   @relation("DMMessageDeletedBy", fields: [deletedBy], references: [id], onDelete: SetNull)
-  reactions        MessageReaction[]
-  readReceipts     MessageReadReceipt[]
-  threadsAsLastMessage DMThread[]          @relation("DMThreadLastMessage")
+  sender               User                 @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  thread               DMThread             @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  replyToMessage       DMMessage?           @relation("DMMessageReply", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies              DMMessage[]          @relation("DMMessageReply")
+  deletedByUser        User?                @relation("DMMessageDeletedBy", fields: [deletedBy], references: [id], onDelete: SetNull)
+  reactions            MessageReaction[]
+  readReceipts         MessageReadReceipt[]
+  threadsAsLastMessage DMThread[]           @relation("DMThreadLastMessage")
 
   @@index([threadId])
   @@index([threadId, isRead])

@@ -231,6 +231,15 @@ export interface MessageFeed {
   messages: MessageFeedItem[];
 }
 
+export interface PaginatedMessageFeed {
+  items: MessageFeedItem[];
+  pagination: {
+    cursor?: string; // Timestamp veya message ID (son item'ın timestamp'i)
+    hasMore: boolean;
+    limit: number;
+  };
+}
+
 export interface SupportRequestCreate {
   senderUserId: string;
   recipientUserId: string;

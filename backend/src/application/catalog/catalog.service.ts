@@ -1243,5 +1243,210 @@ export class CatalogService {
       throw error;
     }
   }
+
+  /**
+   * Global product search - Tüm product group'lar arasında arama
+   * Sonuçları product group bazında gruplar
+   */
+  async searchProductsGlobally(
+    search: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{
+    items: Array<{
+      productGroupId: string;
+      productGroupName: string;
+      productGroupImage: string | null;
+      subCategoryId: string;
+      subCategoryName: string;
+      categoryId: string;
+      categoryName: string;
+      products: Array<{
+        productId: string;
+        name: string;
+        image: string | null;
+        productGroupId: string;
+        subCategoryId: string;
+      }>;
+    }>;
+    pagination: {
+      cursor?: string;
+      hasMore: boolean;
+      limit: number;
+    };
+  }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
+    const searchTrimmed = search?.trim();
+
+    if (!searchTrimmed || searchTrimmed.length === 0) {
+      return {
+        items: [],
+        pagination: {
+          cursor: undefined,
+          hasMore: false,
+          limit,
+        },
+      };
+    }
+
+    try {
+      // Önce arama terimiyle eşleşen product'ları bul
+      // ⚠️ KRİTİK: Sadece product name, description ve brand name'de arama yapılmalı
+      // Product group veya kategori adı ile eşleşme YAPILMAMALI
+      const matchingProducts = await prisma.product.findMany({
+        where: {
+          // Sadece ürün adı, açıklama ve marka adında arama
+          OR: [
+            { name: { contains: searchTrimmed, mode: 'insensitive' } },
+            { description: { contains: searchTrimmed, mode: 'insensitive' } },
+            { brand: { name: { contains: searchTrimmed, mode: 'insensitive' } } },
+          ],
+          // ⚠️ KRİTİK: Sadece groupId'si olan product'ları al (group'u olmayan product'ları atla)
+          groupId: { not: null },
+        },
+        include: {
+          brand: {
+            select: {
+              name: true,
+            },
+          },
+          group: {
+            include: {
+              subCategory: {
+                include: {
+                  mainCategory: {
+                    select: {
+                      id: true,
+                      name: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      // ⚠️ KRİTİK: Aynı productId'ye sahip ürünlerin birden fazla group'ta görünmesini engelle
+      // Her productId sadece bir kez eklenmeli (kendi group'unda)
+      const processedProductIds = new Set<string>();
+      
+      // Product'ları product group bazında grupla
+      const productGroupsMap = new Map<
+        string,
+        {
+          productGroupId: string;
+          productGroupName: string;
+          productGroupImage: string | null;
+          subCategoryId: string;
+          subCategoryName: string;
+          categoryId: string;
+          categoryName: string;
+          products: Array<{
+            productId: string;
+            name: string;
+            image: string | null;
+            productGroupId: string;
+            subCategoryId: string;
+          }>;
+        }
+      >();
+
+      for (const product of matchingProducts) {
+        // ⚠️ KRİTİK: Group'u olmayan product'ları atla
+        if (!product.group) continue;
+
+        // ⚠️ KRİTİK: Bu productId daha önce işlendiyse atla (aynı ürün farklı gruplarda görünmemeli)
+        if (processedProductIds.has(product.id)) {
+          logger.warn(`Product ${product.id} already processed, skipping duplicate`);
+          continue;
+        }
+
+        const groupId = product.group.id;
+        const subCategory = product.group.subCategory;
+        const mainCategory = subCategory?.mainCategory;
+
+        // ⚠️ KRİTİK: Product'ın groupId'si ile eşleşmeli
+        if (product.groupId !== groupId) {
+          logger.warn(`Product ${product.id} groupId mismatch: ${product.groupId} vs ${groupId}`);
+          continue;
+        }
+
+        if (!productGroupsMap.has(groupId)) {
+          productGroupsMap.set(groupId, {
+            productGroupId: groupId,
+            productGroupName: product.group.name,
+            productGroupImage: resolveMediaUrl(product.group.imageUrl),
+            subCategoryId: subCategory?.id || '',
+            subCategoryName: subCategory?.name || '',
+            categoryId: mainCategory?.id || '',
+            categoryName: mainCategory?.name || '',
+            products: [],
+          });
+        }
+
+        // ⚠️ KRİTİK: Ürün görseli doğruluğu - image URL validation
+        const productImageUrl = product.imageUrl;
+        const resolvedImage = productImageUrl 
+          ? resolveMediaUrl(productImageUrl) 
+          : null;
+
+        // Image URL validation: null, boş string veya geçersiz URL kontrolü
+        const validImage = resolvedImage && 
+          resolvedImage.trim().length > 0 && 
+          (resolvedImage.startsWith('http://') || resolvedImage.startsWith('https://'));
+
+        const groupData = productGroupsMap.get(groupId)!;
+        groupData.products.push({
+          productId: product.id,
+          name: product.name,
+          image: validImage ? resolvedImage : null, // Geçersiz URL'ler null olarak döndürülür
+          productGroupId: groupId,
+          subCategoryId: subCategory?.id || '',
+        });
+
+        // ProductId'yi işlenmiş olarak işaretle
+        processedProductIds.add(product.id);
+      }
+
+      // ⚠️ KRİTİK: Sadece eşleşen ürünü olan product group'ları döndür
+      // Boş product listesi olan group'ları filtrele
+      let allGroups = Array.from(productGroupsMap.values())
+        .filter((group) => group.products.length > 0); // En az bir ürünü olan group'lar
+
+      // Cursor-based pagination: cursor varsa, o ID'den sonraki group'ları al
+      if (cursor) {
+        const cursorIndex = allGroups.findIndex((g) => g.productGroupId === cursor);
+        if (cursorIndex >= 0) {
+          allGroups = allGroups.slice(cursorIndex + 1);
+        } else {
+          // Cursor bulunamazsa, cursor ID'sinden büyük olanları al
+          allGroups = allGroups.filter((g) => g.productGroupId > cursor);
+        }
+      }
+
+      // Product group'ları ID'ye göre sırala (cursor-based pagination için)
+      allGroups.sort((a, b) => a.productGroupId.localeCompare(b.productGroupId));
+
+      // Limit + 1 al ki hasMore'u kontrol edebilelim
+      const hasMore = allGroups.length > limit;
+      const resultGroups = hasMore ? allGroups.slice(0, limit) : allGroups;
+      const nextCursor = hasMore && resultGroups.length > 0 
+        ? resultGroups[resultGroups.length - 1].productGroupId 
+        : undefined;
+
+      return {
+        items: resultGroups,
+        pagination: {
+          cursor: nextCursor,
+          hasMore,
+          limit,
+        },
+      };
+    } catch (error) {
+      logger.error(`Failed to search products globally:`, error);
+      throw error;
+    }
+  }
 }
 

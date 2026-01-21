@@ -43,14 +43,41 @@ export class EmailService {
       }
 
       // Path'i resolve et (absolute path olarak)
-      const keyFilePath = path.isAbsolute(credentialsPath)
-        ? credentialsPath
-        : path.resolve(process.cwd(), credentialsPath);
+      let keyFilePath: string;
+      if (path.isAbsolute(credentialsPath)) {
+        keyFilePath = credentialsPath;
+      } else {
+        // Relative path - önce process.cwd()'den, sonra __dirname'den dene
+        const cwdPath = path.resolve(process.cwd(), credentialsPath);
+        if (fs.existsSync(cwdPath)) {
+          keyFilePath = cwdPath;
+        } else {
+          // Backend klasöründen dene
+          const backendPath = path.resolve(process.cwd(), 'backend', credentialsPath);
+          if (fs.existsSync(backendPath)) {
+            keyFilePath = backendPath;
+          } else {
+            keyFilePath = cwdPath; // Hata mesajında gösterilmek için
+          }
+        }
+      }
 
       // Dosyanın var olup olmadığını ve bir dosya olduğunu kontrol et
       if (!fs.existsSync(keyFilePath)) {
+        logger.error({
+          message: 'Google credentials file not found',
+          providedPath: credentialsPath,
+          resolvedPath: keyFilePath,
+          cwd: process.cwd(),
+          triedPaths: [
+            credentialsPath,
+            path.resolve(process.cwd(), credentialsPath),
+            path.resolve(process.cwd(), 'backend', credentialsPath),
+          ],
+        });
         throw new Error(
           `Google credentials file not found at path: ${keyFilePath}. ` +
+          `Provided path: ${credentialsPath}, CWD: ${process.cwd()}. ` +
           `Please check GOOGLE_APPLICATION_CREDENTIALS environment variable.`
         );
       }
@@ -117,21 +144,39 @@ export class EmailService {
         message: 'Gmail API initialized successfully with OAuth 2.0',
         fromEmail: this.fromEmail,
       });
+      
+      this.isInitialized = true;
     } catch (error) {
       logger.error({
         message: 'Failed to initialize Gmail API with OAuth 2.0',
         error: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
+        credentialsPath: process.env.GOOGLE_APPLICATION_CREDENTIALS,
       });
-      // Hata durumunda da initialize edildi olarak işaretle
+      // Hata durumunda initialize edilmedi olarak işaretle
       // Email gönderirken tekrar denenecek
-      this.isInitialized = true;
+      this.isInitialized = false;
+      this.gmail = null;
+      this.authClient = null;
+      throw error; // Hata fırlat ki ensureInitialized tekrar denesin
     }
   }
 
   private async ensureInitialized(): Promise<void> {
-    if (!this.isInitialized || !this.gmail) {
-      await this.initializeGmail();
+    if (!this.isInitialized || !this.gmail || !this.authClient) {
+      try {
+        await this.initializeGmail();
+      } catch (error) {
+        logger.error({
+          message: 'Failed to initialize Gmail API in ensureInitialized',
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+        throw new Error(
+          `Gmail API initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}. ` +
+          `Please check GOOGLE_APPLICATION_CREDENTIALS environment variable and file path.`
+        );
+      }
     }
 
     // Token'un süresi dolmuş olabilir, yenile
@@ -143,7 +188,20 @@ export class EmailService {
           message: 'Failed to refresh access token, reinitializing Gmail API',
           error: error instanceof Error ? error.message : String(error),
         });
-        await this.initializeGmail();
+        // Token yenileme başarısız oldu, yeniden initialize et
+        this.isInitialized = false;
+        this.gmail = null;
+        try {
+          await this.initializeGmail();
+        } catch (initError) {
+          logger.error({
+            message: 'Failed to reinitialize Gmail API after token refresh failure',
+            error: initError instanceof Error ? initError.message : String(initError),
+          });
+          throw new Error(
+            `Gmail API reinitialization failed: ${initError instanceof Error ? initError.message : 'Unknown error'}`
+          );
+        }
       }
     }
   }

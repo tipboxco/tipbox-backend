@@ -3136,6 +3136,193 @@ export class BrandService {
     };
   }
 
+  /**
+   * Global brand search - Tüm brand kategorileri arasında arama
+   * Sonuçları brand category bazında gruplar
+   */
+  async searchBrandsGlobally(
+    search: string,
+    options?: { cursor?: string; limit?: number }
+  ): Promise<{
+    items: Array<{
+      categoryId: string;
+      categoryName: string;
+      categoryImage: string | null;
+      brands: Array<{
+        brandId: string;
+        name: string;
+        image: string | null;
+        categoryId: string;
+      }>;
+    }>;
+    pagination: {
+      cursor?: string;
+      hasMore: boolean;
+      limit: number;
+    };
+  }> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
+    const searchTrimmed = search?.trim();
+
+    if (!searchTrimmed || searchTrimmed.length === 0) {
+      return {
+        items: [],
+        pagination: {
+          cursor: undefined,
+          hasMore: false,
+          limit,
+        },
+      };
+    }
+
+    try {
+      // ⚠️ KRİTİK: Sadece brand name, description ve category name'de arama yapılmalı
+      // Brand category adı ile eşleşme YAPILMAMALI (sadece brand'in kendi category'si)
+      const matchingBrands = await this.prisma.brand.findMany({
+        where: {
+          // Sadece brand adı, açıklama ve category adında arama
+          OR: [
+            { name: { contains: searchTrimmed, mode: 'insensitive' } },
+            { description: { contains: searchTrimmed, mode: 'insensitive' } },
+            { brandCategory: { name: { contains: searchTrimmed, mode: 'insensitive' } } },
+          ],
+          // ⚠️ KRİTİK: Sadece categoryId'si olan brand'leri al (category'si olmayan brand'leri atla)
+          categoryId: { not: null },
+        },
+        include: {
+          brandCategory: {
+            select: {
+              id: true,
+              name: true,
+              imageUrl: true,
+            },
+          },
+        },
+      });
+
+      // ⚠️ KRİTİK: Aynı brandId'ye sahip brand'lerin birden fazla category'de görünmesini engelle
+      // Her brandId sadece bir kez eklenmeli (kendi category'sinde)
+      const processedBrandIds = new Set<string>();
+      
+      // Brand'leri category bazında grupla
+      const categoriesMap = new Map<
+        string,
+        {
+          categoryId: string;
+          categoryName: string;
+          categoryImage: string | null;
+          brands: Array<{
+            brandId: string;
+            name: string;
+            image: string | null;
+            categoryId: string;
+          }>;
+        }
+      >();
+
+      const brandMap: { [key: string]: any } = {};
+      brandToWebsite.forEach((brand) => {
+        brandMap[slugify(brand.brand, slugifyOptions)] = brand;
+      });
+
+      for (const brand of matchingBrands) {
+        // ⚠️ KRİTİK: Category'si olmayan brand'leri atla
+        if (!brand.brandCategory) continue;
+
+        // ⚠️ KRİTİK: Bu brandId daha önce işlendiyse atla (aynı brand farklı category'lerde görünmemeli)
+        if (processedBrandIds.has(brand.id)) {
+          logger.warn(`Brand ${brand.id} already processed, skipping duplicate`);
+          continue;
+        }
+
+        const categoryId = brand.brandCategory.id;
+
+        // ⚠️ KRİTİK: Brand'in categoryId'si ile eşleşmeli
+        if (brand.categoryId !== categoryId) {
+          logger.warn(`Brand ${brand.id} categoryId mismatch: ${brand.categoryId} vs ${categoryId}`);
+          continue;
+        }
+
+        if (!categoriesMap.has(categoryId)) {
+          categoriesMap.set(categoryId, {
+            categoryId: categoryId,
+            categoryName: brand.brandCategory.name,
+            categoryImage: resolveMediaUrl(brand.brandCategory.imageUrl),
+            brands: [],
+          });
+        }
+
+        // ⚠️ KRİTİK: Brand görseli doğruluğu - image URL validation
+        const brandImageUrl = brand.imageUrl;
+        const slugbrand = slugify(brand.name, slugifyOptions);
+        const website = brandMap?.[slugbrand]?.website;
+        
+        // Image URL logic: önce brand.imageUrl, yoksa website'den logo.dev, yoksa null
+        let resolvedImage: string | null = null;
+        if (brandImageUrl && brandImageUrl.length > 0 && brandImageUrl !== 'NULL') {
+          resolvedImage = resolveMediaUrl(brandImageUrl);
+        } else if (website) {
+          resolvedImage = `https://img.logo.dev/name/${website}?token=pk_WgZMkY5cTXCH41Z0yJ_Txw`;
+        }
+
+        // Image URL validation: null, boş string veya geçersiz URL kontrolü
+        const validImage = resolvedImage && 
+          resolvedImage.trim().length > 0 && 
+          (resolvedImage.startsWith('http://') || resolvedImage.startsWith('https://'));
+
+        const categoryData = categoriesMap.get(categoryId)!;
+        categoryData.brands.push({
+          brandId: brand.id,
+          name: brand.name,
+          image: validImage ? resolvedImage : null, // Geçersiz URL'ler null olarak döndürülür
+          categoryId: categoryId,
+        });
+
+        // BrandId'yi işlenmiş olarak işaretle
+        processedBrandIds.add(brand.id);
+      }
+
+      // ⚠️ KRİTİK: Sadece eşleşen brand'i olan category'leri döndür
+      // Boş brand listesi olan category'leri filtrele
+      let allCategories = Array.from(categoriesMap.values())
+        .filter((category) => category.brands.length > 0); // En az bir brand'i olan category'ler
+
+      // Cursor-based pagination: cursor varsa, o ID'den sonraki category'leri al
+      if (cursor) {
+        const cursorIndex = allCategories.findIndex((c) => c.categoryId === cursor);
+        if (cursorIndex >= 0) {
+          allCategories = allCategories.slice(cursorIndex + 1);
+        } else {
+          // Cursor bulunamazsa, cursor ID'sinden büyük olanları al
+          allCategories = allCategories.filter((c) => c.categoryId > cursor);
+        }
+      }
+
+      // Category'leri ID'ye göre sırala (cursor-based pagination için)
+      allCategories.sort((a, b) => a.categoryId.localeCompare(b.categoryId));
+
+      // Limit + 1 al ki hasMore'u kontrol edebilelim
+      const hasMore = allCategories.length > limit;
+      const resultCategories = hasMore ? allCategories.slice(0, limit) : allCategories;
+      const nextCursor = hasMore && resultCategories.length > 0 
+        ? resultCategories[resultCategories.length - 1].categoryId 
+        : undefined;
+
+      return {
+        items: resultCategories,
+        pagination: {
+          cursor: nextCursor,
+          hasMore,
+          limit,
+        },
+      };
+    } catch (error) {
+      logger.error(`Failed to search brands globally:`, error);
+      throw error;
+    }
+  }
+
 }
 
 

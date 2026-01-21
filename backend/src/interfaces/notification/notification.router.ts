@@ -144,16 +144,18 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
     logger.debug(`Loaded ${userAvatars.size} user avatars and ${userNames.size} usernames for ${userIds.size} users`);
   }
 
-  // Batch olarak event görselleri al
+  // Batch olarak event görselleri ve isimleri al
   const eventImages = new Map<string, string | null>();
+  const eventNames = new Map<string, string | null>();
   if (eventIds.size > 0) {
     const events = await prisma.wishboxEvent.findMany({
       where: { id: { in: Array.from(eventIds) } },
-      select: { id: true, imageUrl: true },
+      select: { id: true, imageUrl: true, title: true },
     });
 
     events.forEach((event) => {
       eventImages.set(event.id, resolveMediaUrl(event.imageUrl));
+      eventNames.set(event.id, event.title || null);
     });
   }
 
@@ -428,6 +430,13 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       type: NotificationType;
       avatar?: string | null;
       username?: string | null;
+      description?: string | null;
+      postId?: string;
+      postContent?: string | null;
+      postType?: string | null;
+      imageUrl?: string | null;
+      commentId?: string;
+      amount?: number | null;
       data: any;
       read: boolean;
       createdAt: string;
@@ -497,14 +506,16 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       if (type === NotificationType.POST_COMMENTED) {
         // commentId'yi data'dan al veya commenterId'den bul
         const commentId = data.commentId;
+        // description root seviyede olacak, data içinde olmayacak
         if (commentId && commentDescriptions.has(commentId)) {
-          enriched.data.description = commentDescriptions.get(commentId);
+          enriched.description = commentDescriptions.get(commentId);
         }
         // commentId'yi data'da tut (navigation için gerekli olabilir)
         // Ama commenterId ve commenterName'i kaldır (root'ta userId ve username var)
         if (enriched.data) {
           delete enriched.data.commenterId;
           delete enriched.data.commenterName;
+          delete enriched.data.description; // data içinden description'ı kaldır
         }
       } else {
         // Diğer post bildirimleri için gereksiz alanları kaldır
@@ -597,6 +608,13 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
         }
       }
       // Mesajlaşma bildirimleri için imageUrl field'ı eklenmez (root seviyede zaten yok)
+      // Post ile ilgili root seviye alanları temizle
+      enriched.postId = undefined;
+      enriched.postContent = undefined;
+      enriched.postType = undefined;
+      enriched.description = undefined;
+      enriched.imageUrl = undefined;
+      enriched.commentId = undefined;
       
       // Data hazırla (sadece navigation için gerekli)
       if (!enriched.data) enriched.data = {};
@@ -610,6 +628,13 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       if (type === NotificationType.DM_REQUEST_ACCEPTED) {
         // Sadece threadId (userId root'ta zaten var)
         if (data.threadId) enriched.data.threadId = data.threadId;
+        // Post ile ilgili alanları temizle
+        delete enriched.data.postId;
+        delete enriched.data.postContent;
+        delete enriched.data.postType;
+        delete enriched.data.description;
+        delete enriched.data.imageUrl;
+        delete enriched.data.commentId;
       } else if (type === NotificationType.SUPPORT_REQUEST_ACCEPTED) {
         // threadId, requestId ve expert bilgileri (SupportMessageDetail için gerekli)
         if (data.threadId) enriched.data.threadId = data.threadId;
@@ -628,9 +653,28 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
           enriched.data.expertTitle = data.expertTitle || '';
           enriched.data.expertAvatar = data.expertAvatar || resolveMediaUrl(null, true);
         }
+        // Post ile ilgili alanları temizle
+        delete enriched.data.postId;
+        delete enriched.data.postContent;
+        delete enriched.data.postType;
+        delete enriched.data.description;
+        delete enriched.data.imageUrl;
+        delete enriched.data.commentId;
       } else if (type === NotificationType.DM_REQUEST_RECEIVED) {
-        // Sadece threadId
+        // Sadece threadId ve username - post ile ilgili tüm alanları temizle
+        enriched.data = {};
         if (data.threadId) enriched.data.threadId = data.threadId;
+        if (userId) {
+          const username = userNames.get(userId);
+          if (username) enriched.data.username = username;
+        }
+        // Post ile ilgili alanları kaldır
+        delete enriched.data.postId;
+        delete enriched.data.postContent;
+        delete enriched.data.postType;
+        delete enriched.data.description;
+        delete enriched.data.imageUrl;
+        delete enriched.data.commentId;
       } else {
         // DM_REQUEST_DECLINED - data boş
         enriched.data = {};
@@ -746,19 +790,30 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
         }
       }
       
-      // Data içine ekle
-      if (!enriched.data) enriched.data = {};
-      
+      // TIPS_RECEIVED için özel işlem: sadece userId, username, avatar, type ve amount (root seviyede)
       if (type === NotificationType.TIPS_RECEIVED) {
-        // TIPS_RECEIVED için: amount, username (sender'dan)
-        if (data.amount) enriched.data.amount = data.amount;
+        // Post ile ilgili root seviye alanları temizle
+        enriched.postId = undefined;
+        enriched.postContent = undefined;
+        enriched.postType = undefined;
+        enriched.description = undefined;
+        enriched.imageUrl = undefined;
+        enriched.commentId = undefined;
+        
+        // Username root seviyede
         if (userId) {
           const username = userNames.get(userId);
-          if (username) enriched.data.username = username;
+          enriched.username = username || null;
         }
-        // imageUrl, avatar, senderId, userId duplicate kaldırıldı
+        
+        // Amount root seviyede
+        enriched.amount = data.amount || null;
+        
+        // Data objesini tamamen kaldır
+        enriched.data = undefined;
       } else if (type === NotificationType.TIPS_SENT) {
         // TIPS_SENT için: amount, username (recipient'ten)
+        if (!enriched.data) enriched.data = {};
         if (data.amount) enriched.data.amount = data.amount;
         if (userId) {
           const username = userNames.get(userId);
@@ -766,6 +821,7 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
         }
       } else {
         // SYSTEM_ANNOUNCEMENT için
+        if (!enriched.data) enriched.data = {};
         if (data.amount) enriched.data.amount = data.amount;
       }
     }
@@ -785,11 +841,27 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       } else if (randomImageCache) {
         eventImageUrl = randomImageCache;
       }
-      // Data içine ekle (sadece eventId ve imageUrl - eventName mesajda var)
-      if (!enriched.data) enriched.data = {};
-      enriched.data.eventId = data.eventId;
-      if (eventImageUrl) enriched.data.imageUrl = eventImageUrl;
-      // eventName kaldırıldı
+      
+      // EVENT_STARTED için sadece eventName, eventId ve imageUrl
+      if (type === NotificationType.EVENT_STARTED) {
+        if (!enriched.data) enriched.data = {};
+        enriched.data.eventId = data.eventId;
+        // eventName ekle
+        if (data.eventId && eventNames.has(data.eventId)) {
+          enriched.data.eventName = eventNames.get(data.eventId);
+        } else if (data.eventName) {
+          enriched.data.eventName = data.eventName;
+        }
+        if (eventImageUrl) enriched.data.imageUrl = eventImageUrl;
+        // Gereksiz alanları temizle
+        delete enriched.data.hoursRemaining;
+        delete enriched.data.rewardAmount;
+      } else {
+        // Diğer event bildirimleri için mevcut yapı
+        if (!enriched.data) enriched.data = {};
+        enriched.data.eventId = data.eventId;
+        if (eventImageUrl) enriched.data.imageUrl = eventImageUrl;
+      }
     }
 
     // Collection ile ilgili (2) - avatar null
@@ -1091,9 +1163,54 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
     const { groupNotifications } = await import('../../application/notification/notification-grouper');
     const groupedNotifications = groupNotifications(enrichedNotifications);
 
+    // Bildirimleri işle ve temizle
+    const processedNotifications = groupedNotifications.map((notif: any) => {
+      // EVENT_STARTED bildirimleri için root seviyede imageUrl ekle (eğer data içinde varsa)
+      if (notif.type === 'EVENT_STARTED' && notif.data?.imageUrl && !notif.imageUrl) {
+        notif.imageUrl = notif.data.imageUrl; // Root seviyede de ekle
+      }
+
+      // Mesajlaşma bildirimleri için post ile ilgili alanları kaldır (undefined değerleri temizle)
+      if (
+        notif.type === 'DM_REQUEST_RECEIVED' ||
+        notif.type === 'DM_REQUEST_ACCEPTED' ||
+        notif.type === 'DM_REQUEST_DECLINED' ||
+        notif.type === 'SUPPORT_REQUEST_ACCEPTED'
+      ) {
+        // undefined değerleri kaldır
+        if (notif.postId === undefined) delete notif.postId;
+        if (notif.postContent === undefined) delete notif.postContent;
+        if (notif.postType === undefined) delete notif.postType;
+        if (notif.description === undefined) delete notif.description;
+        if (notif.imageUrl === undefined) delete notif.imageUrl;
+        if (notif.commentId === undefined) delete notif.commentId;
+      }
+
+      // TIPS_RECEIVED için post ile ilgili alanları ve data objesini kaldır
+      if (notif.type === 'TIPS_RECEIVED') {
+        // undefined değerleri kaldır
+        if (notif.postId === undefined) delete notif.postId;
+        if (notif.postContent === undefined) delete notif.postContent;
+        if (notif.postType === undefined) delete notif.postType;
+        if (notif.description === undefined) delete notif.description;
+        if (notif.imageUrl === undefined) delete notif.imageUrl;
+        if (notif.commentId === undefined) delete notif.commentId;
+        if (notif.data === undefined) delete notif.data;
+      }
+
+      // undefined değerleri kaldır (genel temizlik)
+      Object.keys(notif).forEach((key) => {
+        if (notif[key] === undefined) {
+          delete notif[key];
+        }
+      });
+
+      return notif;
+    });
+
     return res.json({
       success: true,
-      data: groupedNotifications,
+      data: processedNotifications,
       pagination: {
         total,
         limit: parseQueryInt(limit, 20),

@@ -67,7 +67,7 @@ export class DMRequestPrismaRepository {
 
   async findSupportRequestsByUserId(
     userId: string,
-    options: { status?: string | DMRequestStatus; search?: string; limit?: number } = {}
+    options: { status?: string | DMRequestStatus; search?: string; limit?: number; cursor?: string } = {}
   ): Promise<DMRequestWithRelations[]> {
     const where: Prisma.DMRequestWhereInput = {
       OR: [
@@ -87,11 +87,17 @@ export class DMRequestPrismaRepository {
       where.status = options.status as unknown as Prisma.EnumDMRequestStatusFilter;
     }
 
+    // Cursor-based pagination: cursor'dan önceki (daha eski) request'leri getir
+    if (options.cursor) {
+      const cursorDate = new Date(options.cursor);
+      where.sentAt = { lt: cursorDate };
+    }
+
     const requests = await this.prisma.dMRequest.findMany({
       where,
       include: DM_REQUEST_INCLUDE,
-      orderBy: { createdAt: 'desc' },
-      take: options.limit,
+      orderBy: { sentAt: 'desc' }, // En yeni önce (WhatsApp tarzı)
+      take: options.limit ? options.limit + 1 : undefined, // hasMore kontrolü için +1
     });
 
     return requests;

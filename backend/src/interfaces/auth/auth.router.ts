@@ -127,7 +127,7 @@ router.post('/login', validateBody(LoginSchema), asyncHandler(async (req: Reques
   if (!user) {
     return res.status(401).json({
       success: false,
-      message: 'Geçersiz email veya şifre',
+      message: 'Invalid email or password',
     });
   }
 
@@ -135,7 +135,7 @@ router.post('/login', validateBody(LoginSchema), asyncHandler(async (req: Reques
   if (!user.emailVerified) {
     return res.status(401).json({
       success: false,
-      message: 'Email adresiniz doğrulanmamış. Lütfen önce email adresinizi doğrulayın.',
+      message: 'Your email address is not verified. Please verify your email address first.',
     });
   }
 
@@ -272,32 +272,57 @@ router.post('/register', asyncHandler(async (req: Request, res: Response) => {
   if (!email || !password || !name) {
     return res.status(400).json({
       success: false,
-      message: 'Email, şifre ve isim alanları zorunludur',
+      message: 'Email, password and name fields are required',
     });
   }
 
   if (password.length < 6) {
     return res.status(400).json({
       success: false,
-      message: 'Şifre en az 6 karakter olmalıdır',
+      message: 'Password must be at least 6 characters long',
     });
   }
 
   if (name.length < 2 || name.length > 50) {
     return res.status(400).json({
       success: false,
-      message: 'İsim en az 2, en fazla 50 karakter olmalıdır',
+      message: 'Name must be between 2 and 50 characters',
     });
   }
 
-  const result = await authService.signup(email, password, name);
+  try {
+    const result = await authService.signup(email, password, name);
 
-  if (!result.success) {
-    const statusCode = result.message.includes('zaten kayıtlı') ? 409 : 500;
-    return res.status(statusCode).json(result);
+    if (!result.success) {
+      // Email zaten kayıtlı hatası için 409
+      if (result.message.includes('already registered') || result.message.includes('already exists')) {
+        return res.status(409).json(result);
+      }
+      
+      // Email gönderilemedi hatası için 503 (Service Unavailable)
+      if (result.message.includes('Failed to send') || result.message.includes('Email could not be sent')) {
+        return res.status(503).json(result);
+      }
+      
+      // Diğer hatalar için 500
+      return res.status(500).json(result);
+    }
+
+    return res.json(result);
+  } catch (error) {
+    // Beklenmeyen hatalar için
+    logger.error({
+      message: 'Unexpected error in register endpoint',
+      email,
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    
+    return res.status(500).json({
+      success: false,
+      message: 'An unexpected error occurred during registration. Please try again.',
+    });
   }
-
-  return res.json(result);
 }));
 
 /**
@@ -787,14 +812,14 @@ router.post('/reset-password', asyncHandler(async (req: Request, res: Response) 
   if (!email || !password) {
     return res.status(400).json({
       success: false,
-      message: 'Email ve şifre alanları zorunludur',
+      message: 'Email and password fields are required',
     });
   }
 
   if (password.length < 6) {
     return res.status(400).json({
       success: false,
-      message: 'Şifre en az 6 karakter olmalıdır',
+      message: 'Password must be at least 6 characters long',
     });
   }
 

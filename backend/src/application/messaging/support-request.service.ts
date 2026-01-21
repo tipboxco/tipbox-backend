@@ -22,12 +22,14 @@ export interface SupportRequestListItem {
   threadId: string | null; // Accept edilmişse thread ID, yoksa null
   fromUserId: string; // Request oluşturan kullanıcı ID
   toUserId: string; // Request alıcı kullanıcı ID
+  timestamp: string; // Request timestamp (sentAt) - pagination için
 }
 
 export interface SupportRequestQueryOptions {
   status?: SupportRequestStatus;
   search?: string;
   limit?: number;
+  cursor?: string; // Pagination cursor (timestamp)
 }
 
 export class SupportRequestService {
@@ -50,7 +52,7 @@ export class SupportRequestService {
   async getUserSupportRequests(
     userId: string,
     options: SupportRequestQueryOptions = {}
-  ): Promise<SupportRequestListItem[]> {
+  ): Promise<{ items: SupportRequestListItem[]; hasMore: boolean; nextCursor?: string }> {
     try {
       // Map SupportRequestStatus to DMRequestStatus for filtering
       let dmRequestStatus: DMRequestStatus | undefined;
@@ -70,10 +72,11 @@ export class SupportRequestService {
         dmRequestStatus = DMRequestStatus.REPORTED;
       }
 
-      // Get support requests (requests with description)
-      // Don't apply limit here - we'll apply it after search filtering
+      // Get support requests (requests with description) - cursor ile
       const requests = await this.dmRequestRepo.findSupportRequestsByUserId(userId, {
         status: dmRequestStatus,
+        cursor: options.cursor,
+        limit: options.limit ? options.limit + 1 : undefined, // hasMore kontrolü için +1
       });
 
       // Get all support threads (is_support_thread = true) for these users
@@ -197,6 +200,7 @@ export class SupportRequestService {
           threadId: finalThreadId,
           fromUserId: request.fromUserId,
           toUserId: request.toUserId,
+          timestamp: request.sentAt.toISOString(), // Pagination için timestamp
         });
       }
 
@@ -224,12 +228,15 @@ export class SupportRequestService {
         console.log('[Support Requests Service] Filtered requests count:', filteredRequests.length);
       }
 
-      // Apply limit after search filtering
-      if (options.limit) {
-        filteredRequests = filteredRequests.slice(0, options.limit);
-      }
+      // Pagination uygula (search filtresinden sonra)
+      const limit = options.limit ?? 50;
+      const hasMore = filteredRequests.length > limit;
+      const items = hasMore ? filteredRequests.slice(0, limit) : filteredRequests;
+      const nextCursor = hasMore && items.length > 0
+        ? items[items.length - 1].timestamp // SupportRequestListItem'de timestamp field'ı var mı kontrol et
+        : undefined;
 
-      return filteredRequests;
+      return { items, hasMore, nextCursor };
     } catch (error) {
       logger.error(`Failed to get support requests for user ${userId}:`, error);
       // Log the full error for debugging

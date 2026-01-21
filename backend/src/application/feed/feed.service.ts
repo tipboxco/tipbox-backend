@@ -156,15 +156,62 @@ export class FeedService {
       cursor: feedCursor,
     });
 
-    // Feed tablosu boşsa boş feed döndür (fallback mekanizması kaldırıldı)
-    // Production'da feed tablosu her zaman dolu olmalı (FeedDistributionWorker tarafından doldurulur)
+    // Feed tablosu boşsa, kullanıcının tercihlerine göre filtreli feed döndür
     if (feeds.length === 0) {
-      logger.warn({
-        message: 'Feed table is empty for user - feed distribution may not be working',
+      logger.info({
+        message: 'Feed table is empty for user - returning filtered feed based on preferences',
         userId,
-        suggestion: 'Check FeedDistributionWorker is running and processing jobs',
       });
 
+      // Kullanıcının tercihlerine göre filtreli feed getir
+      const userPreferences = await this.prisma.userFeedPreferences.findUnique({
+        where: { userId },
+        select: { preferredCategories: true },
+      });
+
+      if (userPreferences?.preferredCategories) {
+        try {
+          const selectedCategories = JSON.parse(userPreferences.preferredCategories);
+          
+          if (Array.isArray(selectedCategories) && selectedCategories.length > 0) {
+            // Kullanıcının seçtiği category ve subCategory ID'lerini topla
+            const categoryIds: string[] = [];
+            const subCategoryIds: string[] = [];
+            
+            for (const category of selectedCategories) {
+              if (category.categoryId) {
+                categoryIds.push(category.categoryId);
+              }
+              if (Array.isArray(category.subCategoryIds)) {
+                subCategoryIds.push(...category.subCategoryIds);
+              }
+            }
+
+            // Tercihlere göre filtreli feed getir
+            const filters: FeedFilterOptions = {};
+            
+            if (categoryIds.length > 0) {
+              filters.category = categoryIds.join(',');
+            }
+
+            // CATEGORY_MATCH source'lu feed'leri önceliklendir
+            filters.interests = ['CATEGORY_MATCH', 'TRUSTER', 'BOOSTED', 'TRENDING', 'NEW_USER'];
+
+            return await this.getFilteredFeed(userId, filters, {
+              cursor: options?.cursor,
+              limit,
+            });
+          }
+        } catch (error) {
+          logger.warn({
+            message: 'Failed to parse preferredCategories for feed fallback',
+            userId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      // Tercih yoksa veya parse edilemediyse boş feed döndür
       return {
         items: [],
         pagination: {
@@ -260,6 +307,68 @@ export class FeedService {
     let orderedPosts = feeds
       .map((feed) => postMap.get(feed.postId))
       .filter((p): p is typeof posts[number] => Boolean(p));
+
+    // Kullanıcının tercihlerine göre post'ları önceliklendir (ilk giriş için)
+    // Eğer kullanıcının preferredCategories'i varsa, CATEGORY_MATCH source'lu post'ları öne al
+    const userPreferences = await this.prisma.userFeedPreferences.findUnique({
+      where: { userId },
+      select: { preferredCategories: true },
+    });
+
+    if (userPreferences?.preferredCategories) {
+      try {
+        const selectedCategories = JSON.parse(userPreferences.preferredCategories);
+        
+        if (Array.isArray(selectedCategories) && selectedCategories.length > 0) {
+          // Kullanıcının seçtiği category ve subCategory ID'lerini topla
+          const preferredCategoryIds = new Set<string>();
+          const preferredSubCategoryIds = new Set<string>();
+          
+          for (const category of selectedCategories) {
+            if (category.categoryId) {
+              preferredCategoryIds.add(category.categoryId);
+            }
+            if (Array.isArray(category.subCategoryIds)) {
+              category.subCategoryIds.forEach((id: string) => preferredSubCategoryIds.add(id));
+            }
+          }
+
+          // Post'ları tercihlere göre sırala
+          orderedPosts = orderedPosts.sort((a, b) => {
+            const aSource = feedSourceMap.get(a.id) || '';
+            const bSource = feedSourceMap.get(b.id) || '';
+            
+            // CATEGORY_MATCH source'lu post'ları önceliklendir
+            const aIsCategoryMatch = aSource === FeedSource.CATEGORY_MATCH;
+            const bIsCategoryMatch = bSource === FeedSource.CATEGORY_MATCH;
+            
+            if (aIsCategoryMatch && !bIsCategoryMatch) return -1;
+            if (!aIsCategoryMatch && bIsCategoryMatch) return 1;
+            
+            // Eğer ikisi de category match değilse, relevance score'a göre sırala
+            const aFeed = feeds.find(f => f.postId === a.id);
+            const bFeed = feeds.find(f => f.postId === b.id);
+            
+            if (aFeed && bFeed) {
+              if (aFeed.relevanceScore !== bFeed.relevanceScore) {
+                return bFeed.relevanceScore - aFeed.relevanceScore; // Descending
+              }
+            }
+            
+            // Son olarak tarihe göre sırala
+            const aTime = a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt).getTime();
+            const bTime = b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt).getTime();
+            return bTime - aTime;
+          });
+        }
+      } catch (error) {
+        logger.warn({
+          message: 'Failed to parse preferredCategories for feed prioritization',
+          userId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
 
     // Context-based filtering
     if (options?.contextType && options?.contextId) {

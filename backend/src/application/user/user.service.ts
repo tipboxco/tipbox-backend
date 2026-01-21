@@ -3111,6 +3111,272 @@ export class UserService {
     });
   }
 
+  /**
+   * Username validasyonu ve müsaitlik kontrolü
+   * @param userName - Kontrol edilecek username
+   * @param currentUserId - Mevcut kullanıcı ID'si (opsiyonel, kendi username'ini kontrol ederken kullanılır)
+   * @returns Username'in geçerliliği ve müsaitlik durumu
+   */
+  async checkUsernameAvailability(
+    userName: string,
+    currentUserId?: string
+  ): Promise<{
+    isValid: boolean;
+    isAvailable: boolean;
+    message?: string;
+  }> {
+    // Username format validasyonu
+    const usernameRegex = /^[a-zA-Z0-9_]+$/;
+    const minLength = 3;
+    const maxLength = 30;
+
+    // Boş kontrolü
+    if (!userName || userName.trim().length === 0) {
+      return {
+        isValid: false,
+        isAvailable: false,
+        message: 'Kullanıcı adı boş olamaz',
+      };
+    }
+
+    // Uzunluk kontrolü
+    if (userName.length < minLength) {
+      return {
+        isValid: false,
+        isAvailable: false,
+        message: `Username must be at least ${minLength} characters long`,
+      };
+    }
+
+    if (userName.length > maxLength) {
+      return {
+        isValid: false,
+        isAvailable: false,
+        message: `Username can be at most ${maxLength} characters long`,
+      };
+    }
+
+    // Format kontrolü
+    if (!usernameRegex.test(userName)) {
+      return {
+        isValid: false,
+        isAvailable: false,
+        message: 'Username can only contain letters, numbers and underscore (_)',
+      };
+    }
+
+    // Müsaitlik kontrolü
+    const existingProfile = await this.profileRepo.findByUserName(userName);
+    
+    // Eğer kullanıcı kendi username'ini kontrol ediyorsa, müsait sayılır
+    if (existingProfile && currentUserId && existingProfile.userId === currentUserId) {
+      return {
+        isValid: true,
+        isAvailable: true,
+      };
+    }
+
+    // Başka bir kullanıcı tarafından kullanılıyorsa
+    if (existingProfile) {
+      return {
+        isValid: true,
+        isAvailable: false,
+        message: 'This username is already in use',
+      };
+    }
+
+    return {
+      isValid: true,
+      isAvailable: true,
+    };
+  }
+
+  /**
+   * Username önerileri oluşturur (Instagram benzeri)
+   * @param baseUsername - Temel username
+   * @param limit - Öneri sayısı (varsayılan: 5)
+   * @returns Önerilen username'ler listesi
+   */
+  async suggestUsernames(
+    baseUsername: string,
+    limit: number = 5
+  ): Promise<string[]> {
+    const suggestions: string[] = [];
+    const cleanBase = baseUsername.toLowerCase().replace(/[^a-z0-9_]/g, '');
+
+    if (cleanBase.length === 0) {
+      return suggestions;
+    }
+
+    // Öneri stratejileri
+    const strategies = [
+      // 1. Base + sayılar (1-999)
+      (base: string) => {
+        const results: string[] = [];
+        for (let i = 1; i <= 999 && results.length < limit; i++) {
+          const candidate = `${base}${i}`;
+          if (candidate.length <= 30) {
+            results.push(candidate);
+          }
+        }
+        return results;
+      },
+      // 2. Base + underscore + sayılar
+      (base: string) => {
+        const results: string[] = [];
+        for (let i = 1; i <= 99 && results.length < limit; i++) {
+          const candidate = `${base}_${i}`;
+          if (candidate.length <= 30) {
+            results.push(candidate);
+          }
+        }
+        return results;
+      },
+      // 3. Base + random sayılar (2-3 haneli)
+      (base: string) => {
+        const results: string[] = [];
+        const usedNumbers = new Set<number>();
+        while (results.length < limit) {
+          const num = Math.floor(Math.random() * 900) + 100; // 100-999
+          if (!usedNumbers.has(num)) {
+            usedNumbers.add(num);
+            const candidate = `${base}${num}`;
+            if (candidate.length <= 30) {
+              results.push(candidate);
+            }
+          }
+          if (usedNumbers.size > 100) break; // Infinite loop önleme
+        }
+        return results;
+      },
+      // 4. Base'in sonuna "real", "official" gibi ekler
+      (base: string) => {
+        const suffixes = ['real', 'official', 'official_', 'the'];
+        const results: string[] = [];
+        for (const suffix of suffixes) {
+          const candidate = `${base}${suffix}`;
+          if (candidate.length <= 30 && results.length < limit) {
+            results.push(candidate);
+          }
+        }
+        return results;
+      },
+      // 5. Base'in başına sayı ekle
+      (base: string) => {
+        const results: string[] = [];
+        for (let i = 1; i <= 9 && results.length < limit; i++) {
+          const candidate = `${i}${base}`;
+          if (candidate.length <= 30) {
+            results.push(candidate);
+          }
+        }
+        return results;
+      },
+    ];
+
+    // Her stratejiyi dene ve müsait olanları topla
+    for (const strategy of strategies) {
+      const candidates = strategy(cleanBase);
+      for (const candidate of candidates) {
+        if (suggestions.length >= limit) break;
+        
+        // Format kontrolü
+        if (!/^[a-zA-Z0-9_]+$/.test(candidate) || candidate.length < 3 || candidate.length > 30) {
+          continue;
+        }
+
+        // Müsaitlik kontrolü
+        const existingProfile = await this.profileRepo.findByUserName(candidate);
+        if (!existingProfile) {
+          suggestions.push(candidate);
+        }
+      }
+      if (suggestions.length >= limit) break;
+    }
+
+    // Eğer yeterli öneri yoksa, random sayılarla doldur
+    if (suggestions.length < limit) {
+      const usedNumbers = new Set<number>();
+      while (suggestions.length < limit) {
+        const num = Math.floor(Math.random() * 10000); // 0-9999
+        if (!usedNumbers.has(num)) {
+          usedNumbers.add(num);
+          const candidate = `${cleanBase}${num}`;
+          if (candidate.length <= 30) {
+            const existingProfile = await this.profileRepo.findByUserName(candidate);
+            if (!existingProfile) {
+              suggestions.push(candidate);
+            }
+          }
+        }
+        if (usedNumbers.size > 1000) break; // Infinite loop önleme
+      }
+    }
+
+    return suggestions.slice(0, limit);
+  }
+
+  /**
+   * Kullanıcı kayıt için kategori ve sub-kategori listesini getir
+   * Her kategori için dinamik olarak en fazla 10 sub-kategori döner
+   * @returns Kategori listesi ve her kategorinin en fazla 10 sub-kategorisi
+   */
+  async getUserCategories(): Promise<Array<{
+    categoryId: string;
+    name: string;
+    subCategories: Array<{
+      subCategoryId: string;
+      name: string;
+    }>;
+  }>> {
+    // Ana kategorileri getir (level = 0)
+    const mainCategories = await this.prisma.category.findMany({
+      where: {
+        level: 0,
+      },
+      select: {
+        id: true,
+        name: true,
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    });
+
+    // Her kategori için en fazla 10 sub-kategoriyi getir
+    const result = await Promise.all(
+      mainCategories.map(async (category) => {
+        // Sub-kategorileri getir (level = 1, parentId = category.id)
+        // Alfabetik sıralama ile ilk 10'u al
+        const subCategories = await this.prisma.category.findMany({
+          where: {
+            parentId: category.id,
+            level: 1,
+          },
+          select: {
+            id: true,
+            name: true,
+          },
+          orderBy: {
+            name: 'asc',
+          },
+          take: 10, // En fazla 10 sub-kategori
+        });
+
+        return {
+          categoryId: category.id,
+          name: category.name,
+          subCategories: subCategories.map((sub) => ({
+            subCategoryId: sub.id,
+            name: sub.name,
+          })),
+        };
+      })
+    );
+
+    return result;
+  }
+
   // ===== SETTINGS METHODS =====
 
   /**

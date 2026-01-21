@@ -597,6 +597,121 @@ router.get(
  *       404:
  *         description: Product bulunamadı.
  */
+/**
+ * @openapi
+ * /catalog/products/search:
+ *   get:
+ *     summary: Global product search - Tüm product group'lar arasında arama
+ *     description: Tüm product group'lar arasında arama yapar ve sonuçları product group bazında gruplar. Sadece eşleşen ürünü olan product group'lar döner.
+ *     tags: [Product Catalog]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Product name, brand veya description'da arama
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor (son dönen product group ID'si)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 20
+ *         description: Sayfa başına item sayısı
+ *     responses:
+ *       200:
+ *         description: Arama sonuçları başarıyla getirildi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       productGroupId:
+ *                         type: string
+ *                       productGroupName:
+ *                         type: string
+ *                       productGroupImage:
+ *                         type: string
+ *                         nullable: true
+ *                       subCategoryId:
+ *                         type: string
+ *                       subCategoryName:
+ *                         type: string
+ *                       categoryId:
+ *                         type: string
+ *                       categoryName:
+ *                         type: string
+ *                       products:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             productId:
+ *                               type: string
+ *                             name:
+ *                               type: string
+ *                             image:
+ *                               type: string
+ *                               nullable: true
+ *                             productGroupId:
+ *                               type: string
+ *                             subCategoryId:
+ *                               type: string
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       nullable: true
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
+ *       400:
+ *         description: Search parametresi boş veya geçersiz
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ *       500:
+ *         description: Sunucu hatası
+ */
+router.get(
+  '/products/search',
+  asyncHandler(async (req: Request, res: Response) => {
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
+    
+    if (!search || search.length === 0) {
+      return res.status(400).json({ message: 'Search parameter is required' });
+    }
+
+    const cursor = req.query.cursor as string | undefined;
+    const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+    
+    if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
+      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+    }
+
+    const result = await catalogService.searchProductsGlobally(search, {
+      cursor,
+      limit: limitParam,
+    });
+
+    return res.json(result);
+  }),
+);
+
 router.get(
   '/products/:productId/posts',
   asyncHandler(async (req: Request, res: Response) => {

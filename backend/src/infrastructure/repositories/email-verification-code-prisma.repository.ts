@@ -2,9 +2,12 @@ import { getPrisma } from './prisma.client';
 
 export interface EmailVerificationCodeData {
   id: string;
-  userId: string;
+  userId: string | null;
   email: string;
   code: string;
+  passwordHash: string | null;
+  name: string | null;
+  auth0Id: string | null;
   isUsed: boolean;
   expiresAt: Date;
   createdAt: Date;
@@ -14,11 +17,18 @@ export interface EmailVerificationCodeData {
 export class EmailVerificationCodePrismaRepository {
   private prisma = getPrisma();
 
-  async create(userId: string, email: string, code: string, expiresAt: Date): Promise<EmailVerificationCodeData> {
-    // Kullanıcının aktif olmayan kodlarını iptal et
+  async create(
+    email: string, 
+    code: string, 
+    expiresAt: Date, 
+    passwordHash?: string, 
+    name?: string, 
+    userId?: string,
+    auth0Id?: string
+  ): Promise<EmailVerificationCodeData> {
+    // Aynı email için aktif olmayan kodlarını iptal et
     await this.prisma.emailVerificationCode.updateMany({
       where: {
-        userId,
         email,
         isUsed: false,
         expiresAt: {
@@ -32,9 +42,12 @@ export class EmailVerificationCodePrismaRepository {
 
     const verificationCode = await this.prisma.emailVerificationCode.create({
       data: {
-        userId,
+        userId: userId || null,
         email,
         code,
+        passwordHash: passwordHash || null,
+        name: name || null,
+        auth0Id: auth0Id || null,
         expiresAt,
         isUsed: false,
       },
@@ -114,6 +127,9 @@ export class EmailVerificationCodePrismaRepository {
       userId: prismaCode.userId,
       email: prismaCode.email,
       code: prismaCode.code,
+      passwordHash: prismaCode.passwordHash,
+      name: prismaCode.name,
+      auth0Id: prismaCode.auth0Id,
       isUsed: prismaCode.isUsed,
       expiresAt: prismaCode.expiresAt,
       createdAt: prismaCode.createdAt,

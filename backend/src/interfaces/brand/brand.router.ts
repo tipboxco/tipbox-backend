@@ -96,6 +96,111 @@ router.get(
 
 /**
  * @openapi
+ * /brands/search:
+ *   get:
+ *     summary: Global brand search - Tüm brand kategorileri arasında arama
+ *     description: Tüm brand kategorileri arasında arama yapar ve sonuçları brand category bazında gruplar. Sadece eşleşen brand'i olan category'ler döner.
+ *     tags: [Brand Catalog]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Brand name, description veya category name'de arama
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor (son dönen category ID'si)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 20
+ *         description: Sayfa başına item sayısı
+ *     responses:
+ *       200:
+ *         description: Arama sonuçları başarıyla getirildi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       categoryId:
+ *                         type: string
+ *                       categoryName:
+ *                         type: string
+ *                       categoryImage:
+ *                         type: string
+ *                         nullable: true
+ *                       brands:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             brandId:
+ *                               type: string
+ *                             name:
+ *                               type: string
+ *                             image:
+ *                               type: string
+ *                               nullable: true
+ *                             categoryId:
+ *                               type: string
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       nullable: true
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
+ *       400:
+ *         description: Search parametresi boş veya geçersiz
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ *       500:
+ *         description: Sunucu hatası
+ */
+router.get(
+  '/search',
+  asyncHandler(async (req: Request, res: Response) => {
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
+    
+    if (!search || search.length === 0) {
+      return res.status(400).json({ message: 'Search parameter is required' });
+    }
+
+    const cursor = req.query.cursor as string | undefined;
+    const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+    
+    if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
+      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+    }
+
+    const result = await brandService.searchBrandsGlobally(search, {
+      cursor,
+      limit: limitParam,
+    });
+
+    return res.json(result);
+  }),
+);
+
+/**
+ * @openapi
  * /brands/{brandId}/catalog:
  *   get:
  *     summary: Brand catalog detayları
