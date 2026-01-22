@@ -4,8 +4,20 @@ import { DMThread } from '../../domain/messaging/dm-thread.entity';
 
 const THREAD_INCLUDE = {
   messages: {
+    where: {
+      isDeleted: false, // Silinmemiş mesajları al
+      context: 'DM', // Sadece DM context'li mesajları al (support mesajları hariç)
+    } as any,
     orderBy: { sentAt: 'desc' as const },
     take: 1,
+    select: {
+      id: true,
+      message: true,
+      sentAt: true,
+      mediaUrl: true,
+      mediaType: true,
+      caption: true,
+    },
   },
   userOne: {
     include: {
@@ -90,6 +102,7 @@ export class DMThreadPrismaRepository {
         { userOneId: userIdStr },
         { userTwoId: userIdStr },
       ],
+      isActive: true, // Sadece aktif thread'leri getir
       ...(isSupportThreadFilter !== undefined && { isSupportThread: isSupportThreadFilter }),
       ...(cursorDate && { updatedAt: { lt: cursorDate } }),
     };

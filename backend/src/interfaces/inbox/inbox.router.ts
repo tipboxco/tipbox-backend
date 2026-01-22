@@ -95,34 +95,34 @@ router.use(authMiddleware);
  *                 items:
  *                   type: array
  *                   items:
- *                 type: object
- *                 properties:
- *                   id:
- *                     type: string
- *                     format: uuid
- *                     description: Thread ID
- *                   recipientUserId:
- *                     type: string
- *                     format: uuid
- *                     description: Karşı tarafın (diğer kullanıcının) ID'si - MessageDetail'e navigate etmek için kullanılır
- *                   senderName:
- *                     type: string
- *                   senderTitle:
- *                     type: string
- *                     nullable: true
- *                   senderAvatar:
- *                     type: string
- *                     nullable: true
- *                   lastMessage:
- *                     type: string
- *                     nullable: true
- *                   timestamp:
- *                     type: string
- *                     format: date-time
- *                   isUnread:
- *                     type: boolean
- *                   unreadCount:
- *                     type: integer
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         format: uuid
+ *                         description: Thread ID
+ *                       recipientUserId:
+ *                         type: string
+ *                         format: uuid
+ *                         description: Karşı tarafın (diğer kullanıcının) ID'si - MessageDetail'e navigate etmek için kullanılır
+ *                       senderName:
+ *                         type: string
+ *                       senderTitle:
+ *                         type: string
+ *                         nullable: true
+ *                       senderAvatar:
+ *                         type: string
+ *                         nullable: true
+ *                       lastMessage:
+ *                         type: string
+ *                         nullable: true
+ *                       timestamp:
+ *                         type: string
+ *                         format: date-time
+ *                       isUnread:
+ *                         type: boolean
+ *                       unreadCount:
+ *                         type: integer
  *                 pagination:
  *                   type: object
  *                   properties:
@@ -233,6 +233,17 @@ router.get(
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
+    // UUID format validation for userId
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const userIdStr = String(userId).trim();
+    if (!uuidRegex.test(userIdStr)) {
+      logger.error(`Invalid userId format in GET /inbox: ${userIdStr}`, { userId, userPayload });
+      return res.status(400).json({ 
+        message: 'Invalid user ID format',
+        details: `userId must be a valid UUID format, received: ${userIdStr}` 
+      });
+    }
+
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
     const unreadOnlyParam = req.query.unreadOnly;
     const unreadOnly = Array.isArray(unreadOnlyParam)
@@ -281,8 +292,14 @@ router.get(
  * @openapi
  * /inbox:
  *   post:
- *     summary: Direkt mesaj gönder
- *     description: Kullanıcıya direkt mesaj gönderir. Mesaj gönderildiğinde `new_message` ve `message_sent` socket event'leri tetiklenir.
+ *     summary: Direkt mesaj gönder (mesaj + fotoğraf desteği ile)
+ *     description: |
+ *       Kullanıcıya direkt mesaj gönderir. Mesaj ile birlikte fotoğraf da gönderilebilir.
+ *       Mesaj gönderildiğinde `new_message` ve `message_sent` socket event'leri tetiklenir.
+ *       
+ *       İki kullanım şekli:
+ *       1. Sadece mesaj: `Content-Type: application/json` ile `{ recipientUserId, message }`
+ *       2. Mesaj + fotoğraf: `Content-Type: multipart/form-data` ile `recipientUserId`, `message` (opsiyonel), `media` (file)
  *     tags: [Inbox]
  *     security:
  *       - bearerAuth: []
@@ -296,27 +313,160 @@ router.get(
  *             properties:
  *               recipientUserId: { type: string }
  *               message: { type: string }
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [ recipientUserId ]
+ *             properties:
+ *               recipientUserId: { type: string }
+ *               message: { type: string }
+ *               media:
+ *                 type: string
+ *                 format: binary
  *     responses:
  *       201:
  *         description: Mesaj gönderildi
  */
 router.post(
   '/',
+  upload.single('media'),
   asyncHandler(async (req: Request, res: Response) => {
     const userPayload = req.user;
     const senderId = userPayload?.id || userPayload?.userId || userPayload?.sub;
     if (!senderId) {
       return res.status(401).json({ message: 'Unauthorized' });
     }
-    const { recipientUserId, message } = req.body || {};
+
+    // UUID format validation for senderId
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const senderIdStr = String(senderId);
+    if (!uuidRegex.test(senderIdStr)) {
+      logger.error(`Invalid senderId format: ${senderIdStr}`, { senderId, userPayload });
+      return res.status(400).json({ 
+        message: 'Invalid sender ID format',
+        details: `senderId must be a valid UUID format, received: ${senderIdStr}` 
+      });
+    }
+
+    const file = (req as any).file;
+    const isMultipart = !!file;
+    
+    let recipientUserId: string;
+    let message: string | undefined;
+
+    if (isMultipart) {
+      // multipart/form-data
+      recipientUserId = req.body.recipientUserId;
+      message = req.body.message; // Opsiyonel - sadece fotoğraf da gönderilebilir
+    } else {
+      // application/json
+      const body = req.body || {};
+      recipientUserId = body.recipientUserId;
+      message = body.message;
+    }
+
     if (!recipientUserId || typeof recipientUserId !== 'string') {
       return res.status(400).json({ message: 'recipientUserId is required' });
     }
-    if (!message || typeof message !== 'string' || message.trim() === '') {
-      return res.status(400).json({ message: 'message is required' });
+
+    // UUID format validation for recipientUserId
+    const recipientUserIdStr = String(recipientUserId).trim();
+    if (!uuidRegex.test(recipientUserIdStr)) {
+      logger.error(`Invalid recipientUserId format: ${recipientUserIdStr}`, { recipientUserId, body: req.body });
+      return res.status(400).json({ 
+        message: 'recipientUserId must be a valid UUID format',
+        details: `Received: ${recipientUserIdStr}` 
+      });
     }
-    await messagingService.sendDirectMessage(String(senderId), recipientUserId, message);
-    return res.status(201).end();
+
+    // Mesaj veya media en az biri olmalı
+    if ((!message || message.trim() === '') && !file) {
+      return res.status(400).json({ message: 'message or media is required' });
+    }
+
+    try {
+      // Eğer media varsa, önce thread oluştur, sonra S3'e yükle
+      if (file) {
+        // Thread oluştur veya mevcut thread'i al (thread bazlı dosya yolu için gerekli)
+        const thread = await messagingService.createThreadIfNotExists(senderIdStr, recipientUserIdStr);
+
+        // Auto-detect media type from MIME type
+        let detectedMediaType: 'image' | 'video' | 'audio' | 'file' = 'file';
+        if (file.mimetype.startsWith('image/')) {
+          detectedMediaType = 'image';
+        } else if (file.mimetype.startsWith('video/')) {
+          detectedMediaType = 'video';
+        } else if (file.mimetype.startsWith('audio/')) {
+          detectedMediaType = 'audio';
+        }
+
+        // Determine file extension
+        const mimeToExtension: Record<string, string> = {
+          'image/jpeg': 'jpg',
+          'image/jpg': 'jpg',
+          'image/png': 'png',
+          'image/gif': 'gif',
+          'image/webp': 'webp',
+          'video/mp4': 'mp4',
+          'video/webm': 'webp',
+          'video/quicktime': 'mov',
+          'video/x-msvideo': 'avi',
+          'audio/mpeg': 'mp3',
+          'audio/mp3': 'mp3',
+          'audio/wav': 'wav',
+        };
+
+        let fileExtension = 'jpg';
+        if (file.mimetype && mimeToExtension[file.mimetype]) {
+          fileExtension = mimeToExtension[file.mimetype];
+        } else if (file.originalname && file.originalname.includes('.')) {
+          const parts = file.originalname.split('.');
+          if (parts.length > 1) {
+            fileExtension = parts[parts.length - 1].toLowerCase();
+          }
+        }
+
+        // Create file path - thread bazlı
+        const filePath = `messages/threads/${thread.id}/${uuidv4()}.${fileExtension}`;
+        
+        // Upload to S3
+        const mediaUrl = await s3Service.uploadFile(filePath, file.buffer, file.mimetype);
+        
+        // For images and videos, use the same URL as thumbnail (could generate thumbnails later)
+        const thumbnailUrl = (detectedMediaType === 'image' || detectedMediaType === 'video') ? mediaUrl : null;
+
+        // Send message with media
+        await messagingService.sendDirectMessageWithMedia(
+          senderIdStr,
+          recipientUserIdStr,
+          message || '', // Mesaj yoksa boş string
+          mediaUrl,
+          detectedMediaType,
+          file.originalname,
+          BigInt(file.size),
+          thumbnailUrl || undefined
+        );
+
+        return res.status(201).json({
+          success: true,
+          message: 'Message with media sent successfully',
+        });
+      } else {
+        // Sadece text mesaj
+        await messagingService.sendDirectMessage(senderIdStr, recipientUserIdStr, message!);
+        return res.status(201).json({
+          success: true,
+          message: 'Message sent successfully',
+        });
+      }
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error);
+      if (hasErrorMessage(error) && (errorMessage.includes('not found') || errorMessage.includes('User not found'))) {
+        return res.status(404).json({ message: 'Recipient user not found' });
+      }
+      logger.error('Send message error:', error);
+      throw error;
+    }
   }),
 );
 
@@ -546,29 +696,29 @@ router.get(
  *                 items:
  *                   type: array
  *                   items:
- *                 type: object
- *                 properties:
- *                   id:
- *                     type: string
- *                     format: uuid
- *                   userName:
- *                     type: string
- *                   userTitle:
- *                     type: string
- *                     nullable: true
- *                   userAvatar:
- *                     type: string
- *                     nullable: true
- *                   requestDescription:
- *                     type: string
- *                   status:
- *                     type: string
- *                     enum: [active, pending, awaiting_completion, completed, finalized, reported]
- *                     description: finalized durumu completed ile aynıdır, frontend uyumluluğu için ayrı değer olarak döner.
- *                   threadId:
- *                     type: string
- *                     format: uuid
- *                     nullable: true
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         format: uuid
+ *                       userName:
+ *                         type: string
+ *                       userTitle:
+ *                         type: string
+ *                         nullable: true
+ *                       userAvatar:
+ *                         type: string
+ *                         nullable: true
+ *                       requestDescription:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                         enum: [active, pending, awaiting_completion, completed, finalized, reported]
+ *                         description: finalized durumu completed ile aynıdır, frontend uyumluluğu için ayrı değer olarak döner.
+ *                       threadId:
+ *                         type: string
+ *                         format: uuid
+ *                         nullable: true
  *                     description: |
  *                       Support request'in bağlı olduğu support thread ID.
  *                       - pending: null (henüz accept edilmemiş, thread oluşturulmamış)
@@ -1046,6 +1196,216 @@ router.post(
 
 /**
  * @openapi
+ * /inbox/support-requests/{requestId}/close:
+ *   post:
+ *     summary: Support request'i kapat ve rating ver
+ *     description: |
+ *       Support request'i kapatır ve rating verir. Her iki kullanıcı da close yaptığında request COMPLETED olur.
+ *       İlk close yapan kullanıcı için status AWAITING_COMPLETION olur, ikinci kullanıcı close yaptığında COMPLETED olur.
+ *       
+ *       **İşlem Adımları:**
+ *       1. Support request status'ü AWAITING_COMPLETION veya COMPLETED olarak güncellenir
+ *       2. Rating kaydedilir (fromUserRating veya toUserRating)
+ *       3. Socket event: support_request_closed gönderilir
+ *       4. Thread mesajlaşması devam edebilir (sadece status değişir)
+ *     tags: [Inbox]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: requestId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Kapatılacak support request ID'si
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [rating]
+ *             properties:
+ *               rating:
+ *                 type: number
+ *                 minimum: 1
+ *                 maximum: 5
+ *                 description: 1-5 arası rating
+ *                 example: 5
+ *               comment:
+ *                 type: string
+ *                 description: Opsiyonel yorum
+ *                 example: "Çok yardımcı oldu"
+ *     responses:
+ *       200:
+ *         description: Support request başarıyla kapatıldı
+ *       400:
+ *         description: Geçersiz rating veya sadece accepted request'ler close edilebilir
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: User is not part of this support request
+ *       404:
+ *         description: Support request not found
+ */
+router.post(
+  '/support-requests/:requestId/close',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { requestId } = req.params;
+    if (!requestId) {
+      return res.status(400).json({ message: 'requestId is required' });
+    }
+
+    const { rating, comment } = req.body;
+
+    if (!rating || typeof rating !== 'number') {
+      return res.status(400).json({ message: 'rating is required and must be a number' });
+    }
+
+    if (rating < 1 || rating > 5) {
+      return res.status(400).json({ message: 'rating must be between 1 and 5' });
+    }
+
+    try {
+      await supportRequestService.closeSupportRequest(requestId, String(userId), rating);
+      return res.status(200).end();
+    } catch (error: unknown) {
+      if (hasErrorMessage(error, 'Support request not found')) {
+        return res.status(404).json({ message: getErrorMessage(error) });
+      }
+      if (errorMessageIncludes(error, 'not part of this support request')) {
+        return res.status(403).json({ message: getErrorMessage(error) });
+      }
+      if (errorMessageIncludes(error, 'Only accepted support requests can be closed')) {
+        return res.status(400).json({ message: getErrorMessage(error) });
+      }
+      if (errorMessageIncludes(error, 'already closed')) {
+        return res.status(400).json({ message: getErrorMessage(error) });
+      }
+      throw error;
+    }
+  }),
+);
+
+/**
+ * @openapi
+ * /inbox/support-requests/{requestId}/report:
+ *   post:
+ *     summary: Support request'i raporla
+ *     description: |
+ *       Support request'i raporlar. Request status'ü REPORTED olarak güncellenir.
+ *       
+ *       **İşlem Adımları:**
+ *       1. Support request status'ü REPORTED olarak güncellenir
+ *       2. Rapor kaydedilir
+ *       3. Socket event: support_request_reported gönderilir
+ *     tags: [Inbox]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: requestId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Raporlanacak support request ID'si
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [reason]
+ *             properties:
+ *               reason:
+ *                 type: string
+ *                 enum: [SPAM, HARASSMENT, SCAM]
+ *                 description: Raporlama nedeni
+ *                 example: "SPAM"
+ *               description:
+ *                 type: string
+ *                 maxLength: 500
+ *                 description: Opsiyonel açıklama
+ *                 example: "İstenmeyen mesajlar gönderiyor"
+ *     responses:
+ *       200:
+ *         description: Support request başarıyla raporlandı
+ *       400:
+ *         description: Geçersiz reason veya zaten raporlanmış
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Only participants can report
+ *       404:
+ *         description: Support request not found
+ */
+router.post(
+  '/support-requests/:requestId/report',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { requestId } = req.params;
+    if (!requestId) {
+      return res.status(400).json({ message: 'requestId is required' });
+    }
+
+    const { reason, description } = req.body;
+
+    if (!reason || typeof reason !== 'string') {
+      return res.status(400).json({ message: 'reason is required and must be a string' });
+    }
+
+    // Validate reason is one of the valid categories
+    const validReasons = ['SPAM', 'HARASSMENT', 'SCAM'];
+    const normalizedReason = reason.toUpperCase();
+    if (!validReasons.includes(normalizedReason)) {
+      return res.status(400).json({ message: `reason must be one of: ${validReasons.join(', ')}` });
+    }
+
+    if (description && typeof description === 'string' && description.length > 500) {
+      return res.status(400).json({ message: 'description must be 500 characters or less' });
+    }
+
+    try {
+      await supportRequestService.reportSupportRequest(
+        requestId,
+        String(userId),
+        normalizedReason as any,
+        description || null
+      );
+      return res.status(200).end();
+    } catch (error: unknown) {
+      if (hasErrorMessage(error, 'Support request not found')) {
+        return res.status(404).json({ message: getErrorMessage(error) });
+      }
+      if (errorMessageIncludes(error, 'Only participants can report')) {
+        return res.status(403).json({ message: getErrorMessage(error) });
+      }
+      if (errorMessageIncludes(error, 'zaten raporlanmış') || errorMessageIncludes(error, 'already reported')) {
+        return res.status(400).json({ message: getErrorMessage(error) });
+      }
+      if (errorMessageIncludes(error, 'Invalid report category')) {
+        return res.status(400).json({ message: getErrorMessage(error) });
+      }
+      throw error;
+    }
+  }),
+);
+
+/**
+ * @openapi
  * /inbox/tips:
  *   post:
  *     summary: Kullanıcıya TIPS gönder
@@ -1488,6 +1848,10 @@ router.get(
       }
 
       return res.status(200).json({
+        participants: result.participants ? {
+          userOne: result.participants.userOne,
+          userTwo: result.participants.userTwo,
+        } : undefined,
         items: result.items,
         pagination: {
           cursor: result.nextCursor,
@@ -2235,8 +2599,8 @@ router.post(
         }
       }
 
-      // Create file path - diğer image saklama yapısıyla aynı mantıkta (userId bazlı)
-      const filePath = `messages/${userId}/${uuidv4()}.${fileExtension}`;
+      // Create file path - thread bazlı (thread silindiğinde tüm medyaları da silmek kolay olur)
+      const filePath = `messages/threads/${threadId}/${uuidv4()}.${fileExtension}`;
       
       // Upload to S3
       const mediaUrl = await s3Service.uploadFile(filePath, file.buffer, file.mimetype);
@@ -2246,7 +2610,7 @@ router.post(
       const thumbnailUrl = (detectedMediaType === 'image' || detectedMediaType === 'video') ? mediaUrl : null;
 
       // Upload media message
-      await messagingService.uploadMedia(
+      const message = await messagingService.uploadMedia(
         threadId,
         String(userId),
         mediaUrl,
@@ -2258,12 +2622,13 @@ router.post(
       );
 
       return res.status(201).json({
+        messageId: message.id,
         threadId,
         mediaUrl,
         thumbnailUrl,
         mediaType: detectedMediaType,
         caption: caption || null,
-        sentAt: new Date().toISOString()
+        sentAt: message.sentAt.toISOString()
       });
     } catch (error: unknown) {
       const message = getErrorMessage(error);

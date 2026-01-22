@@ -22,10 +22,11 @@ import {
   MessageType,
   SupportRequestStatus,
   SupportType,
-} from '../../interfaces/messaging/messaging.dto';
+} from '../../interfaces/inbox/inbox.dto';
 import { SupportRequestService } from './support-request.service';
 import { DMRequestStatus } from '../../domain/messaging/dm-request-status.enum';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
+import { S3Service } from '../../infrastructure/s3/s3.service';
 
 export interface InboxMessageItem {
   id: string;
@@ -58,15 +59,29 @@ export class MessagingService {
   private notificationService = new NotificationService();
   private walletService = new WalletService();
   private transactionService = new TransactionService();
+  private s3Service = new S3Service();
   private prisma = getPrisma();
   async createThreadIfNotExists(senderId: string, recipientId: string) {
+    // UUID format validation
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const senderIdStr = String(senderId).trim();
+    const recipientIdStr = String(recipientId).trim();
+    
+    if (!uuidRegex.test(senderIdStr)) {
+      throw new Error(`Invalid senderId format: ${senderIdStr}. Must be a valid UUID.`);
+    }
+    
+    if (!uuidRegex.test(recipientIdStr)) {
+      throw new Error(`Invalid recipientId format: ${recipientIdStr}. Must be a valid UUID.`);
+    }
+
     // Sadece normal DM thread'leri kontrol et (support thread'leri hariç)
     const existing = await this.prisma.dMThread.findFirst({
       where: {
         isSupportThread: false, // Sadece normal DM thread'leri
         OR: [
-          { userOneId: senderId, userTwoId: recipientId },
-          { userOneId: recipientId, userTwoId: senderId },
+          { userOneId: senderIdStr, userTwoId: recipientIdStr },
+          { userOneId: recipientIdStr, userTwoId: senderIdStr },
         ],
       },
     });
@@ -76,8 +91,8 @@ export class MessagingService {
     // Yeni normal DM thread oluştur
     return await this.prisma.dMThread.create({
       data: {
-        userOneId: senderId,
-        userTwoId: recipientId,
+        userOneId: senderIdStr,
+        userTwoId: recipientIdStr,
         isActive: true,
         isSupportThread: false, // Normal DM thread
         startedAt: new Date(),
@@ -86,22 +101,34 @@ export class MessagingService {
   }
 
   async sendDirectMessage(senderId: string, recipientId: string, message: string) {
-    const sender = await this.userRepo.findById(String(senderId));
-    const recipient = await this.userRepo.findById(String(recipientId));
+    // UUID format validation
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const senderIdStr = String(senderId).trim();
+    const recipientIdStr = String(recipientId).trim();
+    
+    if (!uuidRegex.test(senderIdStr)) {
+      throw new Error(`Invalid senderId format: ${senderIdStr}. Must be a valid UUID.`);
+    }
+    
+    if (!uuidRegex.test(recipientIdStr)) {
+      throw new Error(`Invalid recipientId format: ${recipientIdStr}. Must be a valid UUID.`);
+    }
+
+    const sender = await this.userRepo.findById(senderIdStr);
+    const recipient = await this.userRepo.findById(recipientIdStr);
     if (!sender || !recipient) throw new Error('User not found');
 
     const thread = await this.createThreadIfNotExists(senderId, recipientId);
 
-    const createdMessage = await this.prisma.dMMessage.create({
-      data: {
-        threadId: thread.id,
-        senderId: String(senderId),
-        message,
-        isRead: false,
-        context: "DM",
-        sentAt: new Date(),
-      },
-    });
+    // Repository kullanarak mesaj oluştur (unread count increment için)
+    const createdMessage = await this.dmMessageRepo.create({
+      threadId: thread.id,
+      senderId: String(senderId),
+      message,
+      isRead: false,
+      context: "DM",
+      sentAt: new Date(),
+    } as any);
 
     await this.prisma.dMThread.update({
       where: { id: thread.id },
@@ -134,6 +161,78 @@ export class MessagingService {
     // Sadece önemli durumlar için bildirim gönderilecek (DM_REQUEST_ACCEPTED, SUPPORT_REQUEST_ACCEPTED)
 
     logger.info(`Direct message sent from ${senderId} to ${recipientId}, socket events emitted`);
+  }
+
+  /**
+   * Mesaj ile birlikte medya gönder (fotoğraf, video, ses, dosya)
+   */
+  async sendDirectMessageWithMedia(
+    senderId: string,
+    recipientId: string,
+    message: string,
+    mediaUrl: string,
+    mediaType: 'image' | 'video' | 'audio' | 'file',
+    fileName?: string,
+    fileSize?: bigint,
+    thumbnailUrl?: string
+  ) {
+    const sender = await this.userRepo.findById(String(senderId));
+    const recipient = await this.userRepo.findById(String(recipientId));
+    if (!sender || !recipient) throw new Error('User not found');
+
+    const thread = await this.createThreadIfNotExists(senderId, recipientId);
+
+    // Mesaj ile birlikte medya oluştur (repository kullanarak)
+    // Context field'ı entity'de yok ama Prisma'da var, bu yüzden any kullanıyoruz
+    const messageData: any = {
+      threadId: thread.id,
+      senderId: String(senderId),
+      message: message , // Mesaj yoksa boş string
+      isRead: false,
+      sentAt: new Date(),
+      mediaUrl,
+      mediaType,
+      thumbnailUrl,
+      fileName,
+      fileSize,
+      caption: message || undefined, // Caption olarak mesajı kullan
+      context: "DM", // Context field'ı entity'de yok ama Prisma'da var
+    };
+    const createdMessage = await this.dmMessageRepo.create(messageData);
+
+    await this.prisma.dMThread.update({
+      where: { id: thread.id },
+      data: { updatedAt: new Date() },
+    });
+
+    // Socket bildirimi gönder - new_message event'i (media bilgileri ile)
+    const socketHandler = SocketManager.getInstance().getSocketHandler();
+    const newMessageEvent = {
+      messageId: createdMessage.id,
+      threadId: thread.id,
+      senderId: senderId,
+      recipientId: recipientId,
+      message: message || '',
+      messageType: mediaType as 'image' | 'video' | 'audio' | 'file',
+      mediaUrl,
+      thumbnailUrl: thumbnailUrl || null,
+      fileName: fileName || null,
+      fileSize: fileSize ? Number(fileSize) : null,
+      caption: message || null,
+      context: "DM",
+      timestamp: createdMessage.sentAt.toISOString(),
+    };
+
+    // Alıcıya kendi odasına gönder
+    socketHandler.sendMessageToUser(recipientId, 'new_message', newMessageEvent);
+    
+    // Thread room'una gönder (her iki kullanıcı da thread room'unda olabilir)
+    socketHandler.sendToRoom(`thread:${thread.id}`, 'new_message', newMessageEvent);
+
+    // Göndericiye message_sent event'i gönder
+    socketHandler.sendMessageToUser(senderId, 'message_sent', newMessageEvent);
+
+    logger.info(`Direct message with media (${mediaType}) sent from ${senderId} to ${recipientId}, socket events emitted`);
   }
 
   async sendTips(senderId: string, recipientId: string, amount: number, tipsMessage?: string) {
@@ -223,51 +322,8 @@ export class MessagingService {
 
   /**
    * Mesajı okundu olarak işaretle
+   * @deprecated Bu metod duplicate. Aşağıdaki markMessageAsRead metodunu kullanın (read receipt ile).
    */
-  async markMessageAsRead(messageId: string, userId: string): Promise<void> {
-    try {
-      const message = await this.dmMessageRepo.findById(messageId);
-      if (!message) {
-        throw new Error('Message not found');
-      }
-
-      // Mesajın alıcısı kontrol et
-      const thread = await this.dmThreadRepo.findById(message.threadId);
-      if (!thread) {
-        throw new Error('Thread not found');
-      }
-
-      const userIdStr = userId;
-      const isRecipient = thread.userOneId === userIdStr || thread.userTwoId === userIdStr;
-      if (!isRecipient) {
-        throw new Error('User is not a participant of this thread');
-      }
-
-      // Mesajı okundu olarak işaretle
-      await this.dmMessageRepo.update(messageId, { isRead: true });
-
-      // Okundu bildirimi gönder
-      const senderId = message.senderId;
-      const socketHandler = SocketManager.getInstance().getSocketHandler();
-      const readEvent = {
-        messageId: message.id,
-        threadId: thread.id,
-        readBy: userIdStr,
-        timestamp: new Date().toISOString(),
-      };
-
-      // Göndericiye okundu bildirimi gönder (thread açık değilse bile bildirim gelsin)
-      socketHandler.sendMessageToUser(senderId, 'message_read', readEvent);
-      
-      // Thread room'una da gönder (thread açık olan kullanıcılar için)
-      socketHandler.sendToRoom(`thread:${thread.id}`, 'message_read', readEvent);
-
-      logger.info(`Message ${messageId} marked as read by user ${userId}`);
-    } catch (error) {
-      logger.error(`Failed to mark message ${messageId} as read by user ${userId}:`, error);
-      throw error;
-    }
-  }
 
   /**
    * Thread'deki tüm mesajları okundu olarak işaretle (join_thread için)
@@ -382,13 +438,22 @@ export class MessagingService {
    * Thread'deki tüm mesajları al (DMMessage, TIPS, Support Request birleşik)
    * Cursor-based pagination ile WhatsApp benzeri çalışır
    * @param cursor - Timestamp (ISO string) - bu timestamp'ten önceki (daha eski) mesajlar getirilir
+   * @returns Thread mesajları ve participants bilgileri
    */
   async getThreadMessages(
     threadId: string, 
     userId: string, 
     limit: number = 50, 
     cursor?: string
-  ): Promise<{ items: MessageFeedItem[]; hasMore: boolean; nextCursor?: string }> {
+  ): Promise<{ 
+    items: MessageFeedItem[]; 
+    hasMore: boolean; 
+    nextCursor?: string;
+    participants?: {
+      userOne: { id: string; name: string; title: string; avatar: string };
+      userTwo: { id: string; name: string; title: string; avatar: string };
+    };
+  }> {
     try {
       // Thread'e erişim kontrolü
       const thread = await this.dmThreadRepo.findById(threadId);
@@ -401,6 +466,54 @@ export class MessagingService {
       if (!isParticipant) {
         throw new Error('User is not a participant of this thread');
       }
+
+      // Participants bilgilerini al (userOne ve userTwo)
+      const [userOne, userTwo] = await Promise.all([
+        this.prisma.user.findUnique({
+          where: { id: thread.userOneId },
+          include: {
+            profile: true,
+            titles: { orderBy: { earnedAt: 'desc' }, take: 1 },
+            avatars: { where: { isActive: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+          },
+        }),
+        this.prisma.user.findUnique({
+          where: { id: thread.userTwoId },
+          include: {
+            profile: true,
+            titles: { orderBy: { earnedAt: 'desc' }, take: 1 },
+            avatars: { where: { isActive: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+          },
+        }),
+      ]);
+
+      if (!userOne || !userTwo) {
+        throw new Error('Thread participants not found');
+      }
+
+      const userOneName = userOne.profile?.displayName
+        || userOne.profile?.userName
+        || userOne.email
+        || 'Unknown';
+      const userTwoName = userTwo.profile?.displayName
+        || userTwo.profile?.userName
+        || userTwo.email
+        || 'Unknown';
+
+      const participants = {
+        userOne: {
+          id: thread.userOneId,
+          name: userOneName,
+          title: userOne.titles?.[0]?.title ?? '',
+          avatar: resolveMediaUrl(userOne.avatars?.[0]?.imageUrl, true) || '',
+        },
+        userTwo: {
+          id: thread.userTwoId,
+          name: userTwoName,
+          title: userTwo.titles?.[0]?.title ?? '',
+          avatar: resolveMediaUrl(userTwo.avatars?.[0]?.imageUrl, true) || '',
+        },
+      };
 
       // Cursor'ı Date'e çevir (cursor yoksa undefined)
       const cursorDate = cursor ? new Date(cursor) : undefined;
@@ -460,20 +573,56 @@ export class MessagingService {
             senderAvatar: resolveMediaUrl(sender.avatars?.[0]?.imageUrl, true) || '',
           };
 
-          const messageData: Message = {
-            id: message.id,
-            sender: senderUser,
-            lastMessage: message.message,
-            timestamp: message.sentAt.toISOString(),
-            isUnread: !message.isRead,
-          };
+          // Support thread'de de image kontrolü yap
+          const messageWithMedia = message as typeof message & { mediaUrl?: string | null; mediaType?: string | null; thumbnailUrl?: string | null; caption?: string | null };
+          const hasMedia = !!messageWithMedia.mediaUrl;
+          const isImage = hasMedia && messageWithMedia.mediaType === 'image';
 
-          threadItems.push({
-            id: message.id,
-            type: 'message' as MessageType,
-            data: messageData,
-          });
+          if (isImage) {
+            // Image mesajı
+            const messageData: Message = {
+              id: message.id,
+              senderId: message.senderId,
+              sender: senderUser, // Geriye dönük uyumluluk
+              message: message.message || undefined,
+              timestamp: message.sentAt.toISOString(),
+              isUnread: !message.isRead,
+              mediaUrl: resolveMediaUrl(messageWithMedia.mediaUrl, false) || null,
+              thumbnailUrl: resolveMediaUrl(messageWithMedia.thumbnailUrl, false) || null,
+              caption: messageWithMedia.caption || message.message || null,
+            };
+
+            threadItems.push({
+              id: message.id,
+              type: 'image' as MessageType,
+              data: messageData,
+            });
+          } else {
+            // Normal mesaj
+            const messageData: Message = {
+              id: message.id,
+              senderId: message.senderId,
+              sender: senderUser, // Geriye dönük uyumluluk
+              message: message.message,
+              lastMessage: message.message, // Geriye dönük uyumluluk
+              timestamp: message.sentAt.toISOString(),
+              isUnread: !message.isRead,
+            };
+
+            threadItems.push({
+              id: message.id,
+              type: 'message' as MessageType,
+              data: messageData,
+            });
+          }
         }
+
+        // Tüm item'ları timestamp'e göre DESC sırala (en yeni önce - WhatsApp tarzı)
+        threadItems.sort((a, b) => {
+          const timestampA = this.getTimestampFromFeedItem(a);
+          const timestampB = this.getTimestampFromFeedItem(b);
+          return new Date(timestampB).getTime() - new Date(timestampA).getTime(); // DESC
+        });
 
         // hasMore kontrolü
         const hasMore = threadItems.length > limit;
@@ -483,20 +632,17 @@ export class MessagingService {
           : undefined;
 
         logger.info(`Support thread ${threadId} messages: returned=${items.length}, hasMore=${hasMore}`);
-        return { items, hasMore, nextCursor };
+        return { items, hasMore, nextCursor, participants };
       }
 
       // NORMAL DM THREAD: DM context'li mesajlar + TIPS + support-request
       // Cursor-based pagination: Her tabloyu cursor ile sorgula, sonra birleştir
       
-      // 1. DMMessage'ları getir (DM context'li veya context'i olmayan mesajlar)
+      // 1. DMMessage'ları getir (DM context'li mesajlar)
+      // Not: context field'ı nullable değil, default değeri DM
       const messageWhere: any = {
         threadId,
-        OR: [
-          { context: null },
-          { context: undefined },
-          { context: "DM" },
-        ],
+        context: "DM", // Sadece DM context'li mesajlar
       };
       
       if (cursorDate) {
@@ -583,7 +729,7 @@ export class MessagingService {
       // 4. Tüm item'ları oluştur ve birleştir
       const threadItems: MessageFeedItem[] = [];
 
-      // DMMessage'ları ekle
+      // DMMessage'ları ekle (zaten desc sıralı, en yeni önce)
       for (const message of allMessages) {
         const sender = message.sender;
         if (!sender) continue;
@@ -604,19 +750,48 @@ export class MessagingService {
           senderAvatar: resolveMediaUrl(sender.avatars?.[0]?.imageUrl, true) || '',
         };
 
-        const messageData: Message = {
-          id: message.id,
-          sender: senderUser,
-          lastMessage: message.message,
-          timestamp: message.sentAt.toISOString(),
-          isUnread: !message.isRead,
-        };
+        // Eğer mesajda media varsa ve image ise, type: "image" olarak döndür
+        const messageWithMedia = message as typeof message & { mediaUrl?: string | null; mediaType?: string | null; thumbnailUrl?: string | null; caption?: string | null };
+        const hasMedia = !!messageWithMedia.mediaUrl;
+        const isImage = hasMedia && messageWithMedia.mediaType === 'image';
 
-        threadItems.push({
-          id: message.id,
-          type: 'message' as MessageType,
-          data: messageData,
-        });
+        if (isImage) {
+          // Image mesajı
+          const messageData: Message = {
+            id: message.id,
+            senderId: message.senderId,
+            sender: senderUser, // Geriye dönük uyumluluk
+            message: message.message || undefined, // Caption olarak kullanılabilir
+            timestamp: message.sentAt.toISOString(),
+            isUnread: !message.isRead,
+            mediaUrl: resolveMediaUrl(messageWithMedia.mediaUrl, false) || null,
+            thumbnailUrl: resolveMediaUrl(messageWithMedia.thumbnailUrl, false) || null,
+            caption: messageWithMedia.caption || message.message || null,
+          };
+
+          threadItems.push({
+            id: message.id,
+            type: 'image' as MessageType,
+            data: messageData,
+          });
+        } else {
+          // Normal mesaj
+          const messageData: Message = {
+            id: message.id,
+            senderId: message.senderId,
+            sender: senderUser, // Geriye dönük uyumluluk
+            message: message.message,
+            lastMessage: message.message, // Geriye dönük uyumluluk
+            timestamp: message.sentAt.toISOString(),
+            isUnread: !message.isRead,
+          };
+
+          threadItems.push({
+            id: message.id,
+            type: 'message' as MessageType,
+            data: messageData,
+          });
+        }
       }
 
       // TIPS transferlerini ekle
@@ -638,10 +813,12 @@ export class MessagingService {
 
         const tipsInfo: TipsInfo = {
           id: transfer.id,
-          sender: senderUser,
+          senderId: transfer.fromUserId,
+          sender: senderUser, // Geriye dönük uyumluluk
           amount: typeof transfer.amount === 'number' ? transfer.amount : Number(transfer.amount),
-          message: transfer.reason || '',
+          message: transfer.reason || undefined, // Opsiyonel
           timestamp: transfer.createdAt.toISOString(),
+          isUnread: false, // TIPS mesajları genelde okundu olarak işaretlenir
         };
 
         threadItems.push({
@@ -701,9 +878,13 @@ export class MessagingService {
           : Number(dmRequestWithType.amount) || 0;
 
         const requestThreadId = request.threadId ?? null;
+        // Support request için isUnread kontrolü (pending ise genelde unread)
+        const isUnread = status === 'pending' || status === 'accepted';
+
         const supportRequest: SupportRequest = {
           id: request.id,
-          sender,
+          senderId: request.fromUserId,
+          sender, // Geriye dönük uyumluluk
           type: supportType,
           message: request.description,
           amount,
@@ -713,6 +894,7 @@ export class MessagingService {
           requestId: request.id,
           fromUserId: request.fromUserId,
           toUserId: request.toUserId,
+          isUnread,
         };
 
         threadItems.push({
@@ -739,7 +921,7 @@ export class MessagingService {
       const supportRequestCount = items.filter(item => item.type === 'support-request').length;
       logger.info(`DM thread ${threadId} messages: returned=${items.length}, hasMore=${hasMore}, support-requests=${supportRequestCount}, messages=${items.filter(item => item.type === 'message').length}, tips=${items.filter(item => item.type === 'send-tips').length}`);
 
-      return { items, hasMore, nextCursor };
+      return { items, hasMore, nextCursor, participants };
     } catch (error) {
       logger.error(`Failed to get messages for thread ${threadId}:`, error);
       throw error;
@@ -799,12 +981,104 @@ export class MessagingService {
       const hasMore = threads.length > limit;
       const resultThreads = hasMore ? threads.slice(0, limit) : threads;
 
+      // Thread'lerde mesaj var ama lastMessage null olanları bul ve düzelt
+      const threadsNeedingLastMessage = resultThreads.filter(t => !t.messages?.[0]);
+      const lastMessagesMap = new Map<string, { message: string | null; sentAt: Date }>();
+      
+      if (threadsNeedingLastMessage.length > 0) {
+        // Her thread için en son mesajı toplu olarak çek
+        const threadIds = threadsNeedingLastMessage.map(t => t.id);
+        
+        // Her thread için en son mesajı bulmak için raw query veya her thread için ayrı query
+        // Performans için: Tüm mesajları çekip group by yapmak yerine, her thread için ayrı query
+        const lastMessagePromises = threadIds.map(async (threadId) => {
+          const lastMsg = await this.prisma.dMMessage.findFirst({
+            where: {
+              threadId,
+              isDeleted: false, // Prisma schema'da isDeleted field'ı var
+              context: 'DM', // Sadece DM context'li mesajları al
+            } as any,
+            select: {
+              message: true,
+              sentAt: true,
+              mediaUrl: true,
+              mediaType: true,
+              caption: true,
+            } as any,
+            orderBy: {
+              sentAt: 'desc',
+            },
+          });
+          
+          if (lastMsg) {
+            // Mesaj içeriği: text mesaj varsa message, görsel mesaj varsa caption veya "📷 Görsel"
+            const msg = lastMsg as any;
+            let messageText = msg.message;
+            if (!messageText && msg.mediaUrl) {
+              if (msg.mediaType === 'image') {
+                messageText = msg.caption || '📷 Görsel';
+              } else if (msg.mediaType === 'video') {
+                messageText = msg.caption || '🎥 Video';
+              } else if (msg.mediaType === 'audio') {
+                messageText = msg.caption || '🎵 Ses';
+              } else {
+                messageText = msg.caption || '📎 Dosya';
+              }
+            }
+            
+            lastMessagesMap.set(threadId, {
+              message: messageText,
+              sentAt: lastMsg.sentAt,
+            });
+          }
+        });
+        
+        await Promise.all(lastMessagePromises);
+      }
+
       const items = resultThreads.map((thread) => {
         const isUserOne = thread.userOneId === userIdStr;
         const counterpart = isUserOne ? thread.userTwo : thread.userOne;
         const recipientUserId = isUserOne ? thread.userTwoId : thread.userOneId; // Karşı tarafın ID'si
         const unreadCount = isUserOne ? thread.unreadCountUserOne : thread.unreadCountUserTwo;
-        const lastMessage = thread.messages?.[0];
+        
+        // Önce include'dan gelen mesajı kontrol et, yoksa fallback'ten al
+        let lastMessage = thread.messages?.[0];
+        let lastMessageText: string | null = null;
+        
+        if (lastMessage) {
+          // Include'dan gelen mesaj var, ama message field'ı null olabilir (görsel mesajlar için)
+          if (lastMessage.message) {
+            lastMessageText = lastMessage.message;
+          } else if ((lastMessage as any).mediaUrl) {
+            // Görsel mesaj için caption veya default text
+            const mediaType = (lastMessage as any).mediaType;
+            const caption = (lastMessage as any).caption;
+            if (mediaType === 'image') {
+              lastMessageText = caption || '📷 Görsel';
+            } else if (mediaType === 'video') {
+              lastMessageText = caption || '🎥 Video';
+            } else if (mediaType === 'audio') {
+              lastMessageText = caption || '🎵 Ses';
+            } else {
+              lastMessageText = caption || '📎 Dosya';
+            }
+          }
+        }
+        
+        // Include'dan mesaj gelmediyse veya message null ise, fallback'ten al
+        if (!lastMessageText) {
+          const fallbackMessage = lastMessagesMap.get(thread.id);
+          if (fallbackMessage) {
+            lastMessageText = fallbackMessage.message;
+            if (!lastMessage) {
+              lastMessage = {
+                sentAt: fallbackMessage.sentAt,
+              } as any;
+            }
+          }
+        }
+        
         const timestamp = (lastMessage?.sentAt ?? thread.updatedAt).toISOString();
 
         const senderName = counterpart?.profile?.displayName
@@ -823,7 +1097,7 @@ export class MessagingService {
           senderName,
           senderTitle,
           senderAvatar,
-          lastMessage: lastMessage?.message ?? null,
+          lastMessage: lastMessageText,
           timestamp,
           isUnread: unreadCount > 0,
           unreadCount,
@@ -888,7 +1162,8 @@ export class MessagingService {
 
         const message: Message = {
           id: thread.id,
-          sender,
+          senderId: isUserOne ? thread.userTwoId : thread.userOneId,
+          sender, // Geriye dönük uyumluluk
           lastMessage: lastMessage.message,
           timestamp: lastMessage.sentAt.toISOString(),
           isUnread: (isUserOne ? thread.unreadCountUserOne : thread.unreadCountUserTwo) > 0,
@@ -903,12 +1178,16 @@ export class MessagingService {
 
       // 2. Support Request'leri getir - cursor ile (support request service'de cursor desteği eklenmeli)
       // Şimdilik limit + 1 al, sonra cursor ile filtrele
-      const supportRequests = await this.supportRequestService.getUserSupportRequests(userIdStr, { 
+      const supportRequestsResult = await this.supportRequestService.getUserSupportRequests(userIdStr, { 
         limit: limit + 1, // hasMore kontrolü için +1
+        cursor,
       });
       
-      // Cursor ile filtrele (timestamp'e göre)
-      const filteredSupportRequests = cursorDate
+      // Support requests result bir obje: { items: [...], hasMore: boolean, nextCursor?: string }
+      const supportRequests = supportRequestsResult.items || [];
+      
+      // Cursor ile filtrele (timestamp'e göre) - eğer cursor varsa ve service'de cursor desteği yoksa
+      const filteredSupportRequests = cursorDate && !supportRequestsResult.nextCursor
         ? supportRequests.filter(req => new Date(req.timestamp) < cursorDate)
         : supportRequests;
       for (const request of filteredSupportRequests) {
@@ -1001,7 +1280,8 @@ export class MessagingService {
         // Thread items yüklendiğinde messages array'i dolu gelecek
         const supportRequest: SupportRequest = {
           id: request.id,
-          sender,
+          senderId: dmRequest.fromUserId,
+          sender, // Geriye dönük uyumluluk
           type: supportType,
           message: request.requestDescription,
           amount,
@@ -1075,9 +1355,10 @@ export class MessagingService {
 
         const tipsInfo: TipsInfo = {
           id: transfer.id,
-          sender: senderUser,
+          senderId: transfer.fromUserId,
+          sender: senderUser, // Geriye dönük uyumluluk
           amount: transfer.amount,
-          message: transfer.reason || '',
+          message: transfer.reason || undefined, // Opsiyonel
           timestamp: transfer.createdAt.toISOString(),
         };
 
@@ -1123,7 +1404,8 @@ export class MessagingService {
     limit = 200,
   ): Promise<MessageFeedItem[]> {
     // getThreadMessages'ı kullan (thread'in is_support_thread değerine göre otomatik olarak SUPPORT mesajları döner)
-    return this.getThreadMessages(threadId, userId, limit, 0);
+    const result = await this.getThreadMessages(threadId, userId, limit);
+    return result.items;
   }
 
   /**
@@ -1267,66 +1549,6 @@ export class MessagingService {
   }
 
   /**
-   * Mesaj silme (soft delete)
-   */
-  async deleteMessage(userId: string, messageId: string): Promise<void> {
-    try {
-      const message = await this.prisma.dMMessage.findUnique({
-        where: { id: messageId },
-        include: { thread: true },
-      });
-
-      if (!message) {
-        throw new Error('Message not found');
-      }
-
-      // Mesaj sahibi kontrolü
-      if (message.senderId !== userId) {
-        throw new Error('Forbidden: user does not own this message');
-      }
-
-      // Soft delete: isDeleted flag ekle (eğer schema'da varsa) veya hard delete
-      // Şimdilik hard delete yapıyoruz, gerekirse schema'ya isDeleted field'ı eklenebilir
-      await this.prisma.dMMessage.delete({
-        where: { id: messageId },
-      });
-
-      // Thread updatedAt timestamp'ini güncelle
-      await this.prisma.dMThread.update({
-        where: { id: message.threadId },
-        data: { updatedAt: new Date() },
-      });
-
-      // Socket.IO ile real-time bildirim
-      const socketHandler = SocketManager.getInstance().getSocketHandler();
-      const deletedEvent = {
-        messageId: message.id,
-        threadId: message.threadId,
-        senderId: userId,
-        messageType: 'message' as const,
-        context: message.context,
-        timestamp: new Date().toISOString(),
-      };
-
-      // Thread room'una gönder
-      socketHandler.sendToRoom(`thread:${message.threadId}`, 'message_deleted', deletedEvent);
-
-      // Her iki kullanıcıya da gönder
-      if (message.thread.userOneId) {
-        socketHandler.sendMessageToUser(message.thread.userOneId, 'message_deleted', deletedEvent);
-      }
-      if (message.thread.userTwoId) {
-        socketHandler.sendMessageToUser(message.thread.userTwoId, 'message_deleted', deletedEvent);
-      }
-
-      logger.info(`Message deleted: ${messageId} by user ${userId}`);
-    } catch (error) {
-      logger.error(`Failed to delete message ${messageId} by user ${userId}`, error);
-      throw error;
-    }
-  }
-
-  /**
    * Thread silme (soft delete)
    */
   async deleteThread(userId: string, threadId: string): Promise<void> {
@@ -1389,7 +1611,7 @@ export class MessagingService {
       throw new Error('Forbidden: You can only edit your own messages');
     }
 
-    if (message.isDeleted()) {
+    if (message.isDeleted === true) {
       throw new Error('Cannot edit deleted message');
     }
 
@@ -1426,6 +1648,64 @@ export class MessagingService {
       throw new Error('Forbidden: You can only delete your own messages');
     }
 
+    // Eğer mesajda medya varsa, MinIO'dan da sil
+    if (message.mediaUrl) {
+      try {
+        // mediaUrl zaten path formatında (messages/threads/...)
+        // resolveMediaUrl ile tam URL'ye çevrilmiş olabilir, ama biz path'i kullanıyoruz
+        // Eğer tam URL ise, path'i çıkar
+        let filePath = message.mediaUrl;
+        
+        // Eğer tam URL ise (http:// veya https:// ile başlıyorsa), path'i çıkar
+        if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
+          // URL'den path'i çıkar (örn: http://minio:9000/tipbox-media/messages/threads/... -> messages/threads/...)
+          const urlParts = filePath.split('/');
+          const bucketIndex = urlParts.findIndex(part => part.includes('tipbox-media') || part.includes('bucket'));
+          if (bucketIndex !== -1 && bucketIndex < urlParts.length - 1) {
+            filePath = urlParts.slice(bucketIndex + 1).join('/');
+          } else {
+            // Bucket adı bulunamadıysa, son kısımdan path'i al
+            const messagesIndex = urlParts.findIndex(part => part === 'messages');
+            if (messagesIndex !== -1) {
+              filePath = urlParts.slice(messagesIndex).join('/');
+            }
+          }
+        }
+
+        // MinIO'dan dosyayı sil
+        await this.s3Service.deleteFile(filePath);
+        logger.info(`Media file deleted from MinIO: ${filePath} for message ${messageId}`);
+
+        // Thumbnail varsa onu da sil
+        if (message.thumbnailUrl && message.thumbnailUrl !== message.mediaUrl) {
+          let thumbnailPath = message.thumbnailUrl;
+          if (thumbnailPath.startsWith('http://') || thumbnailPath.startsWith('https://')) {
+            const urlParts = thumbnailPath.split('/');
+            const messagesIndex = urlParts.findIndex(part => part === 'messages');
+            if (messagesIndex !== -1) {
+              thumbnailPath = urlParts.slice(messagesIndex).join('/');
+            }
+          }
+          try {
+            await this.s3Service.deleteFile(thumbnailPath);
+            logger.info(`Thumbnail file deleted from MinIO: ${thumbnailPath} for message ${messageId}`);
+          } catch (thumbnailError) {
+            // Thumbnail silme hatası kritik değil, sadece logla
+            logger.warn(`Failed to delete thumbnail: ${thumbnailPath}`, thumbnailError);
+          }
+        }
+      } catch (s3Error) {
+        // S3 silme hatası kritik değil, mesaj silme işlemi devam etsin
+        // Ama logla ki sorun varsa görülebilsin
+        logger.warn({
+          message: 'Failed to delete media file from MinIO',
+          messageId,
+          mediaUrl: message.mediaUrl,
+          error: s3Error instanceof Error ? s3Error.message : String(s3Error),
+        });
+      }
+    }
+
     const deletedMessage = await this.dmMessageRepo.markAsDeleted(messageId, userId);
     if (!deletedMessage) {
       throw new Error('Failed to delete message');
@@ -1450,7 +1730,7 @@ export class MessagingService {
       throw new Error('Message not found');
     }
 
-    if (message.isDeleted()) {
+    if (message.isDeleted === true) {
       throw new Error('Cannot react to deleted message');
     }
 
@@ -1547,7 +1827,7 @@ export class MessagingService {
     fileSize?: bigint,
     thumbnailUrl?: string,
     caption?: string
-  ): Promise<void> {
+  ): Promise<DMMessage> {
     // Validate thread access
     const thread = await this.dmThreadRepo.findById(threadId);
     if (!thread) {
@@ -1599,6 +1879,8 @@ export class MessagingService {
     socketHandler.sendMessageToUser(userId, 'message_sent', newMessageEvent);
 
     logger.info(`Media uploaded to thread ${threadId} by user ${userId}: ${mediaType}`);
+    
+    return createdMessage;
   }
 
   async markMessageAsDelivered(messageId: string): Promise<void> {

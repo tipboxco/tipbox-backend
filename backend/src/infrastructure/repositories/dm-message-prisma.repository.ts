@@ -59,6 +59,7 @@ export class DmMessagePrismaRepository {
         isRead: data.isRead || false,
         sentAt: data.sentAt || new Date(),
         createdAt: data.createdAt || new Date(),
+        context: (data as any).context || 'DM', // Context field'ı entity'de yok ama Prisma'da var
         mediaUrl: data.mediaUrl,
         mediaType: data.mediaType,
         thumbnailUrl: data.thumbnailUrl,

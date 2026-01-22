@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, PutBucketPolicyCommand, ListObjectsV2Command, DeleteObjectsCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, PutBucketPolicyCommand, ListObjectsV2Command, DeleteObjectsCommand, DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { s3Config } from '../config/s3.config';
 import { getPublicMediaBaseUrl, resolveMediaUrl } from '../config/media.config';
@@ -295,6 +295,43 @@ export class S3Service {
       throw new Error(`Dosya yüklenemedi: ${errorMessage}`);
     }
   }
+  /**
+   * Tek bir dosyayı sil
+   * @param filePath - Silinecek dosyanın path'i (örn: 'messages/threads/uuid/file.jpg')
+   * @returns Başarılı olursa true
+   */
+  async deleteFile(filePath: string): Promise<void> {
+    try {
+      const command = new DeleteObjectCommand({
+        Bucket: s3Config.bucketName,
+        Key: filePath,
+      });
+      await this.s3Client.send(command);
+      logger.info({
+        message: 'Dosya başarıyla silindi',
+        filePath,
+        bucketName: s3Config.bucketName,
+      });
+    } catch (error: any) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      // Dosya zaten yoksa hata verme (idempotent operation)
+      if (error.name === 'NoSuchKey' || error.Code === 'NoSuchKey' || error.$metadata?.httpStatusCode === 404) {
+        logger.warn({
+          message: 'Dosya zaten silinmiş veya bulunamadı',
+          filePath,
+        });
+        return; // Hata fırlatma, dosya zaten yok
+      }
+      logger.error({
+        message: 'Dosya silme hatası',
+        filePath,
+        error: errorMessage,
+        errorDetails: error.$metadata || error,
+      });
+      throw new Error(`Dosya silinemedi: ${errorMessage}`);
+    }
+  }
+
   /**
    * Klasördeki tüm dosyaları recursive olarak sil
    * @param folderPrefix - Klasör prefix'i (örn: 'users/', 'posts/')
