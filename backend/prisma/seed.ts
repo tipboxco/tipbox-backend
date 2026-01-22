@@ -17,6 +17,13 @@ import { seedMessageReactionsAndReadReceipts } from './seed/helpers/seed-message
 import { GeminiService } from '../src/infrastructure/ai/gemini.service'
 import { brandToWebsite } from '../src/data/brandToWebsite'
 import { buildPairMap, pickProductFromPairMap } from './seed/helpers/product-pick-strategies'
+import { InventoryService } from '../src/application/inventory/inventory.service'
+import { PostService } from '../src/application/post/post.service'
+import { ContentPostType } from '../src/domain/content/content-post-type.enum'
+import { ContextType } from '../src/domain/content/context-type.enum'
+import { ExperienceStatus } from '../src/domain/content/experience-status.enum'
+import { ExperienceType } from '../src/domain/content/experience-type.enum'
+import type { Experience } from '../src/interfaces/post/post.dto'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const slugify = require('slugify')
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -784,6 +791,10 @@ async function seedPostTags() {
 async function seedUserInventories() {
   console.log('\n🎒 Kullanıcı inventory\'leri oluşturuluyor...\n')
   
+  // Service instance'ları oluştur
+  const inventoryService = new InventoryService()
+  const postService = new PostService()
+  
   const users = await prisma.user.findMany({ take: seedConfig.users.total })
   const popularBrandWhere = POPULAR_BRAND_NAMES.map((name) => ({
     name: { equals: name, mode: 'insensitive' as const },
@@ -835,19 +846,39 @@ async function seedUserInventories() {
   let totalInventories = 0
   let totalInventoryMedia = 0
   let skippedNoMedia = 0
+  let totalExperiencePosts = 0
+  let skippedExperiencePosts = 0
   
   for (const user of users) {
+    // Mevcut inventory'lerini al (test script mantığı: mevcut inventory'sinde olmayan ürünlerden seç)
+    const existingInventories = await prisma.inventory.findMany({
+      where: { userId: user.id },
+      select: { productId: true },
+    })
+    const existingProductIds = new Set(existingInventories.map(inv => inv.productId))
+
+    // Mevcut inventory'sinde olmayan ürünleri filtrele
+    const availableProducts = pool.filter(p => !existingProductIds.has(p.id))
+    
+    if (availableProducts.length === 0) {
+      console.log(`⚠️  ${user.email} için seçilebilir ürün bulunamadı (tüm ürünler zaten inventory'de)`)
+      continue
+    }
+
     const isFeatured = FEATURED_USER_IDS.includes(user.id)
     const minInv = isFeatured ? seedConfig.inventories.featuredProductsMin : seedConfig.inventories.otherProductsMin
     const maxInv = isFeatured ? seedConfig.inventories.featuredProductsMax : seedConfig.inventories.otherProductsMax
     const inventoryCount = Math.floor(Math.random() * (Math.max(maxInv, minInv) - Math.min(maxInv, minInv) + 1)) + Math.min(maxInv, minInv)
     const selected: typeof pool = []
 
-    // Kullanıcı inventory'sini global picker ile doldur (duplicate engelli)
-    const targetCount = Math.min(inventoryCount, pool.length)
+    // Mevcut inventory'sinde olmayan ürünlerden seçim yap
+    const availablePool = availableProducts
+    const availablePairMap = buildPairMap(availablePool)
+    const targetCount = Math.min(inventoryCount, availablePool.length)
+    
     const pickGlobalProduct = createPopularIntersectionBeautyRatioPicker({
-      pool,
-      pairMap,
+      pool: availablePool,
+      pairMap: availablePairMap,
       totalPicks: targetCount,
       beautyTargetRatio: DEFAULT_BEAUTY_TARGET_RATIO,
       dedupe: true,
@@ -859,7 +890,7 @@ async function seedUserInventories() {
       if (selected.some(x => x.id === p.id)) continue
       selected.push(p)
     }
-    const userProducts = selected.length > 0 ? selected : pool.slice(0, targetCount)
+    const userProducts = selected.length > 0 ? selected : availablePool.slice(0, targetCount)
     
     for (const product of userProducts) {
       // Inventory kaydı oluştur
@@ -919,6 +950,125 @@ async function seedUserInventories() {
           }
         }
       }
+
+      // Experience post oluştur (gerçek uygulama akışı)
+      try {
+        // 1. Experience options al
+        const experienceOptions = await inventoryService.getExperienceOptions()
+        
+        if (experienceOptions.durations.length === 0 || experienceOptions.locations.length === 0 || experienceOptions.purposes.length === 0) {
+          console.log(`⚠️  Experience options eksik, ${product.name} için experience post atlanıyor`)
+          skippedExperiencePosts++
+          continue
+        }
+
+        // 2. Rastgele duration, location, purpose seç
+        const selectedDuration = experienceOptions.durations[Math.floor(Math.random() * experienceOptions.durations.length)]
+        const selectedLocation = experienceOptions.locations[Math.floor(Math.random() * experienceOptions.locations.length)]
+        const selectedPurpose = experienceOptions.purposes[Math.floor(Math.random() * experienceOptions.purposes.length)]
+
+        // 3. Experience text oluştur (Gemini ile)
+        let experienceText: string
+        try {
+          // Gemini ile experience text oluştur
+          const geminiService = GeminiService.getInstance()
+          const experienceTemplates = [
+            `${product.name}${product.brand?.name ? ` (${product.brand.name})` : ''} ürününü ${selectedDuration.name} süredir ${selectedLocation.name} konumunda ${selectedPurpose.name} amacıyla kullanıyorum. Ürünü satın alırken fiyatı makul buldum ve alışveriş deneyimi sorunsuz geçti. Kullanım açısından performansı oldukça iyi, günlük ihtiyaçlarımı karşılıyor ve beklentilerimi aşıyor.`,
+            `${product.name} ürününü ${selectedDuration.name} süredir ${selectedLocation.name} ortamında ${selectedPurpose.name} için kullanıyorum. Satın alma sürecinde fiyatı uygun buldum ve hızlı teslimat aldım. Ürün kalitesi beklentilerimi karşıladı, kullanımı kolay ve pratik. Genel olarak memnun kaldım.`,
+            `${product.name}${product.brand?.name ? ` markasının` : ''} bu ürününü ${selectedDuration.name} süredir ${selectedLocation.name} konumunda ${selectedPurpose.name} amacıyla kullanıyorum. Fiyat-performans oranı iyi, alışveriş deneyimi profesyonel. Ürünün işlevselliği ve dayanıklılığı beni etkiledi. Tavsiye ederim.`,
+          ]
+          
+          // Rastgele bir template seç veya Gemini ile oluştur
+          if (Math.random() < 0.3) {
+            // %30 şansla Gemini kullan (performans için)
+            const prompt = `Bir kullanıcı ${product.name}${product.brand?.name ? ` (${product.brand.name})` : ''} ürününü ${selectedDuration.name} süredir ${selectedLocation.name} konumunda ${selectedPurpose.name} amacıyla kullanıyor. Bu ürün hakkında gerçekçi, samimi ve detaylı bir kullanıcı deneyimi yazısı oluştur. Metin hem fiyat/alışveriş deneyimini hem de ürün/kullanım deneyimini içermeli. Türkçe yaz. Minimum 100 karakter olmalı.`
+            
+            // GeminiService'in generatePostContent metodunu kullan
+            const geminiResult = await geminiService.generatePostContent({
+              postType: 'EXPERIENCE',
+              persona: 'tech enthusiast',
+              productName: product.name,
+              productBrand: product.brand?.name,
+              productDescription: product.description || undefined,
+            })
+            experienceText = geminiResult.body
+          } else {
+            // %70 şansla template kullan (hızlı)
+            experienceText = experienceTemplates[Math.floor(Math.random() * experienceTemplates.length)]
+          }
+        } catch (error) {
+          // Fallback: Basit template kullan
+          experienceText = `${product.name}${product.brand?.name ? ` (${product.brand.name})` : ''} ürününü ${selectedDuration.name} süredir ${selectedLocation.name} konumunda ${selectedPurpose.name} amacıyla kullanıyorum. Ürünün kalitesi ve performansı beni memnun etti. Fiyat-performans oranı oldukça iyi. Günlük kullanımda sorunsuz çalışıyor ve beklentilerimi karşılıyor.`
+        }
+
+        if (!experienceText || experienceText.trim().length < 10) {
+          console.log(`⚠️  Experience text oluşturulamadı, ${product.name} için experience post atlanıyor`)
+          skippedExperiencePosts++
+          continue
+        }
+
+        // 4. splitExperienceWithAI çağır
+        const splitResult = await inventoryService.splitExperienceWithAI(
+          user.id,
+          product.id,
+          experienceText
+        )
+
+        // 5. Inventory'yi güncelle
+        await prisma.inventory.update({
+          where: { id: inventory.id },
+          data: {
+            experienceSnippetId: splitResult.experienceSnippetId,
+            experienceDurationId: selectedDuration.id,
+            experienceLocationId: selectedLocation.id,
+            experiencePurposeId: selectedPurpose.id,
+            experienceSummary: experienceText.substring(0, 200), // İlk 200 karakter
+          }
+        })
+
+        // 6. Experience array oluştur
+        const experienceArray: Experience[] = []
+        if (splitResult.priceAndShopping?.content) {
+          experienceArray.push({
+            type: ExperienceType.PRICE_AND_SHOPPING,
+            content: splitResult.priceAndShopping.content,
+            rating: splitResult.priceAndShopping.rating || 4,
+          })
+        }
+        if (splitResult.productAndUsage?.content) {
+          experienceArray.push({
+            type: ExperienceType.PRODUCT_AND_USAGE,
+            content: splitResult.productAndUsage.content,
+            rating: splitResult.productAndUsage.rating || 4,
+          })
+        }
+
+        if (experienceArray.length === 0) {
+          console.log(`⚠️  Experience array boş, ${product.name} için experience post atlanıyor`)
+          skippedExperiencePosts++
+          continue
+        }
+
+        // 7. createExperiencePost ile EXPERIENCE tipinde ContentPost oluştur
+        await postService.createExperiencePost(user.id, {
+          contextType: ContextType.PRODUCT,
+          contextId: product.id,
+          selectedDurationId: selectedDuration.id,
+          selectedLocationId: selectedLocation.id,
+          selectedPurposeId: selectedPurpose.id,
+          content: experienceText,
+          experience: experienceArray,
+          status: ExperienceStatus.OWN,
+          experienceSnippetId: splitResult.experienceSnippetId,
+        })
+
+        totalExperiencePosts++
+
+      } catch (error) {
+        // Hata durumunda inventory oluşturma devam eder, sadece experience post atlanır
+        console.log(`⚠️  Experience post oluşturulamadı (${product.name}): ${error instanceof Error ? error.message : String(error)}`)
+        skippedExperiencePosts++
+      }
     }
   }
   
@@ -927,8 +1077,11 @@ async function seedUserInventories() {
   console.log(`   🎒 Toplam Inventory: ${totalInventories}`)
   console.log(`   📸 Toplam Inventory Media: ${totalInventoryMedia}`)
   console.log(`   ⏭️  Atlanan (görsel yok): ${skippedNoMedia}`)
+  console.log(`   📝 Toplam Experience Post: ${totalExperiencePosts}`)
+  console.log(`   ⚠️  Atlanan Experience Post: ${skippedExperiencePosts}`)
   console.log(`   👥 Kullanıcı Başına Ortalama: ${(totalInventories / users.length).toFixed(1)} ürün`)
   console.log(`   📊 Media Oranı: ${((totalInventoryMedia / totalInventories) * 100).toFixed(1)}%`)
+  console.log(`   📊 Experience Post Oranı: ${totalInventories > 0 ? ((totalExperiencePosts / totalInventories) * 100).toFixed(1) : 0}%`)
   console.log('═'.repeat(80) + '\n')
 }
 
@@ -1267,8 +1420,8 @@ async function seedPosts() {
   let totalPosts = 0
   let successfulPosts = 0
   let failedPosts = 0
-  const postTypes: Array<'QUESTION' | 'TIPS' | 'FREE' | 'EXPERIENCE' | 'COMPARE' | 'UPDATE'> = [
-    'QUESTION', 'TIPS', 'FREE', 'EXPERIENCE', 'COMPARE', 'UPDATE'
+  const postTypes: Array<'QUESTION' | 'TIPS' | 'FREE' | 'COMPARE'> = [
+    'QUESTION', 'TIPS', 'FREE', 'COMPARE'
   ]
   
   // GeminiService instance'ı
@@ -1300,7 +1453,7 @@ async function seedPosts() {
       continue
     }
     
-    // Kullanıcının inventory'sindeki ürünleri getir (EXPERIENCE ve UPDATE için)
+    // Kullanıcının inventory'sindeki ürünleri getir
     const rawUserInventory = await prisma.inventory.findMany({
       where: { userId: user.id },
       include: {
@@ -1347,36 +1500,8 @@ async function seedPosts() {
           break
         }
         
-        let selectedProduct
-
-        // EXPERIENCE ve UPDATE: inventory'den seç (yoksa global havuzdan seçip inventory'ye ekle)
-        if (postType === 'EXPERIENCE' || postType === 'UPDATE') {
-          if (userInventoryProducts.length > 0) {
-            selectedProduct = userInventoryProducts[Math.floor(Math.random() * userInventoryProducts.length)]
-          } else {
-            // Inventory boşsa: global havuzdan seç, inventory'ye ekle ve onu kullan
-            selectedProduct = pickGlobalProduct()
-            await prisma.inventory.upsert({
-              where: {
-                userId_productId: {
-                  userId: user.id,
-                  productId: selectedProduct.id,
-                },
-              },
-              create: {
-                userId: user.id,
-                productId: selectedProduct.id,
-                hasOwned: true,
-                experienceSummary: `Bu ${selectedProduct.name} ürününü kullanıyorum. Deneyimlerimi paylaşacağım.`,
-              },
-              update: { hasOwned: true },
-            })
-            userInventoryProducts.push(selectedProduct)
-          }
-        } else {
-          // Diğer tipler: doğrudan çeşitli havuzdan ürün seç
-          selectedProduct = pickGlobalProduct()
-        }
+        // Doğrudan çeşitli havuzdan ürün seç
+        const selectedProduct = pickGlobalProduct()
         
         const createdAt = new Date(Date.now() - Math.random() * 90 * 24 * 60 * 60 * 1000) // Son 90 gün içinde
         
@@ -1416,9 +1541,8 @@ async function seedPosts() {
       for (let i = 0; i < extraCount; i++) {
         if (currentPostCount >= TARGET_TOTAL_POSTS) break
 
-        // Other users: inventory bağımlılığı olan tipleri üretme (EXPERIENCE/UPDATE)
-        const otherAllowedTypes = postTypes.filter(t => t !== 'EXPERIENCE' && t !== 'UPDATE')
-        const postType = otherAllowedTypes[Math.floor(Math.random() * otherAllowedTypes.length)]
+        // Other users için rastgele post tipi seç
+        const postType = postTypes[Math.floor(Math.random() * postTypes.length)]
         const selectedProduct = pickGlobalProduct()
         const createdAt = new Date(Date.now() - Math.random() * 90 * 24 * 60 * 60 * 1000)
         const persona = getRandomPersona(selectedProduct.category?.name || '')
@@ -1479,33 +1603,8 @@ async function seedPosts() {
         }
         
         const postType = postTypes[Math.floor(Math.random() * postTypes.length)]
-        let selectedProduct
-
-        if (postType === 'EXPERIENCE' || postType === 'UPDATE') {
-          if (userInventoryProducts.length > 0) {
-            selectedProduct = userInventoryProducts[Math.floor(Math.random() * userInventoryProducts.length)]
-          } else {
-            selectedProduct = pickGlobalProduct()
-            await prisma.inventory.upsert({
-              where: {
-                userId_productId: {
-                  userId: user.id,
-                  productId: selectedProduct.id,
-                },
-              },
-              create: {
-                userId: user.id,
-                productId: selectedProduct.id,
-                hasOwned: true,
-                experienceSummary: `Bu ${selectedProduct.name} ürününü kullanıyorum. Deneyimlerimi paylaşacağım.`,
-              },
-              update: { hasOwned: true },
-            })
-            userInventoryProducts.push(selectedProduct)
-          }
-        } else {
-          selectedProduct = pickGlobalProduct()
-        }
+        // Doğrudan çeşitli havuzdan ürün seç
+        const selectedProduct = pickGlobalProduct()
         
         const createdAt = new Date(Date.now() - Math.random() * 90 * 24 * 60 * 60 * 1000)
         const productCategory = selectedProduct.category?.name || ''
@@ -1596,7 +1695,7 @@ async function seedPosts() {
         body,
         productId: req.selectedProduct.id,
         categoryId: req.selectedProduct.categoryId || undefined,
-        inventoryRequired: req.postType === 'EXPERIENCE' || req.postType === 'UPDATE',
+        inventoryRequired: false,
         createdAt: req.createdAt,
       })
       
@@ -1625,11 +1724,6 @@ async function seedPosts() {
           } while (product2.id === req.selectedProduct.id && attempts < 10)
         }
         await createPostComparison(post.id, req.selectedProduct.id, product2.id)
-      } else if (req.postType === 'EXPERIENCE' && durations.length > 0 && locations.length > 0 && purposes.length > 0) {
-        const randomDuration = durations[Math.floor(Math.random() * durations.length)]
-        const randomLocation = locations[Math.floor(Math.random() * locations.length)]
-        const randomPurpose = purposes[Math.floor(Math.random() * purposes.length)]
-        await addExperienceRelations(post.id, randomDuration.id, randomLocation.id, randomPurpose.id)
       }
       
       // PostMedia ekle (bazı postlara)
@@ -2044,24 +2138,12 @@ async function seedTrendingPosts() {
       ],
     })
     
-    const experiencePosts = await prisma.contentPost.findMany({
-      where: { type: 'EXPERIENCE' },
-      take: 5,
-      orderBy: [
-        { likesCount: 'desc' },
-        { commentsCount: 'desc' },
-        { viewsCount: 'desc' },
-        { createdAt: 'desc' },
-      ],
-    })
-
     // Tüm postları birleştir ve engagement skoruna göre sırala
     const allPostsForTrending = [
       ...freePosts,
       ...tipsPosts,
       ...comparePosts,
       ...questionPostsForTrending,
-      ...experiencePosts,
     ]
     
     // Engagement skoruna göre sırala (likes + comments + views)
@@ -2112,8 +2194,7 @@ async function seedTrendingPosts() {
     console.log(`   - FREE: ${freePosts.filter(p => trendingPosts.some(tp => tp.postId === p.id)).length}`)
     console.log(`   - TIPS: ${tipsPosts.filter(p => trendingPosts.some(tp => tp.postId === p.id)).length}`)
     console.log(`   - COMPARE: ${comparePosts.filter(p => trendingPosts.some(tp => tp.postId === p.id)).length}`)
-    console.log(`   - QUESTION: ${questionPostsForTrending.filter(p => trendingPosts.some(tp => tp.postId === p.id)).length}`)
-    console.log(`   - EXPERIENCE: ${experiencePosts.filter(p => trendingPosts.some(tp => tp.postId === p.id)).length}\n`)
+    console.log(`   - QUESTION: ${questionPostsForTrending.filter(p => trendingPosts.some(tp => tp.postId === p.id)).length}\n`)
   } catch (error) {
     console.error('❌ Trending post oluşturma hatası:', error)
     if (error instanceof Error) {
@@ -4546,7 +4627,7 @@ async function backfillAchievementProgressForSeed(): Promise<void> {
     const userId = String(u.id)
 
     const [postCount, inventoryCount, likeGivenCount, likeReceivedCount] = await Promise.all([
-      prisma.contentPost.count({ where: { userId, type: 'EXPERIENCE' } as any }),
+      prisma.contentPost.count({ where: { userId } }),
       prisma.inventory.count({ where: { userId } }),
       prisma.contentLike.count({ where: { userId, postId: { not: null } } as any }),
       prisma.contentLike.count({ where: { postId: { not: null }, post: { userId } } as any }),
@@ -4872,8 +4953,6 @@ async function ensureAllPostsHaveMedia(): Promise<void> {
         'TIPS': 'catalog.phones',
         'COMPARE': 'catalog.computers-tablets',
         'QUESTION': 'catalog.phones',
-        'EXPERIENCE': 'catalog.home-appliances',
-        'UPDATE': 'catalog.phones',
       }
 
       const mediaData = batch.map((post, index) => {
@@ -5388,8 +5467,6 @@ async function main() {
           'TIPS': 'catalog.phones',
           'COMPARE': 'catalog.computers-tablets',
           'QUESTION': 'catalog.phones',
-          'EXPERIENCE': 'catalog.home-appliances',
-          'UPDATE': 'catalog.phones',
         }
         
         // Feed akışında çeşitlilik için bazen product görselleri kullan

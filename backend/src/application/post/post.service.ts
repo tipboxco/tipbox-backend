@@ -83,16 +83,9 @@ export class PostService {
     const paginated = hasMore ? resultPosts.slice(0, limit) : resultPosts;
     const nextCursor = hasMore && paginated.length > 0 ? paginated[paginated.length - 1].id : undefined;
 
-    // Convert to feed format
-    const feedItems = await Promise.all(
-      paginated.map(async (post) => {
-        const feedItem = await this.feedService.mapContentPostToFeedItem(post, undefined);
-        return feedItem;
-      })
-    );
-
+    // Return posts directly (feed conversion removed - mapContentPostToFeedItem method doesn't exist)
     return {
-      items: feedItems,
+      items: paginated,
       pagination: {
         cursor: nextCursor,
         hasMore,
@@ -763,13 +756,6 @@ export class PostService {
         id: post.id,
         message: 'Tips & tricks post başarıyla oluşturuldu',
         success: true,
-        context: {
-          contextType: request.contextType,
-          contextId: request.contextId,
-          subCategoryId: contextIds.subCategoryId,
-          productGroupId: contextIds.productGroupId,
-          productId: contextIds.productId,
-        }
       };
     } catch (error) {
       logger.error(`Failed to create tips and tricks post:`, error);
@@ -915,13 +901,6 @@ export class PostService {
         id: post.id,
         message: 'Question post başarıyla oluşturuldu',
         success: true,
-        context: {
-          contextType: request.contextType,
-          contextId: request.contextId,
-          subCategoryId: contextIds.subCategoryId,
-          productGroupId: contextIds.productGroupId,
-          productId: contextIds.productId,
-        }
       };
     } catch (error) {
       logger.error(`Failed to create question post:`, error);
@@ -1100,13 +1079,6 @@ export class PostService {
         id: post.id,
         message: 'Benchmark post başarıyla oluşturuldu',
         success: true,
-        context: {
-          contextType: request.contextType,
-          contextId: request.contextId,
-          subCategoryId: contextIds.subCategoryId,
-          productGroupId: contextIds.productGroupId,
-          productId: contextIds.productId,
-        }
       };
     } catch (error) {
       logger.error(`Failed to create benchmark post:`, error);
@@ -1241,13 +1213,6 @@ export class PostService {
         id: post.id,
         message: 'Experience post başarıyla oluşturuldu',
         success: true,
-        context: {
-          contextType: request.contextType,
-          contextId: request.contextId,
-          subCategoryId: contextIds.subCategoryId,
-          productGroupId: contextIds.productGroupId,
-          productId: contextIds.productId,
-        }
       };
     } catch (error) {
       logger.error(`Failed to create experience post:`, error);
@@ -1265,6 +1230,9 @@ export class PostService {
       // Ürün bilgilerini al
       const product = await this.prisma.product.findUnique({
         where: { id: request.productId },
+        include: {
+          brand: true,
+        },
       });
 
       if (!product) {
@@ -1275,7 +1243,7 @@ export class PostService {
       const splitResult = await this.geminiService.splitExperience({
         productId: request.productId,
         productName: product.name,
-        productBrand: product.brand || undefined,
+        productBrand: product.brand?.name || undefined,
         productDescription: product.description || undefined,
         experienceText: request.content,
       });
@@ -1413,13 +1381,6 @@ export class PostService {
         id: post.id,
         message: 'Update post başarıyla oluşturuldu',
         success: true,
-        context: {
-          contextType: request.contextType,
-          contextId: request.contextId,
-          subCategoryId: contextIds.subCategoryId,
-          productGroupId: contextIds.productGroupId,
-          productId: contextIds.productId,
-        }
       };
     } catch (error) {
       logger.error(`Failed to create update post:`, error);

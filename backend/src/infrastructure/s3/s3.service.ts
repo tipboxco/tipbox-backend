@@ -296,6 +296,37 @@ export class S3Service {
     }
   }
   /**
+   * Tek bir dosyayı sil
+   * @param fileKey - Silinecek dosyanın key'i (örn: 'users/avatar.jpg')
+   * @returns Başarılı olup olmadığı
+   */
+  async deleteFile(fileKey: string): Promise<boolean> {
+    try {
+      const deleteCommand = new DeleteObjectsCommand({
+        Bucket: s3Config.bucketName,
+        Delete: {
+          Objects: [{ Key: fileKey }],
+          Quiet: true,
+        },
+      });
+      await this.s3Client.send(deleteCommand);
+      logger.info({
+        message: 'S3 dosya silindi',
+        fileKey,
+      });
+      return true;
+    } catch (error: any) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      logger.error({
+        message: 'S3 dosya silme hatası',
+        fileKey,
+        error: errorMsg,
+      });
+      return false;
+    }
+  }
+
+  /**
    * Klasördeki tüm dosyaları recursive olarak sil
    * @param folderPrefix - Klasör prefix'i (örn: 'users/', 'posts/')
    * @returns Silinen dosya sayısı

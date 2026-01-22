@@ -122,6 +122,7 @@ export class InventoryService {
         const product = await this.prisma.product.findUnique({
           where: { id: inventory.productId },
           include: {
+            brand: true,
             group: {
               include: {
                 subCategory: {
@@ -200,7 +201,7 @@ export class InventoryService {
           id: inventory.id,
           productId: inventory.productId, // ✅ YENİ: Product ID eklendi
           brand: {
-            name: product.brand || 'Unknown',
+            name: product.brand?.name || 'Unknown',
             model: product.name,
             specs: product.description || '',
           },
@@ -304,6 +305,9 @@ export class InventoryService {
       // Ürün bilgilerini al
       const product = await this.prisma.product.findUnique({
         where: { id: productId },
+        include: {
+          brand: true,
+        },
       });
 
       if (!product) {
@@ -314,7 +318,7 @@ export class InventoryService {
       const splitResult = await this.geminiService.splitExperience({
         productId,
         productName: product.name,
-        productBrand: product.brand || undefined,
+        productBrand: product.brand?.name || undefined,
         productDescription: product.description || undefined,
         experienceText,
       });
@@ -377,6 +381,9 @@ export class InventoryService {
     try {
       const product = await this.prisma.product.findUnique({
         where: { id: dto.productId },
+        include: {
+          brand: true,
+        },
       });
 
       if (!product) {
@@ -399,15 +406,8 @@ export class InventoryService {
           },
         });
 
-        if (dto.experience?.length) {
-          await tx.productExperience.createMany({
-            data: dto.experience.map((exp) => ({
-              inventoryId: createdInventory.id,
-              title: this.formatExperienceTitle(exp),
-              experienceText: exp.content,
-            })),
-          });
-        }
+        // ProductExperience model'i artık yok, bu kısım kaldırıldı
+        // Experience bilgileri artık AiExperienceSplit ve ContentPost üzerinden yönetiliyor
 
         if (dto.images?.length) {
           await tx.inventoryMedia.createMany({
@@ -451,7 +451,7 @@ export class InventoryService {
         product: {
           id: product.id,
           name: product.name,
-          brand: product.brand,
+          brand: product.brand?.name || null,
           description: product.description,
         },
       };
@@ -520,6 +520,9 @@ export class InventoryService {
       // Product bilgilerini al
       const product = await this.prisma.product.findUnique({
         where: { id: updatedInventory.productId },
+        include: {
+          brand: true,
+        },
       });
 
       logger.info({
@@ -539,7 +542,7 @@ export class InventoryService {
         product: {
           id: product?.id || '',
           name: product?.name || '',
-          brand: product?.brand || null,
+          brand: product?.brand?.name || null,
           description: product?.description || null,
         },
       };
