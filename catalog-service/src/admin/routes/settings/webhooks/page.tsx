@@ -28,8 +28,8 @@ import {
   Spinner,
   Link as LinkIcon,
 } from "@medusajs/icons"
-import { WebhookForm } from "../../components/webhooks"
-import { StatusBadge } from "../../components/shared"
+import { WebhookForm } from "../../../components/webhooks"
+import { StatusBadge } from "../../../components/shared"
 
 type Webhook = {
   id: string
@@ -228,7 +228,7 @@ const WebhooksPage = () => {
             {webhooks.map((webhook) => (
               <div 
                 key={webhook.id} 
-                onClick={() => navigate(`/webhooks/${webhook.id}`)}
+                onClick={() => navigate(`/settings/webhooks/${webhook.id}`)}
                 className="flex items-center gap-3 px-4 py-2.5 hover:bg-ui-bg-subtle cursor-pointer group"
               >
                 <div className={clx("w-2 h-2 rounded-full flex-shrink-0", webhook.is_active ? "bg-emerald-500" : "bg-gray-400")} />
@@ -262,7 +262,7 @@ const WebhooksPage = () => {
                       <IconButton variant="transparent" size="small"><EllipsisHorizontal className="h-4 w-4" /></IconButton>
                     </DropdownMenu.Trigger>
                     <DropdownMenu.Content align="end">
-                      <DropdownMenu.Item onClick={() => navigate(`/webhooks/${webhook.id}`)}>
+                      <DropdownMenu.Item onClick={() => navigate(`/settings/webhooks/${webhook.id}`)}>
                         <ArrowUpRightOnBox className="mr-2 h-3.5 w-3.5" />Detay
                       </DropdownMenu.Item>
                       <DropdownMenu.Item onClick={() => { setEditingWebhook(webhook); setDrawerOpen(true) }}>

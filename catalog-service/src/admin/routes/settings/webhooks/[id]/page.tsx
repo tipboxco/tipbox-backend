@@ -27,9 +27,9 @@ import {
   CheckMini,
   XMark,
 } from "@medusajs/icons"
-import { Modal, ModalBody, ModalFooter } from "../../../components/modal"
-import { WebhookForm, WebhookLogItem, WebhookLogDetail } from "../../../components/webhooks"
-import { StatsCard, FilterTabs, SplitView } from "../../../components/shared"
+import { Modal, ModalBody, ModalFooter } from "../../../../components/modal"
+import { WebhookForm, WebhookLogItem, WebhookLogDetail } from "../../../../components/webhooks"
+import { StatsCard, FilterTabs, SplitView } from "../../../../components/shared"
 
 type Webhook = {
   id: string
@@ -99,7 +99,7 @@ const WebhookDetailPage = () => {
     setLoading(true)
     try {
       const response = await fetch(`/admin/webhooks/${id}`, { credentials: "include" })
-      if (!response.ok) { navigate("/webhooks"); return }
+      if (!response.ok) { navigate("/settings/webhooks"); return }
       const data = await response.json()
       setWebhook(data.webhook)
     } catch { toast.error("Hata", { description: "Webhook yüklenirken hata oluştu" }) }
@@ -161,7 +161,7 @@ const WebhookDetailPage = () => {
     setDeleting(true)
     try {
       const response = await fetch(`/admin/webhooks/${id}`, { method: "DELETE", credentials: "include" })
-      if (response.ok) { toast.success("Başarılı", { description: "Webhook silindi" }); navigate("/webhooks") }
+      if (response.ok) { toast.success("Başarılı", { description: "Webhook silindi" }); navigate("/settings/webhooks") }
     } catch {}
     finally { setDeleting(false); setDeleteDialogOpen(false) }
   }
@@ -225,7 +225,7 @@ const WebhookDetailPage = () => {
         <div className="text-center">
           <ExclamationCircle className="h-10 w-10 text-ui-fg-muted mx-auto mb-3" />
           <Heading level="h2" className="text-base mb-2">Webhook bulunamadı</Heading>
-          <Button variant="secondary" size="small" onClick={() => navigate("/webhooks")}>Geri Dön</Button>
+          <Button variant="secondary" size="small" onClick={() => navigate("/settings/webhooks")}>Geri Dön</Button>
         </div>
       </div>
     )
@@ -239,7 +239,7 @@ const WebhookDetailPage = () => {
       {/* Header */}
       <div className="bg-white border-b border-ui-border-base">
         <div className="px-4 py-2 border-b border-ui-border-base flex items-center gap-3">
-          <button onClick={() => navigate("/webhooks")} className="flex items-center gap-1 text-ui-fg-muted hover:text-ui-fg-base text-sm">
+          <button onClick={() => navigate("/settings/webhooks")} className="flex items-center gap-1 text-ui-fg-muted hover:text-ui-fg-base text-sm">
             <ArrowLeft className="h-4 w-4" /><span>Webhooks</span>
           </button>
           <div className="h-4 w-px bg-ui-border-base" />
