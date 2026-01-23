@@ -109,7 +109,7 @@ export class UserPrismaRepository {
           auth0Id,
           email, 
           emailVerified,
-          status: 'ACTIVE',
+          status: emailVerified ? 'ACTIVE' : 'PENDING_VERIFICATION',
           profile: displayName
             ? {
                 create: {
