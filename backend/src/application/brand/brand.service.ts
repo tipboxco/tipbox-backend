@@ -306,26 +306,23 @@ export class BrandService {
       const brands = await this.prisma.brand.findMany({
         where: {
           categoryId: category.id,
+          imageUrl: { not: null },
         },
         select: {
           id: true,
           name: true,
           imageUrl: true,
+          isPopular: true,
+          rank: true,
         },
-        orderBy: {
-          name: 'asc',
-        },
+        orderBy: [
+          { isPopular: 'desc' },
+          { rank: 'desc' },
+        ],
       });
 
-      const brandMap: { [key: string]: any } = {};
-      brandToWebsite.forEach((brand) => {
-        brandMap[slugify(brand.brand, slugifyOptions)] = brand;
-      });
-      return brands.map((brand: any) => {
-        const slugbrand = slugify(brand.name, slugifyOptions);
-        const website = brandMap?.[slugbrand]?.website;
-        console.log({brand});
-        const imageUrl = ((brand?.imageUrl)?.length>0 && brand?.imageUrl!=="NULL")? resolveMediaUrl(brand?.imageUrl):website?`https://img.logo.dev/name/${website}?token=pk_WgZMkY5cTXCH41Z0yJ_Txw`:'';
+      return brands.map((brand) => {
+        const imageUrl = resolveMediaUrl(brand.imageUrl);
 
         return {
           brandId: brand.id,

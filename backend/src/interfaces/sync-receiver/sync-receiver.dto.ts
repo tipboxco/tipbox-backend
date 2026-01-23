@@ -26,13 +26,18 @@ export interface SyncRecord {
   thumbnail?: string;
   image_url?: string;
   logo_url?: string;
+  banner_url?: string;
+  website_url?: string;
   parent_id?: string;
   category_id?: string;
+  category?: string | unknown;
   group_id?: string;
   brand?: string;
   sub_name?: string;
   rank?: number;
+  ispopular?: boolean;
   is_active?: boolean;
+  tags?: unknown;
   metadata?: Record<string, unknown>;
   [key: string]: unknown;
 }

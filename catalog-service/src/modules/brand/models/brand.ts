@@ -7,6 +7,10 @@ export const Brand = model.define("brand", {
   website_url:model.text().nullable(),
   logo_url: model.text().nullable(),
   metadata:model.json().nullable(),
+  rank:model.number().nullable(),
+  ispopular:model.boolean().nullable(),
+  tags:model.json().nullable(),
+  banner_url:model.text().nullable(),
   category: model
   .belongsTo(() => BrandCategory, {
     mappedBy: "brands",

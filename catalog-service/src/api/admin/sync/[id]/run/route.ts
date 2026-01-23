@@ -436,7 +436,14 @@ async function getRecordsBatch(
       return brands.map((brand: any) => ({
         id: brand.id,
         name: brand.name,
+        handle: brand.handle || null,
+        website_url: brand.website_url || null,
         logo_url: brand.logo_url || null,
+        banner_url: brand.banner_url || null,
+        rank: brand.rank ?? null,
+        ispopular: brand.ispopular ?? null,
+        metadata: brand.metadata || null,
+        tags: brand.tags || null,
         // Backend category ismi (string) ile eşleştirme yapıyor
         category: brand.category?.title || null, // Kategori ismi (backend bu değeri kullanarak categoryId buluyor)
         category_id: brand.category?.id || brand.category_id || null, // Fallback olarak direkt ID
