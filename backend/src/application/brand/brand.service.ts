@@ -269,12 +269,11 @@ export class BrandService {
       });
 
       return categories.map((category) => {
-        const imageUrl = resolveMediaUrl(category.imageUrl);
 
         return {
           categoryId: category.id,
           name: category.name,
-          image: imageUrl,
+          image: category.imageUrl
         };
       });
     } catch (error) {
@@ -322,7 +321,7 @@ export class BrandService {
       });
 
       return brands.map((brand) => {
-        const imageUrl = resolveMediaUrl(brand.imageUrl);
+        const imageUrl = brand.imageUrl;
 
         return {
           brandId: brand.id,

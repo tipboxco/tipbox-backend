@@ -35,7 +35,7 @@ CREATE TYPE "tip_category" AS ENUM ('USAGE', 'PURCHASE', 'CARE', 'OTHER');
 CREATE TYPE "vote_type" AS ENUM ('UPVOTE', 'DOWNVOTE');
 
 -- CreateEnum
-CREATE TYPE "badge_type" AS ENUM ('ACHIEVEMENT', 'EVENT', 'COSMETIC');
+CREATE TYPE "badge_type" AS ENUM ('ACHIEVEMENT', 'EVENT', 'COSMETIC', 'BRAND');
 
 -- CreateEnum
 CREATE TYPE "badge_rarity" AS ENUM ('COMMON', 'RARE', 'EPIC');
@@ -126,6 +126,7 @@ CREATE TABLE "users" (
     "id" UUID NOT NULL,
     "email" TEXT,
     "password_hash" TEXT,
+    "auth0_id" TEXT,
     "status" TEXT,
     "email_verified" BOOLEAN NOT NULL DEFAULT false,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -343,9 +344,12 @@ CREATE TABLE "password_reset_tokens" (
 -- CreateTable
 CREATE TABLE "email_verification_codes" (
     "id" UUID NOT NULL,
-    "user_id" UUID NOT NULL,
+    "user_id" UUID,
     "email" TEXT NOT NULL,
     "code" VARCHAR(6) NOT NULL,
+    "password_hash" TEXT,
+    "name" TEXT,
+    "auth0_id" TEXT,
     "is_used" BOOLEAN NOT NULL DEFAULT false,
     "expires_at" TIMESTAMP(3) NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -832,6 +836,10 @@ CREATE TABLE "brands" (
     "updated_at" TIMESTAMP(3) NOT NULL,
     "image_url" TEXT,
     "category_id" UUID,
+    "rank" INTEGER DEFAULT 0,
+    "is_popular" BOOLEAN DEFAULT false,
+    "tags" JSONB DEFAULT '[]',
+    "banner_url" TEXT,
 
     CONSTRAINT "brands_pkey" PRIMARY KEY ("id")
 );
@@ -939,6 +947,86 @@ CREATE TABLE "bridge_rewards" (
     "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "bridge_rewards_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "news" (
+    "id" UUID NOT NULL,
+    "brand_id" UUID NOT NULL,
+    "title" TEXT NOT NULL,
+    "content" TEXT NOT NULL,
+    "banner_image_url" TEXT,
+    "source" TEXT NOT NULL DEFAULT 'tipbox',
+    "author" TEXT,
+    "tags" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "likes_count" INTEGER NOT NULL DEFAULT 0,
+    "comments_count" INTEGER NOT NULL DEFAULT 0,
+    "shares_count" INTEGER NOT NULL DEFAULT 0,
+    "favorites_count" INTEGER NOT NULL DEFAULT 0,
+    "views_count" INTEGER NOT NULL DEFAULT 0,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "news_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "news_likes" (
+    "id" UUID NOT NULL,
+    "user_id" UUID NOT NULL,
+    "news_id" UUID NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "news_likes_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "news_comments" (
+    "id" VARCHAR(26) NOT NULL,
+    "news_id" UUID NOT NULL,
+    "user_id" UUID NOT NULL,
+    "parent_id" VARCHAR(26),
+    "comment" TEXT NOT NULL,
+    "likes_count" INTEGER NOT NULL DEFAULT 0,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "news_comments_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "news_comment_likes" (
+    "id" UUID NOT NULL,
+    "user_id" UUID NOT NULL,
+    "comment_id" VARCHAR(26) NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "news_comment_likes_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "news_shares" (
+    "id" UUID NOT NULL,
+    "user_id" UUID NOT NULL,
+    "news_id" UUID NOT NULL,
+    "share_type" "share_type" NOT NULL,
+    "platform" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "news_shares_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "news_favorites" (
+    "id" UUID NOT NULL,
+    "user_id" UUID NOT NULL,
+    "news_id" UUID NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "news_favorites_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -1147,6 +1235,8 @@ CREATE TABLE "dm_threads" (
     "unread_count_user_one" INTEGER NOT NULL DEFAULT 0,
     "unread_count_user_two" INTEGER NOT NULL DEFAULT 0,
     "is_support_thread" BOOLEAN NOT NULL DEFAULT false,
+    "last_message_id" UUID,
+    "last_message_at" TIMESTAMP(3),
 
     CONSTRAINT "dm_threads_pkey" PRIMARY KEY ("id")
 );
@@ -1162,8 +1252,44 @@ CREATE TABLE "dm_messages" (
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
     "context" "DMMessageContext" NOT NULL DEFAULT 'DM',
+    "media_url" TEXT,
+    "media_type" TEXT,
+    "thumbnail_url" TEXT,
+    "file_name" TEXT,
+    "file_size" BIGINT,
+    "caption" TEXT,
+    "reply_to_message_id" UUID,
+    "status" TEXT NOT NULL DEFAULT 'sent',
+    "delivered_at" TIMESTAMP(3),
+    "read_at" TIMESTAMP(3),
+    "is_deleted" BOOLEAN NOT NULL DEFAULT false,
+    "deleted_at" TIMESTAMP(3),
+    "deleted_by" UUID,
+    "is_edited" BOOLEAN NOT NULL DEFAULT false,
+    "edited_at" TIMESTAMP(3),
 
     CONSTRAINT "dm_messages_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "message_reactions" (
+    "id" UUID NOT NULL,
+    "message_id" UUID NOT NULL,
+    "user_id" UUID NOT NULL,
+    "emoji" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "message_reactions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "message_read_receipts" (
+    "id" UUID NOT NULL,
+    "message_id" UUID NOT NULL,
+    "user_id" UUID NOT NULL,
+    "read_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "message_read_receipts_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -1485,6 +1611,9 @@ CREATE TABLE "push_tokens" (
 CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "users_auth0_id_key" ON "users"("auth0_id");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "profiles_user_id_key" ON "profiles"("user_id");
 
 -- CreateIndex
@@ -1770,6 +1899,60 @@ CREATE UNIQUE INDEX "bridge_user_stats_user_id_brand_id_key" ON "bridge_user_sta
 CREATE UNIQUE INDEX "bridge_leaderboards_brand_id_user_id_period_key" ON "bridge_leaderboards"("brand_id", "user_id", "period");
 
 -- CreateIndex
+CREATE INDEX "news_brand_id_idx" ON "news"("brand_id");
+
+-- CreateIndex
+CREATE INDEX "news_created_at_idx" ON "news"("created_at");
+
+-- CreateIndex
+CREATE INDEX "news_likes_user_id_idx" ON "news_likes"("user_id");
+
+-- CreateIndex
+CREATE INDEX "news_likes_news_id_idx" ON "news_likes"("news_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "news_likes_user_id_news_id_key" ON "news_likes"("user_id", "news_id");
+
+-- CreateIndex
+CREATE INDEX "news_comments_news_id_idx" ON "news_comments"("news_id");
+
+-- CreateIndex
+CREATE INDEX "news_comments_user_id_idx" ON "news_comments"("user_id");
+
+-- CreateIndex
+CREATE INDEX "news_comments_parent_id_idx" ON "news_comments"("parent_id");
+
+-- CreateIndex
+CREATE INDEX "news_comment_likes_user_id_idx" ON "news_comment_likes"("user_id");
+
+-- CreateIndex
+CREATE INDEX "news_comment_likes_comment_id_idx" ON "news_comment_likes"("comment_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "news_comment_likes_user_id_comment_id_key" ON "news_comment_likes"("user_id", "comment_id");
+
+-- CreateIndex
+CREATE INDEX "news_shares_news_id_idx" ON "news_shares"("news_id");
+
+-- CreateIndex
+CREATE INDEX "news_shares_user_id_idx" ON "news_shares"("user_id");
+
+-- CreateIndex
+CREATE INDEX "news_shares_share_type_idx" ON "news_shares"("share_type");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "news_shares_user_id_news_id_key" ON "news_shares"("user_id", "news_id");
+
+-- CreateIndex
+CREATE INDEX "news_favorites_user_id_idx" ON "news_favorites"("user_id");
+
+-- CreateIndex
+CREATE INDEX "news_favorites_news_id_idx" ON "news_favorites"("news_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "news_favorites_user_id_news_id_key" ON "news_favorites"("user_id", "news_id");
+
+-- CreateIndex
 CREATE INDEX "wallets_user_id_idx" ON "wallets"("user_id");
 
 -- CreateIndex
@@ -1878,13 +2061,46 @@ CREATE INDEX "dm_threads_user_two_id_idx" ON "dm_threads"("user_two_id");
 CREATE INDEX "dm_threads_is_support_thread_idx" ON "dm_threads"("is_support_thread");
 
 -- CreateIndex
+CREATE INDEX "dm_threads_last_message_at_idx" ON "dm_threads"("last_message_at");
+
+-- CreateIndex
 CREATE INDEX "dm_messages_thread_id_idx" ON "dm_messages"("thread_id");
 
 -- CreateIndex
 CREATE INDEX "dm_messages_thread_id_is_read_idx" ON "dm_messages"("thread_id", "is_read");
 
 -- CreateIndex
+CREATE INDEX "dm_messages_thread_id_sent_at_idx" ON "dm_messages"("thread_id", "sent_at" DESC);
+
+-- CreateIndex
 CREATE INDEX "dm_messages_sender_id_idx" ON "dm_messages"("sender_id");
+
+-- CreateIndex
+CREATE INDEX "dm_messages_reply_to_message_id_idx" ON "dm_messages"("reply_to_message_id");
+
+-- CreateIndex
+CREATE INDEX "dm_messages_status_idx" ON "dm_messages"("status");
+
+-- CreateIndex
+CREATE INDEX "dm_messages_is_deleted_idx" ON "dm_messages"("is_deleted");
+
+-- CreateIndex
+CREATE INDEX "message_reactions_message_id_idx" ON "message_reactions"("message_id");
+
+-- CreateIndex
+CREATE INDEX "message_reactions_user_id_idx" ON "message_reactions"("user_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "message_reactions_message_id_user_id_emoji_key" ON "message_reactions"("message_id", "user_id", "emoji");
+
+-- CreateIndex
+CREATE INDEX "message_read_receipts_message_id_idx" ON "message_read_receipts"("message_id");
+
+-- CreateIndex
+CREATE INDEX "message_read_receipts_user_id_idx" ON "message_read_receipts"("user_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "message_read_receipts_message_id_user_id_key" ON "message_read_receipts"("message_id", "user_id");
 
 -- CreateIndex
 CREATE INDEX "dm_requests_from_user_id_to_user_id_idx" ON "dm_requests"("from_user_id", "to_user_id");
@@ -2316,6 +2532,42 @@ ALTER TABLE "bridge_rewards" ADD CONSTRAINT "bridge_rewards_brand_id_fkey" FOREI
 ALTER TABLE "bridge_rewards" ADD CONSTRAINT "bridge_rewards_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "news" ADD CONSTRAINT "news_brand_id_fkey" FOREIGN KEY ("brand_id") REFERENCES "brands"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "news_likes" ADD CONSTRAINT "news_likes_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "news_likes" ADD CONSTRAINT "news_likes_news_id_fkey" FOREIGN KEY ("news_id") REFERENCES "news"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "news_comments" ADD CONSTRAINT "news_comments_news_id_fkey" FOREIGN KEY ("news_id") REFERENCES "news"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "news_comments" ADD CONSTRAINT "news_comments_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "news_comments" ADD CONSTRAINT "news_comments_parent_id_fkey" FOREIGN KEY ("parent_id") REFERENCES "news_comments"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "news_comment_likes" ADD CONSTRAINT "news_comment_likes_comment_id_fkey" FOREIGN KEY ("comment_id") REFERENCES "news_comments"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "news_comment_likes" ADD CONSTRAINT "news_comment_likes_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "news_shares" ADD CONSTRAINT "news_shares_news_id_fkey" FOREIGN KEY ("news_id") REFERENCES "news"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "news_shares" ADD CONSTRAINT "news_shares_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "news_favorites" ADD CONSTRAINT "news_favorites_news_id_fkey" FOREIGN KEY ("news_id") REFERENCES "news"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "news_favorites" ADD CONSTRAINT "news_favorites_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "wallets" ADD CONSTRAINT "wallets_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -2385,6 +2637,9 @@ ALTER TABLE "event_badges" ADD CONSTRAINT "event_badges_event_id_fkey" FOREIGN K
 ALTER TABLE "event_badges" ADD CONSTRAINT "event_badges_badge_id_fkey" FOREIGN KEY ("badge_id") REFERENCES "badges"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "dm_threads" ADD CONSTRAINT "dm_threads_last_message_id_fkey" FOREIGN KEY ("last_message_id") REFERENCES "dm_messages"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "dm_threads" ADD CONSTRAINT "dm_threads_user_one_id_fkey" FOREIGN KEY ("user_one_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -2395,6 +2650,24 @@ ALTER TABLE "dm_messages" ADD CONSTRAINT "dm_messages_sender_id_fkey" FOREIGN KE
 
 -- AddForeignKey
 ALTER TABLE "dm_messages" ADD CONSTRAINT "dm_messages_thread_id_fkey" FOREIGN KEY ("thread_id") REFERENCES "dm_threads"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "dm_messages" ADD CONSTRAINT "dm_messages_reply_to_message_id_fkey" FOREIGN KEY ("reply_to_message_id") REFERENCES "dm_messages"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "dm_messages" ADD CONSTRAINT "dm_messages_deleted_by_fkey" FOREIGN KEY ("deleted_by") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "message_reactions" ADD CONSTRAINT "message_reactions_message_id_fkey" FOREIGN KEY ("message_id") REFERENCES "dm_messages"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "message_reactions" ADD CONSTRAINT "message_reactions_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "message_read_receipts" ADD CONSTRAINT "message_read_receipts_message_id_fkey" FOREIGN KEY ("message_id") REFERENCES "dm_messages"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "message_read_receipts" ADD CONSTRAINT "message_read_receipts_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "dm_requests" ADD CONSTRAINT "dm_requests_from_user_id_fkey" FOREIGN KEY ("from_user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
