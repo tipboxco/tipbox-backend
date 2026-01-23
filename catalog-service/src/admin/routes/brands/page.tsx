@@ -8,7 +8,6 @@ import {
   Button, 
   Text, 
   Input,
-  Drawer,
   Label,
   usePrompt,
   toast,
@@ -29,12 +28,18 @@ import {
   ChevronLeftMini,
   ChevronRightMini,
 } from "@medusajs/icons"
-import { ImageUploadField } from "../../components/media"
 
 type Brand = {
   id: string
   name: string
+  handle?: string | null
+  website_url?: string | null
   logo_url?: string | null
+  banner_url?: string | null
+  metadata?: any | null
+  rank?: number | null
+  ispopular?: boolean | null
+  tags?: any | null
   category_id?: string | null
   category?: {
     id: string
@@ -58,13 +63,6 @@ const BrandsPage = () => {
   const navigate = useNavigate()
   const [brands, setBrands] = useState<Brand[]>([])
   const [loading, setLoading] = useState(true)
-  const [drawerOpen, setDrawerOpen] = useState(false)
-  const [editingBrand, setEditingBrand] = useState<Brand | null>(null)
-  const [brandName, setBrandName] = useState("")
-  const [brandLogoUrl, setBrandLogoUrl] = useState<string | null>(null)
-  const [brandCategoryId, setBrandCategoryId] = useState<string | null>(null)
-  const [brandCategories, setBrandCategories] = useState<Array<{ id: string; title: string }>>([])
-  const [saving, setSaving] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("")
   const activeFetchRef = useRef<{ requestId: number; controller: AbortController } | null>(null)
@@ -144,95 +142,13 @@ const BrandsPage = () => {
     fetchBrands(currentPage, itemsPerPage, debouncedSearchQuery)
   }, [currentPage, itemsPerPage, debouncedSearchQuery, fetchBrands])
 
-  // Fetch brand categories for dropdown
-  useEffect(() => {
-    const fetchBrandCategories = async () => {
-      try {
-        const response = await fetch("/admin/brand-categories?limit=1000", {
-          credentials: "include",
-        })
-        const data = await response.json()
-        setBrandCategories(data.brand_categories || [])
-      } catch (error) {
-        console.error("Brand kategorileri yüklenirken hata:", error)
-      }
-    }
-    fetchBrandCategories()
-  }, [])
 
   const totalPages = Math.ceil(totalCount / itemsPerPage)
   const startItem = totalCount === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1
   const endItem = Math.min(currentPage * itemsPerPage, totalCount)
 
-  const openCreateDrawer = () => {
-    setEditingBrand(null)
-    setBrandName("")
-    setBrandLogoUrl(null)
-    setBrandCategoryId(null)
-    setDrawerOpen(true)
-  }
 
-  const openEditDrawer = (brand: Brand) => {
-    setEditingBrand(brand)
-    setBrandName(brand.name)
-    setBrandLogoUrl(brand.logo_url || null)
-    setBrandCategoryId(brand.category_id || brand.category?.id || null)
-    setDrawerOpen(true)
-  }
 
-  const handleSave = async () => {
-    if (!brandName.trim()) return
-
-    setSaving(true)
-    try {
-      if (editingBrand) {
-        const response = await fetch(`/admin/brands/${editingBrand.id}`, {
-          method: "PUT",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            name: brandName,
-            logo_url: brandLogoUrl,
-            category_id: brandCategoryId || null,
-          }),
-        })
-
-        if (response.ok) {
-          toast.success("Başarılı", {
-            description: "Marka başarıyla güncellendi",
-          })
-          setDrawerOpen(false)
-          fetchBrands(currentPage, itemsPerPage, debouncedSearchQuery)
-        }
-      } else {
-        const response = await fetch("/admin/brands", {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            name: brandName,
-            logo_url: brandLogoUrl,
-            category_id: brandCategoryId || null,
-          }),
-        })
-
-        if (response.ok) {
-          toast.success("Başarılı", {
-            description: "Marka başarıyla oluşturuldu",
-          })
-          setDrawerOpen(false)
-          fetchBrands(currentPage, itemsPerPage, debouncedSearchQuery)
-        }
-      }
-    } catch (error) {
-      console.error("Marka kaydedilirken hata:", error)
-      toast.error("Hata", {
-        description: "Marka kaydedilirken bir hata oluştu",
-      })
-    } finally {
-      setSaving(false)
-    }
-  }
 
   const handleDelete = async (brand: Brand) => {
     const confirmed = await prompt({
@@ -335,7 +251,7 @@ const BrandsPage = () => {
               Ürünlerinize marka atayarak koleksiyonlarınızı organize edin
             </Text>
           </div>
-          <Button variant="primary" size="small" onClick={openCreateDrawer}>
+          <Button variant="primary" size="small" onClick={() => navigate("/brands/new")}>
             <PlusMini />
             Marka Ekle
           </Button>
@@ -361,7 +277,6 @@ const BrandsPage = () => {
               }}
               className="pl-10"
               size="small"
-              disabled={saving}
             />
           </div>
           <div className="flex items-center gap-2 text-ui-fg-muted">
@@ -397,7 +312,7 @@ const BrandsPage = () => {
                 }
               </Text>
               {!searchQuery && (
-                <Button variant="secondary" size="small" onClick={openCreateDrawer}>
+                <Button variant="secondary" size="small" onClick={() => navigate("/brands/new")}>
                   <PlusMini />
                   Marka Ekle
                 </Button>
@@ -486,7 +401,7 @@ const BrandsPage = () => {
                               <DropdownMenu.Item 
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  openEditDrawer(brand)
+                                  navigate(`/brands/${brand.id}/edit`)
                                 }}
                               >
                                 <PencilSquare className="mr-2 h-4 w-4" />
@@ -590,91 +505,6 @@ const BrandsPage = () => {
         </div>
       </Container>
 
-      {/* Create/Edit Drawer */}
-      <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <Drawer.Content>
-          <Drawer.Header>
-            <Drawer.Title>
-              {editingBrand ? "Marka Düzenle" : "Yeni Marka Oluştur"}
-            </Drawer.Title>
-          </Drawer.Header>
-          <Drawer.Body className="flex flex-col gap-6 p-6">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="brand-name" weight="plus">
-                Marka Adı <span className="text-ui-fg-error">*</span>
-              </Label>
-              <Input
-                id="brand-name"
-                placeholder="Örn: Nike, Adidas, Apple..."
-                value={brandName}
-                onChange={(e) => setBrandName(e.target.value)}
-                autoFocus
-              />
-              <Text size="small" className="text-ui-fg-subtle">
-                Bu ad ürün detay sayfalarında ve filtrelerde görünecektir
-              </Text>
-            </div>
-            <ImageUploadField
-              config={{
-                key: "logo",
-                label: "Marka Logosu",
-                required: false,
-                previewHeight: 64,
-              }}
-              value={brandLogoUrl}
-              isEditing={true}
-              isSaving={saving}
-              onChange={(value) => {
-                // ImageUploadField bazı durumlarda string[] döndürebiliyor
-                const next = Array.isArray(value) ? value[0] ?? null : value
-                setBrandLogoUrl(next)
-              }}
-              onRemove={() => setBrandLogoUrl(null)}
-            />
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="brand-category" weight="plus">
-                Kategori
-              </Label>
-              <Select 
-                value={brandCategoryId || "__none__"} 
-                onValueChange={(value) => setBrandCategoryId(value === "__none__" ? null : value)}
-              >
-                <Select.Trigger>
-                  <Select.Value placeholder="Kategori seçin..." />
-                </Select.Trigger>
-                <Select.Content>
-                  <Select.Item value="__none__">Kategori yok</Select.Item>
-                  {brandCategories.map((category) => (
-                    <Select.Item key={category.id} value={category.id}>
-                      {category.title}
-                    </Select.Item>
-                  ))}
-                </Select.Content>
-              </Select>
-              <Text size="small" className="text-ui-fg-subtle">
-                Markayı bir kategoriye atayabilirsiniz
-              </Text>
-            </div>
-          </Drawer.Body>
-          <Drawer.Footer>
-            <div className="flex items-center justify-end gap-2">
-              <Button
-                variant="secondary"
-                onClick={() => setDrawerOpen(false)}
-              >
-                İptal
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleSave}
-                disabled={saving || !brandName.trim()}
-              >
-                {saving ? "Kaydediliyor..." : (editingBrand ? "Güncelle" : "Oluştur")}
-              </Button>
-            </div>
-          </Drawer.Footer>
-        </Drawer.Content>
-      </Drawer>
     </div>
   )
 }

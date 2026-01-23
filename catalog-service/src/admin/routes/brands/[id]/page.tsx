@@ -7,7 +7,6 @@ import {
   Button, 
   Text, 
   Input,
-  Drawer,
   Label,
   toast,
   Badge,
@@ -35,13 +34,19 @@ import {
 } from "@medusajs/icons"
 import { ProductPickerModal } from "../../../components/product-picker"
 import { EmptyState } from "../../../components/empty-state"
-import { ImageUploadField } from "../../../components/media/image-upload-field"
 import { Modal, ModalBody, ModalFooter } from "../../../components/modal"
 
 type Brand = {
   id: string
   name: string
+  handle?: string | null
+  website_url?: string | null
   logo_url?: string | null
+  banner_url?: string | null
+  metadata?: any | null
+  rank?: number | null
+  ispopular?: boolean | null
+  tags?: any | null
   category_id?: string | null
   category?: {
     id: string
@@ -49,11 +54,6 @@ type Brand = {
   } | null
   created_at?: string
   updated_at?: string
-}
-
-type BrandCategory = {
-  id: string
-  title: string
 }
 
 type Product = {
@@ -83,12 +83,6 @@ const BrandDetailPage = () => {
   const [brandProducts, setBrandProducts] = useState<Product[]>([])
   const [totalProductCount, setTotalProductCount] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [editDrawerOpen, setEditDrawerOpen] = useState(false)
-  const [brandName, setBrandName] = useState("")
-  const [brandLogoUrl, setBrandLogoUrl] = useState<any | null>(null)
-  const [brandCategoryId, setBrandCategoryId] = useState<string | null>(null)
-  const [brandCategories, setBrandCategories] = useState<BrandCategory[]>([])
-  const [saving, setSaving] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedBrandProducts, setSelectedBrandProducts] = useState<Set<string>>(new Set())
 
@@ -124,9 +118,6 @@ const BrandDetailPage = () => {
       const productsData: ProductsResponse = await productsResponse.json()
       
       setBrand(brandData.brand)
-      setBrandName(brandData.brand?.name || "")
-      setBrandLogoUrl(brandData.brand?.logo_url || null)
-      setBrandCategoryId(brandData.brand?.category_id || brandData.brand?.category?.id || null)
       setBrandProducts(productsData.products || [])
       setTotalProductCount(productsData.count || 0)
     } catch (error) {
@@ -140,21 +131,6 @@ const BrandDetailPage = () => {
     fetchBrand(currentPage, itemsPerPage)
   }, [currentPage, itemsPerPage])
 
-  // Fetch brand categories for dropdown
-  useEffect(() => {
-    const fetchBrandCategories = async () => {
-      try {
-        const response = await fetch("/admin/brand-categories?limit=1000", {
-          credentials: "include",
-        })
-        const data = await response.json()
-        setBrandCategories(data.brand_categories || [])
-      } catch (error) {
-        console.error("Brand kategorileri yüklenirken hata:", error)
-      }
-    }
-    fetchBrandCategories()
-  }, [])
 
   // Search with debounce
   useEffect(() => {
@@ -229,83 +205,6 @@ const BrandDetailPage = () => {
     return pages
   }
 
-  // Image upload handler
-  const handleImageUpload = async (base64String: string): Promise<string | null> => {
-    try {
-      const response = await fetch("/admin/media", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          file: base64String,
-          filename: "brand-logo.jpg",
-          mimeType: "image/jpeg",
-        }),
-      })
-      
-      if (!response.ok) {
-        throw new Error("Resim yüklenemedi")
-      }
-      
-      const data = await response.json()
-      return data.file?.url || null
-    } catch (error) {
-      console.error("Image upload error:", error)
-      throw error
-    }
-  }
-
-  // Brand operations
-  const handleUpdateBrand = async () => {
-    if (!brandName.trim() || !id) return
-    setSaving(true)
-    try {
-      const updatePayload = { 
-        name: brandName,
-        logo_url: brandLogoUrl,
-        category_id: brandCategoryId || null,
-      }
-      
-      const response = await fetch(`/admin/brands/${id}`, {
-        method: "PUT",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updatePayload),
-      })
-      if (response.ok) {
-        const data = await response.json()
-        // State'i direkt güncelle (fetchBrand'i beklemeden)
-        if (data.brand) {
-          setBrand(data.brand)
-          setBrandLogoUrl(data.brand.logo_url || null)
-        }
-        toast.success("Başarılı", { description: "Marka güncellendi" })
-        setEditDrawerOpen(false)
-        // Sadece ürünleri fetch et (brand zaten güncellendi)
-        const offset = (currentPage - 1) * itemsPerPage
-        try {
-          const productsResponse = await fetch(`/admin/brands/${id}/products?limit=${itemsPerPage}&offset=${offset}`, { 
-            credentials: "include" 
-          })
-          const productsData: ProductsResponse = await productsResponse.json()
-          setBrandProducts(productsData.products || [])
-          setTotalProductCount(productsData.count || 0)
-        } catch {
-          // Ürün fetch hatası önemli değil, sadece log
-        }
-      } else {
-        const errorData = await response.json().catch(() => ({}))
-        toast.error("Hata", { 
-          description: errorData.message || "Marka güncellenirken hata oluştu" 
-        })
-      }
-    } catch (error) {
-      console.error("Marka güncelleme hatası:", error)
-      toast.error("Hata", { description: "Marka güncellenirken hata oluştu" })
-    } finally {
-      setSaving(false)
-    }
-  }
 
   const handleDeleteBrand = async () => {
     if (!brand || !id) return
@@ -499,7 +398,7 @@ const BrandDetailPage = () => {
               <IconButton variant="transparent" size="small"><EllipsisHorizontal /></IconButton>
             </DropdownMenu.Trigger>
             <DropdownMenu.Content align="end">
-              <DropdownMenu.Item onClick={() => setEditDrawerOpen(true)}>
+              <DropdownMenu.Item onClick={() => navigate(`/brands/${id}/edit`)}>
                 <PencilSquare className="mr-2 h-4 w-4" />Düzenle
               </DropdownMenu.Item>
               <DropdownMenu.Separator />
@@ -721,88 +620,6 @@ const BrandDetailPage = () => {
           <CommandBar.Command action={() => setSelectedBrandProducts(new Set())} label="İptal" shortcut="esc" />
         </CommandBar.Bar>
       </CommandBar>
-
-      {/* Edit Brand Drawer */}
-      <Drawer open={editDrawerOpen} onOpenChange={setEditDrawerOpen}>
-        <Drawer.Content>
-          <Drawer.Header><Drawer.Title>Marka Düzenle</Drawer.Title></Drawer.Header>
-          <Drawer.Body className="flex flex-col gap-6 p-6">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="edit-brand-name" weight="plus">
-                Marka Adı <span className="text-ui-fg-error">*</span>
-              </Label>
-              <Input
-                id="edit-brand-name"
-                placeholder="Marka adını girin..."
-                value={brandName}
-                onChange={(e) => setBrandName(e.target.value)}
-                autoFocus
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="brand-category" weight="plus">
-                Kategori
-              </Label>
-              <Select 
-                value={brandCategoryId || "__none__"} 
-                onValueChange={(value) => setBrandCategoryId(value === "__none__" ? null : value)}
-              >
-                <Select.Trigger>
-                  <Select.Value placeholder="Kategori seçin..." />
-                </Select.Trigger>
-                <Select.Content>
-                  <Select.Item value="__none__">Kategori yok</Select.Item>
-                  {brandCategories.map((category) => (
-                    <Select.Item key={category.id} value={category.id}>
-                      {category.title}
-                    </Select.Item>
-                  ))}
-                </Select.Content>
-              </Select>
-              <Text size="small" className="text-ui-fg-subtle">
-                Markayı bir kategoriye atayabilirsiniz
-              </Text>
-            </div>
-            <ImageUploadField
-              config={{
-                key: "logo",
-                label: "Marka Logosu",
-                required: false,
-                previewHeight: 80,
-              }}
-              value={brandLogoUrl}
-              isEditing={true}
-              isSaving={saving}
-              onChange={(value) => {
-                console.log("ImageUploadField onChange:", value)
-                // Base64 string ise, önce upload et, sonra URL'yi al
-                if (value && value.startsWith("data:image")) {
-                  // Base64 string, upload et
-                  handleImageUpload(value).then((url) => {
-                    console.log("Uploaded image URL:", url)
-                    setBrandLogoUrl(url)
-                  }).catch((error) => {
-                    console.error("Image upload error:", error)
-                    toast.error("Hata", { description: "Resim yüklenirken hata oluştu" })
-                  })
-                } else {
-                  // URL string, direkt set et
-                  setBrandLogoUrl(value)
-                }
-              }}
-              onRemove={() => setBrandLogoUrl(null)}
-            />
-          </Drawer.Body>
-          <Drawer.Footer>
-            <div className="flex items-center justify-end gap-2">
-              <Button variant="secondary" onClick={() => setEditDrawerOpen(false)}>İptal</Button>
-              <Button variant="primary" onClick={handleUpdateBrand} disabled={saving || !brandName.trim()}>
-                {saving ? "Kaydediliyor..." : "Güncelle"}
-              </Button>
-            </div>
-          </Drawer.Footer>
-        </Drawer.Content>
-      </Drawer>
 
       {/* Delete Brand Modal */}
       <Modal

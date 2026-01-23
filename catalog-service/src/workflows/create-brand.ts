@@ -11,7 +11,14 @@ import { IEventBusModuleService } from "@medusajs/framework/types"
 
 export type CreateBrandInput = {
   name: string
+  handle?: string | null
+  website_url?: string | null
   logo_url?: string | null
+  banner_url?: string | null
+  metadata?: any | null
+  rank?: number | null
+  ispopular?: boolean | null
+  tags?: any | null
   category_id?: string | null
 }
 
