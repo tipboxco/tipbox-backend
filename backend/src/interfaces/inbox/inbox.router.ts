@@ -1975,32 +1975,8 @@ router.put(
  *       404:
  *         description: Mesaj bulunamadı
  */
-router.delete(
-  '/inbox/:messageId',
-  asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = req.user;
-    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-    if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
-    }
-
-    const { messageId } = req.params;
-
-    try {
-      await messagingService.deleteMessage(String(userId), messageId);
-      return res.status(204).send();
-    } catch (error: unknown) {
-      const message = getErrorMessage(error);
-      if (hasErrorMessage(error) && (message.includes('not found') || message.includes('Message not found'))) {
-        return res.status(404).json({ message: 'Message not found' });
-      }
-      if (hasErrorMessage(error) && (message.includes('Forbidden') || message.includes('does not own'))) {
-        return res.status(403).json({ message: 'You are not allowed to delete this message' });
-      }
-      throw error;
-    }
-  })
-);
+// Bu endpoint kaldırıldı - aşağıdaki /:messageId endpoint'i kullanılıyor
+// router.delete('/inbox/:messageId', ...) - YANLIŞ PATH, router zaten /inbox base path'inde
 
 /**
  * @openapi
@@ -2138,10 +2114,78 @@ router.patch(
 
 /**
  * @openapi
- * /inbox/{messageId}:
+ * /inbox/messages/{messageId}:
  *   delete:
  *     summary: Mesajı sil
- *     description: Mesajı soft delete yapar
+ *     description: Mesajı soft delete yapar. Sadece mesajın göndereni kendi mesajını silebilir.
+ *     tags: [Inbox]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: messageId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Silinecek mesaj ID'si
+ *     responses:
+ *       200:
+ *         description: Mesaj başarıyla silindi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 messageId:
+ *                   type: string
+ *                   format: uuid
+ *                 deletedAt:
+ *                   type: string
+ *                   format: date-time
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ *       403:
+ *         description: Mesaj sahibi değilsiniz
+ *       404:
+ *         description: Mesaj bulunamadı
+ */
+router.delete(
+  '/messages/:messageId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { messageId } = req.params;
+
+    try {
+      await messagingService.deleteMessage(messageId, String(userId));
+      return res.status(200).json({
+        messageId,
+        deletedAt: new Date().toISOString()
+      });
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      if (hasErrorMessage(error) && (message.includes('not found') || message.includes('Message not found'))) {
+        return res.status(404).json({ message: 'Message not found' });
+      }
+      if (hasErrorMessage(error) && (message.includes('Forbidden') || message.includes('own messages'))) {
+        return res.status(403).json({ message: 'You can only delete your own messages' });
+      }
+      throw error;
+    }
+  })
+);
+
+/**
+ * @openapi
+ * /inbox/{messageId}:
+ *   delete:
+ *     summary: Mesajı sil (alternatif endpoint)
+ *     description: Mesajı soft delete yapar. Frontend /inbox/messages/{messageId} kullanmalı.
  *     tags: [Inbox]
  *     security:
  *       - bearerAuth: []

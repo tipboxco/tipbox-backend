@@ -144,9 +144,10 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
     logger.debug(`Loaded ${userAvatars.size} user avatars and ${userNames.size} usernames for ${userIds.size} users`);
   }
 
-  // Batch olarak event görselleri ve isimleri al
+  // Batch olarak event görselleri, isimleri ve type'ları al
   const eventImages = new Map<string, string | null>();
   const eventNames = new Map<string, string | null>();
+  const eventTypes = new Map<string, string | null>();
   if (eventIds.size > 0) {
     const events = await prisma.wishboxEvent.findMany({
       where: { id: { in: Array.from(eventIds) } },
@@ -156,19 +157,41 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
     events.forEach((event) => {
       eventImages.set(event.id, resolveMediaUrl(event.imageUrl));
       eventNames.set(event.id, event.title || null);
+      // eventType field'ı schema'da olmayabilir, şimdilik null
+      // TODO: eventType field'ı schema'ya eklendiğinde burayı güncelle
+      eventTypes.set(event.id, null);
     });
+    
+    // eventType'ı raw query ile almayı dene (field varsa)
+    try {
+      const eventsWithType = await prisma.$queryRaw<any[]>`
+        SELECT id, event_type
+        FROM wishbox_events
+        WHERE id = ANY(${Array.from(eventIds)}::text[])
+      `;
+      eventsWithType.forEach((event) => {
+        if (event.event_type) {
+          eventTypes.set(event.id, event.event_type);
+        }
+      });
+    } catch (error) {
+      // eventType field'ı yoksa null kalır, sorun değil
+      logger.debug('eventType field not found in wishbox_events table');
+    }
   }
 
-  // Batch olarak badge görselleri al
+  // Batch olarak badge görselleri ve isimleri al
   const badgeImages = new Map<string, string | null>();
+  const badgeNames = new Map<string, string | null>();
   if (badgeIds.size > 0) {
     const badges = await prisma.badge.findMany({
       where: { id: { in: Array.from(badgeIds) } },
-      select: { id: true, imageUrl: true },
+      select: { id: true, imageUrl: true, name: true },
     });
 
     badges.forEach((badge) => {
       badgeImages.set(badge.id, resolveMediaUrl(badge.imageUrl));
+      badgeNames.set(badge.id, badge.name || null);
     });
   }
 
@@ -573,7 +596,7 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       // likerId, replierId, commenterId kaldırıldı (root'ta var)
     }
 
-    // Trust/Follow ile ilgili (2) - userId, avatar ve username
+    // Trust/Follow ile ilgili (2) - trust listesine alan kişinin avatarı, userid, adı root seviyede
     if (type === NotificationType.NEW_TRUSTER || type === NotificationType.NEW_TRUSTED_BY) {
       // userId root'tan alınır (avatar ile eşleşir)
       const userId = data.trusterId || data.trustedId;
@@ -582,13 +605,14 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
         if (!enriched.avatar) {
           enriched.avatar = userAvatars.get(userId) || randomImageCache || null;
         }
-      }
-      // Data içine username ekle
-      if (!enriched.data) enriched.data = {};
-      if (userId) {
+        // Username'i root'a ekle (trust listesine alan kişinin adı)
         const username = userNames.get(userId);
-        if (username) enriched.data.username = username;
+        if (username) {
+          enriched.username = username;
+        }
       }
+      // Data içine username ekleme (root'ta var)
+      if (!enriched.data) enriched.data = {};
     }
 
     // Mesajlaşma ile ilgili bildirimler
@@ -661,13 +685,20 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
         delete enriched.data.imageUrl;
         delete enriched.data.commentId;
       } else if (type === NotificationType.DM_REQUEST_RECEIVED) {
-        // Sadece threadId ve username - post ile ilgili tüm alanları temizle
-        enriched.data = {};
-        if (data.threadId) enriched.data.threadId = data.threadId;
+        // Support request oluşturma: requesti atan kişinin avatarı, userid, username root seviyede
+        // userId zaten root'ta set edildi (yukarıda)
+        // Username'i root'a ekle
         if (userId) {
           const username = userNames.get(userId);
-          if (username) enriched.data.username = username;
+          if (username) {
+            enriched.username = username;
+          }
         }
+        
+        // Data içine sadece threadId ekle
+        enriched.data = {};
+        if (data.threadId) enriched.data.threadId = data.threadId;
+        
         // Post ile ilgili alanları kaldır
         delete enriched.data.postId;
         delete enriched.data.postContent;
@@ -675,6 +706,7 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
         delete enriched.data.description;
         delete enriched.data.imageUrl;
         delete enriched.data.commentId;
+        delete enriched.data.username; // Root'ta var, data'dan kaldır
       } else {
         // DM_REQUEST_DECLINED - data boş
         enriched.data = {};
@@ -693,8 +725,17 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       if (!enriched.data) enriched.data = {};
       
       if (type === NotificationType.NEW_BADGE) {
-        // NEW_BADGE için badgeId ve imageUrl (badgeName mesajda var)
+        // NEW_BADGE için: badge görseli ve badge adı
         if (data.badgeId) enriched.data.badgeId = data.badgeId;
+        
+        // badgeName ekle
+        if (data.badgeId && badgeNames.has(data.badgeId)) {
+          enriched.data.badgeName = badgeNames.get(data.badgeId);
+        } else if (data.badgeName) {
+          enriched.data.badgeName = data.badgeName;
+        }
+        
+        // badge görseli ekle
         let badgeImageUrl = null;
         if (data.badgeId && badgeImages.has(data.badgeId)) {
           badgeImageUrl = badgeImages.get(data.badgeId);
@@ -842,26 +883,30 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
         eventImageUrl = randomImageCache;
       }
       
-      // EVENT_STARTED için sadece eventName, eventId ve imageUrl
-      if (type === NotificationType.EVENT_STARTED) {
-        if (!enriched.data) enriched.data = {};
-        enriched.data.eventId = data.eventId;
-        // eventName ekle
-        if (data.eventId && eventNames.has(data.eventId)) {
-          enriched.data.eventName = eventNames.get(data.eventId);
-        } else if (data.eventName) {
-          enriched.data.eventName = data.eventName;
-        }
-        if (eventImageUrl) enriched.data.imageUrl = eventImageUrl;
-        // Gereksiz alanları temizle
-        delete enriched.data.hoursRemaining;
-        delete enriched.data.rewardAmount;
-      } else {
-        // Diğer event bildirimleri için mevcut yapı
-        if (!enriched.data) enriched.data = {};
-        enriched.data.eventId = data.eventId;
-        if (eventImageUrl) enriched.data.imageUrl = eventImageUrl;
+      // Event bildirimleri için: event görseli, event adı ve event type
+      if (!enriched.data) enriched.data = {};
+      enriched.data.eventId = data.eventId;
+      
+      // eventName ekle
+      if (data.eventId && eventNames.has(data.eventId)) {
+        enriched.data.eventName = eventNames.get(data.eventId);
+      } else if (data.eventName) {
+        enriched.data.eventName = data.eventName;
       }
+      
+      // eventType ekle
+      if (data.eventId && eventTypes.has(data.eventId)) {
+        enriched.data.eventType = eventTypes.get(data.eventId);
+      } else if (data.eventType) {
+        enriched.data.eventType = data.eventType;
+      }
+      
+      // event görseli ekle
+      if (eventImageUrl) enriched.data.imageUrl = eventImageUrl;
+      
+      // Gereksiz alanları temizle
+      delete enriched.data.hoursRemaining;
+      delete enriched.data.rewardAmount;
     }
 
     // Collection ile ilgili (2) - avatar null
@@ -909,7 +954,8 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       delete enriched.data.trusterId;
       delete enriched.data.trustedId;
       delete enriched.data.userName;
-      delete enriched.data.badgeName;
+      // badgeName artık data içinde olmalı (NEW_BADGE için)
+      // delete enriched.data.badgeName;
       delete enriched.data.eventName;
       delete enriched.data.achievementId;
       delete enriched.data.tipsAmount;
@@ -981,6 +1027,13 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       if (type === NotificationType.REWARD_EARNED) {
         delete enriched.data.badgeId;
         delete enriched.data.imageUrl;
+      }
+      
+      // Trust bildirimleri için username data'dan kaldır (root'ta var)
+      if (type === NotificationType.NEW_TRUSTER || type === NotificationType.NEW_TRUSTED_BY) {
+        delete enriched.data.username;
+        delete enriched.data.trusterId;
+        delete enriched.data.trustedId;
       }
     }
     

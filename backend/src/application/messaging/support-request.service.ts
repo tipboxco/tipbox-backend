@@ -11,6 +11,7 @@ import { SupportRequestReportCategory } from '../../domain/messaging/support-req
 import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
 import { UserPrismaRepository } from '../../infrastructure/repositories/user-prisma.repository';
+import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 
 export interface SupportRequestListItem {
   id: string;
@@ -175,7 +176,7 @@ export class SupportRequestService {
           || 'Unknown';
 
         const userTitle = counterpart?.titles?.[0]?.title ?? null;
-        const userAvatar = counterpart?.avatars?.[0]?.imageUrl ?? null;
+        const userAvatar = resolveMediaUrl(counterpart?.avatars?.[0]?.imageUrl, true) ?? null;
 
         // ThreadId'yi belirle: Önce request'in kendi threadId'sini kontrol et, sonra threadMap'i kontrol et
         // PENDING durumunda request.threadId null olmalı, bu durumda threadInfo da null olacak

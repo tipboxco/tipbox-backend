@@ -378,5 +378,112 @@ router.get(
   })
 );
 
+/**
+ * @openapi
+ * /explore/search:
+ *   get:
+ *     summary: Explore ekranında unified arama
+ *     description: Post, product ve brand sonuçlarını birleştirerek arama yapar. Hottest ve News tab'ları için kullanılabilir.
+ *     tags: [Explore]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Arama terimi
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [hottest, news]
+ *           default: hottest
+ *         description: Arama tipi (hottest veya news)
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 20
+ *         description: Sayfa başına item sayısı
+ *     responses:
+ *       200:
+ *         description: Arama sonuçları başarıyla getirildi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       type:
+ *                         type: string
+ *                         enum: [post, product, brand]
+ *                       title:
+ *                         type: string
+ *                       content:
+ *                         type: string
+ *                       image:
+ *                         type: string
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
+ *       400:
+ *         description: Query parametresi eksik
+ *       401:
+ *         description: Unauthorized
+ */
+router.get(
+  '/search',
+  authMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const q = req.query.q as string | undefined;
+    const type = (req.query.type as 'hottest' | 'news') || 'hottest';
+    const cursor = req.query.cursor as string | undefined;
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+
+    if (!q || typeof q !== 'string' || q.trim().length === 0) {
+      return res.status(400).json({ message: 'Query parameter (q) is required' });
+    }
+
+    if (limit < 1 || limit > 50) {
+      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+    }
+
+    if (type !== 'hottest' && type !== 'news') {
+      return res.status(400).json({ message: 'Type must be either "hottest" or "news"' });
+    }
+
+    const result = await exploreService.searchExplore(String(userId), q.trim(), { type, cursor, limit });
+    return res.json(result);
+  })
+);
+
 export default router;
 

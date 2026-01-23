@@ -1555,4 +1555,163 @@ export class EventService {
       throw error;
     }
   }
+
+  /**
+   * Search events (community or achievement)
+   */
+  async searchEvents(
+    query: string,
+    options?: { type?: 'community' | 'achievement'; cursor?: string; limit?: number }
+  ): Promise<{
+    items: Array<{
+      id: string;
+      name: string;
+      description?: string;
+      image?: string;
+      startDate?: string;
+      endDate?: string;
+      [key: string]: any;
+    }>;
+    pagination: {
+      cursor?: string;
+      hasMore: boolean;
+      limit: number;
+    };
+  }> {
+    const limit = options?.limit || 20;
+    const eventType = options?.type || 'community';
+    const searchQuery = query?.trim();
+
+    if (!searchQuery || searchQuery.length === 0) {
+      return {
+        items: [],
+        pagination: {
+          hasMore: false,
+          limit,
+        },
+      };
+    }
+
+    const cacheKey = `events:search:${eventType}:${searchQuery}:${options?.cursor || 'first'}:${limit}`;
+
+    try {
+      const cached = await this.cacheService.get<{
+        items: Array<{
+          id: string;
+          name: string;
+          description?: string;
+          image?: string;
+          startDate?: string;
+          endDate?: string;
+          [key: string]: any;
+        }>;
+        pagination: {
+          cursor?: string;
+          hasMore: boolean;
+          limit: number;
+        };
+      }>(cacheKey);
+      if (cached) {
+        logger.info({ message: 'Events search served from cache', cacheKey });
+        return cached;
+      }
+    } catch (error) {
+      logger.warn({ message: 'Cache error', error: error instanceof Error ? error.message : String(error) });
+    }
+
+    const now = new Date();
+
+    // Build where clause based on type
+    const where: any = {
+      status: 'PUBLISHED',
+      AND: [
+        {
+          OR: [
+            { title: { contains: searchQuery, mode: 'insensitive' } },
+            { description: { contains: searchQuery, mode: 'insensitive' } },
+          ],
+        },
+      ],
+    };
+
+    // For community events, filter active/upcoming events
+    // For achievement events, we can include all published events
+    if (eventType === 'community') {
+      // Community events: active or upcoming
+      where.AND.push({
+        OR: [
+          {
+            AND: [
+              { startDate: { lte: now } },
+              { endDate: { gte: now } },
+            ],
+          },
+          {
+            startDate: { gt: now },
+          },
+        ],
+      });
+    }
+
+    const events = await this.prisma.wishboxEvent.findMany({
+      where,
+      orderBy: eventType === 'community' ? { startDate: 'asc' } : { createdAt: 'desc' },
+      take: limit + 1,
+      ...(options?.cursor && {
+        cursor: { id: options.cursor },
+        skip: 1,
+      }),
+    });
+
+    const hasMore = events.length > limit;
+    const resultEvents = hasMore ? events.slice(0, limit) : events;
+    const nextCursor = hasMore && resultEvents.length > 0 ? resultEvents[resultEvents.length - 1].id : undefined;
+
+    // Map events to response format
+    const items = await Promise.all(
+      resultEvents.map(async (event) => {
+        const interaction = await this.getEventInteraction(event.id);
+        const participants = await this.getEventParticipants(event.id, 2);
+
+        let imageUrl: string | null = null;
+        if (event.imageUrl) {
+          imageUrl = resolveMediaUrl(event.imageUrl);
+        }
+
+        return {
+          id: event.id,
+          name: event.title,
+          description: event.description || undefined,
+          image: imageUrl || undefined,
+          startDate: event.startDate.toISOString(),
+          endDate: event.endDate.toISOString(),
+          eventType: event.eventType || 'SURVEY',
+          interaction,
+          participants: participants.map((p) => ({
+            userId: p.userId,
+            avatar: p.avatar,
+            userName: p.userName,
+          })),
+        };
+      })
+    );
+
+    const response = {
+      items,
+      pagination: {
+        cursor: nextCursor,
+        hasMore: !!nextCursor,
+        limit,
+      },
+    };
+
+    // Cache for 10 minutes
+    try {
+      await this.cacheService.set(cacheKey, response, 600);
+    } catch (error) {
+      // Cache error - continue without caching
+    }
+
+    return response;
+  }
 }

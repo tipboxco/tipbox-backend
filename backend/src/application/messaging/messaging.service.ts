@@ -558,63 +558,45 @@ export class MessagingService {
 
         const threadItems: MessageFeedItem[] = [];
         for (const message of supportMessages) {
-          const sender = message.sender;
-          if (!sender) continue;
+          // Support thread'de de image kontrolü yap
+        const messageWithMedia = message as typeof message & { mediaUrl?: string | null; mediaType?: string | null; thumbnailUrl?: string | null; caption?: string | null };
+        const hasMedia = !!messageWithMedia.mediaUrl;
+        const isImage = hasMedia && messageWithMedia.mediaType === 'image';
 
-          const senderName = sender.profile?.displayName
-            || sender.profile?.userName
-            || sender.email
-            || 'Unknown';
-
-          const senderUser: SenderUser = {
-            id: message.senderId,
-            senderName,
-            senderTitle: sender.titles?.[0]?.title ?? '',
-            senderAvatar: resolveMediaUrl(sender.avatars?.[0]?.imageUrl, true) || '',
+        if (isImage) {
+          // Image mesajı - sadece senderId gönder (participants'tan alınacak)
+          const messageData: Message = {
+            id: message.id,
+            senderId: message.senderId,
+            message: message.message || undefined,
+            timestamp: message.sentAt.toISOString(),
+            isUnread: !message.isRead,
+            mediaUrl: resolveMediaUrl(messageWithMedia.mediaUrl, false) || null,
+            thumbnailUrl: resolveMediaUrl(messageWithMedia.thumbnailUrl, false) || null,
+            caption: messageWithMedia.caption || message.message || null,
           };
 
-          // Support thread'de de image kontrolü yap
-          const messageWithMedia = message as typeof message & { mediaUrl?: string | null; mediaType?: string | null; thumbnailUrl?: string | null; caption?: string | null };
-          const hasMedia = !!messageWithMedia.mediaUrl;
-          const isImage = hasMedia && messageWithMedia.mediaType === 'image';
+          threadItems.push({
+            id: message.id,
+            type: 'image' as MessageType,
+            data: messageData,
+          });
+        } else {
+          // Normal mesaj - sadece senderId gönder (participants'tan alınacak)
+          const messageData: Message = {
+            id: message.id,
+            senderId: message.senderId,
+            message: message.message,
+            timestamp: message.sentAt.toISOString(),
+            isUnread: !message.isRead,
+          };
 
-          if (isImage) {
-            // Image mesajı
-            const messageData: Message = {
-              id: message.id,
-              senderId: message.senderId,
-              sender: senderUser, // Geriye dönük uyumluluk
-              message: message.message || undefined,
-              timestamp: message.sentAt.toISOString(),
-              isUnread: !message.isRead,
-              mediaUrl: resolveMediaUrl(messageWithMedia.mediaUrl, false) || null,
-              thumbnailUrl: resolveMediaUrl(messageWithMedia.thumbnailUrl, false) || null,
-              caption: messageWithMedia.caption || message.message || null,
-            };
-
-            threadItems.push({
-              id: message.id,
-              type: 'image' as MessageType,
-              data: messageData,
-            });
-          } else {
-            // Normal mesaj
-            const messageData: Message = {
-              id: message.id,
-              senderId: message.senderId,
-              sender: senderUser, // Geriye dönük uyumluluk
-              message: message.message,
-              lastMessage: message.message, // Geriye dönük uyumluluk
-              timestamp: message.sentAt.toISOString(),
-              isUnread: !message.isRead,
-            };
-
-            threadItems.push({
-              id: message.id,
-              type: 'message' as MessageType,
-              data: messageData,
-            });
-          }
+          threadItems.push({
+            id: message.id,
+            type: 'message' as MessageType,
+            data: messageData,
+          });
+        }
         }
 
         // Tüm item'ları timestamp'e göre DESC sırala (en yeni önce - WhatsApp tarzı)
@@ -624,9 +606,12 @@ export class MessagingService {
           return new Date(timestampB).getTime() - new Date(timestampA).getTime(); // DESC
         });
 
+        // Mesajları grupla (5 dakika içinde aynı sender'dan gelen mesajlar)
+        const groupedItems = this.groupMessagesByTime(threadItems, 5 * 60 * 1000); // 5 dakika = 300000 ms
+
         // hasMore kontrolü
-        const hasMore = threadItems.length > limit;
-        const items = hasMore ? threadItems.slice(0, limit) : threadItems;
+        const hasMore = groupedItems.length > limit;
+        const items = hasMore ? groupedItems.slice(0, limit) : groupedItems;
         const nextCursor = hasMore && items.length > 0 
           ? this.getTimestampFromFeedItem(items[items.length - 1])
           : undefined;
@@ -738,29 +723,16 @@ export class MessagingService {
         const isTipsMessage = message.message.includes('Sent') && message.message.includes('TIPS');
         if (isTipsMessage) continue;
 
-        const senderName = sender.profile?.displayName
-          || sender.profile?.userName
-          || sender.email
-          || 'Unknown';
-
-        const senderUser: SenderUser = {
-          id: message.senderId,
-          senderName,
-          senderTitle: sender.titles?.[0]?.title ?? '',
-          senderAvatar: resolveMediaUrl(sender.avatars?.[0]?.imageUrl, true) || '',
-        };
-
         // Eğer mesajda media varsa ve image ise, type: "image" olarak döndür
         const messageWithMedia = message as typeof message & { mediaUrl?: string | null; mediaType?: string | null; thumbnailUrl?: string | null; caption?: string | null };
         const hasMedia = !!messageWithMedia.mediaUrl;
         const isImage = hasMedia && messageWithMedia.mediaType === 'image';
 
         if (isImage) {
-          // Image mesajı
+          // Image mesajı - sadece senderId gönder (participants'tan alınacak)
           const messageData: Message = {
             id: message.id,
             senderId: message.senderId,
-            sender: senderUser, // Geriye dönük uyumluluk
             message: message.message || undefined, // Caption olarak kullanılabilir
             timestamp: message.sentAt.toISOString(),
             isUnread: !message.isRead,
@@ -775,13 +747,11 @@ export class MessagingService {
             data: messageData,
           });
         } else {
-          // Normal mesaj
+          // Normal mesaj - sadece senderId gönder (participants'tan alınacak)
           const messageData: Message = {
             id: message.id,
             senderId: message.senderId,
-            sender: senderUser, // Geriye dönük uyumluluk
             message: message.message,
-            lastMessage: message.message, // Geriye dönük uyumluluk
             timestamp: message.sentAt.toISOString(),
             isUnread: !message.isRead,
           };
@@ -794,27 +764,11 @@ export class MessagingService {
         }
       }
 
-      // TIPS transferlerini ekle
+      // TIPS transferlerini ekle - sadece senderId gönder (participants'tan alınacak)
       for (const transfer of tipsTransfers) {
-        const sender = transfer.fromUser;
-        if (!sender) continue;
-
-        const senderName = sender.profile?.displayName
-          || sender.profile?.userName
-          || sender.email
-          || 'Unknown';
-
-        const senderUser: SenderUser = {
-          id: transfer.fromUserId,
-          senderName,
-          senderTitle: sender.titles?.[0]?.title ?? '',
-          senderAvatar: resolveMediaUrl(sender.avatars?.[0]?.imageUrl, true) || '',
-        };
-
         const tipsInfo: TipsInfo = {
           id: transfer.id,
           senderId: transfer.fromUserId,
-          sender: senderUser, // Geriye dönük uyumluluk
           amount: typeof transfer.amount === 'number' ? transfer.amount : Number(transfer.amount),
           message: transfer.reason || undefined, // Opsiyonel
           timestamp: transfer.createdAt.toISOString(),
@@ -828,24 +782,9 @@ export class MessagingService {
         });
       }
 
-      // Support Request'leri ekle
+      // Support Request'leri ekle - sadece senderId gönder (participants'tan alınacak)
       for (const request of supportRequests) {
         if (!request.description) continue;
-
-        const senderUser = request.fromUser;
-        if (!senderUser) continue;
-
-        const senderName = senderUser.profile?.displayName
-          || senderUser.profile?.userName
-          || senderUser.email
-          || 'Unknown';
-
-        const sender: SenderUser = {
-          id: request.fromUserId,
-          senderName,
-          senderTitle: senderUser.titles?.[0]?.title ?? '',
-          senderAvatar: resolveMediaUrl(senderUser.avatars?.[0]?.imageUrl, true) || '',
-        };
 
         // Map DMRequestStatus to SupportRequestStatus
         let status: SupportRequestStatus;
@@ -884,7 +823,6 @@ export class MessagingService {
         const supportRequest: SupportRequest = {
           id: request.id,
           senderId: request.fromUserId,
-          sender, // Geriye dönük uyumluluk
           type: supportType,
           message: request.description,
           amount,
@@ -911,9 +849,12 @@ export class MessagingService {
         return new Date(timestampB).getTime() - new Date(timestampA).getTime(); // DESC
       });
 
-      // 6. Pagination uygula
-      const hasMore = threadItems.length > limit;
-      const items = hasMore ? threadItems.slice(0, limit) : threadItems;
+      // 6. Mesajları grupla (5 dakika içinde aynı sender'dan gelen mesajlar)
+      const groupedItems = this.groupMessagesByTime(threadItems, 5 * 60 * 1000); // 5 dakika = 300000 ms
+
+      // 7. Pagination uygula
+      const hasMore = groupedItems.length > limit;
+      const items = hasMore ? groupedItems.slice(0, limit) : groupedItems;
       const nextCursor = hasMore && items.length > 0 
         ? this.getTimestampFromFeedItem(items[items.length - 1])
         : undefined;
@@ -940,6 +881,85 @@ export class MessagingService {
       return (item.data as SupportRequest).timestamp;
     }
     return new Date().toISOString(); // Fallback
+  }
+
+  /**
+   * Mesajları zaman aralığına göre grupla (5 dakika içinde aynı sender'dan gelen mesajlar)
+   * @param items - Sıralanmış mesaj item'ları (en yeni önce)
+   * @param timeWindowMs - Gruplama zaman penceresi (milisaniye)
+   */
+  private groupMessagesByTime(items: MessageFeedItem[], timeWindowMs: number): MessageFeedItem[] {
+    const grouped: MessageFeedItem[] = [];
+    let currentGroup: MessageFeedItem | null = null;
+
+    for (const item of items) {
+      // Sadece 'message' tipindeki text mesajları grupla
+      // Görsel, tips, support-request gibi diğer tipler grouped olmayacak
+      if (item.type !== 'message') {
+        // Görsel, tips, support-request gibi diğer tipler olduğu gibi ekle
+        grouped.push(item);
+        currentGroup = null; // Grup'u sıfırla (farklı tip geldi)
+        continue;
+      }
+
+      const messageData = item.data as Message;
+      const messageTimestamp = new Date(messageData.timestamp).getTime();
+
+      if (!currentGroup) {
+        // Yeni grup başlat (sadece message tipi için)
+        currentGroup = { ...item };
+        (currentGroup.data as Message).groupedMessages = [];
+        grouped.push(currentGroup);
+      } else {
+        const currentGroupData = currentGroup.data as Message;
+        const currentGroupTimestamp = new Date(currentGroupData.timestamp).getTime();
+        const timeDiff = Math.abs(messageTimestamp - currentGroupTimestamp);
+
+        // Aynı sender ve 5 dakika içinde ise gruba ekle
+        if (
+          currentGroupData.senderId === messageData.senderId &&
+          timeDiff <= timeWindowMs
+        ) {
+          // Gruba ekle (en eski mesaj en üstte olacak şekilde - timestamp ASC)
+          currentGroupData.groupedMessages = currentGroupData.groupedMessages || [];
+          currentGroupData.groupedMessages.push({
+            id: messageData.id,
+            type: 'message',
+            message: messageData.message,
+            timestamp: messageData.timestamp,
+            isUnread: messageData.isUnread,
+          });
+          
+          // Grup'un timestamp'ini en yeni mesajın timestamp'i yap (daha büyük timestamp)
+          if (messageTimestamp > currentGroupTimestamp) {
+            currentGroupData.timestamp = messageData.timestamp;
+          }
+          // Grup'un isUnread durumunu güncelle (en az bir mesaj okunmamışsa true)
+          if (messageData.isUnread) {
+            currentGroupData.isUnread = true;
+          }
+        } else {
+          // Yeni grup başlat
+          currentGroup = { ...item };
+          (currentGroup.data as Message).groupedMessages = [];
+          grouped.push(currentGroup);
+        }
+      }
+    }
+
+    // Gruplanmış mesajları timestamp'e göre sırala (en eski önce - grup içinde)
+    for (const item of grouped) {
+      if (item.type === 'message') {
+        const messageData = item.data as Message;
+        if (messageData.groupedMessages && messageData.groupedMessages.length > 0) {
+          messageData.groupedMessages.sort((a, b) => {
+            return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(); // ASC (en eski önce)
+          });
+        }
+      }
+    }
+
+    return grouped;
   }
 
   /**
@@ -981,17 +1001,46 @@ export class MessagingService {
       const hasMore = threads.length > limit;
       const resultThreads = hasMore ? threads.slice(0, limit) : threads;
 
-      // Thread'lerde mesaj var ama lastMessage null olanları bul ve düzelt
-      const threadsNeedingLastMessage = resultThreads.filter(t => !t.messages?.[0]);
-      const lastMessagesMap = new Map<string, { message: string | null; sentAt: Date }>();
+      // Tüm thread'ler için en son mesajı kontrol et (silinmiş olabilir)
+      const threadIds = resultThreads.map(t => t.id);
+      const lastMessagesMap = new Map<string, { message: string | null; sentAt: Date; isDeleted?: boolean }>();
       
-      if (threadsNeedingLastMessage.length > 0) {
+      if (threadIds.length > 0) {
         // Her thread için en son mesajı toplu olarak çek
-        const threadIds = threadsNeedingLastMessage.map(t => t.id);
         
         // Her thread için en son mesajı bulmak için raw query veya her thread için ayrı query
         // Performans için: Tüm mesajları çekip group by yapmak yerine, her thread için ayrı query
         const lastMessagePromises = threadIds.map(async (threadId) => {
+          // Önce en son mesajı bul (silinmiş olsa bile)
+          const lastMsgAll = await this.prisma.dMMessage.findFirst({
+            where: {
+              threadId,
+              context: 'DM', // Sadece DM context'li mesajları al
+            } as any,
+            select: {
+              message: true,
+              sentAt: true,
+              mediaUrl: true,
+              mediaType: true,
+              caption: true,
+              isDeleted: true,
+            } as any,
+            orderBy: {
+              sentAt: 'desc',
+            },
+          });
+
+          // Eğer en son mesaj silinmişse, "Bu mesaj silindi" göster
+          if (lastMsgAll && lastMsgAll.isDeleted) {
+            lastMessagesMap.set(threadId, {
+              message: 'Bu mesaj silindi',
+              sentAt: lastMsgAll.sentAt,
+              isDeleted: true,
+            });
+            return;
+          }
+
+          // Silinmemiş en son mesajı bul
           const lastMsg = await this.prisma.dMMessage.findFirst({
             where: {
               threadId,
@@ -1046,8 +1095,50 @@ export class MessagingService {
         let lastMessage = thread.messages?.[0];
         let lastMessageText: string | null = null;
         
-        if (lastMessage) {
-          // Include'dan gelen mesaj var, ama message field'ı null olabilir (görsel mesajlar için)
+        // Önce fallback'ten kontrol et (en son mesaj silinmiş olabilir)
+        const fallbackMessage = lastMessagesMap.get(thread.id);
+        
+        // Eğer fallback'te silinmiş mesaj varsa ve timestamp'i daha yeni ise, onu göster
+        if (fallbackMessage && fallbackMessage.isDeleted) {
+          const fallbackTimestamp = fallbackMessage.sentAt instanceof Date 
+            ? fallbackMessage.sentAt.getTime() 
+            : new Date(fallbackMessage.sentAt).getTime();
+          
+          const includeTimestamp = lastMessage?.sentAt 
+            ? (lastMessage.sentAt instanceof Date 
+                ? lastMessage.sentAt.getTime() 
+                : new Date(lastMessage.sentAt).getTime())
+            : 0;
+          
+          // Fallback'teki silinmiş mesaj daha yeni ise, "Bu mesaj silindi" göster
+          if (fallbackTimestamp > includeTimestamp) {
+            lastMessageText = 'Bu mesaj silindi';
+            if (!lastMessage) {
+              lastMessage = {
+                sentAt: fallbackMessage.sentAt,
+              } as any;
+            }
+          } else if (lastMessage) {
+            // Include'dan gelen mesaj var (silinmemiş), onu kullan
+            if (lastMessage.message) {
+              lastMessageText = lastMessage.message;
+            } else if ((lastMessage as any).mediaUrl) {
+              // Görsel mesaj için caption veya default text
+              const mediaType = (lastMessage as any).mediaType;
+              const caption = (lastMessage as any).caption;
+              if (mediaType === 'image') {
+                lastMessageText = caption || '📷 Görsel';
+              } else if (mediaType === 'video') {
+                lastMessageText = caption || '🎥 Video';
+              } else if (mediaType === 'audio') {
+                lastMessageText = caption || '🎵 Ses';
+              } else {
+                lastMessageText = caption || '📎 Dosya';
+              }
+            }
+          }
+        } else if (lastMessage) {
+          // Include'dan gelen mesaj var (silinmemiş), onu kullan
           if (lastMessage.message) {
             lastMessageText = lastMessage.message;
           } else if ((lastMessage as any).mediaUrl) {
@@ -1064,18 +1155,13 @@ export class MessagingService {
               lastMessageText = caption || '📎 Dosya';
             }
           }
-        }
-        
-        // Include'dan mesaj gelmediyse veya message null ise, fallback'ten al
-        if (!lastMessageText) {
-          const fallbackMessage = lastMessagesMap.get(thread.id);
-          if (fallbackMessage) {
-            lastMessageText = fallbackMessage.message;
-            if (!lastMessage) {
-              lastMessage = {
-                sentAt: fallbackMessage.sentAt,
-              } as any;
-            }
+        } else if (fallbackMessage) {
+          // Include'dan mesaj gelmediyse, fallback'ten al
+          lastMessageText = fallbackMessage.message;
+          if (!lastMessage) {
+            lastMessage = {
+              sentAt: fallbackMessage.sentAt,
+            } as any;
           }
         }
         

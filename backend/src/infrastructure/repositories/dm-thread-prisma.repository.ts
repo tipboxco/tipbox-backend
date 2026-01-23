@@ -17,6 +17,7 @@ const THREAD_INCLUDE = {
       mediaUrl: true,
       mediaType: true,
       caption: true,
+      isDeleted: true, // Silinme durumunu da al (kontrol için)
     },
   },
   userOne: {
