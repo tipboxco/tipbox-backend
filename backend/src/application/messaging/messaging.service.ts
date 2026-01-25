@@ -283,7 +283,18 @@ export class MessagingService {
     // Thread oluştur veya mevcut thread'i al
     const thread = await this.createThreadIfNotExists(senderId, recipientId);
 
-    // Mesaj oluştur (tips mesajı için DM mesajı oluşturuluyor)
+    // TipsTokenTransfer kaydı oluştur (thread mesajlarında görünmesi için)
+    const transferCreatedAt = transaction.createdAt || new Date();
+    await this.prisma.tipsTokenTransfer.create({
+      data: {
+        fromUserId: senderId,
+        toUserId: recipientId,
+        amount: amount,
+        reason: tipsMessage || null,
+      },
+    });
+
+    // Mesaj oluştur (tips mesajı için DM mesajı oluşturuluyor - duplicate önlemek için filtrelenecek)
     await this.prisma.dMMessage.create({
       data: {
         threadId: thread.id,
@@ -291,7 +302,7 @@ export class MessagingService {
         message: body,
         isRead: false,
         context: "DM",
-        sentAt: new Date(),
+        sentAt: transaction.createdAt, // Transaction timestamp kullan
       },
     });
 

@@ -449,7 +449,7 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
     // Minimal response structure (title, message, readAt, updatedAt kaldırıldı)
     const enriched: {
       id: string;
-      userId: string;
+      userId?: string;
       type: NotificationType;
       avatar?: string | null;
       username?: string | null;
@@ -465,7 +465,7 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       createdAt: string;
     } = {
       id: notification.id,
-      userId: notification.userId,
+      userId: (notification.type === NotificationType.NEW_BADGE || notification.type === NotificationType.EVENT_STARTED) ? undefined as any : notification.userId,
       type: notification.type,
       avatar: undefined,
       username: undefined,
@@ -650,8 +650,11 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       }
       
       if (type === NotificationType.DM_REQUEST_ACCEPTED) {
-        // Sadece threadId (userId root'ta zaten var)
+        // threadId ve participants bilgileri (thread açıldığında userOne userTwo için)
         if (data.threadId) enriched.data.threadId = data.threadId;
+        if (data.participants) {
+          enriched.data.participants = data.participants;
+        }
         // Post ile ilgili alanları temizle
         delete enriched.data.postId;
         delete enriched.data.postContent;
@@ -719,13 +722,16 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       type === NotificationType.ACHIEVEMENT_UNLOCKED ||
       type === NotificationType.REWARD_EARNED
     ) {
-      // Avatar null (gamification bildirimlerinde kullanıcı avatar'ı yok)
-      enriched.avatar = null;
+      // Avatar undefined (gamification bildirimlerinde kullanıcı avatar'ı yok - badge kazanan kullanıcıya gidiyor)
+      enriched.avatar = undefined;
+      // userId ve username kullanılmıyor (NEW_BADGE için gereksiz - badge kazanan kullanıcıya gidiyor)
+      if (enriched.userId) delete enriched.userId;
+      if (enriched.username) delete enriched.username;
       
       if (!enriched.data) enriched.data = {};
       
       if (type === NotificationType.NEW_BADGE) {
-        // NEW_BADGE için: badge görseli ve badge adı
+        // NEW_BADGE için: sadece badge görseli ve badge adı
         if (data.badgeId) enriched.data.badgeId = data.badgeId;
         
         // badgeName ekle
@@ -743,6 +749,41 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
           badgeImageUrl = randomImageCache;
         }
         if (badgeImageUrl) enriched.data.imageUrl = badgeImageUrl;
+        
+        // NEW_BADGE için tüm user ve gereksiz alanları temizle (sadece badgeId, badgeName, imageUrl kalacak)
+        delete enriched.data.avatar;
+        delete enriched.data.userId;
+        delete enriched.data.username;
+        delete enriched.data.postId;
+        delete enriched.data.postContent;
+        delete enriched.data.postType;
+        delete enriched.data.description;
+        delete enriched.data.commentId;
+        delete enriched.data.badgeIcon;
+        delete enriched.data.senderId;
+        delete enriched.data.senderUserId;
+        delete enriched.data.recipientId;
+        delete enriched.data.recipientUserId;
+        delete enriched.data.likerId;
+        delete enriched.data.commenterId;
+        delete enriched.data.replierId;
+        delete enriched.data.sharerId;
+        delete enriched.data.trusterId;
+        delete enriched.data.trustedId;
+        delete enriched.data.expertId;
+        delete enriched.data.requesterId;
+        delete enriched.data.accepterId;
+        delete enriched.data.userName;
+        delete enriched.data.amount;
+        delete enriched.data.transactionId;
+        delete enriched.data.reason;
+        delete enriched.data.threadId;
+        delete enriched.data.requestId;
+        delete enriched.data.eventId;
+        delete enriched.data.eventName;
+        delete enriched.data.productId;
+        delete enriched.data.collectionId;
+        // Sadece badgeId, badgeName, imageUrl kalacak
       } else if (type === NotificationType.ACHIEVEMENT_UNLOCKED) {
         // ACHIEVEMENT_UNLOCKED için badgeId ve imageUrl (achievementId kaldırıldı)
         if (data.badgeId) enriched.data.badgeId = data.badgeId;
@@ -867,14 +908,17 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       }
     }
 
-    // Event ile ilgili (3) - avatar null
+    // Event ile ilgili (3) - avatar undefined (user bilgileri yok)
     if (
       type === NotificationType.EVENT_STARTED ||
       type === NotificationType.EVENT_ENDING_SOON ||
       type === NotificationType.EVENT_REWARD_AVAILABLE
     ) {
-      // Avatar null (event bildirimlerinde kullanıcı avatar'ı yok)
-      enriched.avatar = null;
+      // Avatar undefined (event bildirimlerinde kullanıcı avatar'ı yok - event kazanan kullanıcıya gidiyor)
+      enriched.avatar = undefined;
+      // userId ve username kullanılmıyor (EVENT_STARTED için gereksiz - event kazanan kullanıcıya gidiyor)
+      if (enriched.userId) delete enriched.userId;
+      if (enriched.username) delete enriched.username;
       
       let eventImageUrl = null;
       if (data.eventId && eventImages.has(data.eventId)) {
@@ -883,30 +927,85 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
         eventImageUrl = randomImageCache;
       }
       
-      // Event bildirimleri için: event görseli, event adı ve event type
-      if (!enriched.data) enriched.data = {};
-      enriched.data.eventId = data.eventId;
-      
-      // eventName ekle
-      if (data.eventId && eventNames.has(data.eventId)) {
-        enriched.data.eventName = eventNames.get(data.eventId);
-      } else if (data.eventName) {
-        enriched.data.eventName = data.eventName;
+      // EVENT_STARTED için: sadece eventId, eventName ve imageUrl
+      if (type === NotificationType.EVENT_STARTED) {
+        if (!enriched.data) enriched.data = {};
+        enriched.data.eventId = data.eventId;
+        
+        // eventName ekle
+        if (data.eventId && eventNames.has(data.eventId)) {
+          enriched.data.eventName = eventNames.get(data.eventId);
+        } else if (data.eventName) {
+          enriched.data.eventName = data.eventName;
+        }
+        
+        // event görseli ekle
+        if (eventImageUrl) enriched.data.imageUrl = eventImageUrl;
+        
+        // EVENT_STARTED için tüm user ve gereksiz alanları temizle (sadece eventId, eventName, imageUrl kalacak)
+        delete enriched.data.eventType;
+        delete enriched.data.avatar;
+        delete enriched.data.userId;
+        delete enriched.data.username;
+        delete enriched.data.userName;
+        delete enriched.data.postId;
+        delete enriched.data.postContent;
+        delete enriched.data.postType;
+        delete enriched.data.description;
+        delete enriched.data.commentId;
+        delete enriched.data.senderId;
+        delete enriched.data.senderUserId;
+        delete enriched.data.recipientId;
+        delete enriched.data.recipientUserId;
+        delete enriched.data.likerId;
+        delete enriched.data.commenterId;
+        delete enriched.data.replierId;
+        delete enriched.data.sharerId;
+        delete enriched.data.trusterId;
+        delete enriched.data.trustedId;
+        delete enriched.data.expertId;
+        delete enriched.data.requesterId;
+        delete enriched.data.accepterId;
+        delete enriched.data.amount;
+        delete enriched.data.transactionId;
+        delete enriched.data.reason;
+        delete enriched.data.threadId;
+        delete enriched.data.requestId;
+        delete enriched.data.productId;
+        delete enriched.data.collectionId;
+        delete enriched.data.badgeId;
+        delete enriched.data.badgeName;
+        delete enriched.data.hoursRemaining;
+        delete enriched.data.rewardAmount;
+        // Sadece eventId, eventName, imageUrl kalacak
+      } else {
+        // EVENT_ENDING_SOON ve EVENT_REWARD_AVAILABLE için mevcut mantık
+        if (!enriched.data) enriched.data = {};
+        enriched.data.eventId = data.eventId;
+        
+        // eventName ekle
+        if (data.eventId && eventNames.has(data.eventId)) {
+          enriched.data.eventName = eventNames.get(data.eventId);
+        } else if (data.eventName) {
+          enriched.data.eventName = data.eventName;
+        }
+        
+        // eventType ekle
+        if (data.eventId && eventTypes.has(data.eventId)) {
+          enriched.data.eventType = eventTypes.get(data.eventId);
+        } else if (data.eventType) {
+          enriched.data.eventType = data.eventType;
+        }
+        
+        // event görseli ekle
+        if (eventImageUrl) enriched.data.imageUrl = eventImageUrl;
+        
+        // EVENT_ENDING_SOON ve EVENT_REWARD_AVAILABLE için gereksiz alanları temizle
+        if (type === NotificationType.EVENT_ENDING_SOON || type === NotificationType.EVENT_REWARD_AVAILABLE) {
+          delete enriched.data.hoursRemaining;
+          delete enriched.data.rewardAmount;
+        }
       }
-      
-      // eventType ekle
-      if (data.eventId && eventTypes.has(data.eventId)) {
-        enriched.data.eventType = eventTypes.get(data.eventId);
-      } else if (data.eventType) {
-        enriched.data.eventType = data.eventType;
-      }
-      
-      // event görseli ekle
-      if (eventImageUrl) enriched.data.imageUrl = eventImageUrl;
-      
-      // Gereksiz alanları temizle
-      delete enriched.data.hoursRemaining;
-      delete enriched.data.rewardAmount;
     }
 
     // Collection ile ilgili (2) - avatar null
@@ -924,8 +1023,14 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
     }
 
     // undefined değerleri null yap (response'da görünsün ama null olsun)
-    // Avatar için: null yerine random avatar veya default avatar kullan
-    if (enriched.avatar === undefined) {
+    // Avatar için: null yerine random avatar veya default avatar kullan (NEW_BADGE, EVENT_STARTED, ACHIEVEMENT_UNLOCKED, REWARD_EARNED hariç)
+    if (
+      enriched.avatar === undefined &&
+      type !== NotificationType.NEW_BADGE &&
+      type !== NotificationType.EVENT_STARTED &&
+      type !== NotificationType.ACHIEVEMENT_UNLOCKED &&
+      type !== NotificationType.REWARD_EARNED
+    ) {
       enriched.avatar = randomImageCache || null;
     }
     // imageUrl artık sadece data içinde, root seviyede yok
@@ -999,22 +1104,93 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
         delete enriched.data.avatar; // Collection bildirimlerinde avatar yok
       }
       
-      // Event bildirimlerinde avatar kaldır
-      if (
-        type === NotificationType.EVENT_STARTED ||
+      // EVENT_STARTED için tüm user ve gereksiz alanları kaldır (sadece eventId, eventName, imageUrl kalacak)
+      if (type === NotificationType.EVENT_STARTED) {
+        delete enriched.data.avatar;
+        delete enriched.data.userId;
+        delete enriched.data.username;
+        delete enriched.data.userName;
+        delete enriched.data.postId;
+        delete enriched.data.postContent;
+        delete enriched.data.postType;
+        delete enriched.data.description;
+        delete enriched.data.commentId;
+        delete enriched.data.senderId;
+        delete enriched.data.senderUserId;
+        delete enriched.data.recipientId;
+        delete enriched.data.recipientUserId;
+        delete enriched.data.likerId;
+        delete enriched.data.commenterId;
+        delete enriched.data.replierId;
+        delete enriched.data.sharerId;
+        delete enriched.data.trusterId;
+        delete enriched.data.trustedId;
+        delete enriched.data.expertId;
+        delete enriched.data.requesterId;
+        delete enriched.data.accepterId;
+        delete enriched.data.amount;
+        delete enriched.data.transactionId;
+        delete enriched.data.reason;
+        delete enriched.data.threadId;
+        delete enriched.data.requestId;
+        delete enriched.data.productId;
+        delete enriched.data.collectionId;
+        delete enriched.data.badgeId;
+        delete enriched.data.badgeName;
+        delete enriched.data.eventType;
+        delete enriched.data.hoursRemaining;
+        delete enriched.data.rewardAmount;
+        // Sadece eventId, eventName, imageUrl kalacak
+      } else if (
         type === NotificationType.EVENT_ENDING_SOON ||
         type === NotificationType.EVENT_REWARD_AVAILABLE
       ) {
-        delete enriched.data.avatar; // Event bildirimlerinde avatar yok
+        delete enriched.data.avatar; // Diğer event bildirimlerinde avatar yok
       }
       
-      // Badge/Gamification bildirimlerinde avatar kaldır
+      // Badge/Gamification bildirimlerinde avatar ve gereksiz alanları kaldır
       if (
         type === NotificationType.NEW_BADGE ||
         type === NotificationType.ACHIEVEMENT_UNLOCKED ||
         type === NotificationType.REWARD_EARNED
       ) {
         delete enriched.data.avatar; // Badge bildirimlerinde avatar yok
+        // NEW_BADGE için tüm gereksiz alanları temizle (sadece badgeId, badgeName, imageUrl kalacak)
+        if (type === NotificationType.NEW_BADGE) {
+          // Tüm user ve gereksiz alanları kaldır
+          delete enriched.data.userId;
+          delete enriched.data.username;
+          delete enriched.data.userName;
+          delete enriched.data.postId;
+          delete enriched.data.postContent;
+          delete enriched.data.postType;
+          delete enriched.data.description;
+          delete enriched.data.commentId;
+          delete enriched.data.badgeIcon;
+          delete enriched.data.senderId;
+          delete enriched.data.senderUserId;
+          delete enriched.data.recipientId;
+          delete enriched.data.recipientUserId;
+          delete enriched.data.likerId;
+          delete enriched.data.commenterId;
+          delete enriched.data.replierId;
+          delete enriched.data.sharerId;
+          delete enriched.data.trusterId;
+          delete enriched.data.trustedId;
+          delete enriched.data.expertId;
+          delete enriched.data.requesterId;
+          delete enriched.data.accepterId;
+          delete enriched.data.amount;
+          delete enriched.data.transactionId;
+          delete enriched.data.reason;
+          delete enriched.data.threadId;
+          delete enriched.data.requestId;
+          delete enriched.data.eventId;
+          delete enriched.data.eventName;
+          delete enriched.data.productId;
+          delete enriched.data.collectionId;
+          // Sadece badgeId, badgeName, imageUrl kalacak
+        }
       }
       
       // Expert için imageUrl kaldır
@@ -1223,6 +1399,59 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
         notif.imageUrl = notif.data.imageUrl; // Root seviyede de ekle
       }
 
+      // EVENT_STARTED için tüm user ve gereksiz alanları kaldır (sadece eventId, eventName, imageUrl kalacak)
+      if (notif.type === 'EVENT_STARTED') {
+        // Root seviyedeki tüm user ve post ile ilgili alanları kaldır
+        delete notif.userId;
+        delete notif.username;
+        delete notif.avatar;
+        delete notif.postId;
+        delete notif.postContent;
+        delete notif.postType;
+        delete notif.description;
+        delete notif.commentId;
+        
+        // data içinde sadece eventId, eventName, imageUrl kalacak
+        if (notif.data) {
+          // Tüm user ve gereksiz alanları kaldır
+          delete notif.data.avatar;
+          delete notif.data.userId;
+          delete notif.data.username;
+          delete notif.data.userName;
+          delete notif.data.postId;
+          delete notif.data.postContent;
+          delete notif.data.postType;
+          delete notif.data.description;
+          delete notif.data.commentId;
+          delete notif.data.senderId;
+          delete notif.data.senderUserId;
+          delete notif.data.recipientId;
+          delete notif.data.recipientUserId;
+          delete notif.data.likerId;
+          delete notif.data.commenterId;
+          delete notif.data.replierId;
+          delete notif.data.sharerId;
+          delete notif.data.trusterId;
+          delete notif.data.trustedId;
+          delete notif.data.expertId;
+          delete notif.data.requesterId;
+          delete notif.data.accepterId;
+          delete notif.data.amount;
+          delete notif.data.transactionId;
+          delete notif.data.reason;
+          delete notif.data.threadId;
+          delete notif.data.requestId;
+          delete notif.data.productId;
+          delete notif.data.collectionId;
+          delete notif.data.badgeId;
+          delete notif.data.badgeName;
+          delete notif.data.eventType;
+          delete notif.data.hoursRemaining;
+          delete notif.data.rewardAmount;
+          // Sadece eventId, eventName, imageUrl kalacak
+        }
+      }
+
       // Mesajlaşma bildirimleri için post ile ilgili alanları kaldır (undefined değerleri temizle)
       if (
         notif.type === 'DM_REQUEST_RECEIVED' ||
@@ -1249,6 +1478,47 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
         if (notif.imageUrl === undefined) delete notif.imageUrl;
         if (notif.commentId === undefined) delete notif.commentId;
         if (notif.data === undefined) delete notif.data;
+      }
+
+      // NEW_BADGE için tüm user ve gereksiz alanları kaldır (sadece badge görseli ve badge adı kalacak)
+      if (notif.type === 'NEW_BADGE') {
+        // Root seviyedeki tüm user ve post ile ilgili alanları kaldır
+        delete notif.userId;
+        delete notif.username;
+        delete notif.avatar;
+        delete notif.postId;
+        delete notif.postContent;
+        delete notif.postType;
+        delete notif.description;
+        delete notif.commentId;
+        
+        // data içinde sadece badgeId, badgeName, imageUrl kalacak
+        if (notif.data) {
+          // Tüm user ve gereksiz alanları kaldır
+          delete notif.data.avatar;
+          delete notif.data.userId;
+          delete notif.data.username;
+          delete notif.data.postId;
+          delete notif.data.postContent;
+          delete notif.data.postType;
+          delete notif.data.description;
+          delete notif.data.commentId;
+          delete notif.data.badgeIcon;
+          delete notif.data.senderId;
+          delete notif.data.senderUserId;
+          delete notif.data.recipientId;
+          delete notif.data.recipientUserId;
+          delete notif.data.likerId;
+          delete notif.data.commenterId;
+          delete notif.data.replierId;
+          delete notif.data.sharerId;
+          delete notif.data.trusterId;
+          delete notif.data.trustedId;
+          delete notif.data.expertId;
+          delete notif.data.requesterId;
+          delete notif.data.accepterId;
+          // Sadece badge ile ilgili alanlar kalacak: badgeId, badgeName, imageUrl
+        }
       }
 
       // undefined değerleri kaldır (genel temizlik)

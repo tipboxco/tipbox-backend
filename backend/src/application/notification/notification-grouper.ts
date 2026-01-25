@@ -120,20 +120,52 @@ export function groupNotifications(
       data: notif.data,
     };
 
-    // EVENT_STARTED için sadece eventName, eventId ve imageUrl (root seviyede imageUrl olabilir)
+    // EVENT_STARTED için sadece eventId, eventName ve imageUrl (user bilgileri yok - event kazanan kullanıcıya gidiyor)
     if (notifType === NotificationType.EVENT_STARTED) {
       return {
-        ...baseNotification,
+        id: notif.id,
+        type: notifType,
+        title: notif.title,
+        message: notif.message,
         data: {
           eventId: notif.data?.eventId,
           eventName: notif.data?.eventName,
           imageUrl: notif.data?.imageUrl || null,
         },
         imageUrl: notif.data?.imageUrl || null, // Root seviyede de olabilir
-        // Gereksiz alanları kaldır
+        createdAt: new Date(notif.createdAt),
+        read: notif.read || false,
+        // Tüm user ve post ile ilgili alanları kaldır (event zaten kazanan kullanıcıya gidiyor)
         userId: undefined,
         username: undefined,
-        avatar: null,
+        avatar: undefined,
+        postId: undefined,
+        commentId: undefined,
+        postContent: undefined,
+        postType: undefined,
+        description: undefined,
+      };
+    }
+
+    // NEW_BADGE için sadece badgeId, badgeName ve imageUrl (user bilgileri yok - badge kazanan kullanıcıya gidiyor)
+    if (notifType === NotificationType.NEW_BADGE) {
+      return {
+        id: notif.id,
+        type: notifType,
+        title: notif.title,
+        message: notif.message,
+        data: {
+          badgeId: notif.data?.badgeId,
+          badgeName: notif.data?.badgeName,
+          imageUrl: notif.data?.imageUrl || null,
+        },
+        imageUrl: notif.data?.imageUrl || null, // Root seviyede de olabilir
+        createdAt: new Date(notif.createdAt),
+        read: notif.read || false,
+        // Tüm user ve post ile ilgili alanları kaldır (badge zaten kazanan kullanıcıya gidiyor)
+        userId: undefined,
+        username: undefined,
+        avatar: undefined,
         postId: undefined,
         commentId: undefined,
         postContent: undefined,

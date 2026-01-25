@@ -1200,14 +1200,14 @@ router.post(
  *   post:
  *     summary: Support request'i kapat ve rating ver
  *     description: |
- *       Support request'i kapatır ve rating verir. Her iki kullanıcı da close yaptığında request COMPLETED olur.
- *       İlk close yapan kullanıcı için status AWAITING_COMPLETION olur, ikinci kullanıcı close yaptığında COMPLETED olur.
+ *       Support request'i kapatır ve rating verir. İlk kullanıcı close yaptığında status AWAITING_COMPLETION olur.
+ *       Karşı taraf finalize endpoint'i ile onaylayacak ve request COMPLETED olacak.
  *       
  *       **İşlem Adımları:**
- *       1. Support request status'ü AWAITING_COMPLETION veya COMPLETED olarak güncellenir
+ *       1. Support request status'ü AWAITING_COMPLETION olarak güncellenir
  *       2. Rating kaydedilir (fromUserRating veya toUserRating)
- *       3. Socket event: support_request_closed gönderilir
- *       4. Thread mesajlaşması devam edebilir (sadece status değişir)
+ *       3. Socket event: support_request_closed gönderilir (needsFinalize: true)
+ *       4. Karşı taraf finalize endpoint'i ile onaylayacak
  *     tags: [Inbox]
  *     security:
  *       - bearerAuth: []
@@ -1239,7 +1239,7 @@ router.post(
  *                 example: "Çok yardımcı oldu"
  *     responses:
  *       200:
- *         description: Support request başarıyla kapatıldı
+ *         description: Support request başarıyla kapatıldı (AWAITING_COMPLETION durumunda)
  *       400:
  *         description: Geçersiz rating veya sadece accepted request'ler close edilebilir
  *       401:
@@ -1275,7 +1275,10 @@ router.post(
 
     try {
       await supportRequestService.closeSupportRequest(requestId, String(userId), rating);
-      return res.status(200).end();
+      return res.status(200).json({ 
+        status: 'awaiting_completion',
+        message: 'Support request closed. Waiting for other user to finalize.' 
+      });
     } catch (error: unknown) {
       if (hasErrorMessage(error, 'Support request not found')) {
         return res.status(404).json({ message: getErrorMessage(error) });
@@ -1284,6 +1287,112 @@ router.post(
         return res.status(403).json({ message: getErrorMessage(error) });
       }
       if (errorMessageIncludes(error, 'Only accepted support requests can be closed')) {
+        return res.status(400).json({ message: getErrorMessage(error) });
+      }
+      if (errorMessageIncludes(error, 'already closed')) {
+        return res.status(400).json({ message: getErrorMessage(error) });
+      }
+      throw error;
+    }
+  }),
+);
+
+/**
+ * @openapi
+ * /inbox/support-requests/{requestId}/finalize:
+ *   post:
+ *     summary: Support request'i finalize et (karşı tarafın close'unu onayla)
+ *     description: |
+ *       AWAITING_COMPLETION durumundaki support request'i finalize eder ve COMPLETED yapar.
+ *       Karşı taraf close yaptıktan sonra, bu endpoint ile onaylanır ve sohbet sonlanır.
+ *       
+ *       **İşlem Adımları:**
+ *       1. Support request status'ü COMPLETED olarak güncellenir
+ *       2. Rating kaydedilir (fromUserRating veya toUserRating)
+ *       3. Socket event: support_request_finalized gönderilir
+ *       4. Thread mesajlaşması sonlanır (status: COMPLETED)
+ *     tags: [Inbox]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: requestId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Finalize edilecek support request ID'si
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [rating]
+ *             properties:
+ *               rating:
+ *                 type: number
+ *                 minimum: 1
+ *                 maximum: 5
+ *                 description: 1-5 arası rating
+ *                 example: 5
+ *               comment:
+ *                 type: string
+ *                 description: Opsiyonel yorum
+ *                 example: "Mükemmel destek"
+ *     responses:
+ *       200:
+ *         description: Support request başarıyla finalize edildi (COMPLETED durumunda)
+ *       400:
+ *         description: Geçersiz rating, sadece awaiting_completion request'ler finalize edilebilir, veya karşı taraf henüz close yapmadı
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: User is not part of this support request
+ *       404:
+ *         description: Support request not found
+ */
+router.post(
+  '/support-requests/:requestId/finalize',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { requestId } = req.params;
+    if (!requestId) {
+      return res.status(400).json({ message: 'requestId is required' });
+    }
+
+    const { rating, comment } = req.body;
+
+    if (!rating || typeof rating !== 'number') {
+      return res.status(400).json({ message: 'rating is required and must be a number' });
+    }
+
+    if (rating < 1 || rating > 5) {
+      return res.status(400).json({ message: 'rating must be between 1 and 5' });
+    }
+
+    try {
+      await supportRequestService.finalizeSupportRequest(requestId, String(userId), rating);
+      return res.status(200).json({ 
+        status: 'completed',
+        message: 'Support request finalized. Chat completed.' 
+      });
+    } catch (error: unknown) {
+      if (hasErrorMessage(error, 'Support request not found')) {
+        return res.status(404).json({ message: getErrorMessage(error) });
+      }
+      if (errorMessageIncludes(error, 'not part of this support request')) {
+        return res.status(403).json({ message: getErrorMessage(error) });
+      }
+      if (errorMessageIncludes(error, 'Only awaiting_completion support requests can be finalized')) {
+        return res.status(400).json({ message: getErrorMessage(error) });
+      }
+      if (errorMessageIncludes(error, 'Other user has not closed the request yet')) {
         return res.status(400).json({ message: getErrorMessage(error) });
       }
       if (errorMessageIncludes(error, 'already closed')) {
@@ -1812,9 +1921,21 @@ router.get(
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
-    const { threadId } = req.params;
+    let { threadId } = req.params;
     if (!threadId) {
       return res.status(400).json({ message: 'threadId is required' });
+    }
+
+    // URL encoding sorunlarını düzelt (tırnak işaretleri, boşluklar vb.)
+    threadId = threadId.trim().replace(/^["']|["']$/g, ''); // Başta ve sonda tırnak işaretlerini temizle
+    
+    // UUID format kontrolü
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(threadId)) {
+      return res.status(400).json({ 
+        message: 'Invalid threadId format',
+        details: `threadId must be a valid UUID format, received: ${threadId}` 
+      });
     }
 
     let limit: number | undefined;
