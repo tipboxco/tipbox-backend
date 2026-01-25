@@ -139,6 +139,10 @@ model UserSettings {
   rewardNotifications      Boolean         @default(true) @map("reward_notifications")
   transactionNotifications Boolean         @default(true) @map("transaction_notifications")
   walletNotifications      Boolean         @default(true) @map("wallet_notifications")
+  gamificationNotifications Boolean         @default(true) @map("gamification_notifications")
+  expertNotifications      Boolean         @default(true) @map("expert_notifications")
+  eventNotifications       Boolean         @default(true) @map("event_notifications")
+  systemNotifications      Boolean         @default(true) @map("system_notifications")
   theme                    UserTheme?      @relation(fields: [themeId], references: [id])
   user                     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 

@@ -3495,44 +3495,107 @@ export class UserService {
 
   /**
    * Get Notification Settings - Kullanıcının bildirim ayarlarını getirir
+   * Hem kanal ayarlarını (EMAIL, PUSH, IN_APP) hem de kategori ayarlarını döndürür
    */
-  async getNotificationSettings(userId: string): Promise<
-    Array<{
+  async getNotificationSettings(userId: string): Promise<{
+    channels: Array<{
       notificationCode: NotificationCode;
       value: boolean;
-    }>
-  > {
+    }>;
+    categories: {
+      trustNotifications: boolean;
+      supportNotifications: boolean;
+      messageNotifications: boolean;
+      collectionNotifications: boolean;
+      postNotifications: boolean;
+      nftNotifications: boolean;
+      rewardNotifications: boolean;
+      transactionNotifications: boolean;
+      walletNotifications: boolean;
+      gamificationNotifications: boolean;
+      expertNotifications: boolean;
+      eventNotifications: boolean;
+      systemNotifications: boolean;
+    };
+    global: {
+      receiveNotifications: boolean | null;
+    };
+  }> {
     let settings = await this.settingsRepo.findByUserId(userId);
     if (!settings) {
       // Default settings oluştur
       settings = await this.settingsRepo.create(userId);
     }
 
-    return [
-      {
-        notificationCode: NotificationCode.EMAIL,
-        value: settings.getNotificationValue(NotificationCode.EMAIL),
+    return {
+      channels: [
+        {
+          notificationCode: NotificationCode.EMAIL,
+          value: settings.getNotificationValue(NotificationCode.EMAIL),
+        },
+        {
+          notificationCode: NotificationCode.PUSH,
+          value: settings.getNotificationValue(NotificationCode.PUSH),
+        },
+        {
+          notificationCode: NotificationCode.IN_APP,
+          value: settings.getNotificationValue(NotificationCode.IN_APP),
+        },
+      ],
+      categories: {
+        trustNotifications: settings.trustNotifications,
+        supportNotifications: settings.supportNotifications,
+        messageNotifications: settings.messageNotifications,
+        collectionNotifications: settings.collectionNotifications,
+        postNotifications: settings.postNotifications,
+        nftNotifications: settings.nftNotifications,
+        rewardNotifications: settings.rewardNotifications,
+        transactionNotifications: settings.transactionNotifications,
+        walletNotifications: settings.walletNotifications,
+        gamificationNotifications: settings.gamificationNotifications,
+        expertNotifications: settings.expertNotifications,
+        eventNotifications: settings.eventNotifications,
+        systemNotifications: settings.systemNotifications,
       },
-      {
-        notificationCode: NotificationCode.PUSH,
-        value: settings.getNotificationValue(NotificationCode.PUSH),
+      global: {
+        receiveNotifications: settings.receiveNotifications,
       },
-      {
-        notificationCode: NotificationCode.IN_APP,
-        value: settings.getNotificationValue(NotificationCode.IN_APP),
-      },
-    ];
+    };
   }
 
   /**
    * Update Notification Settings - Kullanıcının bildirim ayarlarını günceller
+   * Hem kanal ayarlarını (EMAIL, PUSH, IN_APP) hem de kategori ayarlarını güncelleyebilir
    */
   async updateNotificationSettings(
     userId: string,
     settings: Array<{
-      notificationCode: NotificationCode;
-      value: boolean;
-    }>
+      notificationCode?: NotificationCode;
+      value?: boolean;
+    }> | {
+      channels?: Array<{
+        notificationCode: NotificationCode;
+        value: boolean;
+      }>;
+      categories?: {
+        trustNotifications?: boolean;
+        supportNotifications?: boolean;
+        messageNotifications?: boolean;
+        collectionNotifications?: boolean;
+        postNotifications?: boolean;
+        nftNotifications?: boolean;
+        rewardNotifications?: boolean;
+        transactionNotifications?: boolean;
+        walletNotifications?: boolean;
+        gamificationNotifications?: boolean;
+        expertNotifications?: boolean;
+        eventNotifications?: boolean;
+        systemNotifications?: boolean;
+      };
+      global?: {
+        receiveNotifications?: boolean | null;
+      };
+    }
   ): Promise<{ success: boolean; message: string }> {
     try {
       let userSettings = await this.settingsRepo.findByUserId(userId);
@@ -3544,19 +3607,103 @@ export class UserService {
         notificationEmailEnabled?: boolean;
         notificationPushEnabled?: boolean;
         notificationInAppEnabled?: boolean;
+        trustNotifications?: boolean;
+        supportNotifications?: boolean;
+        messageNotifications?: boolean;
+        collectionNotifications?: boolean;
+        postNotifications?: boolean;
+        nftNotifications?: boolean;
+        rewardNotifications?: boolean;
+        transactionNotifications?: boolean;
+        walletNotifications?: boolean;
+        gamificationNotifications?: boolean;
+        expertNotifications?: boolean;
+        eventNotifications?: boolean;
+        systemNotifications?: boolean;
+        receiveNotifications?: boolean | null;
       } = {};
 
-      for (const setting of settings) {
-        switch (setting.notificationCode) {
-          case NotificationCode.EMAIL:
-            updateData.notificationEmailEnabled = setting.value;
-            break;
-          case NotificationCode.PUSH:
-            updateData.notificationPushEnabled = setting.value;
-            break;
-          case NotificationCode.IN_APP:
-            updateData.notificationInAppEnabled = setting.value;
-            break;
+      // Backward compatibility: Eğer array formatında gelirse (eski format)
+      if (Array.isArray(settings)) {
+        for (const setting of settings) {
+          if (setting.notificationCode !== undefined && setting.value !== undefined) {
+            switch (setting.notificationCode) {
+              case NotificationCode.EMAIL:
+                updateData.notificationEmailEnabled = setting.value;
+                break;
+              case NotificationCode.PUSH:
+                updateData.notificationPushEnabled = setting.value;
+                break;
+              case NotificationCode.IN_APP:
+                updateData.notificationInAppEnabled = setting.value;
+                break;
+            }
+          }
+        }
+      } else {
+        // Yeni format: object with channels, categories, global
+        if (settings.channels) {
+          for (const channel of settings.channels) {
+            switch (channel.notificationCode) {
+              case NotificationCode.EMAIL:
+                updateData.notificationEmailEnabled = channel.value;
+                break;
+              case NotificationCode.PUSH:
+                updateData.notificationPushEnabled = channel.value;
+                break;
+              case NotificationCode.IN_APP:
+                updateData.notificationInAppEnabled = channel.value;
+                break;
+            }
+          }
+        }
+
+        if (settings.categories) {
+          if (settings.categories.trustNotifications !== undefined) {
+            updateData.trustNotifications = settings.categories.trustNotifications;
+          }
+          if (settings.categories.supportNotifications !== undefined) {
+            updateData.supportNotifications = settings.categories.supportNotifications;
+          }
+          if (settings.categories.messageNotifications !== undefined) {
+            updateData.messageNotifications = settings.categories.messageNotifications;
+          }
+          if (settings.categories.collectionNotifications !== undefined) {
+            updateData.collectionNotifications = settings.categories.collectionNotifications;
+          }
+          if (settings.categories.postNotifications !== undefined) {
+            updateData.postNotifications = settings.categories.postNotifications;
+          }
+          if (settings.categories.nftNotifications !== undefined) {
+            updateData.nftNotifications = settings.categories.nftNotifications;
+          }
+          if (settings.categories.rewardNotifications !== undefined) {
+            updateData.rewardNotifications = settings.categories.rewardNotifications;
+          }
+          if (settings.categories.transactionNotifications !== undefined) {
+            updateData.transactionNotifications = settings.categories.transactionNotifications;
+          }
+          if (settings.categories.walletNotifications !== undefined) {
+            updateData.walletNotifications = settings.categories.walletNotifications;
+          }
+          if (settings.categories.gamificationNotifications !== undefined) {
+            updateData.gamificationNotifications = settings.categories.gamificationNotifications;
+          }
+          if (settings.categories.expertNotifications !== undefined) {
+            updateData.expertNotifications = settings.categories.expertNotifications;
+          }
+          if (settings.categories.eventNotifications !== undefined) {
+            updateData.eventNotifications = settings.categories.eventNotifications;
+          }
+          if (settings.categories.systemNotifications !== undefined) {
+            updateData.systemNotifications = settings.categories.systemNotifications;
+          }
+        }
+
+        if (settings.global) {
+          if (settings.global.receiveNotifications !== undefined) {
+            updateData.receiveNotifications = settings.global.receiveNotifications;
+          }
         }
       }
 

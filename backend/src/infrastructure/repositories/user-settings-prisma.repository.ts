@@ -46,6 +46,14 @@ export class UserSettingsPrismaRepository {
       messageNotifications?: boolean;
       collectionNotifications?: boolean;
       postNotifications?: boolean;
+      nftNotifications?: boolean;
+      rewardNotifications?: boolean;
+      transactionNotifications?: boolean;
+      walletNotifications?: boolean;
+      gamificationNotifications?: boolean;
+      expertNotifications?: boolean;
+      eventNotifications?: boolean;
+      systemNotifications?: boolean;
       supportSessionPrice?: number | null;
       supportSessionPriceUpdatedAt?: Date | null;
     }
@@ -71,6 +79,14 @@ export class UserSettingsPrismaRepository {
       messageNotifications?: boolean;
       collectionNotifications?: boolean;
       postNotifications?: boolean;
+      nftNotifications?: boolean;
+      rewardNotifications?: boolean;
+      transactionNotifications?: boolean;
+      walletNotifications?: boolean;
+      gamificationNotifications?: boolean;
+      expertNotifications?: boolean;
+      eventNotifications?: boolean;
+      systemNotifications?: boolean;
       supportSessionPrice?: number | null;
       supportSessionPriceUpdatedAt?: Date | null;
     }
@@ -111,6 +127,14 @@ export class UserSettingsPrismaRepository {
       prismaSettings.messageNotifications ?? true,
       prismaSettings.collectionNotifications ?? true,
       prismaSettings.postNotifications ?? true,
+      prismaSettings.nftNotifications ?? true,
+      prismaSettings.rewardNotifications ?? true,
+      prismaSettings.transactionNotifications ?? true,
+      prismaSettings.walletNotifications ?? true,
+      prismaSettings.gamificationNotifications ?? true,
+      prismaSettings.expertNotifications ?? true,
+      prismaSettings.eventNotifications ?? true,
+      prismaSettings.systemNotifications ?? true,
       prismaSettings.supportSessionPrice,
       prismaSettings.supportSessionPriceUpdatedAt,
       prismaSettings.createdAt,

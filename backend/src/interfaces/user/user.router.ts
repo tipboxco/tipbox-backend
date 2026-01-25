@@ -3164,7 +3164,7 @@ router.post('/settings/change-password', asyncHandler(async (req: Request, res: 
  * /users/settings/notifications:
  *   get:
  *     summary: Bildirim ayarlarını getir
- *     description: Kullanıcının bildirim ayarlarını getirir
+ *     description: Kullanıcının tüm bildirim ayarlarını getirir (kanal, kategori ve global ayarlar)
  *     tags: [User Settings]
  *     security:
  *       - bearerAuth: []
@@ -3174,16 +3174,54 @@ router.post('/settings/change-password', asyncHandler(async (req: Request, res: 
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   notificationCode:
- *                     type: integer
- *                     example: 0
- *                   value:
- *                     type: boolean
- *                     example: true
+ *               type: object
+ *               properties:
+ *                 channels:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       notificationCode:
+ *                         type: integer
+ *                         example: 0
+ *                       value:
+ *                         type: boolean
+ *                         example: true
+ *                 categories:
+ *                   type: object
+ *                   properties:
+ *                     trustNotifications:
+ *                       type: boolean
+ *                     supportNotifications:
+ *                       type: boolean
+ *                     messageNotifications:
+ *                       type: boolean
+ *                     collectionNotifications:
+ *                       type: boolean
+ *                     postNotifications:
+ *                       type: boolean
+ *                     nftNotifications:
+ *                       type: boolean
+ *                     rewardNotifications:
+ *                       type: boolean
+ *                     transactionNotifications:
+ *                       type: boolean
+ *                     walletNotifications:
+ *                       type: boolean
+ *                     gamificationNotifications:
+ *                       type: boolean
+ *                     expertNotifications:
+ *                       type: boolean
+ *                     eventNotifications:
+ *                       type: boolean
+ *                     systemNotifications:
+ *                       type: boolean
+ *                 global:
+ *                   type: object
+ *                   properties:
+ *                     receiveNotifications:
+ *                       type: boolean
+ *                       nullable: true
  */
 router.get('/settings/notifications', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
@@ -3202,7 +3240,7 @@ router.get('/settings/notifications', asyncHandler(async (req: Request, res: Res
  * /users/settings/notifications:
  *   put:
  *     summary: Bildirim ayarlarını güncelle
- *     description: Kullanıcının bildirim ayarlarını günceller
+ *     description: Kullanıcının bildirim ayarlarını günceller. Hem eski format (array) hem de yeni format (object) desteklenir.
  *     tags: [User Settings]
  *     security:
  *       - bearerAuth: []
@@ -3211,16 +3249,65 @@ router.get('/settings/notifications', asyncHandler(async (req: Request, res: Res
  *       content:
  *         application/json:
  *           schema:
- *             type: array
- *             items:
- *               type: object
- *               properties:
- *                 notificationCode:
- *                   type: integer
- *                   example: 0
- *                 value:
- *                   type: boolean
- *                   example: true
+ *             oneOf:
+ *               - type: array
+ *                 description: Eski format - sadece kanal ayarları
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     notificationCode:
+ *                       type: integer
+ *                       example: 0
+ *                     value:
+ *                       type: boolean
+ *                       example: true
+ *               - type: object
+ *                 description: Yeni format - kanal, kategori ve global ayarlar
+ *                 properties:
+ *                   channels:
+ *                     type: array
+ *                     items:
+ *                       type: object
+ *                       properties:
+ *                         notificationCode:
+ *                           type: integer
+ *                         value:
+ *                           type: boolean
+ *                   categories:
+ *                     type: object
+ *                     properties:
+ *                       trustNotifications:
+ *                         type: boolean
+ *                       supportNotifications:
+ *                         type: boolean
+ *                       messageNotifications:
+ *                         type: boolean
+ *                       collectionNotifications:
+ *                         type: boolean
+ *                       postNotifications:
+ *                         type: boolean
+ *                       nftNotifications:
+ *                         type: boolean
+ *                       rewardNotifications:
+ *                         type: boolean
+ *                       transactionNotifications:
+ *                         type: boolean
+ *                       walletNotifications:
+ *                         type: boolean
+ *                       gamificationNotifications:
+ *                         type: boolean
+ *                       expertNotifications:
+ *                         type: boolean
+ *                       eventNotifications:
+ *                         type: boolean
+ *                       systemNotifications:
+ *                         type: boolean
+ *                   global:
+ *                     type: object
+ *                     properties:
+ *                       receiveNotifications:
+ *                         type: boolean
+ *                         nullable: true
  *     responses:
  *       200:
  *         description: Bildirim ayarları güncellendi
@@ -3234,16 +3321,29 @@ router.put('/settings/notifications', asyncHandler(async (req: Request, res: Res
   }
 
   const settings = req.body;
-  if (!Array.isArray(settings)) {
-    return res.status(400).json({ message: 'Settings must be an array' });
+  
+  // Backward compatibility: Array formatını da kabul et
+  if (Array.isArray(settings)) {
+    const result = await userService.updateNotificationSettings(String(userId), settings);
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    return res.json(result);
   }
 
-  const result = await userService.updateNotificationSettings(String(userId), settings);
-  if (!result.success) {
-    return res.status(400).json(result);
+  // Yeni format: Object
+  if (typeof settings === 'object' && settings !== null) {
+    const result = await userService.updateNotificationSettings(String(userId), settings);
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    return res.json(result);
   }
 
-  return res.json(result);
+  return res.status(400).json({ 
+    success: false, 
+    message: 'Settings must be an array or object' 
+  });
 }));
 
 /**
