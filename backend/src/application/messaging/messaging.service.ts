@@ -464,12 +464,21 @@ export class MessagingService {
       userOne: { id: string; name: string; title: string; avatar: string };
       userTwo: { id: string; name: string; title: string; avatar: string };
     };
+    totalTipsAmount?: number;
+    supportRequestMessages?: string[];
+    supportRequestType?: SupportType;
+    supportRequestAmount?: number;
   }> {
     try {
       // Thread'e erişim kontrolü
       const thread = await this.dmThreadRepo.findById(threadId);
       if (!thread) {
         throw new Error('Thread not found');
+      }
+
+      // Thread silinmişse (isActive = false) mesajları gösterme
+      if (!thread.isActive) {
+        throw new Error('Thread has been deleted');
       }
 
       const userIdStr = userId;
@@ -617,18 +626,54 @@ export class MessagingService {
           return new Date(timestampB).getTime() - new Date(timestampA).getTime(); // DESC
         });
 
-        // Mesajları grupla (5 dakika içinde aynı sender'dan gelen mesajlar)
-        const groupedItems = this.groupMessagesByTime(threadItems, 5 * 60 * 1000); // 5 dakika = 300000 ms
-
+        // Grouped yapısı kaldırıldı - her mesaj tek tek gelir
         // hasMore kontrolü
-        const hasMore = groupedItems.length > limit;
-        const items = hasMore ? groupedItems.slice(0, limit) : groupedItems;
+        const hasMore = threadItems.length > limit;
+        const items = hasMore ? threadItems.slice(0, limit) : threadItems;
         const nextCursor = hasMore && items.length > 0 
           ? this.getTimestampFromFeedItem(items[items.length - 1])
           : undefined;
 
+        // Support thread için threadId'ye göre support request'i bul
+        let supportRequestType: SupportType | undefined;
+        let supportRequestAmount: number | undefined;
+        
+        const supportRequest = await this.prisma.dMRequest.findFirst({
+          where: {
+            threadId: threadId,
+            description: { not: null },
+            status: DMRequestStatus.ACCEPTED,
+          },
+          select: {
+            type: true,
+            amount: true,
+          },
+        });
+        
+        if (supportRequest) {
+          const prismaType = (supportRequest as any).type as string;
+          supportRequestType = 
+            prismaType === 'GENERAL' || prismaType === 'TECHNICAL' || prismaType === 'PRODUCT'
+              ? prismaType
+              : 'GENERAL';
+          
+          const amount = typeof (supportRequest as any).amount === 'number'
+            ? (supportRequest as any).amount
+            : Number((supportRequest as any).amount) || 0;
+          supportRequestAmount = amount > 0 ? amount : undefined;
+        }
+
         logger.info(`Support thread ${threadId} messages: returned=${items.length}, hasMore=${hasMore}`);
-        return { items, hasMore, nextCursor, participants };
+        return { 
+          items, 
+          hasMore, 
+          nextCursor, 
+          participants,
+          totalTipsAmount: undefined, // Support thread'de TIPS yok
+          supportRequestMessages: undefined, // Support thread'de support request yok
+          supportRequestType,
+          supportRequestAmount,
+        };
       }
 
       // NORMAL DM THREAD: DM context'li mesajlar + TIPS + support-request
@@ -804,6 +849,8 @@ export class MessagingService {
           status = 'pending';
         } else if (requestStatus === DMRequestStatus.ACCEPTED || requestStatus === 'ACCEPTED') {
           status = 'accepted';
+        } else if (requestStatus === DMRequestStatus.DECLINED || requestStatus === 'DECLINED') {
+          status = 'rejected';
         } else if (requestStatus === DMRequestStatus.CANCELED || requestStatus === 'CANCELED') {
           status = 'canceled';
         } else if (requestStatus === DMRequestStatus.AWAITING_COMPLETION || requestStatus === 'AWAITING_COMPLETION') {
@@ -860,12 +907,10 @@ export class MessagingService {
         return new Date(timestampB).getTime() - new Date(timestampA).getTime(); // DESC
       });
 
-      // 6. Mesajları grupla (5 dakika içinde aynı sender'dan gelen mesajlar)
-      const groupedItems = this.groupMessagesByTime(threadItems, 5 * 60 * 1000); // 5 dakika = 300000 ms
-
+      // 6. Grouped yapısı kaldırıldı - her mesaj tek tek gelir
       // 7. Pagination uygula
-      const hasMore = groupedItems.length > limit;
-      const items = hasMore ? groupedItems.slice(0, limit) : groupedItems;
+      const hasMore = threadItems.length > limit;
+      const items = hasMore ? threadItems.slice(0, limit) : threadItems;
       const nextCursor = hasMore && items.length > 0 
         ? this.getTimestampFromFeedItem(items[items.length - 1])
         : undefined;
@@ -873,7 +918,101 @@ export class MessagingService {
       const supportRequestCount = items.filter(item => item.type === 'support-request').length;
       logger.info(`DM thread ${threadId} messages: returned=${items.length}, hasMore=${hasMore}, support-requests=${supportRequestCount}, messages=${items.filter(item => item.type === 'message').length}, tips=${items.filter(item => item.type === 'send-tips').length}`);
 
-      return { items, hasMore, nextCursor, participants };
+      // Thread'deki tüm TIPS transferlerini topla (cursor olmadan, tüm thread için)
+      const allTipsTransfers = await this.prisma.tipsTokenTransfer.findMany({
+        where: {
+          OR: [
+            { fromUserId: thread.userOneId, toUserId: thread.userTwoId },
+            { fromUserId: thread.userTwoId, toUserId: thread.userOneId },
+          ],
+        },
+        select: {
+          amount: true,
+        },
+      });
+
+      // Toplam TIPS miktarını hesapla
+      const totalTipsAmount = allTipsTransfers.reduce((sum, transfer) => {
+        const amount = typeof transfer.amount === 'number' ? transfer.amount : Number(transfer.amount);
+        return sum + amount;
+      }, 0);
+
+      // Thread'deki tüm support request'leri topla (cursor olmadan, tüm thread için)
+      const allSupportRequests = await this.prisma.dMRequest.findMany({
+        where: {
+          OR: [
+            { fromUserId: thread.userOneId, toUserId: thread.userTwoId },
+            { fromUserId: thread.userTwoId, toUserId: thread.userOneId },
+          ],
+          description: { not: null }, // Sadece support request'ler
+        },
+        select: {
+          description: true,
+          type: true,
+          amount: true,
+          threadId: true,
+          status: true,
+        },
+      });
+
+      // Support request mesajlarını topla
+      const supportRequestMessages = allSupportRequests
+        .map(req => req.description)
+        .filter((msg): msg is string => msg !== null && msg.trim() !== '');
+
+      // Support thread ise, bu thread'e bağlı accepted support request'i bul
+      let supportRequestType: SupportType | undefined;
+      let supportRequestAmount: number | undefined;
+      
+      if (isSupportThread) {
+        // Support thread'de threadId'ye göre support request'i bul
+        const supportRequest = allSupportRequests.find(req => {
+          const requestThreadId = (req as any).threadId as string | null | undefined;
+          return requestThreadId === threadId && (req as any).status === DMRequestStatus.ACCEPTED;
+        });
+        
+        if (supportRequest) {
+          const prismaType = (supportRequest as any).type as string;
+          supportRequestType = 
+            prismaType === 'GENERAL' || prismaType === 'TECHNICAL' || prismaType === 'PRODUCT'
+              ? prismaType
+              : 'GENERAL';
+          
+          const amount = typeof (supportRequest as any).amount === 'number'
+            ? (supportRequest as any).amount
+            : Number((supportRequest as any).amount) || 0;
+          supportRequestAmount = amount > 0 ? amount : undefined;
+        }
+      } else {
+        // Normal DM thread'de accepted support request'i bul
+        const acceptedRequest = allSupportRequests.find(req => {
+          return (req as any).status === DMRequestStatus.ACCEPTED;
+        });
+        
+        if (acceptedRequest) {
+          const prismaType = (acceptedRequest as any).type as string;
+          supportRequestType = 
+            prismaType === 'GENERAL' || prismaType === 'TECHNICAL' || prismaType === 'PRODUCT'
+              ? prismaType
+              : 'GENERAL';
+          
+          const amount = typeof (acceptedRequest as any).amount === 'number'
+            ? (acceptedRequest as any).amount
+            : Number((acceptedRequest as any).amount) || 0;
+          supportRequestAmount = amount > 0 ? amount : undefined;
+        }
+      }
+
+      return { 
+        items, 
+        hasMore, 
+        nextCursor, 
+        participants,
+        totalTipsAmount: totalTipsAmount > 0 ? totalTipsAmount : undefined,
+        supportRequestMessages: supportRequestMessages.length > 0 ? supportRequestMessages : undefined,
+        supportRequestType,
+        supportRequestAmount,
+      };
     } catch (error) {
       logger.error(`Failed to get messages for thread ${threadId}:`, error);
       throw error;
@@ -1347,6 +1486,8 @@ export class MessagingService {
           status = 'pending';
         } else if (requestStatus === DMRequestStatus.ACCEPTED || requestStatus === 'ACCEPTED') {
           status = 'accepted';
+        } else if (requestStatus === DMRequestStatus.DECLINED || requestStatus === 'DECLINED') {
+          status = 'rejected';
         } else if (requestStatus === DMRequestStatus.CANCELED || requestStatus === 'CANCELED') {
           status = 'canceled';
         } else if (requestStatus === DMRequestStatus.AWAITING_COMPLETION || requestStatus === 'AWAITING_COMPLETION') {
@@ -1646,7 +1787,7 @@ export class MessagingService {
   }
 
   /**
-   * Thread silme (soft delete)
+   * Thread silme (soft delete) - Thread silindiğinde tüm mesajlar da silinir
    */
   async deleteThread(userId: string, threadId: string): Promise<void> {
     try {
@@ -1663,35 +1804,66 @@ export class MessagingService {
         throw new Error('Forbidden: user is not part of this thread');
       }
 
+      // Thread'deki tüm mesajları bul
+      const threadMessages = await this.prisma.dMMessage.findMany({
+        where: { threadId },
+        select: { id: true },
+      });
+
+      const messageIds = threadMessages.map(m => m.id);
+
+      // Mesajlara bağlı reaksiyonları ve read receipt'leri sil
+      if (messageIds.length > 0) {
+        // Prisma client'ta model isimleri camelCase olarak erişilir
+        // TypeScript tip tanımlarında bu modeller tanımlı olmayabilir, bu yüzden as any kullanıyoruz
+        const prismaClient = this.prisma as any;
+        await prismaClient.messageReaction.deleteMany({
+          where: { messageId: { in: messageIds } },
+        });
+
+        await prismaClient.messageReadReceipt.deleteMany({
+          where: { messageId: { in: messageIds } },
+        });
+
+        // Thread'deki tüm mesajları sil
+        await this.prisma.dMMessage.deleteMany({
+          where: { threadId },
+        });
+
+        logger.info(`Deleted ${messageIds.length} messages from thread ${threadId}`);
+      }
+
       // Thread'i soft delete: isActive = false
       await this.prisma.dMThread.update({
         where: { id: threadId },
         data: { isActive: false },
       });
 
-      // Thread'deki tüm mesajları soft delete (eğer schema'da isDeleted field'ı varsa)
-      // Şimdilik mesajları silmiyoruz, sadece thread'i inactive yapıyoruz
-
       // Socket.IO ile real-time bildirim
-      const socketHandler = SocketManager.getInstance().getSocketHandler();
-      const deletedEvent = {
-        threadId: thread.id,
-        userId: userId,
-        timestamp: new Date().toISOString(),
-      };
+      try {
+        const socketHandler = SocketManager.getInstance().getSocketHandler();
+        const deletedEvent = {
+          threadId: thread.id,
+          userId: userId,
+          timestamp: new Date().toISOString(),
+        };
 
-      // Thread room'una gönder
-      socketHandler.sendToRoom(`thread:${threadId}`, 'thread_deleted', deletedEvent);
+        // Thread room'una gönder
+        socketHandler.sendToRoom(`thread:${threadId}`, 'thread_deleted', deletedEvent);
 
-      // Her iki kullanıcıya da gönder
-      if (thread.userOneId) {
-        socketHandler.sendMessageToUser(thread.userOneId, 'thread_deleted', deletedEvent);
+        // Her iki kullanıcıya da gönder
+        if (thread.userOneId) {
+          socketHandler.sendMessageToUser(thread.userOneId, 'thread_deleted', deletedEvent);
+        }
+        if (thread.userTwoId) {
+          socketHandler.sendMessageToUser(thread.userTwoId, 'thread_deleted', deletedEvent);
+        }
+      } catch (socketError) {
+        // Socket hatası thread silme işlemini engellememeli
+        logger.warn(`Socket notification failed for thread deletion ${threadId}:`, socketError);
       }
-      if (thread.userTwoId) {
-        socketHandler.sendMessageToUser(thread.userTwoId, 'thread_deleted', deletedEvent);
-      }
 
-      logger.info(`Thread deleted: ${threadId} by user ${userId}`);
+      logger.info(`Thread deleted: ${threadId} by user ${userId} (${messageIds.length} messages deleted)`);
     } catch (error) {
       logger.error(`Failed to delete thread ${threadId} by user ${userId}`, error);
       throw error;

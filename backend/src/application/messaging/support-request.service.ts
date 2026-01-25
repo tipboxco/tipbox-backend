@@ -66,9 +66,11 @@ export class SupportRequestService {
       } else if (options.status === SupportRequestStatus.AWAITING_COMPLETION) {
         dmRequestStatus = DMRequestStatus.AWAITING_COMPLETION;
       } else if (options.status === SupportRequestStatus.COMPLETED) {
-        // Completed: include both DECLINED and ACCEPTED without active thread.
+        // Completed: ACCEPTED without active thread.
         // Do NOT pre-filter by status here; fetch all and filter at service layer.
         dmRequestStatus = undefined;
+      } else if (options.status === SupportRequestStatus.REJECTED) {
+        dmRequestStatus = DMRequestStatus.DECLINED;
       } else if (options.status === SupportRequestStatus.REPORTED) {
         dmRequestStatus = DMRequestStatus.REPORTED;
       }
@@ -162,13 +164,18 @@ export class SupportRequestService {
           // Ama eğer request COMPLETED ise yukarıdaki kontrol zaten yakaladı
           supportStatus = threadInfo?.isActive ? SupportRequestStatus.ACTIVE : SupportRequestStatus.COMPLETED;
         } else if (requestStatus === DMRequestStatus.DECLINED) {
-          supportStatus = SupportRequestStatus.COMPLETED; // DECLINED frontend'de completed olarak gösterilir (rejected yok)
+          supportStatus = SupportRequestStatus.REJECTED;
         } else if (requestStatus === DMRequestStatus.CANCELED) {
           supportStatus = SupportRequestStatus.CANCELED;
         } else if (requestStatus === DMRequestStatus.REPORTED) {
           supportStatus = SupportRequestStatus.REPORTED;
         } else {
           supportStatus = SupportRequestStatus.COMPLETED;
+        }
+
+        // REJECTED request'ler listelenmemeli (sadece explicit olarak REJECTED status filtresi varsa gösterilir)
+        if (!options.status && supportStatus === SupportRequestStatus.REJECTED) {
+          continue;
         }
 
         // Apply status filter if specified
@@ -330,13 +337,8 @@ export class SupportRequestService {
           payload.recipientUserId,
           NotificationType.DM_REQUEST_RECEIVED,
           {
-            // Mobil navigasyon için gerekli fieldlar
-            userId: sender.id, // Mesaj atan kişinin ID'si (avatar için)
-            userName: sender.name || sender.email,
-            requestId: request.id,
-            threadId: dmThreadId || null, // Thread varsa ID, yoksa null
-            message: payload.message, // Mesaj içeriği
-            amount: payload.amount, // Support request için amount
+            // Sadece oluşturan kişinin userId'si
+            userId: sender.id,
           }
         );
       }
@@ -976,9 +978,21 @@ export class SupportRequestService {
       description: trimmedDescription || null,
     });
 
-    // Update request status to REPORTED
+    // ThreadId'yi al (mesaj geçmişi görünsün diye korunacak)
+    const requestThreadId = (request as any).threadId as string | null | undefined;
+
+    // Thread varsa kapat (isActive = false) - mesaj geçmişi görünsün ama yeni mesaj gönderilemesin
+    if (requestThreadId) {
+      await this.prisma.dMThread.update({
+        where: { id: requestThreadId },
+        data: { isActive: false },
+      });
+      logger.info(`Thread ${requestThreadId} closed after support request ${requestId} was reported`);
+    }
+
+    // Update request status to COMPLETED (raporlandıktan sonra completed olur)
     await this.dmRequestRepo.update(requestId, {
-      status: DMRequestStatus.REPORTED,
+      status: DMRequestStatus.COMPLETED,
     });
 
     const socketHandler = SocketManager.getInstance().getSocketHandler();
@@ -993,7 +1007,7 @@ export class SupportRequestService {
     socketHandler.sendMessageToUser(request.fromUserId, 'support_request_reported', reportEvent);
     socketHandler.sendMessageToUser(request.toUserId, 'support_request_reported', reportEvent);
 
-    logger.info(`Support request ${requestId} reported by ${reporterId} with category ${normalizedCategory}`);
+    logger.info(`Support request ${requestId} reported by ${reporterId} with category ${normalizedCategory}, status set to COMPLETED, thread closed`);
   }
 }
 

@@ -1409,12 +1409,13 @@ router.post(
  *   post:
  *     summary: Support request'i raporla
  *     description: |
- *       Support request'i raporlar. Request status'ü REPORTED olarak güncellenir.
+ *       Support request'i raporlar. Request status'ü COMPLETED olarak güncellenir ve thread kapatılır.
  *       
  *       **İşlem Adımları:**
- *       1. Support request status'ü REPORTED olarak güncellenir
- *       2. Rapor kaydedilir
- *       3. Socket event: support_request_reported gönderilir
+ *       1. Rapor kaydedilir
+ *       2. Thread kapatılır (isActive = false) - mesaj geçmişi görünmeye devam eder ama yeni mesaj gönderilemez
+ *       3. Support request status'ü COMPLETED olarak güncellenir
+ *       4. Socket event: support_request_reported gönderilir
  *     tags: [Inbox]
  *     security:
  *       - bearerAuth: []
@@ -1974,6 +1975,10 @@ router.get(
           userTwo: result.participants.userTwo,
         } : undefined,
         items: result.items,
+        totalTipsAmount: result.totalTipsAmount,
+        supportRequestMessages: result.supportRequestMessages,
+        supportRequestType: result.supportRequestType,
+        supportRequestAmount: result.supportRequestAmount,
         pagination: {
           cursor: result.nextCursor,
           hasMore: result.hasMore,

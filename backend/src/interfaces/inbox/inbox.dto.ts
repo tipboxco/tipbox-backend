@@ -189,7 +189,7 @@ export interface Message {
   mediaUrl?: string | null;
   thumbnailUrl?: string | null;
   caption?: string | null;
-  // Gruplanmış mesajlar (5 dakika içinde aynı sender'dan gelen mesajlar)
+  // Gruplanmış mesajlar (DEPRECATED - artık kullanılmıyor, her mesaj tek tek gelir)
   groupedMessages?: Array<{
     id: string;
     type: MessageType; // Mesaj tipi (message, image, send-tips, support-request)

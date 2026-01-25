@@ -1414,10 +1414,13 @@ export class UserService {
     return null;
   }
 
-  async getUserPosts(userId: string): Promise<any[]> {
-    // ✅ DÜZELTME: Tüm post tiplerini getir (sadece FREE değil)
+  async getUserPosts(userId: string, options?: { limit?: number }): Promise<any[]> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 50;
+    
+    // ✅ DÜZELTME: Tüm post tiplerini getir (sadece FREE değil) - limit ile
     const posts = await this.prisma.contentPost.findMany({
       where: { userId },
+      take: limit + 1, // hasMore kontrolü için +1
       include: {
         product: {
           include: {
@@ -1497,26 +1500,33 @@ export class UserService {
       });
     }
     
-    const results = await Promise.all(
-      posts.map(async (post) => {
-        const stats = await this.getPostStats(post.id);
-        const contextType = this.mapContextType(post);
-        const contextData = this.buildContextDataFromPost(post, ownedProductIds);
-        // Get images for this post from PostMedia (orderIndex'e göre sıralı)
-        const images = postMediaMap.get(post.id) || [];
-        return {
-          id: String(post.id),
-          type: 'post' as const,
-          user: userBase,
-          stats,
-          createdAt: post.createdAt.toISOString(),
-          contextType,
-          contextData,
-          content: post.body,
-          images,
-        };
-      })
-    );
+    // Limit uygula (hasMore kontrolü için +1 aldık)
+    const paginatedPosts = posts.slice(0, limit);
+    
+    // getPostStats yerine post'un kendi alanlarını kullan (N+1 query'yi önle)
+    const results = paginatedPosts.map((post) => {
+      const stats = {
+        likes: post.likesCount || 0,
+        comments: post.commentsCount || 0,
+        shares: post.sharesCount || 0,
+        bookmarks: post.favoritesCount || 0,
+      };
+      const contextType = this.mapContextType(post);
+      const contextData = this.buildContextDataFromPost(post, ownedProductIds);
+      // Get images for this post from PostMedia (orderIndex'e göre sıralı)
+      const images = postMediaMap.get(post.id) || [];
+      return {
+        id: String(post.id),
+        type: 'post' as const,
+        user: userBase,
+        stats,
+        createdAt: post.createdAt.toISOString(),
+        contextType,
+        contextData,
+        content: post.body,
+        images,
+      };
+    });
     return results;
   }
 
@@ -2775,24 +2785,46 @@ export class UserService {
     // Her kaynak için limit+1 çekiyoruz ki hasMore hesaplanabilsin
     const perSourceLimit = limit + 1;
 
+    // Timeout koruması ile fetcher'ları oluştur
+    const createFetcherWithTimeout = (fetcher: Promise<any>, timeoutMs: number = 8000) => {
+      return Promise.race([
+        fetcher,
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Request timeout')), timeoutMs)
+        )
+      ]).catch((error) => {
+        logger.warn(`Feed fetcher timeout or error: ${error.message}`);
+        return { items: [] }; // Timeout durumunda boş array döndür
+      });
+    };
+
     const fetchers = requestedTypes.map((cardType) => {
+      let fetcher: Promise<any>;
       switch (cardType) {
         case 'feed':
-          return this.getUserReviews(userId, { limit: perSourceLimit });
+          fetcher = this.getUserReviews(userId, { limit: perSourceLimit });
+          break;
         case 'benchmark':
-          return this.getUserBenchmarks(userId, { limit: perSourceLimit });
+          fetcher = this.getUserBenchmarks(userId, { limit: perSourceLimit });
+          break;
         case 'tipsAndTricks':
-          return this.getUserTips(userId, { limit: perSourceLimit });
+          fetcher = this.getUserTips(userId, { limit: perSourceLimit });
+          break;
         case 'question':
-          return this.getUserReplies(userId, { limit: perSourceLimit });
+          fetcher = this.getUserReplies(userId, { limit: perSourceLimit });
+          break;
         case 'experience':
-          return this.getUserReviews(userId, { limit: perSourceLimit });
+          fetcher = this.getUserReviews(userId, { limit: perSourceLimit });
+          break;
         case 'update':
-          return this.getUserUpdates(userId, { limit: perSourceLimit });
+          fetcher = this.getUserUpdates(userId, { limit: perSourceLimit });
+          break;
         case 'post':
         default:
-          return this.getUserPosts(userId);
+          fetcher = this.getUserPosts(userId, { limit: perSourceLimit });
+          break;
       }
+      return createFetcherWithTimeout(fetcher, 8000);
     });
 
     const chunks = await Promise.all(fetchers);
@@ -3388,7 +3420,12 @@ export class UserService {
     newPassword: string
   ): Promise<{ success: boolean; message: string }> {
     try {
-      const user = await this.userRepo.findById(userId);
+      // Sadece passwordHash'i çek (profile ve wallets include etme - performans için)
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, passwordHash: true },
+      });
+
       if (!user || !user.passwordHash) {
         return {
           success: false,
@@ -3398,7 +3435,21 @@ export class UserService {
 
       // Mevcut şifreyi kontrol et
       const isValidPassword = await bcrypt.compare(currentPassword, user.passwordHash);
+      
+      // Debug log (production'da kaldırılabilir)
+      logger.debug({
+        message: 'Password comparison result',
+        userId,
+        passwordHashExists: !!user.passwordHash,
+        passwordHashLength: user.passwordHash?.length,
+        isValidPassword,
+      });
+      
       if (!isValidPassword) {
+        logger.warn({
+          message: 'Password change failed - incorrect current password',
+          userId,
+        });
         return {
           success: false,
           message: 'Current password is incorrect',
@@ -3415,7 +3466,10 @@ export class UserService {
 
       // Yeni şifreyi hash'le ve güncelle
       const newPasswordHash = await bcrypt.hash(newPassword, 10);
-      await this.userRepo.update(userId, { passwordHash: newPasswordHash });
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { passwordHash: newPasswordHash },
+      });
 
       logger.info({
         message: 'Password changed successfully',

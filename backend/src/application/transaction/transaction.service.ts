@@ -128,11 +128,8 @@ export class TransactionService {
         request.fromUserId,
         NotificationType.TIPS_SENT,
         {
-          amount: request.amount,
-          recipientName: toProfile?.displayName || toProfile?.userName || 'Kullanıcı',
           recipientUserId: request.toUserId,
-          transactionId: sendTransaction.id,
-          reason: request.reason,
+          recipientUsername: toProfile?.userName || toProfile?.displayName || null,
         }
       ),
       // Notify recipient
@@ -140,11 +137,8 @@ export class TransactionService {
         request.toUserId,
         NotificationType.TIPS_RECEIVED,
         {
-          amount: request.amount,
-          senderName: fromProfile?.displayName || fromProfile?.userName || 'Kullanıcı',
           senderUserId: request.fromUserId,
-          transactionId: sendTransaction.id,
-          reason: request.reason,
+          senderUsername: fromProfile?.userName || fromProfile?.displayName || null,
         }
       ),
     ]).catch(error => {

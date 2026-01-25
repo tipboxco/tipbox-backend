@@ -40,8 +40,8 @@ const marketplaceService = new MarketplaceService();
  *         name: type
  *         schema:
  *           type: string
- *           enum: [BADGE, COSMETIC, LOOTBOX]
- *         description: NFT tipi filtresi
+ *           enum: [BADGE, COSMETIC, LOOTBOX, ALL]
+ *         description: NFT tipi filtresi. BADGE, COSMETIC, LOOTBOX veya ALL (tüm tipler). Gönderilmediğinde tüm tipler döner.
  *       - in: query
  *         name: rarity
  *         schema:
@@ -92,11 +92,28 @@ const marketplaceService = new MarketplaceService();
  *         description: Sunucu hatası
  */
 router.get('/listings', asyncHandler(async (req: Request, res: Response) => {
+  // Type parametresini kontrol et - enum olarak kabul et (BADGE, COSMETIC, LOOTBOX)
+  // ALL veya undefined ise tüm tipleri döndür
+  let type: 'BADGE' | 'COSMETIC' | 'LOOTBOX' | undefined = undefined;
+  const typeParam = req.query.type as string | undefined;
+  
+  if (typeParam && typeParam !== 'ALL') {
+    const validTypes = ['BADGE', 'COSMETIC', 'LOOTBOX'];
+    if (validTypes.includes(typeParam.toUpperCase())) {
+      type = typeParam.toUpperCase() as 'BADGE' | 'COSMETIC' | 'LOOTBOX';
+    } else {
+      return res.status(400).json({ 
+        message: `Invalid type parameter. Must be one of: BADGE, COSMETIC, LOOTBOX, or ALL` 
+      });
+    }
+  }
+  // typeParam === 'ALL' veya undefined ise type undefined kalır (tüm tipler döner)
+
   const query: ListMarketplaceNFTsQuery = {
     search: req.query.search as string | undefined,
     minPrice: req.query.minPrice ? Number(req.query.minPrice) : undefined,
     maxPrice: req.query.maxPrice ? Number(req.query.maxPrice) : undefined,
-    type: req.query.type as 'BADGE' | 'COSMETIC' | 'LOOTBOX' | undefined,
+    type,
     rarity: req.query.rarity as 'COMMON' | 'RARE' | 'EPIC' | undefined,
     limit: req.query.limit ? Number(req.query.limit) : undefined,
     cursor: typeof req.query.cursor === 'string' ? req.query.cursor : undefined,

@@ -60,7 +60,14 @@ export interface UngroupedNotification {
   postType?: string | null;
   description?: string | null;
   imageUrl?: string | null;
-  amount?: number | null; // TIPS_RECEIVED için root seviyede
+  // TIPS bildirimleri için
+  senderUserId?: string;
+  senderUsername?: string | null;
+  recipientUserId?: string;
+  recipientUsername?: string | null;
+  // NEW_BADGE için
+  badgeUrl?: string | null;
+  badgeName?: string | null;
   createdAt: Date;
   read: boolean;
   title?: string;
@@ -147,19 +154,15 @@ export function groupNotifications(
       };
     }
 
-    // NEW_BADGE için sadece badgeId, badgeName ve imageUrl (user bilgileri yok - badge kazanan kullanıcıya gidiyor)
+    // NEW_BADGE için sadece badgeUrl ve badgeName root seviyede (user bilgileri yok - badge kazanan kullanıcıya gidiyor)
     if (notifType === NotificationType.NEW_BADGE) {
       return {
         id: notif.id,
         type: notifType,
         title: notif.title,
         message: notif.message,
-        data: {
-          badgeId: notif.data?.badgeId,
-          badgeName: notif.data?.badgeName,
-          imageUrl: notif.data?.imageUrl || null,
-        },
-        imageUrl: notif.data?.imageUrl || null, // Root seviyede de olabilir
+        badgeUrl: notif.badgeUrl || notif.data?.imageUrl || notif.imageUrl || null,
+        badgeName: notif.badgeName || notif.data?.badgeName || null,
         createdAt: new Date(notif.createdAt),
         read: notif.read || false,
         // Tüm user ve post ile ilgili alanları kaldır (badge zaten kazanan kullanıcıya gidiyor)
@@ -171,13 +174,39 @@ export function groupNotifications(
         postContent: undefined,
         postType: undefined,
         description: undefined,
+        imageUrl: undefined,
+        // Data objesi kaldırıldı
+        data: undefined,
       };
     }
 
-    // Mesajlaşma bildirimleri için (DM_REQUEST_RECEIVED, DM_REQUEST_ACCEPTED, DM_REQUEST_DECLINED, SUPPORT_REQUEST_ACCEPTED)
+    // DM_REQUEST_RECEIVED için özel işlem: sadece userId, avatar, username (data objesi yok)
+    if (notifType === NotificationType.DM_REQUEST_RECEIVED) {
+      return {
+        id: notif.id,
+        type: notifType,
+        userId: notif.userId || notif.data?.userId || undefined,
+        username: notif.username || notif.data?.username || null,
+        avatar: notif.avatar || null,
+        createdAt: new Date(notif.createdAt),
+        read: notif.read || false,
+        title: notif.title,
+        message: notif.message,
+        // Post ile ilgili tüm alanlar kaldırıldı
+        postId: undefined,
+        commentId: undefined,
+        postContent: undefined,
+        postType: undefined,
+        description: undefined,
+        imageUrl: undefined,
+        // Data objesi kaldırıldı
+        data: undefined,
+      };
+    }
+
+    // Mesajlaşma bildirimleri için (DM_REQUEST_ACCEPTED, DM_REQUEST_DECLINED, SUPPORT_REQUEST_ACCEPTED)
     // Post ile ilgili tüm alanları kaldır, sadece userId, avatar, username ve request bilgileri
     if (
-      notifType === NotificationType.DM_REQUEST_RECEIVED ||
       notifType === NotificationType.DM_REQUEST_ACCEPTED ||
       notifType === NotificationType.DM_REQUEST_DECLINED ||
       notifType === NotificationType.SUPPORT_REQUEST_ACCEPTED
@@ -195,16 +224,29 @@ export function groupNotifications(
       };
     }
 
-    // TIPS_RECEIVED için özel işlem: sadece userId, username, avatar, type ve amount (root seviyede)
+    // TIPS_RECEIVED için özel işlem: sadece senderUserId, senderUsername, avatar (bildirimi alan kullanıcının)
     if (notifType === NotificationType.TIPS_RECEIVED) {
-      const amount = notif.amount || notif.data?.amount || null;
       return {
         id: notif.id,
         type: notifType,
-        userId: notif.userId || notif.data?.senderId || notif.data?.senderUserId || notif.data?.userId || undefined,
-        username: notif.username || null,
-        avatar: notif.avatar || null,
-        amount: amount,
+        avatar: notif.avatar || null, // Bildirimi alan kullanıcının (alıcı) avatar'ı
+        senderUserId: notif.senderUserId || notif.data?.senderUserId || notif.data?.senderId || undefined,
+        senderUsername: notif.senderUsername || notif.data?.senderUsername || null,
+        createdAt: new Date(notif.createdAt),
+        read: notif.read || false,
+        // Post ile ilgili tüm alanlar kaldırıldı
+        // data objesi kaldırıldı
+      };
+    }
+
+    // TIPS_SENT için özel işlem: sadece recipientUserId, recipientUsername, avatar (bildirimi alan kullanıcının)
+    if (notifType === NotificationType.TIPS_SENT) {
+      return {
+        id: notif.id,
+        type: notifType,
+        avatar: notif.avatar || null, // Bildirimi alan kullanıcının (gönderen) avatar'ı
+        recipientUserId: notif.recipientUserId || notif.data?.recipientUserId || notif.data?.recipientId || undefined,
+        recipientUsername: notif.recipientUsername || notif.data?.recipientUsername || null,
         createdAt: new Date(notif.createdAt),
         read: notif.read || false,
         // Post ile ilgili tüm alanlar kaldırıldı
