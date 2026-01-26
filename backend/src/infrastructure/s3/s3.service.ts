@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, PutBucketPolicyCommand, ListObjectsV2Command, DeleteObjectsCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, HeadBucketCommand, CreateBucketCommand, PutBucketPolicyCommand, ListObjectsV2Command, DeleteObjectsCommand, DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { s3Config } from '../config/s3.config';
 import { getPublicMediaBaseUrl, resolveMediaUrl } from '../config/media.config';
@@ -297,32 +297,38 @@ export class S3Service {
   }
   /**
    * Tek bir dosyayı sil
-   * @param fileKey - Silinecek dosyanın key'i (örn: 'users/avatar.jpg')
-   * @returns Başarılı olup olmadığı
+   * @param filePath - Silinecek dosyanın path'i (örn: 'messages/threads/uuid/file.jpg')
+   * @returns Başarılı olursa true
    */
-  async deleteFile(fileKey: string): Promise<boolean> {
+  async deleteFile(filePath: string): Promise<void> {
     try {
-      const deleteCommand = new DeleteObjectsCommand({
+      const command = new DeleteObjectCommand({
         Bucket: s3Config.bucketName,
-        Delete: {
-          Objects: [{ Key: fileKey }],
-          Quiet: true,
-        },
+        Key: filePath,
       });
-      await this.s3Client.send(deleteCommand);
+      await this.s3Client.send(command);
       logger.info({
-        message: 'S3 dosya silindi',
-        fileKey,
+        message: 'Dosya başarıyla silindi',
+        filePath,
+        bucketName: s3Config.bucketName,
       });
-      return true;
     } catch (error: any) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      // Dosya zaten yoksa hata verme (idempotent operation)
+      if (error.name === 'NoSuchKey' || error.Code === 'NoSuchKey' || error.$metadata?.httpStatusCode === 404) {
+        logger.warn({
+          message: 'Dosya zaten silinmiş veya bulunamadı',
+          filePath,
+        });
+        return; // Hata fırlatma, dosya zaten yok
+      }
       logger.error({
-        message: 'S3 dosya silme hatası',
-        fileKey,
-        error: errorMsg,
+        message: 'Dosya silme hatası',
+        filePath,
+        error: errorMessage,
+        errorDetails: error.$metadata || error,
       });
-      return false;
+      throw new Error(`Dosya silinemedi: ${errorMessage}`);
     }
   }
 

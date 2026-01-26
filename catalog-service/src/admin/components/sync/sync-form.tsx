@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { 
   Drawer, 
   Label, 
@@ -43,9 +43,11 @@ export const SyncForm = ({
   const [secretToken, setSecretToken] = useState(initialData?.secret_token || "")
   const [batchSize, setBatchSize] = useState(String(initialData?.batch_size || 1000))
   const [isActive, setIsActive] = useState(initialData?.is_active ?? true)
+  const prevOpenRef = useRef(false)
 
+  // Sadece drawer açıldığında (false -> true geçişinde) initialData'yı uygula
   useEffect(() => {
-    if (open && initialData) {
+    if (open && !prevOpenRef.current && initialData) {
       setName(initialData.name || "")
       setModuleType(initialData.module_type || "product")
       setTargetUrl(initialData.target_url || "")
@@ -53,6 +55,7 @@ export const SyncForm = ({
       setBatchSize(String(initialData.batch_size || 1000))
       setIsActive(initialData.is_active ?? true)
     }
+    prevOpenRef.current = open
   }, [open, initialData])
 
   const handleSubmit = async () => {

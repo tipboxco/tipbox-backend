@@ -11,11 +11,14 @@ import { S3Service } from '../../infrastructure/s3/s3.service';
 import { v4 as uuidv4 } from 'uuid';
 import logger from '../../infrastructure/logger/logger';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
+import { invalidateUserCache, invalidateAllUserCache } from '../../infrastructure/cache/cache-invalidation';
 // ValidationError kullanılmıyor; mevcut mimaride router içinde direkt 400/409 dönüyoruz
 
 const router = Router();
 const userService = new UserService();
 const s3Service = new S3Service();
+const prisma = getPrisma();
 
 // Multer configuration - memory storage (dosya buffer'da tutulacak)
 // Bu tanım endpoint'lerden ÖNCE olmalı (hoisting sorunu için)
@@ -289,16 +292,53 @@ router.post(
       // Dosyayı S3'e yükle
       const filePath = await s3Service.uploadFile(fileName, file.buffer, file.mimetype);
       
+      // Veritabanına kaydet: Önceki aktif avatar'ı pasif yap
+      await prisma.userAvatar.updateMany({
+        where: {
+          userId,
+          isActive: true,
+        },
+        data: {
+          isActive: false,
+        },
+      });
+      
+      // Yeni avatar'ı aktif olarak kaydet (sadece path, full URL değil)
+      await prisma.userAvatar.create({
+        data: {
+          userId,
+          imageUrl: filePath, // Bu zaten path formatında (profile-pictures/...)
+          isActive: true,
+        },
+      });
+      
+      // Cache'i temizle - avatar güncellendiği için profil cache'i invalidate et
+      try {
+        await invalidateAllUserCache(userId);
+        logger.info({
+          message: 'User cache invalidated after avatar upload',
+          userId,
+        });
+      } catch (cacheError) {
+        // Cache invalidation hatası kritik değil, log'la ama devam et
+        logger.warn({
+          message: 'Cache invalidation failed after avatar upload',
+          userId,
+          error: cacheError instanceof Error ? cacheError.message : String(cacheError),
+        });
+      }
+      
       // Tam URL'yi oluştur
       const avatarUrl = resolveMediaUrl(filePath, false);
       
       logger.info({
-        message: 'Avatar başarıyla yüklendi',
+        message: 'Avatar başarıyla yüklendi ve veritabanına kaydedildi',
         userId,
         fileName,
         fileSize: file.size,
         mimeType: file.mimetype,
         avatarUrl,
+        filePath,
       });
       
       return res.json({
@@ -443,16 +483,55 @@ router.post(
       // Dosyayı S3'e yükle
       const filePath = await s3Service.uploadFile(fileName, file.buffer, file.mimetype);
       
+      // Profil tablosunda bannerUrl'i güncelle
+      const existingProfile = await prisma.profile.findUnique({
+        where: { userId } as any,
+      });
+      
+      if (existingProfile) {
+        await prisma.profile.update({
+          where: { userId } as any,
+          data: { bannerUrl: filePath },
+        });
+      } else {
+        // Profil yoksa oluştur
+        await prisma.profile.create({
+          data: {
+            userId,
+            displayName: 'Anonymous User',
+            userName: null,
+            bannerUrl: filePath,
+          } as any,
+        });
+      }
+      
+      // Cache'i temizle - banner güncellendiği için profil cache'i invalidate et
+      try {
+        await invalidateAllUserCache(userId);
+        logger.info({
+          message: 'User cache invalidated after banner upload',
+          userId,
+        });
+      } catch (cacheError) {
+        // Cache invalidation hatası kritik değil, log'la ama devam et
+        logger.warn({
+          message: 'Cache invalidation failed after banner upload',
+          userId,
+          error: cacheError instanceof Error ? cacheError.message : String(cacheError),
+        });
+      }
+      
       // Tam URL'yi oluştur
       const bannerUrl = resolveMediaUrl(filePath, false);
       
       logger.info({
-        message: 'Banner başarıyla yüklendi',
+        message: 'Banner başarıyla yüklendi ve veritabanına kaydedildi',
         userId,
         fileName,
         fileSize: file.size,
         mimeType: file.mimetype,
         bannerUrl,
+        filePath,
       });
       
       return res.json({
@@ -1236,6 +1315,93 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       return res.status(409).json({ error: { message: 'This email address is already in use.' } });
     }
     throw error;
+  }
+}));
+
+/**
+ * @openapi
+ * /users/avatars:
+ *   get:
+ *     summary: Mevcut avatar listesini getirir
+ *     description: Setup profile sırasında kullanıcıya gösterilecek 12 adet default avatar listesini döndürür.
+ *     operationId: getAvatars
+ *     tags:
+ *       - Users
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Avatar listesi başarıyla döndürüldü
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 avatars:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         example: avatar-1
+ *                         description: Avatar identifier
+ *                       name:
+ *                         type: string
+ *                         example: avatar-1.png
+ *                         description: Avatar dosya adı
+ *                       url:
+ *                         type: string
+ *                         example: http://192.168.1.178:9000/tipbox-media/app/Avatars/avatar-1.png
+ *                         description: Avatar'ın tam URL'i
+ *       500:
+ *         description: Sunucu hatası
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: Avatar listesi alınırken bir hata oluştu
+ */
+router.get('/avatars', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    // 12 adet avatar'ı oluştur (avatar-1.png'den avatar-12.png'ye kadar)
+    const avatars = Array.from({ length: 12 }, (_, i) => {
+      const avatarNumber = i + 1;
+      const avatarName = `avatar-${avatarNumber}.png`;
+      const avatarPath = `app/Avatars/${avatarName}`;
+      const avatarUrl = resolveMediaUrl(avatarPath);
+
+      return {
+        id: `avatar-${avatarNumber}`,
+        name: avatarName,
+        url: avatarUrl || '',
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      avatars,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logger.error({
+      message: 'Avatar listesi alınırken hata oluştu',
+      error: errorMessage,
+    });
+
+    return res.status(500).json({
+      success: false,
+      message: `Avatar listesi alınırken bir hata oluştu: ${errorMessage}`,
+    });
   }
 }));
 

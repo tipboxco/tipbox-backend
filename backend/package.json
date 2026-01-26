@@ -21,6 +21,7 @@
     "db:update-marketplace-banners": "docker-compose exec backend npx ts-node scripts/update-marketplace-banners.ts",
     "db:seed:explore-banners": "docker-compose exec backend npx ts-node scripts/seed-explore-banners.ts",
     "db:upload-news-banner": "docker-compose exec backend npx ts-node scripts/upload-news-banner.ts",
+    "db:upload-app-assets": "docker-compose exec backend npx ts-node scripts/upload-app-assets.ts",
     "db:clear-marketplace-banners-cache": "docker-compose exec backend npx ts-node scripts/clear-marketplace-banners-cache.ts",
     "db:reset": "docker-compose exec backend npx ts-node prisma/seed/clear-user-content-data.ts",
     "db:reset:all": "docker-compose exec backend npx ts-node prisma/seed/clear-seed-data.ts --force",
@@ -45,7 +46,10 @@
     "test:inbox:cli": "docker-compose exec backend npx ts-node test-inbox-comprehensive.ts",
     "inbox:delete-julia-havka": "docker-compose exec backend npx ts-node scripts/delete-julia-havka-thread.ts",
     "sim:julia": "docker-compose exec backend npx ts-node scripts/julia-omer-simulation.ts julia",
-    "sim:omer": "docker-compose exec backend npx ts-node scripts/julia-omer-simulation.ts omer"
+    "sim:omer": "docker-compose exec backend npx ts-node scripts/julia-omer-simulation.ts omer",
+    "send:julia-to-georgia": "docker-compose exec backend npx ts-node scripts/send-message-julia-to-omer.ts",
+    "send:tuna-to-georgia": "docker-compose exec backend npx ts-node scripts/send-message-tuna-to-georgia.ts",
+    "test:messaging": "npx ts-node scripts/interactive-messaging-test.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

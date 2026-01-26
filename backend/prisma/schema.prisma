@@ -977,6 +977,10 @@ model Brand {
   updatedAt     DateTime            @updatedAt @map("updated_at")
   imageUrl      String?             @map("image_url")
   categoryId    String?             @map("category_id") @db.Uuid
+  rank          Int?                @map("rank") @default(0)
+  isPopular     Boolean?            @map("is_popular") @default(false)
+  tags          Json?               @map("tags") @default("[]")
+  bannerUrl     String?             @map("banner_url")
   surveys       BrandSurvey[]
   brandCategory BrandCategory?      @relation(fields: [categoryId], references: [id])
   followers     BridgeFollower[]

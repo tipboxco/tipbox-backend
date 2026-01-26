@@ -168,7 +168,7 @@ export type SupportType = 'GENERAL' | 'TECHNICAL' | 'PRODUCT';
 
 export type SupportRequestStatus = 'pending' | 'accepted' | 'rejected' | 'canceled' | 'awaiting_completion' | 'completed' | 'reported';
 
-export type MessageType = 'message' | 'support-request' | 'send-tips';
+export type MessageType = 'message' | 'image' | 'support-request' | 'send-tips';
 
 export interface SenderUser {
   id: string;
@@ -179,10 +179,16 @@ export interface SenderUser {
 
 export interface Message {
   id: string;
-  sender: SenderUser;
-  lastMessage: string;
+  senderId: string; // Sadece senderId (participants'tan alınacak)
+  sender?: SenderUser; // Geriye dönük uyumluluk için (deprecated, participants kullanın)
+  message?: string; // Normal mesaj için zorunlu, image için opsiyonel (caption olarak kullanılabilir)
+  lastMessage?: string; // Geriye dönük uyumluluk için (deprecated, message kullanın)
   timestamp: string;
   isUnread: boolean;
+  // Image için media field'ları (opsiyonel)
+  mediaUrl?: string | null;
+  thumbnailUrl?: string | null;
+  caption?: string | null;
 }
 
 /**
@@ -201,7 +207,8 @@ export interface SupportChatMessage {
  */
 export interface SupportRequest {
   id: string;
-  sender: SenderUser;
+  senderId: string; // Sadece senderId (participants'tan alınacak)
+  sender?: SenderUser; // Geriye dönük uyumluluk için (deprecated, participants kullanın)
   type: SupportType;
   message: string;
   amount: number;
@@ -211,20 +218,35 @@ export interface SupportRequest {
   requestId?: string;
   fromUserId: string; // Request'i oluşturan kullanıcı ID'si (required)
   toUserId: string; // Request'in gönderildiği kullanıcı ID'si (required)
+  isUnread?: boolean; // Opsiyonel, default: false
 }
 
 export interface TipsInfo {
   id: string;
-  sender: SenderUser;
+  senderId: string; // Sadece senderId (participants'tan alınacak)
+  sender?: SenderUser; // Geriye dönük uyumluluk için (deprecated, participants kullanın)
   amount: number;
-  message: string;
+  message?: string; // Opsiyonel
   timestamp: string;
+  isUnread?: boolean; // Opsiyonel, default: false
 }
 
 export interface MessageFeedItem {
   id: string;
   type: MessageType;
-  data: Message | SupportRequest | TipsInfo;
+  data: Message | SupportRequest | TipsInfo; // Message artık image için de kullanılabilir (type: "image" olduğunda)
+}
+
+export interface ThreadParticipant {
+  id: string;
+  name: string;
+  title: string;
+  avatar: string;
+}
+
+export interface ThreadParticipants {
+  userOne: ThreadParticipant;
+  userTwo: ThreadParticipant;
 }
 
 export interface MessageFeed {
