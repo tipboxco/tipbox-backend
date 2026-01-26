@@ -16,6 +16,8 @@ import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
 import { EventMetricsService } from '../event/event-metrics.service';
 import { BadgeEligibilityService } from '../gamification/badge-eligibility.service';
+import { AchievementProgressService } from '../gamification/achievement-progress.service';
+import { AchievementGoalType } from '../../domain/gamification/achievement-goal-type.enum';
 import logger from '../../infrastructure/logger/logger';
 
 export class InteractionService {
@@ -29,6 +31,7 @@ export class InteractionService {
   private notificationService = new NotificationService();
   private eventMetricsService = new EventMetricsService();
   private badgeEligibilityService = new BadgeEligibilityService();
+  private achievementProgressService = new AchievementProgressService();
 
   constructor() {}
 
@@ -70,6 +73,34 @@ export class InteractionService {
         where: { id: postId },
         select: { eventId: true, userId: true },
       });
+
+      // Achievement Ladder progress (event dışı) - async
+      this.achievementProgressService
+        .incrementProgress(userId, AchievementGoalType.LIKE_GIVEN, 1)
+        .catch((err) => {
+          logger.warn({
+            message: 'Failed to increment achievement progress for like given',
+            userId,
+            postId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+      if (postWithEventId?.userId) {
+        this.achievementProgressService
+          .incrementProgress(
+            String(postWithEventId.userId),
+            AchievementGoalType.LIKE_RECEIVED,
+            1
+          )
+          .catch((err) => {
+            logger.warn({
+              message: 'Failed to increment achievement progress for like received',
+              userId: String(postWithEventId.userId),
+              postId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          });
+      }
 
       if (postWithEventId?.eventId) {
         // Async olarak event metrik ve badge kontrolü yap (hata olsa bile devam et)

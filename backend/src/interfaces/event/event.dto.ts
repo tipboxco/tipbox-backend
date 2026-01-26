@@ -1,7 +1,14 @@
 import { FeedItem } from '../feed/feed.dto';
 
 // Event Types
-export type EventType = 'default' | 'product';
+export type EventType = 'PICKS' | 'ROASTS';
+
+export interface EventProductSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  imageUrl: string | null;
+}
 
 // Event Card
 export interface EventParticipant {
@@ -18,7 +25,8 @@ export interface EventCard {
   startDate: string; // ISO 8601 DateTime
   endDate: string; // ISO 8601 DateTime
   interaction?: number; // Total interactions (participants, comments, etc.)
-  eventType?: EventType; // Optional - may not be present in WishboxEvent model
+  eventType: EventType;
+  product: EventProductSummary | null;
   participants?: EventParticipant[];
   userPostCount?: number; // Kullanıcının bu event'teki post sayısı (sadece my-events için)
 }
@@ -59,7 +67,8 @@ export interface EventDetail {
   startDate: string; // ISO 8601 DateTime
   endDate: string; // ISO 8601 DateTime
   interaction: number;
-  eventType?: EventType; // Optional - may not be present in WishboxEvent model
+  eventType: EventType;
+  product: EventProductSummary | null;
   isJoined: boolean;
   status: EventStatus;
   rewards: RewardBadge[];

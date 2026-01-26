@@ -266,7 +266,7 @@ router.post('/login', validateBody(LoginSchema), asyncHandler(async (req: Reques
  *                   type: string
  *                   example: Email gönderilemedi. Lütfen tekrar deneyin.
  */
-router.post('/register', asyncHandler(async (req: Request, res: Response) => {
+router.post('/register', validateBody(RegisterSchema), asyncHandler(async (req: Request, res: Response) => {
   const { email, password, name } = req.body;
 
   if (!email || !password || !name) {
@@ -323,6 +323,21 @@ router.post('/register', asyncHandler(async (req: Request, res: Response) => {
       message: 'An unexpected error occurred during registration. Please try again.',
     });
   }
+}));
+
+/**
+ * Email doğrulama kodunu yeniden gönderir
+ */
+router.post('/resend-verification', validateBody(ResendVerificationSchema), asyncHandler(async (req: Request, res: Response) => {
+  const { email } = req.body;
+  const result = await authService.sendEmailVerificationCode(email);
+
+  if (!result.success) {
+    const statusCode = result.message.includes('bulunamadı') ? 404 : 500;
+    return res.status(statusCode).json(result);
+  }
+
+  return res.json(result);
 }));
 
 /**

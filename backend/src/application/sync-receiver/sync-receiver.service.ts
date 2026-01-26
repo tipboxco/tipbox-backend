@@ -83,12 +83,20 @@ export class SyncReceiverService {
               const categoryName = (record.category as string) || null;
               const categoryId = categoryName ? categoryMap.get(categoryName) : null;
 
+              // rank ve ispopular için null kontrolü (0 ve false geçerli değerler)
+              const rank = record.rank !== undefined && record.rank !== null ? record.rank : null;
+              const isPopular = record.ispopular !== undefined && record.ispopular !== null ? record.ispopular : null;
+
               return {
                 externalId: record.id,
                 name: record.name || record.title || 'Unnamed Brand',
                 description: record.description || null,
                 logoUrl: record.logo_url || record.image_url || null,
                 imageUrl: record.image_url ?? record.logo_url,
+                bannerUrl: record.banner_url || null,
+                rank: rank,
+                isPopular: isPopular,
+                tags: record.tags || null,
                 category: categoryName,
                 categoryId: categoryId || record.category_id || null,
               };
@@ -117,6 +125,10 @@ export class SyncReceiverService {
               const categoryName = (record.category as string) || null;
               const categoryId = categoryName ? categoryMap.get(categoryName) : null;
 
+              // rank ve ispopular için null kontrolü (0 ve false geçerli değerler)
+              const rank = record.rank !== undefined && record.rank !== null ? record.rank : null;
+              const isPopular = record.ispopular !== undefined && record.ispopular !== null ? record.ispopular : null;
+
               return tx.brand.update({
                 where: { externalId: record.id },
                 data: {
@@ -124,6 +136,10 @@ export class SyncReceiverService {
                   description: record.description || null,
                   logoUrl: record.logo_url || record.image_url || null,
                   imageUrl: record.image_url || record.logo_url || null,
+                  bannerUrl: record.banner_url || null,
+                  rank: rank,
+                  isPopular: isPopular,
+                  tags: record.tags || null,
                   category: categoryName,
                   categoryId: categoryId || record.category_id || null,
                 },
@@ -249,11 +265,19 @@ export class SyncReceiverService {
         const categoryName = (record.category as string) || null;
         const categoryId = categoryName ? categoryMap.get(categoryName) : null;
 
+        // rank ve ispopular için null kontrolü (0 ve false geçerli değerler)
+        const rank = record.rank !== undefined && record.rank !== null ? record.rank : null;
+        const isPopular = record.ispopular !== undefined && record.ispopular !== null ? record.ispopular : null;
+
         const brandData = {
           name: record.name || record.title || 'Unnamed Brand',
           description: record.description || null,
           logoUrl: record.logo_url || record.image_url || null,
           imageUrl: record.image_url || record.logo_url || null,
+          bannerUrl: record.banner_url || null,
+          rank: rank,
+          isPopular: isPopular,
+          tags: record.tags || null,
           category: categoryName,
           categoryId: categoryId || record.category_id || null,
           externalId: record.id,

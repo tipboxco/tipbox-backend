@@ -19,15 +19,84 @@ export class AuthService implements IAuthService {
   private emailService = new EmailService();
   private prisma = getPrisma();
 
+  /**
+   * Mevcut kullanıcı için email doğrulama kodu üretir ve gönderir
+   * (kullanıcıyı silmez; önceki aktif kodları invalidate eder)
+   */
+  async sendEmailVerificationCode(email: string): Promise<{ success: boolean; message: string; devCode?: string }> {
+    const user = await this.userRepo.findByEmail(email);
+
+    if (!user) {
+      return {
+        success: false,
+        message: 'Kullanıcı bulunamadı',
+      };
+    }
+
+    if (user.emailVerified) {
+      return {
+        success: true,
+        message: 'Email adresiniz zaten doğrulanmış.',
+      };
+    }
+
+    const code = this.generateVerificationCode();
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + 10);
+
+    await this.emailVerificationRepo.create(user.id, email, code, expiresAt);
+
+    try {
+      await this.emailService.sendVerificationCode(email, code);
+      return {
+        success: true,
+        message: 'Email doğrulama kodu gönderildi.',
+      };
+    } catch (error) {
+      logger.error({
+        message: 'Failed to send verification code email',
+        email,
+        userId: user.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      const isProd = process.env.NODE_ENV === 'production';
+      const exposeCode = process.env.EXPOSE_VERIFICATION_CODE === 'true';
+
+      // Dev/Test ortamında email servis hatası kayıt akışını bloklamasın:
+      // Kod DB'de durur, gerekirse resend ile tekrar denenir.
+      if (!isProd) {
+        logger.warn({
+          message: 'Email service unavailable; verification code generated (dev fallback)',
+          email,
+          userId: user.id,
+          code: exposeCode ? code : undefined,
+        });
+
+        return {
+          success: true,
+          message: exposeCode
+            ? 'Email gönderilemedi (dev). Doğrulama kodu response içine eklendi.'
+            : 'Email gönderilemedi (dev). Doğrulama kodu loglara yazdırıldı.',
+          devCode: exposeCode ? code : undefined,
+        };
+      }
+
+      const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata';
+      return {
+        success: false,
+        message: `Email gönderilemedi: ${errorMessage}. Lütfen tekrar deneyin.`,
+      };
+    }
+  }
+
   async authenticate(email: string, password: string): Promise<User | null> {
     const user = await this.userRepo.findByEmail(email);
     if (!user) return null;
     
     // Şifre hash kontrolü
     if (!user.passwordHash) return null;
-    const hashedPassword = await bcrypt.hash(password, 10);
     const valid = await bcrypt.compare(password, user.passwordHash);
-    console.log({valid,password,userPassword: user.passwordHash,hashedPassword});
     if (!valid) return null;
     
     return user;
@@ -592,7 +661,8 @@ export class AuthService implements IAuthService {
         where: { id: user.id },
         data: {
           email: email || user.email,
-          emailVerified: emailVerified,
+          emailVerified: !!emailVerified,
+          status: !!emailVerified ? 'ACTIVE' : user.status,
           profile: name && user.displayName !== name ? {
             upsert: {
               create: {
@@ -615,12 +685,15 @@ export class AuthService implements IAuthService {
     if (email) {
       const existingUserByEmail = await this.userRepo.findByEmail(email);
       if (existingUserByEmail) {
+        const nextEmailVerified = Boolean(emailVerified || existingUserByEmail.emailVerified);
         // Mevcut kullanıcıya auth0Id ekle
         await this.prisma.user.update({
           where: { id: existingUserByEmail.id },
           data: {
             auth0Id,
-            emailVerified: emailVerified ?? existingUserByEmail.emailVerified ?? false,
+            emailVerified: nextEmailVerified,
+            status: nextEmailVerified ? 'ACTIVE' : 'PENDING_VERIFICATION',
+            //emailVerified: emailVerified ?? existingUserByEmail.emailVerified ?? false,
           },
         });
         

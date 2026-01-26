@@ -29,6 +29,7 @@ import notificationRouter from './notification/notification.router';
 import newsRouter from './news/news.router';
 import syncReceiverRouter from './sync-receiver/sync-receiver.router';
 import auth0Router from './auth0/auth0.router';
+import surveyRouter from './survey/survey.router';
 
 // Middleware
 import { authMiddleware } from './auth/auth.middleware';
@@ -48,6 +49,10 @@ import config from '../infrastructure/config';
 import logger from '../infrastructure/logger/logger';
 
 const app = express();
+
+// Reverse proxy (nginx) arkasında doğru host/protocol ve cookie davranışı için
+// (x-forwarded-* header'larını dikkate alır)
+app.set('trust proxy', 1);
 
 // Security middleware
 app.use(helmet());
@@ -86,6 +91,8 @@ if (issuerBaseURL && clientID && secret && !issuerBaseURL.includes('{yourDomain}
   const auth0Config: any = {
     authRequired: false,
     auth0Logout: true,
+    // baseURL string olmalı (express-openid-connect gereksinimi)
+    // Login endpoint'lerinde redirect_uri request'ten dinamik olarak override edilecek
     baseURL: baseURL,
     clientID: clientID,
     issuerBaseURL: issuerBaseURL,
@@ -97,10 +104,14 @@ if (issuerBaseURL && clientID && secret && !issuerBaseURL.includes('{yourDomain}
       response_type: 'code', // Authorization Code Flow
       scope: 'openid profile email', // openid scope'u mutlaka olmalı
       response_mode: 'query' // veya 'form_post' (daha güvenli)
-    },
+      // PKCE parametrelerini eklemiyoruz (confidential client olduğumuz için client_secret kullanıyoruz)
+      // code_challenge ve code_challenge_method gönderilmediği için PKCE kullanılmayacak
+    } as any,
     routes: {
-      callback: '/auth/auth0/callback',
-      postLogoutRedirect: '/auth/auth0/token' // Callback sonrasında token endpoint'ine yönlendir
+      // Auth0 callback route'unu router mount path'ine sabitle
+      // Not: Auth0 Dashboard "Allowed Callback URLs" listesinde bu URL olmalı
+      callback: '/auth0/callback',
+      postLogoutRedirect: '/auth0/token' // Callback sonrasında token endpoint'ine yönlendir
     },
     // Callback sonrasında session'ı döndür
     afterCallback: async (req: express.Request, res: express.Response, session: any) => {
@@ -109,11 +120,15 @@ if (issuerBaseURL && clientID && secret && !issuerBaseURL.includes('{yourDomain}
   };
   
   app.use(auth(auth0Config));
+  
+  // Callback URL'ini hesapla ve log'la
   logger.info({ 
     message: 'Auth0 middleware initialized',
+    baseURL: baseURL,
     hasClientSecret: !!clientSecret,
     responseType: auth0Config.authorizationParams?.response_type,
-    scope: auth0Config.authorizationParams?.scope
+    scope: auth0Config.authorizationParams?.scope,
+    note: 'Callback endpoint manuel olarak handle ediliyor (request\'ten host bilgisi kullanılıyor). Auth0 Dashboard\'da tüm olası callback URL\'lerini ekleyin.'
   });
 } else {
   logger.warn({ message: 'Auth0 middleware skipped - missing or invalid configuration' });
@@ -223,14 +238,14 @@ function getDynamicSwaggerOptions(req: express.Request) {
 }
 
 /**
- * Swagger spec'inde hardcoded localhost:9000 örneklerini SEED_MEDIA_BASE_URL ile değiştirir
+ * Swagger spec'inde hardcoded localhost:9000 örneklerini public media base URL ile değiştirir
  */
 function replaceLocalhostExamplesInSwaggerSpec(spec: Record<string, unknown>): Record<string, unknown> {
   try {
     const mediaBaseUrl = getPublicMediaBaseUrl();
     const specString = JSON.stringify(spec);
     
-    // localhost:9000 örneklerini SEED_MEDIA_BASE_URL ile değiştir
+    // localhost:9000 örneklerini public media base URL ile değiştir
     const updatedSpecString = specString.replace(
       /http:\/\/localhost:9000/g,
       mediaBaseUrl
@@ -306,6 +321,7 @@ app.use('/events', eventRouter);
 app.use('/news', newsRouter);
 app.use('/interactions', interactionRouter);
 app.use('/notifications', authMiddleware, notificationRouter);
+app.use('/surveys', surveyRouter);
 app.use('/api/cache', cacheRouter);
 app.use('/api/sync-receiver', syncReceiverRouter);
 

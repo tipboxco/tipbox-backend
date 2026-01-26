@@ -7024,6 +7024,8 @@ async function main() {
   console.log(`✅ ${boostOptions.length} boost seçeneği oluşturuldu/güncellendi`)
 
   // Bridge achievement chain kodu eski badge'lere bağımlı olduğu için şimdilik devre dışı
+  /*
+  const bridgeBadgeConfigs = [
     {
       name: 'Gürültü Avcısı',
       description: 'Gürültü engelleme teknolojilerini en iyi anlattınız',
@@ -7282,6 +7284,7 @@ async function main() {
       categoryId: eventCategory.id,
     },
   ]
+  */
   /*
   // Create bridge achievement chain for bridge badges
   let bridgeAchievementChain = await prisma.achievementChain.findFirst({
@@ -7441,52 +7444,8 @@ async function main() {
   console.log('✅ Bridge badge achievement goals created')
   */
 
-  // 5. Comparison Metrics
-  progress.increment('Karşılaştırma metrikleri oluşturuluyor...')
-  console.log('\n📊 Creating comparison metrics...')
-  const metricConfigs = [
-    { name: 'Fiyat', description: 'Ürünün fiyat performansı (1-10)' },
-    { name: 'Kalite', description: 'Ürünün genel kalitesi (1-10)' },
-    { name: 'Kullanım Kolaylığı', description: 'Ürünün ne kadar kolay kullanıldığı (1-10)' },
-    { name: 'Dayanıklılık', description: 'Ürünün ne kadar uzun süre dayandığı (1-10)' },
-    { name: 'Tasarım', description: 'Ürünün görsel tasarımı ve estetik (1-10)' },
-    { name: 'Müşteri Hizmetleri', description: 'Markanın müşteri hizmetleri kalitesi (1-10)' },
-    { name: 'Özellikler', description: 'Ürünün sahip olduğu özellikler (1-10)' },
-    { name: 'Çevre Dostu', description: 'Ürünün çevreye olan etkisi (1-10)' }
-  ]
-  
-  const metrics = await Promise.all(
-    metricConfigs.map(async (config) => {
-      return ensureComparisonMetric(config)
-    })
-  )
-  console.log(`✅ ${metrics.length} karşılaştırma metriği oluşturuldu/güncellendi`)
-
-  // 5.b Boost Options
-  progress.increment('Boost seçenekleri oluşturuluyor...')
-  console.log('\n🚀 Creating boost options...')
-  const boostOptionConfigs = [
-    { title: 'Standard Boost', description: 'Standard visibility boost for your question posts.', amount: 0, isPopular: false, isActive: true },
-    { title: 'Popular Boost', description: 'Increases reach for questions that need quick answers.', amount: 10, isPopular: true, isActive: true },
-    { title: 'Premium Boost', description: 'Maximum visibility and priority in the feed.', amount: 25, isPopular: true, isActive: true }
-  ]
-  
-  const boostOptions = await Promise.all(
-    boostOptionConfigs.map(async (config) => {
-      const existing = await prisma.boostOption.findFirst({
-        where: { title: config.title }
-      })
-      
-      if (existing) {
-        return existing
-      }
-      
-      return prisma.boostOption.create({
-        data: config as any
-      })
-    })
-  )
-  console.log(`✅ ${boostOptions.length} boost option oluşturuldu/güncellendi`)
+  // NOT: Comparison Metrics ve Boost Options zaten yukarıda (6979-7024 satırları arasında) oluşturuldu
+  // Bu kod tekrarı kaldırıldı
 
   // NOT: Sub Categories artık seedProductCategories() içinde oluşturuluyor
   // Electronics ve Beauty için tüm subcategory/product group yapısı orada

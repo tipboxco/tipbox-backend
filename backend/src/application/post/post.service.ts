@@ -36,6 +36,8 @@ import { CacheService } from '../../infrastructure/cache/cache.service';
 import { invalidateCatalogPostsCache } from '../../infrastructure/cache/cache-invalidation';
 import { EventMetricsService } from '../event/event-metrics.service';
 import { BadgeEligibilityService } from '../gamification/badge-eligibility.service';
+import { AchievementProgressService } from '../gamification/achievement-progress.service';
+import { AchievementGoalType } from '../../domain/gamification/achievement-goal-type.enum';
 
 export class PostService {
   private postRepo: ContentPostPrismaRepository;
@@ -50,6 +52,7 @@ export class PostService {
   private s3Service: S3Service;
   private eventMetricsService: EventMetricsService;
   private badgeEligibilityService: BadgeEligibilityService;
+  private achievementProgressService: AchievementProgressService;
 
   /**
    * Search posts by title and body
@@ -80,16 +83,9 @@ export class PostService {
     const paginated = hasMore ? resultPosts.slice(0, limit) : resultPosts;
     const nextCursor = hasMore && paginated.length > 0 ? paginated[paginated.length - 1].id : undefined;
 
-    // Convert to feed format
-    const feedItems = await Promise.all(
-      paginated.map(async (post) => {
-        const feedItem = await this.feedService.mapContentPostToFeedItem(post, undefined);
-        return feedItem;
-      })
-    );
-
+    // Return posts directly (feed conversion removed - mapContentPostToFeedItem method doesn't exist)
     return {
-      items: feedItems,
+      items: paginated,
       pagination: {
         cursor: nextCursor,
         hasMore,
@@ -111,6 +107,7 @@ export class PostService {
     this.s3Service = new S3Service();
     this.eventMetricsService = new EventMetricsService();
     this.badgeEligibilityService = new BadgeEligibilityService();
+    this.achievementProgressService = new AchievementProgressService();
   }
 
   /**
@@ -455,6 +452,20 @@ export class PostService {
       if (request.eventId) {
         await this.validateEvent(request.eventId);
         await this.validateEventMembership(userId, request.eventId);
+
+        // ✅ ROASTS event'lerde productStatus beklenir (app own|tried gönderir)
+        const event = await this.prisma.wishboxEvent.findUnique({
+          where: { id: request.eventId },
+          select: { feedType: true },
+        });
+        if ((event as any)?.feedType === 'ROASTS') {
+          if (!request.productStatus) {
+            throw new Error('productStatus is required for ROASTS event posts');
+          }
+          if (request.productStatus !== 'own' && request.productStatus !== 'tried') {
+            throw new Error("productStatus must be 'own' or 'tried'");
+          }
+        }
       }
 
       const contextIds = await this.resolveContextIds(
@@ -481,7 +492,8 @@ export class PostService {
         contextIds.productId,
         false,
         false,
-        request.eventId
+        request.eventId,
+        request.productStatus
       );
 
       // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
@@ -744,13 +756,6 @@ export class PostService {
         id: post.id,
         message: 'Tips & tricks post başarıyla oluşturuldu',
         success: true,
-        context: {
-          contextType: request.contextType,
-          contextId: request.contextId,
-          subCategoryId: contextIds.subCategoryId,
-          productGroupId: contextIds.productGroupId,
-          productId: contextIds.productId,
-        }
       };
     } catch (error) {
       logger.error(`Failed to create tips and tricks post:`, error);
@@ -896,13 +901,6 @@ export class PostService {
         id: post.id,
         message: 'Question post başarıyla oluşturuldu',
         success: true,
-        context: {
-          contextType: request.contextType,
-          contextId: request.contextId,
-          subCategoryId: contextIds.subCategoryId,
-          productGroupId: contextIds.productGroupId,
-          productId: contextIds.productId,
-        }
       };
     } catch (error) {
       logger.error(`Failed to create question post:`, error);
@@ -1081,13 +1079,6 @@ export class PostService {
         id: post.id,
         message: 'Benchmark post başarıyla oluşturuldu',
         success: true,
-        context: {
-          contextType: request.contextType,
-          contextId: request.contextId,
-          subCategoryId: contextIds.subCategoryId,
-          productGroupId: contextIds.productGroupId,
-          productId: contextIds.productId,
-        }
       };
     } catch (error) {
       logger.error(`Failed to create benchmark post:`, error);
@@ -1175,6 +1166,18 @@ export class PostService {
       logger.info(`Experience post created: ${post.id} by user ${userId}`, {
         experienceSnippetId: request.experienceSnippetId || null
       });
+
+      // Achievement Ladder progress (event dışı) - async
+      this.achievementProgressService
+        .incrementProgress(userId, AchievementGoalType.POST, 1)
+        .catch((err) => {
+          logger.warn({
+            message: 'Failed to increment achievement progress for experience post',
+            userId,
+            postId: post.id,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
       
       // Event cache'i invalidate et (eventId varsa)
       if (request.eventId) {
@@ -1210,13 +1213,6 @@ export class PostService {
         id: post.id,
         message: 'Experience post başarıyla oluşturuldu',
         success: true,
-        context: {
-          contextType: request.contextType,
-          contextId: request.contextId,
-          subCategoryId: contextIds.subCategoryId,
-          productGroupId: contextIds.productGroupId,
-          productId: contextIds.productId,
-        }
       };
     } catch (error) {
       logger.error(`Failed to create experience post:`, error);
@@ -1234,6 +1230,9 @@ export class PostService {
       // Ürün bilgilerini al
       const product = await this.prisma.product.findUnique({
         where: { id: request.productId },
+        include: {
+          brand: true,
+        },
       });
 
       if (!product) {
@@ -1244,7 +1243,7 @@ export class PostService {
       const splitResult = await this.geminiService.splitExperience({
         productId: request.productId,
         productName: product.name,
-        productBrand: product.brand || undefined,
+        productBrand: product.brand?.name || undefined,
         productDescription: product.description || undefined,
         experienceText: request.content,
       });
@@ -1382,13 +1381,6 @@ export class PostService {
         id: post.id,
         message: 'Update post başarıyla oluşturuldu',
         success: true,
-        context: {
-          contextType: request.contextType,
-          contextId: request.contextId,
-          subCategoryId: contextIds.subCategoryId,
-          productGroupId: contextIds.productGroupId,
-          productId: contextIds.productId,
-        }
       };
     } catch (error) {
       logger.error(`Failed to create update post:`, error);

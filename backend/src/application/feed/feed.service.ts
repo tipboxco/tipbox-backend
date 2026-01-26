@@ -394,15 +394,15 @@ export class FeedService {
         orderedPosts = orderedPosts.filter((post) => {
           // Sub category'ye ait mi?
           if (post.subCategoryId === options.contextId) {
-            return allowedTypes.includes(post.type);
+            return allowedTypes.includes(post.type as ContentPostType);
           }
           // Alt product group'a ait mi?
           if (post.productGroupId && productGroupIds.includes(post.productGroupId)) {
-            return allowedTypes.includes(post.type);
+            return allowedTypes.includes(post.type as ContentPostType);
           }
           // Alt product'a ait mi? (sadece Free, Tips, Question)
           if (post.productId && productIds.includes(post.productId)) {
-            return allowedTypes.includes(post.type);
+            return allowedTypes.includes(post.type as ContentPostType);
           }
           return false;
         });
@@ -418,11 +418,11 @@ export class FeedService {
         orderedPosts = orderedPosts.filter((post) => {
           // Product group'a ait mi?
           if (post.productGroupId === options.contextId) {
-            return allowedTypes.includes(post.type);
+            return allowedTypes.includes(post.type as ContentPostType);
           }
           // Alt product'a ait mi? (sadece Free, Tips, Question)
           if (post.productId && productIds.includes(post.productId)) {
-            return allowedTypes.includes(post.type);
+            return allowedTypes.includes(post.type as ContentPostType);
           }
           return false;
         });

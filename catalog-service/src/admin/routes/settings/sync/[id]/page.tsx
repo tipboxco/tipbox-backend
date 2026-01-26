@@ -108,7 +108,10 @@ const SyncDetailPage = () => {
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
-        if (data.sync_config) setConfig(data.sync_config)
+        // Drawer açıkken config güncellemelerini ignore et (form state'i korumak için)
+        if (data.sync_config && !editDrawerOpen) {
+          setConfig(data.sync_config)
+        }
         if (data.stats) setStats(data.stats)
         if (data.jobs) {
           setJobs(data.jobs)
@@ -127,7 +130,7 @@ const SyncDetailPage = () => {
       eventSourceRef.current = null
       setTimeout(() => { if (id) connectSSE() }, 5000)
     }
-  }, [id])
+  }, [id, editDrawerOpen])
 
   useEffect(() => {
     fetchInitialData()
