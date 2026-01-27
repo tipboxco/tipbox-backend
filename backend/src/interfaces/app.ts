@@ -127,7 +127,7 @@ if (issuerBaseURL && clientID && secret && !issuerBaseURL.includes('{yourDomain}
     session: {
       // Cookie'yi tüm domain'ler için geçerli yap (sameSite: 'none' ve secure: true gerekli)
       cookie: {
-        sameSite: 'lax', // 'none' için secure: true gerekli (HTTPS)
+        sameSite: 'Lax', // 'None' için secure: true gerekli (HTTPS)
         secure: process.env.NODE_ENV === 'production', // Production'da HTTPS gerekli
         httpOnly: true,
         // Domain belirtilmezse, cookie mevcut domain için set edilir
