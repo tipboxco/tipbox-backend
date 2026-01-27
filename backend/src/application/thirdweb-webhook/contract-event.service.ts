@@ -20,10 +20,18 @@ import {
   ThirdwebContractSubscriptionPayload,
   EventProcessResult,
   parseTransferEvent,
+  parseApprovalEvent,
   isContractSupported,
+  TokenType,
+  weiToToken,
+  isSignificantTransfer,
   ZERO_ADDRESS
 } from '../../interfaces/thirdweb-webhook/contract-event.dto';
+import { WalletService } from '../wallet/wallet.service';
 import logger from '../../infrastructure/logger/logger';
+
+// Token decimals configuration
+const TOKEN_DECIMALS = parseInt(process.env.TIPS_TOKEN_DECIMALS || '18', 10);
 
 // ============================================================================
 // SERVICE
@@ -37,7 +45,8 @@ export class ContractEventService {
     private readonly eventLogRepo = new ContractEventLogPrismaRepository(),
     private readonly walletRepo = new WalletPrismaRepository(),
     private readonly transactionRepo = new TransactionPrismaRepository(),
-    private readonly transactionService = new TransactionService()
+    private readonly transactionService = new TransactionService(),
+    private readonly walletService = new WalletService()
   ) {
     this.webhookSecret = process.env.THIRDWEB_WEBHOOK_SECRET || '';
     this.expirationSeconds = parseInt(process.env.THIRDWEB_WEBHOOK_EXPIRATION_SECONDS || '300', 10);
@@ -174,55 +183,15 @@ export class ContractEventService {
 
     // Transfer event'i özel işleme
     if (data.eventName === 'Transfer') {
-      const transferEvent = parseTransferEvent(data.decodedLog);
-      
-      if (transferEvent) {
-        // To address'i wallet ile eşleştir
-        const toWallet = await this.walletRepo.findByPublicAddress(transferEvent.to);
-        if (toWallet) {
-          walletId = toWallet.id;
-          
-          // Mint event ise (from = 0x0)
-          if (transferEvent.isMint) {
-            // Bu wallet'ın pending mint transaction'ını bul
-            const pendingTx = await prisma.transaction.findFirst({
-              where: {
-                walletId: toWallet.id,
-                status: 'pending',
-                provider: 'thirdweb',
-                actionType: { in: ['CLAIM_BADGE', 'CLAIM_REWARD'] }
-              },
-              orderBy: { createdAt: 'desc' },
-              select: { id: true }
-            });
-
-            if (pendingTx) {
-              transactionId = pendingTx.id;
-              
-              // Transaction'ı confirm et
-              await this.transactionService.confirmTransaction(
-                transactionId,
-                data.transactionHash
-              );
-
-              logger.info({
-                transactionId,
-                walletId,
-                tokenId: transferEvent.tokenId,
-                message: 'NFT Mint confirmed via Transfer event'
-              });
-            }
-          }
-        }
-
-        // From address'i de kontrol et (transfer veya burn için)
-        if (!walletId) {
-          const fromWallet = await this.walletRepo.findByPublicAddress(transferEvent.from);
-          if (fromWallet) {
-            walletId = fromWallet.id;
-          }
-        }
-      }
+      const result = await this.handleTransferEvent(data, prisma);
+      walletId = result.walletId;
+      transactionId = result.transactionId;
+    }
+    
+    // Approval event'i özel işleme
+    else if (data.eventName === 'Approval') {
+      const result = await this.handleApprovalEvent(data);
+      walletId = result.walletId;
     }
 
     // Event log'u kaydet
@@ -262,6 +231,232 @@ export class ContractEventService {
       transactionId,
       walletId
     };
+  }
+
+  // ==========================================================================
+  // EVENT HANDLERS
+  // ==========================================================================
+
+  /**
+   * Transfer event handler - ERC20 ve ERC721 destekler
+   */
+  private async handleTransferEvent(
+    data: ContractEventPayload['data'],
+    prisma: ReturnType<typeof getPrisma>
+  ): Promise<{ walletId?: string; transactionId?: string }> {
+    const transferEvent = parseTransferEvent(data.decodedLog, TOKEN_DECIMALS);
+    
+    if (!transferEvent) {
+      return {};
+    }
+
+    let walletId: string | undefined;
+    let transactionId: string | undefined;
+
+    // To address'i wallet ile eşleştir
+    const toWallet = await this.walletRepo.findByPublicAddress(transferEvent.to);
+    const fromWallet = await this.walletRepo.findByPublicAddress(transferEvent.from);
+
+    // ===== ERC20 TOKEN TRANSFER =====
+    if (transferEvent.tokenType === TokenType.ERC20 && transferEvent.value) {
+      const amount = weiToToken(transferEvent.value, TOKEN_DECIMALS);
+      
+      // Minimum transfer kontrolü
+      if (!isSignificantTransfer(transferEvent.value, TOKEN_DECIMALS, 0.0001)) {
+        logger.debug({
+          amount,
+          message: 'Insignificant transfer amount, skipping balance update'
+        });
+        return { walletId: toWallet?.id || fromWallet?.id };
+      }
+
+      // MINT: Token oluşturma (from = 0x0)
+      if (transferEvent.isMint && toWallet) {
+        walletId = toWallet.id;
+        
+        // Pending transaction bul
+        const pendingTx = await prisma.transaction.findFirst({
+          where: {
+            walletId: toWallet.id,
+            status: 'pending',
+            provider: 'thirdweb',
+            actionType: { in: ['CLAIM_REWARD', 'AIRDROP', 'TIP_RECEIVE'] }
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true }
+        });
+
+        if (pendingTx) {
+          transactionId = pendingTx.id;
+          await this.transactionService.confirmTransaction(transactionId, data.transactionHash);
+        } else {
+          // Transaction yoksa direkt balance güncelle (external mint)
+          await this.walletService.updateBalance(toWallet.id, amount, {
+            reason: 'Token mint from contract event',
+            txHash: data.transactionHash
+          });
+        }
+
+        logger.info({
+          walletId,
+          amount,
+          transactionHash: data.transactionHash,
+          message: 'ERC20 Token mint detected'
+        });
+      }
+      
+      // BURN: Token yakma (to = 0x0)
+      else if (transferEvent.isBurn && fromWallet) {
+        walletId = fromWallet.id;
+        
+        // Balance düş (negatif amount)
+        await this.walletService.updateBalance(fromWallet.id, -amount, {
+          reason: 'Token burn from contract event',
+          txHash: data.transactionHash
+        });
+
+        logger.info({
+          walletId,
+          amount: -amount,
+          transactionHash: data.transactionHash,
+          message: 'ERC20 Token burn detected'
+        });
+      }
+      
+      // TRANSFER: Normal transfer
+      else {
+        // Alıcı bizim sistemdeyse - balance artır
+        if (toWallet) {
+          walletId = toWallet.id;
+          
+          // Pending receive transaction bul
+          const pendingReceiveTx = await prisma.transaction.findFirst({
+            where: {
+              walletId: toWallet.id,
+              status: 'pending',
+              actionType: 'TIP_RECEIVE'
+            },
+            orderBy: { createdAt: 'desc' },
+            select: { id: true }
+          });
+
+          if (pendingReceiveTx) {
+            transactionId = pendingReceiveTx.id;
+            await this.transactionService.confirmTransaction(transactionId, data.transactionHash);
+          } else {
+            // External transfer - direkt balance güncelle
+            await this.walletService.updateBalance(toWallet.id, amount, {
+              reason: `Token received from ${transferEvent.from}`,
+              txHash: data.transactionHash
+            });
+          }
+
+          logger.info({
+            walletId,
+            amount,
+            from: transferEvent.from,
+            message: 'ERC20 Token received'
+          });
+        }
+
+        // Gönderen bizim sistemdeyse - balance düş
+        if (fromWallet) {
+          if (!walletId) walletId = fromWallet.id;
+          
+          // Pending send transaction bul
+          const pendingSendTx = await prisma.transaction.findFirst({
+            where: {
+              walletId: fromWallet.id,
+              status: 'pending',
+              actionType: 'TIP_SEND'
+            },
+            orderBy: { createdAt: 'desc' },
+            select: { id: true }
+          });
+
+          if (pendingSendTx) {
+            if (!transactionId) transactionId = pendingSendTx.id;
+            await this.transactionService.confirmTransaction(pendingSendTx.id, data.transactionHash);
+          }
+          // Not: Balance zaten transaction confirm'de düşülüyor
+
+          logger.info({
+            walletId: fromWallet.id,
+            amount: -amount,
+            to: transferEvent.to,
+            message: 'ERC20 Token sent'
+          });
+        }
+      }
+    }
+    
+    // ===== ERC721 NFT TRANSFER =====
+    else if (transferEvent.tokenType === TokenType.ERC721 && toWallet) {
+      walletId = toWallet.id;
+      
+      // NFT Mint
+      if (transferEvent.isMint) {
+        const pendingTx = await prisma.transaction.findFirst({
+          where: {
+            walletId: toWallet.id,
+            status: 'pending',
+            provider: 'thirdweb',
+            actionType: { in: ['CLAIM_BADGE', 'CLAIM_REWARD'] }
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true }
+        });
+
+        if (pendingTx) {
+          transactionId = pendingTx.id;
+          await this.transactionService.confirmTransaction(transactionId, data.transactionHash);
+
+          logger.info({
+            transactionId,
+            walletId,
+            tokenId: transferEvent.tokenId,
+            message: 'NFT Mint confirmed via Transfer event'
+          });
+        }
+      }
+    }
+    
+    // Fallback - herhangi bir wallet eşleşmesi
+    if (!walletId && fromWallet) {
+      walletId = fromWallet.id;
+    }
+
+    return { walletId, transactionId };
+  }
+
+  /**
+   * Approval event handler - ERC20 token onayları
+   */
+  private async handleApprovalEvent(
+    data: ContractEventPayload['data']
+  ): Promise<{ walletId?: string }> {
+    const approvalEvent = parseApprovalEvent(data.decodedLog, TOKEN_DECIMALS);
+    
+    if (!approvalEvent) {
+      return {};
+    }
+
+    // Owner wallet'ı bul
+    const ownerWallet = await this.walletRepo.findByPublicAddress(approvalEvent.owner);
+    
+    if (ownerWallet) {
+      logger.info({
+        walletId: ownerWallet.id,
+        spender: approvalEvent.spender,
+        value: approvalEvent.value,
+        tokenType: approvalEvent.tokenType,
+        message: 'Token approval detected'
+      });
+
+      return { walletId: ownerWallet.id };
+    }
+
+    return {};
   }
 
   /**
