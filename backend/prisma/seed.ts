@@ -167,7 +167,7 @@ const SEED_USERS: SeedUserConfig[] = [
     name: 'Elif',
     email: 'elif@tipbox.co',
     userName: 'elif',
-    avatarKey: 'user.avatar.elif',
+    avatarKey: 'user.avatar.woman2',
     bio: 'Hair care specialist and styling expert.',
     title: 'Hair Care Expert',
     country: 'Turkey',
@@ -177,7 +177,7 @@ const SEED_USERS: SeedUserConfig[] = [
     name: 'Can',
     email: 'can@tipbox.co',
     userName: 'can',
-    avatarKey: 'user.avatar.can',
+    avatarKey: 'user.avatar.man3',
     bio: 'Fitness tracker and wearable tech reviewer.',
     title: 'Fitness Tech',
     country: 'Turkey',
@@ -187,7 +187,7 @@ const SEED_USERS: SeedUserConfig[] = [
     name: 'Zeynep',
     email: 'zeynep@tipbox.co',
     userName: 'zeynep',
-    avatarKey: 'user.avatar.zeynep',
+    avatarKey: 'user.avatar.woman3',
     bio: 'Nail art enthusiast and nail care product tester.',
     title: 'Nail Artist',
     country: 'Turkey',
@@ -197,7 +197,7 @@ const SEED_USERS: SeedUserConfig[] = [
     name: 'Ahmet',
     email: 'ahmet@tipbox.co',
     userName: 'ahmet',
-    avatarKey: 'user.avatar.ahmet',
+    avatarKey: 'user.avatar.man4',
     bio: 'Men grooming expert and beard care specialist.',
     title: 'Grooming Guru',
     country: 'Turkey',
@@ -207,7 +207,7 @@ const SEED_USERS: SeedUserConfig[] = [
     name: 'Selin',
     email: 'selin@tipbox.co',
     userName: 'selin',
-    avatarKey: 'user.avatar.selin',
+    avatarKey: 'user.avatar.woman4',
     bio: 'Personal care product reviewer and wellness advocate.',
     title: 'Wellness Expert',
     country: 'Turkey',
@@ -217,7 +217,7 @@ const SEED_USERS: SeedUserConfig[] = [
     name: 'Emre',
     email: 'emre@tipbox.co',
     userName: 'emre',
-    avatarKey: 'user.avatar.emre',
+    avatarKey: 'user.avatar.man5',
     bio: 'Tablet and e-reader enthusiast. Digital reading expert.',
     title: 'Digital Reader',
     country: 'Turkey',
@@ -227,7 +227,7 @@ const SEED_USERS: SeedUserConfig[] = [
     name: 'Deniz',
     email: 'deniz@tipbox.co',
     userName: 'deniz',
-    avatarKey: 'user.avatar.deniz',
+    avatarKey: 'user.avatar.woman5',
     bio: 'Wireless earbuds collector and audio quality tester.',
     title: 'Audio Lover',
     country: 'Turkey',
@@ -237,7 +237,7 @@ const SEED_USERS: SeedUserConfig[] = [
     name: 'Barış',
     email: 'baris@tipbox.co',
     userName: 'baris',
-    avatarKey: 'user.avatar.baris',
+    avatarKey: 'user.avatar.man1',
     bio: 'Drone pilot and aerial photography enthusiast.',
     title: 'Drone Expert',
     country: 'Turkey',
@@ -247,7 +247,7 @@ const SEED_USERS: SeedUserConfig[] = [
     name: 'Merve',
     email: 'merve@tipbox.co',
     userName: 'merve',
-    avatarKey: 'user.avatar.merve',
+    avatarKey: 'user.avatar.woman1',
     bio: 'Smartwatch and fitness band reviewer.',
     title: 'Wearable Tech',
     country: 'Turkey',
@@ -257,7 +257,7 @@ const SEED_USERS: SeedUserConfig[] = [
     name: 'Berkay',
     email: 'berkay@tipbox.co',
     userName: 'berkay',
-    avatarKey: 'user.avatar.berkay',
+    avatarKey: 'user.avatar.man2',
     bio: 'Mechanical keyboard enthusiast and RGB lighting expert.',
     title: 'Keyboard Master',
     country: 'Turkey',
@@ -267,7 +267,7 @@ const SEED_USERS: SeedUserConfig[] = [
     name: 'Aslı',
     email: 'asli@tipbox.co',
     userName: 'asli',
-    avatarKey: 'user.avatar.asli',
+    avatarKey: 'user.avatar.woman2',
     bio: 'Moisturizer and serum expert. Hydration is key!',
     title: 'Hydration Expert',
     country: 'Turkey',
@@ -277,7 +277,7 @@ const SEED_USERS: SeedUserConfig[] = [
     name: 'Murat',
     email: 'murat@tipbox.co',
     userName: 'murat',
-    avatarKey: 'user.avatar.murat',
+    avatarKey: 'user.avatar.man3',
     bio: 'Monitor and display technology reviewer.',
     title: 'Display Expert',
     country: 'Turkey',
@@ -287,7 +287,7 @@ const SEED_USERS: SeedUserConfig[] = [
     name: 'Gizem',
     email: 'gizem@tipbox.co',
     userName: 'gizem',
-    avatarKey: 'user.avatar.gizem',
+    avatarKey: 'user.avatar.woman3',
     bio: 'Foundation and concealer specialist.',
     title: 'Base Makeup Pro',
     country: 'Turkey',
@@ -297,7 +297,7 @@ const SEED_USERS: SeedUserConfig[] = [
     name: 'Onur',
     email: 'onur@tipbox.co',
     userName: 'onur',
-    avatarKey: 'user.avatar.onur',
+    avatarKey: 'user.avatar.man4',
     bio: 'Router and networking equipment expert.',
     title: 'Network Guru',
     country: 'Turkey',
@@ -307,7 +307,7 @@ const SEED_USERS: SeedUserConfig[] = [
     name: 'Burcu',
     email: 'burcu@tipbox.co',
     userName: 'burcu',
-    avatarKey: 'user.avatar.burcu',
+    avatarKey: 'user.avatar.woman4',
     bio: 'Lipstick and lip care enthusiast.',
     title: 'Lip Expert',
     country: 'Turkey',
@@ -317,7 +317,7 @@ const SEED_USERS: SeedUserConfig[] = [
     name: 'Tolga',
     email: 'tolga@tipbox.co',
     userName: 'tolga',
-    avatarKey: 'user.avatar.tolga',
+    avatarKey: 'user.avatar.man5',
     bio: 'Power bank and charging accessories reviewer.',
     title: 'Charging Pro',
     country: 'Turkey',
@@ -327,7 +327,7 @@ const SEED_USERS: SeedUserConfig[] = [
     name: 'Ebru',
     email: 'ebru@tipbox.co',
     userName: 'ebru',
-    avatarKey: 'user.avatar.ebru',
+    avatarKey: 'user.avatar.woman5',
     bio: 'Eyeshadow palette collector and eye makeup artist.',
     title: 'Eye Makeup Artist',
     country: 'Turkey',
@@ -337,7 +337,7 @@ const SEED_USERS: SeedUserConfig[] = [
     name: 'Serkan',
     email: 'serkan@tipbox.co',
     userName: 'serkan',
-    avatarKey: 'user.avatar.serkan',
+    avatarKey: 'user.avatar.man1',
     bio: 'External SSD and storage solutions expert.',
     title: 'Storage Expert',
     country: 'Turkey',
@@ -347,7 +347,7 @@ const SEED_USERS: SeedUserConfig[] = [
     name: 'Ece',
     email: 'ece@tipbox.co',
     userName: 'ece',
-    avatarKey: 'user.avatar.ece',
+    avatarKey: 'user.avatar.woman1',
     bio: 'Mascara and eyeliner specialist.',
     title: 'Lash Expert',
     country: 'Turkey',
@@ -357,7 +357,7 @@ const SEED_USERS: SeedUserConfig[] = [
     name: 'Kaan',
     email: 'kaan@tipbox.co',
     userName: 'kaan',
-    avatarKey: 'user.avatar.kaan',
+    avatarKey: 'user.avatar.man2',
     bio: 'Mouse and gaming accessories reviewer.',
     title: 'Gaming Gear',
     country: 'Turkey',
@@ -367,7 +367,7 @@ const SEED_USERS: SeedUserConfig[] = [
     name: 'Derya',
     email: 'derya@tipbox.co',
     userName: 'derya',
-    avatarKey: 'user.avatar.derya',
+    avatarKey: 'user.avatar.woman2',
     bio: 'Facial cleanser and toner expert.',
     title: 'Cleansing Expert',
     country: 'Turkey',
@@ -377,7 +377,7 @@ const SEED_USERS: SeedUserConfig[] = [
     name: 'Selim',
     email: 'selim@tipbox.co',
     userName: 'selim',
-    avatarKey: 'user.avatar.selim',
+    avatarKey: 'user.avatar.man3',
     bio: 'Webcam and streaming equipment specialist.',
     title: 'Streaming Pro',
     country: 'Turkey',
@@ -387,7 +387,7 @@ const SEED_USERS: SeedUserConfig[] = [
     name: 'Pelin',
     email: 'pelin@tipbox.co',
     userName: 'pelin',
-    avatarKey: 'user.avatar.pelin',
+    avatarKey: 'user.avatar.woman3',
     bio: 'Blush and bronzer enthusiast.',
     title: 'Blush Master',
     country: 'Turkey',
@@ -397,7 +397,7 @@ const SEED_USERS: SeedUserConfig[] = [
     name: 'Cem',
     email: 'cem@tipbox.co',
     userName: 'cem',
-    avatarKey: 'user.avatar.cem',
+    avatarKey: 'user.avatar.man4',
     bio: 'USB hub and docking station expert.',
     title: 'Connectivity Pro',
     country: 'Turkey',
@@ -405,20 +405,20 @@ const SEED_USERS: SeedUserConfig[] = [
 ]
 
 const DEFAULT_BANNER_URL =  getSeedMediaPath('user.banner.primary', true) || null
-const PRIMARY_AVATAR_URL = getSeedMediaPath('user.avatar.primary', true) || getSeedMediaPath('user.avatar.default', true) || null
-const MARKET_AVATAR_URL = getSeedMediaPath('user.avatar.market', true) || getSeedMediaPath('user.avatar.default', true) || null
-const INVENTORY_MEDIA_URL = getSeedMediaPath('inventory.dyson-media', true) || null
+const PRIMARY_AVATAR_URL = getSeedMediaPath('user.avatar.man1', true) || getSeedMediaPath('user.avatar.default', true) || null
+const MARKET_AVATAR_URL = getSeedMediaPath('user.avatar.man2', true) || getSeedMediaPath('user.avatar.default', true) || null
+const INVENTORY_MEDIA_URL = getSeedMediaPath('product.dyson', true) || null
 const TRUST_USER_AVATAR_KEYS: SeedMediaKey[] = [
-  'user.avatar.trust1',
-  'user.avatar.trust2',
-  'user.avatar.trust3',
-  'user.avatar.trust4',
-  'user.avatar.trust5',
+  'user.avatar.man1',
+  'user.avatar.man2',
+  'user.avatar.man3',
+  'user.avatar.man4',
+  'user.avatar.man5',
 ]
 const TRUSTER_USER_AVATAR_KEYS: SeedMediaKey[] = [
-  'user.avatar.truster1',
-  'user.avatar.truster2',
-  'user.avatar.truster3',
+  'user.avatar.woman1',
+  'user.avatar.woman2',
+  'user.avatar.woman3',
 ]
 const TRUST_USER_TITLE_OPTIONS = [
   'Smart Home Mentor',
@@ -433,15 +433,15 @@ const TRUSTER_USER_TITLE_OPTIONS = [
   'Platform Researcher',
 ]
 const COMMUNITY_COACH_EMAIL = 'ebru@tipbox.co'
-const COMMUNITY_COACH_AVATAR_URL = getSeedMediaPath('user.avatar.coach', true) || getSeedMediaPath('user.avatar.truster3', true) || getSeedMediaPath('user.avatar.default', true) || ''
+const COMMUNITY_COACH_AVATAR_URL = getSeedMediaPath('user.avatar.woman5', true) || getSeedMediaPath('user.avatar.default', true) || ''
 const TARGET_USER_TITLE = 'Marketplace Strategist'
 
 const MARKETPLACE_NFT_IMAGE_KEYS: SeedMediaKey[] = [
-  'badge.wish-marker',
-  'badge.premium-shoper',
-  'badge.hardware-expert',
-  'badge.early-adapter',
-  'marketplace.rainbow-border',
+  'badge.wishmarker',
+  'badge.premiumshoper',
+  'badge.hardwareexpert',
+  'badge.earlyadapter',
+  'marketplace.marketplace',
 ]
 
 let marketplaceImageCursor = 0
@@ -2084,7 +2084,7 @@ function getRandomPersona(productCategory?: string): string {
  */
 async function uploadPostImages(): Promise<Map<string, string>> {
   const s3Service = new S3Service()
-  const postImagesDir = path.join(__dirname, '../tests/assets/post-images')
+  const postImagesDir = path.join(__dirname, '../tests/assets/post/post-images')
   const imageUrlMap = new Map<string, string>()
   
   if (!existsSync(postImagesDir)) {
@@ -2683,8 +2683,8 @@ async function seedPosts() {
       } else if (Math.random() > 0.7) {
         // %30 şansla (kalan %90'ın %30'u = toplam %27) seed media'dan görsel ekle
         const mediaKeys: SeedMediaKey[] = [
-          'product.phone.phone1', 'product.phone.samsung', 'product.laptop.macbook',
-          'product.tablet.ipad', 'product.watch.applewatch',
+          'product.phone1', 'product.samsun', 'product.macbook',
+          'product.smartwatch', 'product.headphone',
         ]
         const randomMediaKey = mediaKeys[Math.floor(Math.random() * mediaKeys.length)]
         const mediaUrl = getSeedMediaPath(randomMediaKey, true)
@@ -3461,7 +3461,7 @@ async function seedEvents() {
   // Event image'lerini Minio'ya upload et
   console.log("📸 Event görselleri Minio'ya yükleniyor...")
   const s3Service = new S3Service()
-  const eventImagesDir = path.join(__dirname, '../tests/assets/events/new-events')
+  const eventImagesDir = path.join(__dirname, '../tests/assets/events')
   
   let uploadedEventImageCount = 0
   for (const config of eventConfigs) {
@@ -3475,7 +3475,7 @@ async function seedEvents() {
     if (existsSync(localImagePath)) {
       try {
         const imageBuffer = readFileSync(localImagePath)
-        const minioPath = `events/new-events/${imageName}.png`
+        const minioPath = `events/${imageName}.png`
         await s3Service.uploadFile(minioPath, imageBuffer, 'image/png')
         uploadedEventImageCount++
       } catch (error) {
@@ -3500,7 +3500,7 @@ async function seedEvents() {
     if (config.imageKey) {
       const imageKeyParts = config.imageKey.split('.')
       const imageName = imageKeyParts[imageKeyParts.length - 1] // 'event-batarya'
-      imageUrl = `events/new-events/${imageName}.png`
+      imageUrl = `events/${imageName}.png`
     }
     
     await prisma.wishboxEvent.create({
@@ -4312,37 +4312,91 @@ async function seedRemainingSystemTables() {
   // 2. BADGES
   console.log('🏅 Badges oluşturuluyor...')
   
-  const badgeTypes: Array<'ACHIEVEMENT' | 'EVENT' | 'COSMETIC'> = ['ACHIEVEMENT', 'EVENT', 'COSMETIC']
-  const badgeRarities: Array<'COMMON' | 'RARE' | 'EPIC'> = ['COMMON', 'RARE', 'EPIC']
-  
-  const badgeNames = [
-    'First Post', 'Power User', 'Trusted Member', 'Event Champion', 'Community Hero',
-    'Expert Reviewer', 'Influencer', 'Early Adopter', 'Beta Tester', 'Top Contributor',
-    'Golden User', 'Diamond Tier', 'Platinum Member', 'Elite User', 'VIP Member'
+  // Badge isimleri ve yapılandırmaları
+  // Özel isimli badge'ler (görsel dosyasından çıkarılan isimler)
+  const badgeConfigs: Array<{ name: string; type: 'ACHIEVEMENT' | 'EVENT' | 'COSMETIC' | 'BRAND'; rarity: 'COMMON' | 'RARE' | 'EPIC' }> = [
+    // Özel badge'ler
+    { name: 'Early Adapter', type: 'ACHIEVEMENT', rarity: 'EPIC' },
+    { name: 'Hardware Expert', type: 'ACHIEVEMENT', rarity: 'EPIC' },
+    { name: 'Premium Shopper', type: 'ACHIEVEMENT', rarity: 'RARE' },
+    { name: 'Wish Marker', type: 'ACHIEVEMENT', rarity: 'RARE' },
+    // Numaralı badge'ler (1-10)
+    { name: 'Tech Enthusiast', type: 'ACHIEVEMENT', rarity: 'COMMON' },
+    { name: 'Beauty Guru', type: 'COSMETIC', rarity: 'COMMON' },
+    { name: 'Gadget Master', type: 'ACHIEVEMENT', rarity: 'RARE' },
+    { name: 'Style Curator', type: 'COSMETIC', rarity: 'COMMON' },
+    { name: 'Smart Buyer', type: 'ACHIEVEMENT', rarity: 'COMMON' },
+    { name: 'Product Expert', type: 'ACHIEVEMENT', rarity: 'RARE' },
+    { name: 'Review Pro', type: 'ACHIEVEMENT', rarity: 'RARE' },
+    { name: 'Content Creator', type: 'ACHIEVEMENT', rarity: 'COMMON' },
+    { name: 'Community Star', type: 'ACHIEVEMENT', rarity: 'RARE' },
+    { name: 'Trend Spotter', type: 'COSMETIC', rarity: 'COMMON' },
+    // İsimli badge'ler (11-22) - görsel dosyalarından alınan isimler
+    { name: 'Crimson Roast', type: 'ACHIEVEMENT', rarity: 'EPIC' },
+    { name: 'Golden Pick', type: 'ACHIEVEMENT', rarity: 'EPIC' },
+    { name: 'Trendsetter', type: 'COSMETIC', rarity: 'RARE' },
+    { name: 'Web3 Architect', type: 'ACHIEVEMENT', rarity: 'EPIC' },
+    { name: 'Deal Maven', type: 'ACHIEVEMENT', rarity: 'RARE' },
+    { name: 'Ladder Vanguard', type: 'ACHIEVEMENT', rarity: 'EPIC' },
+    { name: 'Top Picks', type: 'ACHIEVEMENT', rarity: 'RARE' },
+    { name: 'Product Roast', type: 'ACHIEVEMENT', rarity: 'EPIC' },
+    { name: 'Ladder Ranker', type: 'ACHIEVEMENT', rarity: 'RARE' },
+    { name: 'Genesis Member', type: 'ACHIEVEMENT', rarity: 'EPIC' },
+    { name: 'Outdoor Explorer', type: 'COSMETIC', rarity: 'RARE' },
+    { name: 'Critical Review', type: 'ACHIEVEMENT', rarity: 'EPIC' },
+    // Brand badge'ler (brandbadges/ klasöründen) - BRAND tipi
+    { name: 'Brand Badge 1', type: 'BRAND', rarity: 'RARE' },
+    { name: 'Brand Badge 2', type: 'BRAND', rarity: 'RARE' },
+    { name: 'Brand Badge 3', type: 'BRAND', rarity: 'EPIC' },
+    { name: 'Brand Badge 4', type: 'BRAND', rarity: 'RARE' },
+    { name: 'Brand Badge 5', type: 'BRAND', rarity: 'EPIC' },
+    { name: 'Brand Badge 6', type: 'BRAND', rarity: 'EPIC' },
   ]
   
   const createdBadges: string[] = []
   
-  for (const name of badgeNames) {
-    const randomType = badgeTypes[Math.floor(Math.random() * badgeTypes.length)]
-    const randomRarity = badgeRarities[Math.floor(Math.random() * badgeRarities.length)]
+  for (const config of badgeConfigs) {
     const randomCategory = createdCategories[Math.floor(Math.random() * createdCategories.length)]
     
-    const badge = await prisma.badge.create({
-      data: {
-        name,
-        description: `${name} badge - ${randomRarity}`,
-        imageUrl: null,
-        type: randomType,
-        rarity: randomRarity,
-        boostMultiplier: randomRarity === 'EPIC' ? 2.0 : (randomRarity === 'RARE' ? 1.5 : 1.0),
-        rewardMultiplier: randomRarity === 'EPIC' ? 3.0 : (randomRarity === 'RARE' ? 2.0 : 1.0),
-        categoryId: randomCategory,
-      }
-    })
+    // Görsel mapping'den al
+    const imageKey = getBadgeImageKey(config.name);
+    const imageUrl = imageKey ? getSeedMediaPath(imageKey, true) : null;
     
-    createdBadges.push(badge.id)
-    totalBadges++
+    // Mevcut badge kontrolü
+    const existingBadge = await prisma.badge.findFirst({
+      where: { name: config.name }
+    });
+    
+    if (existingBadge) {
+      // Güncelle
+      await prisma.badge.update({
+        where: { id: existingBadge.id },
+        data: {
+          type: config.type,
+          rarity: config.rarity,
+          imageUrl: imageUrl || existingBadge.imageUrl,
+          boostMultiplier: config.rarity === 'EPIC' ? 2.0 : (config.rarity === 'RARE' ? 1.5 : 1.0),
+          rewardMultiplier: config.rarity === 'EPIC' ? 3.0 : (config.rarity === 'RARE' ? 2.0 : 1.0),
+        }
+      });
+      createdBadges.push(existingBadge.id);
+    } else {
+      // Yeni oluştur
+      const badge = await prisma.badge.create({
+        data: {
+          name: config.name,
+          description: `${config.name} - ${config.rarity} ${config.type.toLowerCase()} badge`,
+          imageUrl,
+          type: config.type,
+          rarity: config.rarity,
+          boostMultiplier: config.rarity === 'EPIC' ? 2.0 : (config.rarity === 'RARE' ? 1.5 : 1.0),
+          rewardMultiplier: config.rarity === 'EPIC' ? 3.0 : (config.rarity === 'RARE' ? 2.0 : 1.0),
+          categoryId: randomCategory,
+        }
+      });
+      createdBadges.push(badge.id);
+    }
+    totalBadges++;
   }
   
   console.log(`  ✅ ${totalBadges} badge oluşturuldu`)
@@ -4477,49 +4531,50 @@ const MEDIA_IMAGE_MAPPING: {
     'Shark': 'brand.banner.electronic-shark',
   },
   // Product görselleri - Feed akışında kullanılacak tüm görseller
+  // Not: Apple_Products klasörü kaldırıldı, mevcut post-images görselleri kullanılıyor
   product: {
-    // Apple ürünleri
-    'iPhone 17': 'product.apple.iphone17',
-    'iPhone 17 Pro': 'product.apple.iphone17pro',
-    'iPhone 16e': 'product.apple.iphone16e',
-    'iPhone Air': 'product.apple.iphoneair',
-    'iPhone 15 Pro': 'product.apple.iphone17pro', // Geriye dönük uyumluluk
-    'AirPods 4': 'product.apple.airpods4',
-    'AirPods 4 ANC': 'product.apple.airpods4anc',
-    'AirPods Max': 'product.apple.airpodsmax',
-    'AirPods Pro 3': 'product.apple.airpodspro3',
-    'Watch SE 3': 'product.apple.watchse3',
-    'Watch Series 11': 'product.apple.watchseries11',
-    'Watch Ultra 3': 'product.apple.watchultra3',
+    // Apple ürünleri - phone görselleri ile eşleştiriliyor
+    'iPhone 17': 'product.phone1',
+    'iPhone 17 Pro': 'product.phone2',
+    'iPhone 16e': 'product.phone3',
+    'iPhone Air': 'product.phone4',
+    'iPhone 15 Pro': 'product.phone5',
+    'AirPods 4': 'product.headphone',
+    'AirPods 4 ANC': 'product.headphone',
+    'AirPods Max': 'product.headphone2',
+    'AirPods Pro 3': 'product.headphone',
+    'Watch SE 3': 'product.smartwatch',
+    'Watch Series 11': 'product.smartwatch',
+    'Watch Ultra 3': 'product.smartwatch',
     // Brand + Product kombinasyonları
-    'Apple iPhone 17': 'product.apple.iphone17',
-    'Apple iPhone 17 Pro': 'product.apple.iphone17pro',
-    'Apple iPhone 16e': 'product.apple.iphone16e',
-    'Apple iPhone Air': 'product.apple.iphoneair',
-    'Apple AirPods 4': 'product.apple.airpods4',
-    'Apple AirPods 4 ANC': 'product.apple.airpods4anc',
-    'Apple AirPods Max': 'product.apple.airpodsmax',
-    'Apple AirPods Pro 3': 'product.apple.airpodspro3',
-    'Apple Watch SE 3': 'product.apple.watchse3',
-    'Apple Watch Series 11': 'product.apple.watchseries11',
-    'Apple Watch Ultra 3': 'product.apple.watchultra3',
+    'Apple iPhone 17': 'product.phone1',
+    'Apple iPhone 17 Pro': 'product.phone2',
+    'Apple iPhone 16e': 'product.phone3',
+    'Apple iPhone Air': 'product.phone4',
+    'Apple AirPods 4': 'product.headphone',
+    'Apple AirPods 4 ANC': 'product.headphone',
+    'Apple AirPods Max': 'product.headphone2',
+    'Apple AirPods Pro 3': 'product.headphone',
+    'Apple Watch SE 3': 'product.smartwatch',
+    'Apple Watch Series 11': 'product.smartwatch',
+    'Apple Watch Ultra 3': 'product.smartwatch',
     // Diğer ürün görselleri (feed akışında kullanılacak)
     'Smartwatch': 'product.smartwatch',
     'Smart Watch': 'product.smartwatch',
     'Watch': 'product.smartwatch',
-    'Dyson V15s': 'product.vacuum.dyson',
-    'Dyson V12': 'product.vacuum.dyson',
-    'Dyson': 'product.vacuum.dyson',
-    'MacBook': 'product.laptop.macbook',
-    'MacBook Pro': 'product.laptop.macbook',
-    'MacBook Air': 'product.laptop.macbook',
-    'Laptop': 'product.laptop.macbook',
-    'Headphone': 'product.headphone.primary',
-    'Headphones': 'product.headphone.primary',
-    'Earbuds': 'product.headphone.secondary',
-    'Wireless Earbuds': 'product.headphone.secondary',
-    'Samsung Phone': 'product.phone.samsung',
-    'Samsung': 'product.phone.samsung',
+    'Dyson V15s': 'product.dyson',
+    'Dyson V12': 'product.dyson',
+    'Dyson': 'product.dyson',
+    'MacBook': 'product.macbook',
+    'MacBook Pro': 'product.macbook',
+    'MacBook Air': 'product.macbook',
+    'Laptop': 'product.macbook',
+    'Headphone': 'product.headphone',
+    'Headphones': 'product.headphone',
+    'Earbuds': 'product.headphone2',
+    'Wireless Earbuds': 'product.headphone2',
+    'Samsung Phone': 'product.samsun',
+    'Samsung': 'product.samsun',
   },
   // Brand category görselleri (mevcut catalog görsellerini kullan)
   brandCategory: {
@@ -4540,11 +4595,12 @@ const MEDIA_IMAGE_MAPPING: {
   },
   // Badge görselleri (tests/assets/badge klasöründen)
   badge: {
-    // Ana badge'ler
+    // Özel badge'ler
     'Early Adapter': 'badge.earlyadapter',
     'Hardware Expert': 'badge.hardwareexpert',
     'Premium Shopper': 'badge.premiumshoper',
     'Wish Marker': 'badge.wishmarker',
+    // Numaralı badge'ler (1-10)
     'Tech Enthusiast': 'badge.badge-1',
     'Beauty Guru': 'badge.badge-2',
     'Gadget Master': 'badge.badge-3',
@@ -4552,15 +4608,38 @@ const MEDIA_IMAGE_MAPPING: {
     'Smart Buyer': 'badge.badge-5',
     'Product Expert': 'badge.badge-6',
     'Review Pro': 'badge.badge-7',
-    // Brand badge'ler
+    'Content Creator': 'badge.badge-8',
+    'Community Star': 'badge.badge-9',
+    'Trend Spotter': 'badge.badge-10',
+    // İsimli badge'ler (11-22)
+    'Crimson Roast': 'badge.badge-11-crimson-roast',
+    'Golden Pick': 'badge.badge-12-golden-pick',
+    'Trendsetter': 'badge.badge-13-trendsetter',
+    'Web3 Architect': 'badge.badge-14-web3-architect',
+    'Deal Maven': 'badge.badge-15-deal-maven',
+    'Ladder Vanguard': 'badge.badge-16-ladder-vanguard',
+    'Top Picks': 'badge.badge-17-top-picks',
+    'Product Roast': 'badge.badge-18-product-roast',
+    'Ladder Ranker': 'badge.badge-19-ladder-ranker',
+    'Genesis Member': 'badge.badge-20-genesis-member',
+    'Outdoor Explorer': 'badge.badge-21-outdoor-explorer',
+    'Critical Review': 'badge.badge-22-critical-review',
+    // Brand badge'ler (brandbadges/ klasöründen)
     'Brand Badge 1': 'badge.brand.brandbadge1',
     'Brand Badge 2': 'badge.brand.brandbadge2',
     'Brand Badge 3': 'badge.brand.brandbadge3',
     'Brand Badge 4': 'badge.brand.brandbadge4',
     'Brand Badge 5': 'badge.brand.brandbadge5',
     'Brand Badge 6': 'badge.brand.brandbadge6',
+    // Event badge'ler (eventbadges/ klasöründen)
+    '[Event] İlk Adım': 'badge.event.1',
+    '[Event] İlk Beğeni': 'badge.event.4',
+    '[Event] Aktif Katılımcı': 'badge.event.2',
+    '[Event] Popüler': 'badge.event.5',
+    '[Event] İçerik Ustası': 'badge.event.3',
   },
   // User avatar görselleri (tests/assets/userprofile klasöründen)
+  // Not: Mevcut avatarlar man1-5 ve woman1-5 olarak rotasyonlu kullanılıyor
   userAvatar: {
     'omer': 'user.avatar.omer',
     'tuna': 'user.avatar.man1',
@@ -4579,31 +4658,31 @@ const MEDIA_IMAGE_MAPPING: {
     'selin': 'user.avatar.woman4',
     'emre': 'user.avatar.man5',
     'deniz': 'user.avatar.woman5',
-    'baris': 'user.avatar.primary',
-    'merve': 'user.avatar.trust1',
-    'berkay': 'user.avatar.trust2',
-    'asli': 'user.avatar.trust3',
-    'murat': 'user.avatar.trust4',
-    'gizem': 'user.avatar.trust5',
-    'onur': 'user.avatar.truster1',
-    'burcu': 'user.avatar.truster2',
-    'tolga': 'user.avatar.truster3',
-    'ebru': 'user.avatar.coach',
-    'serkan': 'user.avatar.market',
-    'ece': 'user.avatar.primary',
-    'kaan': 'user.avatar.man1',
-    'derya': 'user.avatar.woman1',
-    'selim': 'user.avatar.man2',
-    'pelin': 'user.avatar.woman2',
-    'cem': 'user.avatar.man3',
-    'duygu': 'user.avatar.woman3',
-    'hakan': 'user.avatar.man4',
-    'nil': 'user.avatar.woman4',
-    'utku': 'user.avatar.man5',
-    'ceren': 'user.avatar.woman5',
-    'yigit': 'user.avatar.primary',
-    'sude': 'user.avatar.trust1',
-    'alper': 'user.avatar.trust2',
+    'baris': 'user.avatar.man1',
+    'merve': 'user.avatar.woman1',
+    'berkay': 'user.avatar.man2',
+    'asli': 'user.avatar.woman2',
+    'murat': 'user.avatar.man3',
+    'gizem': 'user.avatar.woman3',
+    'onur': 'user.avatar.man4',
+    'burcu': 'user.avatar.woman4',
+    'tolga': 'user.avatar.man5',
+    'ebru': 'user.avatar.woman5',
+    'serkan': 'user.avatar.man1',
+    'ece': 'user.avatar.woman1',
+    'kaan': 'user.avatar.man2',
+    'derya': 'user.avatar.woman2',
+    'selim': 'user.avatar.man3',
+    'pelin': 'user.avatar.woman3',
+    'cem': 'user.avatar.man4',
+    'duygu': 'user.avatar.woman4',
+    'hakan': 'user.avatar.man5',
+    'nil': 'user.avatar.woman5',
+    'utku': 'user.avatar.man1',
+    'ceren': 'user.avatar.woman1',
+    'yigit': 'user.avatar.man2',
+    'sude': 'user.avatar.woman2',
+    'alper': 'user.avatar.man3',
   },
   // User banner görselleri
   userBanner: {
@@ -4629,20 +4708,19 @@ function getProductImageKey(productName: string, brand?: string | null): SeedMed
   // 3. Sadece brand ile
   if (brand && mapping[brand]) return mapping[brand];
   
-  // 4. Apple brand'ı için rastgele Apple görseli seç
+  // 4. Apple brand'ı için mevcut görseller arasından seç
   if (brand === 'Apple' || brand?.toLowerCase() === 'apple') {
     const appleImageKeys: SeedMediaKey[] = [
-      'product.apple.iphone17',
-      'product.apple.iphone17pro',
-      'product.apple.iphone16e',
-      'product.apple.iphoneair',
-      'product.apple.airpods4',
-      'product.apple.airpods4anc',
-      'product.apple.airpodsmax',
-      'product.apple.airpodspro3',
-      'product.apple.watchse3',
-      'product.apple.watchseries11',
-      'product.apple.watchultra3',
+      'product.phone1',
+      'product.phone2',
+      'product.phone3',
+      'product.phone4',
+      'product.phone5',
+      'product.phone6',
+      'product.headphone',
+      'product.headphone2',
+      'product.smartwatch',
+      'product.macbook',
     ];
     // Product name'e göre deterministik rastgele seçim (aynı product için aynı görsel)
     if (appleImageKeys.length > 0) {
@@ -4907,7 +4985,7 @@ async function createSeedUsers(defaultThemeId: string): Promise<Map<string, { id
 /**
  * Feed akışında kullanılacak product görselleri pool'u
  * Post media için rastgele görsel seçiminde kullanılır
- * tests/assets/product/ klasöründeki tüm görseller burada listelenir
+ * tests/assets/post/post-images/ klasöründeki görseller kullanılır
  */
 const FEED_PRODUCT_IMAGE_POOL: SeedMediaKey[] = [
   // Telefon görselleri
@@ -5913,7 +5991,7 @@ async function updateBrandCategoryImages(): Promise<void> {
 // ===== BRAND BANNER GÖRSELLERİNİ GÜNCELLE =====
 async function updateBrandBannerImages(): Promise<void> {
   const s3Service = new S3Service()
-  const brandBannersDir = path.join(__dirname, '../tests/assets/Brand_Banners')
+  const brandBannersDir = path.join(__dirname, '../tests/assets/brands/banners')
   
   const brandBannerMap: Record<string, string> = {
     'Apple': 'brandpage-electronic-apple.jpg',
@@ -6242,7 +6320,7 @@ async function seedBrandProducts(userIdToUse: string): Promise<void> {
       name: `${brand.name} Ürünleri`,
       subCategoryId: subCategory.id,
       description: `${brand.name} markasına ait ürünler`,
-      imageKey: 'product.laptop.macbook',
+      imageKey: 'product.macbook',
     })
 
     // Brand'a özel product'lar oluştur
@@ -6375,13 +6453,13 @@ function getProductConfigsForBrand(brandName: string): Array<{
       {
         name: 'TechVision Smart Watch Pro',
         description: 'Gelişmiş özelliklere sahip akıllı saat',
-        imageKey: 'product.laptop.macbook',
+        imageKey: 'product.macbook',
         experienceText: 'Günlük kullanımda çok pratik, sağlık takibi özellikleri harika.',
       },
       {
         name: 'TechVision Wireless Earbuds X1',
         description: 'Yüksek kaliteli kablosuz kulaklık',
-        imageKey: 'product.laptop.macbook',
+        imageKey: 'product.macbook',
         experienceText: 'Ses kalitesi mükemmel, pil ömrü de çok iyi.',
       },
     ],
@@ -6389,13 +6467,13 @@ function getProductConfigsForBrand(brandName: string): Array<{
       {
         name: 'SmartHome Pro Smart Light System',
         description: 'Akıllı ev aydınlatma sistemi',
-        imageKey: 'product.vacuum.dyson',
+        imageKey: 'product.dyson',
         experienceText: 'Ev otomasyonu için mükemmel bir çözüm, uygulama kullanımı çok kolay.',
       },
       {
         name: 'SmartHome Pro Thermostat',
         description: 'Akıllı termostat sistemi',
-        imageKey: 'product.vacuum.dyson',
+        imageKey: 'product.dyson',
         experienceText: 'Enerji tasarrufu sağlıyor ve kullanımı çok basit.',
       },
     ],
@@ -6403,13 +6481,13 @@ function getProductConfigsForBrand(brandName: string): Array<{
       {
         name: 'CoffeeDelight Espresso Machine',
         description: 'Profesyonel espresso makinesi',
-        imageKey: 'product.vacuum.dyson',
+        imageKey: 'product.dyson',
         experienceText: 'Kahve kalitesi harika, barista kalitesinde espresso yapabiliyorum.',
       },
       {
         name: 'CoffeeDelight Grinder Pro',
         description: 'Profesyonel kahve öğütücü',
-        imageKey: 'product.vacuum.dyson',
+        imageKey: 'product.dyson',
         experienceText: 'Öğütme ayarları çok hassas, tutarlı sonuçlar alıyorum.',
       },
     ],
@@ -6417,13 +6495,13 @@ function getProductConfigsForBrand(brandName: string): Array<{
       {
         name: 'FitnessTech Heart Rate Monitor',
         description: 'Gelişmiş kalp atışı monitörü',
-        imageKey: 'product.laptop.macbook',
+        imageKey: 'product.macbook',
         experienceText: 'Antrenman sırasında çok doğru veriler veriyor, dayanıklılığı da iyi.',
       },
       {
         name: 'FitnessTech Dumbbells Set',
         description: 'Akıllı ağırlık seti',
-        imageKey: 'product.laptop.macbook',
+        imageKey: 'product.macbook',
         experienceText: 'Evde antrenman için mükemmel, uygulama entegrasyonu harika.',
       },
     ],
@@ -6431,13 +6509,13 @@ function getProductConfigsForBrand(brandName: string): Array<{
       {
         name: 'StyleHub Designer Lamp',
         description: 'Modern tasarım masa lambası',
-        imageKey: 'product.vacuum.dyson',
+        imageKey: 'product.dyson',
         experienceText: 'Tasarımı çok şık, ev dekorasyonuna mükemmel uyuyor.',
       },
       {
         name: 'StyleHub Modern Chair',
         description: 'Ergonomik ofis koltuğu',
-        imageKey: 'product.vacuum.dyson',
+        imageKey: 'product.dyson',
         experienceText: 'Uzun süre otururken çok rahat, sırt desteği mükemmel.',
       },
     ],
@@ -6445,61 +6523,61 @@ function getProductConfigsForBrand(brandName: string): Array<{
       {
         name: 'AutoParts Pro Engine Oil',
         description: 'Yüksek kaliteli motor yağı - motor performansını artırıyor, uzun ömürlü kullanım sağlıyor',
-        imageKey: 'product.vacuum.dyson',
+        imageKey: 'product.dyson',
         experienceText: 'Motor performansını artırıyor, uzun ömürlü kullanım sağlıyor.',
       },
       {
         name: 'AutoParts Pro Air Filter',
         description: 'Hava filtresi - motor hava kalitesini iyileştiriyor, filtreleme performansı mükemmel',
-        imageKey: 'product.vacuum.dyson',
+        imageKey: 'product.dyson',
         experienceText: 'Motor hava kalitesini iyileştiriyor, filtreleme performansı mükemmel.',
       },
       {
         name: 'AutoParts Pro Brake Pads',
         description: 'Fren balata seti - fren performansı çok iyi, güvenli sürüş sağlıyor',
-        imageKey: 'product.vacuum.dyson',
+        imageKey: 'product.dyson',
         experienceText: 'Fren performansı çok iyi, güvenli sürüş sağlıyor.',
       },
       {
         name: 'AutoParts Pro Car Battery',
         description: 'Araba aküsü - güvenilir ve uzun ömürlü, araç için mükemmel bir akü',
-        imageKey: 'product.vacuum.dyson',
+        imageKey: 'product.dyson',
         experienceText: 'Güvenilir ve uzun ömürlü, araç için mükemmel bir akü.',
       },
       {
         name: 'AutoParts Pro Spark Plugs',
         description: 'Buji seti - motorun daha verimli çalışmasını sağlıyor, yakıt tasarrufu sağlıyor',
-        imageKey: 'product.vacuum.dyson',
+        imageKey: 'product.dyson',
         experienceText: 'Motorun daha verimli çalışmasını sağlıyor, yakıt tasarrufu sağlıyor.',
       },
       {
         name: 'AutoParts Pro Wiper Blades',
         description: 'Silecek lastiği - yağmur ve kar koşullarında mükemmel görüş sağlıyor',
-        imageKey: 'product.vacuum.dyson',
+        imageKey: 'product.dyson',
         experienceText: 'Yağmur ve kar koşullarında mükemmel görüş sağlıyor, silecek performansı çok iyi.',
       },
       {
         name: 'AutoParts Pro Tire Pressure Gauge',
         description: 'Lastik basınç ölçer - doğru lastik basıncı ile güvenli sürüş',
-        imageKey: 'product.vacuum.dyson',
+        imageKey: 'product.dyson',
         experienceText: 'Doğru lastik basıncı ile güvenli sürüş sağlıyor, kullanımı çok kolay.',
       },
       {
         name: 'AutoParts Pro Jump Starter',
         description: 'Araba çalıştırıcı - acil durumlarda araç için hayat kurtarıcı',
-        imageKey: 'product.vacuum.dyson',
+        imageKey: 'product.dyson',
         experienceText: 'Acil durumlarda araç için hayat kurtarıcı, güçlü ve güvenilir.',
       },
       {
         name: 'AutoParts Pro Car Cover',
         description: 'Araba örtüsü - aracınızı güneş, yağmur ve tozdan korur',
-        imageKey: 'product.vacuum.dyson',
+        imageKey: 'product.dyson',
         experienceText: 'Aracınızı güneş, yağmur ve tozdan korur, dayanıklı malzeme kullanılmış.',
       },
       {
         name: 'AutoParts Pro Floor Mats',
         description: 'Araba paspası - araç içini temiz tutar, dayanıklı ve kolay temizlenir',
-        imageKey: 'product.vacuum.dyson',
+        imageKey: 'product.dyson',
         experienceText: 'Araç içini temiz tutar, dayanıklı ve kolay temizlenir, mükemmel fit.',
       },
     ],
@@ -6745,7 +6823,7 @@ async function main() {
     
     // Default avatar'ı MinIO'ya yükle
     console.log('📸 Default avatar yükleniyor...')
-    const defaultAvatarFilePath = path.join(__dirname, '../tests/assets/defaultavatar/default-useravatar.png')
+    const defaultAvatarFilePath = path.join(__dirname, '../tests/assets/avatars/default-useravatar.png')
     
     if (existsSync(defaultAvatarFilePath)) {
       const defaultAvatarBuffer = readFileSync(defaultAvatarFilePath)
@@ -7620,7 +7698,7 @@ async function main() {
       await s3Service.checkAndCreateBucket()
       
       // Upload avatar (use useravatar.jpg from assets)
-      const avatarPath = path.join(__dirname, '../tests/assets/userprofile/useravatar.jpg')
+      const avatarPath = path.join(__dirname, '../tests/assets/userprofile/ozan.jpg')
       try {
         const avatarBuffer = readFileSync(avatarPath)
         const avatarObjectKey = `users/${JULIA_USER_ID}/avatar.jpg`
