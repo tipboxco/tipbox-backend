@@ -139,6 +139,10 @@ model UserSettings {
   rewardNotifications      Boolean         @default(true) @map("reward_notifications")
   transactionNotifications Boolean         @default(true) @map("transaction_notifications")
   walletNotifications      Boolean         @default(true) @map("wallet_notifications")
+  gamificationNotifications Boolean         @default(true) @map("gamification_notifications")
+  expertNotifications      Boolean         @default(true) @map("expert_notifications")
+  eventNotifications       Boolean         @default(true) @map("event_notifications")
+  systemNotifications      Boolean         @default(true) @map("system_notifications")
   theme                    UserTheme?      @relation(fields: [themeId], references: [id])
   user                     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -427,6 +431,7 @@ model Product {
   comparisonProduct1 PostComparison[]    @relation("ComparisonProduct1")
   comparisonProduct2 PostComparison[]    @relation("ComparisonProduct2")
   questionPosts      PostQuestion[]
+  wishboxEvents      WishboxEvent[]      @relation("WishboxEventProduct")
   brand              Brand?              @relation(fields: [brandId], references: [externalId])
   category           Category?           @relation(fields: [categoryId], references: [id])
   group              ProductGroup?       @relation(fields: [groupId], references: [id])
@@ -507,6 +512,7 @@ model ContentPost {
   categoryId           String?              @map("category_id")
   productGroupId       String?              @map("product_group_id") @db.Uuid
   productId            String?              @map("product_id")
+  productStatus        ContentPostProductStatus? @map("product_status")
   inventoryRequired    Boolean              @map("inventory_required")
   isBoosted            Boolean              @map("is_boosted")
   boostedUntil         DateTime?            @map("boosted_until")
@@ -555,6 +561,7 @@ model ContentPost {
   @@index([type])
   @@index([mainCategoryId])
   @@index([productId])
+  @@index([productStatus])
   @@index([createdAt])
   @@index([experienceSnippetId])
   @@index([experienceDurationId])
@@ -563,6 +570,13 @@ model ContentPost {
   @@index([eventId])
   @@index([eventId, createdAt])
   @@map("content_posts")
+}
+
+enum ContentPostProductStatus {
+  own
+  tried
+
+  @@map("content_post_product_status")
 }
 
 model PostMedia {
@@ -885,6 +899,7 @@ model AchievementGoal {
   chainId          String                @map("chain_id") @db.Uuid
   title            String
   requirement      String
+  goalType         AchievementGoalType?  @map("goal_type")
   rewardBadgeId    String?               @map("reward_badge_id") @db.Uuid
   pointsRequired   Int                   @map("points_required")
   difficulty       AchievementDifficulty
@@ -892,7 +907,18 @@ model AchievementGoal {
   rewardBadge      Badge?                @relation(fields: [rewardBadgeId], references: [id])
   userAchievements UserAchievement[]
 
+  @@index([goalType])
   @@map("achievement_goals")
+}
+
+enum AchievementGoalType {
+  POST
+  INVENTORY
+  LIKE_GIVEN
+  LIKE_RECEIVED
+  COMMENT
+
+  @@map("achievement_goal_type")
 }
 
 model UserAchievement {
@@ -1378,6 +1404,8 @@ model WishboxEvent {
   startDate      DateTime           @map("start_date")
   endDate        DateTime           @map("end_date")
   status         WishboxEventStatus @default(DRAFT)
+  feedType       WishboxEventFeedType @default(PICKS) @map("feed_type")
+  productId      String?            @map("product_id")
   createdAt      DateTime           @default(now()) @map("created_at")
   updatedAt      DateTime           @updatedAt @map("updated_at")
   imageUrl       String?            @map("image_url")
@@ -1385,6 +1413,7 @@ model WishboxEvent {
   mainCategoryId String?            @map("main_category_id") @db.Uuid
   subCategoryId  String?            @map("sub_category_id") @db.Uuid
   posts          ContentPost[]
+  product        Product?           @relation("WishboxEventProduct", fields: [productId], references: [id], onDelete: SetNull)
   brand          Brand?             @relation(fields: [brandId], references: [id], onDelete: Cascade)
   mainCategory   MainCategory?      @relation(fields: [mainCategoryId], references: [id])
   subCategory    SubCategory?       @relation(fields: [subCategoryId], references: [id])
@@ -1392,6 +1421,7 @@ model WishboxEvent {
   stats          WishboxStats[]
   eventBadges    EventBadge[] // ✅ YENİ
 
+  @@index([productId])
   @@index([brandId])
   @@index([status, startDate, endDate])
   @@index([mainCategoryId])
@@ -2169,6 +2199,13 @@ enum WishboxEventStatus {
   @@map("wishbox_event_status")
 }
 
+enum WishboxEventFeedType {
+  PICKS
+  ROASTS
+
+  @@map("wishbox_event_feed_type")
+}
+
 enum WishboxRewardType {
   TIPS
   BADGE
@@ -2283,6 +2320,21 @@ enum NotificationType {
   ACCOUNT_SECURITY
   TIPS_RECEIVED
   TIPS_SENT
+  WALLET_CONNECTED
+  WALLET_DISCONNECTED
+  TRANSACTION_CONFIRMED
+  TRANSACTION_FAILED
+  TRANSACTION_PENDING
+  REWARD_CLAIMABLE
+  REWARD_CLAIMED
+  REWARD_EXPIRED
+  MULTIPLE_REWARDS_AVAILABLE
+  NFT_RECEIVED
+  NFT_SENT
+  NFT_SOLD
+  NFT_PURCHASED
+  NFT_LISTED
+  NFT_LISTING_SOLD
 
   @@map("notification_type")
 }

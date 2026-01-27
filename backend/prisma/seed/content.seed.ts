@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-non-null-asserted-optional-chain */
 import { prisma, generateUlid, TEST_USER_ID } from './types';
 import { getSeedMediaPath } from './helpers/media.helper';
+import { pickSeedContentCommentTemplate } from './helpers/content-comment-templates';
 
 const HOME_APPLIANCE_IMAGE = getSeedMediaPath('catalog.home-appliances');
 const PHONE_IMAGE = getSeedMediaPath('catalog.phones');
@@ -293,17 +294,36 @@ export async function seedProductsAndContent(): Promise<void> {
   }
 
   // Comments
-  const commentsTargets = await prisma.contentPost.findMany({ where: { userId: userIdToUse }, take: 3 });
+  const commentsTargets = await prisma.contentPost.findMany({
+    where: { userId: userIdToUse },
+    orderBy: { createdAt: 'desc' },
+    take: 8,
+    select: { id: true, userId: true, createdAt: true, type: true },
+  });
+
+  const commentUsers = (await prisma.user.findMany({ take: 12, select: { id: true } })) || [];
   for (const post of commentsTargets) {
-    await prisma.contentComment.create({
-      data: {
-        id: generateUlid(),
-        postId: post.id,
-        userId: userIdToUse,
-        comment: `Great post about ${post.title}! I have similar experience.`,
-        isAnswer: false,
-      },
-    });
+    // Post sahibine self-comment vermeyelim (daha gerçekçi)
+    const eligibleUsers = commentUsers.filter((u) => u.id !== post.userId);
+    const commenter = (eligibleUsers.length ? eligibleUsers : commentUsers)[
+      Math.floor(Math.random() * Math.max(1, eligibleUsers.length || commentUsers.length))
+    ];
+    if (!commenter) continue;
+
+    // Her post'a 0-2 arası comment (az ama çeşitli)
+    const count = Math.floor(Math.random() * 3); // 0,1,2
+    for (let i = 0; i < count; i++) {
+      await prisma.contentComment.create({
+        data: {
+          id: generateUlid(),
+          postId: post.id,
+          userId: commenter.id,
+          comment: pickSeedContentCommentTemplate(post.type),
+          isAnswer: false,
+          createdAt: new Date(post.createdAt.getTime() + Math.random() * 10 * 60 * 60 * 1000),
+        },
+      });
+    }
   }
 
   // Likes & Favorites & Views

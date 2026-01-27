@@ -5,6 +5,7 @@ import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import logger from '../../infrastructure/logger/logger';
 import { NotFoundError } from '../../infrastructure/errors/custom-errors';
 import { brandToWebsite } from '../../data/brandToWebsite';
+import { randomUUID } from 'crypto';
 var slugify = require('slugify');
 const slugifyOptions = {
   lower: true,
@@ -3317,6 +3318,161 @@ export class BrandService {
       logger.error(`Failed to search brands globally:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Anket sorularını getirir
+   * GET /surveys/{surveyId}/questions
+   */
+  async getSurveyQuestions(surveyId: string, userId: string): Promise<{
+    surveyId: string;
+    questions: Array<{
+      id: string;
+      text: string;
+      options: Array<{
+        id: string;
+        text: string;
+      }>;
+      order: number;
+    }>;
+    totalQuestions: number;
+  }> {
+    // Survey kontrolü
+    const survey = await this.prisma.brandSurvey.findUnique({
+      where: { id: surveyId },
+      include: {
+        questions: {
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+
+    if (!survey) {
+      throw new NotFoundError(`Survey not found: ${surveyId}`);
+    }
+
+    // Kullanıcının verdiği cevapları kontrol et
+    const userAnswers = await this.prisma.brandSurveyAnswer.findMany({
+      where: {
+        userId,
+        question: {
+          surveyId: surveyId,
+        },
+      },
+      select: {
+        questionId: true,
+      },
+    });
+
+    const answeredQuestionIds = new Set(userAnswers.map((a) => a.questionId));
+
+    // Soruları formatla
+    const questions = survey.questions.map((question, index) => {
+      // Options şimdilik boş array - veritabanında saklanmıyor
+      // TODO: Options'ları veritabanına eklemek için schema güncellemesi gerekebilir
+      // Frontend normalize ediyor, bu yüzden boş array kabul edilebilir
+      // Ancak SINGLE_CHOICE ve MULTIPLE_CHOICE soruları için options gerekli
+      const options: Array<{ id: string; text: string }> = [];
+
+      // Eğer SINGLE_CHOICE veya MULTIPLE_CHOICE ise, options'ları seed data'dan alabiliriz
+      // Şimdilik boş array döndürüyoruz - frontend normalize edecek
+      // Not: Options'ları veritabanına eklemek için BrandSurveyQuestion modeline
+      // options JSON field'ı eklenmeli veya ayrı bir BrandSurveyQuestionOption tablosu oluşturulmalı
+      
+      return {
+        id: question.id,
+        text: question.questionText,
+        options,
+        order: index + 1,
+      };
+    });
+
+    return {
+      surveyId: survey.id,
+      questions,
+      totalQuestions: questions.length,
+    };
+  }
+
+  /**
+   * Anket cevabını gönderir
+   * POST /surveys/{surveyId}/questions/{questionId}/answer
+   */
+  async submitSurveyAnswer(
+    surveyId: string,
+    questionId: string,
+    userId: string,
+    answerId: string
+  ): Promise<{
+    success: boolean;
+    message?: string;
+    isCompleted: boolean;
+  }> {
+    // Survey kontrolü
+    const survey = await this.prisma.brandSurvey.findUnique({
+      where: { id: surveyId },
+      include: {
+        questions: true,
+      },
+    });
+
+    if (!survey) {
+      throw new NotFoundError(`Survey not found: ${surveyId}`);
+    }
+
+    // Question kontrolü
+    const question = survey.questions.find((q) => q.id === questionId);
+    if (!question) {
+      throw new NotFoundError(`Question not found: ${questionId}`);
+    }
+
+    // Kullanıcının bu soruya daha önce cevap verip vermediğini kontrol et
+    const existingAnswer = await this.prisma.brandSurveyAnswer.findUnique({
+      where: {
+        questionId_userId: {
+          questionId,
+          userId,
+        },
+      },
+    });
+
+    // Cevabı güncelle veya oluştur
+    if (existingAnswer) {
+      await this.prisma.brandSurveyAnswer.update({
+        where: { id: existingAnswer.id },
+        data: {
+          answerText: answerId,
+          updatedAt: new Date(),
+        },
+      });
+    } else {
+      await this.prisma.brandSurveyAnswer.create({
+        data: {
+          id: randomUUID(),
+          questionId,
+          userId,
+          answerText: answerId,
+        },
+      });
+    }
+
+    // Kullanıcının tüm sorulara cevap verip vermediğini kontrol et
+    const userAnswers = await this.prisma.brandSurveyAnswer.findMany({
+      where: {
+        userId,
+        question: {
+          surveyId: surveyId,
+        },
+      },
+    });
+
+    const isCompleted = userAnswers.length >= survey.questions.length;
+
+    return {
+      success: true,
+      message: existingAnswer ? 'Cevap güncellendi' : 'Cevap kaydedildi',
+      isCompleted,
+    };
   }
 
 }

@@ -189,6 +189,23 @@ export interface Message {
   mediaUrl?: string | null;
   thumbnailUrl?: string | null;
   caption?: string | null;
+  // Gruplanmış mesajlar (DEPRECATED - artık kullanılmıyor, her mesaj tek tek gelir)
+  groupedMessages?: Array<{
+    id: string;
+    type: MessageType; // Mesaj tipi (message, image, send-tips, support-request)
+    message?: string;
+    mediaUrl?: string | null;
+    thumbnailUrl?: string | null;
+    caption?: string | null;
+    timestamp: string;
+    isUnread: boolean;
+    // send-tips için
+    amount?: number;
+    // support-request için
+    supportType?: SupportType;
+    supportStatus?: SupportRequestStatus;
+    supportAmount?: number;
+  }>;
 }
 
 /**
@@ -242,11 +259,18 @@ export interface ThreadParticipant {
   name: string;
   title: string;
   avatar: string;
+  isOnline?: boolean; // Opsiyonel - online durumu
+  lastSeen?: string; // Opsiyonel - son görülme zamanı
 }
 
 export interface ThreadParticipants {
   userOne: ThreadParticipant;
   userTwo: ThreadParticipant;
+}
+
+// Yeni yapı: Key-value format (user-1, user-2)
+export interface ThreadParticipantsMap {
+  [userId: string]: ThreadParticipant;
 }
 
 export interface MessageFeed {
@@ -333,6 +357,76 @@ export interface RemoveReactionResponse {
   messageId: string;
   reactionId: string;
   deletedAt: string;
+}
+
+/**
+ * Yeni thread response yapısı - WhatsApp/Instagram tarzı
+ */
+export interface ThreadInfo {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DateInfo {
+  timestamp: string; // ISO date string (00:00:00.000Z)
+  displayText: string; // "Today", "Yesterday", "15 Jan 2024" gibi
+  dayKey: string; // "2024-01-15" formatında
+}
+
+export interface MessageContent {
+  // Text mesaj için
+  text?: string;
+  // Image mesaj için
+  mediaUrl?: string;
+  thumbnailUrl?: string;
+  caption?: string;
+  fileSize?: number;
+  dimensions?: {
+    width: number;
+    height: number;
+  };
+  // TIPS için
+  amount?: number;
+  currency?: string;
+  // Support request için
+  type?: SupportType;
+  message?: string;
+  status?: SupportRequestStatus;
+  threadId?: string | null;
+}
+
+export interface GroupedMessage {
+  id: string;
+  type: 'message' | 'image' | 'send-tips' | 'support-request';
+  sentAt: string;
+  isRead: boolean;
+  readAt?: string | null;
+  content: MessageContent;
+}
+
+export interface MessageGroup {
+  groupId: string;
+  senderId: string;
+  startTime: string; // İlk mesajın timestamp'i
+  endTime: string; // Son mesajın timestamp'i
+  messages: GroupedMessage[];
+}
+
+export interface DateGroup {
+  date: DateInfo;
+  messageGroups: MessageGroup[];
+}
+
+export interface ThreadMessagesResponse {
+  thread: ThreadInfo;
+  participants: ThreadParticipantsMap; // Key-value format: { "user-1": {...}, "user-2": {...} }
+  dateGroups: DateGroup[];
+  pagination: {
+    hasMore: boolean;
+    nextCursor?: string;
+    totalCount?: number;
+  };
 }
 
 export interface GetReactionsResponse {

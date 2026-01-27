@@ -6,6 +6,21 @@ export interface SendTipRequest {
   reason?: string;           // Backward compatibility için (message ile aynı)
 }
 
+export interface TransferNftRequest {
+  nftId: string;
+  recipientId: string;
+  message?: string;
+}
+
+export interface TransferNftResponse {
+  success: boolean;
+  nftId: string;
+  fromUserId: string;
+  toUserId: string;
+  nftTransactionId: string;
+  transferredAt: string;
+}
+
 export interface TransactionResponse {
   id: string;
   actionType: string;

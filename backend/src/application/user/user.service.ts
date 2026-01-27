@@ -1039,40 +1039,21 @@ export class UserService {
   }> {
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
 
-    // Tüm ACHIEVEMENT tipindeki badgeleri kullanıcı progress'i ile birlikte çek
-    const badges = await this.prisma.badge.findMany({
-      where: {
-        type: 'ACHIEVEMENT',
-      },
-      include: {
-        achievementGoals: {
-          include: {
-            userAchievements: {
-              where: { userId },
-            },
-          },
-        },
-      },
-      orderBy: { createdAt: 'asc' },
-    });
-
     const mapStatus = (current: number, total: number): 'not-started' | 'in_progress' | 'completed' => {
       if (current <= 0) return 'not-started';
       if (current >= total) return 'completed';
       return 'in_progress';
     };
 
-    const mapped = badges.map((badge: any) => {
-      const goals = badge.achievementGoals || [];
-      const total = goals.reduce(
-        (sum: number, g: any) => sum + (g.pointsRequired || 0),
-        0
-      );
-      const current = goals.reduce(
-        (sum: number, g: any) => sum + (g.userAchievements?.[0]?.progress || 0),
-        0
-      );
+    const statusFilter = options?.status;
+    const isValidUuid = (value: unknown): value is string =>
+      typeof value === 'string' && /^[0-9a-fA-F-]{36}$/.test(value);
+    const initialCursor = isValidUuid(options?.cursor) ? options!.cursor : undefined;
 
+    const mapBadge = (badge: any) => {
+      const goals = badge.achievementGoals || [];
+      const total = goals.reduce((sum: number, g: any) => sum + (g.pointsRequired || 0), 0);
+      const current = goals.reduce((sum: number, g: any) => sum + (g.userAchievements?.[0]?.progress || 0), 0);
       const status = mapStatus(current, total || 1);
 
       return {
@@ -1084,32 +1065,87 @@ export class UserService {
         total: total || 1,
         status,
       };
-    });
+    };
 
-    // Status filtresi uygula
-    const filtered = options?.status
-      ? mapped.filter((b) => b.status === options.status)
-      : mapped;
+    // DB-level cursor pagination (deterministic order). Status filtresi için gerekirse birden çok batch çekilir.
+    const items: Array<{
+      id: string;
+      title: string;
+      image: string;
+      description: string;
+      current: number;
+      total: number;
+      status: 'not-started' | 'in_progress' | 'completed';
+    }> = [];
 
-    // Basit cursor: badge id'sine göre
-    let startIndex = 0;
-    if (options?.cursor) {
-      const idx = filtered.findIndex((b) => b.id === options.cursor);
-      if (idx >= 0) {
-        startIndex = idx + 1;
+    const take = limit; // client limit
+    const pageSize = limit; // internal batch size (limit<=50)
+    let cursor = initialCursor;
+    let moreRowsAvailable = true;
+    let hasMoreForResponse = false;
+    let iterations = 0;
+
+    while (items.length < take && moreRowsAvailable && iterations < 30) {
+      iterations += 1;
+
+      const batch = await this.prisma.badge.findMany({
+        where: { type: 'ACHIEVEMENT' },
+        include: {
+          achievementGoals: {
+            include: {
+              userAchievements: {
+                where: { userId },
+              },
+            },
+          },
+        },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        take: pageSize + 1,
+        ...(cursor && {
+          cursor: { id: cursor },
+          skip: 1,
+        }),
+      });
+
+      moreRowsAvailable = batch.length > pageSize;
+      const page = moreRowsAvailable ? batch.slice(0, pageSize) : batch;
+
+      if (page.length === 0) {
+        break;
       }
+
+      // Next query cursor: last row of the page (not filtered)
+      cursor = String(page[page.length - 1].id);
+
+      const mapped = page.map(mapBadge);
+      const filtered = statusFilter ? mapped.filter((b) => b.status === statusFilter) : mapped;
+
+      if (filtered.length === 0) {
+        continue;
+      }
+
+      const remaining = take - items.length;
+      if (filtered.length > remaining) {
+        items.push(...filtered.slice(0, remaining));
+        hasMoreForResponse = true; // Aynı batch'te bile daha fazla eşleşen var
+        break;
+      }
+
+      items.push(...filtered);
     }
 
-    const sliced = filtered.slice(startIndex, startIndex + limit + 1);
-    const hasMore = sliced.length > limit;
-    const items = hasMore ? sliced.slice(0, limit) : sliced;
-    const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].id : undefined;
+    // Eğer limit'e ulaştıysak ve daha fazla row varsa, hasMore=true sayabiliriz
+    if (!hasMoreForResponse) {
+      hasMoreForResponse = items.length >= take && moreRowsAvailable;
+    }
+
+    const nextCursor = items.length > 0 ? items[items.length - 1].id : undefined;
 
     return {
-      items,
+      items: items,
       pagination: {
         cursor: nextCursor,
-        hasMore,
+        hasMore: hasMoreForResponse,
         limit,
       },
     };
@@ -1414,10 +1450,13 @@ export class UserService {
     return null;
   }
 
-  async getUserPosts(userId: string): Promise<any[]> {
-    // ✅ DÜZELTME: Tüm post tiplerini getir (sadece FREE değil)
+  async getUserPosts(userId: string, options?: { limit?: number }): Promise<any[]> {
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 50;
+    
+    // ✅ DÜZELTME: Tüm post tiplerini getir (sadece FREE değil) - limit ile
     const posts = await this.prisma.contentPost.findMany({
       where: { userId },
+      take: limit + 1, // hasMore kontrolü için +1
       include: {
         product: {
           include: {
@@ -1497,26 +1536,33 @@ export class UserService {
       });
     }
     
-    const results = await Promise.all(
-      posts.map(async (post) => {
-        const stats = await this.getPostStats(post.id);
-        const contextType = this.mapContextType(post);
-        const contextData = this.buildContextDataFromPost(post, ownedProductIds);
-        // Get images for this post from PostMedia (orderIndex'e göre sıralı)
-        const images = postMediaMap.get(post.id) || [];
-        return {
-          id: String(post.id),
-          type: 'post' as const,
-          user: userBase,
-          stats,
-          createdAt: post.createdAt.toISOString(),
-          contextType,
-          contextData,
-          content: post.body,
-          images,
-        };
-      })
-    );
+    // Limit uygula (hasMore kontrolü için +1 aldık)
+    const paginatedPosts = posts.slice(0, limit);
+    
+    // getPostStats yerine post'un kendi alanlarını kullan (N+1 query'yi önle)
+    const results = paginatedPosts.map((post) => {
+      const stats = {
+        likes: post.likesCount || 0,
+        comments: post.commentsCount || 0,
+        shares: post.sharesCount || 0,
+        bookmarks: post.favoritesCount || 0,
+      };
+      const contextType = this.mapContextType(post);
+      const contextData = this.buildContextDataFromPost(post, ownedProductIds);
+      // Get images for this post from PostMedia (orderIndex'e göre sıralı)
+      const images = postMediaMap.get(post.id) || [];
+      return {
+        id: String(post.id),
+        type: 'post' as const,
+        user: userBase,
+        stats,
+        createdAt: post.createdAt.toISOString(),
+        contextType,
+        contextData,
+        content: post.body,
+        images,
+      };
+    });
     return results;
   }
 
@@ -2775,24 +2821,46 @@ export class UserService {
     // Her kaynak için limit+1 çekiyoruz ki hasMore hesaplanabilsin
     const perSourceLimit = limit + 1;
 
+    // Timeout koruması ile fetcher'ları oluştur
+    const createFetcherWithTimeout = (fetcher: Promise<any>, timeoutMs: number = 8000) => {
+      return Promise.race([
+        fetcher,
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Request timeout')), timeoutMs)
+        )
+      ]).catch((error) => {
+        logger.warn(`Feed fetcher timeout or error: ${error.message}`);
+        return { items: [] }; // Timeout durumunda boş array döndür
+      });
+    };
+
     const fetchers = requestedTypes.map((cardType) => {
+      let fetcher: Promise<any>;
       switch (cardType) {
         case 'feed':
-          return this.getUserReviews(userId, { limit: perSourceLimit });
+          fetcher = this.getUserReviews(userId, { limit: perSourceLimit });
+          break;
         case 'benchmark':
-          return this.getUserBenchmarks(userId, { limit: perSourceLimit });
+          fetcher = this.getUserBenchmarks(userId, { limit: perSourceLimit });
+          break;
         case 'tipsAndTricks':
-          return this.getUserTips(userId, { limit: perSourceLimit });
+          fetcher = this.getUserTips(userId, { limit: perSourceLimit });
+          break;
         case 'question':
-          return this.getUserReplies(userId, { limit: perSourceLimit });
+          fetcher = this.getUserReplies(userId, { limit: perSourceLimit });
+          break;
         case 'experience':
-          return this.getUserReviews(userId, { limit: perSourceLimit });
+          fetcher = this.getUserReviews(userId, { limit: perSourceLimit });
+          break;
         case 'update':
-          return this.getUserUpdates(userId, { limit: perSourceLimit });
+          fetcher = this.getUserUpdates(userId, { limit: perSourceLimit });
+          break;
         case 'post':
         default:
-          return this.getUserPosts(userId);
+          fetcher = this.getUserPosts(userId, { limit: perSourceLimit });
+          break;
       }
+      return createFetcherWithTimeout(fetcher, 8000);
     });
 
     const chunks = await Promise.all(fetchers);
@@ -3388,7 +3456,12 @@ export class UserService {
     newPassword: string
   ): Promise<{ success: boolean; message: string }> {
     try {
-      const user = await this.userRepo.findById(userId);
+      // Sadece passwordHash'i çek (profile ve wallets include etme - performans için)
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, passwordHash: true },
+      });
+
       if (!user || !user.passwordHash) {
         return {
           success: false,
@@ -3398,7 +3471,21 @@ export class UserService {
 
       // Mevcut şifreyi kontrol et
       const isValidPassword = await bcrypt.compare(currentPassword, user.passwordHash);
+      
+      // Debug log (production'da kaldırılabilir)
+      logger.debug({
+        message: 'Password comparison result',
+        userId,
+        passwordHashExists: !!user.passwordHash,
+        passwordHashLength: user.passwordHash?.length,
+        isValidPassword,
+      });
+      
       if (!isValidPassword) {
+        logger.warn({
+          message: 'Password change failed - incorrect current password',
+          userId,
+        });
         return {
           success: false,
           message: 'Current password is incorrect',
@@ -3415,7 +3502,10 @@ export class UserService {
 
       // Yeni şifreyi hash'le ve güncelle
       const newPasswordHash = await bcrypt.hash(newPassword, 10);
-      await this.userRepo.update(userId, { passwordHash: newPasswordHash });
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { passwordHash: newPasswordHash },
+      });
 
       logger.info({
         message: 'Password changed successfully',
@@ -3441,44 +3531,107 @@ export class UserService {
 
   /**
    * Get Notification Settings - Kullanıcının bildirim ayarlarını getirir
+   * Hem kanal ayarlarını (EMAIL, PUSH, IN_APP) hem de kategori ayarlarını döndürür
    */
-  async getNotificationSettings(userId: string): Promise<
-    Array<{
+  async getNotificationSettings(userId: string): Promise<{
+    channels: Array<{
       notificationCode: NotificationCode;
       value: boolean;
-    }>
-  > {
+    }>;
+    categories: {
+      trustNotifications: boolean;
+      supportNotifications: boolean;
+      messageNotifications: boolean;
+      collectionNotifications: boolean;
+      postNotifications: boolean;
+      nftNotifications: boolean;
+      rewardNotifications: boolean;
+      transactionNotifications: boolean;
+      walletNotifications: boolean;
+      gamificationNotifications: boolean;
+      expertNotifications: boolean;
+      eventNotifications: boolean;
+      systemNotifications: boolean;
+    };
+    global: {
+      receiveNotifications: boolean | null;
+    };
+  }> {
     let settings = await this.settingsRepo.findByUserId(userId);
     if (!settings) {
       // Default settings oluştur
       settings = await this.settingsRepo.create(userId);
     }
 
-    return [
-      {
-        notificationCode: NotificationCode.EMAIL,
-        value: settings.getNotificationValue(NotificationCode.EMAIL),
+    return {
+      channels: [
+        {
+          notificationCode: NotificationCode.EMAIL,
+          value: settings.getNotificationValue(NotificationCode.EMAIL),
+        },
+        {
+          notificationCode: NotificationCode.PUSH,
+          value: settings.getNotificationValue(NotificationCode.PUSH),
+        },
+        {
+          notificationCode: NotificationCode.IN_APP,
+          value: settings.getNotificationValue(NotificationCode.IN_APP),
+        },
+      ],
+      categories: {
+        trustNotifications: settings.trustNotifications,
+        supportNotifications: settings.supportNotifications,
+        messageNotifications: settings.messageNotifications,
+        collectionNotifications: settings.collectionNotifications,
+        postNotifications: settings.postNotifications,
+        nftNotifications: settings.nftNotifications,
+        rewardNotifications: settings.rewardNotifications,
+        transactionNotifications: settings.transactionNotifications,
+        walletNotifications: settings.walletNotifications,
+        gamificationNotifications: settings.gamificationNotifications,
+        expertNotifications: settings.expertNotifications,
+        eventNotifications: settings.eventNotifications,
+        systemNotifications: settings.systemNotifications,
       },
-      {
-        notificationCode: NotificationCode.PUSH,
-        value: settings.getNotificationValue(NotificationCode.PUSH),
+      global: {
+        receiveNotifications: settings.receiveNotifications,
       },
-      {
-        notificationCode: NotificationCode.IN_APP,
-        value: settings.getNotificationValue(NotificationCode.IN_APP),
-      },
-    ];
+    };
   }
 
   /**
    * Update Notification Settings - Kullanıcının bildirim ayarlarını günceller
+   * Hem kanal ayarlarını (EMAIL, PUSH, IN_APP) hem de kategori ayarlarını güncelleyebilir
    */
   async updateNotificationSettings(
     userId: string,
     settings: Array<{
-      notificationCode: NotificationCode;
-      value: boolean;
-    }>
+      notificationCode?: NotificationCode;
+      value?: boolean;
+    }> | {
+      channels?: Array<{
+        notificationCode: NotificationCode;
+        value: boolean;
+      }>;
+      categories?: {
+        trustNotifications?: boolean;
+        supportNotifications?: boolean;
+        messageNotifications?: boolean;
+        collectionNotifications?: boolean;
+        postNotifications?: boolean;
+        nftNotifications?: boolean;
+        rewardNotifications?: boolean;
+        transactionNotifications?: boolean;
+        walletNotifications?: boolean;
+        gamificationNotifications?: boolean;
+        expertNotifications?: boolean;
+        eventNotifications?: boolean;
+        systemNotifications?: boolean;
+      };
+      global?: {
+        receiveNotifications?: boolean | null;
+      };
+    }
   ): Promise<{ success: boolean; message: string }> {
     try {
       let userSettings = await this.settingsRepo.findByUserId(userId);
@@ -3490,19 +3643,103 @@ export class UserService {
         notificationEmailEnabled?: boolean;
         notificationPushEnabled?: boolean;
         notificationInAppEnabled?: boolean;
+        trustNotifications?: boolean;
+        supportNotifications?: boolean;
+        messageNotifications?: boolean;
+        collectionNotifications?: boolean;
+        postNotifications?: boolean;
+        nftNotifications?: boolean;
+        rewardNotifications?: boolean;
+        transactionNotifications?: boolean;
+        walletNotifications?: boolean;
+        gamificationNotifications?: boolean;
+        expertNotifications?: boolean;
+        eventNotifications?: boolean;
+        systemNotifications?: boolean;
+        receiveNotifications?: boolean | null;
       } = {};
 
-      for (const setting of settings) {
-        switch (setting.notificationCode) {
-          case NotificationCode.EMAIL:
-            updateData.notificationEmailEnabled = setting.value;
-            break;
-          case NotificationCode.PUSH:
-            updateData.notificationPushEnabled = setting.value;
-            break;
-          case NotificationCode.IN_APP:
-            updateData.notificationInAppEnabled = setting.value;
-            break;
+      // Backward compatibility: Eğer array formatında gelirse (eski format)
+      if (Array.isArray(settings)) {
+        for (const setting of settings) {
+          if (setting.notificationCode !== undefined && setting.value !== undefined) {
+            switch (setting.notificationCode) {
+              case NotificationCode.EMAIL:
+                updateData.notificationEmailEnabled = setting.value;
+                break;
+              case NotificationCode.PUSH:
+                updateData.notificationPushEnabled = setting.value;
+                break;
+              case NotificationCode.IN_APP:
+                updateData.notificationInAppEnabled = setting.value;
+                break;
+            }
+          }
+        }
+      } else {
+        // Yeni format: object with channels, categories, global
+        if (settings.channels) {
+          for (const channel of settings.channels) {
+            switch (channel.notificationCode) {
+              case NotificationCode.EMAIL:
+                updateData.notificationEmailEnabled = channel.value;
+                break;
+              case NotificationCode.PUSH:
+                updateData.notificationPushEnabled = channel.value;
+                break;
+              case NotificationCode.IN_APP:
+                updateData.notificationInAppEnabled = channel.value;
+                break;
+            }
+          }
+        }
+
+        if (settings.categories) {
+          if (settings.categories.trustNotifications !== undefined) {
+            updateData.trustNotifications = settings.categories.trustNotifications;
+          }
+          if (settings.categories.supportNotifications !== undefined) {
+            updateData.supportNotifications = settings.categories.supportNotifications;
+          }
+          if (settings.categories.messageNotifications !== undefined) {
+            updateData.messageNotifications = settings.categories.messageNotifications;
+          }
+          if (settings.categories.collectionNotifications !== undefined) {
+            updateData.collectionNotifications = settings.categories.collectionNotifications;
+          }
+          if (settings.categories.postNotifications !== undefined) {
+            updateData.postNotifications = settings.categories.postNotifications;
+          }
+          if (settings.categories.nftNotifications !== undefined) {
+            updateData.nftNotifications = settings.categories.nftNotifications;
+          }
+          if (settings.categories.rewardNotifications !== undefined) {
+            updateData.rewardNotifications = settings.categories.rewardNotifications;
+          }
+          if (settings.categories.transactionNotifications !== undefined) {
+            updateData.transactionNotifications = settings.categories.transactionNotifications;
+          }
+          if (settings.categories.walletNotifications !== undefined) {
+            updateData.walletNotifications = settings.categories.walletNotifications;
+          }
+          if (settings.categories.gamificationNotifications !== undefined) {
+            updateData.gamificationNotifications = settings.categories.gamificationNotifications;
+          }
+          if (settings.categories.expertNotifications !== undefined) {
+            updateData.expertNotifications = settings.categories.expertNotifications;
+          }
+          if (settings.categories.eventNotifications !== undefined) {
+            updateData.eventNotifications = settings.categories.eventNotifications;
+          }
+          if (settings.categories.systemNotifications !== undefined) {
+            updateData.systemNotifications = settings.categories.systemNotifications;
+          }
+        }
+
+        if (settings.global) {
+          if (settings.global.receiveNotifications !== undefined) {
+            updateData.receiveNotifications = settings.global.receiveNotifications;
+          }
         }
       }
 

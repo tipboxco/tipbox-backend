@@ -13,6 +13,7 @@ import { CacheService } from '../infrastructure/cache/cache.service';
 import QueueProvider from '../infrastructure/queue/queue.provider';
 import { getPrisma } from '../infrastructure/repositories/prisma.client';
 import WorkerManager from '../infrastructure/workers';
+import { maybeBackfillFeedOnStartup } from '../infrastructure/scheduler/feed-distribution.startup-backfill';
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -62,6 +63,10 @@ async function startServer() {
     // Worker'ları başlat
     const workerManager = new WorkerManager();
     await workerManager.startAll();
+
+    // Feed tablosu boş + queue idle ise (ör: seed sonrası/restart), feed distribution job'larını otomatik kuyruğa al.
+    // Non-blocking: server boot'u bekletmesin.
+    void maybeBackfillFeedOnStartup();
 
     // HTTP server'ı başlat - 0.0.0.0 tüm ağ arayüzlerinde dinler (local network erişimi için)
     httpServer.listen(PORT, '0.0.0.0', () => {

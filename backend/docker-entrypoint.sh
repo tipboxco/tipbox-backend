@@ -42,16 +42,20 @@ if [ $attempt -eq $max_attempts ]; then
   exit 1
 fi
 
-echo "🔄 Veritabanı migration'ları uygulanıyor..."
-# db push kullan (development için), production'da migrate deploy kullanılabilir
-if npx prisma db push --accept-data-loss --skip-generate; then
-  echo "✅ Migration'lar başarıyla uygulandı!"
+if [ "${SKIP_DB_MIGRATIONS}" = "1" ] || [ "${SKIP_DB_MIGRATIONS}" = "true" ]; then
+  echo "⏭️  SKIP_DB_MIGRATIONS aktif: migration/db push atlanıyor."
 else
-  echo "⚠️  db push başarısız, migrate deploy deneniyor..."
-  npx prisma migrate deploy || echo "⚠️  Migration hatası, devam ediliyor..."
-fi
+  echo "🔄 Veritabanı migration'ları uygulanıyor..."
+  # db push kullan (development için), production'da migrate deploy kullanılabilir
+  if npx prisma db push --accept-data-loss --skip-generate; then
+    echo "✅ Migration'lar başarıyla uygulandı!"
+  else
+    echo "⚠️  db push başarısız, migrate deploy deneniyor..."
+    npx prisma migrate deploy || echo "⚠️  Migration hatası, devam ediliyor..."
+  fi
 
-echo "✅ Migration işlemi tamamlandı!"
+  echo "✅ Migration işlemi tamamlandı!"
+fi
 
 # Gelen komutu çalıştır (npm run dev gibi)
 exec "$@"

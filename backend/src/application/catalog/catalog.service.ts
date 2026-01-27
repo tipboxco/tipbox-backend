@@ -55,6 +55,85 @@ export interface ProductDetail {
 
 export class CatalogService {
   /**
+   * Category ID'yi resolve eder - tüm ID formatlarını kabul eder
+   * Medusa ID formatlarını (pcat_, mcat_, scat_), UUID, ULID ve diğer formatları destekler
+   * Eğer Category tablosunda bulunamazsa, direkt ID'yi döndürür (parentId olarak kullanılabilir)
+   */
+  private async resolveCategoryId(categoryId: string): Promise<string> {
+    if (!categoryId || categoryId.trim() === '') {
+      throw new Error('Category ID cannot be empty');
+    }
+
+    const trimmedId = categoryId.trim();
+
+    // 1. Önce direkt id ile ara - herhangi bir format kabul edilir
+    try {
+      const category = await prisma.category.findUnique({
+        where: { id: trimmedId },
+        select: { id: true },
+      });
+      if (category) {
+        return category.id;
+      }
+    } catch (error) {
+      // ID formatı Prisma için geçersiz olabilir - devam et
+    }
+
+    // 2. Metadata içindeki externalId ile ara
+    try {
+      const result = await prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT id 
+        FROM categories 
+        WHERE metadata->>'externalId' = ${trimmedId}
+        LIMIT 1
+      `;
+
+      if (result && result.length > 0) {
+        return result[0].id;
+      }
+    } catch (error) {
+      // Metadata query hatası - devam et
+    }
+
+    // 3. Metadata içindeki medusaId ile ara (alternatif field adı)
+    try {
+      const result = await prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT id 
+        FROM categories 
+        WHERE metadata->>'medusaId' = ${trimmedId}
+        LIMIT 1
+      `;
+
+      if (result && result.length > 0) {
+        return result[0].id;
+      }
+    } catch (error) {
+      // Metadata query hatası - devam et
+    }
+
+    // 4. Metadata içindeki herhangi bir field'da bu ID'yi ara
+    try {
+      const result = await prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT id 
+        FROM categories 
+        WHERE metadata::text LIKE ${'%' + trimmedId + '%'}
+        LIMIT 1
+      `;
+
+      if (result && result.length > 0) {
+        return result[0].id;
+      }
+    } catch (error) {
+      // Metadata query hatası - devam et
+    }
+
+    // 5. Eğer hiçbir yerde bulunamazsa, direkt ID'yi döndür
+    // Category tablosunda ID String tipinde olduğu için herhangi bir format kabul edilir
+    // Bu ID parentId olarak kullanılabilir veya yeni bir Category oluşturulabilir
+    return trimmedId;
+  }
+
+  /**
    * Tüm kategorileri listele
    */
   async getAllCategories(): Promise<CategoryItem[]> {
@@ -105,12 +184,15 @@ export class CatalogService {
       limit: number;
     };
   }> {
-    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 20;
     const cursor = options?.cursor;
 
     try {
+      // Category ID'yi resolve et - tüm ID formatlarını kabul eder
+      const resolvedCategoryId = await this.resolveCategoryId(categoryId);
+
       const whereClause: any = {
-        parentId: categoryId,
+        parentId: resolvedCategoryId,
       };
 
       if (cursor) {
@@ -143,7 +225,7 @@ export class CatalogService {
 
         return {
           subCategoryId: subCategory.id,
-          categoryId: categoryId,
+          categoryId: resolvedCategoryId,
           name: subCategory.name,
           image: imageUrl,
         };
@@ -177,12 +259,15 @@ export class CatalogService {
       limit: number;
     };
   }> {
-    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 20;
     const cursor = options?.cursor;
 
     try {
+      // Sub Category ID'yi resolve et - tüm ID formatlarını kabul eder
+      const resolvedSubCategoryId = await this.resolveCategoryId(subCategoryId);
+
       const whereClause: any = {
-        parentId: subCategoryId,
+        parentId: resolvedSubCategoryId,
       };
 
       if (cursor) {
@@ -251,7 +336,7 @@ export class CatalogService {
       limit: number;
     };
   }> {
-    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 20;
     const cursor = options?.cursor;
     const searchTrimmed = search?.trim();
 
@@ -437,7 +522,7 @@ export class CatalogService {
         throw new Error(`Product not found: ${productId}`);
       }
 
-      const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+      const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 20;
       const cursor = options?.cursor;
       const filter = options?.filter || 'all'; // all, tips_and_tricks, questions, updates, benchmarks, reviews
       const sort = options?.sort || 'newest'; // newest, oldest, most_popular
@@ -716,33 +801,107 @@ export class CatalogService {
     pagination: { cursor?: string; hasMore: boolean; limit: number };
   }> {
     try {
-      // Sub category'nin var olup olmadığını kontrol et
-      const subCategory = await prisma.subCategory.findUnique({
+      // Sub category ID'yi resolve et - tüm ID formatlarını kabul eder
+      // Önce Category tablosunda ara (String ID kabul eder)
+      let resolvedSubCategoryId: string | null = null;
+      let actualSubCategoryId: string | null = null;
+
+      // 1. Önce Category tablosunda ara (Medusa ID formatlarını destekler)
+      const category = await prisma.category.findUnique({
         where: { id: subCategoryId },
+        select: { id: true, name: true },
       });
 
-      if (!subCategory) {
-        throw new Error(`Sub category not found: ${subCategoryId}`);
+      if (category) {
+        // Category bulundu - name ile SubCategory'de ara
+        const subCategory = await prisma.subCategory.findFirst({
+          where: { name: category.name },
+          select: { id: true },
+        });
+        if (subCategory) {
+          actualSubCategoryId = subCategory.id;
+          resolvedSubCategoryId = category.id; // Category ID'yi context için kullan
+        }
       }
 
-      const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+      // 2. Category'de bulunamadı - direkt SubCategory'de ara (UUID formatı)
+      if (!actualSubCategoryId) {
+        try {
+          const subCategory = await prisma.subCategory.findUnique({
+            where: { id: subCategoryId },
+            select: { id: true },
+          });
+          if (subCategory) {
+            actualSubCategoryId = subCategory.id;
+            resolvedSubCategoryId = subCategory.id;
+          }
+        } catch (error) {
+          // UUID formatı değil - Category tablosunu kullan
+        }
+      }
+
+      // 3. Hiçbir yerde bulunamadı - Category ID'yi direkt kullan (parentId olarak)
+      if (!resolvedSubCategoryId) {
+        resolvedSubCategoryId = subCategoryId;
+      }
+
+      const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 20;
       const cursor = options?.cursor;
       const filter = options?.filter || 'all'; // all, free, tips_and_tricks, questions
       const sort = options?.sort || 'newest'; // newest, oldest, most_popular
 
       // Alt product group'ları getir
-      const productGroups = await prisma.productGroup.findMany({
-        where: { subCategoryId: subCategoryId },
-        select: { id: true },
-      });
-      const productGroupIds = productGroups.map((pg) => pg.id);
+      // Eğer actualSubCategoryId varsa onu kullan, yoksa Category ID ile product group'ları bul
+      let productGroupIds: string[] = [];
+      
+      if (actualSubCategoryId) {
+        // SubCategory'den product group'ları getir
+        const productGroups = await prisma.productGroup.findMany({
+          where: { subCategoryId: actualSubCategoryId },
+          select: { id: true },
+        });
+        productGroupIds = productGroups.map((pg) => pg.id);
+      } else if (category) {
+        // Category ID ile product group'ları bul (Category tablosundan)
+        const categoryProductGroups = await prisma.category.findMany({
+          where: { parentId: category.id },
+          select: { id: true, name: true },
+        });
+        
+        // Category name'lerini kullanarak ProductGroup'ları bul
+        const categoryNames = categoryProductGroups.map(c => c.name);
+        if (categoryNames.length > 0) {
+          const productGroups = await prisma.productGroup.findMany({
+            where: { name: { in: categoryNames } },
+            select: { id: true },
+          });
+          productGroupIds = productGroups.map((pg) => pg.id);
+        }
+      }
 
-      // Alt product'ları getir
-      const products = await prisma.product.findMany({
-        where: { groupId: { in: productGroupIds } },
-        select: { id: true },
-      });
-      const productIds = products.map((p) => p.id);
+      // Alt product'ları getir - sadece geçerli UUID'ler varsa
+      // ProductGroup ID'lerinin UUID formatında olduğundan emin ol
+      let productIds: string[] = [];
+      if (productGroupIds.length > 0) {
+        // UUID formatını kontrol et (8-4-4-4-12 formatı)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const validProductGroupIds = productGroupIds.filter(id => uuidRegex.test(id));
+        
+        if (validProductGroupIds.length > 0) {
+          try {
+            const products = await prisma.product.findMany({
+              where: { groupId: { in: validProductGroupIds } },
+              select: { id: true },
+            });
+            productIds = products.map((p) => p.id);
+          } catch (error) {
+            // ProductGroup ID'leri geçersiz olabilir - boş bırak
+            logger.warn(`Failed to get products for product groups: ${validProductGroupIds.join(', ')}`, error);
+          }
+        } else {
+          logger.warn(`No valid UUID product group IDs found. Received: ${productGroupIds.join(', ')}`);
+        }
+      }
 
       // Filtreleme: Sub category için
       let typeFilter: ContentPostType[] | undefined;
@@ -757,10 +916,30 @@ export class CatalogService {
         typeFilter = this.getAllowedPostTypesForContext(ContextType.SUB_CATEGORY);
       }
 
+      // Eğer SubCategory bulunamadıysa, Category'den child category'leri bul ve onların name'lerini kullan
+      if (!actualSubCategoryId && category) {
+        // Category'nin child category'lerini bul
+        const childCategories = await prisma.category.findMany({
+          where: { parentId: category.id },
+          select: { id: true, name: true },
+        });
+        
+        // Child category name'lerini kullanarak SubCategory'leri bul
+        const subCategoryNames = childCategories.map(c => c.name);
+        if (subCategoryNames.length > 0) {
+          const subCategories = await prisma.subCategory.findMany({
+            where: { name: { in: subCategoryNames } },
+            select: { id: true },
+          });
+          actualSubCategoryId = subCategories.length > 0 ? subCategories[0].id : null;
+        }
+      }
+
       // Hiyerarşik where clause: sub category + alt product groups + alt products
       const whereClause: any = {
         OR: [
-          { subCategoryId: subCategoryId },
+          // SubCategory ID'yi kullan (UUID formatında)
+          ...(actualSubCategoryId ? [{ subCategoryId: actualSubCategoryId }] : []),
           ...(productGroupIds.length > 0 ? [{ productGroupId: { in: productGroupIds } }] : []),
           ...(productIds.length > 0 ? [{ productId: { in: productIds } }] : []),
         ],
@@ -946,23 +1125,61 @@ export class CatalogService {
     pagination: { cursor?: string; hasMore: boolean; limit: number };
   }> {
     try {
-      // Product group'un var olup olmadığını kontrol et
-      const productGroup = await prisma.productGroup.findUnique({
+      // Product group ID'yi resolve et - tüm ID formatlarını kabul eder
+      let actualProductGroupId: string | null = null;
+
+      // 1. Önce Category tablosunda ara (Medusa ID formatlarını destekler)
+      const category = await prisma.category.findUnique({
         where: { id: productGroupId },
+        select: { id: true, name: true },
       });
 
-      if (!productGroup) {
-        throw new Error(`Product group not found: ${productGroupId}`);
+      if (category) {
+        // Category bulundu - name ile ProductGroup'da ara
+        const productGroup = await prisma.productGroup.findFirst({
+          where: { name: category.name },
+          select: { id: true },
+        });
+        if (productGroup) {
+          actualProductGroupId = productGroup.id;
+        }
       }
 
-      const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+      // 2. Category'de bulunamadı - direkt ProductGroup'da ara (UUID formatı)
+      if (!actualProductGroupId) {
+        try {
+          const productGroup = await prisma.productGroup.findUnique({
+            where: { id: productGroupId },
+            select: { id: true },
+          });
+          if (productGroup) {
+            actualProductGroupId = productGroup.id;
+          }
+        } catch (error) {
+          // UUID formatı değil - devam et
+        }
+      }
+
+      if (!actualProductGroupId) {
+        // Product group bulunamadı - boş sonuç döndür
+        return {
+          items: [],
+          pagination: {
+            cursor: undefined,
+            hasMore: false,
+            limit: options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 20,
+          },
+        };
+      }
+
+      const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 20;
       const cursor = options?.cursor;
       const filter = options?.filter || 'all'; // all, free, tips_and_tricks, questions
       const sort = options?.sort || 'newest'; // newest, oldest, most_popular
 
       // Alt product'ları getir
       const products = await prisma.product.findMany({
-        where: { groupId: productGroupId },
+        where: { groupId: actualProductGroupId },
         select: { id: true },
       });
       const productIds = products.map((p) => p.id);
@@ -983,7 +1200,7 @@ export class CatalogService {
       // Hiyerarşik where clause: product group + alt products
       const whereClause: any = {
         OR: [
-          { productGroupId: productGroupId },
+          { productGroupId: actualProductGroupId },
           ...(productIds.length > 0 ? [{ productId: { in: productIds } }] : []),
         ],
       };
@@ -1176,7 +1393,7 @@ export class CatalogService {
         throw new Error(`Product not found: ${productId}`);
       }
 
-      const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+      const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 20;
       const cursor = options?.cursor;
 
       // Product'a ait post'ları haber olarak getir
@@ -1274,7 +1491,7 @@ export class CatalogService {
       limit: number;
     };
   }> {
-    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 20;
     const cursor = options?.cursor;
     const searchTrimmed = search?.trim();
 

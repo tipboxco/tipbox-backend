@@ -30,6 +30,7 @@ import newsRouter from './news/news.router';
 import syncReceiverRouter from './sync-receiver/sync-receiver.router';
 import auth0Router from './auth0/auth0.router';
 import cannyRouter from './canny/canny.router';
+import surveyRouter from './survey/survey.router';
 
 // Middleware
 import { authMiddleware } from './auth/auth.middleware';
@@ -282,14 +283,14 @@ function getDynamicSwaggerOptions(req: express.Request) {
 }
 
 /**
- * Swagger spec'inde hardcoded localhost:9000 örneklerini SEED_MEDIA_BASE_URL ile değiştirir
+ * Swagger spec'inde hardcoded localhost:9000 örneklerini public media base URL ile değiştirir
  */
 function replaceLocalhostExamplesInSwaggerSpec(spec: Record<string, unknown>): Record<string, unknown> {
   try {
     const mediaBaseUrl = getPublicMediaBaseUrl();
     const specString = JSON.stringify(spec);
     
-    // localhost:9000 örneklerini SEED_MEDIA_BASE_URL ile değiştir
+    // localhost:9000 örneklerini public media base URL ile değiştir
     const updatedSpecString = specString.replace(
       /http:\/\/localhost:9000/g,
       mediaBaseUrl
@@ -365,6 +366,7 @@ app.use('/events', eventRouter);
 app.use('/news', newsRouter);
 app.use('/interactions', interactionRouter);
 app.use('/notifications', authMiddleware, notificationRouter);
+app.use('/surveys', surveyRouter);
 app.use('/api/cache', cacheRouter);
 app.use('/api/sync-receiver', syncReceiverRouter);
 app.use('/canny', cannyRouter);

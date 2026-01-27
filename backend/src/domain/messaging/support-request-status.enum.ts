@@ -5,5 +5,6 @@ export enum SupportRequestStatus {
   COMPLETED = 'completed',
   CANCELED = 'canceled',
   REPORTED = 'reported',
+  REJECTED = 'rejected',
 }
 

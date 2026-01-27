@@ -204,12 +204,30 @@ function createApiClient(token: string): AxiosInstance {
 }
 
 /**
- * Test görseli oluştur (1x1 pixel PNG base64)
+ * Test görseli oluştur - belirtilen görseli kullan
  */
 function createTestImage(): Buffer {
-  // Minimal 1x1 pixel PNG (base64)
-  const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-  return Buffer.from(pngBase64, 'base64');
+  try {
+    // Belirtilen görseli oku (backend/src/Explore Banners/Tipbox-explorebanners.png)
+    const imagePath = path.resolve(process.cwd(), 'src/Explore Banners/Tipbox-explorebanners.png');
+    log.info(`Görsel okunuyor: ${imagePath}`);
+    
+    if (fs.existsSync(imagePath)) {
+      const imageBuffer = fs.readFileSync(imagePath);
+      log.success(`Görsel başarıyla okundu (${imageBuffer.length} bytes)`);
+      return imageBuffer;
+    } else {
+      // Fallback: Minimal 1x1 pixel PNG (base64)
+      log.warning('Görsel bulunamadı, test görseli kullanılıyor: ' + imagePath);
+      const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      return Buffer.from(pngBase64, 'base64');
+    }
+  } catch (error: any) {
+    log.error('Görsel okuma hatası: ' + error.message);
+    // Fallback: Minimal 1x1 pixel PNG (base64)
+    const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    return Buffer.from(pngBase64, 'base64');
+  }
 }
 
 /**
@@ -262,14 +280,14 @@ async function sendImageMessage(api: AxiosInstance, recipientId: string): Promis
     // FormData kullan (Node.js built-in değil, paket gerekli)
     // Alternatif: axios ile multipart/form-data gönder
     const FormData = require('form-data');
-    const formData = new FormData();
+    const formData = new (FormData as any)();
     
     formData.append('recipientUserId', recipientId);
     if (caption.trim()) {
       formData.append('message', caption.trim());
     }
     formData.append('media', imageBuffer, {
-      filename: 'test-image.png',
+      filename: 'Tipbox-explorebanners.png',
       contentType: 'image/png',
     });
 

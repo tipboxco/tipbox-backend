@@ -1,4 +1,46 @@
 {
+  "avatar.avatar-1": {
+    "targetKey": "avatars/avatar-1.png"
+  },
+  "avatar.avatar-2": {
+    "targetKey": "avatars/avatar-2.png"
+  },
+  "avatar.avatar-3": {
+    "targetKey": "avatars/avatar-3.png"
+  },
+  "avatar.avatar-4": {
+    "targetKey": "avatars/avatar-4.png"
+  },
+  "avatar.avatar-5": {
+    "targetKey": "avatars/avatar-5.png"
+  },
+  "avatar.avatar-6": {
+    "targetKey": "avatars/avatar-6.png"
+  },
+  "avatar.avatar-7": {
+    "targetKey": "avatars/avatar-7.png"
+  },
+  "avatar.avatar-8": {
+    "targetKey": "avatars/avatar-8.png"
+  },
+  "avatar.avatar-9": {
+    "targetKey": "avatars/avatar-9.png"
+  },
+  "avatar.avatar-10": {
+    "targetKey": "avatars/avatar-10.png"
+  },
+  "avatar.avatar-11": {
+    "targetKey": "avatars/avatar-11.png"
+  },
+  "avatar.avatar-12": {
+    "targetKey": "avatars/avatar-12.png"
+  },
+  "avatar.default-useravatar": {
+    "targetKey": "avatars/default-useravatar.png"
+  },
+  "user.avatar.default": {
+    "targetKey": "avatars/default-useravatar.png"
+  },
   "user.avatar.omer": {
     "targetKey": "profile-pictures/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-avatar.png"
   },
@@ -18,7 +60,37 @@
     "targetKey": "profile-pictures/cccccccc-cccc-4ccc-cccc-cccccccccccc/seed-avatar.png"
   },
   "user.avatar.ozan": {
-    "targetKey": "profile-pictures/dddddddd-dddd-4ddd-dddd-dddddddddddd/seed-avatar.jpg"
+    "targetKey": "profile-pictures/99999999-9999-4999-9999-999999999999/seed-avatar.jpg"
+  },
+  "user.avatar.man1": {
+    "targetKey": "profile-pictures/11111111-1111-4111-a111-111111111111/seed-avatar.jpg"
+  },
+  "user.avatar.man2": {
+    "targetKey": "profile-pictures/33333333-3333-4333-a333-333333333333/seed-avatar.png"
+  },
+  "user.avatar.man3": {
+    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000002/seed-avatar.jpg"
+  },
+  "user.avatar.man4": {
+    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000004/seed-avatar.jpg"
+  },
+  "user.avatar.man5": {
+    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000006/seed-avatar.jpg"
+  },
+  "user.avatar.woman1": {
+    "targetKey": "profile-pictures/aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa/seed-avatar.jpg"
+  },
+  "user.avatar.woman2": {
+    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000001/seed-avatar.jpg"
+  },
+  "user.avatar.woman3": {
+    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000003/seed-avatar.jpg"
+  },
+  "user.avatar.woman4": {
+    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000005/seed-avatar.jpg"
+  },
+  "user.avatar.woman5": {
+    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000007/seed-avatar.jpg"
   },
   "user.banner.primary": {
     "targetKey": "profile-banners/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-banner.png"
@@ -34,6 +106,72 @@
   },
   "badge.wishmarker": {
     "targetKey": "badges/custom/WishMarker.png"
+  },
+  "badge.badge-1": {
+    "targetKey": "badges/custom/badge-1.png"
+  },
+  "badge.badge-2": {
+    "targetKey": "badges/custom/badge-2.png"
+  },
+  "badge.badge-3": {
+    "targetKey": "badges/custom/badge-3.png"
+  },
+  "badge.badge-4": {
+    "targetKey": "badges/custom/badge-4.png"
+  },
+  "badge.badge-5": {
+    "targetKey": "badges/custom/badge-5.png"
+  },
+  "badge.badge-6": {
+    "targetKey": "badges/custom/badge-6.png"
+  },
+  "badge.badge-7": {
+    "targetKey": "badges/custom/badge-7.png"
+  },
+  "badge.badge-8": {
+    "targetKey": "badges/custom/badge-8.png"
+  },
+  "badge.badge-9": {
+    "targetKey": "badges/custom/badge-9.png"
+  },
+  "badge.badge-10": {
+    "targetKey": "badges/custom/badge-10.png"
+  },
+  "badge.badge-11-crimson-roast": {
+    "targetKey": "badges/custom/badge-11-Crimson-Roast.png"
+  },
+  "badge.badge-12-golden-pick": {
+    "targetKey": "badges/custom/badge-12-Golden-Pick.png"
+  },
+  "badge.badge-13-trendsetter": {
+    "targetKey": "badges/custom/badge-13-Trendsetter.png"
+  },
+  "badge.badge-14-web3-architect": {
+    "targetKey": "badges/custom/badge-14-Web3-Architect.png"
+  },
+  "badge.badge-15-deal-maven": {
+    "targetKey": "badges/custom/badge-15-Deal-Maven.png"
+  },
+  "badge.badge-16-ladder-vanguard": {
+    "targetKey": "badges/custom/badge-16-Ladder-Vanguard.png"
+  },
+  "badge.badge-17-top-picks": {
+    "targetKey": "badges/custom/badge-17-Top-Picks.png"
+  },
+  "badge.badge-18-product-roast": {
+    "targetKey": "badges/custom/badge-18-Product-Roast.png"
+  },
+  "badge.badge-19-ladder-ranker": {
+    "targetKey": "badges/custom/badge-19-Ladder-Ranker.png"
+  },
+  "badge.badge-20-genesis-member": {
+    "targetKey": "badges/custom/badge-20-Genesis-Member.png"
+  },
+  "badge.badge-21-outdoor-explorer": {
+    "targetKey": "badges/custom/badge-21-Outdoor-Explorer.png"
+  },
+  "badge.badge-22-critical-review": {
+    "targetKey": "badges/custom/badge-22-Critical-Review.png"
   },
   "badge.brand.brandbadge1": {
     "targetKey": "badges/brand/brandbadge1.png"
@@ -53,41 +191,128 @@
   "badge.brand.brandbadge6": {
     "targetKey": "badges/brand/brandbadge6.png"
   },
-  "brand.banner.brandpage-electronic-apple": {
+  "badge.event.1": {
+    "targetKey": "badges/event/1.png"
+  },
+  "badge.event.2": {
+    "targetKey": "badges/event/2.png"
+  },
+  "badge.event.3": {
+    "targetKey": "badges/event/3.png"
+  },
+  "badge.event.4": {
+    "targetKey": "badges/event/4.png"
+  },
+  "badge.event.5": {
+    "targetKey": "badges/event/5.png"
+  },
+  "brand.banner.electronic-apple": {
     "targetKey": "brands/banners/brandpage-electronic-apple.jpg"
   },
-  "brand.banner.brandpage-electronic-asus": {
+  "brand.banner.electronic-asus": {
     "targetKey": "brands/banners/brandpage-electronic-asus.jpg"
   },
-  "brand.banner.brandpage-electronic-canon": {
+  "brand.banner.electronic-canon": {
     "targetKey": "brands/banners/brandpage-electronic-canon.jpg"
   },
-  "brand.banner.brandpage-electronic-dyson": {
+  "brand.banner.electronic-dyson": {
     "targetKey": "brands/banners/brandpage-electronic-dyson.jpg"
   },
-  "brand.banner.brandpage-electronic-jbl": {
+  "brand.banner.electronic-jbl": {
     "targetKey": "brands/banners/brandpage-electronic-jbl.jpg"
   },
-  "brand.banner.brandpage-electronic-msi": {
+  "brand.banner.electronic-msi": {
     "targetKey": "brands/banners/brandpage-electronic-msi.jpg"
   },
-  "brand.banner.brandpage-electronic-nvidia": {
+  "brand.banner.electronic-nvidia": {
     "targetKey": "brands/banners/brandpage-electronic-nvidia.jpg"
   },
-  "brand.banner.brandpage-electronic-samsung": {
+  "brand.banner.electronic-samsung": {
     "targetKey": "brands/banners/brandpage-electronic-samsung.jpg"
   },
-  "brand.banner.brandpage-electronic-shark": {
+  "brand.banner.electronic-shark": {
     "targetKey": "brands/banners/brandpage-electronic-shark.jpg"
   },
-  "brand.banner.brandpage-electronic-steelseries": {
+  "brand.banner.electronic-steelseries": {
     "targetKey": "brands/banners/brandpage-electronic-steelseries.jpg"
   },
-  "brand.banner.brandpage-electronic-xiaomi": {
+  "brand.banner.electronic-xiaomi": {
     "targetKey": "brands/banners/brandpage-electronic-xiaomi.jpg"
   },
   "brand.banner.marshall": {
     "targetKey": "brands/banners/marshall.jpg"
+  },
+  "brand.catalog.electronic-apple": {
+    "targetKey": "brands/catalog/brandcatalog-electronic-apple.png"
+  },
+  "brand.catalog.electronic-asus": {
+    "targetKey": "brands/catalog/brandcatalog-electronic-asus.png"
+  },
+  "brand.catalog.electronic-canon": {
+    "targetKey": "brands/catalog/brandcatalog-electronic-canon.png"
+  },
+  "brand.catalog.electronic-dyson": {
+    "targetKey": "brands/catalog/brandcatalog-electronic-dyson.png"
+  },
+  "brand.catalog.electronic-jbl": {
+    "targetKey": "brands/catalog/brandcatalog-electronic-jbl.png"
+  },
+  "brand.catalog.electronic-marshall": {
+    "targetKey": "brands/catalog/brandcatalog-electronic-marshall.png"
+  },
+  "brand.catalog.electronic-msi": {
+    "targetKey": "brands/catalog/brandcatalog-electronic-msi.png"
+  },
+  "brand.catalog.electronic-nvidia": {
+    "targetKey": "brands/catalog/brandcatalog-electronic-nvidia.png"
+  },
+  "brand.catalog.electronic-samsung": {
+    "targetKey": "brands/catalog/brandcatalog-electronic-samsung.png"
+  },
+  "brand.catalog.electronic-shark": {
+    "targetKey": "brands/catalog/brandcatalog-electronic-shark.png"
+  },
+  "brand.catalog.electronic-steelseries": {
+    "targetKey": "brands/catalog/brandcatalog-electronic-steelseries.png"
+  },
+  "brand.catalog.electronic-xiaomi": {
+    "targetKey": "brands/catalog/brandcatalog-electronic-xiaomi.png"
+  },
+  "brand.catalog.cosmetic-bioderma": {
+    "targetKey": "brands/catalog/brandcatalog-cosmetic-bioderma.png"
+  },
+  "brand.catalog.cosmetic-chanel": {
+    "targetKey": "brands/catalog/brandcatalog-cosmetic-chanel.png"
+  },
+  "brand.catalog.cosmetic-dior": {
+    "targetKey": "brands/catalog/brandcatalog-cosmetic-dior.png"
+  },
+  "brand.catalog.cosmetic-esteelauder": {
+    "targetKey": "brands/catalog/brandcatalog-cosmetic-esteelauder.png"
+  },
+  "brand.catalog.cosmetic-farmasi": {
+    "targetKey": "brands/catalog/brandcatalog-cosmetic-farmasi.png"
+  },
+  "brand.catalog.cosmetic-flormar": {
+    "targetKey": "brands/catalog/brandcatalog-cosmetic-flormar.png"
+  },
+  "brand.catalog.cosmetic-lorealparis": {
+    "targetKey": "brands/catalog/brandcatalog-cosmetic-lorealparis.png"
+  },
+  "brand.catalog.cosmetic-mac": {
+    "targetKey": "brands/catalog/brandcatalog-cosmetic-mac.png"
+  },
+  "brand.catalog.cosmetic-maybelline": {
+    "targetKey": "brands/catalog/brandcatalog-cosmetic-maybelline.png"
+  },
+  "brand.catalog.cosmetic-nars": {
+    "targetKey": "brands/catalog/brandcatalog-cosmetic-nars.png"
+  },
+  "brand.catalog.cosmetic-neutrogena": {
+    "targetKey": "brands/catalog/brandcatalog-cosmetic-neutrogena.png"
+  },
+  "brand.catalog.cosmetic-sephora": {
+    "targetKey": "brands/catalog/brandcatalog-cosmetic-sephora.png"
   },
   "catalog.tv": {
     "targetKey": "catalog/TV.png"
@@ -134,6 +359,51 @@
   "catalog.smart-home-devices": {
     "targetKey": "catalog/smart home devices.png"
   },
+  "brand.category.tv": {
+    "targetKey": "brand-categories/TV.png"
+  },
+  "brand.category.air-conditioner": {
+    "targetKey": "brand-categories/air conditioner.png"
+  },
+  "brand.category.beauty-main": {
+    "targetKey": "brand-categories/beauty-main.png"
+  },
+  "brand.category.cameras": {
+    "targetKey": "brand-categories/cameras.png"
+  },
+  "brand.category.computers-tablets": {
+    "targetKey": "brand-categories/computers-tablets.png"
+  },
+  "brand.category.drone": {
+    "targetKey": "brand-categories/drone.png"
+  },
+  "brand.category.electronic-main": {
+    "targetKey": "brand-categories/electronic-main.png"
+  },
+  "brand.category.games": {
+    "targetKey": "brand-categories/games.png"
+  },
+  "brand.category.headphones": {
+    "targetKey": "brand-categories/headphones.png"
+  },
+  "brand.category.home-appliances": {
+    "targetKey": "brand-categories/home appliances.png"
+  },
+  "brand.category.kucukev": {
+    "targetKey": "brand-categories/kucukev.png"
+  },
+  "brand.category.otomotiv": {
+    "targetKey": "brand-categories/otomotiv.png"
+  },
+  "brand.category.phones": {
+    "targetKey": "brand-categories/phones.png"
+  },
+  "brand.category.printers": {
+    "targetKey": "brand-categories/printers.png"
+  },
+  "brand.category.smart-home-devices": {
+    "targetKey": "brand-categories/smart home devices.png"
+  },
   "event.communityevents-the-content-creator": {
     "targetKey": "events/communityevents-the-content-creator.jpg"
   },
@@ -164,112 +434,178 @@
   "event.communityevents-the-urban-commuter": {
     "targetKey": "events/communityevents-the-urban-commuter.jpg"
   },
+  "event.event-akillisaat": {
+    "targetKey": "events/event-akillisaat.png"
+  },
+  "event.event-batarya": {
+    "targetKey": "events/event-batarya.png"
+  },
+  "event.event-ciltbakim": {
+    "targetKey": "events/event-ciltbakim.png"
+  },
+  "event.event-gunestenkorunma": {
+    "targetKey": "events/event-gunestenkorunma.png"
+  },
+  "event.event-kalicimakyaj": {
+    "targetKey": "events/event-kalicimakyaj.png"
+  },
+  "event.event-kamera": {
+    "targetKey": "events/event-kamera.png"
+  },
+  "event.event-oyun": {
+    "targetKey": "events/event-oyun.png"
+  },
+  "event.event-sacbakim": {
+    "targetKey": "events/event-sacbakim.png"
+  },
+  "event.event-tablet": {
+    "targetKey": "events/event-tablet.png"
+  },
+  "event.event-yaglicilt": {
+    "targetKey": "events/event-yaglicilt.png"
+  },
   "event.event": {
     "targetKey": "events/event.png"
   },
   "event.eventcardbg": {
     "targetKey": "events/eventcardbg.png"
   },
+  "explore.explorebanners": {
+    "targetKey": "explore/explorebanners.png"
+  },
+  "explore.explorebanners2": {
+    "targetKey": "explore/explorebanners2.png"
+  },
+  "explore.hottest": {
+    "targetKey": "explore/hottest.jpg"
+  },
+  "explore.hottest2": {
+    "targetKey": "explore/hottest2.jpg"
+  },
+  "marketplace.marketplace": {
+    "targetKey": "marketplace/marketplace.jpg"
+  },
+  "onboarding.onboarding0": {
+    "targetKey": "onboarding/onboarding0.png"
+  },
+  "onboarding.onboarding1": {
+    "targetKey": "onboarding/onboarding1.png"
+  },
+  "onboarding.onboarding2": {
+    "targetKey": "onboarding/onboarding2.png"
+  },
+  "onboarding.onboarding3": {
+    "targetKey": "onboarding/onboarding3.png"
+  },
+  "onboarding.onboarding4": {
+    "targetKey": "onboarding/onboarding4.png"
+  },
+  "post.default-image": {
+    "targetKey": "post-media/480f5de9-b691-4d70-a6a8-2789226f4e07/default_image.png"
+  },
+  "post.post": {
+    "targetKey": "post-media/480f5de9-b691-4d70-a6a8-2789226f4e07/post.jpg"
+  },
   "product.dyson": {
-    "targetKey": "products/seed/dyson.png"
+    "targetKey": "posts/seed-images/dyson.png"
   },
   "product.electronic-post-1": {
-    "targetKey": "products/seed/electronic-post-1.jpg"
-  },
-  "product.electronic-post-10": {
-    "targetKey": "products/seed/electronic-post-10.jpg"
+    "targetKey": "posts/seed-images/electronic-post-1.jpg"
   },
   "product.electronic-post-2": {
-    "targetKey": "products/seed/electronic-post-2.jpg"
+    "targetKey": "posts/seed-images/electronic-post-2.jpg"
   },
   "product.electronic-post-3": {
-    "targetKey": "products/seed/electronic-post-3.jpg"
+    "targetKey": "posts/seed-images/electronic-post-3.jpg"
   },
   "product.electronic-post-4": {
-    "targetKey": "products/seed/electronic-post-4.jpg"
+    "targetKey": "posts/seed-images/electronic-post-4.jpg"
   },
   "product.electronic-post-5": {
-    "targetKey": "products/seed/electronic-post-5.jpg"
+    "targetKey": "posts/seed-images/electronic-post-5.jpg"
   },
   "product.electronic-post-6": {
-    "targetKey": "products/seed/electronic-post-6.jpg"
+    "targetKey": "posts/seed-images/electronic-post-6.jpg"
   },
   "product.electronic-post-7": {
-    "targetKey": "products/seed/electronic-post-7.jpg"
+    "targetKey": "posts/seed-images/electronic-post-7.jpg"
   },
   "product.electronic-post-8": {
-    "targetKey": "products/seed/electronic-post-8.jpg"
+    "targetKey": "posts/seed-images/electronic-post-8.jpg"
   },
   "product.electronic-post-9": {
-    "targetKey": "products/seed/electronic-post-9.jpg"
+    "targetKey": "posts/seed-images/electronic-post-9.jpg"
+  },
+  "product.electronic-post-10": {
+    "targetKey": "posts/seed-images/electronic-post-10.jpg"
   },
   "product.headphone": {
-    "targetKey": "products/seed/headphone.png"
+    "targetKey": "posts/seed-images/headphone.png"
   },
   "product.headphone2": {
-    "targetKey": "products/seed/headphone2.png"
+    "targetKey": "posts/seed-images/headphone2.png"
   },
   "product.macbook": {
-    "targetKey": "products/seed/macbook.png"
+    "targetKey": "posts/seed-images/macbook.png"
   },
   "product.makeup-post-1": {
-    "targetKey": "products/seed/makeup-post-1.jpg"
-  },
-  "product.makeup-post-10": {
-    "targetKey": "products/seed/makeup-post-10.jpg"
+    "targetKey": "posts/seed-images/makeup-post-1.jpg"
   },
   "product.makeup-post-2": {
-    "targetKey": "products/seed/makeup-post-2.jpg"
+    "targetKey": "posts/seed-images/makeup-post-2.jpg"
   },
   "product.makeup-post-3": {
-    "targetKey": "products/seed/makeup-post-3.jpg"
+    "targetKey": "posts/seed-images/makeup-post-3.jpg"
   },
   "product.makeup-post-4": {
-    "targetKey": "products/seed/makeup-post-4.jpg"
+    "targetKey": "posts/seed-images/makeup-post-4.jpg"
   },
   "product.makeup-post-5": {
-    "targetKey": "products/seed/makeup-post-5.jpg"
+    "targetKey": "posts/seed-images/makeup-post-5.jpg"
   },
   "product.makeup-post-6": {
-    "targetKey": "products/seed/makeup-post-6.jpg"
+    "targetKey": "posts/seed-images/makeup-post-6.jpg"
   },
   "product.makeup-post-7": {
-    "targetKey": "products/seed/makeup-post-7.jpg"
+    "targetKey": "posts/seed-images/makeup-post-7.jpg"
   },
   "product.makeup-post-8": {
-    "targetKey": "products/seed/makeup-post-8.jpg"
+    "targetKey": "posts/seed-images/makeup-post-8.jpg"
   },
   "product.makeup-post-9": {
-    "targetKey": "products/seed/makeup-post-9.jpg"
+    "targetKey": "posts/seed-images/makeup-post-9.jpg"
+  },
+  "product.makeup-post-10": {
+    "targetKey": "posts/seed-images/makeup-post-10.jpg"
   },
   "product.phone1": {
-    "targetKey": "products/seed/phone1.png"
+    "targetKey": "posts/seed-images/phone1.png"
   },
   "product.phone2": {
-    "targetKey": "products/seed/phone2.png"
+    "targetKey": "posts/seed-images/phone2.png"
   },
   "product.phone3": {
-    "targetKey": "products/seed/phone3.png"
+    "targetKey": "posts/seed-images/phone3.png"
   },
   "product.phone4": {
-    "targetKey": "products/seed/phone4.png"
+    "targetKey": "posts/seed-images/phone4.png"
   },
   "product.phone5": {
-    "targetKey": "products/seed/phone5.png"
+    "targetKey": "posts/seed-images/phone5.png"
   },
   "product.phone6": {
-    "targetKey": "products/seed/phone6.png"
+    "targetKey": "posts/seed-images/phone6.png"
   },
   "product.samsun": {
-    "targetKey": "products/seed/samsun.png"
+    "targetKey": "posts/seed-images/samsun.png"
   },
   "product.smartwatch": {
-    "targetKey": "products/seed/smartwatch.png"
+    "targetKey": "posts/seed-images/smartwatch.png"
+  },
+  "primepass.coming-soon": {
+    "targetKey": "primepass/coming-soon.png"
   },
   "news.event": {
     "targetKey": "news/event.jpg"
-  },
-  "user.avatar.default.default-useravatar": {
-    "targetKey": "avatars/default/default-useravatar.png"
   }
 }

@@ -1675,6 +1675,10 @@ router.get(
  *               inventoryId:
  *                 type: string
  *                 description: Inventory ID (UUID format). Belirtilirse productId otomatik olarak inventory'den çekilir.
+ *               productStatus:
+ *                 type: string
+ *                 enum: [own, tried]
+ *                 description: (Roasts) Product status for the event post
  *               images:
  *                 type: array
  *                 items:
@@ -1756,7 +1760,7 @@ router.post(
     }
 
     // Validate required fields before processing images
-    let { body, contextType, contextId, inventoryId } = req.body;
+    let { body, contextType, contextId, inventoryId, productStatus } = req.body;
 
     // ✅ Auto-detect contextType from inventoryId (inventory items are always products)
     if (inventoryId && !contextType) {
@@ -1822,6 +1826,7 @@ router.post(
         inventoryId: inventoryId, // ✅ YENİ: InventoryId'yi service'e gönder
         images: imageUrls,
         eventId: eventId,
+        productStatus: typeof productStatus === 'string' ? (productStatus as any) : undefined,
       };
 
       const result = await postService.createFreePost(String(userId), postData);

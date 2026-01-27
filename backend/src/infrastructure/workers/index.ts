@@ -2,8 +2,10 @@ import { NotificationWorker } from './notification.worker';
 import { FeedCleanupWorker } from './feed-cleanup.worker';
 import { FeedDistributionWorker } from './feed-distribution.worker';
 import { TrustBackfillWorker } from './trust-backfill.worker';
+import { SupportRequestAutoCompleteWorker } from './support-request-auto-complete.worker';
 import { FeedCleanupScheduler } from '../scheduler/feed-cleanup.scheduler';
 import { TrustBackfillScheduler } from '../scheduler/trust-backfill.scheduler';
+import { SupportRequestAutoCompleteScheduler } from '../scheduler/support-request-auto-complete.scheduler';
 import { getTransactionProcessor } from './transaction-processor';
 import logger from '../logger/logger';
 
@@ -12,8 +14,10 @@ class WorkerManager {
   private feedCleanupWorker: FeedCleanupWorker;
   private feedDistributionWorker: FeedDistributionWorker;
   private trustBackfillWorker: TrustBackfillWorker;
+  private supportRequestAutoCompleteWorker: SupportRequestAutoCompleteWorker;
   private feedCleanupScheduler: FeedCleanupScheduler;
   private trustBackfillScheduler: TrustBackfillScheduler;
+  private supportRequestAutoCompleteScheduler: SupportRequestAutoCompleteScheduler;
   private transactionProcessor: ReturnType<typeof getTransactionProcessor>;
 
   constructor() {
@@ -21,8 +25,10 @@ class WorkerManager {
     this.feedCleanupWorker = new FeedCleanupWorker();
     this.feedDistributionWorker = new FeedDistributionWorker();
     this.trustBackfillWorker = new TrustBackfillWorker();
+    this.supportRequestAutoCompleteWorker = new SupportRequestAutoCompleteWorker();
     this.feedCleanupScheduler = new FeedCleanupScheduler();
     this.trustBackfillScheduler = new TrustBackfillScheduler();
+    this.supportRequestAutoCompleteScheduler = new SupportRequestAutoCompleteScheduler();
     this.transactionProcessor = getTransactionProcessor();
   }
 
@@ -47,9 +53,17 @@ class WorkerManager {
       await this.trustBackfillWorker.start();
       logger.info('TrustBackfillWorker started');
 
+      // Support request auto-complete worker'ı başlat
+      await this.supportRequestAutoCompleteWorker.start();
+      logger.info('SupportRequestAutoCompleteWorker started');
+
       // Feed cleanup scheduler'ı başlat (günlük job schedule et)
       await this.feedCleanupScheduler.scheduleDaily();
       logger.info('FeedCleanupScheduler started');
+
+      // Support request auto-complete scheduler'ı başlat (her saat başı job schedule et)
+      await this.supportRequestAutoCompleteScheduler.scheduleHourly();
+      logger.info('SupportRequestAutoCompleteScheduler started');
 
       // Transaction processor'ı başlat
       this.transactionProcessor.start();
@@ -76,8 +90,10 @@ class WorkerManager {
       await this.feedCleanupWorker.stop();
       await this.feedDistributionWorker.stop();
       await this.trustBackfillWorker.stop();
+      await this.supportRequestAutoCompleteWorker.stop();
       await this.feedCleanupScheduler.close();
       await this.trustBackfillScheduler.close();
+      await this.supportRequestAutoCompleteScheduler.close();
       this.transactionProcessor.stop();
 
       logger.info('All workers stopped successfully');

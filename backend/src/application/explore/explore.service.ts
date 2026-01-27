@@ -14,16 +14,25 @@ import { ContentPostType } from '../../domain/content/content-post-type.enum';
 import { FeedItemType } from '../../domain/feed/feed-item-type.enum';
 import { ContextType } from '../../domain/content/context-type.enum';
 import { ContextData, ExperiencePost, ExperienceContent, ReviewProduct } from '../../interfaces/feed/feed.dto';
+import { PostService } from '../post/post.service';
+import { CatalogService } from '../catalog/catalog.service';
+import { BrandService } from '../brand/brand.service';
 
 export class ExploreService {
   private readonly prisma: ReturnType<typeof getPrisma>;
   private readonly cacheService: CacheService;
   private readonly bannerRepo: MarketplaceBannerPrismaRepository;
+  private readonly postService: PostService;
+  private readonly catalogService: CatalogService;
+  private readonly brandService: BrandService;
 
   constructor() {
     this.prisma = getPrisma();
     this.cacheService = CacheService.getInstance();
     this.bannerRepo = new MarketplaceBannerPrismaRepository();
+    this.postService = new PostService();
+    this.catalogService = new CatalogService();
+    this.brandService = new BrandService();
   }
 
   /**
@@ -375,7 +384,7 @@ export class ExploreService {
 
         return {
           eventId: event.id,
-          eventType: event.eventType || 'SURVEY',
+          eventType: 'SURVEY',
           image: resolveMediaUrl((event as any).imageUrl) || null,
           title: event.title,
           description: event.description || '',
@@ -954,6 +963,180 @@ export class ExploreService {
     }
 
     return content;
+  }
+
+  /**
+   * Unified search for Explore screen
+   * Searches across posts, products, and brands
+   */
+  async searchExplore(
+    userId: string,
+    query: string,
+    options?: { type?: 'hottest' | 'news'; cursor?: string; limit?: number }
+  ): Promise<{
+    items: Array<{
+      id: string;
+      type: 'post' | 'product' | 'brand';
+      title: string;
+      content?: string;
+      image?: string;
+      [key: string]: any;
+    }>;
+    pagination: {
+      cursor?: string;
+      hasMore: boolean;
+      limit: number;
+    };
+  }> {
+    const limit = options?.limit || 20;
+    const searchType = options?.type || 'hottest';
+    const searchQuery = query?.trim();
+
+    if (!searchQuery || searchQuery.length === 0) {
+      return {
+        items: [],
+        pagination: {
+          hasMore: false,
+          limit,
+        },
+      };
+    }
+
+    const cacheKey = `explore:search:${userId}:${searchType}:${searchQuery}:${options?.cursor || 'first'}:${limit}`;
+
+    try {
+      const cached = await this.cacheService.get<{
+        items: Array<{
+          id: string;
+          type: 'post' | 'product' | 'brand';
+          title: string;
+          content?: string;
+          image?: string;
+          [key: string]: any;
+        }>;
+        pagination: {
+          cursor?: string;
+          hasMore: boolean;
+          limit: number;
+        };
+      }>(cacheKey);
+      if (cached) {
+        logger.info({ message: 'Explore search served from cache', userId, cacheKey });
+        return cached;
+      }
+    } catch (error) {
+      logger.warn({ message: 'Cache error', error: error instanceof Error ? error.message : String(error) });
+    }
+
+    const items: Array<{
+      id: string;
+      type: 'post' | 'product' | 'brand';
+      title: string;
+      content?: string;
+      image?: string;
+      [key: string]: any;
+    }> = [];
+
+    // Search posts
+    try {
+      const postResults = await this.postService.searchPosts(searchQuery, {
+        limit: Math.floor(limit * 0.5), // 50% posts
+        cursor: options?.cursor,
+      });
+
+      postResults.items.forEach((item: any) => {
+        // PostService.searchPosts returns FeedItem format: { type, data }
+        const postData = item.data || item;
+        items.push({
+          id: postData.id || item.id,
+          type: 'post',
+          title: postData.title || postData.content?.substring(0, 100) || '',
+          content: postData.content || postData.body || '',
+          image: postData.images?.[0] || null,
+          ...item,
+        });
+      });
+    } catch (error) {
+      logger.warn({ message: 'Error searching posts', error: error instanceof Error ? error.message : String(error) });
+    }
+
+    // Search products
+    try {
+      const productResults = await this.catalogService.searchProductsGlobally(searchQuery, {
+        limit: Math.floor(limit * 0.3), // 30% products
+        cursor: options?.cursor,
+      });
+
+      productResults.items.forEach((group) => {
+        group.products.forEach((product: any) => {
+          items.push({
+            id: product.productId,
+            type: 'product',
+            title: product.name,
+            image: product.image,
+            productGroupId: product.productGroupId,
+            subCategoryId: product.subCategoryId,
+            ...product,
+          });
+        });
+      });
+    } catch (error) {
+      logger.warn({ message: 'Error searching products', error: error instanceof Error ? error.message : String(error) });
+    }
+
+    // Search brands
+    try {
+      const brandResults = await this.brandService.searchBrandsGlobally(searchQuery, {
+        limit: Math.floor(limit * 0.2), // 20% brands
+        cursor: options?.cursor,
+      });
+
+      brandResults.items.forEach((category) => {
+        category.brands.forEach((brand: any) => {
+          items.push({
+            id: brand.brandId,
+            type: 'brand',
+            title: brand.name,
+            image: brand.image,
+            categoryId: brand.categoryId,
+            ...brand,
+          });
+        });
+      });
+    } catch (error) {
+      logger.warn({ message: 'Error searching brands', error: error instanceof Error ? error.message : String(error) });
+    }
+
+    // Apply cursor-based pagination
+    let resultItems = items;
+    if (options?.cursor) {
+      const cursorIndex = resultItems.findIndex((item) => item.id === options.cursor);
+      if (cursorIndex >= 0) {
+        resultItems = resultItems.slice(cursorIndex + 1);
+      }
+    }
+
+    const hasMore = resultItems.length > limit;
+    const paginated = hasMore ? resultItems.slice(0, limit) : resultItems;
+    const nextCursor = hasMore && paginated.length > 0 ? paginated[paginated.length - 1].id : undefined;
+
+    const response = {
+      items: paginated,
+      pagination: {
+        cursor: nextCursor,
+        hasMore: !!nextCursor,
+        limit,
+      },
+    };
+
+    // Cache for 5 minutes
+    try {
+      await this.cacheService.set(cacheKey, response, 300);
+    } catch (error) {
+      // Cache error - continue without caching
+    }
+
+    return response;
   }
 }
 

@@ -101,6 +101,14 @@ export class NotificationService {
         return settings.rewardNotifications ?? true;
       case NotificationCategory.NFT:
         return settings.nftNotifications ?? true;
+      case NotificationCategory.GAMIFICATION:
+        return settings.gamificationNotifications ?? true;
+      case NotificationCategory.EXPERT:
+        return settings.expertNotifications ?? true;
+      case NotificationCategory.EVENT:
+        return settings.eventNotifications ?? true;
+      case NotificationCategory.SYSTEM:
+        return settings.systemNotifications ?? true;
       default:
         return true;
     }

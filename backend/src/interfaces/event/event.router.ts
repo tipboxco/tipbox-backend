@@ -5,12 +5,164 @@ import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { authMiddleware } from '../auth/auth.middleware';
 import { getErrorMessage, hasErrorMessage, errorMessageIncludes } from '../../infrastructure/errors/error-helper';
 import logger from '../../infrastructure/logger/logger';
-import { UpdateEventRequest } from './event.dto';
 import { isAdmin } from '../../infrastructure/auth/role-checker';
 
 const router = Router();
 const eventService = new EventService();
 const userService = new UserService();
+
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *     EventProductSummary:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *         name:
+ *           type: string
+ *         description:
+ *           type: string
+ *           nullable: true
+ *         imageUrl:
+ *           type: string
+ *           nullable: true
+ *     EventCard:
+ *       type: object
+ *       properties:
+ *         eventId:
+ *           type: string
+ *         image:
+ *           type: string
+ *           nullable: true
+ *         title:
+ *           type: string
+ *         description:
+ *           type: string
+ *           nullable: true
+ *         startDate:
+ *           type: string
+ *           format: date-time
+ *         endDate:
+ *           type: string
+ *           format: date-time
+ *         interaction:
+ *           type: integer
+ *         eventType:
+ *           type: string
+ *           enum: [PICKS, ROASTS]
+ *         product:
+ *           $ref: '#/components/schemas/EventProductSummary'
+ *           nullable: true
+ *         participants:
+ *           type: array
+ *           items:
+ *             type: object
+ *             properties:
+ *               userId:
+ *                 type: string
+ *               avatar:
+ *                 type: string
+ *                 nullable: true
+ *               userName:
+ *                 type: string
+ *     EventDetail:
+ *       type: object
+ *       properties:
+ *         eventId:
+ *           type: string
+ *         banner:
+ *           type: string
+ *           nullable: true
+ *         title:
+ *           type: string
+ *         description:
+ *           type: string
+ *           nullable: true
+ *         startDate:
+ *           type: string
+ *           format: date-time
+ *         endDate:
+ *           type: string
+ *           format: date-time
+ *         interaction:
+ *           type: integer
+ *         eventType:
+ *           type: string
+ *           enum: [PICKS, ROASTS]
+ *         product:
+ *           $ref: '#/components/schemas/EventProductSummary'
+ *           nullable: true
+ *         isJoined:
+ *           type: boolean
+ *         status:
+ *           type: string
+ *           enum: [active, upcoming]
+ *         rewards:
+ *           type: array
+ *           items:
+ *             type: object
+ *             properties:
+ *               id:
+ *                 type: string
+ *               image:
+ *                 type: string
+ *                 nullable: true
+ *               title:
+ *                 type: string
+ *     LimitedTimeEventLeaderboardUser:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *         avatar:
+ *           type: string
+ *           nullable: true
+ *         rank:
+ *           type: integer
+ *     LimitedTimeEventUser:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *         avatar:
+ *           type: string
+ *           nullable: true
+ *         rank:
+ *           type: integer
+ *         score:
+ *           type: integer
+ *     LimitedTimeEventResponse:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *         title:
+ *           type: string
+ *         description:
+ *           type: string
+ *           nullable: true
+ *         leaderboardUsers:
+ *           type: array
+ *           items:
+ *             $ref: '#/components/schemas/LimitedTimeEventLeaderboardUser'
+ *         userScore:
+ *           $ref: '#/components/schemas/LimitedTimeEventUser'
+ *           nullable: true
+ *         backgroundImage:
+ *           type: string
+ *           nullable: true
+ *         eventImage:
+ *           type: string
+ *           nullable: true
+ *         startDate:
+ *           type: string
+ *           format: date-time
+ *         endDate:
+ *           type: string
+ *           format: date-time
+ */
 
 /**
  * @openapi
@@ -1136,6 +1288,132 @@ router.get(
         statusCode: 500
       });
     }
+  })
+);
+
+/**
+ * @openapi
+ * /events/search:
+ *   get:
+ *     summary: Event'lerde arama yap
+ *     description: Community Events ve Achievement Ladder'da event araması yapar. Event başlığı ve açıklamasında arama yapar.
+ *     tags: [Events]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Arama terimi
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [community, achievement]
+ *           default: community
+ *         description: Event tipi (community veya achievement)
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 20
+ *         description: Sayfa başına item sayısı
+ *     responses:
+ *       200:
+ *         description: Arama sonuçları başarıyla getirildi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       name:
+ *                         type: string
+ *                       description:
+ *                         type: string
+ *                       image:
+ *                         type: string
+ *                       startDate:
+ *                         type: string
+ *                         format: date-time
+ *                       endDate:
+ *                         type: string
+ *                         format: date-time
+ *                       eventType:
+ *                         type: string
+ *                         enum: [SURVEY, POLL, CONTEST, CHALLENGE, PROMOTION]
+ *                       interaction:
+ *                         type: integer
+ *                       participants:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             userId:
+ *                               type: string
+ *                             avatar:
+ *                               type: string
+ *                             userName:
+ *                               type: string
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
+ *       400:
+ *         description: Query parametresi eksik
+ *       401:
+ *         description: Unauthorized
+ */
+router.get(
+  '/search',
+  authMiddleware,
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const q = req.query.q as string | undefined;
+    const type = (req.query.type as 'community' | 'achievement') || 'community';
+    const cursor = req.query.cursor as string | undefined;
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+
+    if (!q || typeof q !== 'string' || q.trim().length === 0) {
+      return res.status(400).json({ message: 'Query parameter (q) is required' });
+    }
+
+    if (limit < 1 || limit > 50) {
+      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+    }
+
+    if (type !== 'community' && type !== 'achievement') {
+      return res.status(400).json({ message: 'Type must be either "community" or "achievement"' });
+    }
+
+    const result = await eventService.searchEvents(q.trim(), { type, cursor, limit });
+    return res.json(result);
   })
 );
 

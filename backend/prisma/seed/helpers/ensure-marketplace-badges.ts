@@ -115,16 +115,19 @@ export async function ensureMarketplaceBadges(prisma: PrismaClient): Promise<voi
     // 2. Marketplace Badge Görsellerini MinIO'ya Yükle
     console.log('\n📤 Marketplace Badge Görselleri MinIO\'ya Yükleniyor...\n');
 
-    const marketplaceBadgesPath = path.join(__dirname, '../../../tests/assets/Badges _ Marketplace');
+    const marketplaceBadgesPath = path.join(__dirname, '../../../tests/assets/badge');
     const uploadedImages: string[] = [];
 
     try {
-      const files = await fs.readdir(marketplaceBadgesPath);
-      const pngFiles = files.filter(f => f.endsWith('.png'));
+      const entries = await fs.readdir(marketplaceBadgesPath, { withFileTypes: true });
+      // Sadece dosyaları al (klasörleri atla: brandbadges, eventbadges)
+      const pngFiles = entries
+        .filter(entry => entry.isFile() && entry.name.endsWith('.png'))
+        .map(entry => entry.name);
 
       for (const file of pngFiles) {
         const localPath = path.join(marketplaceBadgesPath, file);
-        const targetKey = `badges/marketplace/${file}`;
+        const targetKey = `badges/custom/${file}`;
 
         const exists = await s3Service.fileExists(targetKey);
 

@@ -49,7 +49,11 @@
     "sim:omer": "docker-compose exec backend npx ts-node scripts/julia-omer-simulation.ts omer",
     "send:julia-to-georgia": "docker-compose exec backend npx ts-node scripts/send-message-julia-to-omer.ts",
     "send:tuna-to-georgia": "docker-compose exec backend npx ts-node scripts/send-message-tuna-to-georgia.ts",
-    "test:messaging": "npx ts-node scripts/interactive-messaging-test.ts"
+    "test:messaging": "npx ts-node scripts/interactive-messaging-test.ts",
+    "test:tuna-georgia": "docker-compose exec backend npx ts-node scripts/tuna-georgia-socket-test.ts",
+    "test:support-flow": "docker-compose exec backend npx ts-node scripts/test-support-request-flow.ts",
+    "clear:georgia": "docker-compose exec backend npx ts-node scripts/clear-georgia-all-data.ts",
+    "delete:georgia-threads": "docker-compose exec backend npx ts-node scripts/delete-georgia-threads-complete.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
@@ -91,7 +95,7 @@
     "lint-staged": "^16.1.2",
     "nodemon": "^3.1.10",
     "prettier": "^3.6.2",
-    "prisma": "^6.19.1",
+    "prisma": "^6.19.2",
     "socket.io-client": "^4.8.1",
     "supertest": "^7.1.4",
     "ts-jest": "^29.2.5",
@@ -103,7 +107,7 @@
     "@aws-sdk/client-s3": "^3.658.1",
     "@aws-sdk/s3-request-presigner": "^3.658.1",
     "@google/generative-ai": "^0.24.1",
-    "@prisma/client": "^6.19.0",
+    "@prisma/client": "^6.19.2",
     "@socket.io/redis-adapter": "^8.2.1",
     "@types/multer": "^2.0.0",
     "@types/nodemailer": "^7.0.3",

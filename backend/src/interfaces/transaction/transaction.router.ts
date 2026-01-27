@@ -147,6 +147,95 @@ router.post('/send-tip', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
+ * /transactions/nft-transfer:
+ *   post:
+ *     summary: NFT transfer et (kullanıcıdan kullanıcıya)
+ *     tags: [Transactions]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - nftId
+ *               - recipientId
+ *             properties:
+ *               nftId:
+ *                 type: string
+ *                 description: Transfer edilecek NFT ID
+ *               recipientId:
+ *                 type: string
+ *                 description: Alıcı kullanıcı ID
+ *               message:
+ *                 type: string
+ *                 description: Opsiyonel mesaj
+ *     responses:
+ *       200:
+ *         description: NFT başarıyla transfer edildi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 nftId:
+ *                   type: string
+ *                 fromUserId:
+ *                   type: string
+ *                 toUserId:
+ *                   type: string
+ *                 nftTransactionId:
+ *                   type: string
+ *                 transferredAt:
+ *                   type: string
+ *                   format: date-time
+ *       400:
+ *         description: Geçersiz istek (owner değil, transferable değil, listing aktif, vb.)
+ *       401:
+ *         description: Yetkisiz erişim
+ *       404:
+ *         description: NFT veya alıcı kullanıcı bulunamadı
+ */
+router.post('/nft-transfer', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const fromUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+  if (!fromUserId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const { nftId, recipientId, message } = req.body;
+
+  if (!nftId || typeof nftId !== 'string') {
+    return res.status(400).json({ message: 'nftId is required' });
+  }
+  if (!recipientId || typeof recipientId !== 'string') {
+    return res.status(400).json({ message: 'recipientId is required' });
+  }
+
+  const result = await transactionService.transferNFT({
+    fromUserId: String(fromUserId),
+    toUserId: String(recipientId),
+    nftId: String(nftId),
+    message: typeof message === 'string' ? message : undefined,
+  });
+
+  return res.json({
+    success: true,
+    nftId: result.nftId,
+    fromUserId: result.fromUserId,
+    toUserId: result.toUserId,
+    nftTransactionId: result.nftTransactionId,
+    transferredAt: result.transferredAt.toISOString(),
+  });
+}));
+
+/**
+ * @openapi
  * /transactions/history:
  *   get:
  *     summary: Transaction geçmişi (list)
