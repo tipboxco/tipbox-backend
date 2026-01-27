@@ -41,7 +41,9 @@ Bu sistem Thirdweb Engine üzerinden blockchain event'lerini dinler ve işler:
 
 ### ERC20 Token İşlemleri
 
-- **Transfer**: Gönderen ve alıcı wallet balance'ları otomatik güncellenir
+- **Deposit**: External wallet'tan (Metamask vb.) TipBox wallet'a gelen token
+- **Withdraw**: TipBox wallet'tan external wallet'a gönderilen token
+- **Internal Transfer**: TipBox wallet'lar arası transfer
 - **Mint** (from = 0x0): Alıcı wallet'a token eklenir
 - **Burn** (to = 0x0): Gönderen wallet'tan token düşülür
 - **Approval**: Log kaydı tutulur
@@ -51,6 +53,23 @@ Bu sistem Thirdweb Engine üzerinden blockchain event'lerini dinler ve işler:
 - **Mint**: Transaction confirm edilir, NFT ownership güncellenir
 - **Transfer**: Wallet eşleştirmesi yapılır
 - **Approval**: Log kaydı tutulur
+
+### TransactionActionType Enum
+
+| Action Type | Açıklama | Provider |
+|-------------|----------|----------|
+| `TIP_SEND` | Kullanıcıdan kullanıcıya tip gönderimi | thirdweb |
+| `TIP_RECEIVE` | Kullanıcıdan tip alımı | thirdweb |
+| `DEPOSIT` | External wallet'tan (Metamask) gelen token | external |
+| `WITHDRAW` | External wallet'a gönderilen token | external |
+| `CLAIM_REWARD` | Ödül claim işlemi | thirdweb |
+| `CLAIM_BADGE` | NFT badge claim işlemi | thirdweb |
+| `AIRDROP` | Airdrop token dağıtımı | thirdweb |
+| `NFT_BUY` | NFT satın alma | thirdweb |
+| `NFT_SELL` | NFT satış | thirdweb |
+| `SWAP_TIP_TO_SOL` | TIP → SOL swap | thirdweb |
+| `SWAP_SOL_TO_TIP` | SOL → TIP swap | thirdweb |
+| `FEE` | İşlem ücreti | system |
 
 ---
 
@@ -204,6 +223,39 @@ enum TokenType {
 
 ## Event İşleme Akışı
 
+### Wallet Relevance Check (İlgililik Kontrolü)
+
+Contract üzerindeki her aktivite sistemimizle ilgili olmayabilir. **Sadece tanımlı wallet'lar** için event işlenir:
+
+```
+Event Geldi
+    │
+    ▼
+checkEventRelevance()
+    │
+    ├─── Transfer Event?
+    │         │
+    │         ├─── from veya to adresi sistemde tanımlı mı?
+    │         │         │
+    │         │         ├── EVET → İşleme devam et
+    │         │         │
+    │         │         └── HAYIR → Event atla (log kaydedilmez)
+    │         │
+    │         └─── Mint/Burn özel durumu:
+    │                   • Mint: Sadece to adresi kontrol edilir
+    │                   • Burn: Sadece from adresi kontrol edilir
+    │
+    └─── Approval Event?
+              │
+              └─── owner adresi sistemde tanımlı mı?
+                        │
+                        ├── EVET → İşleme devam et
+                        │
+                        └── HAYIR → Event atla
+```
+
+> **Önemli:** Tanımsız adresler arasındaki transferler işlenmez ve database'e kaydedilmez. Bu gereksiz log yükünü önler.
+
 ### ERC20 Token Transfer Akışı
 
 ```
@@ -214,44 +266,45 @@ parseTransferEvent() → TokenType.ERC20
         │
         ├─── isMint (from = 0x0)
         │         │
-        │         ▼
-        │    toWallet bulundu?
-        │         │
-        │         ├── Pending transaction var?
-        │         │         │
-        │         │         ├── Evet → confirmTransaction()
-        │         │         │
-        │         │         └── Hayır → walletService.updateBalance(+amount)
-        │         │
-        │         └── Balance += amount
+        │         └── toWallet? → confirmTransaction() veya updateBalance(+amount)
         │
         ├─── isBurn (to = 0x0)
         │         │
-        │         ▼
-        │    fromWallet bulundu?
-        │         │
-        │         └── walletService.updateBalance(-amount)
+        │         └── fromWallet? → updateBalance(-amount)
         │
         └─── Normal Transfer
                   │
-                  ├── toWallet var?
+                  ├─── DEPOSIT (External → TipBox)
+                  │    toWallet var, fromWallet YOK
                   │         │
-                  │         ├── Pending TIP_RECEIVE transaction?
-                  │         │         │
+                  │         ├── Pending transaction var?
                   │         │         ├── Evet → confirmTransaction()
-                  │         │         │
-                  │         │         └── Hayır → updateBalance(+amount)
+                  │         │         └── Hayır → Yeni DEPOSIT transaction oluştur
                   │         │
                   │         └── Balance += amount
                   │
-                  └── fromWallet var?
-                            │
-                            ├── Pending TIP_SEND transaction?
-                            │         │
-                            │         └── confirmTransaction()
-                            │
-                            └── Balance -= amount (transaction'da)
+                  ├─── WITHDRAW (TipBox → External)
+                  │    fromWallet var, toWallet YOK
+                  │         │
+                  │         ├── Pending transaction var?
+                  │         │         ├── Evet → confirmTransaction()
+                  │         │         └── Hayır → Yeni WITHDRAW transaction oluştur
+                  │         │
+                  │         └── Balance -= amount
+                  │
+                  └─── INTERNAL (TipBox → TipBox)
+                       İkisi de sistemde kayıtlı
+                             │
+                             └── İlgili pending transaction'ları onayla
 ```
+
+### Deposit/Withdraw Senaryoları
+
+| Senaryo | from | to | İşlem |
+|---------|------|-----|-------|
+| **Deposit** | Metamask (external) | TipBox wallet | `DEPOSIT` transaction oluştur, balance += amount |
+| **Withdraw** | TipBox wallet | Metamask (external) | `WITHDRAW` transaction oluştur, balance -= amount |
+| **Internal** | TipBox wallet A | TipBox wallet B | `TIP_SEND` + `TIP_RECEIVE` confirm |
 
 ### ERC721 NFT Transfer Akışı
 

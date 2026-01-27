@@ -139,6 +139,9 @@ export class ContractEventService {
 
   /**
    * Event Log işleme (Transfer, Mint, Approval vb.)
+   * 
+   * NOT: Sadece sistemde tanımlı wallet'larla ilgili event'ler işlenir.
+   * Tanımsız adresler arasındaki transferler atlanır.
    */
   private async processEventLog(payload: ContractEventPayload): Promise<EventProcessResult> {
     const { data } = payload;
@@ -154,6 +157,25 @@ export class ContractEventService {
         success: true,
         action: 'skipped',
         message: 'Contract not supported'
+      };
+    }
+
+    // =========================================================================
+    // WALLET RELEVANCE CHECK - Sistemde tanımlı wallet var mı?
+    // =========================================================================
+    const relevanceCheck = await this.checkEventRelevance(data);
+    
+    if (!relevanceCheck.isRelevant) {
+      logger.debug({
+        eventName: data.eventName,
+        transactionHash: data.transactionHash,
+        addresses: relevanceCheck.addresses,
+        message: 'Event skipped - no registered wallet involved'
+      });
+      return {
+        success: true,
+        action: 'skipped',
+        message: 'No registered wallet involved in this event'
       };
     }
 
@@ -194,7 +216,7 @@ export class ContractEventService {
       walletId = result.walletId;
     }
 
-    // Event log'u kaydet
+    // Event log'u kaydet (sadece relevant event'ler için)
     const eventLog = await this.eventLogRepo.create({
       chainId: data.chainId,
       contractAddress: data.contractAddress,
@@ -231,6 +253,81 @@ export class ContractEventService {
       transactionId,
       walletId
     };
+  }
+
+  // ==========================================================================
+  // RELEVANCE CHECK
+  // ==========================================================================
+
+  /**
+   * Event'in sistemdeki wallet'larla ilgili olup olmadığını kontrol eder.
+   * Sadece tanımlı wallet'lar için event işlenir.
+   */
+  private async checkEventRelevance(data: ContractEventPayload['data']): Promise<{
+    isRelevant: boolean;
+    addresses: string[];
+    matchedWallets: string[];
+  }> {
+    const addresses: string[] = [];
+    const matchedWallets: string[] = [];
+
+    // Transfer event kontrolü
+    if (data.eventName === 'Transfer') {
+      const transferEvent = parseTransferEvent(data.decodedLog, TOKEN_DECIMALS);
+      
+      if (transferEvent) {
+        // 0x0 adresi hariç (mint/burn için geçerli)
+        if (transferEvent.from && transferEvent.from !== ZERO_ADDRESS) {
+          addresses.push(transferEvent.from.toLowerCase());
+        }
+        if (transferEvent.to && transferEvent.to !== ZERO_ADDRESS) {
+          addresses.push(transferEvent.to.toLowerCase());
+        }
+
+        // Wallet eşleştirmesi
+        for (const addr of addresses) {
+          const wallet = await this.walletRepo.findByPublicAddress(addr);
+          if (wallet) {
+            matchedWallets.push(wallet.id);
+          }
+        }
+
+        // Mint durumunda sadece to adresi kontrol edilir
+        if (transferEvent.isMint && transferEvent.to) {
+          const toWallet = await this.walletRepo.findByPublicAddress(transferEvent.to);
+          if (toWallet) {
+            return { isRelevant: true, addresses, matchedWallets: [toWallet.id] };
+          }
+        }
+
+        // Burn durumunda sadece from adresi kontrol edilir
+        if (transferEvent.isBurn && transferEvent.from) {
+          const fromWallet = await this.walletRepo.findByPublicAddress(transferEvent.from);
+          if (fromWallet) {
+            return { isRelevant: true, addresses, matchedWallets: [fromWallet.id] };
+          }
+        }
+      }
+    }
+    
+    // Approval event kontrolü
+    else if (data.eventName === 'Approval') {
+      const approvalEvent = parseApprovalEvent(data.decodedLog, TOKEN_DECIMALS);
+      
+      if (approvalEvent) {
+        addresses.push(approvalEvent.owner.toLowerCase());
+        
+        const ownerWallet = await this.walletRepo.findByPublicAddress(approvalEvent.owner);
+        if (ownerWallet) {
+          return { isRelevant: true, addresses, matchedWallets: [ownerWallet.id] };
+        }
+      }
+    }
+
+    // Herhangi bir wallet eşleşti mi?
+    const isRelevant = matchedWallets.length > 0;
+
+    return { isRelevant, addresses, matchedWallets };
   }
 
   // ==========================================================================
@@ -325,11 +422,135 @@ export class ContractEventService {
       
       // TRANSFER: Normal transfer
       else {
-        // Alıcı bizim sistemdeyse - balance artır
-        if (toWallet) {
+        // ============================================================
+        // DEPOSIT: External wallet (Metamask vb.) → TipBox Wallet
+        // from: External (sistemde yok), to: TipBox wallet (sistemde var)
+        // ============================================================
+        if (toWallet && !fromWallet) {
           walletId = toWallet.id;
           
           // Pending receive transaction bul
+          const pendingReceiveTx = await prisma.transaction.findFirst({
+            where: {
+              walletId: toWallet.id,
+              status: 'pending',
+              actionType: { in: ['TIP_RECEIVE', 'DEPOSIT'] }
+            },
+            orderBy: { createdAt: 'desc' },
+            select: { id: true }
+          });
+
+          if (pendingReceiveTx) {
+            // Mevcut pending transaction'ı onayla
+            transactionId = pendingReceiveTx.id;
+            await this.transactionService.confirmTransaction(transactionId, data.transactionHash);
+          } else {
+            // DEPOSIT: External wallet'tan gelen transfer için yeni transaction oluştur
+            const depositTx = await this.transactionRepo.create({
+              walletId: toWallet.id,
+              actionType: 'DEPOSIT',
+              status: 'confirmed',
+              amount: amount,
+              fromAddress: transferEvent.from,
+              toAddress: transferEvent.to,
+              txHash: data.transactionHash,
+              provider: 'external',
+              confirmedAt: new Date(),
+              metadata: {
+                source: 'contract_event',
+                chainId: data.chainId,
+                contractAddress: data.contractAddress,
+                blockNumber: data.blockNumber,
+                tokenType: 'ERC20'
+              }
+            });
+            transactionId = depositTx.id;
+
+            // Balance güncelle
+            await this.walletService.updateBalance(toWallet.id, amount, {
+              reason: `Deposit from external wallet ${transferEvent.from}`,
+              txHash: data.transactionHash
+            });
+          }
+
+          logger.info({
+            walletId,
+            transactionId,
+            amount,
+            from: transferEvent.from,
+            actionType: 'DEPOSIT',
+            message: 'ERC20 Token deposit detected'
+          });
+        }
+
+        // ============================================================
+        // WITHDRAW: TipBox Wallet → External wallet
+        // from: TipBox wallet (sistemde var), to: External (sistemde yok)
+        // ============================================================
+        else if (fromWallet && !toWallet) {
+          walletId = fromWallet.id;
+          
+          // Pending send/withdraw transaction bul
+          const pendingSendTx = await prisma.transaction.findFirst({
+            where: {
+              walletId: fromWallet.id,
+              status: 'pending',
+              actionType: { in: ['TIP_SEND', 'WITHDRAW'] }
+            },
+            orderBy: { createdAt: 'desc' },
+            select: { id: true }
+          });
+
+          if (pendingSendTx) {
+            transactionId = pendingSendTx.id;
+            await this.transactionService.confirmTransaction(pendingSendTx.id, data.transactionHash);
+          } else {
+            // WITHDRAW: External wallet'a gönderilen transfer için yeni transaction oluştur
+            const withdrawTx = await this.transactionRepo.create({
+              walletId: fromWallet.id,
+              actionType: 'WITHDRAW',
+              status: 'confirmed',
+              amount: amount,
+              fromAddress: transferEvent.from,
+              toAddress: transferEvent.to,
+              txHash: data.transactionHash,
+              provider: 'external',
+              confirmedAt: new Date(),
+              metadata: {
+                source: 'contract_event',
+                chainId: data.chainId,
+                contractAddress: data.contractAddress,
+                blockNumber: data.blockNumber,
+                tokenType: 'ERC20'
+              }
+            });
+            transactionId = withdrawTx.id;
+
+            // Balance zaten blockchain'de düşmüş, burada da güncelle
+            await this.walletService.updateBalance(fromWallet.id, -amount, {
+              reason: `Withdraw to external wallet ${transferEvent.to}`,
+              txHash: data.transactionHash
+            });
+          }
+
+          logger.info({
+            walletId,
+            transactionId,
+            amount: -amount,
+            to: transferEvent.to,
+            actionType: 'WITHDRAW',
+            message: 'ERC20 Token withdraw detected'
+          });
+        }
+
+        // ============================================================
+        // INTERNAL TRANSFER: TipBox Wallet → TipBox Wallet
+        // İkisi de sistemde kayıtlı
+        // ============================================================
+        else if (toWallet && fromWallet) {
+          // Alıcı tarafı
+          walletId = toWallet.id;
+          
           const pendingReceiveTx = await prisma.transaction.findFirst({
             where: {
               walletId: toWallet.id,
@@ -343,27 +564,9 @@ export class ContractEventService {
           if (pendingReceiveTx) {
             transactionId = pendingReceiveTx.id;
             await this.transactionService.confirmTransaction(transactionId, data.transactionHash);
-          } else {
-            // External transfer - direkt balance güncelle
-            await this.walletService.updateBalance(toWallet.id, amount, {
-              reason: `Token received from ${transferEvent.from}`,
-              txHash: data.transactionHash
-            });
           }
 
-          logger.info({
-            walletId,
-            amount,
-            from: transferEvent.from,
-            message: 'ERC20 Token received'
-          });
-        }
-
-        // Gönderen bizim sistemdeyse - balance düş
-        if (fromWallet) {
-          if (!walletId) walletId = fromWallet.id;
-          
-          // Pending send transaction bul
+          // Gönderen tarafı
           const pendingSendTx = await prisma.transaction.findFirst({
             where: {
               walletId: fromWallet.id,
@@ -378,13 +581,12 @@ export class ContractEventService {
             if (!transactionId) transactionId = pendingSendTx.id;
             await this.transactionService.confirmTransaction(pendingSendTx.id, data.transactionHash);
           }
-          // Not: Balance zaten transaction confirm'de düşülüyor
 
           logger.info({
-            walletId: fromWallet.id,
-            amount: -amount,
-            to: transferEvent.to,
-            message: 'ERC20 Token sent'
+            fromWalletId: fromWallet.id,
+            toWalletId: toWallet.id,
+            amount,
+            message: 'ERC20 Internal transfer detected'
           });
         }
       }

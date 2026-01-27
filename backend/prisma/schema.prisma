@@ -2141,6 +2141,8 @@ enum TransactionActionType {
   SWAP_SOL_TO_TIP
   AIRDROP
   FEE
+  DEPOSIT  // External wallet'tan (Metamask vb.) gelen token
+  WITHDRAW // External wallet'a gönderilen token
 
   @@map("transaction_action_type")
 }
