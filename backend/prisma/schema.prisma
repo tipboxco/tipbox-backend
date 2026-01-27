@@ -1233,17 +1233,18 @@ model NewsFavorite {
 }
 
 model Wallet {
-  id            String         @id @default(uuid()) @db.Uuid
-  userId        String         @map("user_id") @db.Uuid
-  publicAddress String         @map("public_address")
-  provider      WalletProvider
-  isConnected   Boolean        @map("is_connected")
-  createdAt     DateTime       @default(now()) @map("created_at")
-  updatedAt     DateTime       @updatedAt @map("updated_at")
-  balance       Float          @default(0)
-  lockedBalance Float          @default(0) @map("locked_balance")
-  transactions  Transaction[]
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                String             @id @default(uuid()) @db.Uuid
+  userId            String             @map("user_id") @db.Uuid
+  publicAddress     String             @map("public_address")
+  provider          WalletProvider
+  isConnected       Boolean            @map("is_connected")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  balance           Float              @default(0)
+  lockedBalance     Float              @default(0) @map("locked_balance")
+  transactions      Transaction[]
+  contractEventLogs ContractEventLog[]
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, provider])
   @@index([userId])
@@ -1269,6 +1270,7 @@ model Transaction {
   rewardClaims         RewardClaim[]
   wallet               Wallet                 @relation(fields: [walletId], references: [id], onDelete: Cascade)
   thirdwebWebhookLogs  ThirdwebWebhookLog[]
+  contractEventLogs    ContractEventLog[]
 
   @@index([walletId])
   @@index([status])
@@ -2417,4 +2419,41 @@ enum ThirdwebOnchainStatus {
   reverted
 
   @@map("thirdweb_onchain_status")
+}
+
+// ============================================================================
+// THIRDWEB CONTRACT EVENT SUBSCRIPTIONS
+// ============================================================================
+
+model ContractEventLog {
+  id               String    @id @default(uuid()) @db.Uuid
+  chainId          Int       @map("chain_id")
+  contractAddress  String    @map("contract_address")
+  blockNumber      Int       @map("block_number")
+  transactionHash  String    @map("transaction_hash")
+  transactionIndex Int       @map("transaction_index")
+  logIndex         Int       @map("log_index")
+  eventName        String    @map("event_name")
+  decodedLog       Json      @map("decoded_log")
+  topics           String[]
+  data             String?
+  timestamp        DateTime
+  rawPayload       Json      @map("raw_payload")
+  transactionId    String?   @map("transaction_id") @db.Uuid
+  walletId         String?   @map("wallet_id") @db.Uuid
+  processed        Boolean   @default(false)
+  processedAt      DateTime? @map("processed_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  transaction      Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  wallet           Wallet?      @relation(fields: [walletId], references: [id], onDelete: SetNull)
+
+  @@unique([transactionHash, logIndex])
+  @@index([contractAddress])
+  @@index([eventName])
+  @@index([transactionHash])
+  @@index([blockNumber])
+  @@index([chainId, contractAddress])
+  @@index([walletId])
+  @@index([processed])
+  @@map("contract_event_logs")
 }

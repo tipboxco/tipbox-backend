@@ -5,15 +5,110 @@ Bu dokümantasyon, TipBox Backend'e Thirdweb Engine webhook entegrasyonunun nas�
 ## İçindekiler
 
 - [Genel Bakış](#genel-bakış)
-- [Thirdweb Webhook Payload Yapısı](#thirdweb-webhook-payload-yapısı)
-- [Desteklenen Event Türleri](#desteklenen-event-türleri)
-- [Webhook Yaşam Döngüsü](#webhook-yaşam-döngüsü)
+- [İki Farklı Webhook Türü](#i̇ki-farklı-webhook-türü)
+- [Contract Event Subscriptions](#contract-event-subscriptions)
+- [Transaction Webhooks](#transaction-webhooks)
 - [Güvenlik - Signature Doğrulama](#güvenlik---signature-doğrulama)
-- [Prisma Şema Entegrasyonu](#prisma-şema-entegrasyonu)
-- [Service Yapısı](#service-yapısı)
-- [Router Yapısı](#router-yapısı)
+- [Prisma Şema](#prisma-şema)
+- [API Endpoints](#api-endpoints)
 - [Kullanım Örnekleri](#kullanım-örnekleri)
 - [Ortam Değişkenleri](#ortam-değişkenleri)
+
+---
+
+## İki Farklı Webhook Türü
+
+Bu sistem iki farklı Thirdweb webhook türünü destekler:
+
+### 1. Transaction Webhooks (`POST /api/webhooks/thirdweb`)
+Bizim gönderdiğimiz transaction'ların durumunu takip eder.
+- `sent`: Transaction RPC'ye gönderildi
+- `mined`: Transaction blockchain'de onaylandı
+- `errored`: Transaction başarısız oldu
+
+### 2. Contract Event Subscriptions (`POST /api/webhooks/thirdweb/events`)
+Blockchain'deki contract event'lerini dinler.
+- `Transfer`: NFT veya token transferi
+- `Approval`: Token onayı
+- `Mint`: Yeni token oluşturma (Transfer from 0x0)
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    THIRDWEB WEBHOOK SYSTEM                           │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│   Transaction Webhooks          Contract Event Subscriptions         │
+│   ────────────────────         ─────────────────────────────         │
+│   POST /webhooks/thirdweb      POST /webhooks/thirdweb/events        │
+│                                                                      │
+│   ┌─────────────────┐          ┌─────────────────┐                   │
+│   │ sent            │          │ Transfer        │                   │
+│   │ mined           │          │ Approval        │                   │
+│   │ errored         │          │ Mint/Burn       │                   │
+│   │ cancelled       │          │ Custom Events   │                   │
+│   └─────────────────┘          └─────────────────┘                   │
+│           │                            │                             │
+│           ▼                            ▼                             │
+│   ThirdwebWebhookLog           ContractEventLog                      │
+│   (thirdweb_webhook_logs)      (contract_event_logs)                 │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Contract Event Subscriptions
+
+### Payload Yapısı - Event Log
+
+```json
+{
+  "type": "event-log",
+  "data": {
+    "chainId": 11155111,
+    "contractAddress": "0xB7b9dfdB0291510e4677aADD2b03a39B9d46d235",
+    "blockNumber": 14306496,
+    "transactionHash": "0xdd73fc70754b6cb5238c33657b382e397aae635a8f9a3b26abe5f336059d0a40",
+    "topics": ["0xddf252ad..."],
+    "data": "0x...",
+    "eventName": "Transfer",
+    "decodedLog": {
+      "from": { "type": "address", "value": "0x0000000000000000000000000000000000000000" },
+      "to": { "type": "address", "value": "0x1234567890123456789012345678901234567890" },
+      "tokenId": { "type": "uint256", "value": "1" }
+    },
+    "timestamp": 1715402339000,
+    "transactionIndex": 33,
+    "logIndex": 91
+  }
+}
+```
+
+### Payload Yapısı - Transaction Receipt
+
+```json
+{
+  "type": "transaction-receipt",
+  "data": {
+    "chainId": 11155111,
+    "blockNumber": 14306498,
+    "contractAddress": "0xB7b9dfdB...",
+    "transactionHash": "0xa2cef7ca...",
+    "from": "0xAdmin...",
+    "to": "0xContract...",
+    "status": 1,
+    "gasUsed": "77523"
+  }
+}
+```
+
+### Transfer Event Türleri
+
+| Event | from | to | Açıklama |
+|-------|------|-----|----------|
+| **Mint** | `0x0000...0000` | User Address | Yeni NFT oluşturuldu |
+| **Transfer** | User A | User B | NFT transfer edildi |
+| **Burn** | User Address | `0x0000...0000` | NFT yakıldı |
 
 ---
 
@@ -1122,21 +1217,54 @@ curl -X POST http://localhost:3000/api/webhooks/thirdweb \
 ```
 backend/
 ├── prisma/
-│   └── schema.prisma                    # ThirdwebWebhookLog modeli eklendi
+│   └── schema.prisma
+│       ├── ThirdwebWebhookLog        # Transaction webhook logları
+│       ├── ContractEventLog          # Contract event logları
+│       ├── ThirdwebWebhookStatus     # sent, mined, errored, cancelled
+│       └── ThirdwebOnchainStatus     # success, reverted
+│
 ├── src/
 │   ├── application/
 │   │   └── thirdweb-webhook/
-│   │       └── thirdweb-webhook.service.ts  ✅ Oluşturuldu
+│   │       ├── thirdweb-webhook.service.ts   # Transaction webhook işleme
+│   │       └── contract-event.service.ts     # Contract event işleme
+│   │
 │   ├── interfaces/
 │   │   └── thirdweb-webhook/
 │   │       ├── THIRDWEB_WEBHOOK_INTEGRATION.md  (bu dosya)
-│   │       ├── thirdweb-webhook.router.ts       ✅ Oluşturuldu
-│   │       └── thirdweb-webhook.dto.ts          ✅ Oluşturuldu
+│   │       ├── thirdweb-webhook.router.ts       # Tüm endpoint'ler
+│   │       ├── thirdweb-webhook.dto.ts          # Transaction webhook DTO'ları
+│   │       └── contract-event.dto.ts            # Contract event DTO'ları
+│   │
 │   └── infrastructure/
 │       └── repositories/
-│           ├── thirdweb-webhook-log-prisma.repository.ts  ✅ Oluşturuldu
-│           └── wallet-prisma.repository.ts     # findByPublicAddress eklendi
+│           ├── thirdweb-webhook-log-prisma.repository.ts
+│           ├── contract-event-log-prisma.repository.ts
+│           └── wallet-prisma.repository.ts  # findByPublicAddress eklendi
 ```
+
+## API Endpoints
+
+### Transaction Webhooks
+
+| Method | Endpoint | Auth | Açıklama |
+|--------|----------|------|----------|
+| POST | `/api/webhooks/thirdweb` | Signature | Transaction webhook receiver |
+| GET | `/api/webhooks/thirdweb/health` | - | Health check |
+| GET | `/api/webhooks/thirdweb/logs` | JWT | Son transaction webhook logları |
+| GET | `/api/webhooks/thirdweb/logs/:queueId` | JWT | Queue ID ile log detayı |
+| GET | `/api/webhooks/thirdweb/stats` | JWT | Webhook istatistikleri |
+
+### Contract Event Subscriptions
+
+| Method | Endpoint | Auth | Açıklama |
+|--------|----------|------|----------|
+| POST | `/api/webhooks/thirdweb/events` | Signature | Contract event receiver |
+| GET | `/api/webhooks/thirdweb/events/logs` | JWT | Son contract event logları |
+| GET | `/api/webhooks/thirdweb/events/stats` | JWT | Event istatistikleri |
+| GET | `/api/webhooks/thirdweb/events/by-hash/:txHash` | JWT | TxHash ile event logları |
+| GET | `/api/webhooks/thirdweb/events/by-wallet/:walletId` | JWT | Wallet ile event logları |
+| POST | `/api/webhooks/thirdweb/events/reprocess` | JWT | İşlenmemiş event'leri yeniden işle |
 
 ## Kurulum Adımları
 
@@ -1144,7 +1272,7 @@ backend/
 
 ```bash
 cd backend
-npx prisma migrate dev --name add_thirdweb_webhook_log
+npx prisma migrate dev --name add_thirdweb_webhook_and_events
 npx prisma generate
 ```
 
@@ -1153,14 +1281,26 @@ npx prisma generate
 `.env` dosyasına ekleyin:
 
 ```env
+# Thirdweb Webhook Configuration
 THIRDWEB_WEBHOOK_SECRET=your_webhook_secret_from_thirdweb_dashboard
 THIRDWEB_WEBHOOK_EXPIRATION_SECONDS=300
+
+# Contract Event Filtering (opsiyonel, virgülle ayrılmış)
+THIRDWEB_WATCHED_CONTRACTS=0xB7b9dfdB0291510e4677aADD2b03a39B9d46d235
 ```
 
 ### 3. Thirdweb Dashboard Yapılandırması
 
-1. [Thirdweb Dashboard](https://thirdweb.com/dashboard) > Engine > Configuration > Webhooks
+#### Transaction Webhooks için:
+1. [Thirdweb Dashboard](https://thirdweb.com/dashboard) > Engine > Configuration > **Webhooks**
 2. **Create Webhook** butonuna tıklayın
 3. URL: `https://your-domain.com/api/webhooks/thirdweb`
 4. Events: `all_transaction` seçin
-5. Webhook Secret'ı kopyalayın ve `.env` dosyasına ekleyin
+5. Webhook Secret'ı kopyalayın
+
+#### Contract Event Subscriptions için:
+1. [Thirdweb Dashboard](https://thirdweb.com/dashboard) > Engine > **Contract Subscriptions**
+2. **Add Contract Subscription** butonuna tıklayın
+3. Contract Address ve Chain seçin
+4. Webhook URL: `https://your-domain.com/api/webhooks/thirdweb/events`
+5. Aynı Webhook Secret'ı kullanın
