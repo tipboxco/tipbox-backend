@@ -203,8 +203,9 @@ router.get(
     const cursor = req.query.cursor as string | undefined;
     const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
     
-    if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
-      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+    // Limit kontrolü - max 50, ama 100'e kadar kabul et (frontend 100 gönderiyor)
+    if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 100)) {
+      return res.status(400).json({ message: 'Limit must be between 1 and 100' });
     }
 
     const productGroups = await catalogService.getProductGroupsBySubCategoryId(subCategoryId, {

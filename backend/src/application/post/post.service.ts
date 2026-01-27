@@ -205,33 +205,60 @@ export class PostService {
    * Tüm ID formatlarını kabul eder (UUID, ULID, Medusa ID, vb.)
    */
   async resolveSubCategoryId(subCategoryIdOrExternalId: string): Promise<string> {
-    // Önce direkt id ile ara
-    let subCategory = await this.prisma.subCategory.findUnique({
-      where: { id: subCategoryIdOrExternalId },
-      select: { id: true },
-    });
+    const trimmedId = subCategoryIdOrExternalId.trim();
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const isUuid = uuidRegex.test(trimmedId);
 
-    if (subCategory) {
-      return subCategory.id;
+    // UUID formatındaysa, direkt id ile ara (try-catch ile)
+    if (isUuid) {
+      try {
+        const subCategory = await this.prisma.subCategory.findUnique({
+          where: { id: trimmedId },
+          select: { id: true },
+        });
+
+        if (subCategory) {
+          return subCategory.id;
+        }
+      } catch (error) {
+        // UUID formatı geçersiz olabilir - devam et
+        logger.debug({
+          message: 'SubCategory UUID query failed',
+          subCategoryIdOrExternalId: trimmedId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
-    // Eğer bulunamazsa, metadata içindeki externalId ile ara (eğer metadata field'ı varsa)
+    // UUID değilse veya bulunamazsa, Category tablosunda externalId ile ara
+    // SubCategory tablosunda metadata field'ı yok, bu yüzden Category tablosunda arama yapıyoruz
     try {
-      const result = await this.prisma.$queryRaw<Array<{ id: string }>>`
-        SELECT id 
-        FROM sub_categories 
-        WHERE metadata->>'externalId' = ${subCategoryIdOrExternalId}
+      const categoryResult = await this.prisma.$queryRaw<Array<{ id: string; name: string }>>`
+        SELECT id, name 
+        FROM categories 
+        WHERE metadata->>'externalId' = ${trimmedId}
+           OR metadata->>'medusaId' = ${trimmedId}
         LIMIT 1
       `;
 
-      if (result && result.length > 0) {
-        return result[0].id;
+      if (categoryResult && categoryResult.length > 0) {
+        const category = categoryResult[0];
+        
+        // Category name ile SubCategory'yi bul
+        const subCategory = await this.prisma.subCategory.findFirst({
+          where: { name: category.name },
+          select: { id: true },
+        });
+
+        if (subCategory) {
+          return subCategory.id;
+        }
       }
     } catch (error) {
-      // Metadata field'ı yoksa veya query hatası - devam et
       logger.debug({
-        message: 'SubCategory metadata query failed or not available',
-        subCategoryIdOrExternalId,
+        message: 'SubCategory Category lookup failed',
+        subCategoryIdOrExternalId: trimmedId,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
 
@@ -244,33 +271,60 @@ export class PostService {
    * Tüm ID formatlarını kabul eder (UUID, ULID, Medusa ID, vb.)
    */
   async resolveProductGroupId(productGroupIdOrExternalId: string): Promise<string> {
-    // Önce direkt id ile ara
-    let productGroup = await this.prisma.productGroup.findUnique({
-      where: { id: productGroupIdOrExternalId },
-      select: { id: true },
-    });
+    const trimmedId = productGroupIdOrExternalId.trim();
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const isUuid = uuidRegex.test(trimmedId);
 
-    if (productGroup) {
-      return productGroup.id;
+    // UUID formatındaysa, direkt id ile ara (try-catch ile)
+    if (isUuid) {
+      try {
+        const productGroup = await this.prisma.productGroup.findUnique({
+          where: { id: trimmedId },
+          select: { id: true },
+        });
+
+        if (productGroup) {
+          return productGroup.id;
+        }
+      } catch (error) {
+        // UUID formatı geçersiz olabilir - devam et
+        logger.debug({
+          message: 'ProductGroup UUID query failed',
+          productGroupIdOrExternalId: trimmedId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
-    // Eğer bulunamazsa, metadata içindeki externalId ile ara (eğer metadata field'ı varsa)
+    // UUID değilse veya bulunamazsa, Category tablosunda externalId ile ara
+    // ProductGroup tablosunda metadata field'ı yok, bu yüzden Category tablosunda arama yapıyoruz
     try {
-      const result = await this.prisma.$queryRaw<Array<{ id: string }>>`
-        SELECT id 
-        FROM product_groups 
-        WHERE metadata->>'externalId' = ${productGroupIdOrExternalId}
+      const categoryResult = await this.prisma.$queryRaw<Array<{ id: string; name: string }>>`
+        SELECT id, name 
+        FROM categories 
+        WHERE metadata->>'externalId' = ${trimmedId}
+           OR metadata->>'medusaId' = ${trimmedId}
         LIMIT 1
       `;
 
-      if (result && result.length > 0) {
-        return result[0].id;
+      if (categoryResult && categoryResult.length > 0) {
+        const category = categoryResult[0];
+        
+        // Category name ile ProductGroup'u bul
+        const productGroup = await this.prisma.productGroup.findFirst({
+          where: { name: category.name },
+          select: { id: true },
+        });
+
+        if (productGroup) {
+          return productGroup.id;
+        }
       }
     } catch (error) {
-      // Metadata field'ı yoksa veya query hatası - devam et
       logger.debug({
-        message: 'ProductGroup metadata query failed or not available',
-        productGroupIdOrExternalId,
+        message: 'ProductGroup Category lookup failed',
+        productGroupIdOrExternalId: trimmedId,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
 
@@ -283,33 +337,60 @@ export class PostService {
    * Tüm ID formatlarını kabul eder (UUID, ULID, Medusa ID, vb.)
    */
   async resolveMainCategoryId(mainCategoryIdOrExternalId: string): Promise<string> {
-    // Önce direkt id ile ara
-    let mainCategory = await this.prisma.mainCategory.findUnique({
-      where: { id: mainCategoryIdOrExternalId },
-      select: { id: true },
-    });
+    const trimmedId = mainCategoryIdOrExternalId.trim();
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const isUuid = uuidRegex.test(trimmedId);
 
-    if (mainCategory) {
-      return mainCategory.id;
+    // UUID formatındaysa, direkt id ile ara (try-catch ile)
+    if (isUuid) {
+      try {
+        const mainCategory = await this.prisma.mainCategory.findUnique({
+          where: { id: trimmedId },
+          select: { id: true },
+        });
+
+        if (mainCategory) {
+          return mainCategory.id;
+        }
+      } catch (error) {
+        // UUID formatı geçersiz olabilir - devam et
+        logger.debug({
+          message: 'MainCategory UUID query failed',
+          mainCategoryIdOrExternalId: trimmedId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
-    // Eğer bulunamazsa, metadata içindeki externalId ile ara (eğer metadata field'ı varsa)
+    // UUID değilse veya bulunamazsa, Category tablosunda externalId ile ara
+    // MainCategory tablosunda metadata field'ı yok, bu yüzden Category tablosunda arama yapıyoruz
     try {
-      const result = await this.prisma.$queryRaw<Array<{ id: string }>>`
-        SELECT id 
-        FROM main_categories 
-        WHERE metadata->>'externalId' = ${mainCategoryIdOrExternalId}
+      const categoryResult = await this.prisma.$queryRaw<Array<{ id: string; name: string }>>`
+        SELECT id, name 
+        FROM categories 
+        WHERE metadata->>'externalId' = ${trimmedId}
+           OR metadata->>'medusaId' = ${trimmedId}
         LIMIT 1
       `;
 
-      if (result && result.length > 0) {
-        return result[0].id;
+      if (categoryResult && categoryResult.length > 0) {
+        const category = categoryResult[0];
+        
+        // Category name ile MainCategory'yi bul
+        const mainCategory = await this.prisma.mainCategory.findFirst({
+          where: { name: category.name },
+          select: { id: true },
+        });
+
+        if (mainCategory) {
+          return mainCategory.id;
+        }
       }
     } catch (error) {
-      // Metadata field'ı yoksa veya query hatası - devam et
       logger.debug({
-        message: 'MainCategory metadata query failed or not available',
-        mainCategoryIdOrExternalId,
+        message: 'MainCategory Category lookup failed',
+        mainCategoryIdOrExternalId: trimmedId,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
 
