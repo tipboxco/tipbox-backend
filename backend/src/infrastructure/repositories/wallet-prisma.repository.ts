@@ -28,6 +28,38 @@ export class WalletPrismaRepository {
     return wallet ? this.toDomain(wallet) : null;
   }
 
+  /**
+   * Public address (wallet adresi) ile wallet bulur
+   * Thirdweb webhook entegrasyonu için kullanılır
+   */
+  async findByPublicAddress(publicAddress: string): Promise<Wallet | null> {
+    const wallet = await this.prisma.wallet.findFirst({
+      where: { 
+        publicAddress: {
+          equals: publicAddress,
+          mode: 'insensitive' // Case-insensitive arama (0x adresleri için)
+        }
+      }
+    });
+    return wallet ? this.toDomain(wallet) : null;
+  }
+
+  /**
+   * Public address ile aktif wallet bulur
+   */
+  async findActiveByPublicAddress(publicAddress: string): Promise<Wallet | null> {
+    const wallet = await this.prisma.wallet.findFirst({
+      where: { 
+        publicAddress: {
+          equals: publicAddress,
+          mode: 'insensitive'
+        },
+        isConnected: true 
+      }
+    });
+    return wallet ? this.toDomain(wallet) : null;
+  }
+
   async create(userId: string, publicAddress: string, provider: WalletProvider, isConnected = true): Promise<Wallet> {
     // Eğer yeni wallet bağlanıyorsa, diğerlerini disconnect et
     if (isConnected) {

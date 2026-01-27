@@ -1252,22 +1252,23 @@ model Wallet {
 }
 
 model Transaction {
-  id           String                @id @default(uuid()) @db.Uuid
-  walletId     String                @map("wallet_id") @db.Uuid
-  actionType   TransactionActionType @map("action_type")
-  status       TransactionStatus     @default(created)
-  amount       Float?
-  fromAddress  String?               @map("from_address")
-  toAddress    String?               @map("to_address")
-  metadata     Json?
-  txHash       String?               @map("tx_hash")
-  provider     String                @default("backend")
-  errorMessage String?               @map("error_message")
-  createdAt    DateTime              @default(now()) @map("created_at")
-  confirmedAt  DateTime?             @map("confirmed_at")
-  failedAt     DateTime?             @map("failed_at")
-  rewardClaims RewardClaim[]
-  wallet       Wallet                @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  id                   String                 @id @default(uuid()) @db.Uuid
+  walletId             String                 @map("wallet_id") @db.Uuid
+  actionType           TransactionActionType  @map("action_type")
+  status               TransactionStatus      @default(created)
+  amount               Float?
+  fromAddress          String?                @map("from_address")
+  toAddress            String?                @map("to_address")
+  metadata             Json?
+  txHash               String?                @map("tx_hash")
+  provider             String                 @default("backend")
+  errorMessage         String?                @map("error_message")
+  createdAt            DateTime               @default(now()) @map("created_at")
+  confirmedAt          DateTime?              @map("confirmed_at")
+  failedAt             DateTime?              @map("failed_at")
+  rewardClaims         RewardClaim[]
+  wallet               Wallet                 @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  thirdwebWebhookLogs  ThirdwebWebhookLog[]
 
   @@index([walletId])
   @@index([status])
@@ -2369,4 +2370,51 @@ enum RewardClaimStatus {
   CANCELLED
 
   @@map("reward_claim_status")
+}
+
+// ============================================================================
+// THIRDWEB WEBHOOK
+// ============================================================================
+
+model ThirdwebWebhookLog {
+  id              String                    @id @default(uuid()) @db.Uuid
+  queueId         String                    @unique @map("queue_id")
+  status          ThirdwebWebhookStatus
+  onchainStatus   ThirdwebOnchainStatus?    @map("onchain_status")
+  chainId         Int                       @map("chain_id")
+  fromAddress     String                    @map("from_address")
+  toAddress       String                    @map("to_address")
+  transactionHash String?                   @map("transaction_hash")
+  blockNumber     Int?                      @map("block_number")
+  functionName    String?                   @map("function_name")
+  functionArgs    String?                   @map("function_args")
+  errorMessage    String?                   @map("error_message")
+  rawPayload      Json                      @map("raw_payload")
+  transactionId   String?                   @map("transaction_id") @db.Uuid
+  processedAt     DateTime                  @default(now()) @map("processed_at")
+  createdAt       DateTime                  @default(now()) @map("created_at")
+  transaction     Transaction?              @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+
+  @@index([queueId])
+  @@index([transactionHash])
+  @@index([status])
+  @@index([processedAt])
+  @@index([transactionId])
+  @@map("thirdweb_webhook_logs")
+}
+
+enum ThirdwebWebhookStatus {
+  sent
+  mined
+  errored
+  cancelled
+
+  @@map("thirdweb_webhook_status")
+}
+
+enum ThirdwebOnchainStatus {
+  success
+  reverted
+
+  @@map("thirdweb_onchain_status")
 }
