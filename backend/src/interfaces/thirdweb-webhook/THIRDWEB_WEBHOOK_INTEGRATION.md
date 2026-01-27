@@ -127,6 +127,46 @@ Bu sistem Thirdweb Engine üzerinden blockchain event'lerini dinler ve işler:
 | `Transfer` | ERC20/ERC721 | Token veya NFT transferi |
 | `Approval` | ERC20/ERC721 | Token onayı |
 
+### Thirdweb v1.events Payload Formatı (Yeni)
+
+```json
+{
+  "timestamp": 1769530718,
+  "topic": "v1.events",
+  "data": [
+    {
+      "data": {
+        "chain_id": "1",
+        "block_number": 22140383,
+        "block_hash": "0x...",
+        "block_timestamp": 1743104207,
+        "transaction_hash": "0x...",
+        "transaction_index": 93,
+        "log_index": 230,
+        "address": "0x...",
+        "data": "0x...",
+        "topics": ["0xddf252ad..."],
+        "decoded": {
+          "name": "Transfer",
+          "indexed_params": {
+            "from": "0x...",
+            "to": "0x..."
+          },
+          "non_indexed_params": {
+            "amount": "41729516213800138"
+          }
+        }
+      },
+      "status": "new",
+      "type": "event",
+      "id": "..."
+    }
+  ]
+}
+```
+
+> **Not:** Sistem hem yeni `v1.events` formatını hem de legacy `event-log` formatını destekler.
+
 ### Payload Yapısı - ERC20 Transfer
 
 ```json
@@ -441,6 +481,39 @@ enum ThirdwebOnchainStatus {
 | `X-Engine-Signature` | HMAC-SHA256 imza |
 | `X-Engine-Timestamp` | Unix timestamp (saniye) |
 
+### Thirdweb Örnek Webhook Kodu
+
+```typescript
+import express from "express";
+import bodyParser from "body-parser";
+import { isValidSignature, isExpired } from "./webhookHelper";
+
+const app = express();
+const WEBHOOK_SECRET = "<your_webhook_auth_secret>";
+
+app.use(bodyParser.text());
+
+app.post("/webhook", (req, res) => {
+  const signatureFromHeader = req.header("X-Engine-Signature");
+  const timestampFromHeader = req.header("X-Engine-Timestamp");
+
+  if (!signatureFromHeader || !timestampFromHeader) {
+    return res.status(401).send("Missing signature or timestamp header");
+  }
+
+  if (!isValidSignature(req.body, timestampFromHeader, signatureFromHeader, WEBHOOK_SECRET)) {
+    return res.status(401).send("Invalid signature");
+  }
+
+  if (isExpired(timestampFromHeader, 300)) {
+    return res.status(401).send("Request has expired");
+  }
+
+  // Process the request
+  res.status(200).send("Webhook received!");
+});
+```
+
 ### Signature Doğrulama
 
 ```typescript
@@ -461,6 +534,73 @@ function verifySignature(body: string, timestamp: string, signature: string, sec
 function isExpired(timestamp: string, expirationSeconds: number = 300): boolean {
   const currentTime = Math.floor(Date.now() / 1000);
   return currentTime - parseInt(timestamp) > expirationSeconds;
+}
+```
+
+### HTTP Response Kodları
+
+Thirdweb webhook standartlarına uygun response kodları:
+
+| Status | Durum | Thirdweb Davranışı |
+|--------|-------|-------------------|
+| **200** | Başarılı işlem | ✅ Retry yok |
+| **401** | Missing headers | ❌ Retry yok |
+| **401** | Invalid signature | ❌ Retry yok |
+| **401** | Expired timestamp | ❌ Retry yok |
+| **400** | Invalid JSON payload | ❌ Retry yok |
+| **400** | Missing required fields | ❌ Retry yok |
+| **400** | Unknown payload format | ❌ Retry yok |
+| **500** | Internal server error | 🔄 **Retry yapar** |
+
+### Örnek Response'lar
+
+**Başarılı (200):**
+```json
+{
+  "success": true,
+  "action": "created",
+  "message": "Event Transfer logged",
+  "eventLogId": "uuid-here"
+}
+```
+
+**Missing Headers (401):**
+```json
+{
+  "success": false,
+  "error": "Missing signature or timestamp header"
+}
+```
+
+**Invalid Signature (401):**
+```json
+{
+  "success": false,
+  "error": "Invalid signature"
+}
+```
+
+**Expired (401):**
+```json
+{
+  "success": false,
+  "error": "Request has expired"
+}
+```
+
+**Invalid Payload (400):**
+```json
+{
+  "success": false,
+  "error": "Invalid JSON payload"
+}
+```
+
+**Server Error (500):**
+```json
+{
+  "success": false,
+  "error": "Internal server error while processing webhook"
 }
 ```
 

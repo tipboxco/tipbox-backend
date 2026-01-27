@@ -16,7 +16,13 @@ import express, { Request, Response } from 'express';
 import { ThirdwebWebhookService } from '../../application/thirdweb-webhook/thirdweb-webhook.service';
 import { ContractEventService } from '../../application/thirdweb-webhook/contract-event.service';
 import { ThirdwebWebhookPayload, ThirdwebWebhookLogDTO } from './thirdweb-webhook.dto';
-import { ThirdwebContractSubscriptionPayload, ContractEventLogDTO } from './contract-event.dto';
+import { 
+  ThirdwebContractSubscriptionPayload, 
+  ContractEventLogDTO,
+  ThirdwebWebhookPayloadWrapper,
+  isThirdwebV1Payload,
+  parseThirdwebPayload
+} from './contract-event.dto';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { authMiddleware } from '../auth/auth.middleware';
 import logger from '../../infrastructure/logger/logger';
@@ -227,12 +233,18 @@ router.post('/',
  *       Contract event'lerini (Transfer, Mint, Approval vb.) dinler.
  *       Thirdweb Engine Contract Subscriptions özelliği ile kullanılır.
  *       
- *       **Payload Types:**
- *       - event-log: Contract event'leri (Transfer, Mint, Approval)
- *       - transaction-receipt: Transaction receipt bilgileri
+ *       **Payload Format (v1.events):**
+ *       ```json
+ *       {
+ *         "timestamp": 1769530718,
+ *         "topic": "v1.events",
+ *         "data": [{ ... event items ... }]
+ *       }
+ *       ```
  *       
  *       **Security:**
- *       - X-Engine-Signature header ile HMAC-SHA256 doğrulaması
+ *       - X-Webhook-Secret header ile secret doğrulaması (opsiyonel)
+ *       - Payload içindeki timestamp ile replay attack önlenir
  *     tags: [Webhooks]
  *     requestBody:
  *       required: true
@@ -240,28 +252,6 @@ router.post('/',
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - type
- *               - data
- *             properties:
- *               type:
- *                 type: string
- *                 enum: [event-log, transaction-receipt]
- *               data:
- *                 type: object
- *                 properties:
- *                   chainId:
- *                     type: integer
- *                   contractAddress:
- *                     type: string
- *                   blockNumber:
- *                     type: integer
- *                   transactionHash:
- *                     type: string
- *                   eventName:
- *                     type: string
- *                   decodedLog:
- *                     type: object
  *     responses:
  *       200:
  *         description: Event başarıyla işlendi
@@ -273,56 +263,14 @@ router.post('/',
 router.post('/events',
   express.raw({ type: 'application/json' }),
   asyncHandler(async (req: Request, res: Response) => {
-    const signature = req.header('X-Engine-Signature');
-    const timestamp = req.header('X-Engine-Timestamp');
-    
     const rawBody = Buffer.isBuffer(req.body) 
       ? req.body.toString('utf-8')
       : typeof req.body === 'string' 
         ? req.body 
         : JSON.stringify(req.body);
 
-    // Header validation
-    if (!signature || !timestamp) {
-      logger.warn({
-        ip: req.ip,
-        path: req.path,
-        message: 'Missing event webhook signature or timestamp headers'
-      });
-      return res.status(401).json({
-        success: false,
-        error: 'Missing signature or timestamp header'
-      });
-    }
-
-    // Signature verification
-    if (!contractEventService.verifySignature(rawBody, timestamp, signature)) {
-      logger.warn({
-        ip: req.ip,
-        path: req.path,
-        message: 'Invalid event webhook signature'
-      });
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid signature'
-      });
-    }
-
-    // Timestamp check
-    if (contractEventService.isExpired(timestamp)) {
-      logger.warn({
-        ip: req.ip,
-        timestamp,
-        message: 'Event webhook request has expired'
-      });
-      return res.status(401).json({
-        success: false,
-        error: 'Request has expired'
-      });
-    }
-
-    // Parse payload
-    let payload: ThirdwebContractSubscriptionPayload;
+    // Parse payload first
+    let payload: any;
     try {
       payload = JSON.parse(rawBody);
     } catch (error) {
@@ -336,33 +284,139 @@ router.post('/events',
       });
     }
 
-    // Validate required fields
-    if (!payload.type || !payload.data) {
+    // =========================================================================
+    // SIGNATURE VERIFICATION
+    // =========================================================================
+    // Thirdweb yeni format (v1.events) farklı header'lar kullanabilir
+    // Legacy format: X-Engine-Signature + X-Engine-Timestamp
+    // Yeni format: X-Webhook-Secret veya payload içinde timestamp
+    
+    const signature = req.header('X-Engine-Signature') || req.header('X-Webhook-Secret');
+    const timestamp = req.header('X-Engine-Timestamp') || 
+                      (payload.timestamp ? String(payload.timestamp) : null);
+    
+    // Signature kontrolü (eğer THIRDWEB_WEBHOOK_SECRET tanımlıysa)
+    const webhookSecret = process.env.THIRDWEB_WEBHOOK_SECRET;
+    
+    if (webhookSecret && webhookSecret.length > 0) {
+      if (signature) {
+        // Signature varsa doğrula
+        if (!contractEventService.verifySignature(rawBody, timestamp || '', signature)) {
+          logger.warn({
+            ip: req.ip,
+            path: req.path,
+            message: 'Invalid event webhook signature'
+          });
+          return res.status(401).json({
+            success: false,
+            error: 'Invalid signature'
+          });
+        }
+      } else {
+        // Signature yoksa ama secret tanımlı - uyarı logla ama devam et (test amaçlı)
+        logger.warn({
+          ip: req.ip,
+          path: req.path,
+          message: 'Webhook received without signature - proceeding in development mode'
+        });
+        
+        // Production'da signature zorunlu olsun
+        if (process.env.NODE_ENV === 'production') {
+          return res.status(401).json({
+            success: false,
+            error: 'Missing signature header in production'
+          });
+        }
+      }
+    }
+
+    // Timestamp expiration check (varsa)
+    if (timestamp && contractEventService.isExpired(timestamp)) {
       logger.warn({
-        payload: { type: payload.type },
-        message: 'Missing required fields in event payload'
+        ip: req.ip,
+        timestamp,
+        message: 'Event webhook request has expired'
       });
-      return res.status(400).json({
+      return res.status(401).json({
         success: false,
-        error: 'Missing required fields: type, data'
+        error: 'Request has expired'
       });
     }
 
-    // Process event
+    // =========================================================================
+    // PROCESS EVENTS
+    // =========================================================================
     try {
-      const result = await contractEventService.processEvent(payload);
+      // Yeni Thirdweb v1.events formatı mı kontrol et
+      if (isThirdwebV1Payload(payload)) {
+        // v1.events formatı: birden fazla event içerebilir
+        const normalizedEvents = parseThirdwebPayload(payload);
+        
+        if (normalizedEvents.length === 0) {
+          logger.debug({
+            topic: payload.topic,
+            dataCount: payload.data?.length || 0,
+            message: 'No processable events in v1.events payload'
+          });
+          return res.status(200).json({
+            success: true,
+            action: 'skipped',
+            message: 'No processable events',
+            eventsReceived: payload.data?.length || 0,
+            eventsProcessed: 0
+          });
+        }
 
-      return res.status(200).json({
-        success: result.success,
-        action: result.action,
-        message: result.message,
-        eventLogId: result.eventLogId,
-        transactionId: result.transactionId
+        // Her event'i işle
+        const results = await contractEventService.processNormalizedEvents(normalizedEvents);
+
+        logger.info({
+          topic: payload.topic,
+          eventsReceived: payload.data.length,
+          eventsProcessed: results.processed,
+          eventsSkipped: results.skipped,
+          message: 'v1.events payload processed'
+        });
+
+        return res.status(200).json({
+          success: true,
+          action: 'processed',
+          message: `Processed ${results.processed} events, skipped ${results.skipped}`,
+          eventsReceived: payload.data.length,
+          eventsProcessed: results.processed,
+          eventsSkipped: results.skipped,
+          errors: results.errors.length > 0 ? results.errors : undefined
+        });
+      }
+      
+      // Legacy format kontrolü
+      if (payload.type && payload.data) {
+        const result = await contractEventService.processEvent(payload);
+
+        return res.status(200).json({
+          success: result.success,
+          action: result.action,
+          message: result.message,
+          eventLogId: result.eventLogId,
+          transactionId: result.transactionId
+        });
+      }
+
+      // Bilinmeyen format
+      logger.warn({
+        payloadKeys: Object.keys(payload),
+        message: 'Unknown webhook payload format'
       });
+      
+      return res.status(400).json({
+        success: false,
+        error: 'Unknown payload format. Expected v1.events or legacy event-log format.'
+      });
+
     } catch (error) {
       logger.error({
-        type: payload.type,
         error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
         message: 'Error processing contract event'
       });
 

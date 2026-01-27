@@ -25,7 +25,9 @@ import {
   TokenType,
   weiToToken,
   isSignificantTransfer,
-  ZERO_ADDRESS
+  ZERO_ADDRESS,
+  NormalizedContractEvent,
+  DecodedLogValue
 } from '../../interfaces/thirdweb-webhook/contract-event.dto';
 import { WalletService } from '../wallet/wallet.service';
 import logger from '../../infrastructure/logger/logger';
@@ -112,14 +114,14 @@ export class ContractEventService {
   // ==========================================================================
 
   /**
-   * Ana event işleme fonksiyonu
+   * Ana event işleme fonksiyonu (legacy format)
    */
   async processEvent(payload: ThirdwebContractSubscriptionPayload): Promise<EventProcessResult> {
     try {
-      if (payload.type === 'event-log') {
-        return this.processEventLog(payload);
-      } else if (payload.type === 'transaction-receipt') {
-        return this.processTransactionReceipt(payload);
+      if ((payload as any).type === 'event-log') {
+        return this.processEventLog(payload as ContractEventPayload);
+      } else if ((payload as any).type === 'transaction-receipt') {
+        return this.processTransactionReceipt(payload as TransactionReceiptPayload);
       }
 
       return {
@@ -135,6 +137,467 @@ export class ContractEventService {
       });
       throw error;
     }
+  }
+
+  /**
+   * Normalize edilmiş event'leri işle (v1.events formatı)
+   * Birden fazla event'i tek seferde işler
+   */
+  async processNormalizedEvents(events: NormalizedContractEvent[]): Promise<{
+    processed: number;
+    skipped: number;
+    errors: string[];
+  }> {
+    let processed = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+
+    for (const event of events) {
+      try {
+        const result = await this.processNormalizedEvent(event);
+        
+        if (result.action === 'created' || result.action === 'processed') {
+          processed++;
+        } else {
+          skipped++;
+        }
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        errors.push(`Event ${event.transactionHash}:${event.logIndex} - ${errorMsg}`);
+        logger.error({
+          transactionHash: event.transactionHash,
+          logIndex: event.logIndex,
+          error: errorMsg,
+          message: 'Error processing normalized event'
+        });
+      }
+    }
+
+    return { processed, skipped, errors };
+  }
+
+  /**
+   * Tek bir normalized event'i işle
+   */
+  private async processNormalizedEvent(event: NormalizedContractEvent): Promise<EventProcessResult> {
+    const prisma = getPrisma();
+
+    // Contract destekleniyor mu kontrol et
+    if (!isContractSupported(event.contractAddress)) {
+      logger.debug({
+        contractAddress: event.contractAddress,
+        message: 'Contract not in supported list, skipping'
+      });
+      return {
+        success: true,
+        action: 'skipped',
+        message: 'Contract not supported'
+      };
+    }
+
+    // Wallet relevance check - sistemde tanımlı wallet var mı?
+    const relevanceCheck = await this.checkNormalizedEventRelevance(event);
+    
+    if (!relevanceCheck.isRelevant) {
+      logger.debug({
+        eventName: event.eventName,
+        transactionHash: event.transactionHash,
+        addresses: relevanceCheck.addresses,
+        message: 'Event skipped - no registered wallet involved'
+      });
+      return {
+        success: true,
+        action: 'skipped',
+        message: 'No registered wallet involved in this event'
+      };
+    }
+
+    // Daha önce işlenmiş mi kontrol et
+    const existing = await this.eventLogRepo.findByHashAndLogIndex(
+      event.transactionHash,
+      event.logIndex
+    );
+
+    if (existing) {
+      logger.debug({
+        transactionHash: event.transactionHash,
+        logIndex: event.logIndex,
+        message: 'Event already processed'
+      });
+      return {
+        success: true,
+        action: 'skipped',
+        message: 'Event already exists',
+        eventLogId: existing.id
+      };
+    }
+
+    // Wallet eşleştirmesi yap
+    let walletId: string | undefined;
+    let transactionId: string | undefined;
+
+    // Transfer event'i özel işleme
+    if (event.eventName === 'Transfer') {
+      const result = await this.handleNormalizedTransferEvent(event, prisma);
+      walletId = result.walletId;
+      transactionId = result.transactionId;
+    }
+    
+    // Approval event'i özel işleme
+    else if (event.eventName === 'Approval') {
+      const result = await this.handleNormalizedApprovalEvent(event);
+      walletId = result.walletId;
+    }
+
+    // Event log'u kaydet
+    const eventLog = await this.eventLogRepo.create({
+      chainId: event.chainId,
+      contractAddress: event.contractAddress,
+      blockNumber: event.blockNumber,
+      transactionHash: event.transactionHash,
+      transactionIndex: event.transactionIndex,
+      logIndex: event.logIndex,
+      eventName: event.eventName,
+      decodedLog: event.decodedLog,
+      topics: event.topics,
+      data: event.data,
+      timestamp: event.blockTimestamp,
+      rawPayload: event.rawPayload as any,
+      transactionId,
+      walletId,
+      processed: !!transactionId
+    });
+
+    logger.info({
+      eventLogId: eventLog.id,
+      eventName: event.eventName,
+      contractAddress: event.contractAddress,
+      transactionHash: event.transactionHash,
+      walletId,
+      transactionId,
+      message: 'Contract event logged (v1.events)'
+    });
+
+    return {
+      success: true,
+      action: 'created',
+      message: `Event ${event.eventName} logged`,
+      eventLogId: eventLog.id,
+      transactionId,
+      walletId
+    };
+  }
+
+  /**
+   * Normalized event için relevance check
+   */
+  private async checkNormalizedEventRelevance(event: NormalizedContractEvent): Promise<{
+    isRelevant: boolean;
+    addresses: string[];
+    matchedWallets: string[];
+  }> {
+    const addresses: string[] = [];
+    const matchedWallets: string[] = [];
+
+    // Transfer event kontrolü
+    if (event.eventName === 'Transfer') {
+      const transferEvent = parseTransferEvent(event.decodedLog, TOKEN_DECIMALS);
+      
+      if (transferEvent) {
+        if (transferEvent.from && transferEvent.from !== ZERO_ADDRESS) {
+          addresses.push(transferEvent.from.toLowerCase());
+        }
+        if (transferEvent.to && transferEvent.to !== ZERO_ADDRESS) {
+          addresses.push(transferEvent.to.toLowerCase());
+        }
+
+        for (const addr of addresses) {
+          const wallet = await this.walletRepo.findByPublicAddress(addr);
+          if (wallet) {
+            matchedWallets.push(wallet.id);
+          }
+        }
+
+        if (transferEvent.isMint && transferEvent.to) {
+          const toWallet = await this.walletRepo.findByPublicAddress(transferEvent.to);
+          if (toWallet) {
+            return { isRelevant: true, addresses, matchedWallets: [toWallet.id] };
+          }
+        }
+
+        if (transferEvent.isBurn && transferEvent.from) {
+          const fromWallet = await this.walletRepo.findByPublicAddress(transferEvent.from);
+          if (fromWallet) {
+            return { isRelevant: true, addresses, matchedWallets: [fromWallet.id] };
+          }
+        }
+      }
+    }
+    
+    // Approval event kontrolü
+    else if (event.eventName === 'Approval') {
+      const approvalEvent = parseApprovalEvent(event.decodedLog, TOKEN_DECIMALS);
+      
+      if (approvalEvent) {
+        addresses.push(approvalEvent.owner.toLowerCase());
+        
+        const ownerWallet = await this.walletRepo.findByPublicAddress(approvalEvent.owner);
+        if (ownerWallet) {
+          return { isRelevant: true, addresses, matchedWallets: [ownerWallet.id] };
+        }
+      }
+    }
+
+    return { isRelevant: matchedWallets.length > 0, addresses, matchedWallets };
+  }
+
+  /**
+   * Normalized Transfer event handler
+   */
+  private async handleNormalizedTransferEvent(
+    event: NormalizedContractEvent,
+    prisma: ReturnType<typeof getPrisma>
+  ): Promise<{ walletId?: string; transactionId?: string }> {
+    const transferEvent = parseTransferEvent(event.decodedLog, TOKEN_DECIMALS);
+    
+    if (!transferEvent) {
+      return {};
+    }
+
+    let walletId: string | undefined;
+    let transactionId: string | undefined;
+
+    const toWallet = await this.walletRepo.findByPublicAddress(transferEvent.to);
+    const fromWallet = await this.walletRepo.findByPublicAddress(transferEvent.from);
+
+    // ===== ERC20 TOKEN TRANSFER =====
+    if (transferEvent.tokenType === TokenType.ERC20 && transferEvent.value) {
+      const amount = weiToToken(transferEvent.value, TOKEN_DECIMALS);
+      
+      if (!isSignificantTransfer(transferEvent.value, TOKEN_DECIMALS, 0.0001)) {
+        return { walletId: toWallet?.id || fromWallet?.id };
+      }
+
+      // DEPOSIT: External → TipBox
+      if (toWallet && !fromWallet && !transferEvent.isMint) {
+        walletId = toWallet.id;
+        
+        const pendingTx = await prisma.transaction.findFirst({
+          where: {
+            walletId: toWallet.id,
+            status: 'pending',
+            actionType: { in: ['TIP_RECEIVE', 'DEPOSIT'] }
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true }
+        });
+
+        if (pendingTx) {
+          transactionId = pendingTx.id;
+          await this.transactionService.confirmTransaction(transactionId, event.transactionHash);
+        } else {
+          // DEPOSIT transaction oluştur (doğrudan Prisma)
+          const depositTx = await prisma.transaction.create({
+            data: {
+              walletId: toWallet.id,
+              actionType: 'DEPOSIT' as any, // Prisma generate sonrası düzeltilecek
+              status: 'confirmed',
+              amount: amount,
+              fromAddress: transferEvent.from,
+              toAddress: transferEvent.to,
+              txHash: event.transactionHash,
+              provider: 'external',
+              confirmedAt: new Date(),
+              metadata: {
+                source: 'contract_event_v1',
+                chainId: event.chainId,
+                contractAddress: event.contractAddress,
+                blockNumber: event.blockNumber,
+                tokenType: 'ERC20'
+              }
+            }
+          });
+          transactionId = depositTx.id;
+
+          await this.walletService.updateBalance(toWallet.id, amount, {
+            reason: `Deposit from ${transferEvent.from} (tx: ${event.transactionHash})`
+          });
+        }
+
+        logger.info({
+          walletId, transactionId, amount,
+          from: transferEvent.from,
+          message: 'ERC20 Deposit detected (v1.events)'
+        });
+      }
+
+      // WITHDRAW: TipBox → External
+      else if (fromWallet && !toWallet && !transferEvent.isBurn) {
+        walletId = fromWallet.id;
+        
+        const pendingTx = await prisma.transaction.findFirst({
+          where: {
+            walletId: fromWallet.id,
+            status: 'pending',
+            actionType: { in: ['TIP_SEND', 'WITHDRAW'] }
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true }
+        });
+
+        if (pendingTx) {
+          transactionId = pendingTx.id;
+          await this.transactionService.confirmTransaction(pendingTx.id, event.transactionHash);
+        } else {
+          // WITHDRAW transaction oluştur (doğrudan Prisma)
+          const withdrawTx = await prisma.transaction.create({
+            data: {
+              walletId: fromWallet.id,
+              actionType: 'WITHDRAW' as any, // Prisma generate sonrası düzeltilecek
+              status: 'confirmed',
+              amount: amount,
+              fromAddress: transferEvent.from,
+              toAddress: transferEvent.to,
+              txHash: event.transactionHash,
+              provider: 'external',
+              confirmedAt: new Date(),
+              metadata: {
+                source: 'contract_event_v1',
+                chainId: event.chainId,
+                contractAddress: event.contractAddress,
+                blockNumber: event.blockNumber,
+                tokenType: 'ERC20'
+              }
+            }
+          });
+          transactionId = withdrawTx.id;
+
+          await this.walletService.updateBalance(fromWallet.id, -amount, {
+            reason: `Withdraw to ${transferEvent.to} (tx: ${event.transactionHash})`
+          });
+        }
+
+        logger.info({
+          walletId, transactionId, amount: -amount,
+          to: transferEvent.to,
+          message: 'ERC20 Withdraw detected (v1.events)'
+        });
+      }
+
+      // MINT
+      else if (transferEvent.isMint && toWallet) {
+        walletId = toWallet.id;
+        
+        const pendingTx = await prisma.transaction.findFirst({
+          where: {
+            walletId: toWallet.id,
+            status: 'pending',
+            actionType: { in: ['CLAIM_REWARD', 'AIRDROP', 'TIP_RECEIVE'] }
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true }
+        });
+
+        if (pendingTx) {
+          transactionId = pendingTx.id;
+          await this.transactionService.confirmTransaction(transactionId, event.transactionHash);
+        } else {
+          await this.walletService.updateBalance(toWallet.id, amount, {
+            reason: `Token mint (tx: ${event.transactionHash})`
+          });
+        }
+      }
+
+      // BURN
+      else if (transferEvent.isBurn && fromWallet) {
+        walletId = fromWallet.id;
+        await this.walletService.updateBalance(fromWallet.id, -amount, {
+          reason: `Token burn (tx: ${event.transactionHash})`
+        });
+      }
+
+      // INTERNAL TRANSFER
+      else if (toWallet && fromWallet) {
+        walletId = toWallet.id;
+        
+        const pendingReceiveTx = await prisma.transaction.findFirst({
+          where: { walletId: toWallet.id, status: 'pending', actionType: 'TIP_RECEIVE' },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true }
+        });
+
+        if (pendingReceiveTx) {
+          transactionId = pendingReceiveTx.id;
+          await this.transactionService.confirmTransaction(transactionId, event.transactionHash);
+        }
+
+        const pendingSendTx = await prisma.transaction.findFirst({
+          where: { walletId: fromWallet.id, status: 'pending', actionType: 'TIP_SEND' },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true }
+        });
+
+        if (pendingSendTx) {
+          await this.transactionService.confirmTransaction(pendingSendTx.id, event.transactionHash);
+        }
+      }
+    }
+    
+    // ===== ERC721 NFT TRANSFER =====
+    else if (transferEvent.tokenType === TokenType.ERC721 && toWallet) {
+      walletId = toWallet.id;
+      
+      if (transferEvent.isMint) {
+        const pendingTx = await prisma.transaction.findFirst({
+          where: {
+            walletId: toWallet.id,
+            status: 'pending',
+            actionType: { in: ['CLAIM_BADGE', 'CLAIM_REWARD'] }
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true }
+        });
+
+        if (pendingTx) {
+          transactionId = pendingTx.id;
+          await this.transactionService.confirmTransaction(transactionId, event.transactionHash);
+        }
+      }
+    }
+
+    if (!walletId && fromWallet) {
+      walletId = fromWallet.id;
+    }
+
+    return { walletId, transactionId };
+  }
+
+  /**
+   * Normalized Approval event handler
+   */
+  private async handleNormalizedApprovalEvent(
+    event: NormalizedContractEvent
+  ): Promise<{ walletId?: string }> {
+    const approvalEvent = parseApprovalEvent(event.decodedLog, TOKEN_DECIMALS);
+    
+    if (!approvalEvent) {
+      return {};
+    }
+
+    const ownerWallet = await this.walletRepo.findByPublicAddress(approvalEvent.owner);
+    
+    if (ownerWallet) {
+      logger.info({
+        walletId: ownerWallet.id,
+        spender: approvalEvent.spender,
+        value: approvalEvent.value,
+        message: 'Token approval detected (v1.events)'
+      });
+
+      return { walletId: ownerWallet.id };
+    }
+
+    return {};
   }
 
   /**
@@ -389,8 +852,7 @@ export class ContractEventService {
         } else {
           // Transaction yoksa direkt balance güncelle (external mint)
           await this.walletService.updateBalance(toWallet.id, amount, {
-            reason: 'Token mint from contract event',
-            txHash: data.transactionHash
+            reason: `Token mint from contract event (tx: ${data.transactionHash})`
           });
         }
 
@@ -408,8 +870,7 @@ export class ContractEventService {
         
         // Balance düş (negatif amount)
         await this.walletService.updateBalance(fromWallet.id, -amount, {
-          reason: 'Token burn from contract event',
-          txHash: data.transactionHash
+          reason: `Token burn from contract event (tx: ${data.transactionHash})`
         });
 
         logger.info({
@@ -446,30 +907,31 @@ export class ContractEventService {
             await this.transactionService.confirmTransaction(transactionId, data.transactionHash);
           } else {
             // DEPOSIT: External wallet'tan gelen transfer için yeni transaction oluştur
-            const depositTx = await this.transactionRepo.create({
-              walletId: toWallet.id,
-              actionType: 'DEPOSIT',
-              status: 'confirmed',
-              amount: amount,
-              fromAddress: transferEvent.from,
-              toAddress: transferEvent.to,
-              txHash: data.transactionHash,
-              provider: 'external',
-              confirmedAt: new Date(),
-              metadata: {
-                source: 'contract_event',
-                chainId: data.chainId,
-                contractAddress: data.contractAddress,
-                blockNumber: data.blockNumber,
-                tokenType: 'ERC20'
+            const depositTx = await prisma.transaction.create({
+              data: {
+                walletId: toWallet.id,
+                actionType: 'DEPOSIT' as any, // Prisma generate sonrası düzeltilecek
+                status: 'confirmed',
+                amount: amount,
+                fromAddress: transferEvent.from,
+                toAddress: transferEvent.to,
+                txHash: data.transactionHash,
+                provider: 'external',
+                confirmedAt: new Date(),
+                metadata: {
+                  source: 'contract_event',
+                  chainId: data.chainId,
+                  contractAddress: data.contractAddress,
+                  blockNumber: data.blockNumber,
+                  tokenType: 'ERC20'
+                }
               }
             });
             transactionId = depositTx.id;
 
             // Balance güncelle
             await this.walletService.updateBalance(toWallet.id, amount, {
-              reason: `Deposit from external wallet ${transferEvent.from}`,
-              txHash: data.transactionHash
+              reason: `Deposit from external wallet ${transferEvent.from} (tx: ${data.transactionHash})`
             });
           }
 
@@ -506,30 +968,31 @@ export class ContractEventService {
             await this.transactionService.confirmTransaction(pendingSendTx.id, data.transactionHash);
           } else {
             // WITHDRAW: External wallet'a gönderilen transfer için yeni transaction oluştur
-            const withdrawTx = await this.transactionRepo.create({
-              walletId: fromWallet.id,
-              actionType: 'WITHDRAW',
-              status: 'confirmed',
-              amount: amount,
-              fromAddress: transferEvent.from,
-              toAddress: transferEvent.to,
-              txHash: data.transactionHash,
-              provider: 'external',
-              confirmedAt: new Date(),
-              metadata: {
-                source: 'contract_event',
-                chainId: data.chainId,
-                contractAddress: data.contractAddress,
-                blockNumber: data.blockNumber,
-                tokenType: 'ERC20'
+            const withdrawTx = await prisma.transaction.create({
+              data: {
+                walletId: fromWallet.id,
+                actionType: 'WITHDRAW' as any, // Prisma generate sonrası düzeltilecek
+                status: 'confirmed',
+                amount: amount,
+                fromAddress: transferEvent.from,
+                toAddress: transferEvent.to,
+                txHash: data.transactionHash,
+                provider: 'external',
+                confirmedAt: new Date(),
+                metadata: {
+                  source: 'contract_event',
+                  chainId: data.chainId,
+                  contractAddress: data.contractAddress,
+                  blockNumber: data.blockNumber,
+                  tokenType: 'ERC20'
+                }
               }
             });
             transactionId = withdrawTx.id;
 
             // Balance zaten blockchain'de düşmüş, burada da güncelle
             await this.walletService.updateBalance(fromWallet.id, -amount, {
-              reason: `Withdraw to external wallet ${transferEvent.to}`,
-              txHash: data.transactionHash
+              reason: `Withdraw to external wallet ${transferEvent.to} (tx: ${data.transactionHash})`
             });
           }
 
