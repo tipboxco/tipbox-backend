@@ -476,10 +476,12 @@ enum ThirdwebOnchainStatus {
 
 ### HTTP Headers
 
-| Header | Açıklama |
-|--------|----------|
-| `X-Engine-Signature` | HMAC-SHA256 imza |
-| `X-Engine-Timestamp` | Unix timestamp (saniye) |
+Thirdweb farklı header isimleri kullanabilir, sistem her ikisini de destekler:
+
+| Header (Yeni) | Header (Eski) | Açıklama |
+|---------------|---------------|----------|
+| `X-Webhook-Signature` | `X-Engine-Signature` | HMAC-SHA256 imza |
+| `X-Webhook-Timestamp` | `X-Engine-Timestamp` | Unix timestamp (saniye) |
 
 ### Thirdweb Örnek Webhook Kodu
 

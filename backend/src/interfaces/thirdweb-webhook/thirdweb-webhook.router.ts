@@ -114,97 +114,56 @@ const contractEventService = new ContractEventService();
  *         description: İşleme hatası
  */
 router.post('/',
-  // Raw body middleware - signature verification için
+  // Raw body middleware - signature verification için (Thirdweb req.body kullanır)
   express.raw({ type: 'application/json' }),
   asyncHandler(async (req: Request, res: Response) => {
-    const signature = req.header('X-Engine-Signature');
-    const timestamp = req.header('X-Engine-Timestamp');
+    // Thirdweb header isimleri
+    const signatureFromHeader = req.header('X-Webhook-Signature') || req.header('X-Engine-Signature');
+    const timestampFromHeader = req.header('X-Webhook-Timestamp') || req.header('X-Engine-Timestamp');
     
-    // Raw body'yi string'e çevir
-    const rawBody = Buffer.isBuffer(req.body) 
+    // Body'yi string'e çevir (Thirdweb örneği req.body kullanır)
+    const body = Buffer.isBuffer(req.body) 
       ? req.body.toString('utf-8')
       : typeof req.body === 'string' 
         ? req.body 
         : JSON.stringify(req.body);
 
-    // Header validation
-    if (!signature || !timestamp) {
-      logger.warn({
-        ip: req.ip,
-        path: req.path,
-        message: 'Missing webhook signature or timestamp headers'
-      });
-      return res.status(401).json({
-        success: false,
-        error: 'Missing signature or timestamp header'
-      });
+    // Header validation (Thirdweb örneğine uygun)
+    if (!signatureFromHeader || !timestampFromHeader) {
+      return res.status(401).send('Missing signature or timestamp header');
     }
 
-    // Signature verification
-    if (!webhookService.verifySignature(rawBody, timestamp, signature)) {
-      logger.warn({
-        ip: req.ip,
-        path: req.path,
-        message: 'Invalid webhook signature'
-      });
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid signature'
-      });
+    // Signature verification (Thirdweb örneğine uygun)
+    const WEBHOOK_SECRET = process.env.THIRDWEB_WEBHOOK_SECRET || '';
+    
+    if (!webhookService.isValidSignature(body, timestampFromHeader, signatureFromHeader, WEBHOOK_SECRET)) {
+      return res.status(401).send('Invalid signature');
     }
 
-    // Timestamp expiration check
-    if (webhookService.isExpired(timestamp)) {
-      logger.warn({
-        ip: req.ip,
-        timestamp,
-        path: req.path,
-        message: 'Webhook request has expired'
-      });
-      return res.status(401).json({
-        success: false,
-        error: 'Request has expired'
-      });
+    // Timestamp expiration check (Thirdweb örneği: 300 saniye = 5 dakika)
+    if (webhookService.isExpired(timestampFromHeader)) {
+      return res.status(401).send('Request has expired');
     }
 
     // Parse payload
     let payload: ThirdwebWebhookPayload;
     try {
-      payload = JSON.parse(rawBody);
+      payload = JSON.parse(body);
     } catch (error) {
-      logger.error({
-        error: error instanceof Error ? error.message : String(error),
-        rawBody: rawBody.substring(0, 200),
-        message: 'Failed to parse webhook payload'
-      });
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid JSON payload'
-      });
+      return res.status(400).send('Invalid JSON payload');
     }
 
     // Validate required fields
     if (!payload.queueId || !payload.status || !payload.chainId || !payload.fromAddress || !payload.toAddress) {
-      logger.warn({
-        payload: { queueId: payload.queueId, status: payload.status },
-        message: 'Missing required fields in webhook payload'
-      });
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required fields: queueId, status, chainId, fromAddress, toAddress'
-      });
+      return res.status(400).send('Missing required fields: queueId, status, chainId, fromAddress, toAddress');
     }
 
-    // Process webhook
+    // Process the request (Thirdweb örneğine uygun)
     try {
       const result = await webhookService.processWebhook(payload);
-
-      return res.status(200).json({
-        success: result.success,
-        action: result.action,
-        message: result.message,
-        transactionId: result.transactionId
-      });
+      
+      // Thirdweb örneği: res.status(200).send("Webhook received!");
+      return res.status(200).send('Webhook received!');
     } catch (error) {
       logger.error({
         queueId: payload.queueId,
@@ -212,10 +171,7 @@ router.post('/',
         message: 'Error processing webhook'
       });
 
-      return res.status(500).json({
-        success: false,
-        error: 'Internal server error while processing webhook'
-      });
+      return res.status(500).send('Internal server error');
     }
   })
 );
@@ -287,12 +243,14 @@ router.post('/events',
     // =========================================================================
     // SIGNATURE VERIFICATION
     // =========================================================================
-    // Thirdweb yeni format (v1.events) farklı header'lar kullanabilir
-    // Legacy format: X-Engine-Signature + X-Engine-Timestamp
-    // Yeni format: X-Webhook-Secret veya payload içinde timestamp
+    // Thirdweb farklı header isimleri kullanabilir:
+    // - X-Webhook-Signature / X-Engine-Signature
+    // - X-Webhook-Timestamp / X-Engine-Timestamp
+    // - Payload içinde timestamp
     
-    const signature = req.header('X-Engine-Signature') || req.header('X-Webhook-Secret');
-    const timestamp = req.header('X-Engine-Timestamp') || 
+    const signature = req.header('X-Webhook-Signature') || req.header('X-Engine-Signature');
+    const timestamp = req.header('X-Webhook-Timestamp') || 
+                      req.header('X-Engine-Timestamp') || 
                       (payload.timestamp ? String(payload.timestamp) : null);
     
     // Signature kontrolü (eğer THIRDWEB_WEBHOOK_SECRET tanımlıysa)

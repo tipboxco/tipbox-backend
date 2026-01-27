@@ -37,6 +37,7 @@ export class ThirdwebWebhookService {
     private readonly transactionService = new TransactionService()
   ) {
     this.webhookSecret = process.env.THIRDWEB_WEBHOOK_SECRET || '';
+    console.log('webhookSecret', this.webhookSecret);
     this.expirationSeconds = parseInt(process.env.THIRDWEB_WEBHOOK_EXPIRATION_SECONDS || '300', 10);
 
     if (!this.webhookSecret) {
@@ -45,45 +46,46 @@ export class ThirdwebWebhookService {
   }
 
   // ==========================================================================
-  // SIGNATURE VERIFICATION
+  // SIGNATURE VERIFICATION (Thirdweb örneğine uygun)
   // ==========================================================================
 
   /**
    * HMAC-SHA256 ile signature oluşturur
+   * Thirdweb formatı: `${timestamp}.${body}`
    */
-  private generateSignature(body: string, timestamp: string): string {
+  generateSignature(
+    body: string,
+    timestamp: string,
+    secret: string,
+  ): string {
     const payload = `${timestamp}.${body}`;
+    console.log('payload', payload);
     return crypto
-      .createHmac('sha256', this.webhookSecret)
+      .createHmac("sha256", secret)
       .update(payload)
-      .digest('hex');
-  }
-
+      .digest("hex");
+  };
   /**
    * Webhook signature'ını doğrular
+   * Thirdweb örneğine birebir uygun
+   */
+  isValidSignature(body: string, timestamp: string, signature: string, secret: string): boolean {
+    const expectedSignature = this.generateSignature(body, timestamp, secret);
+    console.log({expectedSignature, signature});
+    return crypto.timingSafeEqual(
+      Buffer.from(expectedSignature),
+      Buffer.from(signature),
+    );
+  };
+  /**
+   * Backward compatibility - eski fonksiyon adı
    */
   verifySignature(body: string, timestamp: string, signature: string): boolean {
     if (!this.webhookSecret) {
       logger.error('Webhook secret is not configured');
       return false;
     }
-
-    try {
-      const expectedSignature = this.generateSignature(body, timestamp);
-      
-      // Length check - timingSafeEqual requires same length buffers
-      if (expectedSignature.length !== signature.length) {
-        return false;
-      }
-
-      return crypto.timingSafeEqual(
-        Buffer.from(expectedSignature),
-        Buffer.from(signature)
-      );
-    } catch (error) {
-      logger.error('Signature verification error:', error);
-      return false;
-    }
+    return this.isValidSignature(body, timestamp, signature, this.webhookSecret);
   }
 
   /**
@@ -92,11 +94,11 @@ export class ThirdwebWebhookService {
   isExpired(timestamp: string): boolean {
     const currentTime = Math.floor(Date.now() / 1000);
     const webhookTime = parseInt(timestamp, 10);
-    
+
     if (isNaN(webhookTime)) {
       return true;
     }
-    
+
     return currentTime - webhookTime > this.expirationSeconds;
   }
 
@@ -139,7 +141,7 @@ export class ThirdwebWebhookService {
 
       // Wallet'ı publicAddress ile bul (toAddress = mint alıcısı)
       const wallet = await this.walletRepo.findByPublicAddress(payload.toAddress);
-      
+
       // Transaction'ı bul
       let transactionId: string | undefined;
 
