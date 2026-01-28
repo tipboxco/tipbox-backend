@@ -5,6 +5,7 @@ import { NotificationType } from '../../domain/notification/notification-type.en
 import logger from '../../infrastructure/logger/logger';
 import { InsufficientBalanceError } from '../../infrastructure/errors/custom-errors';
 import { getThirdwebAuthService, ThirdwebAuthResult } from '../../infrastructure/thirdweb/thirdweb-auth.service';
+import { getThirdwebSdkService } from '../../infrastructure/thirdweb/thirdweb-sdk.service';
 
 export class WalletService {
   constructor(
@@ -333,30 +334,71 @@ export class WalletService {
         message: 'Thirdweb authentication başlatılıyor',
       });
 
-      // Smart account dahil edilecek mi?
-      const authResult: ThirdwebAuthResult = options?.includeSmartAccount
-        ? await thirdwebAuthService.authenticateUserWithSmartAccount(userId, options?.chainId)
-        : await thirdwebAuthService.authenticateUser(userId);
+      // Önce SDK ile dene (daha güvenilir), başarısız olursa HTTP API'ye fallback
+      const thirdwebSdkService = getThirdwebSdkService();
+      let eoaAddress: string | undefined;
+      let smartAccountAddress: string | undefined;
+      let isNewThirdwebUser = false; // Thirdweb tarafında yeni kullanıcı mı
 
-      if (!authResult.success || !authResult.walletAddress) {
+      // SDK ile authentication dene
+      const sdkResult = await thirdwebSdkService.authenticateAndGetAddresses(userId, options?.chainId);
+      
+      if (sdkResult.success && sdkResult.eoaAddress) {
+        eoaAddress = sdkResult.eoaAddress;
+        smartAccountAddress = sdkResult.smartAccountAddress;
+        
+        logger.info({
+          userId,
+          eoaAddress,
+          smartAccountAddress,
+          message: 'Thirdweb SDK authentication başarılı',
+        });
+      } else {
+        // SDK başarısız olursa HTTP API ile dene (fallback)
+        logger.warn({
+          userId,
+          sdkError: sdkResult.error,
+          message: 'SDK başarısız, HTTP API ile deneniyor',
+        });
+
+        const authResult: ThirdwebAuthResult = options?.includeSmartAccount
+          ? await thirdwebAuthService.authenticateUserWithSmartAccount(userId, options?.chainId)
+          : await thirdwebAuthService.authenticateUser(userId);
+
+        if (!authResult.success || !authResult.walletAddress) {
+          logger.error({
+            userId,
+            error: authResult.error,
+            message: 'Thirdweb authentication başarısız (SDK ve HTTP API)',
+          });
+          return {
+            success: false,
+            error: authResult.error || 'Failed to authenticate with Thirdweb',
+          };
+        }
+
+        eoaAddress = authResult.walletAddress;
+        smartAccountAddress = authResult.smartAccountAddress;
+        isNewThirdwebUser = authResult.isNewUser || false;
+      }
+
+if (!eoaAddress) {
         logger.error({
           userId,
-          error: authResult.error,
-          message: 'Thirdweb authentication başarısız',
+          message: 'Thirdweb authentication başarısız - EOA adresi alınamadı',
         });
         return {
           success: false,
-          error: authResult.error || 'Failed to authenticate with Thirdweb',
+          error: 'Failed to get EOA address from Thirdweb',
         };
       }
 
-      const walletAddress = authResult.walletAddress;
-      const smartAccountAddress = authResult.smartAccountAddress;
+      const walletAddress = eoaAddress;
 
       // 2. Mevcut wallet'ı kontrol et
       const existingWallets = await this.walletRepo.findByUserId(userId);
       const existingThirdwebWallet = existingWallets.find(
-        w => w.publicAddress.toLowerCase() === walletAddress.toLowerCase() && 
+        w => w.publicAddress.toLowerCase() === walletAddress.toLowerCase() &&
              w.provider === WalletProvider.THIRDWEB
       );
 
@@ -403,7 +445,7 @@ export class WalletService {
           walletId: wallet.id,
           walletAddress,
           smartAccountAddress,
-          isNewUser: authResult.isNewUser,
+          isNewUser: true,
           message: 'Yeni Thirdweb wallet oluşturuldu',
         });
 
@@ -423,9 +465,12 @@ export class WalletService {
         });
       }
 
+      // Bizim sistemimizde yeni wallet mi (existingThirdwebWallet yoksa yeni)
+      const isNewWallet = !existingThirdwebWallet;
+
       return {
         success: true,
-        isNewUser: authResult.isNewUser,
+        isNewUser: isNewWallet || isNewThirdwebUser,
         wallet,
         walletAddress,
         smartAccountAddress: wallet.smartAccountAddress || undefined,
