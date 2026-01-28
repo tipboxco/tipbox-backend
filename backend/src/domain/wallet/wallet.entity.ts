@@ -1,14 +1,18 @@
 export enum WalletProvider {
   METAMASK = 'METAMASK',
   WALLETCONNECT = 'WALLETCONNECT', 
-  CUSTOM = 'CUSTOM'
+  CUSTOM = 'CUSTOM',
+  THIRDWEB = 'THIRDWEB'
 }
 
 export class Wallet {
   constructor(
     public readonly id: string,
     public readonly userId: string,
+    /** EIP-7702 EOA wallet adresi */
     public readonly publicAddress: string,
+    /** ERC-4337 Smart Account adresi (Account Abstraction) */
+    public readonly smartAccountAddress: string | null,
     public readonly provider: WalletProvider,
     public readonly isConnected: boolean,
     public readonly balance: number = 0,
@@ -39,6 +43,19 @@ export class Wallet {
     return `${this.publicAddress.slice(0, 6)}...${this.publicAddress.slice(-4)}`;
   }
 
+  getShortSmartAccountAddress(): string | null {
+    if (!this.smartAccountAddress) return null;
+    if (this.smartAccountAddress.length < 10) return this.smartAccountAddress;
+    return `${this.smartAccountAddress.slice(0, 6)}...${this.smartAccountAddress.slice(-4)}`;
+  }
+
+  /**
+   * ERC-4337 Smart Account adresi var mı?
+   */
+  hasSmartAccount(): boolean {
+    return !!this.smartAccountAddress;
+  }
+
   getProviderIcon(): string {
     switch (this.provider) {
       case WalletProvider.METAMASK:
@@ -47,6 +64,8 @@ export class Wallet {
         return '🔗';
       case WalletProvider.CUSTOM:
         return '💼';
+      case WalletProvider.THIRDWEB:
+        return '🔮';
       default:
         return '💰';
     }

@@ -32,6 +32,229 @@ const webhookService = new ThirdwebWebhookService();
 const contractEventService = new ContractEventService();
 
 // ============================================================================
+// AUTH PAYLOAD VERIFICATION ENDPOINT
+// ============================================================================
+
+/**
+ * @openapi
+ * /webhooks/thirdweb/auth/verify:
+ *   post:
+ *     summary: Thirdweb auth-payload doğrulama endpoint'i
+ *     description: |
+ *       Thirdweb, custom auth-payload yöntemi kullanıldığında bu endpoint'e
+ *       istek atarak payload'ı doğrular. 200 döndürülürse authentication onaylanır.
+ *       
+ *       **Thirdweb Dashboard Yapılandırması:**
+ *       1. In-App Wallets > Custom Authentication
+ *       2. Auth Method: Custom Payload
+ *       3. Verification Endpoint: https://your-api.com/webhooks/thirdweb/auth/verify
+ *       
+ *       **Payload Format:**
+ *       ```json
+ *       {
+ *         "userId": "tipbox-user-id",
+ *         "walletId": "tipbox-embedded-wallet",
+ *         "timestamp": 1706456789000
+ *       }
+ *       ```
+ *     tags: [Webhooks, Thirdweb Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - userId
+ *               - walletId
+ *             properties:
+ *               userId:
+ *                 type: string
+ *                 description: Tipbox kullanıcı ID'si
+ *                 example: "01J9Y4NQSW3KZV9W0F7B6C2D1E"
+ *               walletId:
+ *                 type: string
+ *                 description: Sabit wallet identifier
+ *                 example: "tipbox-embedded-wallet"
+ *               timestamp:
+ *                 type: number
+ *                 description: İşlem zamanı (opsiyonel)
+ *     responses:
+ *       200:
+ *         description: Payload doğrulandı - authentication onaylanır
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 valid:
+ *                   type: boolean
+ *                   example: true
+ *                 userId:
+ *                   type: string
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Geçersiz payload formatı
+ *       401:
+ *         description: Doğrulama başarısız - authentication reddedilir
+ */
+router.post('/auth/verify',
+  express.json({type: 'application/json'}),
+  asyncHandler(async (req: Request, res: Response) => {
+    let authPayload: { userId?: string; walletId?: string; timestamp?: number };
+    
+    // Thirdweb payload'ı { payload: "JSON_STRING" } formatında gönderiyor
+    // veya direkt { userId, walletId, timestamp } olarak gelebilir
+    if (req.body.payload && typeof req.body.payload === 'string') {
+      // payload JSON string olarak geldi - parse et
+      try {
+        authPayload = JSON.parse(req.body.payload);
+      } catch (parseError) {
+        logger.warn({
+          message: 'Thirdweb auth verify - payload JSON parse hatası',
+          payload: req.body.payload,
+          error: parseError instanceof Error ? parseError.message : String(parseError),
+          ip: req.ip,
+        });
+        return res.status(400).json({
+          valid: false,
+          error: 'Invalid payload JSON format',
+        });
+      }
+    } else if (req.body.userId) {
+      // Direkt payload olarak geldi
+      authPayload = req.body;
+    } else {
+      // Bilinmeyen format
+      logger.warn({
+        message: 'Thirdweb auth verify - tanınmayan payload formatı',
+        body: req.body,
+        ip: req.ip,
+      });
+      return res.status(400).json({
+        valid: false,
+        error: 'Unknown payload format. Expected { payload: "JSON_STRING" } or { userId, walletId }',
+      });
+    }
+
+    logger.debug({
+      message: 'Thirdweb auth verify isteği alındı',
+      authPayload: {
+        userId: authPayload?.userId,
+        walletId: authPayload?.walletId,
+        hasTimestamp: !!authPayload?.timestamp,
+      },
+      ip: req.ip,
+      headers: {
+        'x-client-id': req.header('x-client-id'),
+        'x-secret-key': req.header('x-secret-key') ? '***' : undefined,
+      },
+    });
+
+    // 1. Payload format kontrolü
+    if (!authPayload || typeof authPayload !== 'object') {
+      logger.warn({
+        message: 'Thirdweb auth verify - geçersiz payload formatı',
+        ip: req.ip,
+      });
+      return res.status(400).json({
+        valid: false,
+        error: 'Invalid payload format',
+      });
+    }
+
+    // 2. Gerekli alanları kontrol et
+    const { userId, walletId, timestamp } = authPayload;
+
+    if (!userId || typeof userId !== 'string') {
+      logger.warn({
+        message: 'Thirdweb auth verify - userId eksik veya geçersiz',
+        ip: req.ip,
+      });
+      return res.status(400).json({
+        valid: false,
+        error: 'userId is required and must be a string',
+      });
+    }
+
+    if (!walletId || typeof walletId !== 'string') {
+      logger.warn({
+        message: 'Thirdweb auth verify - walletId eksik veya geçersiz',
+        ip: req.ip,
+      });
+      return res.status(400).json({
+        valid: false,
+        error: 'walletId is required and must be a string',
+      });
+    }
+
+    // 3. WalletId kontrolü - sabit değerimizle eşleşmeli
+    const expectedWalletId = process.env.THIRDWEB_WALLET_ID || 'tipbox-embedded-wallet';
+    if (walletId !== expectedWalletId) {
+      logger.warn({
+        message: 'Thirdweb auth verify - walletId eşleşmedi',
+        expected: expectedWalletId,
+        received: walletId,
+        ip: req.ip,
+      });
+      return res.status(401).json({
+        valid: false,
+        error: 'Invalid walletId',
+      });
+    }
+
+    // 4. Timestamp kontrolü (opsiyonel - çok eski istekleri reddet)
+    if (timestamp) {
+      const now = Date.now();
+      const maxAge = 5 * 60 * 1000; // 5 dakika
+      
+      if (typeof timestamp === 'number' && (now - timestamp) > maxAge) {
+        logger.warn({
+          message: 'Thirdweb auth verify - timestamp çok eski',
+          timestamp,
+          age: now - timestamp,
+          maxAge,
+          ip: req.ip,
+        });
+        return res.status(401).json({
+          valid: false,
+          error: 'Request has expired',
+        });
+      }
+    }
+
+    // 5. UserId format kontrolü (opsiyonel - ULID veya UUID kontrolü yapılabilir)
+    // ULID format: 26 karakter, büyük harf + rakam
+    const isValidUlid = /^[0-9A-Z]{26}$/.test(userId);
+    const isValidUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
+    
+    if (!isValidUlid && !isValidUuid && userId.length < 10) {
+      logger.warn({
+        message: 'Thirdweb auth verify - userId formatı şüpheli',
+        userId,
+        ip: req.ip,
+      });
+      // Şimdilik sadece uyarı - geçişi bozmamak için reddetmiyoruz
+    }
+
+    // 6. Tüm kontroller geçti - 200 döndür
+    logger.info({
+      message: 'Thirdweb auth verify başarılı',
+      userId,
+      walletId,
+      ip: req.ip,
+    });
+
+    return res.status(200).json({
+      valid: true,
+      userId,
+      message: 'Authentication verified successfully',
+    });
+  })
+);
+
+// ============================================================================
 // WEBHOOK ENDPOINT (No Auth - Signature Verified)
 // ============================================================================
 

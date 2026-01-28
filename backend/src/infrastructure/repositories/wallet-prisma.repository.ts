@@ -60,7 +60,13 @@ export class WalletPrismaRepository {
     return wallet ? this.toDomain(wallet) : null;
   }
 
-  async create(userId: string, publicAddress: string, provider: WalletProvider, isConnected = true): Promise<Wallet> {
+  async create(
+    userId: string, 
+    publicAddress: string, 
+    provider: WalletProvider, 
+    isConnected = true,
+    smartAccountAddress?: string
+  ): Promise<Wallet> {
     // Eğer yeni wallet bağlanıyorsa, diğerlerini disconnect et
     if (isConnected) {
       await this.prisma.wallet.updateMany({
@@ -73,11 +79,38 @@ export class WalletPrismaRepository {
       data: {
         userId,
         publicAddress,
+        smartAccountAddress,
         provider,
         isConnected
       }
     });
     return this.toDomain(wallet);
+  }
+
+  /**
+   * Smart Account adresini günceller
+   */
+  async updateSmartAccountAddress(id: string, smartAccountAddress: string): Promise<Wallet | null> {
+    const updatedWallet = await this.prisma.wallet.update({
+      where: { id },
+      data: { smartAccountAddress }
+    });
+    return this.toDomain(updatedWallet);
+  }
+
+  /**
+   * Smart Account adresi ile wallet bulur
+   */
+  async findBySmartAccountAddress(smartAccountAddress: string): Promise<Wallet | null> {
+    const wallet = await this.prisma.wallet.findFirst({
+      where: { 
+        smartAccountAddress: {
+          equals: smartAccountAddress,
+          mode: 'insensitive'
+        }
+      }
+    });
+    return wallet ? this.toDomain(wallet) : null;
   }
 
   async updateConnectionStatus(id: string, isConnected: boolean): Promise<Wallet | null> {
@@ -146,6 +179,7 @@ export class WalletPrismaRepository {
       prismaWallet.id,
       prismaWallet.userId,
       prismaWallet.publicAddress,
+      prismaWallet.smartAccountAddress || null,
       prismaWallet.provider as WalletProvider,
       prismaWallet.isConnected,
       prismaWallet.balance || 0,

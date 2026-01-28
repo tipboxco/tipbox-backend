@@ -4,6 +4,7 @@ import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
 import logger from '../../infrastructure/logger/logger';
 import { InsufficientBalanceError } from '../../infrastructure/errors/custom-errors';
+import { getThirdwebAuthService, ThirdwebAuthResult } from '../../infrastructure/thirdweb/thirdweb-auth.service';
 
 export class WalletService {
   constructor(
@@ -273,5 +274,195 @@ export class WalletService {
   private formatAddressForNotification(address: string): string {
     if (address.length <= 10) return address;
     return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+  }
+
+  // ============================================================================
+  // THIRDWEB INTEGRATION
+  // ============================================================================
+
+  /**
+   * Kullanıcı ID'si ile Thirdweb embedded wallet oluşturur/alır
+   * 
+   * Bu metod:
+   * 1. Kullanıcı ID'si ve walletId ile özel JWT oluşturur
+   * 2. JWT'yi Thirdweb API'ye gönderir
+   * 3. Thirdweb embedded wallet adresini alır
+   * 4. Kullanıcı için wallet kaydı oluşturur veya mevcut olanı döndürür
+   * 
+   * JWT Format:
+   * - sub: userId (Tipbox kullanıcı ID'si)
+   * - walletId: sabit değer (THIRDWEB_WALLET_ID)
+   * 
+   * @param userId - Tipbox user ID
+   * @returns Wallet entity ve authentication sonucu
+   */
+  async authenticateWithThirdweb(
+    userId: string,
+    options?: { includeSmartAccount?: boolean; chainId?: number }
+  ): Promise<{
+    success: boolean;
+    isNewUser?: boolean;
+    wallet?: Wallet;
+    /** EIP-7702 EOA wallet adresi */
+    walletAddress?: string;
+    /** ERC-4337 Smart Account adresi */
+    smartAccountAddress?: string;
+    error?: string;
+  }> {
+    const thirdwebAuthService = getThirdwebAuthService();
+
+    // Thirdweb yapılandırmasını kontrol et
+    if (!thirdwebAuthService.isConfigured()) {
+      logger.warn({
+        userId,
+        message: 'Thirdweb authentication yapılandırılmamış',
+        config: thirdwebAuthService.getConfigStatus(),
+      });
+      return {
+        success: false,
+        error: 'Thirdweb authentication is not configured',
+      };
+    }
+
+    try {
+      // 1. Kullanıcı ID'si ile Thirdweb'e authenticate ol
+      logger.info({
+        userId,
+        walletId: thirdwebAuthService.getWalletId(),
+        includeSmartAccount: options?.includeSmartAccount,
+        message: 'Thirdweb authentication başlatılıyor',
+      });
+
+      // Smart account dahil edilecek mi?
+      const authResult: ThirdwebAuthResult = options?.includeSmartAccount
+        ? await thirdwebAuthService.authenticateUserWithSmartAccount(userId, options?.chainId)
+        : await thirdwebAuthService.authenticateUser(userId);
+
+      if (!authResult.success || !authResult.walletAddress) {
+        logger.error({
+          userId,
+          error: authResult.error,
+          message: 'Thirdweb authentication başarısız',
+        });
+        return {
+          success: false,
+          error: authResult.error || 'Failed to authenticate with Thirdweb',
+        };
+      }
+
+      const walletAddress = authResult.walletAddress;
+      const smartAccountAddress = authResult.smartAccountAddress;
+
+      // 2. Mevcut wallet'ı kontrol et
+      const existingWallets = await this.walletRepo.findByUserId(userId);
+      const existingThirdwebWallet = existingWallets.find(
+        w => w.publicAddress.toLowerCase() === walletAddress.toLowerCase() && 
+             w.provider === WalletProvider.THIRDWEB
+      );
+
+      let wallet: Wallet;
+
+      if (existingThirdwebWallet) {
+        // Mevcut wallet'ı aktif yap
+        const updatedWallet = await this.walletRepo.updateConnectionStatus(existingThirdwebWallet.id, true);
+        if (!updatedWallet) {
+          throw new Error('Failed to update wallet connection status');
+        }
+        wallet = updatedWallet;
+
+        // Smart account adresi varsa ve henüz kayıtlı değilse güncelle
+        if (smartAccountAddress && !wallet.smartAccountAddress) {
+          const walletWithSmartAccount = await this.walletRepo.updateSmartAccountAddress(
+            wallet.id,
+            smartAccountAddress
+          );
+          if (walletWithSmartAccount) {
+            wallet = walletWithSmartAccount;
+          }
+        }
+
+        logger.info({
+          userId,
+          walletId: wallet.id,
+          walletAddress,
+          smartAccountAddress: wallet.smartAccountAddress,
+          message: 'Mevcut Thirdweb wallet aktif edildi',
+        });
+      } else {
+        // Yeni wallet oluştur (smart account adresi dahil)
+        wallet = await this.walletRepo.create(
+          userId,
+          walletAddress,
+          WalletProvider.THIRDWEB,
+          true,
+          smartAccountAddress
+        );
+
+        logger.info({
+          userId,
+          walletId: wallet.id,
+          walletAddress,
+          smartAccountAddress,
+          isNewUser: authResult.isNewUser,
+          message: 'Yeni Thirdweb wallet oluşturuldu',
+        });
+
+        // Bildirim gönder (asenkron)
+        this.notificationService.sendNotification(
+          userId,
+          NotificationType.WALLET_CONNECTED,
+          {
+            walletAddress: this.formatAddressForNotification(walletAddress),
+            smartAccountAddress: smartAccountAddress ? this.formatAddressForNotification(smartAccountAddress) : undefined,
+            provider: WalletProvider.THIRDWEB,
+            walletId: wallet.id,
+            isThirdwebEmbedded: true,
+          }
+        ).catch(error => {
+          logger.error('Thirdweb wallet bağlantı bildirimi gönderilemedi:', error);
+        });
+      }
+
+      return {
+        success: true,
+        isNewUser: authResult.isNewUser,
+        wallet,
+        walletAddress,
+        smartAccountAddress: wallet.smartAccountAddress || undefined,
+      };
+    } catch (error) {
+      logger.error({
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        message: 'Thirdweb authentication sırasında hata',
+      });
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error during Thirdweb authentication',
+      };
+    }
+  }
+
+  /**
+   * Kullanıcının Thirdweb wallet'ını getirir
+   */
+  async getThirdwebWallet(userId: string): Promise<Wallet | null> {
+    const wallets = await this.walletRepo.findByUserId(userId);
+    return wallets.find(w => w.provider === WalletProvider.THIRDWEB) || null;
+  }
+
+  /**
+   * Thirdweb servisinin yapılandırma durumunu döndürür
+   */
+  getThirdwebConfigStatus(): {
+    hasClientId: boolean;
+    hasSecretKey: boolean;
+    hasEcosystemId: boolean;
+    isReady: boolean;
+  } {
+    const thirdwebAuthService = getThirdwebAuthService();
+    return thirdwebAuthService.getConfigStatus();
   }
 }

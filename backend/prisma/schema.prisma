@@ -1233,22 +1233,25 @@ model NewsFavorite {
 }
 
 model Wallet {
-  id                String             @id @default(uuid()) @db.Uuid
-  userId            String             @map("user_id") @db.Uuid
-  publicAddress     String             @map("public_address")
-  provider          WalletProvider
-  isConnected       Boolean            @map("is_connected")
-  createdAt         DateTime           @default(now()) @map("created_at")
-  updatedAt         DateTime           @updatedAt @map("updated_at")
-  balance           Float              @default(0)
-  lockedBalance     Float              @default(0) @map("locked_balance")
-  transactions      Transaction[]
-  contractEventLogs ContractEventLog[]
-  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                  String             @id @default(uuid()) @db.Uuid
+  userId              String             @map("user_id") @db.Uuid
+  publicAddress       String             @map("public_address")
+  /// ERC-4337 Smart Account adresi (Account Abstraction)
+  smartAccountAddress String?            @map("smart_account_address")
+  provider            WalletProvider
+  isConnected         Boolean            @map("is_connected")
+  createdAt           DateTime           @default(now()) @map("created_at")
+  updatedAt           DateTime           @updatedAt @map("updated_at")
+  balance             Float              @default(0)
+  lockedBalance       Float              @default(0) @map("locked_balance")
+  transactions        Transaction[]
+  contractEventLogs   ContractEventLog[]
+  user                User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, provider])
   @@index([userId])
   @@index([balance])
+  @@index([smartAccountAddress])
   @@map("wallets")
 }
 
@@ -2126,6 +2129,7 @@ enum WalletProvider {
   METAMASK
   WALLETCONNECT
   CUSTOM
+  THIRDWEB
 
   @@map("wallet_provider")
 }

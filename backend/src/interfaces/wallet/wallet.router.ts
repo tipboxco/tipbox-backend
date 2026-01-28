@@ -3,18 +3,679 @@ import { WalletService } from '../../application/wallet/wallet.service';
 import { TipsBalanceService } from '../../application/wallet/tips-balance.service';
 import { TransactionService } from '../../application/transaction/transaction.service';
 import { RewardClaimService } from '../../application/reward/reward-claim.service';
-import { ConnectWalletRequest, WalletResponse } from './wallet.dto';
+import { 
+  ConnectWalletRequest, 
+  WalletResponse, 
+  ThirdwebAuthenticateResponse,
+  WalletBalancesResponse,
+  WalletNftsResponse,
+  TransferTokenRequest,
+  TransferNftRequest,
+  TransferResponse,
+  ChainConfigResponse,
+} from './wallet.dto';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { WalletProvider } from '../../domain/wallet/wallet.entity';
 import { authMiddleware } from '../auth/auth.middleware';
+import { getThirdwebWalletService } from '../../infrastructure/thirdweb/thirdweb-wallet.service';
+import logger from '../../infrastructure/logger/logger';
 
 const router = express.Router();
 const walletService = new WalletService();
 const tipsBalanceService = new TipsBalanceService();
 const transactionService = new TransactionService();
 const rewardClaimService = new RewardClaimService();
+const thirdwebWalletService = getThirdwebWalletService();
 
 router.use(authMiddleware);
+
+/**
+ * @openapi
+ * /wallets/thirdweb/authenticate:
+ *   post:
+ *     summary: Kullanıcı için Thirdweb embedded wallet oluştur/al
+ *     description: |
+ *       Kullanıcı ID'si ile Thirdweb API'ye bağlanarak embedded wallet oluşturur.
+ *       Eğer kullanıcının zaten bir Thirdweb wallet'ı varsa, mevcut wallet'ı döndürür.
+ *       
+ *       Her zaman hem EOA (EIP-7702) hem de Smart Account (ERC-4337) adresi döndürülür.
+ *       
+ *       Thirdweb Custom Auth-Payload Authentication kullanılır:
+ *       - https://portal.thirdweb.com/wallets/custom-authentication
+ *     tags: [Wallet, Thirdweb]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: chainId
+ *         schema:
+ *           type: integer
+ *         description: Chain ID (varsayılan THIRDWEB_DEFAULT_CHAIN_ID env'den alınır)
+ *     responses:
+ *       200:
+ *         description: Thirdweb wallet başarıyla oluşturuldu/alındı
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 isNewUser:
+ *                   type: boolean
+ *                   description: Thirdweb'de yeni kullanıcı mı (ilk kez wallet oluşturuldu mu)
+ *                   example: false
+ *                 walletAddress:
+ *                   type: string
+ *                   description: EIP-7702 EOA wallet adresi
+ *                   example: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
+ *                 smartAccountAddress:
+ *                   type: string
+ *                   description: ERC-4337 Smart Account adresi
+ *                   example: "0x8A3d35Cc6634C0532925a3b844Bc9e7595f0cDa"
+ *                 wallet:
+ *                   $ref: '#/components/schemas/WalletResponse'
+ *       401:
+ *         description: Unauthorized - Kullanıcı doğrulanamadı
+ *       500:
+ *         description: Thirdweb authentication hatası
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: string
+ *                   example: "Thirdweb authentication is not configured"
+ */
+router.post('/thirdweb/authenticate', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+  if (!userId) {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
+
+  logger.info({
+    userId: String(userId),
+    message: 'Thirdweb authentication isteği alındı',
+  });
+
+  try {
+    // Chain ID (opsiyonel - varsayılan .env'den alınır)
+    const chainId = req.query.chainId ? parseInt(req.query.chainId as string, 10) : undefined;
+
+    // Her zaman EOA + Smart Account adresi al
+    const result = await walletService.authenticateWithThirdweb(String(userId), {
+      includeSmartAccount: true,
+      chainId,
+    });
+
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        error: result.error,
+      } as ThirdwebAuthenticateResponse);
+    }
+
+    const wallet = result.wallet!;
+    const response: ThirdwebAuthenticateResponse = {
+      success: true,
+      isNewUser: result.isNewUser,
+      walletAddress: result.walletAddress,
+      smartAccountAddress: result.smartAccountAddress,
+      wallet: {
+        id: wallet.id,
+        userId: wallet.userId,
+        publicAddress: wallet.publicAddress,
+        smartAccountAddress: wallet.smartAccountAddress,
+        provider: wallet.provider as 'METAMASK' | 'WALLETCONNECT' | 'CUSTOM' | 'THIRDWEB',
+        isConnected: wallet.isConnected,
+        balance: wallet.balance,
+        lockedBalance: wallet.lockedBalance,
+        shortAddress: wallet.getShortAddress(),
+        shortSmartAccountAddress: wallet.getShortSmartAccountAddress(),
+        providerIcon: wallet.getProviderIcon(),
+        createdAt: wallet.createdAt.toISOString(),
+        updatedAt: wallet.updatedAt.toISOString(),
+      },
+    };
+
+    return res.json(response);
+  } catch (error) {
+    logger.error({
+      userId: String(userId),
+      error: error instanceof Error ? error.message : String(error),
+      message: 'Thirdweb authentication endpoint hatası',
+    });
+
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    } as ThirdwebAuthenticateResponse);
+  }
+}));
+
+/**
+ * @openapi
+ * /wallets/thirdweb/status:
+ *   get:
+ *     summary: Thirdweb yapılandırma durumunu kontrol et
+ *     description: Thirdweb API entegrasyonunun düzgün yapılandırılıp yapılandırılmadığını kontrol eder
+ *     tags: [Wallet, Thirdweb]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Yapılandırma durumu
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 hasClientId:
+ *                   type: boolean
+ *                   description: THIRDWEB_CLIENT_ID ayarlanmış mı
+ *                 hasSecretKey:
+ *                   type: boolean
+ *                   description: THIRDWEB_SECRET_KEY ayarlanmış mı
+ *                 hasEcosystemId:
+ *                   type: boolean
+ *                   description: THIRDWEB_ECOSYSTEM_ID ayarlanmış mı
+ *                 isReady:
+ *                   type: boolean
+ *                   description: Thirdweb entegrasyonu kullanıma hazır mı
+ */
+router.get('/thirdweb/status', asyncHandler(async (req: Request, res: Response) => {
+  const status = walletService.getThirdwebConfigStatus();
+  return res.json(status);
+}));
+
+/**
+ * @openapi
+ * /wallets/thirdweb:
+ *   get:
+ *     summary: Kullanıcının Thirdweb wallet'ını getir
+ *     description: Kullanıcının Thirdweb embedded wallet bilgilerini döndürür
+ *     tags: [Wallet, Thirdweb]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Thirdweb wallet bilgileri
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/WalletResponse'
+ *       404:
+ *         description: Thirdweb wallet bulunamadı
+ */
+router.get('/thirdweb', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const wallet = await walletService.getThirdwebWallet(String(userId));
+
+  if (!wallet) {
+    return res.status(404).json({ message: 'Thirdweb wallet not found' });
+  }
+
+  const response: WalletResponse = {
+    id: wallet.id,
+    userId: wallet.userId,
+    publicAddress: wallet.publicAddress,
+    provider: wallet.provider as 'METAMASK' | 'WALLETCONNECT' | 'CUSTOM' | 'THIRDWEB',
+    isConnected: wallet.isConnected,
+    balance: wallet.balance,
+    lockedBalance: wallet.lockedBalance,
+    shortAddress: wallet.getShortAddress(),
+    providerIcon: wallet.getProviderIcon(),
+    createdAt: wallet.createdAt.toISOString(),
+    updatedAt: wallet.updatedAt.toISOString(),
+  };
+
+  return res.json(response);
+}));
+
+/**
+ * @openapi
+ * /wallets/thirdweb/balances:
+ *   get:
+ *     summary: Thirdweb wallet bakiyelerini getir (native + ERC20)
+ *     description: |
+ *       Kullanıcının Thirdweb embedded wallet'ındaki native token ve ERC20 token bakiyelerini getirir.
+ *     tags: [Wallet, Thirdweb]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: chainId
+ *         schema:
+ *           type: integer
+ *         description: Chain ID (varsayılan Polygon - 137)
+ *     responses:
+ *       200:
+ *         description: Bakiyeler başarıyla getirildi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/WalletBalancesResponse'
+ *       404:
+ *         description: Thirdweb wallet bulunamadı
+ */
+router.get('/thirdweb/balances', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
+
+  const wallet = await walletService.getThirdwebWallet(String(userId));
+  if (!wallet) {
+    return res.status(404).json({ success: false, error: 'Thirdweb wallet not found' });
+  }
+
+  const chainId = req.query.chainId ? parseInt(req.query.chainId as string, 10) : undefined;
+  const result = await thirdwebWalletService.getWalletBalance(wallet.publicAddress, chainId);
+
+  return res.json(result as WalletBalancesResponse);
+}));
+
+/**
+ * @openapi
+ * /wallets/thirdweb/nfts:
+ *   get:
+ *     summary: Thirdweb wallet NFT'lerini getir
+ *     description: Kullanıcının Thirdweb embedded wallet'ındaki NFT'leri listeler
+ *     tags: [Wallet, Thirdweb]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: chainId
+ *         schema:
+ *           type: integer
+ *         description: Chain ID (varsayılan Polygon - 137)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *         description: Maksimum NFT sayısı
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor
+ *     responses:
+ *       200:
+ *         description: NFT'ler başarıyla getirildi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/WalletNftsResponse'
+ *       404:
+ *         description: Thirdweb wallet bulunamadı
+ */
+router.get('/thirdweb/nfts', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
+
+  const wallet = await walletService.getThirdwebWallet(String(userId));
+  if (!wallet) {
+    return res.status(404).json({ success: false, error: 'Thirdweb wallet not found' });
+  }
+
+  const chainId = req.query.chainId ? parseInt(req.query.chainId as string, 10) : undefined;
+  const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
+  const cursor = req.query.cursor as string | undefined;
+
+  const result = await thirdwebWalletService.getWalletNfts(
+    wallet.publicAddress, 
+    chainId, 
+    { limit, cursor }
+  );
+
+  return res.json(result as WalletNftsResponse);
+}));
+
+/**
+ * @openapi
+ * /wallets/thirdweb/nfts/collection/{collectionAddress}:
+ *   get:
+ *     summary: Belirli bir koleksiyondaki NFT'leri getir
+ *     tags: [Wallet, Thirdweb]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: collectionAddress
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: NFT koleksiyon contract adresi
+ *       - in: query
+ *         name: chainId
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Koleksiyon NFT'leri
+ *       404:
+ *         description: Wallet bulunamadı
+ */
+router.get('/thirdweb/nfts/collection/:collectionAddress', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
+
+  const wallet = await walletService.getThirdwebWallet(String(userId));
+  if (!wallet) {
+    return res.status(404).json({ success: false, error: 'Thirdweb wallet not found' });
+  }
+
+  const { collectionAddress } = req.params;
+  const chainId = req.query.chainId ? parseInt(req.query.chainId as string, 10) : undefined;
+
+  const result = await thirdwebWalletService.getNftsFromCollection(
+    wallet.publicAddress,
+    collectionAddress,
+    chainId
+  );
+
+  return res.json(result as WalletNftsResponse);
+}));
+
+/**
+ * @openapi
+ * /wallets/thirdweb/token/{tokenAddress}/balance:
+ *   get:
+ *     summary: Belirli bir ERC20 token bakiyesini getir
+ *     tags: [Wallet, Thirdweb]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: tokenAddress
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ERC20 token contract adresi
+ *       - in: query
+ *         name: chainId
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Token bakiyesi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/TokenBalanceResponse'
+ *       404:
+ *         description: Wallet veya token bulunamadı
+ */
+router.get('/thirdweb/token/:tokenAddress/balance', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const wallet = await walletService.getThirdwebWallet(String(userId));
+  if (!wallet) {
+    return res.status(404).json({ error: 'Thirdweb wallet not found' });
+  }
+
+  const { tokenAddress } = req.params;
+  const chainId = req.query.chainId ? parseInt(req.query.chainId as string, 10) : undefined;
+
+  const result = await thirdwebWalletService.getTokenBalance(
+    wallet.publicAddress,
+    tokenAddress,
+    chainId
+  );
+
+  if (!result) {
+    return res.status(404).json({ error: 'Token not found or no balance' });
+  }
+
+  return res.json(result);
+}));
+
+/**
+ * @openapi
+ * /wallets/thirdweb/transfer/token:
+ *   post:
+ *     summary: ERC20 token transfer et
+ *     description: |
+ *       Kullanıcının Thirdweb wallet'ından ERC20 token transfer eder.
+ *       NOT: Bu işlem server wallet üzerinden yapılır.
+ *     tags: [Wallet, Thirdweb]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/TransferTokenRequest'
+ *     responses:
+ *       200:
+ *         description: Transfer başarılı
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/TransferResponse'
+ *       400:
+ *         description: Geçersiz istek
+ *       404:
+ *         description: Wallet bulunamadı
+ */
+router.post('/thirdweb/transfer/token', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
+
+  const wallet = await walletService.getThirdwebWallet(String(userId));
+  if (!wallet) {
+    return res.status(404).json({ success: false, error: 'Thirdweb wallet not found' });
+  }
+
+  const { toAddress, tokenContractAddress, amount, chainId }: TransferTokenRequest = req.body;
+
+  if (!toAddress || !tokenContractAddress || !amount) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'toAddress, tokenContractAddress and amount are required' 
+    });
+  }
+
+  const result = await thirdwebWalletService.transferToken(
+    wallet.publicAddress,
+    toAddress,
+    tokenContractAddress,
+    amount,
+    chainId
+  );
+
+  return res.json(result as TransferResponse);
+}));
+
+/**
+ * @openapi
+ * /wallets/thirdweb/transfer/nft:
+ *   post:
+ *     summary: NFT transfer et
+ *     description: |
+ *       Kullanıcının Thirdweb wallet'ından NFT transfer eder.
+ *       ERC721 ve ERC1155 desteklenir.
+ *     tags: [Wallet, Thirdweb]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/TransferNftRequest'
+ *     responses:
+ *       200:
+ *         description: Transfer başarılı
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/TransferResponse'
+ *       400:
+ *         description: Geçersiz istek
+ *       404:
+ *         description: Wallet bulunamadı
+ */
+router.post('/thirdweb/transfer/nft', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
+
+  const wallet = await walletService.getThirdwebWallet(String(userId));
+  if (!wallet) {
+    return res.status(404).json({ success: false, error: 'Thirdweb wallet not found' });
+  }
+
+  const { 
+    toAddress, 
+    nftContractAddress, 
+    tokenId, 
+    tokenType = 'ERC721', 
+    amount, 
+    chainId 
+  }: TransferNftRequest = req.body;
+
+  if (!toAddress || !nftContractAddress || !tokenId) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'toAddress, nftContractAddress and tokenId are required' 
+    });
+  }
+
+  const result = await thirdwebWalletService.transferNft(
+    wallet.publicAddress,
+    toAddress,
+    nftContractAddress,
+    tokenId,
+    chainId,
+    tokenType,
+    amount
+  );
+
+  return res.json(result as TransferResponse);
+}));
+
+/**
+ * @openapi
+ * /wallets/thirdweb/disconnect:
+ *   post:
+ *     summary: Thirdweb wallet'ı disconnect et
+ *     description: |
+ *       Kullanıcının Thirdweb wallet bağlantısını keser.
+ *       NOT: Embedded wallet blockchain'den silinmez, sadece uygulama oturumu sonlanır.
+ *     tags: [Wallet, Thirdweb]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Disconnect başarılı
+ *       404:
+ *         description: Wallet bulunamadı
+ */
+router.post('/thirdweb/disconnect', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  
+  if (!userId) {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
+
+  const wallet = await walletService.getThirdwebWallet(String(userId));
+  if (!wallet) {
+    return res.status(404).json({ success: false, error: 'Thirdweb wallet not found' });
+  }
+
+  // Thirdweb servisinde disconnect (şu an sadece log)
+  await thirdwebWalletService.disconnectWallet(wallet.publicAddress);
+
+  // DB'de wallet'ı disconnect olarak işaretle
+  const disconnectedWallet = await walletService.disconnectWallet(wallet.id);
+
+  logger.info({
+    userId: String(userId),
+    walletId: wallet.id,
+    walletAddress: wallet.publicAddress,
+    message: 'Thirdweb wallet disconnected',
+  });
+
+  return res.json({
+    success: true,
+    message: 'Wallet disconnected successfully',
+    wallet: disconnectedWallet ? {
+      id: disconnectedWallet.id,
+      isConnected: disconnectedWallet.isConnected,
+    } : null,
+  });
+}));
+
+/**
+ * @openapi
+ * /wallets/thirdweb/chains:
+ *   get:
+ *     summary: Desteklenen blockchain listesini getir
+ *     tags: [Wallet, Thirdweb]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Desteklenen chain'ler
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/ChainConfigResponse'
+ */
+router.get('/thirdweb/chains', asyncHandler(async (req: Request, res: Response) => {
+  const chains = thirdwebWalletService.getSupportedChains();
+  
+  const response: ChainConfigResponse[] = chains.map(chain => ({
+    chainId: chain.chainId,
+    name: chain.name,
+    nativeCurrency: chain.nativeCurrency,
+    blockExplorerUrl: chain.blockExplorerUrl,
+  }));
+
+  return res.json(response);
+}));
 
 /**
  * @openapi
@@ -63,11 +724,11 @@ router.use(authMiddleware);
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
+
   if (!userId) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
-  
+
   const wallets = await walletService.getUserWallets(String(userId));
   const response: WalletResponse[] = wallets.map(wallet => ({
     id: wallet.id,
@@ -131,11 +792,11 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
 router.get('/active', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
+
   if (!userId) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
-  
+
   const activeWallet = await walletService.getActiveWallet(String(userId));
   if (!activeWallet) {
     return res.status(404).json({ message: 'No active wallet found' });
@@ -221,11 +882,11 @@ router.get('/active', asyncHandler(async (req: Request, res: Response) => {
 router.post('/connect', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
+
   if (!userId) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
-  
+
   const { publicAddress, provider }: ConnectWalletRequest = req.body;
 
   // Validation
@@ -238,7 +899,7 @@ router.post('/connect', asyncHandler(async (req: Request, res: Response) => {
   }
 
   const wallet = await walletService.connectWallet(String(userId), publicAddress, provider as WalletProvider);
-  
+
   const response: WalletResponse = {
     id: wallet.id,
     userId: wallet.userId,
@@ -306,7 +967,7 @@ router.post('/connect', asyncHandler(async (req: Request, res: Response) => {
  */
 router.patch('/:id/disconnect', asyncHandler(async (req: Request, res: Response) => {
   const walletId = req.params.id;
-  
+
   const wallet = await walletService.disconnectWallet(walletId);
   if (!wallet) {
     return res.status(404).json({ message: 'Wallet not found' });
@@ -379,7 +1040,7 @@ router.patch('/:id/disconnect', asyncHandler(async (req: Request, res: Response)
  */
 router.patch('/:id/activate', asyncHandler(async (req: Request, res: Response) => {
   const walletId = req.params.id;
-  
+
   const wallet = await walletService.switchActiveWallet(walletId);
   if (!wallet) {
     return res.status(404).json({ message: 'Wallet not found' });
@@ -425,7 +1086,7 @@ router.patch('/:id/activate', asyncHandler(async (req: Request, res: Response) =
  */
 router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
   const walletId = req.params.id;
-  
+
   const deleted = await walletService.removeWallet(walletId);
   if (!deleted) {
     return res.status(404).json({ message: 'Wallet not found' });
@@ -529,7 +1190,7 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
 router.get('/transactions', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
+
   if (!userId) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
@@ -607,7 +1268,7 @@ router.get('/transactions', asyncHandler(async (req: Request, res: Response) => 
 router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
+
   if (!userId) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
@@ -619,7 +1280,7 @@ router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
 
   try {
     const balanceInfo = await walletService.getUserBalance(String(userId));
-    
+
     return res.json({
       balance: balanceInfo.balance,
       currency: 'TIPS',
@@ -627,7 +1288,7 @@ router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
       available: balanceInfo.available,
     });
   } catch (error) {
-    return res.status(500).json({ 
+    return res.status(500).json({
       message: 'Failed to get balance',
       error: error instanceof Error ? error.message : String(error)
     });
@@ -662,7 +1323,7 @@ router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
 router.post('/create', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
+
   if (!userId) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
@@ -771,7 +1432,7 @@ router.post('/create', asyncHandler(async (req: Request, res: Response) => {
 router.get('/info', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
+
   if (!userId) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
@@ -844,7 +1505,7 @@ router.get('/info', asyncHandler(async (req: Request, res: Response) => {
 router.get('/rewards/summary', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
+
   if (!userId) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
@@ -908,7 +1569,7 @@ router.get('/rewards/summary', asyncHandler(async (req: Request, res: Response) 
 router.get('/rewards/claimable', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
+
   if (!userId) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
@@ -952,7 +1613,7 @@ router.get('/rewards/claimable', asyncHandler(async (req: Request, res: Response
 router.get('/rewards/source/:sourceType', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
+
   if (!userId) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
@@ -1014,7 +1675,7 @@ router.get('/rewards/source/:sourceType', asyncHandler(async (req: Request, res:
 router.post('/rewards/claim/:rewardId', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
+
   if (!userId) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
@@ -1084,7 +1745,7 @@ router.post('/rewards/claim/:rewardId', asyncHandler(async (req: Request, res: R
 router.post('/rewards/claim-all', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
+
   if (!userId) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
@@ -1133,7 +1794,7 @@ router.post('/rewards/claim-all', asyncHandler(async (req: Request, res: Respons
 router.get('/rewards/history', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
+
   if (!userId) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
