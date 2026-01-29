@@ -4,25 +4,25 @@ overview: Create a new seed step file for Brand Catalog data that generates test
 todos:
   - id: create-file
     content: Create brand-catalog.seed.ts with main export function and helper
-    status: in_progress
+    status: completed
   - id: seed-followers
     content: Implement seedBridgeFollowers function
-    status: pending
+    status: completed
   - id: seed-surveys
     content: Implement seedBrandSurveys with SINGLE_CHOICE questions and answers
-    status: pending
+    status: completed
   - id: seed-posts
     content: Implement seedBridgePosts with ULID generation
-    status: pending
+    status: completed
   - id: seed-rewards
     content: Implement seedBridgeRewards using BRAND badges
-    status: pending
+    status: completed
   - id: seed-news
     content: Implement seedBrandNews function
-    status: pending
+    status: completed
   - id: integrate
     content: Integrate seedBrandCatalog into main seed.ts
-    status: pending
+    status: completed
 isProject: false
 ---
 

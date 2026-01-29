@@ -12,6 +12,7 @@ import { seedTaxonomy } from './seed/taxonomy.seed'
 import { seedProductCatalog } from './seed/product-catalog.seed'
 import { ensureEventBadgeSystem } from './seed/helpers/ensure-event-badge-system'
 import { ensureMarketplaceBadges } from './seed/helpers/ensure-marketplace-badges'
+import { seedBrandCatalog } from './seed/steps/brand-catalog.seed'
 import { GeminiService } from '../src/infrastructure/ai/gemini.service'
 import { brandToWebsite } from '../src/data/brandToWebsite'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -7867,6 +7868,23 @@ async function main() {
       console.error('   Stack:', error.stack)
     }
     console.log('⚠️  Seed devam ediyor ama event/marketplace badges oluşturulamadı')
+  }
+
+  // ===== BRAND CATALOG DATA SEEDING =====
+  console.log('\n📦 Brand Catalog data seeding starting...')
+  progress.increment('Brand Catalog verileri oluşturuluyor...')
+  
+  try {
+    await seedBrandCatalog(prisma)
+    progress.increment('Brand Catalog seeding tamamlandı')
+    console.log('✅ Brand Catalog data seeding completed')
+  } catch (error) {
+    console.error('❌ Brand Catalog seeding hatası:', error)
+    if (error instanceof Error) {
+      console.error('   Message:', error.message)
+      console.error('   Stack:', error.stack)
+    }
+    console.log('⚠️  Seed devam ediyor ama Brand Catalog verileri oluşturulamadı')
   }
 
   // ===== NFT SEEDING FOR PRIORITY USERS =====
