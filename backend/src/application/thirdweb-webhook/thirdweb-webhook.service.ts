@@ -37,7 +37,6 @@ export class ThirdwebWebhookService {
     private readonly transactionService = new TransactionService()
   ) {
     this.webhookSecret = process.env.THIRDWEB_WEBHOOK_SECRET || '';
-    console.log('webhookSecret', this.webhookSecret);
     this.expirationSeconds = parseInt(process.env.THIRDWEB_WEBHOOK_EXPIRATION_SECONDS || '300', 10);
 
     if (!this.webhookSecret) {
@@ -59,7 +58,6 @@ export class ThirdwebWebhookService {
     secret: string,
   ): string {
     const payload = `${timestamp}.${body}`;
-    console.log('payload', payload);
     return crypto
       .createHmac("sha256", secret)
       .update(payload)
@@ -71,7 +69,6 @@ export class ThirdwebWebhookService {
    */
   isValidSignature(body: string, timestamp: string, signature: string, secret: string): boolean {
     const expectedSignature = this.generateSignature(body, timestamp, secret);
-    console.log({expectedSignature, signature});
     return crypto.timingSafeEqual(
       Buffer.from(expectedSignature),
       Buffer.from(signature),

@@ -5,10 +5,13 @@ TipBox Backend için Thirdweb Engine webhook entegrasyonu - ERC20 Token ve ERC72
 ## İçindekiler
 
 - [Genel Bakış](#genel-bakış)
+- [Tek URL ve Payload Ayrımı](#tek-url-ve-payload-ayrımı)
 - [Desteklenen Token Türleri](#desteklenen-token-türleri)
 - [Sistem Mimarisi](#sistem-mimarisi)
-- [Contract Event Subscriptions](#contract-event-subscriptions)
+  - [Veri akışı: Wallet, Transaction ve log tabloları](#veri-akışı-wallet-transaction-ve-log-tabloları)
+- [Contract Event Subscriptions (v1.events)](#contract-event-subscriptions-v1events)
 - [Transaction Webhooks](#transaction-webhooks)
+- [İmza Doğrulama ve Ortam Değişkenleri](#i̇mza-doğrulama-ve-ortam-değişkenleri)
 - [Token Türü Tespiti](#token-türü-tespiti)
 - [Event İşleme Akışı](#event-i̇şleme-akışı)
 - [API Endpoints](#api-endpoints)
@@ -16,8 +19,10 @@ TipBox Backend için Thirdweb Engine webhook entegrasyonu - ERC20 Token ve ERC72
 - [Güvenlik](#güvenlik)
 - [Kurulum](#kurulum)
 - [Ortam Değişkenleri](#ortam-değişkenleri)
+- [Debug ve Loglama](#debug-ve-loglama)
 - [Kullanım Örnekleri](#kullanım-örnekleri)
 - [Test Etme](#test-etme)
+- [Referanslar](#referanslar)
 
 ---
 
@@ -29,6 +34,29 @@ Bu sistem Thirdweb Engine üzerinden blockchain event'lerini dinler ve işler:
 - **ERC721 NFT** mint/transfer işlemleri
 - **Approval** event'leri
 - **Mint/Burn** işlemleri
+- **Transaction lifecycle** (sent, mined, errored, cancelled)
+
+---
+
+## Tek URL ve Payload Ayrımı
+
+Thirdweb hem **Transaction Webhooks** hem **Contract Subscriptions (v1.events)** için aynı webhook URL'ini kullanabilir. Backend gelen body'ye göre türü ayırır:
+
+| Gelen body | Tür | İşleyen servis |
+|------------|-----|-----------------|
+| `topic === "v1.events"` ve `data` array | Contract Subscription (v1.events) | ContractEventService |
+| `type` = `engine.transaction.sent/mined/errored/cancelled` veya `data.queueId` | Transaction webhook | ThirdwebWebhookService |
+
+- **Endpoint:** `POST /api/webhooks/thirdweb` (tek URL).
+- **Routing:** Body parse edilir; `topic === 'v1.events'` ve `Array.isArray(data)` ise v1.events dalına, değilse transaction dalına gider.
+- **Alternatif:** Contract events için ayrı endpoint `POST /api/webhooks/thirdweb/events` da desteklenir; Thirdweb Dashboard'da tek URL (`/api/webhooks/thirdweb`) kullanılırsa her iki tip de burada toplanır.
+
+### Payload formatları özeti
+
+| Tür | Üst seviye alanlar | İşlenen veri |
+|-----|--------------------|--------------|
+| **Transaction** | `id`, `type` (örn. `engine.transaction.sent`), `triggered_at`, `object`, **`data`** (obje) | `data.queueId`, `data.status`, `data.chainId`, `data.fromAddress`, `data.toAddress`, … (normalizer ile düzleştirilir) |
+| **v1.events** | `timestamp`, **`topic`** (`"v1.events"`), **`data`** (array) | `data[]` içindeki her öğe: `data.decoded.name` (Transfer/Approval), `data.decoded.indexed_params.from/to`, … |
 
 ---
 
@@ -75,50 +103,101 @@ Bu sistem Thirdweb Engine üzerinden blockchain event'lerini dinler ve işler:
 
 ## Sistem Mimarisi
 
+### Üst seviye akış (tek URL)
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                         THIRDWEB WEBHOOK SYSTEM                              │
+│                    THIRDWEB WEBHOOK SYSTEM (Tek URL)                        │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
+│              POST /api/webhooks/thirdweb                                    │
+│              (body'ye göre routing: topic vs queueId)                       │
+│                              │                                              │
+│              ┌───────────────┴───────────────┐                              │
+│              ▼                               ▼                              │
+│   topic === "v1.events"              engine.transaction.*                    │
 │   ┌─────────────────────────┐      ┌─────────────────────────┐              │
-│   │  Transaction Webhooks   │      │  Contract Subscriptions  │              │
-│   │  POST /webhooks/thirdweb│      │  POST /webhooks/thirdweb │              │
-│   │                         │      │       /events            │              │
+│   │  ContractEventService   │      │ ThirdwebWebhookService  │              │
+│   │  • Transfer (ERC20/721) │      │ • sent / mined          │              │
+│   │  • Approval             │      │ • errored / cancelled   │              │
+│   │  • Mint / Burn          │      │                         │              │
 │   └───────────┬─────────────┘      └───────────┬─────────────┘              │
 │               │                                │                             │
 │               ▼                                ▼                             │
 │   ┌─────────────────────────┐      ┌─────────────────────────┐              │
-│   │ ThirdwebWebhookService  │      │  ContractEventService   │              │
-│   │                         │      │                         │              │
-│   │ • sent                  │      │ • Transfer (ERC20/721)  │              │
-│   │ • mined                 │      │ • Approval              │              │
-│   │ • errored               │      │ • Mint / Burn           │              │
-│   │ • cancelled             │      │                         │              │
-│   └───────────┬─────────────┘      └───────────┬─────────────┘              │
-│               │                                │                             │
-│               ▼                                ▼                             │
-│   ┌─────────────────────────┐      ┌─────────────────────────┐              │
-│   │  ThirdwebWebhookLog     │      │   ContractEventLog      │              │
-│   │  (DB Table)             │      │   (DB Table)            │              │
+│   │   ContractEventLog       │      │  ThirdwebWebhookLog      │              │
+│   │   (DB)                   │      │  (DB)                    │              │
 │   └───────────┬─────────────┘      └───────────┬─────────────┘              │
 │               │                                │                             │
 │               └────────────────┬───────────────┘                             │
 │                                ▼                                             │
 │                    ┌─────────────────────────┐                              │
-│                    │   TransactionService    │                              │
-│                    │   WalletService         │                              │
-│                    │                         │                              │
-│                    │ • confirmTransaction()  │                              │
-│                    │ • failTransaction()     │                              │
-│                    │ • updateBalance()       │                              │
+│                    │ TransactionService      │  WalletService                │
+│                    │ confirmTransaction()    │  updateBalance()              │
 │                    └─────────────────────────┘                              │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
+### Veri akışı: Wallet, Transaction ve log tabloları
+
+Webhook’lar hangi **DB tablolarını** okuyup yazıyor, **Wallet** ve **Transaction** ile nasıl eşleşiyor — aşağıdaki diyagram ve tablo bunu gösterir.
+
+```
+┌──────────────────────────────────────────────────────────────────────────────────────────┐
+│  TRANSACTION WEBHOOK (engine.transaction.sent / mined / errored / cancelled)              │
+├──────────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                           │
+│   Payload (data.toAddress, data.queueId, data.transactionHash, data.status)               │
+│        │                                                                                  │
+│        ├──► Wallet tablosu        : findByPublicAddress(toAddress)  → walletId           │
+│        │                            (eşleşme: publicAddress, case-insensitive)            │
+│        │                                                                                  │
+│        ├──► Transaction tablosu  : queueId / txHash / pending ile bulunur                │
+│        │                            • sent   → status = PENDING, txHash güncelleme        │
+│        │                            • mined  → confirmTransaction() veya failTransaction() │
+│        │                            • errored/cancelled → failTransaction()                │
+│        │                                                                                  │
+│        └──► ThirdwebWebhookLog    : Her webhook isteği için upsert (queueId unique)       │
+│                                     transactionId ile Transaction’a FK                    │
+│                                                                                           │
+└──────────────────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────────────────┐
+│  CONTRACT EVENTS (v1.events – Transfer / Approval)                                        │
+├──────────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                           │
+│   Payload (data[].data.decoded.indexed_params.from / .to, amount, eventName)             │
+│        │                                                                                  │
+│        ├──► Wallet tablosu        : findByPublicAddress(from) / findByPublicAddress(to)   │
+│        │                            Sadece from veya to DB’de kayıtlıysa event işlenir    │
+│        │                            (relevance check)                                      │
+│        │                                                                                  │
+│        ├──► Transaction tablosu   : DEPOSIT/WITHDRAW → create; pending varsa confirm     │
+│        │                            TIP_SEND/TIP_RECEIVE (internal) → confirmTransaction  │
+│        │                            Mint/Claim → confirmTransaction                        │
+│        │                                                                                  │
+│        ├──► WalletService         : updateBalance(walletId, ±amount) — balance güncelleme │
+│        │                                                                                  │
+│        └──► ContractEventLog      : Her işlenen event için insert (txHash + logIndex      │
+│                                     unique); walletId, transactionId FK                   │
+│                                                                                           │
+└──────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Tablo kullanım özeti
+
+| Tablo / Yapı | Transaction webhook | v1.events (Contract) |
+|--------------|---------------------|----------------------|
+| **Wallet** | Okuma: `toAddress` ile eşleşen wallet bulunur. | Okuma: `from` / `to` ile eşleşen wallet’lar bulunur; sadece biri varsa işlem yapılır. |
+| **Transaction** | Okuma: queueId, txHash veya pending tx ile bulunur. Güncelleme: status (PENDING → confirmed/failed), txHash. | Okuma: Pending DEPOSIT/WITHDRAW/TIP_* ile eşleşme. Oluşturma: Yeni DEPOSIT/WITHDRAW. Güncelleme: confirmTransaction(). |
+| **ThirdwebWebhookLog** | Yazma: Her transaction webhook için upsert (queueId); transactionId FK. | Kullanılmaz. |
+| **ContractEventLog** | Kullanılmaz. | Yazma: Her işlenen event için insert; walletId, transactionId FK. |
+| **WalletService (balance)** | Dolaylı (Transaction üzerinden). | Doğrudan: updateBalance(walletId, ±amount) (DEPOSIT/WITHDRAW/Mint/Burn). |
+
 ---
 
-## Contract Event Subscriptions
+## Contract Event Subscriptions (v1.events)
 
 ### Desteklenen Event'ler
 
@@ -376,7 +455,7 @@ parseTransferEvent() → TokenType.ERC721
 
 | Method | Endpoint | Auth | Açıklama |
 |--------|----------|------|----------|
-| `POST` | `/api/webhooks/thirdweb` | Signature | Transaction webhook receiver |
+| `POST` | `/api/webhooks/thirdweb` | Signature | Transaction **ve** v1.events (tek URL; body'ye göre ayrılır) |
 | `GET` | `/api/webhooks/thirdweb/health` | - | Health check |
 | `GET` | `/api/webhooks/thirdweb/logs` | JWT | Son webhook logları |
 | `GET` | `/api/webhooks/thirdweb/logs/:queueId` | JWT | Queue ID ile log detayı |
@@ -387,7 +466,7 @@ parseTransferEvent() → TokenType.ERC721
 
 | Method | Endpoint | Auth | Açıklama |
 |--------|----------|------|----------|
-| `POST` | `/api/webhooks/thirdweb/events` | Signature | Contract event receiver |
+| `POST` | `/api/webhooks/thirdweb/events` | Signature | Contract event receiver (alternatif; ana URL `/api/webhooks/thirdweb` da kabul eder) |
 | `GET` | `/api/webhooks/thirdweb/events/logs` | JWT | Son event logları |
 | `GET` | `/api/webhooks/thirdweb/events/stats` | JWT | Event istatistikleri |
 | `GET` | `/api/webhooks/thirdweb/events/by-hash/:txHash` | JWT | TxHash ile loglar |
@@ -623,16 +702,40 @@ npx prisma generate
 1. [Thirdweb Dashboard](https://thirdweb.com/dashboard) > Engine > Configuration > **Webhooks**
 2. **Create Webhook**
 3. URL: `https://your-domain.com/api/webhooks/thirdweb`
-4. Events: `all_transaction`
-5. Webhook Secret'ı kopyalayın
+4. Events: `all_transaction` (veya ilgili transaction topic’leri)
+5. Webhook Secret’ı kopyalayıp `THIRDWEB_WEBHOOK_SECRET` olarak kullanın
 
 ### 3. Thirdweb Dashboard - Contract Subscriptions
 
+- **Tek URL (önerilen):** Hem Transaction hem Contract Subscriptions için aynı URL kullanılabilir.
 1. [Thirdweb Dashboard](https://thirdweb.com/dashboard) > Engine > **Contract Subscriptions**
 2. **Add Contract Subscription**
 3. Contract Address: Token veya NFT contract adresi
 4. Chain: Sepolia (11155111) veya ilgili chain
-5. Webhook URL: `https://your-domain.com/api/webhooks/thirdweb/events`
+5. **Webhook URL:** `https://your-domain.com/api/webhooks/thirdweb` (transaction ile aynı URL)
+- Backend gelen body’de `topic === "v1.events"` görünce otomatik olarak event işleme dalına gider.
+- İsteğe bağlı: Contract Subscriptions için ayrı webhook tanımlayıp URL’i `https://your-domain.com/api/webhooks/thirdweb/events` yapabilirsiniz.
+
+---
+
+## İmza Doğrulama ve Ortam Değişkenleri
+
+### Transaction webhook
+
+- **Zorunlu:** `X-Webhook-Signature` (veya `X-Engine-Signature`) ve `X-Webhook-Timestamp` (veya `X-Engine-Timestamp`).
+- **Secret:** Sadece `THIRDWEB_WEBHOOK_SECRET` kullanılır. İmza geçersizse **401**.
+
+### v1.events (Contract Subscription)
+
+- **Timestamp:** Önce header, yoksa payload içindeki `timestamp` kullanılır.
+- **Secret sırası:** Önce `THIRDWEB_WEBHOOK_SECRET`, sonra (tanımlıysa) `THIRDWEB_EVENTS_WEBHOOK_SECRET` denenir. İkisi de header ve payload timestamp ile denenebilir.
+- **Development’ta imza atlama:** `THIRDWEB_WEBHOOK_SKIP_SIGNATURE_IN_DEV=true` ve `NODE_ENV !== 'production'` iken imza geçersiz olsa bile v1.events kabul edilir (test için). Varsayılan: `false` (imza zorunlu).
+
+| Ortam | İmza geçersiz v1.events |
+|-------|--------------------------|
+| Production | Her zaman **401** |
+| Development + `SKIP_SIGNATURE_IN_DEV=false` veya unset | **401** |
+| Development + `SKIP_SIGNATURE_IN_DEV=true` | Kabul edilir (log uyarısı) |
 
 ---
 
@@ -643,8 +746,14 @@ npx prisma generate
 # THIRDWEB WEBHOOK CONFIGURATION
 # ============================================================================
 
-# Thirdweb Dashboard'dan alınan webhook secret
+# Transaction webhook + (opsiyonel) v1.events için ana secret (Thirdweb Dashboard)
 THIRDWEB_WEBHOOK_SECRET=your_webhook_secret_here
+
+# Contract Subscriptions (v1.events) için ayrı secret; Dashboard'da farklı olabilir
+THIRDWEB_EVENTS_WEBHOOK_SECRET=
+
+# v1.events: development'ta imza geçersiz olsa bile kabul et (sadece true iken). false/unset = imza zorunlu
+THIRDWEB_WEBHOOK_SKIP_SIGNATURE_IN_DEV=false
 
 # Webhook timestamp expiration (saniye, default: 300 = 5 dakika)
 THIRDWEB_WEBHOOK_EXPIRATION_SECONDS=300
@@ -653,7 +762,6 @@ THIRDWEB_WEBHOOK_EXPIRATION_SECONDS=300
 TIPS_TOKEN_DECIMALS=18
 
 # İzlenen contract adresleri (opsiyonel, virgülle ayrılmış)
-# Boş bırakılırsa tüm contract'lar kabul edilir
 THIRDWEB_WATCHED_CONTRACTS=0xTokenContract,0xNFTContract
 ```
 
@@ -689,6 +797,35 @@ backend/
 │           ├── contract-event-log-prisma.repository.ts
 │           └── wallet-prisma.repository.ts
 ```
+
+---
+
+## Debug ve Loglama
+
+### Son gelen payload (dosya)
+
+Her başarılı webhook isteğinde (transaction veya v1.events) gelen **ham body** aşağıdaki dosyaya yazılır (üzerine yazar):
+
+- **Dosya:** `logs/last-thirdweb-webhook-payload.json`
+- **İçerik:** Son işlenen isteğin `JSON.parse(body)` çıktısı (pretty-print).
+- **Amaç:** Thirdweb’in gerçek payload formatını incelemek ve normalizer’ı buna göre güncellemek.
+
+### Log mesajları
+
+| Mesaj | Anlamı |
+|-------|--------|
+| `Thirdweb webhook incoming (transaction)` | Transaction webhook body’si alındı; topLevelKeys, dataKeys, bodyLength loglanır. |
+| `Thirdweb webhook incoming` | (Eski log; artık transaction için yukarıdaki mesaj kullanılıyor.) |
+| `v1.events signature invalid, accepting (THIRDWEB_WEBHOOK_SKIP_SIGNATURE_IN_DEV=true)` | Development’ta imza geçersiz ama SKIP_SIGNATURE_IN_DEV=true nedeniyle kabul edildi. |
+| `v1.events webhook signature invalid` | v1.events imzası geçersiz; 401 döndü. |
+| `v1.events processed on /api/webhooks/thirdweb` | v1.events başarıyla işlendi; eventsReceived, eventsProcessed, eventsSkipped. |
+| `Webhook processed successfully` | Transaction webhook işlendi; queueId, status, webhookLogId. |
+| `Event skipped - no registered wallet involved` | Contract event’te from/to adresleri DB’deki hiçbir wallet ile eşleşmedi; işlem yapılmadı. |
+
+### Wallet eşleştirme (DB)
+
+- **Transaction webhook:** `payload.toAddress` ile `Wallet.publicAddress` (case-insensitive) eşleştirilir; transaction queueId/txHash/pending ile bulunur.
+- **v1.events (Transfer):** `decoded.indexed_params.from` ve `to` adresleri `Wallet.publicAddress` ile (case-insensitive) aranır. Sadece en az biri DB’de kayıtlıysa event işlenir; DEPOSIT/WITHDRAW/Internal/Mint/Burn akışları uygulanır.
 
 ---
 
@@ -772,13 +909,16 @@ const result = await thirdwebEngine.transfer(tokenContract, recipientAddress, am
 ### Local Development
 
 ```bash
-# ngrok ile local endpoint'i expose edin
-ngrok http 3000
+# Tunnel ile local endpoint'i expose edin (ngrok, Cloudflare Tunnel vb.)
+# Örnek: cloudflare tunnel → https://xxx.trycloudflare.com
 
-# Thirdweb Dashboard'da URL'leri güncelleyin:
-# - Transaction Webhooks: https://xxxxx.ngrok.io/api/webhooks/thirdweb
-# - Contract Events: https://xxxxx.ngrok.io/api/webhooks/thirdweb/events
+# Thirdweb Dashboard'da tek URL kullanın:
+# - Webhook URL: https://xxx.trycloudflare.com/api/webhooks/thirdweb
+# Hem Transaction hem Contract Subscriptions bu URL'e gönderilebilir.
 ```
+
+- **v1.events imza uyuşmazlığı:** Thirdweb Contract Subscriptions farklı secret kullanıyorsa development’ta 401 alabilirsiniz. İmza zorunluluğunu geçici kaldırmak için `.env` içinde `THIRDWEB_WEBHOOK_SKIP_SIGNATURE_IN_DEV=true` yapın (sadece development ortamında).
+- **Gelen veriyi incelemek:** Sunucu çalışırken webhook tetikleyin; ardından `logs/last-thirdweb-webhook-payload.json` dosyasını kontrol edin.
 
 ### Manuel Event Test
 

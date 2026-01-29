@@ -15,7 +15,7 @@
 import express, { Request, Response } from 'express';
 import { ThirdwebWebhookService } from '../../application/thirdweb-webhook/thirdweb-webhook.service';
 import { ContractEventService } from '../../application/thirdweb-webhook/contract-event.service';
-import { ThirdwebWebhookPayload, ThirdwebWebhookLogDTO } from './thirdweb-webhook.dto';
+import { ThirdwebWebhookPayload, ThirdwebWebhookLogDTO, normalizeThirdwebWebhookPayload } from './thirdweb-webhook.dto';
 import { 
   ThirdwebContractSubscriptionPayload, 
   ContractEventLogDTO,
@@ -23,9 +23,13 @@ import {
   isThirdwebV1Payload,
   parseThirdwebPayload
 } from './contract-event.dto';
+import fs from 'fs';
+import path from 'path';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { authMiddleware } from '../auth/auth.middleware';
 import logger from '../../infrastructure/logger/logger';
+
+const DEBUG_PAYLOAD_PATH = path.join(process.cwd(), 'logs', 'last-thirdweb-webhook-payload.json');
 
 const router = express.Router();
 const webhookService = new ThirdwebWebhookService();
@@ -340,52 +344,158 @@ router.post('/',
   // Raw body middleware - signature verification için (Thirdweb req.body kullanır)
   express.raw({ type: 'application/json' }),
   asyncHandler(async (req: Request, res: Response) => {
-    // Thirdweb header isimleri
     const signatureFromHeader = req.header('X-Webhook-Signature') || req.header('X-Engine-Signature');
     const timestampFromHeader = req.header('X-Webhook-Timestamp') || req.header('X-Engine-Timestamp');
-    
-    // Body'yi string'e çevir (Thirdweb örneği req.body kullanır)
-    const body = Buffer.isBuffer(req.body) 
+
+    const body = Buffer.isBuffer(req.body)
       ? req.body.toString('utf-8')
-      : typeof req.body === 'string' 
-        ? req.body 
+      : typeof req.body === 'string'
+        ? req.body
         : JSON.stringify(req.body);
 
-    // Header validation (Thirdweb örneğine uygun)
-    if (!signatureFromHeader || !timestampFromHeader) {
-      return res.status(401).send('Missing signature or timestamp header');
+    if (!signatureFromHeader) {
+      return res.status(401).send('Missing signature header');
     }
 
-    // Signature verification (Thirdweb örneğine uygun)
-    const WEBHOOK_SECRET = process.env.THIRDWEB_WEBHOOK_SECRET || '';
-    
-    if (!webhookService.isValidSignature(body, timestampFromHeader, signatureFromHeader, WEBHOOK_SECRET)) {
-      return res.status(401).send('Invalid signature');
-    }
-
-    // Timestamp expiration check (Thirdweb örneği: 300 saniye = 5 dakika)
-    if (webhookService.isExpired(timestampFromHeader)) {
-      return res.status(401).send('Request has expired');
-    }
-
-    // Parse payload
-    let payload: ThirdwebWebhookPayload;
+    // Önce parse et: aynı URL'de hem transaction hem v1.events (Contract Subscription) gelebilir
+    let parsed: unknown;
     try {
-      payload = JSON.parse(body);
+      parsed = JSON.parse(body);
     } catch (error) {
       return res.status(400).send('Invalid JSON payload');
     }
 
-    // Validate required fields
-    if (!payload.queueId || !payload.status || !payload.chainId || !payload.fromAddress || !payload.toAddress) {
-      return res.status(400).send('Missing required fields: queueId, status, chainId, fromAddress, toAddress');
+    const isV1Events =
+      parsed &&
+      typeof parsed === 'object' &&
+      (parsed as Record<string, unknown>).topic === 'v1.events' &&
+      Array.isArray((parsed as Record<string, unknown>).data);
+
+    // --- v1.events (Contract Subscription): topic + data array
+    if (isV1Events) {
+      const payload = parsed as { timestamp?: number; topic: string; data: unknown[] };
+      const timestampToUse = timestampFromHeader || (payload.timestamp != null ? String(payload.timestamp) : '');
+      if (!timestampToUse) {
+        return res.status(401).send('Missing timestamp (header or payload.timestamp)');
+      }
+      const MAIN_SECRET = process.env.THIRDWEB_WEBHOOK_SECRET || '';
+      const EVENTS_SECRET = process.env.THIRDWEB_EVENTS_WEBHOOK_SECRET || '';
+      let valid =
+        webhookService.isValidSignature(body, timestampToUse, signatureFromHeader, MAIN_SECRET) ||
+        (EVENTS_SECRET ? webhookService.isValidSignature(body, timestampToUse, signatureFromHeader, EVENTS_SECRET) : false) ||
+        (timestampFromHeader && timestampFromHeader !== timestampToUse
+          ? webhookService.isValidSignature(body, timestampFromHeader, signatureFromHeader, MAIN_SECRET) ||
+            (EVENTS_SECRET ? webhookService.isValidSignature(body, timestampFromHeader, signatureFromHeader, EVENTS_SECRET) : false)
+          : false);
+
+      // İmza geçersizse: sadece SKIP_SIGNATURE_IN_DEV=true ve production değilken kabul et (test için)
+      const skipSignatureInDev = process.env.THIRDWEB_WEBHOOK_SKIP_SIGNATURE_IN_DEV === 'true';
+      if (!valid && process.env.NODE_ENV !== 'production' && skipSignatureInDev) {
+        logger.warn({
+          message: 'v1.events signature invalid, accepting (THIRDWEB_WEBHOOK_SKIP_SIGNATURE_IN_DEV=true)',
+          topic: payload.topic
+        });
+        valid = true;
+      }
+
+      if (!valid) {
+        logger.warn({
+          message: 'v1.events webhook signature invalid',
+          topic: payload.topic,
+          hasEventsSecret: !!EVENTS_SECRET
+        });
+        return res.status(401).send('Invalid signature');
+      }
+      if (webhookService.isExpired(timestampToUse)) {
+        return res.status(401).send('Request has expired');
+      }
+
+      try {
+        if (!fs.existsSync(path.dirname(DEBUG_PAYLOAD_PATH))) {
+          fs.mkdirSync(path.dirname(DEBUG_PAYLOAD_PATH), { recursive: true });
+        }
+        fs.writeFileSync(DEBUG_PAYLOAD_PATH, JSON.stringify(parsed, null, 2), 'utf-8');
+      } catch (e) {
+        logger.warn({ message: 'Could not write debug payload file', error: String(e) });
+      }
+
+      if (!isThirdwebV1Payload(payload)) {
+        return res.status(200).json({ success: true, action: 'skipped', message: 'No processable events', eventsProcessed: 0 });
+      }
+      const normalizedEvents = parseThirdwebPayload(payload);
+      if (normalizedEvents.length === 0) {
+        return res.status(200).json({
+          success: true,
+          action: 'skipped',
+          message: 'No processable events',
+          eventsReceived: payload.data?.length || 0,
+          eventsProcessed: 0
+        });
+      }
+      const results = await contractEventService.processNormalizedEvents(normalizedEvents);
+      logger.info({
+        topic: payload.topic,
+        eventsReceived: payload.data.length,
+        eventsProcessed: results.processed,
+        eventsSkipped: results.skipped,
+        message: 'v1.events processed on /api/webhooks/thirdweb'
+      });
+      return res.status(200).json({
+        success: true,
+        action: 'processed',
+        message: `Processed ${results.processed} events, skipped ${results.skipped}`,
+        eventsReceived: payload.data.length,
+        eventsProcessed: results.processed,
+        eventsSkipped: results.skipped,
+        errors: results.errors.length > 0 ? results.errors : undefined
+      });
     }
 
-    // Process the request (Thirdweb örneğine uygun)
+    // --- Transaction webhook (engine.transaction.sent / mined / errored / cancelled)
+    if (!timestampFromHeader) {
+      return res.status(401).send('Missing timestamp header');
+    }
+    const WEBHOOK_SECRET = process.env.THIRDWEB_WEBHOOK_SECRET || '';
+    if (!webhookService.isValidSignature(body, timestampFromHeader, signatureFromHeader, WEBHOOK_SECRET)) {
+      return res.status(401).send('Invalid signature');
+    }
+    if (webhookService.isExpired(timestampFromHeader)) {
+      return res.status(401).send('Request has expired');
+    }
+
+    const topLevelKeys = parsed && typeof parsed === 'object' ? Object.keys(parsed as object) : [];
+    const dataKeys =
+      parsed && typeof parsed === 'object' && (parsed as Record<string, unknown>).data && typeof (parsed as Record<string, unknown>).data === 'object' && !Array.isArray((parsed as Record<string, unknown>).data)
+        ? Object.keys((parsed as Record<string, unknown>).data as object)
+        : [];
+    logger.info({
+      message: 'Thirdweb webhook incoming (transaction)',
+      topLevelKeys,
+      dataKeys: dataKeys.length ? dataKeys : undefined,
+      bodyLength: body.length
+    });
     try {
-      const result = await webhookService.processWebhook(payload);
-      
-      // Thirdweb örneği: res.status(200).send("Webhook received!");
+      if (!fs.existsSync(path.dirname(DEBUG_PAYLOAD_PATH))) {
+        fs.mkdirSync(path.dirname(DEBUG_PAYLOAD_PATH), { recursive: true });
+      }
+      fs.writeFileSync(DEBUG_PAYLOAD_PATH, JSON.stringify(parsed, null, 2), 'utf-8');
+    } catch (e) {
+      logger.warn({ message: 'Could not write debug payload file', error: String(e) });
+    }
+
+    let payload: ThirdwebWebhookPayload;
+    try {
+      payload = normalizeThirdwebWebhookPayload(parsed);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      logger.warn({ message: 'Thirdweb webhook normalize failed', error: msg, topLevelKeys, dataKeys });
+      return res.status(400).send(`Invalid payload: ${msg}`);
+    }
+    if (!['sent', 'mined', 'errored', 'cancelled'].includes(payload.status)) {
+      return res.status(400).send(`Invalid status: ${payload.status}`);
+    }
+    try {
+      await webhookService.processWebhook(payload);
       return res.status(200).send('Webhook received!');
     } catch (error) {
       logger.error({
@@ -393,7 +503,6 @@ router.post('/',
         error: error instanceof Error ? error.message : String(error),
         message: 'Error processing webhook'
       });
-
       return res.status(500).send('Internal server error');
     }
   })
