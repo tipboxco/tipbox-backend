@@ -1366,7 +1366,7 @@ router.delete(
     }
 
     try {
-      const deleted = await postService.deletePost(String(userId), id);
+      const deleted = await postService.deletePost(String(userId), id.trim());
       if (!deleted) {
         return res.status(404).json({ message: 'Post not found' });
       }

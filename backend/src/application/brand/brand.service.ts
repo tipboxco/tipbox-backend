@@ -1,5 +1,5 @@
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
-import { FeedItem, FeedItemType, FeedResponse, ContextData, ExperiencePost, ExperienceContent } from '../../interfaces/feed/feed.dto';
+import { FeedItem, FeedItemType, FeedResponse, ContextData, ExperiencePost, ExperienceContent, ReviewProduct } from '../../interfaces/feed/feed.dto';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import logger from '../../infrastructure/logger/logger';
@@ -2818,11 +2818,27 @@ export class BrandService {
     const tags = post.tags?.map((t: any) => t.tag) || post.contentPostTags?.map((t: any) => t.tag) || [];
 
     const productBase = this.getProductBase(post.product);
+    const product: ReviewProduct = productBase
+      ? { ...productBase, isOwned: _ownedProductIds?.has(productBase.id) || false }
+      : {
+          id: post.productId || '',
+          name: post.product?.name || '',
+          subName: post.productGroup?.name || '',
+          image: resolveMediaUrl(post.product?.imageUrl) || null,
+          isOwned: false,
+        };
+
+    const contentString =
+      experienceContent.length > 0
+        ? experienceContent
+            .map((item) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`)
+            .join('\n\n')
+        : post.body || '';
 
     if (type === FeedItemType.UPDATE) {
       const relatedPost = {
         id: post.id,
-        product: productBase,
+        product,
         content: experienceContent,
         tags,
         images,
@@ -2843,9 +2859,15 @@ export class BrandService {
 
     const experienceData: ExperiencePost = {
       ...basePost,
-      content: experienceContent,
+      product,
+      content: contentString,
+      experienceContent,
       tags,
       images,
+      ...(post.productStatus && {
+        status: post.productStatus,
+        statusLabel: post.productStatus === 'own' ? 'I owned' : 'I tried',
+      }),
     };
 
     return {

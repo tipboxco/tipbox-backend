@@ -274,6 +274,69 @@ export class InventoryService {
   }
 
   /**
+   * Experience option name'lerini UUID'lere çevir
+   * App "3 Months", "Good", "Weekly Use" gibi isim gönderdiğinde UUID'ye resolve eder
+   */
+  private async resolveExperienceOptionIds(params: {
+    durationId?: string | null;
+    locationId?: string | null;
+    purposeId?: string | null;
+  }): Promise<{
+    durationId: string | null;
+    locationId: string | null;
+    purposeId: string | null;
+  }> {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    if (
+      (!params.durationId || uuidRegex.test(params.durationId)) &&
+      (!params.locationId || uuidRegex.test(params.locationId)) &&
+      (!params.purposeId || uuidRegex.test(params.purposeId))
+    ) {
+      return {
+        durationId: params.durationId || null,
+        locationId: params.locationId || null,
+        purposeId: params.purposeId || null,
+      };
+    }
+
+    const options = await this.getExperienceOptions();
+
+    const resolveOption = <T extends { id: string; name: string }>(
+      value: string | null | undefined,
+      list: T[],
+      type: 'duration' | 'location' | 'purpose'
+    ): string | null => {
+      if (!value) return null;
+      if (uuidRegex.test(value)) return value;
+      const normalizedInput = value.trim().toLowerCase();
+      let found = list.find(
+        (opt) => opt.name.trim().toLowerCase() === normalizedInput || opt.id === value
+      );
+      if (!found && type === 'duration') {
+        found = list.find((opt) => {
+          const n = opt.name.trim().toLowerCase();
+          const inNum = normalizedInput.match(/\d+/)?.[0];
+          const nameNum = n.match(/\d+/)?.[0];
+          return n.includes(normalizedInput) || normalizedInput.includes(n) || (inNum && nameNum && inNum === nameNum);
+        });
+      } else if (!found) {
+        found = list.find((opt) => {
+          const n = opt.name.trim().toLowerCase();
+          return n.includes(normalizedInput) || normalizedInput.includes(n);
+        });
+      }
+      return found ? found.id : null;
+    };
+
+    return {
+      durationId: resolveOption(params.durationId, options.durations, 'duration'),
+      locationId: resolveOption(params.locationId, options.locations, 'location'),
+      purposeId: resolveOption(params.purposeId, options.purposes, 'purpose'),
+    };
+  }
+
+  /**
    * Kullanıcının deneyim metnini AI ile ayır ve database'e kaydet
    */
   async splitExperienceWithAI(
@@ -390,6 +453,13 @@ export class InventoryService {
         throw new Error('Product not found');
       }
 
+      // App "3 Months", "Good", "Weekly Use" gibi isim gönderebilir; UUID'ye çevir
+      const resolvedIds = await this.resolveExperienceOptionIds({
+        durationId: dto.selectedDurationId,
+        locationId: dto.selectedLocationId,
+        purposeId: dto.selectedPurposeId,
+      });
+
       const hasOwned = dto.status === ExperienceStatus.OWN;
 
       const inventory = await this.prisma.$transaction(async (tx) => {
@@ -400,9 +470,9 @@ export class InventoryService {
             hasOwned,
             experienceSummary: dto.content,
             experienceSnippetId: dto.experienceSnippetId || null,
-            experienceDurationId: dto.selectedDurationId || null,
-            experienceLocationId: dto.selectedLocationId || null,
-            experiencePurposeId: dto.selectedPurposeId || null,
+            experienceDurationId: resolvedIds.durationId,
+            experienceLocationId: resolvedIds.locationId,
+            experiencePurposeId: resolvedIds.purposeId,
           },
         });
 

@@ -1194,10 +1194,10 @@ export class PostService {
         throw new Error('Product ID is required for experience posts');
       }
 
-      // I owned ise ürünü kullanıcı envanterine ekle/güncelle; I tried ise envantere ekleme
+      // I owned ise ürünü kullanıcı envanterine ekle/güncelle (görseli ile); I tried ise envantere ekleme
       const hasOwned = request.status === ExperienceStatus.OWN;
       if (hasOwned) {
-        await this.prisma.inventory.upsert({
+        const inventory = await this.prisma.inventory.upsert({
           where: {
             userId_productId: {
               userId,
@@ -1223,10 +1223,22 @@ export class PostService {
             experiencePurposeId: request.selectedPurposeId ?? undefined,
           },
         });
+        inventoryId = inventory.id;
+        // Post görsellerini envanter kaydına da ekle (ürün envanterde görseli ile görünsün)
+        if (request.images && request.images.length > 0) {
+          await this.prisma.inventoryMedia.createMany({
+            data: request.images.map((mediaUrl) => ({
+              inventoryId: inventory.id,
+              mediaUrl,
+            })),
+          });
+        }
         logger.info({
           message: 'Inventory upserted for experience post (I owned)',
           userId,
           productId: contextIds.productId,
+          inventoryId: inventory.id,
+          mediaCount: request.images?.length ?? 0,
         });
       }
 
@@ -1961,7 +1973,7 @@ export class PostService {
 
   async deletePost(userId: string, postId: string): Promise<boolean> {
     try {
-      const post = await this.postRepo.findById(postId);
+      const post = await this.postRepo.findById(postId?.trim() || '');
 
       if (!post) {
         return false; // Router 404 dönecek

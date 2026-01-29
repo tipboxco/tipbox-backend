@@ -1489,6 +1489,7 @@ export class UserService {
         likes: true,
         comments: true,
         favorites: true,
+        contentPostTags: true,
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -1540,6 +1541,7 @@ export class UserService {
     const paginatedPosts = posts.slice(0, limit);
     
     // getPostStats yerine post'un kendi alanlarını kullan (N+1 query'yi önle)
+    // Experience/Update: feed ile aynı yapı (type: experience, product, experienceContent, tags, status)
     const results = paginatedPosts.map((post) => {
       const stats = {
         likes: post.likesCount || 0,
@@ -1549,8 +1551,39 @@ export class UserService {
       };
       const contextType = this.mapContextType(post);
       const contextData = this.buildContextDataFromPost(post, ownedProductIds);
-      // Get images for this post from PostMedia (orderIndex'e göre sıralı)
       const images = postMediaMap.get(post.id) || [];
+      const postType = post.type as string;
+
+      if (postType === 'EXPERIENCE' || postType === 'UPDATE') {
+        const product = contextData
+          ? { ...contextData, isOwned: contextData.isOwned ?? ownedProductIds.has(String(post.productId)) }
+          : { id: post.productId || '', name: '', subName: '', image: null, isOwned: false };
+        const experienceContent = this.parseExperienceContentFromBody(post.body);
+        const contentString =
+          experienceContent.length > 0
+            ? experienceContent
+                .map((item) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`)
+                .join('\n\n')
+            : post.body || '';
+        return {
+          id: String(post.id),
+          type: 'experience' as const,
+          user: userBase,
+          stats,
+          createdAt: post.createdAt.toISOString(),
+          contextType,
+          product,
+          content: contentString,
+          experienceContent,
+          tags: post.contentPostTags?.map((t: any) => t.tag) || [],
+          images,
+          ...(post.productStatus && {
+            status: post.productStatus,
+            statusLabel: post.productStatus === 'own' ? 'I owned' : 'I tried',
+          }),
+        };
+      }
+
       return {
         id: String(post.id),
         type: 'post' as const,
@@ -1564,6 +1597,25 @@ export class UserService {
       };
     });
     return results;
+  }
+
+  /** Experience post body'den experienceContent array (feed ile aynı yapı) */
+  private parseExperienceContentFromBody(body: string): Array<{ title: string; content: string; rating: number }> {
+    if (!body) {
+      return [{ title: 'Product and Usage Experience', content: '', rating: 0 }];
+    }
+    const content: Array<{ title: string; content: string; rating: number }> = [];
+    const ratingMatch = body.match(/Rating:\s*(\d+)/i);
+    const r = ratingMatch ? Math.min(5, Math.max(1, parseInt(ratingMatch[1], 10))) : 0;
+    const priceMatch = body.match(/\[(?:price_and_shopping|Price and Shopping)[^\]]*\](.*?)(?:\[|Rating:|$)/is);
+    const usageMatch = body.match(/\[(?:product_and_usage|Product and Usage)[^\]]*\](.*?)(?:\[|Rating:|$)/is);
+    if (priceMatch) content.push({ title: 'Price and Shopping Experience', content: priceMatch[1].trim(), rating: r });
+    if (usageMatch) content.push({ title: 'Product and Usage Experience', content: usageMatch[1].trim(), rating: r });
+    if (content.length === 0) {
+      content.push({ title: 'Price and Shopping Experience', content: body, rating: r });
+      content.push({ title: 'Product and Usage Experience', content: body, rating: r });
+    }
+    return content;
   }
 
   async getUserUpdates(
@@ -2509,6 +2561,7 @@ export class UserService {
             comparison: { include: { product1: true, product2: true } } as any,
             tip: true,
             question: true,
+            contentPostTags: true,
           },
         },
       },
@@ -2654,6 +2707,40 @@ export class UserService {
             content: post.body,
             expectedAnswerFormat: question?.expectedAnswerFormat || 'short',
             images: [], // TODO
+          });
+          break;
+        }
+
+        case 'EXPERIENCE':
+        case 'UPDATE': {
+          // Experience/Update: feed ve profil ile aynı yapı
+          const product = contextData
+            ? { ...contextData, isOwned: contextData.isOwned ?? ownedSet.has(String(post.productId)) }
+            : { id: post.productId || '', name: '', subName: '', image: null, isOwned: false };
+          const experienceContent = this.parseExperienceContentFromBody(post.body);
+          const contentString =
+            experienceContent.length > 0
+              ? experienceContent
+                  .map((item) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`)
+                  .join('\n\n')
+              : post.body || '';
+          const postTags = (post as any).contentPostTags?.map((t: any) => t.tag) || (post as any).tags?.map((t: any) => t.tag) || [];
+          results.push({
+            id: String(post.id),
+            type: 'experience' as const,
+            user: userBase,
+            stats,
+            createdAt: post.createdAt.toISOString(),
+            contextType,
+            product,
+            content: contentString,
+            experienceContent,
+            tags: postTags,
+            images: [],
+            ...(post.productStatus && {
+              status: post.productStatus,
+              statusLabel: post.productStatus === 'own' ? 'I owned' : 'I tried',
+            }),
           });
           break;
         }

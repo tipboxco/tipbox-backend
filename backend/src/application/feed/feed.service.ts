@@ -1568,6 +1568,11 @@ export class FeedService {
       experienceContent, // Keep array for structured data
       tags,
       images,
+      // I owned / I tried etiketi (profil, feed, tüm listelerde aynı yapı)
+      ...((post as any).productStatus && {
+        status: (post as any).productStatus,
+        statusLabel: (post as any).productStatus === 'own' ? 'I owned' : 'I tried',
+      }),
     } as any; // Type assertion needed because ExperiencePost interface expects content: ExperienceContent[]
 
     return {

@@ -667,6 +667,7 @@ export class CatalogService {
           question: true,
           tip: true,
           tags: true,
+          contentPostTags: true,
           likes: true,
           comments: true,
           favorites: true,
@@ -704,6 +705,16 @@ export class CatalogService {
       const resultPosts = hasMore ? sortedPosts.slice(0, limit) : sortedPosts;
       const nextCursor = hasMore && resultPosts.length > 0 ? resultPosts[resultPosts.length - 1].id : undefined;
 
+      // Kullanıcının sahip olduğu ürünler (experience post product.isOwned için)
+      let ownedProductIds = new Set<string>();
+      if (userId) {
+        const inventories = await prisma.inventory.findMany({
+          where: { userId },
+          select: { productId: true },
+        });
+        ownedProductIds = new Set(inventories.map((inv) => String(inv.productId)));
+      }
+
       // Map ContentPostType to FeedItemType
       const mapContentPostTypeToFeedItemType = (type: ContentPostType): FeedItemType => {
         switch (type) {
@@ -721,12 +732,13 @@ export class CatalogService {
         }
       };
 
-      // Convert posts to feed items
+      // Convert posts to feed items (experience: profil/feed ile aynı yapı)
       const feedItems: Array<{ type: string; data: any }> = resultPosts.map((post: any) => {
         const baseType = mapContentPostTypeToFeedItemType(post.type);
         const contextData = this.buildContextDataFromPost(post);
+        const images = (post.media || []).map((m: any) => resolveMediaUrl(m.mediaUrl)).filter((url: string | null): url is string => url !== null);
 
-        const baseData = {
+        const baseData: any = {
           id: post.id,
           type: baseType,
           user: {
@@ -744,10 +756,19 @@ export class CatalogService {
           contextType: post.product ? ContextType.PRODUCT : post.productGroup ? ContextType.PRODUCT_GROUP : ContextType.SUB_CATEGORY,
           contextData: contextData,
           content: post.body,
-          images: (post.media || []).map((m: any) => resolveMediaUrl(m.mediaUrl)).filter((url: string | null): url is string => url !== null),
-          // Experience/Update için: I owned (own) / I tried (tried) etiketi
+          images,
           ...(post.productStatus && { status: post.productStatus, statusLabel: post.productStatus === 'own' ? 'I owned' : 'I tried' }),
         };
+
+        // Experience/Update: feed ve profil ile aynı yapı (product, experienceContent, tags)
+        if (post.type === ContentPostType.EXPERIENCE || post.type === ContentPostType.UPDATE) {
+          baseData.product = {
+            ...contextData,
+            isOwned: post.productId ? ownedProductIds.has(String(post.productId)) : false,
+          };
+          baseData.experienceContent = this.parseExperienceContentForCatalog(post.body);
+          baseData.tags = post.contentPostTags?.map((t: any) => t.tag) || post.tags?.map((t: any) => t.tag) || [];
+        }
 
         return {
           type: baseType,
@@ -847,6 +868,25 @@ export class CatalogService {
       subName: '',
       image: null,
     };
+  }
+
+  /** Experience post body'den experienceContent array üretir (feed ile aynı yapı) */
+  private parseExperienceContentForCatalog(body: string): Array<{ title: string; content: string; rating: number }> {
+    if (!body) {
+      return [{ title: 'Product and Usage Experience', content: '', rating: 0 }];
+    }
+    const content: Array<{ title: string; content: string; rating: number }> = [];
+    const ratingMatch = body.match(/Rating:\s*(\d+)/i);
+    const r = ratingMatch ? Math.min(5, Math.max(1, parseInt(ratingMatch[1], 10))) : 0;
+    const priceMatch = body.match(/\[(?:price_and_shopping|Price and Shopping)[^\]]*\](.*?)(?:\[|Rating:|$)/is);
+    const usageMatch = body.match(/\[(?:product_and_usage|Product and Usage)[^\]]*\](.*?)(?:\[|Rating:|$)/is);
+    if (priceMatch) content.push({ title: 'Price and Shopping Experience', content: priceMatch[1].trim(), rating: r });
+    if (usageMatch) content.push({ title: 'Product and Usage Experience', content: usageMatch[1].trim(), rating: r });
+    if (content.length === 0) {
+      content.push({ title: 'Price and Shopping Experience', content: body, rating: r });
+      content.push({ title: 'Product and Usage Experience', content: body, rating: r });
+    }
+    return content;
   }
 
   /**

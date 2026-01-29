@@ -792,12 +792,24 @@ export class ExploreService {
       };
     }
 
+    const contentString =
+      experienceContent.length > 0
+        ? experienceContent
+            .map((item) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`)
+            .join('\n\n')
+        : post.body || '';
+
     const experienceData: ExperiencePost = {
       ...basePost,
       product,
-      content: experienceContent,
+      content: contentString,
+      experienceContent,
       tags,
       images,
+      ...(post.productStatus && {
+        status: post.productStatus,
+        statusLabel: post.productStatus === 'own' ? 'I owned' : 'I tried',
+      }),
     };
 
     return {
