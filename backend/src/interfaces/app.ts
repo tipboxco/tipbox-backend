@@ -31,6 +31,7 @@ import syncReceiverRouter from './sync-receiver/sync-receiver.router';
 import auth0Router from './auth0/auth0.router';
 import cannyRouter from './canny/canny.router';
 import surveyRouter from './survey/survey.router';
+import subscriptionRouter from './subscription/subscription.router';
 
 // Middleware
 import { authMiddleware } from './auth/auth.middleware';
@@ -370,6 +371,7 @@ app.use('/surveys', surveyRouter);
 app.use('/api/cache', cacheRouter);
 app.use('/api/sync-receiver', syncReceiverRouter);
 app.use('/canny', cannyRouter);
+app.use('/subscription', authMiddleware, subscriptionRouter);
 
 // Dashboard routes (must be last)
 app.use('/', dashboardRouter);

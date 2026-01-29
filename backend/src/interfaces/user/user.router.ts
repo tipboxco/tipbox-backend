@@ -7,6 +7,18 @@ import {
 } from '../../application/user/user.service';
 import { CreateUserRequest, UpdateUserProfileRequest, UserResponse } from './user.dto';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
+import { PaymentDashboardService } from '../../application/payment/payment-dashboard.service';
+import { PaymentMethodService, PAYMENT_ERROR_CODES } from '../../application/payment/payment-method.service';
+import { InvoiceService } from '../../application/payment/invoice.service';
+import {
+  PaymentDashboardResponse,
+  PaymentMethodResponse,
+  SubscriptionResponse,
+  InvoiceResponse,
+  AddPaymentMethodRequest,
+  UpdatePaymentMethodRequest,
+} from '../payment/payment.dto';
+import { parseInvoiceSort, parseLimit, parseOffset } from '../payment/payment.schemas';
 import { S3Service } from '../../infrastructure/s3/s3.service';
 import { v4 as uuidv4 } from 'uuid';
 import logger from '../../infrastructure/logger/logger';
@@ -19,6 +31,44 @@ const router = Router();
 const userService = new UserService();
 const s3Service = new S3Service();
 const prisma = getPrisma();
+const paymentDashboardService = new PaymentDashboardService();
+const paymentMethodService = new PaymentMethodService();
+const invoiceService = new InvoiceService();
+
+function toPaymentMethodResponse(card: { id: string; cardAlias: string; brand: string; last4: string; expiryMonth: number; expiryYear: number; isDefault: boolean; createdAt: Date; updatedAt: Date }): PaymentMethodResponse {
+  return {
+    id: card.id,
+    card_alias: card.cardAlias,
+    brand: card.brand,
+    last4: card.last4,
+    expiry_month: card.expiryMonth,
+    expiry_year: card.expiryYear,
+    is_default: card.isDefault,
+    createdAt: card.createdAt.toISOString(),
+    updatedAt: card.updatedAt.toISOString(),
+  };
+}
+
+function toSubscriptionResponse(sub: { planId: string; status: string; currentPeriodEnd: Date; planName?: string; benefits?: string[] }): SubscriptionResponse {
+  return {
+    current_plan_id: sub.planId,
+    plan_name: sub.planName ?? '',
+    status: sub.status,
+    next_billing_date: sub.currentPeriodEnd.toISOString(),
+    benefits: sub.benefits ?? [],
+  };
+}
+
+function toInvoiceResponse(inv: { id: string; amount: number; currency: string; status: string; description: string | null; invoiceDate: Date }): InvoiceResponse {
+  return {
+    id: inv.id,
+    amount: inv.amount,
+    currency: inv.currency,
+    date: inv.invoiceDate.toISOString(),
+    status: inv.status,
+    description: inv.description,
+  };
+}
 
 // Multer configuration - memory storage (dosya buffer'da tutulacak)
 // Bu tanım endpoint'lerden ÖNCE olmalı (hoisting sorunu için)
@@ -3631,6 +3681,217 @@ router.delete('/settings/devices', asyncHandler(async (req: Request, res: Respon
 
   const result = await userService.removeAllDevices(String(userId));
   return res.json(result);
+}));
+
+/**
+ * @openapi
+ * /users/settings/payment-dashboard:
+ *   get:
+ *     summary: Ödeme özeti (kartlar, abonelik, son faturalar)
+ *     description: Ayarlar sayfası için kayıtlı kartlar, aktif abonelik ve son 3-5 faturayı döner.
+ *     tags: [Payment]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Ödeme özeti
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 saved_cards: { type: array, items: { $ref: '#/components/schemas/PaymentMethodResponse' } }
+ *                 active_subscription: { $ref: '#/components/schemas/SubscriptionResponse', nullable: true }
+ *                 recent_invoices: { type: array, items: { $ref: '#/components/schemas/InvoiceResponse' } }
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/settings/payment-dashboard', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+  const dashboard = await paymentDashboardService.getDashboard(String(userId));
+  const response: PaymentDashboardResponse = {
+    saved_cards: dashboard.saved_cards.map(toPaymentMethodResponse),
+    active_subscription: dashboard.active_subscription ? toSubscriptionResponse(dashboard.active_subscription) : null,
+    recent_invoices: dashboard.recent_invoices.map(toInvoiceResponse),
+  };
+  return res.json(response);
+}));
+
+/**
+ * @openapi
+ * /users/settings/payment-methods:
+ *   post:
+ *     summary: Yeni kart ekle
+ *     description: Ödeme sağlayıcısından alınan token ile kart eklenir. Kart bilgisi backend'e gönderilmez.
+ *     tags: [Payment]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/AddPaymentMethodRequest'
+ *     responses:
+ *       201:
+ *         description: Kart eklendi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/PaymentMethodResponse'
+ *       400:
+ *         description: Geçersiz istek veya hata (error_code ile)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message: { type: string }
+ *                 error_code: { type: string, enum: [INSUFFICIENT_FUNDS, INVALID_EXPIRY, CARD_DECLINED] }
+ *       401:
+ *         description: Unauthorized
+ */
+router.post('/settings/payment-methods', asyncHandler(async (req: Request<{}, {}, AddPaymentMethodRequest>, res: Response) => {
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+  const body = req.body;
+  if (!body?.payment_token || !body?.card_alias) {
+    return res.status(400).json({ message: 'payment_token and card_alias are required' });
+  }
+  const card = await paymentMethodService.addCard(String(userId), {
+    payment_token: body.payment_token,
+    card_alias: body.card_alias,
+  });
+  return res.status(201).json(toPaymentMethodResponse(card));
+}));
+
+/**
+ * @openapi
+ * /users/settings/payment-methods/{id}:
+ *   patch:
+ *     summary: Kart ismini güncelle
+ *     description: Sadece card_alias güncellenir.
+ *     tags: [Payment]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UpdatePaymentMethodRequest'
+ *     responses:
+ *       200:
+ *         description: Kart güncellendi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/PaymentMethodResponse'
+ *       404:
+ *         description: Kart bulunamadı veya kullanıcıya ait değil
+ *       401:
+ *         description: Unauthorized
+ */
+router.patch('/settings/payment-methods/:id', asyncHandler(async (req: Request<{ id: string }, {}, UpdatePaymentMethodRequest>, res: Response) => {
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+  const { id } = req.params;
+  const body = req.body;
+  if (!body?.card_alias) return res.status(400).json({ message: 'card_alias is required' });
+  const card = await paymentMethodService.updateCardAlias(String(userId), id, body.card_alias);
+  if (!card) return res.status(404).json({ message: 'Payment method not found' });
+  return res.json(toPaymentMethodResponse(card));
+}));
+
+/**
+ * @openapi
+ * /users/settings/payment-methods/{id}:
+ *   delete:
+ *     summary: Kayıtlı kartı sil
+ *     description: Kart aktif abonelikte kullanılıyorsa silme reddedilir (409, error_code CARD_IN_USE_BY_SUBSCRIPTION).
+ *     tags: [Payment]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       204:
+ *         description: Kart silindi
+ *       404:
+ *         description: Kart bulunamadı (error_code CARD_NOT_FOUND)
+ *       409:
+ *         description: Kart aktif abonelikte kullanılıyor (error_code CARD_IN_USE_BY_SUBSCRIPTION)
+ *       401:
+ *         description: Unauthorized
+ */
+router.delete('/settings/payment-methods/:id', asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+  const { id } = req.params;
+  const result = await paymentMethodService.deleteCard(String(userId), id);
+  if (!result.success) {
+    if (result.errorCode === PAYMENT_ERROR_CODES.CARD_NOT_FOUND) {
+      return res.status(404).json({ message: 'Payment method not found', error_code: result.errorCode });
+    }
+    if (result.errorCode === PAYMENT_ERROR_CODES.CARD_IN_USE_BY_SUBSCRIPTION) {
+      return res.status(409).json({ message: 'Card is in use by an active subscription', error_code: result.errorCode });
+    }
+    return res.status(400).json({ message: 'Cannot delete card', error_code: result.errorCode });
+  }
+  return res.status(204).send();
+}));
+
+/**
+ * @openapi
+ * /users/settings/invoices:
+ *   get:
+ *     summary: Fatura geçmişi listele
+ *     description: sort_by (date_asc, date_desc), limit, offset ile sayfalı liste.
+ *     tags: [Payment]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: sort_by
+ *         schema: { type: string, enum: [date_asc, date_desc], default: date_desc }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *       - in: query
+ *         name: offset
+ *         schema: { type: integer, default: 0 }
+ *     responses:
+ *       200:
+ *         description: Fatura listesi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items: { $ref: '#/components/schemas/InvoiceResponse' }
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/settings/invoices', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+  const sort_by = parseInvoiceSort(req.query.sort_by);
+  const limit = parseLimit(req.query.limit);
+  const offset = parseOffset(req.query.offset);
+  const invoices = await invoiceService.listInvoices(String(userId), { sort_by, limit, offset });
+  return res.json(invoices.map(toInvoiceResponse));
 }));
 
 /**

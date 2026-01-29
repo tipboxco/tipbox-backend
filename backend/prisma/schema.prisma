@@ -93,6 +93,9 @@ model User {
   newsShares              NewsShare[]
   newsFavorites           NewsFavorite[]
   newsCommentLikes        NewsCommentLike[]
+  paymentMethods          PaymentMethod[]
+  userSubscriptions       UserSubscription[]
+  invoices                Invoice[]
 
   @@map("users")
 }
@@ -1277,6 +1280,87 @@ model Transaction {
   @@map("transactions")
 }
 
+model PaymentMethod {
+  id                      String            @id @default(uuid()) @db.Uuid
+  userId                  String            @map("user_id") @db.Uuid
+  cardAlias               String            @map("card_alias")
+  brand                   String
+  last4                   String
+  expiryMonth             Int               @map("expiry_month")
+  expiryYear              Int               @map("expiry_year")
+  isDefault               Boolean           @default(false) @map("is_default")
+  providerPaymentMethodId String?           @map("provider_payment_method_id")
+  createdAt               DateTime          @default(now()) @map("created_at")
+  updatedAt               DateTime          @updatedAt @map("updated_at")
+  user                    User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userSubscriptions       UserSubscription[]
+
+  @@index([userId])
+  @@map("payment_methods")
+}
+
+model SubscriptionPlan {
+  id           String             @id @default(uuid()) @db.Uuid
+  name         String
+  price        Float
+  currency     String             @default("TRY")
+  period       SubscriptionPlanPeriod
+  benefits     Json               @default("[]")
+  isActive     Boolean            @default(true) @map("is_active")
+  displayOrder Int                @default(0) @map("display_order")
+  createdAt    DateTime           @default(now()) @map("created_at")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
+  userSubscriptions UserSubscription[]
+  invoices     Invoice[]
+
+  @@index([isActive])
+  @@map("subscription_plans")
+}
+
+model UserSubscription {
+  id                 String           @id @default(uuid()) @db.Uuid
+  userId             String           @map("user_id") @db.Uuid
+  planId             String           @map("plan_id") @db.Uuid
+  status             SubscriptionStatus
+  currentPeriodStart DateTime         @map("current_period_start")
+  currentPeriodEnd   DateTime         @map("current_period_end")
+  paymentMethodId    String?          @map("payment_method_id") @db.Uuid
+  canceledAt         DateTime?        @map("canceled_at")
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+  user               User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan               SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  paymentMethod      PaymentMethod?   @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  invoices           Invoice[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("user_subscriptions")
+}
+
+model Invoice {
+  id             String        @id @default(uuid()) @db.Uuid
+  userId         String        @map("user_id") @db.Uuid
+  subscriptionId String?       @map("subscription_id") @db.Uuid
+  planId         String?       @map("plan_id") @db.Uuid
+  amount         Float
+  currency       String        @default("TRY")
+  status         InvoiceStatus
+  description    String?
+  invoiceDate    DateTime      @map("invoice_date")
+  paidAt         DateTime?     @map("paid_at")
+  externalId     String?       @map("external_id")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription   UserSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  plan           SubscriptionPlan?  @relation(fields: [planId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([invoiceDate])
+  @@map("invoices")
+}
+
 model TipsTokenTransfer {
   id         String   @id @default(uuid()) @db.Uuid
   fromUserId String   @map("from_user_id") @db.Uuid
@@ -2369,4 +2453,28 @@ enum RewardClaimStatus {
   CANCELLED
 
   @@map("reward_claim_status")
+}
+
+enum SubscriptionStatus {
+  active
+  trialing
+  canceled
+  past_due
+
+  @@map("subscription_status")
+}
+
+enum InvoiceStatus {
+  Paid
+  Pending
+  Failed
+
+  @@map("invoice_status")
+}
+
+enum SubscriptionPlanPeriod {
+  MONTHLY
+  YEARLY
+
+  @@map("subscription_plan_period")
 }

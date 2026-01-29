@@ -77,7 +77,7 @@ export async function seedExplore(): Promise<void> {
     console.warn('⚠️  Yeterli görsel yüklenemedi, marketplace banner\'lar oluşturulamadı');
   }
 
-  // Brands (subset matching original names) - logoUrl seed media üzerinden
+  // Brands (subset matching original names) - logoUrl seed media üzerinden; externalId Product FK için gerekli
   await Promise.all(
     [
       { name: 'TechVision', description: 'Yenilikçi teknoloji ürünleri ve çözümleri sunan global marka', category: 'Technology', logoKey: 'explore.event.primary' },
@@ -89,7 +89,13 @@ export async function seedExplore(): Promise<void> {
     ].map((b) =>
       prisma.brand
         .create({
-          data: { name: b.name, description: b.description, category: b.category, logoUrl: getSeedMediaPath(b.logoKey as any) },
+          data: {
+            name: b.name,
+            description: b.description,
+            category: b.category,
+            logoUrl: getSeedMediaPath(b.logoKey as any),
+            externalId: `seed-explore-${b.name.replace(/\s+/g, '-')}`,
+          },
         })
         .catch(() => null)
     )
@@ -108,19 +114,19 @@ export async function seedExplore(): Promise<void> {
         startDate: today,
         endDate: nextMonth,
         status: 'PUBLISHED',
-        eventType: 'SURVEY',
+        feedType: 'PICKS',
       },
     }),
     prisma.wishboxEvent.create({
       data: {
         id: generateUlid(),
         title: 'Teknoloji Trendleri 2024',
-        description: 
+        description:
           "2024'ün en çok beklenen teknoloji ürünlerini seçiyoruz. Senin tercihin ne?",
         startDate: today,
         endDate: nextWeek,
         status: 'PUBLISHED',
-        eventType: 'POLL',
+        feedType: 'PICKS',
       },
     }),
     prisma.wishboxEvent.create({
@@ -132,26 +138,13 @@ export async function seedExplore(): Promise<void> {
         startDate: today,
         endDate: nextWeek,
         status: 'PUBLISHED',
-        eventType: 'CONTEST',
+        feedType: 'ROASTS',
       },
     }),
   ]).catch(() => [] as any);
 
   if (events && events.length >= 3) {
-    await Promise.all([
-      prisma.wishboxScenario.create({
-        data: { eventId: events[0].id, title: 'Yılın En İyi Telefonu', description: 'Hangi telefon 2024\'ün şampiyonu olmalı?', orderIndex: 1 },
-      }),
-      prisma.wishboxScenario.create({
-        data: { eventId: events[0].id, title: "Yılın En İyi Laptop'u", description: 'En iyi performansı hangi laptop verdi?', orderIndex: 2 },
-      }),
-      prisma.wishboxScenario.create({
-        data: { eventId: events[1].id, title: 'En Beklenen Akıllı Saat', description: '2024\'te hangi akıllı saati almayı düşünüyorsun?', orderIndex: 1 },
-      }),
-      prisma.wishboxScenario.create({
-        data: { eventId: events[2].id, title: 'Tam Otomatik vs Manuel', description: 'Tam otomatik mı, manuel kahve makinesi mi?', orderIndex: 1 },
-      }),
-    ]).catch(() => {});
+    // WishboxScenario modeli kaldırıldı (migration 20260111132616); scenario oluşturma atlandı
 
     const allUserIds = [
       (await prisma.user.findUnique({ where: { id: TEST_USER_ID } }))?.id,
@@ -232,13 +225,15 @@ export async function seedExplore(): Promise<void> {
       if (userIdToUse) {
         for (const productData of exploreProducts) {
           try {
+            const brand = await prisma.brand.findFirst({ where: { name: productData.brand } });
             const product = await prisma.product.create({
               data: {
+                id: generateUlid(),
                 name: productData.name,
-                brand: productData.brand,
                 description: `Yeni eklenen ${productData.name} ürünü`,
                 groupId: productData.group.id,
                 imageUrl: getSeedMediaPath(productData.mediaKey as any),
+                ...(brand?.externalId != null && { brandId: brand.externalId }),
               },
             });
 
