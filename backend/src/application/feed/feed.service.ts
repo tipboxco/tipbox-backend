@@ -276,6 +276,21 @@ export class FeedService {
         },
         question: true,
         tip: true,
+        updateContent: {
+          include: {
+            experiencePost: {
+              include: {
+                product: {
+                  include: {
+                    group: true,
+                  },
+                },
+                tags: true,
+                contentPostTags: true,
+              },
+            },
+          },
+        },
         tags: true,
         likes: true,
         comments: true,
@@ -806,6 +821,21 @@ export class FeedService {
             },
             question: true,
             tip: true,
+            updateContent: {
+              include: {
+                experiencePost: {
+                  include: {
+                    product: {
+                      include: {
+                        group: true,
+                      },
+                    },
+                    tags: true,
+                    contentPostTags: true,
+                  },
+                },
+              },
+            },
             tags: true,
             likes: true,
             comments: true,
@@ -1445,24 +1475,77 @@ export class FeedService {
     const tags = post.tags?.map((t: any) => t.tag) || post.contentPostTags?.map((t: any) => t.tag) || [];
 
     if (type === FeedItemType.UPDATE) {
-      // Convert experienceContent array to string for mobile compatibility
-      const relatedPostContentString = experienceContent.length > 0
-        ? experienceContent.map((item) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`).join('\n\n')
-        : post.body || '';
+      // Get experience post from PostUpdateContent
+      const updateContent = post.updateContent;
+      if (!updateContent || !updateContent.experiencePost) {
+        // Fallback: if updateContent is not loaded, use current post data
+        const relatedPostContentString = experienceContent.length > 0
+          ? experienceContent.map((item) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`).join('\n\n')
+          : post.body || '';
+
+        const relatedPost = {
+          id: post.id,
+          product,
+          content: relatedPostContentString,
+          experienceContent,
+          tags,
+          images,
+        } as any;
+
+        const updateData = {
+          ...basePost,
+          relatedPost,
+          content: post.body || '',
+          images,
+        };
+
+        return {
+          type,
+          data: updateData,
+        };
+      }
+
+      // Use experience post from PostUpdateContent
+      const experiencePost = updateContent.experiencePost;
+      const experiencePostProduct = experiencePost.product
+        ? this.getProductBase(experiencePost.product)
+        : null;
+
+      const experiencePostProductData: ReviewProduct = experiencePostProduct
+        ? {
+            ...experiencePostProduct,
+            isOwned: ownedProductIds?.has(experiencePostProduct.id) || false,
+          }
+        : {
+            id: experiencePost.productId || '',
+            name: experiencePost.product?.name || '',
+            subName: experiencePost.productGroup?.name || '',
+            image: this.buildFullMediaUrl(experiencePost.product?.imageUrl),
+            isOwned: false,
+          };
+
+      const experiencePostTags = experiencePost.tags?.map((t: any) => t.tag) || experiencePost.contentPostTags?.map((t: any) => t.tag) || [];
+      const experiencePostContent = this.parseExperienceContent(experiencePost.body);
+      const experiencePostContentString = experiencePostContent.length > 0
+        ? experiencePostContent.map((item) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`).join('\n\n')
+        : experiencePost.body || '';
 
       const relatedPost = {
-        id: post.id,
-        product,
-        content: relatedPostContentString, // String for mobile compatibility
-        experienceContent, // Keep array for structured data
-        tags,
-        images,
-      } as any; // Type assertion needed because RelatedPostData interface expects content: ExperienceContent[]
+        id: experiencePost.id,
+        product: experiencePostProductData,
+        content: experiencePostContentString,
+        experienceContent: experiencePostContent,
+        tags: experiencePostTags,
+        images: [], // Experience post images would need to be fetched separately if needed
+      } as any;
+
+      // Update post content from PostUpdateContent
+      const updatePostContent = updateContent.content || post.body || '';
 
       const updateData = {
         ...basePost,
         relatedPost,
-        content: post.body || '', // Ensure content is always a string
+        content: updatePostContent,
         images,
       };
 

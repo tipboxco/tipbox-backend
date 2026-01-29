@@ -349,6 +349,7 @@ export interface CreateExperiencePostRequest {
 export interface CreateUpdatePostRequest {
   contextType: ContextType;
   contextId: string;
+  experiencePostId: string; // Experience post ID that this update is related to
   content: string;
   images?: string[];
   eventId?: string; // Optional event ID to link post to event

@@ -1190,8 +1190,48 @@ export class PostService {
         request.contextId
       );
 
-      // Map status to hasOwned: OWN = true, TEST = false
+      if (!contextIds.productId) {
+        throw new Error('Product ID is required for experience posts');
+      }
+
+      // I owned ise ürünü kullanıcı envanterine ekle/güncelle; I tried ise envantere ekleme
       const hasOwned = request.status === ExperienceStatus.OWN;
+      if (hasOwned) {
+        await this.prisma.inventory.upsert({
+          where: {
+            userId_productId: {
+              userId,
+              productId: contextIds.productId,
+            },
+          },
+          create: {
+            userId,
+            productId: contextIds.productId,
+            hasOwned: true,
+            experienceSummary: request.content?.slice(0, 500) || null,
+            experienceSnippetId: request.experienceSnippetId || null,
+            experienceDurationId: request.selectedDurationId || null,
+            experienceLocationId: request.selectedLocationId || null,
+            experiencePurposeId: request.selectedPurposeId || null,
+          },
+          update: {
+            hasOwned: true,
+            experienceSummary: request.content?.slice(0, 500) || undefined,
+            experienceSnippetId: request.experienceSnippetId || undefined,
+            experienceDurationId: request.selectedDurationId ?? undefined,
+            experienceLocationId: request.selectedLocationId ?? undefined,
+            experiencePurposeId: request.selectedPurposeId ?? undefined,
+          },
+        });
+        logger.info({
+          message: 'Inventory upserted for experience post (I owned)',
+          userId,
+          productId: contextIds.productId,
+        });
+      }
+
+      // Gönderi etiketi: I owned -> own, I tried -> tried
+      const productStatus: 'own' | 'tried' = hasOwned ? 'own' : 'tried';
 
       // Combine content and experiences
       const experienceText = request.experience
@@ -1216,7 +1256,8 @@ export class PostService {
         contextIds.productId,
         true, // inventoryRequired - experience posts require inventory
         false,
-        request.eventId // eventId
+        request.eventId, // eventId
+        productStatus // I owned / I tried etiketi
       );
 
       // AI Split ID ve Taxonomy ID'leri kaydet
@@ -1276,8 +1317,8 @@ export class PostService {
           });
       }
       
-      // Catalog posts cache'ini invalidate et
-      invalidateCatalogPostsCache({
+      // Catalog posts cache'ini invalidate et (product feed güncel dönsün diye await)
+      await invalidateCatalogPostsCache({
         subCategoryId: contextIds.subCategoryId,
         productGroupId: contextIds.productGroupId,
         productId: contextIds.productId,
@@ -1385,6 +1426,28 @@ export class PostService {
         throw new Error('Update posts can only be created for products');
       }
 
+      // Experience post validation - update posts can only be created on experience posts
+      if (!request.experiencePostId) {
+        throw new Error('experiencePostId is required for update posts');
+      }
+
+      const experiencePost = await this.prisma.contentPost.findUnique({
+        where: { id: request.experiencePostId },
+        select: { id: true, userId: true, type: true, productId: true },
+      });
+
+      if (!experiencePost) {
+        throw new Error('Experience post not found');
+      }
+
+      if (experiencePost.userId !== userId) {
+        throw new Error('You can only create update posts on your own experience posts');
+      }
+
+      if (experiencePost.type !== ContentPostType.EXPERIENCE) {
+        throw new Error('Update posts can only be created on experience posts');
+      }
+
       // Event validation (if eventId is provided)
       if (request.eventId) {
         await this.validateEvent(request.eventId);
@@ -1394,6 +1457,11 @@ export class PostService {
         request.contextType,
         request.contextId
       );
+
+      // Verify that the experience post is for the same product
+      if (experiencePost.productId !== contextIds.productId) {
+        throw new Error('Experience post and update post must be for the same product');
+      }
 
       const bodyWithImages = this.appendImagesToBody(
         request.content,
@@ -1414,6 +1482,15 @@ export class PostService {
         request.eventId // eventId
       );
 
+      // Create PostUpdateContent record
+      await this.prisma.postUpdateContent.create({
+        data: {
+          postId: post.id,
+          experiencePostId: request.experiencePostId,
+          content: request.content,
+        },
+      });
+
       // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
       if (request.images && request.images.length > 0) {
         await this.prisma.postMedia.createMany({
@@ -1426,7 +1503,7 @@ export class PostService {
         });
       }
 
-      logger.info(`Update post created: ${post.id} by user ${userId}`);
+      logger.info(`Update post created: ${post.id} by user ${userId} for experience post ${request.experiencePostId}`);
       
       // Event cache'i invalidate et (eventId varsa)
       if (request.eventId) {

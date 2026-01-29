@@ -621,24 +621,36 @@ router.post(
       });
     }
 
+    const description = (req.body.description ?? req.body.postText ?? req.body.body ?? req.body.content ?? '').trim();
+    const contextTypeRaw = req.body.contextType ?? req.body.context_type;
+    const contextType = contextTypeRaw && String(contextTypeRaw).toLowerCase() === 'product' ? ContextType.PRODUCT : undefined;
+    const contextId = req.body.contextId ?? req.body.context_id ?? req.body.productId;
+
     const request: CreateBenchmarkPostRequest = {
-      contextType: req.body.contextType as ContextType,
-      contextId: req.body.contextId,
+      contextType: contextType as ContextType,
+      contextId: contextId,
       products: products,
-      description: req.body.description || req.body.postText,
+      description,
       images: images,
-      eventId: normalizeEventId(req.body.eventId), // Optional event ID (normalized)
+      eventId: normalizeEventId(req.body.eventId ?? req.body.event_id),
     };
 
-    if (
-      !request.contextType ||
-      !request.contextId ||
-      !request.products ||
-      !request.description
-    ) {
+    if (!request.contextType) {
       return res.status(400).json({
-        message:
-          'contextType, contextId, products, and description are required',
+        message: 'contextType is required and must be "product"',
+        field: 'contextType',
+      });
+    }
+    if (!request.contextId || String(request.contextId).trim() === '') {
+      return res.status(400).json({
+        message: 'contextId is required (product id for context)',
+        field: 'contextId',
+      });
+    }
+    if (!request.description) {
+      return res.status(400).json({
+        message: 'description is required (or postText, body, content)',
+        field: 'description',
       });
     }
 
@@ -1415,14 +1427,15 @@ router.post(
     const request: CreateUpdatePostRequest = {
       contextType: req.body.contextType as ContextType,
       contextId: req.body.contextId,
+      experiencePostId: req.body.experiencePostId,
       content: req.body.content,
       images: images,
       eventId: normalizeEventId(req.body.eventId), // Optional event ID (normalized)
     };
 
-    if (!request.contextType || !request.contextId || !request.content) {
+    if (!request.contextType || !request.contextId || !request.experiencePostId || !request.content) {
       return res.status(400).json({
-        message: 'contextType, contextId, and content are required',
+        message: 'contextType, contextId, experiencePostId, and content are required',
       });
     }
 

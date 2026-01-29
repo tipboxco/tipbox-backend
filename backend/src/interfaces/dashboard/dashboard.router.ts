@@ -146,6 +146,15 @@ const interfaceServices = [
     containerName: 'tipbox_minio',
     canControlContainer: false,
   },
+  {
+    name: 'Medusa',
+    port: 9002,
+    path: '/app',
+    description: 'Medusa admin / store',
+    icon: 'fa-shopping-cart',
+    containerName: '',
+    canControlContainer: false,
+  },
 ];
 
 // Seed information

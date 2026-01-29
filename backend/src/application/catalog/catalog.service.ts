@@ -134,6 +134,23 @@ export class CatalogService {
   }
 
   /**
+   * Bir category id için kendisi + tüm alt (descendant) category id'lerini döndürür.
+   * categories tablosundaki parent_id hiyerarşisine göre rekürsif.
+   */
+  private async getAllDescendantCategoryIds(categoryId: string): Promise<string[]> {
+    const ids: string[] = [categoryId];
+    const children = await prisma.category.findMany({
+      where: { parentId: categoryId },
+      select: { id: true },
+    });
+    for (const child of children) {
+      const childDescendants = await this.getAllDescendantCategoryIds(child.id);
+      ids.push(...childDescendants);
+    }
+    return ids;
+  }
+
+  /**
    * Tüm kategorileri listele
    */
   async getAllCategories(): Promise<CategoryItem[]> {
@@ -513,9 +530,58 @@ export class CatalogService {
     pagination: { cursor?: string; hasMore: boolean; limit: number };
   }> {
     try {
+      // Product ID'yi resolve et - tüm ID formatlarını kabul eder
+      // Product.id TEXT tipinde olduğu için direkt herhangi bir formatı kabul edebilir
+      const trimmedId = productId.trim();
+      let actualProductId: string | null = null;
+
+      // 1. Önce direkt id ile ara (herhangi bir format olabilir - Product.id TEXT)
+      try {
+        const product = await prisma.product.findUnique({
+          where: { id: trimmedId },
+          select: { id: true },
+        });
+        if (product) {
+          actualProductId = product.id;
+        }
+      } catch (error) {
+        // Query hatası - devam et
+        logger.debug({
+          message: 'Product direct query failed in getProductPosts',
+          productId: trimmedId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      // 2. Bulunamadıysa, metadata içindeki externalId ile ara
+      if (!actualProductId) {
+        try {
+          const result = await prisma.$queryRaw<Array<{ id: string }>>`
+            SELECT id 
+            FROM products 
+            WHERE metadata->>'externalId' = ${trimmedId}
+            LIMIT 1
+          `;
+
+          if (result && result.length > 0) {
+            actualProductId = result[0].id;
+          }
+        } catch (error) {
+          logger.debug({
+            message: 'Product metadata lookup failed in getProductPosts',
+            productId: trimmedId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      if (!actualProductId) {
+        throw new Error(`Product not found: ${productId}`);
+      }
+
       // Product'ın var olup olmadığını kontrol et
       const product = await prisma.product.findUnique({
-        where: { id: productId },
+        where: { id: actualProductId },
       });
 
       if (!product) {
@@ -545,7 +611,7 @@ export class CatalogService {
       }
 
       const whereClause: any = {
-        productId: productId,
+        productId: actualProductId,
       };
 
       if (typeFilter) {
@@ -679,6 +745,8 @@ export class CatalogService {
           contextData: contextData,
           content: post.body,
           images: (post.media || []).map((m: any) => resolveMediaUrl(m.mediaUrl)).filter((url: string | null): url is string => url !== null),
+          // Experience/Update için: I owned (own) / I tried (tried) etiketi
+          ...(post.productStatus && { status: post.productStatus, statusLabel: post.productStatus === 'own' ? 'I owned' : 'I tried' }),
         };
 
         return {
@@ -801,109 +869,18 @@ export class CatalogService {
     pagination: { cursor?: string; hasMore: boolean; limit: number };
   }> {
     try {
-      // Sub category ID'yi resolve et - tüm ID formatlarını kabul eder
-      // Önce Category tablosunda ara (String ID kabul eder)
-      let resolvedSubCategoryId: string | null = null;
-      let actualSubCategoryId: string | null = null;
-
-      // 1. Önce Category tablosunda ara (Medusa ID formatlarını destekler)
-      const category = await prisma.category.findUnique({
-        where: { id: subCategoryId },
-        select: { id: true, name: true },
-      });
-
-      if (category) {
-        // Category bulundu - name ile SubCategory'de ara
-        const subCategory = await prisma.subCategory.findFirst({
-          where: { name: category.name },
-          select: { id: true },
-        });
-        if (subCategory) {
-          actualSubCategoryId = subCategory.id;
-          resolvedSubCategoryId = category.id; // Category ID'yi context için kullan
-        }
-      }
-
-      // 2. Category'de bulunamadı - direkt SubCategory'de ara (UUID formatı)
-      if (!actualSubCategoryId) {
-        try {
-          const subCategory = await prisma.subCategory.findUnique({
-            where: { id: subCategoryId },
-            select: { id: true },
-          });
-          if (subCategory) {
-            actualSubCategoryId = subCategory.id;
-            resolvedSubCategoryId = subCategory.id;
-          }
-        } catch (error) {
-          // UUID formatı değil - Category tablosunu kullan
-        }
-      }
-
-      // 3. Hiçbir yerde bulunamadı - Category ID'yi direkt kullan (parentId olarak)
-      if (!resolvedSubCategoryId) {
-        resolvedSubCategoryId = subCategoryId;
-      }
-
+      const trimmedId = subCategoryId.trim();
       const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 20;
       const cursor = options?.cursor;
-      const filter = options?.filter || 'all'; // all, free, tips_and_tricks, questions
-      const sort = options?.sort || 'newest'; // newest, oldest, most_popular
+      const filter = options?.filter || 'all';
+      const sort = options?.sort || 'newest';
 
-      // Alt product group'ları getir
-      // Eğer actualSubCategoryId varsa onu kullan, yoksa Category ID ile product group'ları bul
-      let productGroupIds: string[] = [];
-      
-      if (actualSubCategoryId) {
-        // SubCategory'den product group'ları getir
-        const productGroups = await prisma.productGroup.findMany({
-          where: { subCategoryId: actualSubCategoryId },
-          select: { id: true },
-        });
-        productGroupIds = productGroups.map((pg) => pg.id);
-      } else if (category) {
-        // Category ID ile product group'ları bul (Category tablosundan)
-        const categoryProductGroups = await prisma.category.findMany({
-          where: { parentId: category.id },
-          select: { id: true, name: true },
-        });
-        
-        // Category name'lerini kullanarak ProductGroup'ları bul
-        const categoryNames = categoryProductGroups.map(c => c.name);
-        if (categoryNames.length > 0) {
-          const productGroups = await prisma.productGroup.findMany({
-            where: { name: { in: categoryNames } },
-            select: { id: true },
-          });
-          productGroupIds = productGroups.map((pg) => pg.id);
-        }
-      }
+      // Sub-category = categories tablosunda bir düğüm. Altındaki tüm gönderiler:
+      // 1) category_id bu düğüm veya alt kategorilerde olan postlar
+      // 2) product_id setli ve product.categoryId bu ağaçta olan postlar
+      const resolvedCategoryId = await this.resolveCategoryId(trimmedId);
+      const descendantCategoryIds = await this.getAllDescendantCategoryIds(resolvedCategoryId);
 
-      // Alt product'ları getir - sadece geçerli UUID'ler varsa
-      // ProductGroup ID'lerinin UUID formatında olduğundan emin ol
-      let productIds: string[] = [];
-      if (productGroupIds.length > 0) {
-        // UUID formatını kontrol et (8-4-4-4-12 formatı)
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        const validProductGroupIds = productGroupIds.filter(id => uuidRegex.test(id));
-        
-        if (validProductGroupIds.length > 0) {
-          try {
-            const products = await prisma.product.findMany({
-              where: { groupId: { in: validProductGroupIds } },
-              select: { id: true },
-            });
-            productIds = products.map((p) => p.id);
-          } catch (error) {
-            // ProductGroup ID'leri geçersiz olabilir - boş bırak
-            logger.warn(`Failed to get products for product groups: ${validProductGroupIds.join(', ')}`, error);
-          }
-        } else {
-          logger.warn(`No valid UUID product group IDs found. Received: ${productGroupIds.join(', ')}`);
-        }
-      }
-
-      // Filtreleme: Sub category için
       let typeFilter: ContentPostType[] | undefined;
       if (filter === 'free') {
         typeFilter = [ContentPostType.FREE];
@@ -912,41 +889,16 @@ export class CatalogService {
       } else if (filter === 'questions') {
         typeFilter = [ContentPostType.QUESTION];
       } else {
-        // filter === 'all' ise context seviyesine göre otomatik filtreleme
         typeFilter = this.getAllowedPostTypesForContext(ContextType.SUB_CATEGORY);
       }
 
-      // Eğer SubCategory bulunamadıysa, Category'den child category'leri bul ve onların name'lerini kullan
-      if (!actualSubCategoryId && category) {
-        // Category'nin child category'lerini bul
-        const childCategories = await prisma.category.findMany({
-          where: { parentId: category.id },
-          select: { id: true, name: true },
-        });
-        
-        // Child category name'lerini kullanarak SubCategory'leri bul
-        const subCategoryNames = childCategories.map(c => c.name);
-        if (subCategoryNames.length > 0) {
-          const subCategories = await prisma.subCategory.findMany({
-            where: { name: { in: subCategoryNames } },
-            select: { id: true },
-          });
-          actualSubCategoryId = subCategories.length > 0 ? subCategories[0].id : null;
-        }
-      }
-
-      // Hiyerarşik where clause: sub category + alt product groups + alt products
       const whereClause: any = {
         OR: [
-          // SubCategory ID'yi kullan (UUID formatında)
-          ...(actualSubCategoryId ? [{ subCategoryId: actualSubCategoryId }] : []),
-          ...(productGroupIds.length > 0 ? [{ productGroupId: { in: productGroupIds } }] : []),
-          ...(productIds.length > 0 ? [{ productId: { in: productIds } }] : []),
+          { categoryId: { in: descendantCategoryIds } },
+          { productId: { not: null }, product: { categoryId: { in: descendantCategoryIds } } },
         ],
       };
-
-      // Post type filtreleme
-      if (typeFilter) {
+      if (typeFilter?.length) {
         whereClause.type = { in: typeFilter };
       }
 
@@ -1107,9 +1059,9 @@ export class CatalogService {
 
   /**
    * Product group'a ait post'ları getir (hiyerarşik feed)
-   * Product group'a ait + alt product'ların gönderilerini getirir
-   * Filtreler: all, free, tips_and_tricks, questions
-   * Sıralama: newest, oldest, most_popular
+   * Product group = categories tablosunda bir düğüm. Altındaki tüm gönderiler:
+   * 1) category_id bu düğüm veya alt kategorilerde olan postlar
+   * 2) product_id setli ve product.categoryId bu ağaçta olan postlar
    */
   async getProductGroupPosts(
     productGroupId: string,
@@ -1125,66 +1077,15 @@ export class CatalogService {
     pagination: { cursor?: string; hasMore: boolean; limit: number };
   }> {
     try {
-      // Product group ID'yi resolve et - tüm ID formatlarını kabul eder
-      let actualProductGroupId: string | null = null;
-
-      // 1. Önce Category tablosunda ara (Medusa ID formatlarını destekler)
-      const category = await prisma.category.findUnique({
-        where: { id: productGroupId },
-        select: { id: true, name: true },
-      });
-
-      if (category) {
-        // Category bulundu - name ile ProductGroup'da ara
-        const productGroup = await prisma.productGroup.findFirst({
-          where: { name: category.name },
-          select: { id: true },
-        });
-        if (productGroup) {
-          actualProductGroupId = productGroup.id;
-        }
-      }
-
-      // 2. Category'de bulunamadı - direkt ProductGroup'da ara (UUID formatı)
-      if (!actualProductGroupId) {
-        try {
-          const productGroup = await prisma.productGroup.findUnique({
-            where: { id: productGroupId },
-            select: { id: true },
-          });
-          if (productGroup) {
-            actualProductGroupId = productGroup.id;
-          }
-        } catch (error) {
-          // UUID formatı değil - devam et
-        }
-      }
-
-      if (!actualProductGroupId) {
-        // Product group bulunamadı - boş sonuç döndür
-        return {
-          items: [],
-          pagination: {
-            cursor: undefined,
-            hasMore: false,
-            limit: options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 20,
-          },
-        };
-      }
-
+      const trimmedId = productGroupId.trim();
       const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 20;
       const cursor = options?.cursor;
-      const filter = options?.filter || 'all'; // all, free, tips_and_tricks, questions
-      const sort = options?.sort || 'newest'; // newest, oldest, most_popular
+      const filter = options?.filter || 'all';
+      const sort = options?.sort || 'newest';
 
-      // Alt product'ları getir
-      const products = await prisma.product.findMany({
-        where: { groupId: actualProductGroupId },
-        select: { id: true },
-      });
-      const productIds = products.map((p) => p.id);
+      const resolvedCategoryId = await this.resolveCategoryId(trimmedId);
+      const descendantCategoryIds = await this.getAllDescendantCategoryIds(resolvedCategoryId);
 
-      // Filtreleme: Product group için
       let typeFilter: ContentPostType[] | undefined;
       if (filter === 'free') {
         typeFilter = [ContentPostType.FREE];
@@ -1193,20 +1094,16 @@ export class CatalogService {
       } else if (filter === 'questions') {
         typeFilter = [ContentPostType.QUESTION];
       } else {
-        // filter === 'all' ise context seviyesine göre otomatik filtreleme
         typeFilter = this.getAllowedPostTypesForContext(ContextType.PRODUCT_GROUP);
       }
 
-      // Hiyerarşik where clause: product group + alt products
       const whereClause: any = {
         OR: [
-          { productGroupId: actualProductGroupId },
-          ...(productIds.length > 0 ? [{ productId: { in: productIds } }] : []),
+          { categoryId: { in: descendantCategoryIds } },
+          { productId: { not: null }, product: { categoryId: { in: descendantCategoryIds } } },
         ],
       };
-
-      // Post type filtreleme
-      if (typeFilter) {
+      if (typeFilter?.length) {
         whereClause.type = { in: typeFilter };
       }
 

@@ -322,8 +322,7 @@ router.get(
  *         required: true
  *         schema:
  *           type: string
- *           format: uuid
- *         description: Sub category ID'si
+ *         description: Sub category ID'si (UUID veya external ID formatında olabilir)
  *       - in: query
  *         name: filter
  *         schema:
@@ -428,8 +427,7 @@ router.get(
  *         required: true
  *         schema:
  *           type: string
- *           format: uuid
- *         description: Product group ID'si
+ *         description: Product group ID'si (UUID veya external ID formatında olabilir)
  *       - in: query
  *         name: filter
  *         schema:
