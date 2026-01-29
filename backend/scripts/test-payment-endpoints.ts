@@ -4,12 +4,15 @@
  * Usage: npx ts-node scripts/test-payment-endpoints.ts
  *        or: docker-compose exec backend npx ts-node scripts/test-payment-endpoints.ts
  * API_BASE_URL=http://localhost:3000 npx ts-node scripts/test-payment-endpoints.ts
+ *
+ * Uses tuna@tipbox.co by default. omer@tipbox.co is reserved for app-side integration;
+ * this script does NOT delete or modify omer@tipbox.co data.
  */
 import axios, { AxiosInstance } from 'axios';
 
 const BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000';
 
-// Seed user (must exist in DB)
+// Test user (must exist in DB). omer@tipbox.co reserved for app integration - not used here.
 const TEST_EMAIL = process.env.TEST_EMAIL || 'tuna@tipbox.co';
 const TEST_PASSWORD = process.env.TEST_PASSWORD || 'password123';
 
