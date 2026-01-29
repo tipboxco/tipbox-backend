@@ -15,8 +15,8 @@ export async function seedExplore(): Promise<void> {
   const exploreImagePaths: string[] = [];
   
   const imageFiles = [
-    { localPath: path.join(__dirname, '../../../tests/assets/explore/hottest.jpg'), fileName: 'hottest.jpg' },
-    { localPath: path.join(__dirname, '../../../tests/assets/explore/hottest2.jpg'), fileName: 'hottest2.jpg' },
+    { localPath: path.join(__dirname, '../../../tests/assets/explore/explorebanners.png'), fileName: 'explorebanners.png' },
+    { localPath: path.join(__dirname, '../../../tests/assets/explore/explorebanners2.png'), fileName: 'explorebanners2.png' },
   ];
   
   console.log('📸 Marketplace banner görselleri MinIO\'ya yükleniyor...');
@@ -34,7 +34,7 @@ export async function seedExplore(): Promise<void> {
       
       if (!exists) {
         const fileBuffer = readFileSync(imageFile.localPath);
-        await s3Service.uploadFile(minioPath, fileBuffer, 'image/jpeg');
+        await s3Service.uploadFile(minioPath, fileBuffer, 'image/png');
         console.log(`✅ Görsel yüklendi: ${minioPath}`);
       } else {
         console.log(`⏭️  Görsel zaten mevcut: ${minioPath}`);
