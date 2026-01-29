@@ -6833,6 +6833,27 @@ async function main() {
     } else {
       console.warn(`⚠️  Default avatar dosyası bulunamadı: ${defaultAvatarFilePath}\n`)
     }
+
+    // Setup Profile için 12 temsili avatar'ı MinIO'ya yükle (GET /users/avatars path'leri ile uyumlu)
+    const avatarsDir = path.join(__dirname, '../tests/assets/avatars')
+    if (existsSync(avatarsDir)) {
+      let uploaded = 0
+      for (let i = 1; i <= 12; i++) {
+        const avatarName = `avatar-${i}.png`
+        const avatarPath = path.join(avatarsDir, avatarName)
+        if (existsSync(avatarPath)) {
+          const objectKey = `avatars/${avatarName}`
+          const buf = readFileSync(avatarPath)
+          await s3Service.uploadFile(objectKey, buf, 'image/png')
+          uploaded++
+        }
+      }
+      if (uploaded > 0) {
+        console.log(`✅ Setup Profile avatarları yüklendi: ${uploaded}/12 (avatars/avatar-1.png … avatar-12.png)\n`)
+      }
+    } else {
+      console.warn(`⚠️  Avatarlar klasörü bulunamadı: ${avatarsDir}\n`)
+    }
   } catch (error: any) {
     console.error('❌ MinIO bucket kontrolü başarısız!')
     console.error('   Hata:', error instanceof Error ? error.message : String(error))

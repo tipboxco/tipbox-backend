@@ -1355,7 +1355,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
  *                         description: Avatar dosya adı
  *                       url:
  *                         type: string
- *                         example: http://192.168.1.178:9000/tipbox-media/app/Avatars/avatar-1.png
+ *                         example: http://192.168.1.178:9000/tipbox-media/avatars/avatar-1.png
  *                         description: Avatar'ın tam URL'i
  *       500:
  *         description: Sunucu hatası
@@ -1373,11 +1373,11 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/avatars', asyncHandler(async (req: Request, res: Response) => {
   try {
-    // 12 adet avatar'ı oluştur (avatar-1.png'den avatar-12.png'ye kadar)
+    // 12 adet avatar: seed'de tests/assets/avatars/ → MinIO'ya avatars/avatar-1.png ... avatars/avatar-12.png yüklenir
     const avatars = Array.from({ length: 12 }, (_, i) => {
       const avatarNumber = i + 1;
       const avatarName = `avatar-${avatarNumber}.png`;
-      const avatarPath = `app/Avatars/${avatarName}`;
+      const avatarPath = `avatars/${avatarName}`;
       const avatarUrl = resolveMediaUrl(avatarPath);
 
       return {
