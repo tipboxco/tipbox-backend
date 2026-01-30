@@ -13,6 +13,12 @@ import { seedProductCatalog } from './seed/product-catalog.seed'
 import { ensureEventBadgeSystem } from './seed/helpers/ensure-event-badge-system'
 import { ensureMarketplaceBadges } from './seed/helpers/ensure-marketplace-badges'
 import { seedBrandCatalog } from './seed/steps/brand-catalog.seed'
+import { seedUserAvatars } from './seed/steps/user-avatar.seed'
+import { seedSocialAndPreferences } from './seed/steps/social-and-preferences.seed'
+import { seedPayment } from './seed/steps/payment.seed'
+import { seedTipsTransfers } from './seed/steps/tips-transfer.seed'
+import { seedExpert } from './seed/steps/expert.seed'
+import { seedNotification } from './seed/steps/notification.seed'
 import { GeminiService } from '../src/infrastructure/ai/gemini.service'
 import { brandToWebsite } from '../src/data/brandToWebsite'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -6893,7 +6899,7 @@ async function main() {
   }
 
   // Progress bar oluştur (toplam 26 ana adım - Trending posts ve Feed distribution eklendi)
-  const totalSteps = 26 // Updated: Added trending posts and feed distribution steps
+  const totalSteps = 32 // Includes 8.1 steps: UserAvatar, Social&Preferences, Payment, TipsTransfer, Expert, Notification
   const progress = new ProgressBar(totalSteps, 50)
 
   // Seed başlangıcını işaretle (metadata için)
@@ -6960,6 +6966,16 @@ async function main() {
   console.log(`✅ ${seedUsers.size} kullanıcı oluşturuldu`)
   progress.increment('Seed kullanıcıları oluşturuldu')
 
+  // 2b. UserAvatar (ensure every seed user has active avatar for EP compatibility)
+  progress.increment('UserAvatar step...')
+  try {
+    await seedUserAvatars(prisma)
+    progress.increment('UserAvatar step tamamlandı')
+  } catch (error) {
+    console.warn('⚠️  UserAvatar step atlandı:', error instanceof Error ? error.message : error)
+    progress.increment('UserAvatar step atlandı')
+  }
+
   // 3. Experience Taxonomy (Duration, Location, Purpose - for Experience posts)
   await seedTaxonomy()
   progress.increment('Experience Taxonomy oluşturuldu')
@@ -7008,6 +7024,16 @@ async function main() {
   await seedTrustRelations()
   progress.increment('Trust relations oluşturuldu')
 
+  // 8b. Social & Preferences (UserBlock, UserMute, UserFeedPreferences)
+  progress.increment('Social & Preferences step...')
+  try {
+    await seedSocialAndPreferences(prisma)
+    progress.increment('Social & Preferences step tamamlandı')
+  } catch (error) {
+    console.warn('⚠️  Social & Preferences step atlandı:', error instanceof Error ? error.message : error)
+    progress.increment('Social & Preferences step atlandı')
+  }
+
   // 8.5. Trending Posts (Feed distribution'dan önce hazırlanmalı)
   progress.increment('Trending post\'lar oluşturuluyor...')
   await seedTrendingPosts()
@@ -7017,6 +7043,26 @@ async function main() {
   progress.increment('Wallet transactions oluşturuluyor...')
   await seedTransactions()
   progress.increment('Wallet transactions oluşturuldu')
+
+  // 9b. Payment step (SubscriptionPlan, PaymentMethod, UserSubscription, Invoice)
+  progress.increment('Payment step...')
+  try {
+    await seedPayment(prisma, { testUserEmail: 'omer@tipbox.co' })
+    progress.increment('Payment step tamamlandı')
+  } catch (error) {
+    console.warn('⚠️  Payment step atlandı:', error instanceof Error ? error.message : error)
+    progress.increment('Payment step atlandı')
+  }
+
+  // 9c. TipsTokenTransfer step
+  progress.increment('TipsTransfer step...')
+  try {
+    await seedTipsTransfers(prisma)
+    progress.increment('TipsTransfer step tamamlandı')
+  } catch (error) {
+    console.warn('⚠️  TipsTransfer step atlandı:', error instanceof Error ? error.message : error)
+    progress.increment('TipsTransfer step atlandı')
+  }
 
   // 12. Events (WishboxEvent + Participation + Rewards)
   progress.increment('Events oluşturuluyor...')
@@ -7906,6 +7952,27 @@ async function main() {
       console.error('   Stack:', error.stack)
     }
     console.log('⚠️  Seed devam ediyor ama Brand Catalog verileri oluşturulamadı')
+  }
+
+  // ===== EXPERT & NOTIFICATION STEPS (8.1) =====
+  progress.increment('Expert step...')
+  try {
+    await seedExpert(prisma)
+    progress.increment('Expert step tamamlandı')
+    console.log('✅ Expert (ExpertRequest, ExpertAnswer) seeding completed')
+  } catch (error) {
+    console.warn('⚠️  Expert step atlandı:', error instanceof Error ? error.message : error)
+    progress.increment('Expert step atlandı')
+  }
+
+  progress.increment('Notification step...')
+  try {
+    await seedNotification(prisma)
+    progress.increment('Notification step tamamlandı')
+    console.log('✅ Notification & PushToken seeding completed')
+  } catch (error) {
+    console.warn('⚠️  Notification step atlandı:', error instanceof Error ? error.message : error)
+    progress.increment('Notification step atlandı')
   }
 
   // ===== NFT SEEDING FOR PRIORITY USERS =====
