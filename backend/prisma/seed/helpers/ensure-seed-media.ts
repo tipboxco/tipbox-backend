@@ -4,7 +4,7 @@
  */
 
 import { S3Service } from '../../../src/infrastructure/s3/s3.service';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
 import path from 'path';
 import mediaMap from '../seed-media-map.json';
 
@@ -17,7 +17,7 @@ const seedMedia = mediaMap as Record<string, MediaEntry>;
 // upload-seed-media.ts ile aynı klasör yapısını kullan
 // seed-media-map.json'dan key'e göre local path bulur
 function buildAssetMapping(): Map<string, string> {
-  const assetsBasePath = path.join(__dirname, '../../tests/assets');
+  const assetsBasePath = path.join(__dirname, '../../../tests/assets');
   const mapping = new Map<string, string>();
   
   const fs = require('fs');
@@ -169,7 +169,26 @@ function buildAssetMapping(): Map<string, string> {
   } catch (error) {
     // Klasör yoksa atla
   }
-  
+
+  // 6a. CATALOG MAIN-CATEGORY → catalog/main-category/ (sadece birinci seviye PNG dosyaları)
+  try {
+    const catalogMainCategoryPath = path.join(assetsBasePath, 'catalog', 'main-category');
+    if (existsSync(catalogMainCategoryPath)) {
+      const items = fs.readdirSync(catalogMainCategoryPath);
+      for (const item of items) {
+        if (item.startsWith('.')) continue;
+        const itemPath = path.join(catalogMainCategoryPath, item);
+        if (existsSync(itemPath) && fs.statSync(itemPath).isFile() && /\.(png|jpg|jpeg)$/i.test(item)) {
+          const nameWithoutExt = item.replace(/\.[^/.]+$/, '');
+          const slug = slugify(nameWithoutExt);
+          mapping.set(`catalog.main-category.${slug}`, itemPath);
+        }
+      }
+    }
+  } catch (error) {
+    // Klasör yoksa atla
+  }
+
   // 6b. PRODUCT CATALOG → product-catalog/ (hierarchical structure)
   try {
     const productCatalogPath = path.join(assetsBasePath, 'Product Catalog', 'Main Category');
@@ -351,51 +370,40 @@ function buildAssetMapping(): Map<string, string> {
   }
   
   // 11. USERPROFILE → profile-pictures/ ve profile-banners/
-  // ÖNEMLİ: seed-media-map.json'daki key'ler için doğru dosya yollarını bul
+  // tests/assets/userprofile/ dosya adları ile seed key eşleştirmesi (SEED_USERS avatarKey ile uyumlu)
   try {
     const userProfilePath = path.join(assetsBasePath, 'userprofile');
     if (existsSync(userProfilePath)) {
       const files = fs.readdirSync(userProfilePath);
+      const fileToKey: Record<string, string> = {
+        'omer.png': 'user.avatar.omer',
+        'mehmet.png': 'user.avatar.mehmet',
+        'burakcan.png': 'user.avatar.burakcan',
+        'mihrac.png': 'user.avatar.mihrac',
+        'furkan.png': 'user.avatar.furkan',
+        'aycan.png': 'user.avatar.aycan',
+        'ozan.jpg': 'user.avatar.ozan',
+        'ozan.png': 'user.avatar.ozan',
+        'man-user.jpg': 'user.avatar.man1',
+        'man-user-2.png': 'user.avatar.man2',
+        'man-user-3.jpg': 'user.avatar.man3',
+        'man-user-4.jpg': 'user.avatar.man4',
+        'man-user-5.jpg': 'user.avatar.man5',
+        'woman-user.jpg': 'user.avatar.woman1',
+        'woman-user-2.jpg': 'user.avatar.woman2',
+        'woman-user-3.jpg': 'user.avatar.woman3',
+        'woman-user-4.jpg': 'user.avatar.woman4',
+        'woman-user-5.jpg': 'user.avatar.woman5',
+        'banner.png': 'user.banner.primary',
+      };
       for (const file of files) {
         if (file.startsWith('.')) continue;
         const filePath = path.join(userProfilePath, file);
         if (existsSync(filePath) && fs.statSync(filePath).isFile()) {
-          const nameWithoutExt = file.replace(/\.[^/.]+$/, '');
-          
-          // seed-media-map.json'daki key'lerle eşleştir
-          // user.avatar.primary ve user.banner.primary için özel dosyalar kullanılabilir
-          // ama seed-media-map.json'da farklı path'ler olabilir
-          if (file === 'banner.png') {
-            // user.banner.primary için banner.png kullanılabilir
-            // ama seed-media-map.json'da farklı bir path olabilir
-            if (!mapping.has('user.banner.primary')) {
-              mapping.set('user.banner.primary', filePath);
-            }
-          } else if (file === 'ozan.jpg') {
-            // user.avatar.primary ve user.avatar.market için ozan.jpg kullanılabilir
-            // ama seed-media-map.json'da farklı path'ler olabilir
-            if (!mapping.has('user.avatar.primary')) {
-              mapping.set('user.avatar.primary', filePath);
-            }
-            if (!mapping.has('user.avatar.market')) {
-              mapping.set('user.avatar.market', filePath);
-            }
-          }
-          
-          // Diğer user avatar dosyaları için
-          if (file === 'useravatar.jpg') {
-            mapping.set('user.avatar.trust1', filePath);
-          } else if (file === 'useravatar2.jpg') {
-            mapping.set('user.avatar.trust2', filePath);
-            mapping.set('user.avatar.truster1', filePath);
-          } else if (file === 'useravatar3.jpg') {
-            mapping.set('user.avatar.trust3', filePath);
-            mapping.set('user.avatar.truster2', filePath);
-          } else if (file === 'useravatar4.png') {
-            mapping.set('user.avatar.trust4', filePath);
-            mapping.set('user.avatar.truster3', filePath);
-          } else if (file === 'ozan.jpg') {
-            mapping.set('user.avatar.trust5', filePath);
+          const key = fileToKey[file];
+          if (key) {
+            if (key === 'user.avatar.ozan' && file === 'ozan.png' && mapping.has(key)) continue;
+            if (!mapping.has(key)) mapping.set(key, filePath);
           }
         }
       }
@@ -481,7 +489,7 @@ function buildAssetMapping(): Map<string, string> {
 
 // Local dosya path'lerini key'e göre bul
 function getLocalPathForKey(key: string): string | null {
-  const assetsBasePath = path.join(__dirname, '../../tests/assets');
+  const assetsBasePath = path.join(__dirname, '../../../tests/assets');
   
   // Önce buildAssetMapping'den bak
   const mapping = buildAssetMapping();
@@ -511,6 +519,7 @@ function getLocalPathForKey(key: string): string | null {
           path.join(assetsBasePath, 'brands', 'Cosmetic', fileName),
           path.join(assetsBasePath, 'brands', 'cosmetic', fileName),
           path.join(assetsBasePath, 'catalog', fileName),
+          path.join(assetsBasePath, 'catalog', 'main-category', fileName),
           path.join(assetsBasePath, 'event', fileName),
           path.join(assetsBasePath, 'events', fileName),
           path.join(assetsBasePath, 'marketplace', fileName),
@@ -540,11 +549,11 @@ function getLocalPathForKey(key: string): string | null {
             // Recursive search function
             const findInProductCatalog = (dirPath: string): string | null => {
               try {
-                const items = fs.readdirSync(dirPath);
+                const items = readdirSync(dirPath);
                 for (const item of items) {
                   if (item.startsWith('.')) continue;
                   const itemPath = path.join(dirPath, item);
-                  const itemStat = fs.statSync(itemPath);
+                  const itemStat = statSync(itemPath);
                   
                   if (itemStat.isFile() && (item === fileName || item === nameWithoutExt + ext)) {
                     return itemPath;

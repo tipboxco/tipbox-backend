@@ -2,6 +2,9 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# node-gyp için Python ve build araçları (utf-8-validate, bufferutil gibi native modüller için)
+RUN apk add --no-cache python3 make g++ && ln -sf /usr/bin/python3 /usr/bin/python
+
 # Package files ve Prisma schema'yı kopyala
 COPY package*.json ./
 COPY prisma ./prisma
