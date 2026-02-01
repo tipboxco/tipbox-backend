@@ -53,7 +53,7 @@ router.get(
  * /brands/categories/{categoryId}/brands:
  *   get:
  *     summary: Kategoriye göre markaları listele
- *     description: Kullanıcının seçtiği categorye bağlı olarak markaların listelendiği endpoint.
+ *     description: Kullanıcının seçtiği categorye bağlı markalar, markaya ait ürün sayısına göre (çoktan aza) sıralanarak döner.
  *     tags: [Brand Catalog]
  *     security:
  *       - bearerAuth: []
@@ -348,8 +348,8 @@ router.get(
  * @openapi
  * /brands/{brandId}/groups:
  *   get:
- *     summary: Markaya ait product group'ları listele
- *     description: Markaya ait product group'ların listelendiği endpoint. Her group içinde max ürün ön izlemesi (productLimit) ve hem grup hem ürün pagination bilgisi döner.
+ *     summary: Markanın ürünlerini kategori (level 2) bazında getir
+ *     description: Brand id veya externalId ile markayı bulur. Ürünler nested Category yapısına göre gruplanır; sadece rank/derinlik 2 (level 2) kategoriler grup adı olarak döner. Kategorisi yok veya level 2 olmayan ürünler "Diğer" grubunda.
  *     tags: [Brand Catalog]
  *     security:
  *       - bearerAuth: []
@@ -359,8 +359,7 @@ router.get(
  *         required: true
  *         schema:
  *           type: string
- *           format: uuid
- *         description: Brand ID'si
+ *         description: Brand ID veya externalId (her ikisi de kabul edilir)
  *       - in: query
  *         name: limit
  *         required: false
@@ -368,13 +367,7 @@ router.get(
  *           type: integer
  *           minimum: 1
  *           maximum: 50
- *         description: Sayfa başına dönecek group sayısı (varsayılan 20)
- *       - in: query
- *         name: cursor
- *         required: false
- *         schema:
- *           type: string
- *         description: Bir sonraki sayfa için cursor (önceki sayfanın son group ID'si)
+ *         description: Sayfa başına kategori grubu sayısı (varsayılan 20)
  *       - in: query
  *         name: productLimit
  *         required: false
@@ -382,10 +375,16 @@ router.get(
  *           type: integer
  *           minimum: 1
  *           maximum: 50
- *         description: Her group içinde dönecek ürün ön izlemesi adedi (varsayılan 5)
+ *         description: Her kategori grubunda dönecek ürün sayısı (varsayılan 5)
+ *       - in: query
+ *         name: cursor
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Sonraki sayfa için cursor (son kategori id)
  *     responses:
  *       200:
- *         description: Product group'ları başarıyla listelendi.
+ *         description: Kategori grupları ve ürünler döndü.
  *         content:
  *           application/json:
  *             schema:
@@ -396,10 +395,9 @@ router.get(
  *                   items:
  *                     type: object
  *                     properties:
- *                       productGroupId:
+ *                       categoryId:
  *                         type: string
- *                         format: uuid
- *                       productGroupName:
+ *                       categoryName:
  *                         type: string
  *                       products:
  *                         type: array
@@ -408,8 +406,6 @@ router.get(
  *                           properties:
  *                             productId:
  *                               type: string
- *                             productGroupId:
- *                               type: string
  *                             name:
  *                               type: string
  *                             image:
@@ -417,13 +413,6 @@ router.get(
  *                               nullable: true
  *                             stats:
  *                               type: object
- *                               properties:
- *                                 reviews:
- *                                   type: integer
- *                                 likes:
- *                                   type: integer
- *                                 share:
- *                                   type: integer
  *                 pagination:
  *                   type: object
  *                   properties:
@@ -450,11 +439,7 @@ router.get(
     const productLimit =
       productLimitParam && !Number.isNaN(productLimitParam) ? Math.min(productLimitParam, 50) : undefined;
 
-    const result = await brandService.getBrandProductGroups(brandId, {
-      cursor,
-      limit,
-      productLimit,
-    });
+    const result = await brandService.getBrandProductGroups(brandId, { cursor, limit, productLimit });
     return res.json(result);
   }),
 );
@@ -489,7 +474,7 @@ router.get(
  *         required: false
  *         schema:
  *           type: string
- *         description: Bir sonraki sayfa için cursor (önceki sayfanın son product ID'si)
+ *         description: Bir sonraki sayfa için cursor (product id veya metadata externalId kabul edilir)
  *     responses:
  *       200:
  *         description: Products başarıyla listelendi.
@@ -566,8 +551,7 @@ router.get(
  *         required: true
  *         schema:
  *           type: string
- *           format: uuid
- *         description: Brand ID'si
+ *         description: Brand ID veya externalId (her ikisi de kabul edilir)
  *       - in: path
  *         name: groupId
  *         required: true
@@ -588,7 +572,7 @@ router.get(
  *         required: false
  *         schema:
  *           type: string
- *         description: Bir sonraki sayfa için cursor (önceki sayfanın son product ID'si)
+ *         description: Bir sonraki sayfa için cursor (product id veya metadata externalId kabul edilir)
  *     responses:
  *       200:
  *         description: Products başarıyla listelendi.

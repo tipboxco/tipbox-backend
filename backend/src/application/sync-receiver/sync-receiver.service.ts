@@ -180,8 +180,30 @@ export class SyncReceiverService {
   }
 
   /**
-   * Brand category'lerini işler - yoksa oluşturur, varsa ID'sini döner
-   * @returns Category name -> Category ID mapping
+   * Medusa Category tablosundan name ile Category id (pcat_...) resolve eder.
+   * BrandCategory.categoryId alanını doğru pcat_ ID ile doldurmak için kullanılır.
+   */
+  private async resolveMedusaCategoryIdByName(
+    categoryNames: string[],
+    tx: Prisma.TransactionClient,
+  ): Promise<Map<string, string>> {
+    const map = new Map<string, string>();
+    if (categoryNames.length === 0) return map;
+
+    const categories = await tx.category.findMany({
+      where: { name: { in: categoryNames } },
+      select: { id: true, name: true },
+    });
+    categories.forEach((c: { id: string; name: string }) => {
+      map.set(c.name, c.id);
+    });
+    return map;
+  }
+
+  /**
+   * Brand category'lerini işler - yoksa oluşturur, varsa ID'sini döner.
+   * BrandCategory.categoryId (Medusa Category pcat_...) name ile eşlenir.
+   * @returns Category name -> BrandCategory ID (UUID) mapping (Brand.categoryId için)
    */
   private async processBrandCategories(
     data: SyncRecord[],
@@ -202,9 +224,14 @@ export class SyncReceiverService {
       return categoryMap;
     }
 
-    // Mevcut category'leri çek
+    const namesArray = Array.from(categoryNames);
+
+    // Medusa Category (pcat_...) name -> id mapping
+    const medusaCategoryMap = await this.resolveMedusaCategoryIdByName(namesArray, tx);
+
+    // Mevcut BrandCategory'leri çek
     const existingCategories = await tx.brandCategory.findMany({
-      where: { name: { in: Array.from(categoryNames) } },
+      where: { name: { in: namesArray } },
       select: { id: true, name: true },
     });
 
@@ -215,15 +242,14 @@ export class SyncReceiverService {
       categoryMap.set(cat.name, cat.id);
     });
 
-    // Olmayan category'leri oluştur
-    const categoriesToCreate = Array.from(categoryNames).filter(
-      (name) => !existingCategoryNames.has(name),
-    );
+    // Olmayan BrandCategory'leri oluştur (categoryId = Medusa Category pcat_ varsa set et)
+    const categoriesToCreate = namesArray.filter((name) => !existingCategoryNames.has(name));
 
     if (categoriesToCreate.length > 0) {
       const createData = categoriesToCreate.map((name) => ({
         name,
         imageUrl: null,
+        categoryId: medusaCategoryMap.get(name) ?? null,
       }));
 
       await tx.brandCategory.createMany({
@@ -231,7 +257,7 @@ export class SyncReceiverService {
         skipDuplicates: true,
       });
 
-      // Yeni oluşturulan category'leri çek ve map'e ekle
+      // Yeni oluşturulan BrandCategory'leri çek ve map'e ekle
       const newlyCreated = await tx.brandCategory.findMany({
         where: { name: { in: categoriesToCreate } },
         select: { id: true, name: true },
@@ -240,6 +266,20 @@ export class SyncReceiverService {
       newlyCreated.forEach((cat: { id: string; name: string }) => {
         categoryMap.set(cat.name, cat.id);
       });
+    }
+
+    // Mevcut BrandCategory'lerin categoryId (pcat_) eksikse güncelle
+    const toUpdateMedusaId = existingCategories.filter(
+      (c: { id: string; name: string }) => medusaCategoryMap.has(c.name),
+    );
+    for (const bc of toUpdateMedusaId) {
+      const medusaId = medusaCategoryMap.get(bc.name);
+      if (medusaId) {
+        await tx.brandCategory.update({
+          where: { id: bc.id },
+          data: { categoryId: medusaId },
+        });
+      }
     }
 
     return categoryMap;
@@ -335,13 +375,13 @@ export class SyncReceiverService {
   }
 
   /**
-   * Brand category'lerini fallback modda işler
-   * @returns Category name -> Category ID mapping
+   * Brand category'lerini fallback modda işler.
+   * BrandCategory.categoryId (Medusa Category pcat_...) name ile eşlenir.
+   * @returns Category name -> BrandCategory ID (UUID) mapping
    */
   private async processBrandCategoriesFallback(data: SyncRecord[]): Promise<Map<string, string>> {
     const categoryMap = new Map<string, string>();
 
-    // Tüm unique category isimlerini topla
     const categoryNames = new Set<string>();
     for (const record of data) {
       const categoryName = (record.category as string) || null;
@@ -354,9 +394,21 @@ export class SyncReceiverService {
       return categoryMap;
     }
 
-    // Mevcut category'leri çek
+    const namesArray = Array.from(categoryNames);
+
+    // Medusa Category (pcat_...) name -> id
+    const medusaCategoryMap = new Map<string, string>();
+    const medusaCategories = await this.prisma.category.findMany({
+      where: { name: { in: namesArray } },
+      select: { id: true, name: true },
+    });
+    medusaCategories.forEach((c: { id: string; name: string }) => {
+      medusaCategoryMap.set(c.name, c.id);
+    });
+
+    // Mevcut BrandCategory'leri çek
     const existingCategories = await this.prisma.brandCategory.findMany({
-      where: { name: { in: Array.from(categoryNames) } },
+      where: { name: { in: namesArray } },
       select: { id: true, name: true },
     });
 
@@ -367,23 +419,33 @@ export class SyncReceiverService {
       categoryMap.set(cat.name, cat.id);
     });
 
-    // Olmayan category'leri oluştur
-    const categoriesToCreate = Array.from(categoryNames).filter(
-      (name) => !existingCategoryNames.has(name),
-    );
+    // Mevcut satırlarda categoryId (pcat_) güncelle
+    for (const bc of existingCategories) {
+      const medusaId = medusaCategoryMap.get(bc.name);
+      if (medusaId) {
+        await this.prisma.brandCategory.update({
+          where: { id: bc.id },
+          data: { categoryId: medusaId },
+        });
+      }
+    }
+
+    // Olmayan BrandCategory'leri oluştur (categoryId = pcat_ varsa set et)
+    const categoriesToCreate = namesArray.filter((name) => !existingCategoryNames.has(name));
 
     if (categoriesToCreate.length > 0) {
       for (const categoryName of categoriesToCreate) {
         try {
+          const medusaId = medusaCategoryMap.get(categoryName) ?? null;
           const newCategory = await this.prisma.brandCategory.create({
             data: {
               name: categoryName,
               imageUrl: null,
+              categoryId: medusaId,
             },
           });
           categoryMap.set(categoryName, newCategory.id);
         } catch (error) {
-          // Eğer aynı anda başka bir işlem oluşturduysa, tekrar çek
           const existing = await this.prisma.brandCategory.findUnique({
             where: { name: categoryName },
             select: { id: true },
@@ -876,7 +938,8 @@ export class SyncReceiverService {
   }
 
   /**
-   * Brand category verilerini batch olarak işler (upsert) - name ile eşlenir
+   * Brand category verilerini batch olarak işler (upsert) - name ile eşlenir.
+   * BrandCategory.categoryId (Medusa Category pcat_...) name ile set edilir.
    */
   private async processBrandCategoriesBatch(data: SyncRecord[]): Promise<ProcessResult> {
     if (data.length === 0) {
@@ -884,14 +947,24 @@ export class SyncReceiverService {
     }
 
     const records: ProcessedRecord[] = [];
-    // Data'dan name'leri al (id veya name field'ından)
     const categoryNames = data
       .map((r) => r.name || r.title || r.id)
       .filter(Boolean) as string[];
 
-    // BrandCategory tablosundaki name'leri çek
+    const uniqueNames = [...new Set(categoryNames)];
+
+    // Medusa Category (pcat_...) name -> id
+    const medusaCategoryMap = new Map<string, string>();
+    const medusaCategories = await this.prisma.category.findMany({
+      where: { name: { in: uniqueNames } },
+      select: { id: true, name: true },
+    });
+    medusaCategories.forEach((c: { id: string; name: string }) => {
+      medusaCategoryMap.set(c.name, c.id);
+    });
+
     const existingCategories = await this.prisma.brandCategory.findMany({
-      where: { name: { in: categoryNames } },
+      where: { name: { in: uniqueNames } },
       select: { name: true },
     });
 
@@ -899,7 +972,6 @@ export class SyncReceiverService {
     const toCreate: typeof data = [];
     const toUpdate: typeof data = [];
 
-    // Kayıtları create ve update listelerine ayır
     for (const record of data) {
       const categoryName = record.name || record.title || record.id;
       if (categoryName && existingNames.has(categoryName)) {
@@ -913,18 +985,19 @@ export class SyncReceiverService {
     let updated = 0;
     let failed = 0;
 
-    // Transaction içinde batch işlemler
     try {
       await this.prisma.$transaction(
-        async (tx: any) => {
-          // Batch create
+        async (tx: Prisma.TransactionClient) => {
           if (toCreate.length > 0) {
-            const createData = toCreate.map((record) => ({
-              name: record.name || record.title || record.id || 'Unnamed Category',
-              imageUrl: record.image_url || record.thumbnail || null,
-            }));
+            const createData = toCreate.map((record) => {
+              const name = record.name || record.title || record.id || 'Unnamed Category';
+              return {
+                name,
+                imageUrl: record.image_url || record.thumbnail || null,
+                categoryId: medusaCategoryMap.get(name) ?? null,
+              };
+            });
 
-            // Prisma createMany skipDuplicates kullanarak hızlı insert
             await tx.brandCategory.createMany({
               data: createData,
               skipDuplicates: true,
@@ -940,15 +1013,15 @@ export class SyncReceiverService {
             });
           }
 
-          // Batch update - her kayıt için ayrı update (Prisma updateMany where in desteklemiyor)
           if (toUpdate.length > 0) {
-            // Paralel update işlemleri için Promise.all kullan
             const updatePromises = toUpdate.map((record) => {
               const categoryName = record.name || record.title || record.id;
+              const medusaId = medusaCategoryMap.get(categoryName) ?? null;
               return tx.brandCategory.update({
                 where: { name: categoryName },
                 data: {
                   imageUrl: record.image_url || record.thumbnail || null,
+                  categoryId: medusaId,
                 },
               });
             });
@@ -965,11 +1038,10 @@ export class SyncReceiverService {
           }
         },
         {
-          timeout: 30000, // 30 saniye timeout
+          timeout: 30000,
         },
       );
     } catch (error) {
-      // Transaction başarısız olursa, her kaydı tek tek dene
       logger.warn('[SyncReceiver] Brand categories batch transaction failed, falling back to individual upserts', {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
@@ -987,7 +1059,8 @@ export class SyncReceiverService {
   }
 
   /**
-   * Brand categories batch işlemi için fallback - transaction başarısız olursa kullanılır
+   * Brand categories batch işlemi için fallback - transaction başarısız olursa kullanılır.
+   * BrandCategory.categoryId (Medusa pcat_...) name ile set edilir.
    */
   private async processBrandCategoriesBatchFallback(data: SyncRecord[]): Promise<ProcessResult> {
     const records: ProcessedRecord[] = [];
@@ -999,11 +1072,15 @@ export class SyncReceiverService {
     for (const record of data) {
       try {
         const categoryName = record.name || record.title || record.id || 'Unnamed Category';
+        const medusaCategory = await this.prisma.category.findFirst({
+          where: { name: categoryName },
+          select: { id: true },
+        });
         const categoryData = {
           imageUrl: record.image_url || record.thumbnail || null,
+          categoryId: medusaCategory?.id ?? null,
         };
 
-        // Önce var mı kontrol et (name ile)
         const existing = await this.prisma.brandCategory.findUnique({
           where: { name: categoryName },
           select: { id: true, name: true },

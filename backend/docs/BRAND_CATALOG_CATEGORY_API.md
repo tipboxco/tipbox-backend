@@ -53,6 +53,8 @@ Authorization: Bearer {token}
 
 **Endpoint:** `GET /brands/categories/{categoryId}/brands`
 
+**Sıralama:** Markalar, markaya ait ürün sayısına göre **çoktan aza** sıralanır (en fazla ürünü olan marka önce).
+
 **Authentication:** Bearer Token gerekli
 
 **Request:**

@@ -5344,35 +5344,38 @@ async function updateBrandLogosFromLogoDev(): Promise<void> {
 }
 
 async function ensureBrandCategory(config: { name: string; description?: string; imageKey?: SeedMediaKey }): Promise<{ id: string; name: string }> {
-  // Eğer imageKey belirtilmemişse, mapping'den otomatik bul
+  // Medusa Category (pcat_...) name ile eşle - BrandCategory.categoryId doğru pcat_ ile dolsun
+  const medusaCategory = await prisma.category.findFirst({
+    where: { name: config.name },
+    select: { id: true },
+  }).catch(() => null);
+  const categoryId = medusaCategory?.id ?? null;
+
   let finalImageKey = config.imageKey;
   if (!finalImageKey) {
     finalImageKey = getBrandCategoryImageKey(config.name);
   }
-  
+
   const existing = await prisma.brandCategory.findUnique({
     where: { name: config.name }
   }).catch(() => null);
-  
+
   if (existing) {
-    // imageUrl için fallback: eğer key bulunamazsa, mapping'den bak
     let imageUrl: string | null = null;
     if (finalImageKey) {
       imageUrl = getSeedMediaPath(finalImageKey, true);
     }
-    
-    // Eğer hala null ise, mapping'den otomatik bul
     if (!imageUrl) {
       const mappingKey = getBrandCategoryImageKey(config.name);
       if (mappingKey) {
         imageUrl = getSeedMediaPath(mappingKey, true);
       }
     }
-    
-    const updateData: any = {};
-    if (config.description !== undefined) updateData.description = config.description;
+
+    const updateData: Record<string, unknown> = {};
     if (imageUrl) updateData.imageUrl = imageUrl;
-    
+    if (categoryId) updateData.categoryId = categoryId;
+
     if (Object.keys(updateData).length > 0) {
       return prisma.brandCategory.update({
         where: { id: existing.id },
@@ -5381,25 +5384,23 @@ async function ensureBrandCategory(config: { name: string; description?: string;
     }
     return existing;
   }
-  
-  // imageUrl için fallback: eğer key bulunamazsa, mapping'den bak
+
   let imageUrl: string | null = null;
   if (finalImageKey) {
     imageUrl = getSeedMediaPath(finalImageKey, true);
   }
-  
-  // Eğer hala null ise, mapping'den otomatik bul
   if (!imageUrl) {
     const mappingKey = getBrandCategoryImageKey(config.name);
     if (mappingKey) {
       imageUrl = getSeedMediaPath(mappingKey, true);
     }
   }
-  
+
   return prisma.brandCategory.create({
     data: {
       name: config.name,
       imageUrl,
+      categoryId,
     }
   });
 }
