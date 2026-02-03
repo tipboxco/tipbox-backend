@@ -1155,7 +1155,11 @@ export class UserService {
     userId: string,
     query?: string,
     options?: { cursor?: string; limit?: number }
-  ): Promise<{ items: CollectionResponse[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+  ): Promise<{
+    brand: { items: CollectionResponse[] };
+    achievement: { items: CollectionResponse[] };
+    pagination: { cursor?: string; hasMore: boolean; limit: number };
+  }> {
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
     const cursor = options?.cursor;
 
@@ -1221,6 +1225,7 @@ export class UserService {
         id: string;
         name: string;
         rarity: string;
+        type?: string;
         imageUrl?: string | null;
         achievementGoals?: Array<{
           id: string;
@@ -1232,8 +1237,10 @@ export class UserService {
         };
       };
     };
-    
-    const items = (paginatedRewards as RewardWithBadge[]).map((rw) => {
+
+    const BRAND_TYPE = 'BRAND';
+
+    const itemsWithType = (paginatedRewards as RewardWithBadge[]).map((rw) => {
       const badge = rw.badge;
       type AchievementGoalType = {
         id: string;
@@ -1247,7 +1254,7 @@ export class UserService {
         type: inferTaskType(goal.title, goal.requirement),
       }));
 
-      return {
+      const item: CollectionResponse = {
         id: String(badge?.id || ''),
         title: badge?.name || '',
         rarity: COLLECTION_RARITY_MAP[badge?.rarity || 'COMMON'] || 'Usual',
@@ -1258,12 +1265,19 @@ export class UserService {
         totalEarned: badge?._count?.bridgeRewards ?? 0,
         tasks,
       };
+      const badgeType = badge?.type ?? '';
+      return { item, badgeType };
     });
 
-    const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].id : undefined;
+    const brandItems = itemsWithType.filter((x) => x.badgeType === BRAND_TYPE).map((x) => x.item);
+    const achievementItems = itemsWithType.filter((x) => x.badgeType !== BRAND_TYPE).map((x) => x.item);
+
+    const allItems = itemsWithType.map((x) => x.item);
+    const nextCursor = hasMore && allItems.length > 0 ? allItems[allItems.length - 1].id : undefined;
 
     return {
-      items,
+      brand: { items: brandItems },
+      achievement: { items: achievementItems },
       pagination: {
         cursor: nextCursor,
         hasMore,

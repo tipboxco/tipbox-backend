@@ -109,7 +109,7 @@ Bu doküman, mevcut seed yapısının durumunu, hangi modüllerin/feature'ların
 | **ProductSuggestion** | Ürün önerileri | Hiç seed yok. |
 | **Lootbox, NFTClaim** | Lootbox / NFT claim | NFT tarafı var, Lootbox/NFTClaim seed yok. |
 | **DMSupportSession, DMFeedback, SupportRequestReport** | DM destek / feedback | Hiç seed yok. |
-| **AiExperienceSplit** | A/B deney | Hiç seed yok. |
+| **AiExperienceSplit** | A/B deney (Experience split) | Hiç seed yok. Runtime'da doldurulur: kullanıcı envantere "owned" ürün ekleyip Experience metni paylaştığında `createInventoryItem` içinde otomatik `splitExperienceWithAI` çağrılır, Gemini ile ayrışan metin bu tabloya yazılır. Seed'de Gemini çağrısı yapılmadığı için bu tabloya veri basılmıyor; isteğe bağlı statik 1–2 kayıt eklenebilir. |
 | **UserKycRecord, UserCollection, UserRole** | KYC, koleksiyon, rol | createSeedUsers’ta dolaylı kullanım var; bu tabloların açık seed’i yok. |
 
 ---

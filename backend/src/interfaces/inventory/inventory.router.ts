@@ -111,14 +111,15 @@ router.post(
       errors.push('selectedPurposeId is required');
     }
 
-    if (!body.content || typeof body.content !== 'string') {
-      errors.push('content is required');
+    // owned (own) ise content opsiyonel: boş/eksikse backend Gemini ile Experience metni üretir
+    if (typeof body.content !== 'string') {
+      errors.push('content must be a string (can be empty for own status to trigger AI generation)');
     }
 
-    if (!Array.isArray(body.experience) || body.experience.length === 0) {
-      errors.push('experience must be a non-empty array');
-    } else {
-      body.experience.forEach((exp, index) => {
+    if (!Array.isArray(body.experience)) {
+      errors.push('experience must be an array');
+    } else if (body.experience.length > 0) {
+      body.experience.forEach((exp: { type?: string; content?: string; rating?: number }, index: number) => {
         if (!exp.type || typeof exp.type !== 'string') {
           errors.push(`experience[${index}].type is required`);
         }
@@ -154,6 +155,8 @@ router.post(
 
     const created = await inventoryService.createInventoryItem(String(userId), {
       ...body,
+      content: body.content ?? '',
+      experience: Array.isArray(body.experience) ? body.experience : [],
       images: body.images || [],
     });
 

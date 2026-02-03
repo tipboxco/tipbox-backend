@@ -546,6 +546,62 @@ export class BrandService {
   }
 
   /**
+   * Markayı takip et (BridgeFollower tablosuna kayıt ekle).
+   * Zaten takip ediyorsa idempotent: mevcut kayıt döner.
+   */
+  async followBrand(brandId: string, userId: string): Promise<{ isJoined: true; followers: number }> {
+    const brand = await this.prisma.brand.findUnique({
+      where: { id: brandId },
+      select: { id: true },
+    });
+    if (!brand) {
+      throw new NotFoundError('Brand not found');
+    }
+
+    await this.prisma.bridgeFollower.upsert({
+      where: {
+        userId_brandId: { userId, brandId },
+      },
+      update: {},
+      create: {
+        userId,
+        brandId,
+      },
+    });
+
+    const followersCount = await this.prisma.bridgeFollower.count({
+      where: { brandId },
+    });
+    return { isJoined: true, followers: followersCount };
+  }
+
+  /**
+   * Markayı bırak (BridgeFollower tablosundan kayıt sil).
+   * Takip etmiyorsa idempotent: 204/200 ile başarılı kabul edilir.
+   */
+  async leaveBrand(brandId: string, userId: string): Promise<{ isJoined: false; followers: number }> {
+    const brand = await this.prisma.brand.findUnique({
+      where: { id: brandId },
+      select: { id: true },
+    });
+    if (!brand) {
+      throw new NotFoundError('Brand not found');
+    }
+
+    await this.prisma.bridgeFollower.deleteMany({
+      where: {
+        userId,
+        brandId,
+      },
+    });
+
+    const followersCount = await this.prisma.bridgeFollower.count({
+      where: { brandId },
+    });
+    return { isJoined: false, followers: followersCount };
+  }
+
+  /**
    * Brand feed (sadece brand'e ait bridge post'lardan oluşan feed)
    */
   async getBrandFeed(

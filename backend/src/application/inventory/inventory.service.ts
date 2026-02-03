@@ -17,6 +17,8 @@ import { GeminiService } from '../../infrastructure/ai/gemini.service';
 import { AiExperienceSplitPrismaRepository } from '../../infrastructure/repositories/ai-experience-split-prisma.repository';
 import { AchievementProgressService } from '../gamification/achievement-progress.service';
 import { AchievementGoalType } from '../../domain/gamification/achievement-goal-type.enum';
+import { PostService } from '../post/post.service';
+import { ContextType } from '../../domain/content/context-type.enum';
 
 export class InventoryService {
   private readonly prisma: ReturnType<typeof getPrisma>;
@@ -26,6 +28,7 @@ export class InventoryService {
   private readonly geminiService: GeminiService;
   private readonly experienceSnippetRepo: AiExperienceSplitPrismaRepository;
   private readonly achievementProgressService: AchievementProgressService;
+  private readonly postService: PostService;
 
   constructor() {
     this.prisma = getPrisma();
@@ -35,6 +38,7 @@ export class InventoryService {
     this.geminiService = GeminiService.getInstance();
     this.experienceSnippetRepo = new AiExperienceSplitPrismaRepository();
     this.achievementProgressService = new AchievementProgressService();
+    this.postService = new PostService();
   }
 
   /**
@@ -372,7 +376,27 @@ export class InventoryService {
   }
 
   /**
+   * Ürün hakkında Gemini ile Experience metni üretir (ContentPost için).
+   * Owned ürün eklerken content yoksa veya kısa ise kullanılır.
+   */
+  private async generateExperienceText(product: {
+    name: string;
+    description: string | null;
+    brand?: { name: string } | null;
+  }): Promise<string> {
+    const result = await this.geminiService.generatePostContent({
+      postType: 'EXPERIENCE',
+      persona: 'product reviewer',
+      productName: product.name,
+      productBrand: product.brand?.name ?? undefined,
+      productDescription: product.description ?? undefined,
+    });
+    return result.body?.trim() ?? '';
+  }
+
+  /**
    * Inventory'ye yeni ürün ekle
+   * Owned + Experience akışı: 1) Experience metni (kullanıcı veya Gemini), 2) Split (Gemini), 3) AIExperienceSplit kaydı, 4) Inventory, 5) ContentPost (Experience post).
    */
   async createInventoryItem(
     userId: string,
@@ -392,22 +416,67 @@ export class InventoryService {
 
       const hasOwned = dto.status === ExperienceStatus.OWN;
 
+      // Owned akışı: 1) Experience metni (kullanıcı gönderdiyse kullan, yoksa Gemini ile üret), 2) Split (Gemini) → AIExperienceSplit, 3) Inventory, 4) ContentPost
+      let experienceText = dto.content?.trim() ?? '';
+      let experienceSnippetId: string | null = dto.experienceSnippetId ?? null;
+      let splitResult: Awaited<ReturnType<InventoryService['splitExperienceWithAI']>> | null = null;
+
+      if (hasOwned) {
+        // 1) Experience metni: yoksa veya çok kısaysa Gemini ile üret
+        if (!experienceText || experienceText.length < 20) {
+          try {
+            const generated = await this.generateExperienceText(product);
+            if (generated) experienceText = generated;
+          } catch (genErr) {
+            logger.warn({
+              message: 'Experience text generation failed, using provided content or fallback',
+              userId,
+              productId: dto.productId,
+              error: genErr instanceof Error ? genErr.message : String(genErr),
+            });
+          }
+        }
+        if (!experienceText) {
+          experienceText = `${product.name}${product.brand?.name ? ` (${product.brand.name})` : ''} ürünüyle ilgili deneyim paylaşımı.`;
+        }
+
+        // 2) Split (Gemini) → AIExperienceSplit
+        if (!experienceSnippetId) {
+          try {
+            splitResult = await this.splitExperienceWithAI(userId, dto.productId, experienceText);
+            experienceSnippetId = splitResult.experienceSnippetId;
+            logger.info({
+              message: 'Experience auto-split on inventory create (owned)',
+              userId,
+              productId: dto.productId,
+              experienceSnippetId,
+            });
+          } catch (splitError) {
+            logger.warn({
+              message: 'Experience split failed on inventory create, continuing without snippet',
+              userId,
+              productId: dto.productId,
+              error: splitError instanceof Error ? splitError.message : String(splitError),
+            });
+          }
+        }
+      }
+
+      const experienceSummary = experienceText.length > 200 ? experienceText.substring(0, 200) : experienceText;
+
       const inventory = await this.prisma.$transaction(async (tx) => {
         const createdInventory = await tx.inventory.create({
           data: {
             userId,
             productId: dto.productId,
             hasOwned,
-            experienceSummary: dto.content,
-            experienceSnippetId: dto.experienceSnippetId || null,
+            experienceSummary,
+            experienceSnippetId,
             experienceDurationId: dto.selectedDurationId || null,
             experienceLocationId: dto.selectedLocationId || null,
             experiencePurposeId: dto.selectedPurposeId || null,
           },
         });
-
-        // ProductExperience model'i artık yok, bu kısım kaldırıldı
-        // Experience bilgileri artık AiExperienceSplit ve ContentPost üzerinden yönetiliyor
 
         if (dto.images?.length) {
           await tx.inventoryMedia.createMany({
@@ -420,6 +489,58 @@ export class InventoryService {
 
         return createdInventory;
       });
+
+      // 4) Owned ise ContentPost (Experience post) oluştur
+      if (hasOwned && experienceText) {
+        let experienceArray: { type: ExperienceType; content: string; rating: number }[] = [];
+        if (splitResult) {
+          if (splitResult.priceAndShopping?.content) {
+            experienceArray.push({
+              type: ExperienceType.PRICE_AND_SHOPPING,
+              content: splitResult.priceAndShopping.content,
+              rating: splitResult.priceAndShopping.rating ?? 4,
+            });
+          }
+          if (splitResult.productAndUsage?.content) {
+            experienceArray.push({
+              type: ExperienceType.PRODUCT_AND_USAGE,
+              content: splitResult.productAndUsage.content,
+              rating: splitResult.productAndUsage.rating ?? 4,
+            });
+          }
+        }
+        if (experienceArray.length === 0 && Array.isArray(dto.experience) && dto.experience.length > 0) {
+          experienceArray = dto.experience.map((e) => ({
+            type: e.type as ExperienceType,
+            content: e.content,
+            rating: typeof e.rating === 'number' ? e.rating : 4,
+          }));
+        }
+        if (experienceArray.length > 0) {
+          try {
+            await this.postService.createExperiencePost(userId, {
+              contextType: ContextType.PRODUCT,
+              contextId: dto.productId,
+              selectedDurationId: dto.selectedDurationId || null,
+              selectedLocationId: dto.selectedLocationId || null,
+              selectedPurposeId: dto.selectedPurposeId || null,
+              content: experienceText,
+              experience: experienceArray,
+              status: ExperienceStatus.OWN,
+              images: dto.images,
+              experienceSnippetId: experienceSnippetId ?? undefined,
+            });
+          } catch (postErr) {
+            logger.warn({
+              message: 'Experience post creation failed after inventory create',
+              userId,
+              productId: dto.productId,
+              inventoryId: inventory.id,
+              error: postErr instanceof Error ? postErr.message : String(postErr),
+            });
+          }
+        }
+      }
 
       logger.info({
         message: 'Inventory item created',

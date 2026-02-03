@@ -2019,6 +2019,109 @@ async function seedUserInventories() {
 }
 
 /**
+ * AiExperienceSplit seed: Her aşamada AI veri üretir.
+ * 1) Gemini generatePostContent(EXPERIENCE) → ürün hakkında ContentPost için post metni.
+ * 2) Gemini splitExperience(experienceText) → priceAndShopping / productAndUsage ayrıştırması.
+ * 3) AiExperienceSplit + inventory güncellemesi.
+ */
+async function seedAiExperienceSplits() {
+  const limit = 8
+  const ownedInventories = await prisma.inventory.findMany({
+    where: { hasOwned: true, experienceSnippetId: null },
+    include: {
+      product: {
+        include: { brand: { select: { name: true } } },
+      },
+    },
+    take: limit,
+    orderBy: { createdAt: 'desc' },
+  })
+  if (ownedInventories.length === 0) {
+    return
+  }
+  const geminiService = GeminiService.getInstance()
+  const createdSplitIds: string[] = []
+  for (const inv of ownedInventories) {
+    try {
+      // 1) ContentPost için ürün hakkında Experience metni üret (Gemini) — script ile aynı akış
+      let original = ''
+      try {
+        const genResult = await geminiService.generatePostContent({
+          postType: 'EXPERIENCE',
+          persona: 'product reviewer',
+          productName: inv.product.name,
+          productBrand: inv.product.brand?.name ?? undefined,
+          productDescription: inv.product.description ?? undefined,
+        })
+        if (genResult?.body?.trim()) {
+          original = genResult.body.trim()
+        }
+      } catch (genErr) {
+        console.warn(`   ⚠️  Gemini generate (${inv.product.name}) atlandı:`, genErr instanceof Error ? genErr.message : genErr)
+        continue
+      }
+      if (!original) continue
+
+      // 2) Üretilen metni Gemini ile split et (priceAndShopping / productAndUsage) — script ile aynı
+      let splitResult: Awaited<ReturnType<typeof geminiService.splitExperience>>
+      try {
+        splitResult = await geminiService.splitExperience({
+          productId: inv.productId ?? undefined,
+          productName: inv.product.name,
+          productBrand: inv.product.brand?.name ?? undefined,
+          productDescription: inv.product.description ?? undefined,
+          experienceText: original,
+        })
+      } catch (splitErr) {
+        console.warn(`   ⚠️  Gemini split (${inv.product.name}) atlandı:`, splitErr instanceof Error ? splitErr.message : splitErr)
+        continue
+      }
+
+      // 3) AiExperienceSplit kaydı (tüm alanlar AI çıktısı) — script'teki createInventoryItem ile aynı veri yapısı
+      const split = await prisma.aiExperienceSplit.create({
+        data: {
+          userId: inv.userId,
+          productId: inv.productId,
+          originalExperience: original,
+          priceAndShopping: splitResult.priceAndShopping?.content ?? null,
+          productAndUsage: splitResult.productAndUsage?.content ?? null,
+          priceAndShoppingRating: splitResult.priceAndShopping?.rating ?? null,
+          productAndUsageRating: splitResult.productAndUsage?.rating ?? null,
+          priceAndShoppingPlaceholder: splitResult.priceAndShopping?.placeholder ?? null,
+          productAndUsagePlaceholder: splitResult.productAndUsage?.placeholder ?? null,
+          priceAndShoppingIsEnhanced: splitResult.priceAndShopping?.isEnhanced ?? null,
+          productAndUsageIsEnhanced: splitResult.productAndUsage?.isEnhanced ?? null,
+          isEdited: false,
+          model: splitResult.metadata?.model ?? 'gemini-2.5-pro',
+          promptVersion: splitResult.metadata?.promptVersion ?? 'v1.0',
+          tokensUsed: splitResult.metadata?.tokensUsed ?? null,
+          processingTimeMs: splitResult.metadata?.processingTimeMs ?? null,
+        },
+      })
+      await prisma.inventory.update({
+        where: { id: inv.id },
+        data: { experienceSnippetId: split.id, experienceSummary: original.substring(0, 200) },
+      })
+      createdSplitIds.push(split.id)
+    } catch (e) {
+      // skip duplicate or constraint errors
+    }
+  }
+
+  // Doğrulama: ai_experience_splits tablosuna yazılan kayıtlar DB'de mevcut mu? (script ile aynı doğruluk)
+  if (createdSplitIds.length > 0) {
+    const verifiedCount = await prisma.aiExperienceSplit.count({
+      where: { id: { in: createdSplitIds } },
+    })
+    if (verifiedCount !== createdSplitIds.length) {
+      console.warn(`   ⚠️  AiExperienceSplit doğrulama: beklenen ${createdSplitIds.length}, DB'de ${verifiedCount} kayıt.`)
+    } else {
+      console.log(`✅ AiExperienceSplit: ${createdSplitIds.length} adet (Gemini: post metni + split, inventory'ye bağlandı, tabloda doğrulandı)\n`)
+    }
+  }
+}
+
+/**
  * 30 Persona Tanımları (GENERATE_POST_AI.md'den)
  */
 const PERSONAS = {
@@ -7004,6 +7107,11 @@ async function main() {
   progress.increment('Kullanıcı inventory\'leri oluşturuluyor...')
   await seedUserInventories()
   progress.increment('Kullanıcı inventory\'leri oluşturuldu')
+
+  // 5b. AiExperienceSplit (owned inventory'ler için statik split kayıtları; Gemini çağrılmaz)
+  progress.increment('AiExperienceSplit seed...')
+  await seedAiExperienceSplits()
+  progress.increment('AiExperienceSplit seed tamamlandı')
 
   // 7. Posts (40 users × 70 posts = 2800 posts)
   progress.increment('Post\'lar oluşturuluyor...')

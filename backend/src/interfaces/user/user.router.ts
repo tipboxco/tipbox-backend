@@ -1060,61 +1060,58 @@ router.post('/trust', asyncHandler(async (req: Request, res: Response) => {
  *         description: Sayfa başına item sayısı
  *     responses:
  *       200:
- *         description: Kullanıcının bridge koleksiyon rozetleri
+ *         description: Kullanıcının bridge koleksiyon rozetleri (Badge type'a göre Brand ve Achievement tab'ları için ayrılmış)
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 items:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       id:
- *                         type: string
- *                         example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
- *                       image:
- *                         type: string
- *                         nullable: true
- *                         example: "http://localhost:9000/tipbox-media/badges/480f5de9-b691-4d70-a6a8-2789226f4e07/bridge-ambassador.png"
- *                       title:
- *                         type: string
- *                         example: "Bridge Ambassador"
- *                       rarity:
- *                         type: string
- *                         enum: [Usual, Rare, Epic, Legendary]
- *                         example: "Rare"
- *                       isClaimed:
- *                         type: boolean
- *                         example: true
- *                       nftAddress:
- *                         type: string
- *                         nullable: true
- *                         example: null
- *                       totalEarned:
- *                         type: integer
- *                         example: 3
- *                       earnedDate:
- *                         type: string
- *                         format: date-time
- *                         nullable: true
- *                         example: "2024-02-10T10:30:00.000Z"
- *                       tasks:
- *                         type: array
- *                         items:
- *                           type: object
- *                           properties:
- *                             id:
- *                               type: string
- *                               example: "goal-123"
- *                             title:
- *                               type: string
- *                               example: "10 Yorum Yap"
- *                             type:
- *                               type: string
- *                               enum: [Comment, Like, Share]
- *                               example: "Comment"
+ *                 brand:
+ *                   type: object
+ *                   description: Badge type BRAND olan rozetler (Brand tab içeriği)
+ *                   properties:
+ *                     items:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id: { type: string }
+ *                           image: { type: string, nullable: true }
+ *                           title: { type: string }
+ *                           rarity: { type: string, enum: [Usual, Rare, Epic, Legendary] }
+ *                           isClaimed: { type: boolean }
+ *                           nftAddress: { type: string, nullable: true }
+ *                           totalEarned: { type: integer }
+ *                           earnedDate: { type: string, format: date-time, nullable: true }
+ *                           tasks: { type: array, items: { type: object, properties: { id: { type: string }, title: { type: string }, type: { type: string, enum: [Comment, Like, Share] } } } }
+ *                 achievement:
+ *                   type: object
+ *                   description: Badge type BRAND dışındaki tüm rozetler (Achievement tab içeriği)
+ *                   properties:
+ *                     items:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id: { type: string }
+ *                           image: { type: string, nullable: true }
+ *                           title: { type: string }
+ *                           rarity: { type: string, enum: [Usual, Rare, Epic, Legendary] }
+ *                           isClaimed: { type: boolean }
+ *                           nftAddress: { type: string, nullable: true }
+ *                           totalEarned: { type: integer }
+ *                           earnedDate: { type: string, format: date-time, nullable: true }
+ *                           tasks: { type: array, items: { type: object, properties: { id: { type: string }, title: { type: string }, type: { type: string, enum: [Comment, Like, Share] } } } }
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       nullable: true
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
  */
 router.get('/:id/collections/bridges', asyncHandler(async (req: Request, res: Response) => {
   const id = String(req.params.id);

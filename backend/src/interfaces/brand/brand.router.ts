@@ -258,6 +258,106 @@ router.get(
 
 /**
  * @openapi
+ * /brands/{brandId}/follow:
+ *   post:
+ *     summary: Markayı takip et
+ *     description: Kullanıcı markayı takip eder (BridgeFollower tablosuna kayıt eklenir). App tarafında optimistic güncelleme sonrası bu EP ile senkronize edilir.
+ *     tags: [Brand Catalog]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: brandId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Brand ID'si
+ *     responses:
+ *       200:
+ *         description: Marka takip edildi.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 isJoined:
+ *                   type: boolean
+ *                   example: true
+ *                 followers:
+ *                   type: integer
+ *                   description: Güncel takipçi sayısı
+ *       401:
+ *         description: Kimlik doğrulaması başarısız.
+ *       404:
+ *         description: Brand bulunamadı.
+ */
+router.post(
+  '/:brandId/follow',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { brandId } = req.params;
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+    const result = await brandService.followBrand(brandId, userId);
+    return res.json(result);
+  }),
+);
+
+/**
+ * @openapi
+ * /brands/{brandId}/follow:
+ *   delete:
+ *     summary: Markayı bırak (takibi kaldır)
+ *     description: Kullanıcı markayı bırakır (BridgeFollower tablosundan kayıt silinir). Leave işlemi için kullanılır.
+ *     tags: [Brand Catalog]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: brandId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Brand ID'si
+ *     responses:
+ *       200:
+ *         description: Marka bırakıldı.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 isJoined:
+ *                   type: boolean
+ *                   example: false
+ *                 followers:
+ *                   type: integer
+ *                   description: Güncel takipçi sayısı
+ *       401:
+ *         description: Kimlik doğrulaması başarısız.
+ *       404:
+ *         description: Brand bulunamadı.
+ */
+router.delete(
+  '/:brandId/follow',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { brandId } = req.params;
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+    const result = await brandService.leaveBrand(brandId, userId);
+    return res.json(result);
+  }),
+);
+
+/**
+ * @openapi
  * /brands/{brandId}/feed:
  *   get:
  *     summary: Brand feed'ini getir
