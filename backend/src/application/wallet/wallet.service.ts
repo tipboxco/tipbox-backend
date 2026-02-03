@@ -303,15 +303,4 @@ export class WalletService {
     return wallets.find(w => w.provider === WalletProvider.THIRDWEB) || null;
   }
 
-  /**
-   * Thirdweb servisinin yapılandırma durumunu döndürür
-   */
-  getThirdwebConfigStatus(): {
-    hasClientId: boolean;
-    hasSecretKey: boolean;
-    hasEcosystemId: boolean;
-    isReady: boolean;
-  } {
-    return thirdwebAuthService.getConfigStatus();
-  }
 }
