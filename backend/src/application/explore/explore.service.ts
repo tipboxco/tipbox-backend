@@ -799,6 +799,8 @@ export class ExploreService {
             .join('\n\n')
         : post.body || '';
 
+    const status = post.productStatus === 'own' || post.productStatus === 'tried' ? post.productStatus : null;
+    const statusLabel = post.productStatus === 'own' ? 'I owned' : post.productStatus === 'tried' ? 'I tried' : null;
     const experienceData: ExperiencePost = {
       ...basePost,
       product,
@@ -806,10 +808,8 @@ export class ExploreService {
       experienceContent,
       tags,
       images,
-      ...(post.productStatus && {
-        status: post.productStatus,
-        statusLabel: post.productStatus === 'own' ? 'I owned' : 'I tried',
-      }),
+      status: status ?? undefined,
+      statusLabel: statusLabel ?? undefined,
     };
 
     return {

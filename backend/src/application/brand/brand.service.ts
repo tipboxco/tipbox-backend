@@ -4,6 +4,7 @@ import { ContentPostType } from '../../domain/content/content-post-type.enum';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import logger from '../../infrastructure/logger/logger';
 import { NotFoundError } from '../../infrastructure/errors/custom-errors';
+import { IdResolverService } from '../../infrastructure/ids/id-resolver.service';
 import { brandToWebsite } from '../../data/brandToWebsite';
 import { randomUUID } from 'crypto';
 var slugify = require('slugify');
@@ -245,9 +246,11 @@ export interface BrandHistoryEventsResponse {
 
 export class BrandService {
   private readonly prisma: ReturnType<typeof getPrisma>;
+  private readonly idResolver: IdResolverService;
 
-  constructor() {
+  constructor(idResolver?: IdResolverService) {
     this.prisma = getPrisma();
+    this.idResolver = idResolver ?? new IdResolverService();
   }
 
   /**
@@ -345,7 +348,7 @@ export class BrandService {
     userId: string,
     options?: { cursor?: string; limit?: number }
   ): Promise<SurveyListResponse> {
-    // Brand kontrolü
+    brandId = await this.idResolver.resolveBrandId(brandId);
     const brand = await this.prisma.brand.findUnique({
       where: { id: brandId },
     });
@@ -449,6 +452,7 @@ export class BrandService {
    */
   async getBrandCatalog(brandId: string, userId?: string): Promise<BrandCatalogResponse> {
     try {
+      brandId = await this.idResolver.resolveBrandId(brandId);
       const brand = await this.prisma.brand.findUnique({
         where: { id: brandId },
         select: {
@@ -510,6 +514,7 @@ export class BrandService {
     options?: { cursor?: string; limit?: number; userId?: string }
   ): Promise<BrandFeedResponse> {
     try {
+      brandId = await this.idResolver.resolveBrandId(brandId);
       const brand = await this.prisma.brand.findUnique({
         where: { id: brandId },
         select: {
@@ -665,6 +670,7 @@ export class BrandService {
     userId: string,
     options?: { cursor?: string; limit?: number }
   ): Promise<BrandEventsResponse> {
+    brandId = await this.idResolver.resolveBrandId(brandId);
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
     const cursor = options?.cursor;
 
@@ -798,6 +804,7 @@ export class BrandService {
     options?: { cursor?: string; limit?: number }
   ): Promise<FeedResponse> {
     try {
+      brandId = await this.idResolver.resolveBrandId(brandId);
       const brand = await this.prisma.brand.findUnique({
         where: { id: brandId },
       });
@@ -929,7 +936,7 @@ export class BrandService {
     userId: string,
     options?: { cursor?: string; limit?: number }
   ): Promise<BrandHistory> {
-    // Brand bilgilerini store'dan (brand tablosundan) al
+    brandId = await this.idResolver.resolveBrandId(brandId);
     const brand = await this.prisma.brand.findUnique({
       where: { id: brandId },
       include: { brandCategory: true },
@@ -1119,7 +1126,7 @@ export class BrandService {
     totalPoints: number;
   }> {
     try {
-      // Brand'in var olup olmadığını kontrol et
+      brandId = await this.idResolver.resolveBrandId(brandId);
       const brand = await this.prisma.brand.findUnique({
         where: { id: brandId },
       });
@@ -1235,10 +1242,10 @@ export class BrandService {
     userId: string,
     options?: { cursor?: string; limit?: number }
   ): Promise<BrandHistoryPointsResponse> {
+    brandId = await this.idResolver.resolveBrandId(brandId);
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
     const cursor = options?.cursor;
 
-    // ✅ DÜZELTME: BridgeReward'ları al
     const whereClause: any = {
       userId,
       brandId,
@@ -1345,10 +1352,10 @@ export class BrandService {
     userId: string,
     options?: { cursor?: string; limit?: number }
   ): Promise<SurveyList> {
+    brandId = await this.idResolver.resolveBrandId(brandId);
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
     const cursor = options?.cursor;
 
-    // İlgili brand'in varlığını doğrula
     const brand = await this.prisma.brand.findUnique({ where: { id: brandId } });
     if (!brand) {
       throw new NotFoundError(`Brand not found: ${brandId}`);
@@ -1486,6 +1493,7 @@ export class BrandService {
     };
   }> {
     try {
+      brandId = await this.idResolver.resolveBrandId(brandId);
       const brand = await this.prisma.brand.findUnique({
         where: { id: brandId },
         select: { name: true, externalId: true },
@@ -1967,7 +1975,8 @@ export class BrandService {
     options?: { cursor?: string; limit?: number }
   ): Promise<FeedResponse> {
     try {
-      // Brand name'i al
+      brandId = await this.idResolver.resolveBrandId(brandId);
+      productId = await this.idResolver.resolveProductId(productId);
       const brand = await this.prisma.brand.findFirst({
         where: {
           OR: [
@@ -2345,7 +2354,8 @@ export class BrandService {
     };
   }> {
     try {
-      // Brand'i kontrol et (hem id hem externalId ile kontrol et)
+      brandId = await this.idResolver.resolveBrandId(brandId);
+      productId = await this.idResolver.resolveProductId(productId);
       const brand = await this.prisma.brand.findFirst({
         where: {
           OR: [
@@ -2456,7 +2466,8 @@ export class BrandService {
     }>
   > {
     try {
-      // Brand'i kontrol et (hem id hem externalId ile kontrol et)
+      brandId = await this.idResolver.resolveBrandId(brandId);
+      productId = await this.idResolver.resolveProductId(productId);
       const brand = await this.prisma.brand.findFirst({
         where: {
           OR: [
@@ -2857,6 +2868,8 @@ export class BrandService {
       };
     }
 
+    const status = post.productStatus === 'own' || post.productStatus === 'tried' ? post.productStatus : null;
+    const statusLabel = post.productStatus === 'own' ? 'I owned' : post.productStatus === 'tried' ? 'I tried' : null;
     const experienceData: ExperiencePost = {
       ...basePost,
       product,
@@ -2864,10 +2877,8 @@ export class BrandService {
       experienceContent,
       tags,
       images,
-      ...(post.productStatus && {
-        status: post.productStatus,
-        statusLabel: post.productStatus === 'own' ? 'I owned' : 'I tried',
-      }),
+      status: status ?? undefined,
+      statusLabel: statusLabel ?? undefined,
     };
 
     return {

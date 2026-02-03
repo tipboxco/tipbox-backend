@@ -1453,7 +1453,7 @@ export class UserService {
   async getUserPosts(userId: string, options?: { limit?: number }): Promise<any[]> {
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 50;
     
-    // ✅ DÜZELTME: Tüm post tiplerini getir (sadece FREE değil) - limit ile
+    // ✅ Tüm post tiplerini getir (EXPERIENCE + UPDATE Experience tabında listelenir)
     const posts = await this.prisma.contentPost.findMany({
       where: { userId },
       take: limit + 1, // hasMore kontrolü için +1
@@ -1490,6 +1490,24 @@ export class UserService {
         comments: true,
         favorites: true,
         contentPostTags: true,
+        updateContent: {
+          include: {
+            experiencePost: {
+              include: {
+                product: {
+                  include: {
+                    group: {
+                      include: {
+                        subCategory: { include: { mainCategory: true } },
+                      },
+                    },
+                  },
+                },
+                contentPostTags: true,
+              },
+            },
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -1554,6 +1572,47 @@ export class UserService {
       const images = postMediaMap.get(post.id) || [];
       const postType = post.type as string;
 
+      if (postType === 'UPDATE' && (post as any).updateContent?.experiencePost) {
+        const expPost = (post as any).updateContent.experiencePost;
+        const expProduct = expPost.product
+          ? {
+              id: expPost.product.id,
+              name: expPost.product.name,
+              subName: expPost.product.group?.name ?? '',
+              image: resolveMediaUrl(expPost.product.imageUrl) ?? null,
+              isOwned: ownedProductIds.has(String(expPost.productId)),
+            }
+          : { id: expPost.productId || '', name: '', subName: '', image: null, isOwned: false };
+        const expContent = this.parseExperienceContentFromBody(expPost.body);
+        const expContentString =
+          expContent.length > 0
+            ? expContent
+                .map((item) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`)
+                .join('\n\n')
+            : expPost.body || '';
+        const updateContentText = (post as any).updateContent.content || post.body || '';
+        return {
+          id: String(post.id),
+          type: 'update' as const,
+          user: userBase,
+          stats,
+          createdAt: post.createdAt.toISOString(),
+          contextType,
+          relatedPost: {
+            id: String(expPost.id),
+            product: expProduct,
+            content: expContentString,
+            experienceContent: expContent,
+            tags: expPost.contentPostTags?.map((t: any) => t.tag) || [],
+            images: [],
+            status: expPost.productStatus ?? undefined,
+            statusLabel: expPost.productStatus === 'own' ? 'I owned' : expPost.productStatus === 'tried' ? 'I tried' : undefined,
+          },
+          content: updateContentText,
+          images,
+        };
+      }
+
       if (postType === 'EXPERIENCE' || postType === 'UPDATE') {
         const product = contextData
           ? { ...contextData, isOwned: contextData.isOwned ?? ownedProductIds.has(String(post.productId)) }
@@ -1567,7 +1626,7 @@ export class UserService {
             : post.body || '';
         return {
           id: String(post.id),
-          type: 'experience' as const,
+          type: (postType === 'UPDATE' ? 'update' : 'experience') as const,
           user: userBase,
           stats,
           createdAt: post.createdAt.toISOString(),
@@ -1577,10 +1636,8 @@ export class UserService {
           experienceContent,
           tags: post.contentPostTags?.map((t: any) => t.tag) || [],
           images,
-          ...(post.productStatus && {
-            status: post.productStatus,
-            statusLabel: post.productStatus === 'own' ? 'I owned' : 'I tried',
-          }),
+          status: post.productStatus === 'own' || post.productStatus === 'tried' ? post.productStatus : undefined,
+          statusLabel: post.productStatus === 'own' ? 'I owned' : post.productStatus === 'tried' ? 'I tried' : undefined,
         };
       }
 
@@ -1817,7 +1874,14 @@ export class UserService {
         id: String(inv.id),
         type: 'experience' as const,
         user: userBase,
-        stats: this.buildExperienceStats(String(inv.id)),
+        // Legacy inventory-based experience'lar için mock istatistikler gösterme.
+        // Gerçek like/comment/share/bookmark verisi olmadığı için hepsini 0 döndürüyoruz.
+        stats: {
+          likes: 0,
+          comments: 0,
+          shares: 0,
+          bookmarks: 0,
+        },
         createdAt: inv.createdAt.toISOString(),
         contextType: ContextType.PRODUCT,
         contextData,
@@ -1853,8 +1917,48 @@ export class UserService {
       take: limit + 1,
     });
 
-    // Batch fetch images from PostMedia (orderIndex'e göre sıralı)
-    const postIds = experiencePosts.map((p) => p.id);
+    // 3. ContentPost tablosundan UPDATE tipindeki gönderileri çek (experience’a yapılan güncellemeler)
+    const updatePosts = await this.prisma.contentPost.findMany({
+      where: {
+        userId,
+        type: ContentPostType.UPDATE,
+      },
+      include: {
+        product: {
+          include: {
+            group: {
+              include: {
+                subCategory: {
+                  include: {
+                    mainCategory: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        updateContent: {
+          include: {
+            experiencePost: {
+              include: {
+                product: {
+                  include: {
+                    group: true,
+                  },
+                },
+                contentPostTags: true,
+              },
+            },
+          },
+        },
+        contentPostTags: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit + 1,
+    });
+
+    // Batch fetch images from PostMedia (experience + update post id’leri)
+    const postIds = [...experiencePosts.map((p) => p.id), ...updatePosts.map((p) => p.id)];
     const postMediaMap = new Map<string, string[]>();
     if (postIds.length > 0) {
       const allPostMedia = await this.prisma.postMedia.findMany({
@@ -1927,6 +2031,98 @@ export class UserService {
         contextType: ContextType.PRODUCT,
         contextData,
         content: experienceContent,
+        tags,
+        images,
+      });
+    }
+
+    // 4. UPDATE postlarını ekle: feed/catalog ile aynı yapı (relatedPost = bağlı experience özeti)
+    for (const post of updatePosts) {
+      const images = postMediaMap.get(post.id) || [];
+      const tags = (post.contentPostTags || [])
+        .map((cpt: any) => cpt.tag)
+        .filter((tag: string | null | undefined) => tag);
+      const updateText = (post as any).updateContent?.content ?? post.body ?? '';
+      const contextData = post.product
+        ? {
+            product: {
+              id: post.product.id,
+              name: post.product.name,
+              image: resolveMediaUrl(post.product.imageUrl),
+              group: post.product.group
+                ? {
+                    id: post.product.group.id,
+                    name: post.product.group.name,
+                  }
+                : null,
+              subCategory: post.product.group?.subCategory
+                ? {
+                    id: post.product.group.subCategory.id,
+                    name: post.product.group.subCategory.name,
+                    mainCategory: post.product.group.subCategory.mainCategory
+                      ? {
+                          id: post.product.group.subCategory.mainCategory.id,
+                          name: post.product.group.subCategory.mainCategory.name,
+                        }
+                      : null,
+                  }
+                : null,
+            },
+          }
+        : null;
+      const stats = {
+        likes: post.likesCount || 0,
+        comments: post.commentsCount || 0,
+        shares: post.sharesCount || 0,
+        bookmarks: post.favoritesCount || 0,
+      };
+
+      // relatedPost = bağlı experience post özeti (UpdatePost yapısı, feed/catalog ile uyumlu)
+      const expPost = (post as any).updateContent?.experiencePost;
+      let relatedPost: {
+        id: string;
+        product: { id: string; name: string; subName: string; image: string | null };
+        content: string;
+        experienceContent?: ExperienceContent[];
+        tags: string[];
+        images: string[];
+      } | undefined;
+      if (expPost) {
+        const expProduct = expPost.product
+          ? {
+              id: expPost.product.id,
+              name: expPost.product.name,
+              subName: expPost.product.group?.name ?? '',
+              image: resolveMediaUrl(expPost.product.imageUrl) ?? null,
+            }
+          : { id: expPost.productId || '', name: '', subName: '', image: null as string | null };
+        const expContent = this.parseExperienceContentFromPost(expPost.body);
+        const expContentString =
+          expContent.length > 0
+            ? expContent
+                .map((item) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`)
+                .join('\n\n')
+            : expPost.body || '';
+        relatedPost = {
+          id: expPost.id,
+          product: expProduct,
+          content: expContentString,
+          experienceContent: expContent,
+          tags: (expPost.contentPostTags || []).map((cpt: any) => cpt.tag).filter(Boolean),
+          images: [], // experience post görselleri ayrı sorgulanabilir; reviews’ta opsiyonel
+        };
+      }
+
+      results.push({
+        id: post.id,
+        type: 'update' as const,
+        user: userBase,
+        stats,
+        createdAt: post.createdAt.toISOString(),
+        contextType: ContextType.PRODUCT,
+        contextData,
+        content: updateText,
+        relatedPost,
         tags,
         images,
       });
@@ -2725,6 +2921,8 @@ export class UserService {
                   .join('\n\n')
               : post.body || '';
           const postTags = (post as any).contentPostTags?.map((t: any) => t.tag) || (post as any).tags?.map((t: any) => t.tag) || [];
+          const status = post.productStatus === 'own' || post.productStatus === 'tried' ? post.productStatus : null;
+          const statusLabel = post.productStatus === 'own' ? 'I owned' : post.productStatus === 'tried' ? 'I tried' : null;
           results.push({
             id: String(post.id),
             type: 'experience' as const,
@@ -2737,10 +2935,8 @@ export class UserService {
             experienceContent,
             tags: postTags,
             images: [],
-            ...(post.productStatus && {
-              status: post.productStatus,
-              statusLabel: post.productStatus === 'own' ? 'I owned' : 'I tried',
-            }),
+            status: status ?? undefined,
+            statusLabel: statusLabel ?? undefined,
           });
           break;
         }
@@ -2864,16 +3060,6 @@ export class UserService {
     });
 
     return tags.map((t) => t.tag);
-  }
-
-  private buildExperienceStats(seed: string): BasicStats {
-    const hash = this.generateDeterministicNumber(seed);
-    return {
-      likes: 30 + (hash % 40),
-      comments: 6 + (hash % 10),
-      shares: 2 + (hash % 5),
-      bookmarks: 4 + (hash % 7),
-    };
   }
 
   private calculateExperienceRating(seed: string): number {

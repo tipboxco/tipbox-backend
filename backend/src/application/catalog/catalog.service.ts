@@ -7,6 +7,7 @@ import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
 import { FeedItem, FeedItemType } from '../../interfaces/feed/feed.dto';
 import { ContextType } from '../../domain/content/context-type.enum';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
+import { IdResolverService } from '../../infrastructure/ids/id-resolver.service';
 
 const prisma = getPrisma();
 
@@ -54,83 +55,11 @@ export interface ProductDetail {
 }
 
 export class CatalogService {
-  /**
-   * Category ID'yi resolve eder - tüm ID formatlarını kabul eder
-   * Medusa ID formatlarını (pcat_, mcat_, scat_), UUID, ULID ve diğer formatları destekler
-   * Eğer Category tablosunda bulunamazsa, direkt ID'yi döndürür (parentId olarak kullanılabilir)
-   */
+  private readonly idResolver = new IdResolverService();
+
+  /** IdResolver'a delege eder. */
   private async resolveCategoryId(categoryId: string): Promise<string> {
-    if (!categoryId || categoryId.trim() === '') {
-      throw new Error('Category ID cannot be empty');
-    }
-
-    const trimmedId = categoryId.trim();
-
-    // 1. Önce direkt id ile ara - herhangi bir format kabul edilir
-    try {
-      const category = await prisma.category.findUnique({
-        where: { id: trimmedId },
-        select: { id: true },
-      });
-      if (category) {
-        return category.id;
-      }
-    } catch (error) {
-      // ID formatı Prisma için geçersiz olabilir - devam et
-    }
-
-    // 2. Metadata içindeki externalId ile ara
-    try {
-      const result = await prisma.$queryRaw<Array<{ id: string }>>`
-        SELECT id 
-        FROM categories 
-        WHERE metadata->>'externalId' = ${trimmedId}
-        LIMIT 1
-      `;
-
-      if (result && result.length > 0) {
-        return result[0].id;
-      }
-    } catch (error) {
-      // Metadata query hatası - devam et
-    }
-
-    // 3. Metadata içindeki medusaId ile ara (alternatif field adı)
-    try {
-      const result = await prisma.$queryRaw<Array<{ id: string }>>`
-        SELECT id 
-        FROM categories 
-        WHERE metadata->>'medusaId' = ${trimmedId}
-        LIMIT 1
-      `;
-
-      if (result && result.length > 0) {
-        return result[0].id;
-      }
-    } catch (error) {
-      // Metadata query hatası - devam et
-    }
-
-    // 4. Metadata içindeki herhangi bir field'da bu ID'yi ara
-    try {
-      const result = await prisma.$queryRaw<Array<{ id: string }>>`
-        SELECT id 
-        FROM categories 
-        WHERE metadata::text LIKE ${'%' + trimmedId + '%'}
-        LIMIT 1
-      `;
-
-      if (result && result.length > 0) {
-        return result[0].id;
-      }
-    } catch (error) {
-      // Metadata query hatası - devam et
-    }
-
-    // 5. Eğer hiçbir yerde bulunamazsa, direkt ID'yi döndür
-    // Category tablosunda ID String tipinde olduğu için herhangi bir format kabul edilir
-    // Bu ID parentId olarak kullanılabilir veya yeni bir Category oluşturulabilir
-    return trimmedId;
+    return this.idResolver.resolveCategoryId(categoryId);
   }
 
   /**
@@ -530,56 +459,7 @@ export class CatalogService {
     pagination: { cursor?: string; hasMore: boolean; limit: number };
   }> {
     try {
-      // Product ID'yi resolve et - tüm ID formatlarını kabul eder
-      // Product.id TEXT tipinde olduğu için direkt herhangi bir formatı kabul edebilir
-      const trimmedId = productId.trim();
-      let actualProductId: string | null = null;
-
-      // 1. Önce direkt id ile ara (herhangi bir format olabilir - Product.id TEXT)
-      try {
-        const product = await prisma.product.findUnique({
-          where: { id: trimmedId },
-          select: { id: true },
-        });
-        if (product) {
-          actualProductId = product.id;
-        }
-      } catch (error) {
-        // Query hatası - devam et
-        logger.debug({
-          message: 'Product direct query failed in getProductPosts',
-          productId: trimmedId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-
-      // 2. Bulunamadıysa, metadata içindeki externalId ile ara
-      if (!actualProductId) {
-        try {
-          const result = await prisma.$queryRaw<Array<{ id: string }>>`
-            SELECT id 
-            FROM products 
-            WHERE metadata->>'externalId' = ${trimmedId}
-            LIMIT 1
-          `;
-
-          if (result && result.length > 0) {
-            actualProductId = result[0].id;
-          }
-        } catch (error) {
-          logger.debug({
-            message: 'Product metadata lookup failed in getProductPosts',
-            productId: trimmedId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
-
-      if (!actualProductId) {
-        throw new Error(`Product not found: ${productId}`);
-      }
-
-      // Product'ın var olup olmadığını kontrol et
+      const actualProductId = await this.idResolver.resolveProductId(productId.trim());
       const product = await prisma.product.findUnique({
         where: { id: actualProductId },
       });
@@ -604,7 +484,7 @@ export class CatalogService {
       } else if (filter === 'benchmarks') {
         typeFilter = [ContentPostType.COMPARE];
       } else if (filter === 'reviews') {
-        typeFilter = [ContentPostType.EXPERIENCE];
+        typeFilter = [ContentPostType.EXPERIENCE, ContentPostType.UPDATE];
       } else if (filter === 'all') {
         // Product için izin verilen tüm post tipleri (FREE hariç)
         typeFilter = this.getAllowedPostTypesForContext(ContextType.PRODUCT);
@@ -666,6 +546,24 @@ export class CatalogService {
           },
           question: true,
           tip: true,
+          updateContent: {
+            include: {
+              experiencePost: {
+                include: {
+                  product: {
+                    include: {
+                      group: {
+                        include: {
+                          subCategory: { include: { mainCategory: true } },
+                        },
+                      },
+                    },
+                  },
+                  contentPostTags: true,
+                },
+              },
+            },
+          },
           tags: true,
           contentPostTags: true,
           likes: true,
@@ -715,12 +613,13 @@ export class CatalogService {
         ownedProductIds = new Set(inventories.map((inv) => String(inv.productId)));
       }
 
-      // Map ContentPostType to FeedItemType
+      // Map ContentPostType to FeedItemType (UPDATE ayrı tip; Experience/Reviews tabında listelenir)
       const mapContentPostTypeToFeedItemType = (type: ContentPostType): FeedItemType => {
         switch (type) {
           case ContentPostType.EXPERIENCE:
-          case ContentPostType.UPDATE:
             return FeedItemType.EXPERIENCE;
+          case ContentPostType.UPDATE:
+            return FeedItemType.UPDATE;
           case ContentPostType.COMPARE:
             return FeedItemType.BENCHMARK;
           case ContentPostType.QUESTION:
@@ -757,11 +656,39 @@ export class CatalogService {
           contextData: contextData,
           content: post.body,
           images,
-          ...(post.productStatus && { status: post.productStatus, statusLabel: post.productStatus === 'own' ? 'I owned' : 'I tried' }),
+          status: (post.productStatus === 'own' || post.productStatus === 'tried' ? post.productStatus : null) as 'own' | 'tried' | null,
+          statusLabel: post.productStatus === 'own' ? 'I owned' : post.productStatus === 'tried' ? 'I tried' : null,
         };
 
-        // Experience/Update: feed ve profil ile aynı yapı (product, experienceContent, tags)
-        if (post.type === ContentPostType.EXPERIENCE || post.type === ContentPostType.UPDATE) {
+        if (post.type === ContentPostType.UPDATE && post.updateContent?.experiencePost) {
+          const expPost = post.updateContent.experiencePost;
+          const expProduct = expPost.product
+            ? {
+                id: expPost.product.id,
+                name: expPost.product.name,
+                subName: expPost.product.group?.name ?? '',
+                image: resolveMediaUrl(expPost.product.imageUrl) ?? null,
+                isOwned: expPost.productId ? ownedProductIds.has(String(expPost.productId)) : false,
+              }
+            : { id: expPost.productId || '', name: '', subName: '', image: null, isOwned: false };
+          const expContent = this.parseExperienceContentForCatalog(expPost.body);
+          const expContentString =
+            expContent.length > 0
+              ? expContent.map((item: any) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`).join('\n\n')
+              : expPost.body || '';
+          baseData.relatedPost = {
+            id: String(expPost.id),
+            product: expProduct,
+            content: expContentString,
+            experienceContent: expContent,
+            tags: expPost.contentPostTags?.map((t: any) => t.tag) || [],
+            images: [],
+            status: expPost.productStatus ?? null,
+            statusLabel: expPost.productStatus === 'own' ? 'I owned' : expPost.productStatus === 'tried' ? 'I tried' : null,
+          };
+          baseData.content = post.updateContent.content || post.body;
+          baseData.tags = post.contentPostTags?.map((t: any) => t.tag) || post.tags?.map((t: any) => t.tag) || [];
+        } else if (post.type === ContentPostType.EXPERIENCE || post.type === ContentPostType.UPDATE) {
           baseData.product = {
             ...contextData,
             isOwned: post.productId ? ownedProductIds.has(String(post.productId)) : false,

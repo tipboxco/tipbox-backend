@@ -17,6 +17,8 @@ import { GeminiService } from '../../infrastructure/ai/gemini.service';
 import { AiExperienceSplitPrismaRepository } from '../../infrastructure/repositories/ai-experience-split-prisma.repository';
 import { AchievementProgressService } from '../gamification/achievement-progress.service';
 import { AchievementGoalType } from '../../domain/gamification/achievement-goal-type.enum';
+import { IdResolverService } from '../../infrastructure/ids/id-resolver.service';
+import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 
 export class InventoryService {
   private readonly prisma: ReturnType<typeof getPrisma>;
@@ -26,8 +28,9 @@ export class InventoryService {
   private readonly geminiService: GeminiService;
   private readonly experienceSnippetRepo: AiExperienceSplitPrismaRepository;
   private readonly achievementProgressService: AchievementProgressService;
+  private readonly idResolver: IdResolverService;
 
-  constructor() {
+  constructor(idResolver?: IdResolverService) {
     this.prisma = getPrisma();
     this.inventoryRepo = new InventoryPrismaRepository();
     this.mediaRepo = new InventoryMediaPrismaRepository();
@@ -35,6 +38,7 @@ export class InventoryService {
     this.geminiService = GeminiService.getInstance();
     this.experienceSnippetRepo = new AiExperienceSplitPrismaRepository();
     this.achievementProgressService = new AchievementProgressService();
+    this.idResolver = idResolver ?? new IdResolverService();
   }
 
   /**
@@ -140,19 +144,14 @@ export class InventoryService {
         // ProductExperience tablosu artık yok, boş array kullan
         const experiences: any[] = [];
 
-        // Media'dan ilk resmi al
-        const images = await this.mediaRepo.findByInventoryId(inventory.id);
-        let image: string | null = null;
-        if (images.length > 0) {
-          const mediaUrl = images[0].getMediaUrl();
-          // Eğer zaten tam URL ise olduğu gibi kullan, değilse prefix ekle
-          if (mediaUrl.startsWith('http://') || mediaUrl.startsWith('https://')) {
-            image = mediaUrl;
-          } else {
-            const { resolveMediaUrl } = await import('../../infrastructure/config/media.config');
-            image = resolveMediaUrl(mediaUrl);
-          }
-        }
+        // Envanterde sadece ürün görseli kullanılır (product tablosu). Kullanıcının post gönderisindeki görsel kullanılmaz.
+        const productImagePath =
+          product.imageUrl ||
+          product.group?.imageUrl ||
+          product.group?.subCategory?.imageUrl ||
+          product.group?.subCategory?.mainCategory?.imageUrl ||
+          null;
+        const image: string | null = productImagePath ? resolveMediaUrl(productImagePath) : null;
 
         // Tags: Content post tags'lerinden al veya product group'dan
         const tags: string[] = [];
@@ -365,9 +364,9 @@ export class InventoryService {
     };
   }> {
     try {
-      // Ürün bilgilerini al
+      const resolvedProductId = await this.idResolver.resolveProductId(productId);
       const product = await this.prisma.product.findUnique({
-        where: { id: productId },
+        where: { id: resolvedProductId },
         include: {
           brand: true,
         },
@@ -377,9 +376,8 @@ export class InventoryService {
         throw new Error('Product not found');
       }
 
-      // Gemini AI ile deneyimi ayır
       const splitResult = await this.geminiService.splitExperience({
-        productId,
+        productId: resolvedProductId,
         productName: product.name,
         productBrand: product.brand?.name || undefined,
         productDescription: product.description || undefined,
@@ -389,7 +387,7 @@ export class InventoryService {
       // AI split sonucunu database'e kaydet
       const experienceSnippet = await this.experienceSnippetRepo.create({
         userId,
-        productId,
+        productId: resolvedProductId,
         originalExperience: experienceText,
         priceAndShopping: splitResult.priceAndShopping?.content ?? null,
         productAndUsage: splitResult.productAndUsage?.content ?? null,
@@ -409,7 +407,7 @@ export class InventoryService {
       logger.info({
         message: 'Experience split with AI and saved',
         userId,
-        productId,
+        productId: resolvedProductId,
         experienceSnippetId: experienceSnippet.id,
         tokensUsed: splitResult.metadata.tokensUsed,
         processingTimeMs: splitResult.metadata.processingTimeMs,
@@ -442,8 +440,9 @@ export class InventoryService {
     dto: CreateInventoryRequest
   ): Promise<InventoryItemResponse> {
     try {
+      const resolvedProductId = await this.idResolver.resolveProductId(dto.productId);
       const product = await this.prisma.product.findUnique({
-        where: { id: dto.productId },
+        where: { id: resolvedProductId },
         include: {
           brand: true,
         },
@@ -453,7 +452,6 @@ export class InventoryService {
         throw new Error('Product not found');
       }
 
-      // App "3 Months", "Good", "Weekly Use" gibi isim gönderebilir; UUID'ye çevir
       const resolvedIds = await this.resolveExperienceOptionIds({
         durationId: dto.selectedDurationId,
         locationId: dto.selectedLocationId,
@@ -466,7 +464,7 @@ export class InventoryService {
         const createdInventory = await tx.inventory.create({
           data: {
             userId,
-            productId: dto.productId,
+            productId: resolvedProductId,
             hasOwned,
             experienceSummary: dto.content,
             experienceSnippetId: dto.experienceSnippetId || null,
@@ -494,7 +492,7 @@ export class InventoryService {
       logger.info({
         message: 'Inventory item created',
         userId,
-        productId: dto.productId,
+        productId: resolvedProductId,
         inventoryId: inventory.id,
       });
 

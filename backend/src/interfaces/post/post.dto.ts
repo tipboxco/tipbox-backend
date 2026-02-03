@@ -342,23 +342,18 @@ export interface CreateExperiencePostRequest {
   experience: Experience[];
   status: ExperienceStatus;
   images?: string[];
-  experienceSnippetId?: string; // Experience snippet ID (optional)
+  // Tags = duration, location, purpose seçimlerinden türetilir (request'te ayrı tags yok)
+  experienceSnippetId: string; // Experience snippet ID (zorunlu)
   eventId?: string; // Optional event ID to link post to event
 }
 
 export interface CreateUpdatePostRequest {
-  contextType: ContextType;
-  contextId: string;
+  contextType?: ContextType; // Optional, default PRODUCT. Medusa: tek category tablosu ile category/subcategory/product group aynı yapıda.
+  contextId?: string; // Optional. Boşsa experience post'taki productId kullanılır (Medusa'da zorunlu değil).
   experiencePostId: string; // Experience post ID that this update is related to
   content: string;
   images?: string[];
   eventId?: string; // Optional event ID to link post to event
-}
-
-export interface UpdatePostRequest {
-  description?: string;
-  images?: string[];
-  eventId?: string;
 }
 
 export interface SplitExperienceRequest {

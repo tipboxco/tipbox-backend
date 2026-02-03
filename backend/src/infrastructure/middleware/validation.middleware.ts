@@ -126,8 +126,8 @@ export const validateParams = (schema: ZodSchema) => {
  * Common validation schemas
  */
 export const CommonSchemas = {
-  // ID validation (ULID format)
-  id: z.string().length(26, 'ID must be 26 characters (ULID format)'),
+  // ID validation: format bağımsız (UUID, ULID, Medusa ID vb.). Önemli olan tabloda eşleşmesi.
+  id: z.string().min(1, 'ID boş olamaz').max(128, 'ID en fazla 128 karakter olabilir').trim(),
   
   // Email validation
   email: z.string().email('Geçerli bir email adresi giriniz'),

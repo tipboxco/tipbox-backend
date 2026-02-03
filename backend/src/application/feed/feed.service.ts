@@ -1530,13 +1530,19 @@ export class FeedService {
         ? experiencePostContent.map((item) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`).join('\n\n')
         : experiencePost.body || '';
 
+      const expStatus = (experiencePost as any).productStatus;
+      const relatedPostImages = (experiencePost.media || [])
+        .map((m: any) => this.buildFullMediaUrl(m.mediaUrl))
+        .filter(Boolean) as string[];
       const relatedPost = {
         id: experiencePost.id,
         product: experiencePostProductData,
         content: experiencePostContentString,
         experienceContent: experiencePostContent,
         tags: experiencePostTags,
-        images: [], // Experience post images would need to be fetched separately if needed
+        images: relatedPostImages,
+        status: expStatus === 'own' || expStatus === 'tried' ? expStatus : null,
+        statusLabel: expStatus === 'own' ? 'I owned' : expStatus === 'tried' ? 'I tried' : null,
       } as any;
 
       // Update post content from PostUpdateContent
@@ -1545,6 +1551,7 @@ export class FeedService {
       const updateData = {
         ...basePost,
         relatedPost,
+        relatedPostId: experiencePost.id,
         content: updatePostContent,
         images,
       };
@@ -1561,6 +1568,10 @@ export class FeedService {
       ? experienceContent.map((item) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`).join('\n\n')
       : post.body || '';
 
+    const productStatus = (post as any).productStatus;
+    const status = productStatus === 'own' || productStatus === 'tried' ? productStatus : null;
+    const statusLabel = productStatus === 'own' ? 'I owned' : productStatus === 'tried' ? 'I tried' : null;
+
     const experienceData: ExperiencePost = {
       ...basePost,
       product,
@@ -1568,12 +1579,9 @@ export class FeedService {
       experienceContent, // Keep array for structured data
       tags,
       images,
-      // I owned / I tried etiketi (profil, feed, tüm listelerde aynı yapı)
-      ...((post as any).productStatus && {
-        status: (post as any).productStatus,
-        statusLabel: (post as any).productStatus === 'own' ? 'I owned' : 'I tried',
-      }),
-    } as any; // Type assertion needed because ExperiencePost interface expects content: ExperienceContent[]
+      status: status ?? undefined,
+      statusLabel: statusLabel ?? undefined,
+    } as any; // Her zaman döndür; productStatus yoksa (eski kayıt) null/undefined // Type assertion needed because ExperiencePost interface expects content: ExperienceContent[]
 
     return {
       type,

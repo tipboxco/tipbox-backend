@@ -246,6 +246,7 @@ export interface BaseStats {
 }
 
 export interface BasePost {
+  /** Post/kayıt id'si. Format (UUID, ULID, Medusa vb.) önemsiz; tablodaki değerle eşleşmesi önemli. */
   id: string;
   type?: FeedItemType; // Optional - type is only at FeedItem root level, not in data object
   user: BaseUser;

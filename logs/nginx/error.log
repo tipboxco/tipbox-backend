@@ -1,0 +1,2 @@
+2026/02/03 14:58:11 [alert] 1#1: unlink() "/run/nginx.pid" failed (5: I/O error)
+2026/02/03 17:09:59 [alert] 1#1: unlink() "/run/nginx.pid" failed (5: I/O error)
