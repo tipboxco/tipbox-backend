@@ -71,13 +71,13 @@ export async function ensureEventBadgeSystem(prisma: PrismaClient): Promise<void
   try {
     // 1. Badge Category oluştur
     let eventCategory = await prisma.badgeCategory.findFirst({
-      where: { name: 'Event Rozetleri' }
+      where: { name: 'Event' }
     });
 
     if (!eventCategory) {
       eventCategory = await prisma.badgeCategory.create({
         data: {
-          name: 'Event Rozetleri',
+          name: 'Event',
           description: 'Event etkinliklerinde kazanılan özel rozetler'
         }
       });
@@ -89,7 +89,7 @@ export async function ensureEventBadgeSystem(prisma: PrismaClient): Promise<void
     // 2. Event Badge Görsellerini MinIO'ya yükle
     console.log('\n📤 Event Badge Görselleri MinIO\'ya Yükleniyor...\n');
     
-    const eventBadgesPath = path.join(__dirname, '../../../tests/assets/event_badges');
+    const eventBadgesPath = path.join(__dirname, '../../../tests/assets/badge/eventbadges');
     let uploadedImageUrls: Map<string, string> = new Map();
 
     try {
@@ -176,7 +176,7 @@ export async function ensureEventBadgeSystem(prisma: PrismaClient): Promise<void
       const imageKey = 'event.event-batarya';
       const imageKeyParts = imageKey.split('.');
       const imageName = imageKeyParts[imageKeyParts.length - 1]; // 'event-batarya'
-      const imageUrl = `events/new-events/${imageName}.png`;
+      const imageUrl = `events/${imageName}.png`;
 
       event = await prisma.wishboxEvent.create({
         data: {

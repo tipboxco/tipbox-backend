@@ -70,6 +70,20 @@ export interface BrandProductsResponse {
   };
 }
 
+/** Markanın ürünleri kategori (level 2) bazında gruplu response */
+export interface BrandProductGroupsByCategoryResponse {
+  items: Array<{
+    categoryId: string;
+    categoryName: string;
+    products: BrandProduct[];
+  }>;
+  pagination: {
+    cursor?: string;
+    hasMore: boolean;
+    limit: number;
+  };
+}
+
 export interface BrandProductsBatchResponse {
   groups: Record<string, BrandProductGroupInfo>;
   items: BrandProduct[];
@@ -315,13 +329,10 @@ export class BrandService {
           id: true,
           name: true,
           imageUrl: true,
-          isPopular: true,
-          rank: true,
         },
-        orderBy: [
-          { isPopular: 'desc' },
-          { rank: 'desc' },
-        ],
+        orderBy: {
+          products: { _count: 'desc' },
+        },
       });
 
       return brands.map((brand) => {
@@ -504,6 +515,62 @@ export class BrandService {
       logger.error(`Failed to get brand catalog for ${brandId}:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Markayı takip et (BridgeFollower tablosuna kayıt ekle).
+   * Zaten takip ediyorsa idempotent: mevcut kayıt döner.
+   */
+  async followBrand(brandId: string, userId: string): Promise<{ isJoined: true; followers: number }> {
+    const brand = await this.prisma.brand.findUnique({
+      where: { id: brandId },
+      select: { id: true },
+    });
+    if (!brand) {
+      throw new NotFoundError('Brand not found');
+    }
+
+    await this.prisma.bridgeFollower.upsert({
+      where: {
+        userId_brandId: { userId, brandId },
+      },
+      update: {},
+      create: {
+        userId,
+        brandId,
+      },
+    });
+
+    const followersCount = await this.prisma.bridgeFollower.count({
+      where: { brandId },
+    });
+    return { isJoined: true, followers: followersCount };
+  }
+
+  /**
+   * Markayı bırak (BridgeFollower tablosundan kayıt sil).
+   * Takip etmiyorsa idempotent: 204/200 ile başarılı kabul edilir.
+   */
+  async leaveBrand(brandId: string, userId: string): Promise<{ isJoined: false; followers: number }> {
+    const brand = await this.prisma.brand.findUnique({
+      where: { id: brandId },
+      select: { id: true },
+    });
+    if (!brand) {
+      throw new NotFoundError('Brand not found');
+    }
+
+    await this.prisma.bridgeFollower.deleteMany({
+      where: {
+        userId,
+        brandId,
+      },
+    });
+
+    const followersCount = await this.prisma.bridgeFollower.count({
+      where: { brandId },
+    });
+    return { isJoined: false, followers: followersCount };
   }
 
   /**
@@ -1479,20 +1546,15 @@ export class BrandService {
   }
 
   /**
-   * Markaya ait product group'ları listele (sadece group bilgileri)
+   * Markanın (externalId'ye ait) ürünlerini nested kategori yapısına göre gruplar.
+   * Gruplar sadece level 2 (rank 2) derinliğindeki kategori isimleriyle döner; level 0/1 veya kategorisiz ürünler "Diğer" grubunda.
    */
   async getBrandProductGroups(
     brandId: string,
     options?: { cursor?: string; limit?: number; productLimit?: number }
-  ): Promise<{
-    items: BrandProductGroup[];
-    pagination: {
-      cursor?: string;
-      hasMore: boolean;
-      limit: number;
-    };
-  }> {
+  ): Promise<BrandProductGroupsByCategoryResponse> {
     try {
+      const brand = await this.resolveBrandByIdOrExternalId(brandId);
       brandId = await this.idResolver.resolveBrandId(brandId);
       const brand = await this.prisma.brand.findUnique({
         where: { id: brandId },
@@ -1502,7 +1564,6 @@ export class BrandService {
       if (!brand) {
         throw new NotFoundError('Brand not found');
       }
-
       if (!brand.externalId) {
         throw new NotFoundError('Brand externalId not found');
       }
@@ -1512,69 +1573,109 @@ export class BrandService {
         options?.productLimit && options.productLimit > 0 ? Math.min(options.productLimit, 50) : 5;
       const cursor = options?.cursor;
 
-      const groups = await this.prisma.productGroup.findMany({
-        where: {
-          products: {
-            some: { brandId: brand.externalId },
-          },
-          ...(cursor && {
-            id: {
-              gt: cursor,
-            },
-          }),
-        },
-        orderBy: {
-          id: 'asc',
-        },
+      const items: Array<{ categoryId: string; categoryName: string; products: BrandProduct[] }> = [];
+
+      // Level 2 kategorileri getir (bu markaya ait en az bir ürünü olanlar)
+      const categoriesWhere: { level: number; products: { some: { brandId: string } }; id?: { gt: string } } = {
+        level: 2,
+        products: { some: { brandId: brand.externalId } },
+      };
+      if (cursor && cursor !== 'ungrouped') {
+        categoriesWhere.id = { gt: cursor };
+      }
+
+      const categories = await this.prisma.category.findMany({
+        where: categoriesWhere,
+        orderBy: { id: 'asc' },
         take: limit + 1,
-        include: {
-          products: {
-            where: { brandId: brand.externalId },
-            orderBy: { id: 'asc' },
-            take: productLimit + 1,
-            include: {
-              contentPosts: {
-                select: {
-                  id: true,
-                  likesCount: true,
-                  sharesCount: true,
-                  favoritesCount: true,
-                },
+        select: { id: true, name: true },
+      });
+
+      const hasMore = categories.length > limit;
+      const resultCategories = hasMore ? categories.slice(0, limit) : categories;
+      const nextCursor =
+        hasMore && resultCategories.length > 0 ? resultCategories[resultCategories.length - 1].id : undefined;
+
+      for (const category of resultCategories) {
+        const products = await this.prisma.product.findMany({
+          where: {
+            brandId: brand.externalId,
+            categoryId: category.id,
+          },
+          orderBy: { id: 'asc' },
+          take: productLimit + 1,
+          include: {
+            contentPosts: {
+              select: {
+                id: true,
+                likesCount: true,
+                sharesCount: true,
+                favoritesCount: true,
               },
             },
           },
-        },
-      });
-
-      const hasMore = groups.length > limit;
-      const resultGroups = hasMore ? groups.slice(0, limit) : groups;
-      const nextCursor = hasMore && resultGroups.length > 0 ? resultGroups[resultGroups.length - 1].id : undefined;
-
-      const items: BrandProductGroup[] = [];
-
-      for (const group of resultGroups) {
-        const groupProducts = group.products || [];
-        const hasMoreProducts = groupProducts.length > productLimit;
-        const limitedProducts = hasMoreProducts ? groupProducts.slice(0, productLimit) : groupProducts;
-
-        const products = await Promise.all(
-          limitedProducts.map(async (product) => {
-            const stats = await this.calculateProductStats(product.contentPosts || [], brandId);
-            const imageUrl = resolveMediaUrl(product.imageUrl);
+        });
+        const limited = products.length > productLimit ? products.slice(0, productLimit) : products;
+        const productsMapped: BrandProduct[] = await Promise.all(
+          limited.map(async (product) => {
+            const stats = await this.calculateProductStats(product.contentPosts || [], brand.id);
             return {
               productId: product.id,
               name: product.name,
-              image: imageUrl,
+              image: this.buildFullMediaUrl(product.imageUrl),
               stats,
             };
           })
         );
-
         items.push({
-          productGroupId: group.id,
-          productGroupName: group.name,
-          products,
+          categoryId: category.id,
+          categoryName: category.name,
+          products: productsMapped,
         });
+      }
+
+      // İlk sayfada "Diğer": kategorisi yok veya level !== 2 olan ürünler
+      if (!cursor) {
+        const otherProducts = await this.prisma.product.findMany({
+          where: {
+            brandId: brand.externalId,
+            OR: [
+              { categoryId: null },
+              { category: { level: { not: 2 } } },
+            ],
+          },
+          orderBy: { id: 'asc' },
+          take: productLimit + 1,
+          include: {
+            contentPosts: {
+              select: {
+                id: true,
+                likesCount: true,
+                sharesCount: true,
+                favoritesCount: true,
+              },
+            },
+          },
+        });
+        if (otherProducts.length > 0) {
+          const limited = otherProducts.length > productLimit ? otherProducts.slice(0, productLimit) : otherProducts;
+          const productsMapped: BrandProduct[] = await Promise.all(
+            limited.map(async (product) => {
+              const stats = await this.calculateProductStats(product.contentPosts || [], brand.id);
+              return {
+                productId: product.id,
+                name: product.name,
+                image: this.buildFullMediaUrl(product.imageUrl),
+                stats,
+              };
+            })
+          );
+          items.push({
+            categoryId: 'ungrouped',
+            categoryName: 'Diğer',
+            products: productsMapped,
+          });
+        }
       }
 
       return {
@@ -1586,7 +1687,7 @@ export class BrandService {
         },
       };
     } catch (error) {
-      logger.error(`Failed to get brand product groups for ${brandId}:`, error);
+      logger.error(`Failed to get brand product groups by category for ${brandId}:`, error);
       throw error;
     }
   }
@@ -1600,27 +1701,25 @@ export class BrandService {
     options?: { cursor?: string; limit?: number }
   ): Promise<BrandProductsResponse> {
     try {
-      const brand = await this.prisma.brand.findUnique({
-        where: { id: brandId },
-        select: { name: true },
-      });
-
+      const brand = await this.resolveBrandByIdOrExternalId(brandId);
       if (!brand) {
         throw new NotFoundError('Brand not found');
+      }
+      if (!brand.externalId) {
+        throw new NotFoundError('Brand externalId not found');
       }
 
       const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
       const cursor = options?.cursor;
 
       const whereClause: any = {
-        brandId: brandId,
+        brandId: brand.externalId,
         groupId: productGroupId === 'ungrouped' ? null : productGroupId,
       };
 
       if (cursor) {
-        whereClause.id = {
-          gt: cursor,
-        };
+        const resolvedCursor = await this.resolveProductIdForCursor(cursor);
+        whereClause.id = { gt: resolvedCursor };
       }
 
       const products = await this.prisma.product.findMany({
@@ -1646,7 +1745,7 @@ export class BrandService {
       const nextCursor = hasMore && resultProducts.length > 0 ? resultProducts[resultProducts.length - 1].id : undefined;
     const items: BrandProduct[] = await Promise.all(
       resultProducts.map(async (product) => {
-        const stats = await this.calculateProductStats(product.contentPosts || [], brandId);
+        const stats = await this.calculateProductStats(product.contentPosts || [], brand.id);
 
         return {
           productId: product.id,
@@ -1686,9 +1785,8 @@ export class BrandService {
     };
 
     if (cursor) {
-      whereClause.id = {
-        gt: cursor,
-      };
+      const resolvedCursor = await this.resolveProductIdForCursor(cursor);
+      whereClause.id = { gt: resolvedCursor };
     }
 
     const products = await this.prisma.product.findMany({
@@ -1761,25 +1859,17 @@ export class BrandService {
     options?: { cursor?: string; limit?: number }
   ): Promise<BrandProductsResponse> {
     try {
-      // Brand kontrolü
-      const brand = await this.prisma.brand.findUnique({
-        where: { id: brandId },
-        select: { name: true, externalId: true },
-      });
-
+      const brand = await this.resolveBrandByIdOrExternalId(brandId);
       if (!brand) {
         throw new NotFoundError('Brand not found');
       }
-
       if (!brand.externalId) {
         throw new NotFoundError('Brand externalId not found');
       }
 
-      // Product group kontrolü
       const productGroup = await this.prisma.productGroup.findUnique({
         where: { id: productGroupId },
       });
-
       if (!productGroup) {
         throw new NotFoundError('Product group not found');
       }
@@ -1789,13 +1879,11 @@ export class BrandService {
 
       const whereClause: any = {
         groupId: productGroupId,
-        brandId: brand.externalId, // Brand externalId'ye göre filtrele
+        brandId: brand.externalId,
       };
-
       if (cursor) {
-        whereClause.id = {
-          gt: cursor,
-        };
+        const resolvedCursor = await this.resolveProductIdForCursor(cursor);
+        whereClause.id = { gt: resolvedCursor };
       }
 
       const products = await this.prisma.product.findMany({
@@ -1822,7 +1910,7 @@ export class BrandService {
 
       const items: BrandProduct[] = await Promise.all(
         resultProducts.map(async (product) => {
-          const stats = await this.calculateProductStats(product.contentPosts || [], brandId);
+          const stats = await this.calculateProductStats(product.contentPosts || [], brand.id);
 
           return {
             productId: product.id,

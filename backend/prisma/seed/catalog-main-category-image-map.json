@@ -1,0 +1,15 @@
+{
+  "Electronics": "catalog.electronic-main",
+  "Beauty": "catalog.beauty-main",
+  "Cosmetics": "catalog.main-category.cosmetic",
+  "Appliances": "catalog.main-category.appliances",
+  "Fashion": "catalog.main-category.fashion",
+  "Home & Living": "catalog.main-category.home-living",
+  "Sports & Outdoors": "catalog.main-category.sports-outdoors",
+  "Pet Supplies": "catalog.main-category.pet-supplies",
+  "Baby & Kids": "catalog.main-category.baby-kids",
+  "Automotive": "catalog.main-category.automotive-motorcycle",
+  "Garden & Hardware": "catalog.main-category.garden-hardware",
+  "Hobbies, Music & Art": "catalog.main-category.hobbies-music-art",
+  "Office & Stationery": "catalog.main-category.office-stationery"
+}

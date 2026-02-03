@@ -1,3 +1,5 @@
+import { getCurrentContext } from '../middleware/request-context.middleware';
+
 /**
  * Default avatar path (MinIO'daki path)
  * Bu path tüm ortamlarda (dev, test, prod) aynı olacak
@@ -51,10 +53,34 @@ function tryExtractObjectKeyFromUrl(urlString: string): string | null {
     return null;
   }
 }
+/** Express Request tipi - circular dependency önlemek için lazy import yerine tip için */
+type ExpressRequest = { get(name: string): string | undefined; protocol: string };
+
+/**
+ * Mevcut HTTP isteğinden media base URL türetir.
+ * Böylece MEDIA_PUBLIC_BASE_URL set edilmeden hangi ağdan istek gelirse (localhost, 10.5.50.134 vb.)
+ * avatar/media URL'leri o host üzerinden döner; app tarafı görsele erişebilir.
+ */
+function getMediaBaseUrlFromRequest(req: ExpressRequest): string {
+  const protocol = req.get('x-forwarded-proto') || req.protocol || 'http';
+  const hostHeader = req.get('x-forwarded-host') || req.get('host') || 'localhost:3000';
+  let hostname: string;
+  try {
+    const u = new URL(hostHeader.startsWith('http') ? hostHeader : `http://${hostHeader}`);
+    hostname = u.hostname;
+  } catch {
+    hostname = hostHeader.includes(']') ? hostHeader : hostHeader.split(':')[0];
+  }
+  const mediaPort = process.env.MEDIA_PORT || '9000';
+  const hostPart = hostname.includes(':') ? `[${hostname}]` : hostname;
+  return `${protocol}://${hostPart}:${mediaPort}`;
+}
+
 /**
  * Ortak public media base URL
  * - Tüm görsel URL'leri için TEK kontrol noktası
  * - Önerilen: MEDIA_PUBLIC_BASE_URL (public erişim için)
+ * - MEDIA_PUBLIC_BASE_URL yoksa: mevcut request'ten türetilir (request context varsa)
  * - Backward-compat: SEED_MEDIA_BASE_URL / MINIO_PUBLIC_ENDPOINT (deprecated)
  * - Fallback: BASE_URL'den port 9000 türetilir (legacy)
  *
@@ -67,14 +93,18 @@ export function getPublicMediaBaseUrl(): string {
   const mediaPublicBaseUrl = process.env.MEDIA_PUBLIC_BASE_URL;
   if (mediaPublicBaseUrl) return normalizePublicObjectBaseUrl(mediaPublicBaseUrl);
 
-  // 2) Deprecated env'ler (geriye dönük uyumluluk)
+  // 2) Request'ten türet (MEDIA_PUBLIC_BASE_URL yoksa; böylece ağ değişince env güncellemeye gerek kalmaz)
+  const ctx = getCurrentContext();
+  if (ctx?.req) return normalizePublicObjectBaseUrl(getMediaBaseUrlFromRequest(ctx.req as ExpressRequest));
+
+  // 3) Deprecated env'ler (geriye dönük uyumluluk)
   const deprecatedSeedBase = process.env.SEED_MEDIA_BASE_URL;
   if (deprecatedSeedBase) return normalizePublicObjectBaseUrl(deprecatedSeedBase);
 
   const deprecatedMinioPublic = process.env.MINIO_PUBLIC_ENDPOINT;
   if (deprecatedMinioPublic) return normalizePublicObjectBaseUrl(deprecatedMinioPublic);
 
-  // 3) Legacy fallback: BASE_URL'den 9000 türet
+  // 4) Legacy fallback: BASE_URL'den 9000 türet
   const baseUrl = process.env.BASE_URL;
   if (baseUrl) {
     try {
@@ -89,7 +119,7 @@ export function getPublicMediaBaseUrl(): string {
     }
   }
 
-  // 4) Son çare: S3_ENDPOINT'ten public üretmeyi dene (dev için)
+  // 5) Son çare: S3_ENDPOINT'ten public üretmeyi dene (dev için)
   // Not: Bu sadece development'ta bir "life-saver" olmalı; ideal değil.
   const s3Endpoint = process.env.S3_ENDPOINT;
   if (s3Endpoint) {

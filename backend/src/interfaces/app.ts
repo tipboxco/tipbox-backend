@@ -29,7 +29,9 @@ import notificationRouter from './notification/notification.router';
 import newsRouter from './news/news.router';
 import syncReceiverRouter from './sync-receiver/sync-receiver.router';
 import auth0Router from './auth0/auth0.router';
+import cannyRouter from './canny/canny.router';
 import surveyRouter from './survey/survey.router';
+import subscriptionRouter from './subscription/subscription.router';
 
 // Middleware
 import { authMiddleware } from './auth/auth.middleware';
@@ -88,6 +90,15 @@ const secret = process.env.SECRET;
 const baseURL = process.env.BASE_URL || 'http://localhost:3000';
 
 if (issuerBaseURL && clientID && secret && !issuerBaseURL.includes('{yourDomain}') && !clientID.includes('{yourClientId}') && secret !== 'LONG_RANDOM_STRING') {
+  /**
+   * Request'ten dinamik base URL oluşturur (IP veya hostname bazlı)
+   */
+  function getDynamicBaseUrl(req: express.Request): string {
+    const protocol = req.protocol || (req.get('x-forwarded-proto') || 'http');
+    const host = req.get('host') || req.get('x-forwarded-host') || process.env.BASE_URL?.replace(/^https?:\/\//, '') || 'localhost:3000';
+    return `${protocol}://${host}`;
+  }
+
   const auth0Config: any = {
     authRequired: false,
     auth0Logout: true,
@@ -112,6 +123,41 @@ if (issuerBaseURL && clientID && secret && !issuerBaseURL.includes('{yourDomain}
       // Not: Auth0 Dashboard "Allowed Callback URLs" listesinde bu URL olmalı
       callback: '/auth0/callback',
       postLogoutRedirect: '/auth0/token' // Callback sonrasında token endpoint'ine yönlendir
+    },
+    // Cookie ayarları - farklı domain'ler arasında çalışması için
+    session: {
+      // Cookie'yi tüm domain'ler için geçerli yap (sameSite: 'none' ve secure: true gerekli)
+      cookie: {
+        sameSite: 'Lax', // 'None' için secure: true gerekli (HTTPS)
+        secure: process.env.NODE_ENV === 'production', // Production'da HTTPS gerekli
+        httpOnly: true,
+        // Domain belirtilmezse, cookie mevcut domain için set edilir
+        // path: '/' - default
+      }
+    },
+    // Login state oluşturulurken dinamik redirect_uri ayarla
+    getLoginState: (req: express.Request, options: any) => {
+      const dynamicBaseUrl = getDynamicBaseUrl(req);
+      const dynamicCallbackUrl = `${dynamicBaseUrl}/auth0/callback`;
+      
+      logger.info({
+        message: 'Auth0 login state oluşturuluyor',
+        originalBaseUrl: baseURL,
+        dynamicBaseUrl,
+        dynamicCallbackUrl,
+        host: req.get('host'),
+        xForwardedHost: req.get('x-forwarded-host'),
+        protocol: req.protocol,
+        xForwardedProto: req.get('x-forwarded-proto')
+      });
+
+      return {
+        ...options,
+        authorizationParams: {
+          ...options.authorizationParams,
+          redirect_uri: dynamicCallbackUrl
+        }
+      };
     },
     // Callback sonrasında session'ı döndür
     afterCallback: async (req: express.Request, res: express.Response, session: any) => {
@@ -324,6 +370,8 @@ app.use('/notifications', authMiddleware, notificationRouter);
 app.use('/surveys', surveyRouter);
 app.use('/api/cache', cacheRouter);
 app.use('/api/sync-receiver', syncReceiverRouter);
+app.use('/canny', cannyRouter);
+app.use('/subscription', authMiddleware, subscriptionRouter);
 
 // Dashboard routes (must be last)
 app.use('/', dashboardRouter);

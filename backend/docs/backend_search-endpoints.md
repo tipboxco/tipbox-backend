@@ -475,20 +475,42 @@ Authorization: Bearer {token}
 - `cursor` (string, optional): Pagination cursor
 - `limit` (integer, optional, default: 20, max: 50): Sayfa başına item sayısı
 
-**Response (200):**
+**Response (200):** Badge tablosundaki `type` alanına göre gruplanmış; `BRAND` olanlar `brand.items`, diğerleri `achievement.items` içinde (Tab Page yapısı için).
+
 ```json
 {
-  "items": [
-    {
-      "badgeId": "220e8400-e29b-41d4-a716-446655440011",
-      "name": "Bridge Badge",
-      "description": "Connected with community",
-      "image": "http://api-test.tipbox.co:9000/tipbox-media/badges/bridge-badge.jpg",
-      "earnedAt": "2024-01-15T10:30:00.000Z"
-    }
-  ],
+  "brand": {
+    "items": [
+      {
+        "id": "220e8400-e29b-41d4-a716-446655440011",
+        "title": "Bridge Ambassador",
+        "image": "http://api-test.tipbox.co:9000/tipbox-media/badges/bridge-badge.jpg",
+        "rarity": "Rare",
+        "isClaimed": true,
+        "nftAddress": null,
+        "totalEarned": 3,
+        "earnedDate": "2024-01-15T10:30:00.000Z",
+        "tasks": []
+      }
+    ]
+  },
+  "achievement": {
+    "items": [
+      {
+        "id": "330e8400-e29b-41d4-a716-446655440012",
+        "title": "Expert Badge",
+        "image": "http://api-test.tipbox.co:9000/tipbox-media/badges/expert.png",
+        "rarity": "Epic",
+        "isClaimed": true,
+        "nftAddress": null,
+        "totalEarned": 1,
+        "earnedDate": "2024-02-10T10:30:00.000Z",
+        "tasks": [{ "id": "goal-1", "title": "10 Yorum Yap", "type": "Comment" }]
+      }
+    ]
+  },
   "pagination": {
-    "cursor": "220e8400-e29b-41d4-a716-446655440011",
+    "cursor": "330e8400-e29b-41d4-a716-446655440012",
     "hasMore": false,
     "limit": 20
   }
