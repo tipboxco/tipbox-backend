@@ -1,10 +1,9 @@
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
-import { FeedItem, FeedItemType, FeedResponse, ContextData, ExperiencePost, ExperienceContent, ReviewProduct } from '../../interfaces/feed/feed.dto';
+import { FeedItem, FeedItemType, FeedResponse, ContextData, ExperiencePost, ExperienceContent } from '../../interfaces/feed/feed.dto';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import logger from '../../infrastructure/logger/logger';
 import { NotFoundError } from '../../infrastructure/errors/custom-errors';
-import { IdResolverService } from '../../infrastructure/ids/id-resolver.service';
 import { brandToWebsite } from '../../data/brandToWebsite';
 import { randomUUID } from 'crypto';
 var slugify = require('slugify');
@@ -260,11 +259,41 @@ export interface BrandHistoryEventsResponse {
 
 export class BrandService {
   private readonly prisma: ReturnType<typeof getPrisma>;
-  private readonly idResolver: IdResolverService;
 
-  constructor(idResolver?: IdResolverService) {
+  constructor() {
     this.prisma = getPrisma();
-    this.idResolver = idResolver ?? new IdResolverService();
+  }
+
+  /**
+   * Brand'i id veya externalId ile bulur (EP'lerde path'te id veya externalId kabul etmek için).
+   */
+  private async resolveBrandByIdOrExternalId(brandId: string): Promise<{
+    id: string;
+    externalId: string | null;
+    name: string;
+  } | null> {
+    return this.prisma.brand.findFirst({
+      where: {
+        OR: [{ id: brandId }, { externalId: brandId }],
+      },
+      select: { id: true, externalId: true, name: true },
+    });
+  }
+
+  /**
+   * Product cursor'ı id veya metadata->>'externalId' ile resolve eder (frontend product id veya externalId gönderebilir).
+   */
+  private async resolveProductIdForCursor(cursor: string): Promise<string> {
+    const byId = await this.prisma.product.findUnique({
+      where: { id: cursor },
+      select: { id: true },
+    });
+    if (byId) return byId.id;
+    const byExternalId = await this.prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM products WHERE metadata->>'externalId' = ${cursor} LIMIT 1
+    `;
+    if (byExternalId?.length) return byExternalId[0].id;
+    throw new NotFoundError(`Product not found with id or externalId: ${cursor}`);
   }
 
   /**
@@ -359,7 +388,7 @@ export class BrandService {
     userId: string,
     options?: { cursor?: string; limit?: number }
   ): Promise<SurveyListResponse> {
-    brandId = await this.idResolver.resolveBrandId(brandId);
+    // Brand kontrolü
     const brand = await this.prisma.brand.findUnique({
       where: { id: brandId },
     });
@@ -463,7 +492,6 @@ export class BrandService {
    */
   async getBrandCatalog(brandId: string, userId?: string): Promise<BrandCatalogResponse> {
     try {
-      brandId = await this.idResolver.resolveBrandId(brandId);
       const brand = await this.prisma.brand.findUnique({
         where: { id: brandId },
         select: {
@@ -581,7 +609,6 @@ export class BrandService {
     options?: { cursor?: string; limit?: number; userId?: string }
   ): Promise<BrandFeedResponse> {
     try {
-      brandId = await this.idResolver.resolveBrandId(brandId);
       const brand = await this.prisma.brand.findUnique({
         where: { id: brandId },
         select: {
@@ -737,7 +764,6 @@ export class BrandService {
     userId: string,
     options?: { cursor?: string; limit?: number }
   ): Promise<BrandEventsResponse> {
-    brandId = await this.idResolver.resolveBrandId(brandId);
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
     const cursor = options?.cursor;
 
@@ -871,7 +897,6 @@ export class BrandService {
     options?: { cursor?: string; limit?: number }
   ): Promise<FeedResponse> {
     try {
-      brandId = await this.idResolver.resolveBrandId(brandId);
       const brand = await this.prisma.brand.findUnique({
         where: { id: brandId },
       });
@@ -1003,7 +1028,7 @@ export class BrandService {
     userId: string,
     options?: { cursor?: string; limit?: number }
   ): Promise<BrandHistory> {
-    brandId = await this.idResolver.resolveBrandId(brandId);
+    // Brand bilgilerini store'dan (brand tablosundan) al
     const brand = await this.prisma.brand.findUnique({
       where: { id: brandId },
       include: { brandCategory: true },
@@ -1193,7 +1218,7 @@ export class BrandService {
     totalPoints: number;
   }> {
     try {
-      brandId = await this.idResolver.resolveBrandId(brandId);
+      // Brand'in var olup olmadığını kontrol et
       const brand = await this.prisma.brand.findUnique({
         where: { id: brandId },
       });
@@ -1309,10 +1334,10 @@ export class BrandService {
     userId: string,
     options?: { cursor?: string; limit?: number }
   ): Promise<BrandHistoryPointsResponse> {
-    brandId = await this.idResolver.resolveBrandId(brandId);
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
     const cursor = options?.cursor;
 
+    // ✅ DÜZELTME: BridgeReward'ları al
     const whereClause: any = {
       userId,
       brandId,
@@ -1419,10 +1444,10 @@ export class BrandService {
     userId: string,
     options?: { cursor?: string; limit?: number }
   ): Promise<SurveyList> {
-    brandId = await this.idResolver.resolveBrandId(brandId);
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
     const cursor = options?.cursor;
 
+    // İlgili brand'in varlığını doğrula
     const brand = await this.prisma.brand.findUnique({ where: { id: brandId } });
     if (!brand) {
       throw new NotFoundError(`Brand not found: ${brandId}`);
@@ -1555,12 +1580,6 @@ export class BrandService {
   ): Promise<BrandProductGroupsByCategoryResponse> {
     try {
       const brand = await this.resolveBrandByIdOrExternalId(brandId);
-      brandId = await this.idResolver.resolveBrandId(brandId);
-      const brand = await this.prisma.brand.findUnique({
-        where: { id: brandId },
-        select: { name: true, externalId: true },
-      });
-
       if (!brand) {
         throw new NotFoundError('Brand not found');
       }
@@ -2063,8 +2082,7 @@ export class BrandService {
     options?: { cursor?: string; limit?: number }
   ): Promise<FeedResponse> {
     try {
-      brandId = await this.idResolver.resolveBrandId(brandId);
-      productId = await this.idResolver.resolveProductId(productId);
+      // Brand name'i al
       const brand = await this.prisma.brand.findFirst({
         where: {
           OR: [
@@ -2442,8 +2460,7 @@ export class BrandService {
     };
   }> {
     try {
-      brandId = await this.idResolver.resolveBrandId(brandId);
-      productId = await this.idResolver.resolveProductId(productId);
+      // Brand'i kontrol et (hem id hem externalId ile kontrol et)
       const brand = await this.prisma.brand.findFirst({
         where: {
           OR: [
@@ -2554,8 +2571,7 @@ export class BrandService {
     }>
   > {
     try {
-      brandId = await this.idResolver.resolveBrandId(brandId);
-      productId = await this.idResolver.resolveProductId(productId);
+      // Brand'i kontrol et (hem id hem externalId ile kontrol et)
       const brand = await this.prisma.brand.findFirst({
         where: {
           OR: [
@@ -2917,27 +2933,11 @@ export class BrandService {
     const tags = post.tags?.map((t: any) => t.tag) || post.contentPostTags?.map((t: any) => t.tag) || [];
 
     const productBase = this.getProductBase(post.product);
-    const product: ReviewProduct = productBase
-      ? { ...productBase, isOwned: _ownedProductIds?.has(productBase.id) || false }
-      : {
-          id: post.productId || '',
-          name: post.product?.name || '',
-          subName: post.productGroup?.name || '',
-          image: resolveMediaUrl(post.product?.imageUrl) || null,
-          isOwned: false,
-        };
-
-    const contentString =
-      experienceContent.length > 0
-        ? experienceContent
-            .map((item) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`)
-            .join('\n\n')
-        : post.body || '';
 
     if (type === FeedItemType.UPDATE) {
       const relatedPost = {
         id: post.id,
-        product,
+        product: productBase,
         content: experienceContent,
         tags,
         images,
@@ -2956,17 +2956,11 @@ export class BrandService {
       };
     }
 
-    const status = post.productStatus === 'own' || post.productStatus === 'tried' ? post.productStatus : null;
-    const statusLabel = post.productStatus === 'own' ? 'I owned' : post.productStatus === 'tried' ? 'I tried' : null;
     const experienceData: ExperiencePost = {
       ...basePost,
-      product,
-      content: contentString,
-      experienceContent,
+      content: experienceContent,
       tags,
       images,
-      status: status ?? undefined,
-      statusLabel: statusLabel ?? undefined,
     };
 
     return {
@@ -3597,5 +3591,4 @@ export class BrandService {
   }
 
 }
-
 
