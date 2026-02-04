@@ -17,25 +17,26 @@ export interface CategoryItem {
   image: string | null;
 }
 
+// Medusa: Category tablosunda level ile ayrım (0=main, 1=sub, 2=group)
 export interface SubCategoryItem {
-  subCategoryId: string;
+  subCategoryId: string; // Medusa Category ID (level=1)
   name: string;
   image: string | null;
-  categoryId: string;
+  categoryId: string; // Main Category ID (parent)
 }
 
 export interface ProductGroupItem {
-  productGroupId: string;
+  productGroupId: string; // Medusa Category ID (level=2)
   name: string;
   image: string | null;
-  subCategoryId: string;
+  subCategoryId: string; // Sub Category ID (parent)
 }
 
 export interface ProductItem {
-  productId: string;
+  productId: string; // Medusa Product ID
   name: string;
   image: string | null;
-  productGroupId: string;
+  productGroupId: string; // Product Group ID (parent)
 }
 
 export interface ProductDetail {
@@ -170,10 +171,10 @@ export class CatalogService {
         const imageUrl = resolveMediaUrl(subCategory.thumbnail);
 
         return {
-          subCategoryId: subCategory.id,
-          categoryId: resolvedCategoryId,
+          subCategoryId: subCategory.id, // ✅ Sub-Category ID (Medusa Category ID, level=1)
           name: subCategory.name,
           image: imageUrl,
+          categoryId: resolvedCategoryId, // ✅ Main Category ID (parent)
         };
       });
 
@@ -246,10 +247,10 @@ export class CatalogService {
         const imageUrl = resolveMediaUrl(group.thumbnail);
 
         return {
-          productGroupId: group.id,
+          productGroupId: group.id, // ✅ Product Group ID (Medusa Category ID, level=2)
           name: group.name,
           image: imageUrl,
-          subCategoryId: group.parentId || '',
+          subCategoryId: group.parentId || '', // ✅ Sub Category ID (parent)
         };
       });
 
@@ -352,7 +353,7 @@ export class CatalogService {
           productId: product.id,
           name: product.name,
           image: imageUrl,
-          productGroupId: product.categoryId || '',
+          productGroupId: product.categoryId || '', // ✅ Product Group ID (parent)
         };
       });
 
@@ -371,20 +372,28 @@ export class CatalogService {
   }
 
   /**
-   * Product detay bilgilerini getir
+   * Product detay bilgilerini getir (Medusa: Product.categoryId + Category breadcrumb; legacy: group.subCategory.mainCategory).
    */
   async getProductById(productId: string): Promise<ProductDetail> {
     try {
       const product = await prisma.product.findUnique({
         where: { id: productId },
         include: {
+          category: {
+            select: { id: true, name: true, parentId: true },
+            include: { parent: { select: { id: true, name: true } } },
+          },
           group: {
             include: {
-              subCategory: {
-                include: {
-                  mainCategory: true,
-                },
-              },
+              subCategory: { include: { mainCategory: true } },
+            },
+          },
+          brand: {
+            select: {
+              id: true,
+              name: true,
+              logoUrl: true,
+              imageUrl: true,
             },
           },
         },
@@ -394,41 +403,33 @@ export class CatalogService {
         throw new Error(`Product not found: ${productId}`);
       }
 
-      // Brand bilgisini al (product.brand string olarak saklanıyor)
+      const subName =
+        product.subName ??
+        product.category?.name ??
+        product.category?.parent?.name ??
+        product.group?.name ??
+        product.group?.subCategory?.name ??
+        null;
+
       let brandData: { id: string; name: string; image: string | null } | null = null;
       if (product.brand) {
-        const brand = await prisma.brand.findFirst({
-          where: { name: product.brand },
-          select: {
-            id: true,
-            name: true,
-            imageUrl: true,
-          },
-        });
-
-        if (brand) {
-          brandData = {
-            id: brand.id,
-            name: brand.name,
-            image: resolveMediaUrl(brand.imageUrl),
-          };
-        }
+        brandData = {
+          id: product.brand.id,
+          name: product.brand.name,
+          image: resolveMediaUrl(product.brand.logoUrl ?? product.brand.imageUrl),
+        };
       }
 
-      // Specs'i parse et (eğer description'da varsa veya ayrı bir alan varsa)
-      // Şimdilik boş array döndürüyoruz, ileride specs alanı eklenebilir
       const specs: string[] = [];
-
-      // Price ve currency şimdilik null, ileride eklenebilir
       const price: number | null = null;
       const currency: string | null = null;
 
       return {
         productId: product.id,
         name: product.name,
-        subName: product.subName,
+        subName,
         description: product.description,
-        image: resolveMediaUrl(product.imageUrl),
+        image: resolveMediaUrl(product.imageUrl ?? product.thumbnail),
         brand: brandData,
         specs,
         price,
@@ -546,24 +547,6 @@ export class CatalogService {
           },
           question: true,
           tip: true,
-          updateContent: {
-            include: {
-              experiencePost: {
-                include: {
-                  product: {
-                    include: {
-                      group: {
-                        include: {
-                          subCategory: { include: { mainCategory: true } },
-                        },
-                      },
-                    },
-                  },
-                  contentPostTags: true,
-                },
-              },
-            },
-          },
           tags: true,
           contentPostTags: true,
           likes: true,
@@ -980,7 +963,7 @@ export class CatalogService {
 
       // Convert posts to feed items
       const feedItems: Array<{ type: string; data: any }> = resultPosts.map((post) => {
-        const baseType = mapContentPostTypeToFeedItemType(post.type);
+        const baseType = mapContentPostTypeToFeedItemType(post.type as any);
         const contextData = this.buildContextDataFromPost(post);
 
         const baseData = {
@@ -1185,7 +1168,7 @@ export class CatalogService {
 
       // Convert posts to feed items
       const feedItems: Array<{ type: string; data: any }> = resultPosts.map((post) => {
-        const baseType = mapContentPostTypeToFeedItemType(post.type);
+        const baseType = mapContentPostTypeToFeedItemType(post.type as any);
         const contextData = this.buildContextDataFromPost(post);
 
         const baseData = {
@@ -1250,7 +1233,14 @@ export class CatalogService {
       // Product'ın var olup olmadığını kontrol et
       const product = await prisma.product.findUnique({
         where: { id: productId },
-        select: { id: true, brand: true },
+        select: { 
+          id: true, 
+          brand: {
+            select: {
+              name: true,
+            },
+          },
+        },
       });
 
       if (!product) {
@@ -1293,7 +1283,7 @@ export class CatalogService {
       const newsItems = resultPosts.map((post: any) => {
         const title = post.title || post.body?.slice(0, 80) || 'News';
         const description = post.body || '';
-        const source = product.brand || 'tipbox';
+        const source = product.brand?.name || 'tipbox';
         const image =
           (post as any).imageUrl ||
           post.product?.imageUrl ||
@@ -1307,7 +1297,7 @@ export class CatalogService {
           description,
           source,
           date: post.createdAt.toISOString(),
-          image: resolveMediaUrl(image),
+          image: resolveMediaUrl(image) || '',
         };
       });
 

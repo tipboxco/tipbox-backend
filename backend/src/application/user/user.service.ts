@@ -3846,6 +3846,12 @@ export class UserService {
   }> {
     let settings = await this.settingsRepo.findByUserId(userId);
     if (!settings) {
+      // Kullanıcının veritabanında var olup olmadığını kontrol et
+      const user = await this.userRepo.findById(userId);
+      if (!user) {
+        throw new Error('User not found');
+      }
+      
       // Default settings oluştur
       settings = await this.settingsRepo.create(userId);
     }

@@ -3278,8 +3278,15 @@ router.get('/settings/notifications', asyncHandler(async (req: Request, res: Res
     return res.status(401).json({ error: { message: 'Unauthorized' } });
   }
 
-  const settings = await userService.getNotificationSettings(String(userId));
-  return res.json(settings);
+  try {
+    const settings = await userService.getNotificationSettings(String(userId));
+    return res.json(settings);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'User not found') {
+      return res.status(404).json({ error: { message: 'User not found' } });
+    }
+    throw error;
+  }
 }));
 
 /**
