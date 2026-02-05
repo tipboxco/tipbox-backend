@@ -55,37 +55,55 @@ Authorization: Bearer {token}
 
 **Sıralama:** Markalar, markaya ait ürün sayısına göre **çoktan aza** sıralanır (en fazla ürünü olan marka önce).
 
+**Pagination:** `page` (varsayılan 1) ve `limit` (varsayılan 20, max 50) query parametreleri ile sayfalama yapılır.
+
 **Authentication:** Bearer Token gerekli
 
 **Request:**
 ```http
-GET /brands/categories/550e8400-e29b-41d4-a716-446655440000/brands
+GET /brands/categories/550e8400-e29b-41d4-a716-446655440000/brands?page=1&limit=20
 Authorization: Bearer {token}
 ```
 
 **Path Parameters:**
 - `categoryId` (string): Brand kategori ID'si (UUID veya kategori adı)
 
+**Query Parameters:**
+- `page` (integer, optional): Sayfa numarası (varsayılan: 1)
+- `limit` (integer, optional): Sayfa başına marka sayısı (varsayılan: 20, max: 50)
+
 **Response:**
 ```json
-[
-  {
-    "brandId": "770e8400-e29b-41d4-a716-446655440000",
-    "name": "Apple",
-    "image": "http://api-test.tipbox.co:9000/tipbox-media/brands/apple-logo.jpg"
-  },
-  {
-    "brandId": "880e8400-e29b-41d4-a716-446655440001",
-    "name": "Samsung",
-    "image": "http://api-test.tipbox.co:9000/tipbox-media/brands/samsung-logo.jpg"
+{
+  "items": [
+    {
+      "brandId": "770e8400-e29b-41d4-a716-446655440000",
+      "name": "Apple",
+      "image": "http://api-test.tipbox.co:9000/tipbox-media/brands/apple-logo.jpg"
+    },
+    {
+      "brandId": "880e8400-e29b-41d4-a716-446655440001",
+      "name": "Samsung",
+      "image": "http://api-test.tipbox.co:9000/tipbox-media/brands/samsung-logo.jpg"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "hasMore": false
   }
-]
+}
 ```
 
 **Response Fields:**
-- `brandId` (string, UUID): Marka benzersiz ID'si
-- `name` (string): Marka adı
-- `image` (string | null): Marka logosu (tam URL)
+- `items` (array): Marka listesi
+  - `brandId` (string, UUID): Marka benzersiz ID'si
+  - `name` (string): Marka adı
+  - `image` (string | null): Marka logosu (tam URL)
+- `pagination`: Sayfalama bilgisi
+  - `page` (integer): Mevcut sayfa
+  - `limit` (integer): Sayfa boyutu
+  - `hasMore` (boolean): Sonraki sayfa var mı
 
 ---
 
