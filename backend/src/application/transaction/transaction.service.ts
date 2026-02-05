@@ -71,13 +71,14 @@ export class TransactionService {
       throw new ValidationError('Cannot send tips to yourself');
     }
 
-    // Get wallets
-    const fromWallet = await this.walletRepo.findActiveByUserId(request.fromUserId);
+    // Gönderen: JWT'deki userId için smart account tercih eden wallet (ERC-4337)
+    const fromWallet = await this.walletRepo.findPreferredForReceivingByUserId(request.fromUserId);
     if (!fromWallet) {
       throw new NotFoundError('Sender wallet not found');
     }
 
-    const toWallet = await this.walletRepo.findActiveByUserId(request.toUserId);
+    // Alıcı: recipientUserId için smart account tercih eden wallet (ERC-4337)
+    const toWallet = await this.walletRepo.findPreferredForReceivingByUserId(request.toUserId);
     if (!toWallet) {
       throw new NotFoundError('Recipient wallet not found');
     }
@@ -95,13 +96,17 @@ export class TransactionService {
       this.profileRepo.findByUserId(request.toUserId),
     ]);
 
+    // Wallet'lar arası tip transferinde adres olarak smartAccountAddress kullan (yoksa publicAddress)
+    const fromAddress = fromWallet.smartAccountAddress ?? fromWallet.publicAddress;
+    const toAddress = toWallet.smartAccountAddress ?? toWallet.publicAddress;
+
     // Create SEND transaction
     const sendTransaction = await this.transactionRepo.create({
       walletId: fromWallet.id,
       actionType: TransactionActionType.TIP_SEND,
       amount: request.amount,
-      fromAddress: fromWallet.publicAddress,
-      toAddress: toWallet.publicAddress,
+      fromAddress,
+      toAddress,
       metadata: {
         reason: request.reason || null,
         recipientUserId: request.toUserId
@@ -114,8 +119,8 @@ export class TransactionService {
       walletId: toWallet.id,
       actionType: TransactionActionType.TIP_RECEIVE,
       amount: request.amount,
-      fromAddress: fromWallet.publicAddress,
-      toAddress: toWallet.publicAddress,
+      fromAddress,
+      toAddress,
       metadata: {
         reason: request.reason || null,
         senderUserId: request.fromUserId,
@@ -405,7 +410,7 @@ export class TransactionService {
       actionType: TransactionActionType.CLAIM_REWARD,
       amount,
       fromAddress: null,
-      toAddress: wallet.publicAddress,
+      toAddress: wallet.smartAccountAddress ?? wallet.publicAddress,
       metadata: {
         rewardId,
         rewardType
@@ -473,13 +478,17 @@ export class TransactionService {
       this.profileRepo.findByUserId(sellerId),
     ]);
 
+    // Wallet adresi: smartAccountAddress kullan (yoksa publicAddress)
+    const buyerAddress = buyerWallet.smartAccountAddress ?? buyerWallet.publicAddress;
+    const sellerAddress = sellerWallet.smartAccountAddress ?? sellerWallet.publicAddress;
+
     // Create BUY transaction
     const buyTransaction = await this.transactionRepo.create({
       walletId: buyerWallet.id,
       actionType: TransactionActionType.NFT_BUY,
       amount: price,
-      fromAddress: buyerWallet.publicAddress,
-      toAddress: sellerWallet.publicAddress,
+      fromAddress: buyerAddress,
+      toAddress: sellerAddress,
       metadata: { nftId, sellerId },
       provider: 'backend'
     });
@@ -492,8 +501,8 @@ export class TransactionService {
       walletId: sellerWallet.id,
       actionType: TransactionActionType.NFT_SELL,
       amount: sellerReceives,
-      fromAddress: buyerWallet.publicAddress,
-      toAddress: sellerWallet.publicAddress,
+      fromAddress: buyerAddress,
+      toAddress: sellerAddress,
       metadata: { nftId, buyerId: userId, gasFee },
       provider: 'backend'
     });

@@ -13,7 +13,10 @@ router.use(authMiddleware);
  * @openapi
  * /transactions/send-tip:
  *   post:
- *     summary: TIPS gönder (kullanıcıya veya wallet address'e)
+ *     summary: TIPS gönder (alıcı kullanıcıya)
+ *     description: |
+ *       Gönderen kullanıcının aktif wallet'ından, alıcı kullanıcının wallet tablosundaki
+ *       smartAccountAddress adresine tip gönderir. smartAccountAddress yoksa public_address kullanılır.
  *     tags: [Transactions]
  *     security:
  *       - bearerAuth: []
@@ -24,125 +27,64 @@ router.use(authMiddleware);
  *           schema:
  *             type: object
  *             required:
+ *               - recipientId
  *               - amount
  *             properties:
  *               recipientId:
  *                 type: string
- *                 description: Alıcı kullanıcı ID (internal transfer için)
- *               walletAddress:
- *                 type: string
- *                 description: Alıcı wallet adresi (external transfer için)
+ *                 description: Alıcı kullanıcının user id değeri (tip bu kullanıcının wallet'ına gider)
  *               amount:
  *                 type: number
  *                 description: TIPS miktarı
  *               message:
  *                 type: string
- *                 description: Opsiyonel mesaj
+ *                 description: Opsiyonel mesaj (metadata'da reason olarak saklanır)
  *     responses:
  *       200:
  *         description: Transaction başarıyla oluşturuldu
  *       400:
  *         description: Geçersiz parametre veya yetersiz bakiye
+ *       404:
+ *         description: Alıcı veya gönderen wallet bulunamadı
  */
 router.post('/send-tip', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const fromUserId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
+
   if (!fromUserId) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
 
-  const { recipientId, walletAddress, amount, message, reason } = req.body;
+  const { recipientId, amount, message } = req.body;
 
-  // Validation: En az biri olmalı
-  if (!recipientId && !walletAddress) {
-    return res.status(400).json({ 
-      message: 'Either recipientId or walletAddress is required' 
-    });
-  }
-
-  // İkisi birden olamaz
-  if (recipientId && walletAddress) {
-    return res.status(400).json({ 
-      message: 'Cannot specify both recipientId and walletAddress' 
-    });
+  if (!recipientId) {
+    return res.status(400).json({ message: 'recipientId is required' });
   }
 
   if (!amount || amount <= 0) {
     return res.status(400).json({ message: 'Amount must be greater than 0' });
   }
 
-  // WalletAddress ile gönderim
-  if (walletAddress) {
-    // Wallet address validation
-    if (!walletAddress.startsWith('0x') || walletAddress.length < 20) {
-      return res.status(400).json({ 
-        message: 'Invalid wallet address format' 
-      });
-    }
+  // recipientId = alıcı kullanıcı id; servis wallet tablosundan alıcının wallet'ını bulur,
+  // smartAccountAddress (yoksa public_address) adresine tip gönderimi yapar
+  const result = await transactionService.sendTip({
+    fromUserId: String(fromUserId),
+    toUserId: String(recipientId),
+    amount: Number(amount),
+    reason: message || undefined
+  });
 
-    // Wallet address'den user bulma
-    const prisma = getPrisma();
-    const recipientWallet = await prisma.wallet.findFirst({
-      where: { 
-        publicAddress: walletAddress,
-        isConnected: true
-      },
-      include: {
-        user: true
-      }
-    });
-
-    if (!recipientWallet) {
-      return res.status(404).json({ 
-        message: 'Wallet address not found in system' 
-      });
-    }
-
-    // Internal transfer olarak işle
-    const result = await transactionService.sendTip({
-      fromUserId: String(fromUserId),
-      toUserId: recipientWallet.userId,
-      amount: Number(amount),
-      reason: message || reason || undefined
-    });
-
-    return res.json({
-      id: result.transaction.id,
-      actionType: result.transaction.actionType,
-      status: result.transaction.status,
-      amount: result.transaction.amount,
-      toAddress: result.transaction.toAddress,
-      toUserId: recipientWallet.userId,
-      metadata: result.transaction.metadata,
-      provider: result.transaction.provider,
-      createdAt: result.transaction.createdAt.toISOString()
-    });
-  }
-
-  // RecipientId ile gönderim (mevcut mantık)
-  if (recipientId) {
-    const result = await transactionService.sendTip({
-      fromUserId: String(fromUserId),
-      toUserId: String(recipientId),
-      amount: Number(amount),
-      reason: message || reason || undefined
-    });
-
-    return res.json({
-      id: result.transaction.id,
-      actionType: result.transaction.actionType,
-      status: result.transaction.status,
-      amount: result.transaction.amount,
-      toAddress: result.transaction.toAddress,
-      toUserId: recipientId,
-      metadata: result.transaction.metadata,
-      provider: result.transaction.provider,
-      createdAt: result.transaction.createdAt.toISOString()
-    });
-  }
-
-  return res.status(400).json({ message: 'Invalid request' });
+  return res.json({
+    id: result.transaction.id,
+    actionType: result.transaction.actionType,
+    status: result.transaction.status,
+    amount: result.transaction.amount,
+    toAddress: result.transaction.toAddress,
+    toUserId: recipientId,
+    metadata: result.transaction.metadata,
+    provider: result.transaction.provider,
+    createdAt: result.transaction.createdAt.toISOString()
+  });
 }));
 
 /**

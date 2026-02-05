@@ -4,6 +4,7 @@ import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
 import logger from '../../infrastructure/logger/logger';
 import { InsufficientBalanceError } from '../../infrastructure/errors/custom-errors';
+import { getThirdwebSdkService } from './thirdweb-sdk/thirdweb-sdk.service';
 
 export class WalletService {
   constructor(
@@ -13,6 +14,42 @@ export class WalletService {
 
   async getUserWallets(userId: string): Promise<Wallet[]> {
     return this.walletRepo.findByUserId(userId);
+  }
+
+  /**
+   * Kullanıcının wallet'ı yoksa Thirdweb SDK ile oturum açıp wallet oluşturur ve DB'ye kaydeder.
+   * Liste çağrılarından önce kullanılır (wallet yoksa otomatik oluşturma).
+   */
+  async ensureWalletForUser(userId: string): Promise<void> {
+    const wallets = await this.walletRepo.findByUserId(userId);
+    if (wallets.length > 0) return;
+
+    const sdk = getThirdwebSdkService();
+    if (!sdk.isConfigured()) return;
+
+    try {
+      const auth = await sdk.authenticateAndGetAddresses(userId);
+      if (!auth.success || !auth.eoaAddress) return;
+
+      await this.connectWallet(
+        userId,
+        auth.eoaAddress,
+        WalletProvider.THIRDWEB,
+        auth.smartAccountAddress
+      );
+      logger.info({
+        userId,
+        eoaAddress: auth.eoaAddress,
+        smartAccountAddress: auth.smartAccountAddress,
+        message: 'Wallet created from Thirdweb session (ensureWalletForUser)',
+      });
+    } catch (err) {
+      logger.warn({
+        userId,
+        error: err instanceof Error ? err.message : String(err),
+        message: 'ensureWalletForUser: Thirdweb session or wallet create failed',
+      });
+    }
   }
 
   async getActiveWallet(userId: string): Promise<Wallet | null> {
@@ -164,6 +201,48 @@ export class WalletService {
   }
 
   /**
+   * Contract'tan balance ve pendingTips çekip wallet tablosunu günceller (webhook sonrası sync).
+   * Takip adresi: smart_account_address varsa o, yoksa public_address.
+   */
+  async syncWalletBalanceFromChain(walletId: string): Promise<{ success: boolean; error?: string }> {
+    const wallet = await this.walletRepo.findById(walletId);
+    if (!wallet) {
+      return { success: false, error: 'Wallet not found' };
+    }
+    const address = wallet.smartAccountAddress ?? wallet.publicAddress;
+    const sdk = getThirdwebSdkService();
+    if (!sdk.isConfigured()) {
+      logger.debug({ walletId, message: 'Thirdweb SDK not configured, skipping balance sync' });
+      return { success: false, error: 'Thirdweb SDK not configured' };
+    }
+    try {
+      const [balanceResult, pendingResult] = await Promise.all([
+        sdk.getTokenBalanceForAddress(address),
+        sdk.getPendingTips(address),
+      ]);
+      if (!balanceResult.success) {
+        logger.warn({ walletId, address, error: balanceResult.error, message: 'Contract balance fetch failed' });
+        return { success: false, error: balanceResult.error };
+      }
+      const balance = balanceResult.balanceFormatted ?? 0;
+      const lockedBalance = pendingResult.success ? (pendingResult.pendingFormatted ?? 0) : (wallet.lockedBalance ?? 0);
+      await this.walletRepo.setBalance(walletId, balance, lockedBalance);
+      logger.info({
+        walletId,
+        address,
+        balance,
+        lockedBalance,
+        message: 'Wallet balance synced from chain (contract + pendingTips)',
+      });
+      return { success: true };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.warn({ walletId, address, error: msg, message: 'syncWalletBalanceFromChain failed' });
+      return { success: false, error: msg };
+    }
+  }
+
+  /**
    * Balance'ı direkt set et (migration/admin işlemleri için)
    */
   async setBalance(walletId: string, balance: number, lockedBalance?: number): Promise<Wallet> {
@@ -182,22 +261,30 @@ export class WalletService {
     return updatedWallet;
   }
 
-  async connectWallet(userId: string, publicAddress: string, provider: WalletProvider): Promise<Wallet> {
+  async connectWallet(
+    userId: string,
+    publicAddress: string,
+    provider: WalletProvider,
+    smartAccountAddress?: string
+  ): Promise<Wallet> {
     // Aynı adres zaten var mı kontrol et
     const existingWallets = await this.walletRepo.findByUserId(userId);
     const existing = existingWallets.find(w => w.publicAddress.toLowerCase() === publicAddress.toLowerCase());
-    
+
     let wallet: Wallet;
     if (existing) {
-      // Var olan wallet'ı aktif yap
+      // Var olan wallet'ı aktif yap; smartAccountAddress verilmişse güncelle
+      if (smartAccountAddress && !existing.smartAccountAddress) {
+        await this.walletRepo.updateSmartAccountAddress(existing.id, smartAccountAddress);
+      }
       const updatedWallet = await this.walletRepo.updateConnectionStatus(existing.id, true);
       if (!updatedWallet) {
         throw new Error('Failed to update wallet connection status');
       }
       wallet = updatedWallet;
     } else {
-      // Yeni wallet oluştur
-      wallet = await this.walletRepo.create(userId, publicAddress, provider, true);
+      // Yeni wallet oluştur (smartAccountAddress varsa kaydet)
+      wallet = await this.walletRepo.create(userId, publicAddress, provider, true, smartAccountAddress);
     }
 
     // Send notification asynchronously

@@ -80,6 +80,14 @@ export interface PendingTipsResult {
   contractError?: string;
 }
 
+/** Contract'tan adrese göre token balance okuma sonucu (webhook sync için) */
+export interface TokenBalanceForAddressResult {
+  success: boolean;
+  balanceWei?: string;
+  balanceFormatted?: number;
+  error?: string;
+}
+
 /** Single token balance (native ETH or contract token). */
 export interface TokenBalance {
   symbol?: string;

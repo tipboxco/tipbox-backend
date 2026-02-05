@@ -49,7 +49,7 @@ export function getErrorCode(error: unknown): string | undefined {
  * @param message - The message to check for
  * @returns True if error message matches
  */
-export function hasErrorMessage(error: unknown, message: string): boolean {
+export function hasErrorMessage(error: any, message?: string): boolean {
   return getErrorMessage(error) === message;
 }
 

@@ -3,15 +3,22 @@ import { WalletService } from '../../application/wallet/wallet.service';
 import { TipsBalanceService } from '../../application/wallet/tips-balance.service';
 import { TransactionService } from '../../application/transaction/transaction.service';
 import { RewardClaimService } from '../../application/reward/reward-claim.service';
+import { getThirdwebSdkService } from '../../application/wallet/thirdweb-sdk/thirdweb-sdk.service';
+import { createWeb3NftService } from '../../application/wallet/web3-nft-service';
 import { ConnectWalletRequest,WalletResponse} from './wallet.dto';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { WalletProvider } from '../../domain/wallet/wallet.entity';
 import { authMiddleware } from '../auth/auth.middleware';
+import logger from '../../infrastructure/logger/logger';
+
 const router = express.Router();
 const walletService = new WalletService();
 const tipsBalanceService = new TipsBalanceService();
 const transactionService = new TransactionService();
 const rewardClaimService = new RewardClaimService();
+
+/** NoBadgeOwned: contract'tan dönen hata adı – badge yoksa mint sonrası claim tekrarlanır. */
+const CONTRACT_ERROR_NO_BADGE_OWNED = 'NoBadgeOwned';
 
 router.use(authMiddleware);
 
@@ -67,14 +74,19 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
     return res.status(401).json({ message: 'Unauthorized' });
   }
 
+  // Wallet yoksa Thirdweb ile oturum açıp DB'ye otomatik kaydet
+  await walletService.ensureWalletForUser(String(userId));
+
   const wallets = await walletService.getUserWallets(String(userId));
   const response: WalletResponse[] = wallets.map(wallet => ({
     id: wallet.id,
     userId: wallet.userId,
     publicAddress: wallet.publicAddress,
+    smartAccountAddress: wallet.smartAccountAddress ?? undefined,
     provider: wallet.provider,
     isConnected: wallet.isConnected,
     shortAddress: wallet.getShortAddress(),
+    shortSmartAccountAddress: wallet.getShortSmartAccountAddress() ?? undefined,
     providerIcon: wallet.getProviderIcon(),
     createdAt: wallet.createdAt.toISOString(),
     updatedAt: wallet.updatedAt.toISOString()
@@ -794,6 +806,135 @@ router.get('/info', asyncHandler(async (req: Request, res: Response) => {
     isConnected: wallet.isConnected,
     balance: balanceInfo.balance,
     createdAt: wallet.createdAt.toISOString()
+  });
+}));
+
+/**
+ * @openapi
+ * /wallets/pending-tips/claim:
+ *   post:
+ *     summary: Pending tips claim et (contract)
+ *     description: |
+ *       Tipbox contract'taki bekleyen TIPS'leri Smart Account üzerinden claim eder.
+ *       - Claim Thirdweb SDK (thirdweb-sdk.service) ile yapılır.
+ *       - Contract **NoBadgeOwned** (badge hatası) dönerse, kullanıcının smartAccountAddress'ine
+ *         Web3 NFT servisi ile badge mint edilir ve claim tekrar denenir.
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Claim başarılı (veya badge mint sonrası claim başarılı)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 eoaAddress:
+ *                   type: string
+ *                   nullable: true
+ *                 smartAccountAddress:
+ *                   type: string
+ *                   nullable: true
+ *                 receipt:
+ *                   type: object
+ *                   description: Transaction receipt
+ *                 badgeMinted:
+ *                   type: boolean
+ *                   description: Bu denemede badge mint edilip sonra claim tekrarlandıysa true
+ *       400:
+ *         description: Claim başarısız (NoPendingTips vb.)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: string
+ *                 contractError:
+ *                   type: string
+ *                   nullable: true
+ *       401:
+ *         description: Unauthorized
+ *       502:
+ *         description: Badge mint gerekli ama mint başarısız
+ */
+router.post('/pending-tips/claim', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const sdk = getThirdwebSdkService();
+  if (!sdk.isConfigured()) {
+    return res.status(503).json({
+      success: false,
+      error: 'Thirdweb SDK is not configured',
+    });
+  }
+
+  const userIdStr = String(userId);
+  let result = await sdk.claim(userIdStr);
+
+  if (result.success) {
+    return res.status(200).json({
+      success: true,
+      eoaAddress: result.eoaAddress ?? null,
+      smartAccountAddress: result.smartAccountAddress ?? null,
+      receipt: result.receipt ?? undefined,
+      badgeMinted: false,
+    });
+  }
+
+  if (result.contractError === CONTRACT_ERROR_NO_BADGE_OWNED && result.smartAccountAddress) {
+    logger.info({
+      userId: userIdStr,
+      smartAccountAddress: result.smartAccountAddress,
+      message: 'Pending tips claim failed with NoBadgeOwned; minting badge to smartAccountAddress',
+    });
+
+    const nftService = createWeb3NftService();
+    const mintResult = await nftService.mintDefaultBadge(result.smartAccountAddress);
+
+    if (!mintResult.success) {
+      logger.error({
+        userId: userIdStr,
+        smartAccountAddress: result.smartAccountAddress,
+        error: mintResult.error,
+        contractError: mintResult.contractError,
+        message: 'Badge mint failed for pending-tips claim',
+      });
+      return res.status(502).json({
+        success: false,
+        error: mintResult.error ?? 'Badge mint failed',
+        contractError: mintResult.contractError ?? undefined,
+      });
+    }
+
+    result = await sdk.claim(userIdStr);
+    if (result.success) {
+      return res.status(200).json({
+        success: true,
+        eoaAddress: result.eoaAddress ?? null,
+        smartAccountAddress: result.smartAccountAddress ?? null,
+        receipt: result.receipt ?? undefined,
+        badgeMinted: true,
+      });
+    }
+  }
+
+  return res.status(400).json({
+    success: false,
+    error: result.error ?? 'Claim failed',
+    contractError: result.contractError ?? undefined,
   });
 }));
 

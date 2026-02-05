@@ -13,6 +13,7 @@ import { ThirdwebWebhookLogPrismaRepository } from '../../infrastructure/reposit
 import { WalletPrismaRepository } from '../../infrastructure/repositories/wallet-prisma.repository';
 import { TransactionPrismaRepository } from '../../infrastructure/repositories/transaction-prisma.repository';
 import { TransactionService } from '../transaction/transaction.service';
+import { WalletService } from '../wallet/wallet.service';
 import { TransactionStatus } from '../../domain/transaction/transaction-status.enum';
 import { ThirdwebWebhookStatus, ThirdwebOnchainStatus } from '@prisma/client';
 import {
@@ -34,7 +35,8 @@ export class ThirdwebWebhookService {
     private readonly webhookLogRepo = new ThirdwebWebhookLogPrismaRepository(),
     private readonly walletRepo = new WalletPrismaRepository(),
     private readonly transactionRepo = new TransactionPrismaRepository(),
-    private readonly transactionService = new TransactionService()
+    private readonly transactionService = new TransactionService(),
+    private readonly walletService = new WalletService()
   ) {
     this.webhookSecret = process.env.THIRDWEB_WEBHOOK_SECRET || '';
     this.expirationSeconds = parseInt(process.env.THIRDWEB_WEBHOOK_EXPIRATION_SECONDS || '300', 10);
@@ -136,8 +138,8 @@ export class ThirdwebWebhookService {
         }
       }
 
-      // Wallet'ı publicAddress ile bul (toAddress = mint alıcısı)
-      const wallet = await this.walletRepo.findByPublicAddress(payload.toAddress);
+      // Wallet'ı takip adresi ile bul: önce smart_account_address, yoksa public_address (toAddress = alıcı)
+      const wallet = await this.walletRepo.findByAddressForTracking(payload.toAddress);
 
       // Transaction'ı bul
       let transactionId: string | undefined;
@@ -191,6 +193,13 @@ export class ThirdwebWebhookService {
         case 'cancelled':
           await this.handleCancelledTransaction(payload, transactionId);
           break;
+      }
+
+      // Contract'tan balance + pendingTips çekip wallet tablosunu güncelle (gelen veriye göre)
+      if (wallet) {
+        this.walletService.syncWalletBalanceFromChain(wallet.id).catch((err) => {
+          logger.warn({ walletId: wallet.id, error: String(err), message: 'syncWalletBalanceFromChain failed after webhook' });
+        });
       }
 
       // Webhook log'u kaydet veya güncelle

@@ -237,16 +237,19 @@ export class ContractEventService {
     let transactionId: string | undefined;
 
     // Transfer event'i özel işleme
+    let walletIdsToSync: string[] = [];
     if (event.eventName === 'Transfer') {
       const result = await this.handleNormalizedTransferEvent(event, prisma);
       walletId = result.walletId;
       transactionId = result.transactionId;
+      walletIdsToSync = result.walletIds ?? (result.walletId ? [result.walletId] : []);
     }
     
     // Approval event'i özel işleme
     else if (event.eventName === 'Approval') {
       const result = await this.handleNormalizedApprovalEvent(event);
       walletId = result.walletId;
+      walletIdsToSync = result.walletId ? [result.walletId] : [];
     }
 
     // Event log'u kaydet
@@ -277,6 +280,13 @@ export class ContractEventService {
       transactionId,
       message: 'Contract event logged (v1.events)'
     });
+
+    // Contract'tan balance + pendingTips çekip wallet tablosunu güncelle (gelen veriye göre)
+    for (const wid of walletIdsToSync) {
+      this.walletService.syncWalletBalanceFromChain(wid).catch((err) => {
+        logger.warn({ walletId: wid, error: String(err), message: 'syncWalletBalanceFromChain failed after event' });
+      });
+    }
 
     return {
       success: true,
@@ -357,7 +367,7 @@ export class ContractEventService {
   private async handleNormalizedTransferEvent(
     event: NormalizedContractEvent,
     prisma: ReturnType<typeof getPrisma>
-  ): Promise<{ walletId?: string; transactionId?: string }> {
+  ): Promise<{ walletId?: string; transactionId?: string; walletIds?: string[] }> {
     const transferEvent = parseTransferEvent(event.decodedLog, TOKEN_DECIMALS);
     
     if (!transferEvent) {
@@ -366,16 +376,19 @@ export class ContractEventService {
 
     let walletId: string | undefined;
     let transactionId: string | undefined;
+    const walletIds: string[] = [];
 
-    const toWallet = await this.walletRepo.findByPublicAddress(transferEvent.to);
-    const fromWallet = await this.walletRepo.findByPublicAddress(transferEvent.from);
+    const toWallet = await this.walletRepo.findByAddressForTracking(transferEvent.to);
+    const fromWallet = await this.walletRepo.findByAddressForTracking(transferEvent.from);
+    if (toWallet?.id) walletIds.push(toWallet.id);
+    if (fromWallet?.id && !walletIds.includes(fromWallet.id)) walletIds.push(fromWallet.id);
 
     // ===== ERC20 TOKEN TRANSFER =====
     if (transferEvent.tokenType === TokenType.ERC20 && transferEvent.value) {
       const amount = weiToToken(transferEvent.value, TOKEN_DECIMALS);
       
       if (!isSignificantTransfer(transferEvent.value, TOKEN_DECIMALS, 0.0001)) {
-        return { walletId: toWallet?.id || fromWallet?.id };
+        return { walletId: toWallet?.id || fromWallet?.id, walletIds };
       }
 
       // DEPOSIT: External → TipBox
@@ -569,7 +582,7 @@ export class ContractEventService {
       walletId = fromWallet.id;
     }
 
-    return { walletId, transactionId };
+    return { walletId, transactionId, walletIds };
   }
 
   /**
@@ -584,7 +597,7 @@ export class ContractEventService {
       return {};
     }
 
-    const ownerWallet = await this.walletRepo.findByPublicAddress(approvalEvent.owner);
+    const ownerWallet = await this.walletRepo.findByAddressForTracking(approvalEvent.owner);
     
     if (ownerWallet) {
       logger.info({
@@ -665,18 +678,21 @@ export class ContractEventService {
     // Wallet eşleştirmesi yap
     let walletId: string | undefined;
     let transactionId: string | undefined;
+    let walletIdsToSync: string[] = [];
 
     // Transfer event'i özel işleme
     if (data.eventName === 'Transfer') {
       const result = await this.handleTransferEvent(data, prisma);
       walletId = result.walletId;
       transactionId = result.transactionId;
+      walletIdsToSync = result.walletIds ?? (result.walletId ? [result.walletId] : []);
     }
     
     // Approval event'i özel işleme
     else if (data.eventName === 'Approval') {
       const result = await this.handleApprovalEvent(data);
       walletId = result.walletId;
+      walletIdsToSync = result.walletId ? [result.walletId] : [];
     }
 
     // Event log'u kaydet (sadece relevant event'ler için)
@@ -707,6 +723,13 @@ export class ContractEventService {
       transactionId,
       message: 'Contract event logged'
     });
+
+    // Contract'tan balance + pendingTips çekip wallet tablosunu güncelle (gelen veriye göre)
+    for (const wid of walletIdsToSync) {
+      this.walletService.syncWalletBalanceFromChain(wid).catch((err) => {
+        logger.warn({ walletId: wid, error: String(err), message: 'syncWalletBalanceFromChain failed after event' });
+      });
+    }
 
     return {
       success: true,
@@ -803,7 +826,7 @@ export class ContractEventService {
   private async handleTransferEvent(
     data: ContractEventPayload['data'],
     prisma: ReturnType<typeof getPrisma>
-  ): Promise<{ walletId?: string; transactionId?: string }> {
+  ): Promise<{ walletId?: string; transactionId?: string; walletIds?: string[] }> {
     const transferEvent = parseTransferEvent(data.decodedLog, TOKEN_DECIMALS);
     
     if (!transferEvent) {
@@ -812,10 +835,13 @@ export class ContractEventService {
 
     let walletId: string | undefined;
     let transactionId: string | undefined;
+    const walletIds: string[] = [];
 
-    // To address'i wallet ile eşleştir
-    const toWallet = await this.walletRepo.findByPublicAddress(transferEvent.to);
-    const fromWallet = await this.walletRepo.findByPublicAddress(transferEvent.from);
+    // To address'i wallet ile eşleştir (takip adresi: smart_account_address önce)
+    const toWallet = await this.walletRepo.findByAddressForTracking(transferEvent.to);
+    const fromWallet = await this.walletRepo.findByAddressForTracking(transferEvent.from);
+    if (toWallet?.id) walletIds.push(toWallet.id);
+    if (fromWallet?.id && !walletIds.includes(fromWallet.id)) walletIds.push(fromWallet.id);
 
     // ===== ERC20 TOKEN TRANSFER =====
     if (transferEvent.tokenType === TokenType.ERC20 && transferEvent.value) {
@@ -827,7 +853,7 @@ export class ContractEventService {
           amount,
           message: 'Insignificant transfer amount, skipping balance update'
         });
-        return { walletId: toWallet?.id || fromWallet?.id };
+        return { walletId: toWallet?.id || fromWallet?.id, walletIds };
       }
 
       // MINT: Token oluşturma (from = 0x0)
@@ -1091,7 +1117,7 @@ export class ContractEventService {
       walletId = fromWallet.id;
     }
 
-    return { walletId, transactionId };
+    return { walletId, transactionId, walletIds };
   }
 
   /**
@@ -1106,8 +1132,8 @@ export class ContractEventService {
       return {};
     }
 
-    // Owner wallet'ı bul
-    const ownerWallet = await this.walletRepo.findByPublicAddress(approvalEvent.owner);
+    // Owner wallet'ı bul (takip adresi: smart_account_address önce)
+    const ownerWallet = await this.walletRepo.findByAddressForTracking(approvalEvent.owner);
     
     if (ownerWallet) {
       logger.info({

@@ -20,6 +20,7 @@ import type {
   PendingTipsResult,
   ThirdwebSdkAuthResult,
   TipResult,
+  TokenBalanceForAddressResult,
   WalletBalanceResult,
   WalletNFTsResult,
 } from "./types";
@@ -490,6 +491,39 @@ export class ThirdwebSdkService {
         nfts: [],
         error: userMessage,
         contractError: contractError ?? undefined,
+      };
+    }
+  }
+
+  /**
+   * Contract'tan adrese göre token balance okur (webhook sync için).
+   * TIPS token contract balanceOf(address) + decimals kullanır.
+   */
+  async getTokenBalanceForAddress(address: string): Promise<TokenBalanceForAddressResult> {
+    try {
+      const tokenContract = this.core.getTokenContract();
+      const [balanceWei, decimals] = await Promise.all([
+        this.core.readContract<bigint>({
+          contract: tokenContract,
+          method: "balanceOf",
+          params: [address as `0x${string}`],
+        }),
+        this.core.readContract<number>({
+          contract: tokenContract,
+          method: "decimals",
+          params: [],
+        }),
+      ]);
+      const balanceFormatted = Number(balanceWei) / 10 ** decimals;
+      return {
+        success: true,
+        balanceWei: balanceWei.toString(),
+        balanceFormatted,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
       };
     }
   }

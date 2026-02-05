@@ -1119,7 +1119,7 @@ router.post(
     try {
       await supportRequestService.rejectSupportRequest(requestId, String(expertUserId));
       return res.status(200).json({ message: 'Support request rejected' });
-    } catch (error: unknown) {
+    } catch (error: any) {
       if (hasErrorMessage(error, 'Support request not found')) {
         return res.status(404).json({ message: getErrorMessage(error) });
       }
@@ -1179,7 +1179,7 @@ router.post(
     try {
       await supportRequestService.cancelSupportRequest(requestId, String(senderId));
       return res.status(200).json({ message: 'Support request cancelled' });
-    } catch (error: unknown) {
+    } catch (error: any) {
       if (hasErrorMessage(error, 'Support request not found')) {
         return res.status(404).json({ message: getErrorMessage(error) });
       }
@@ -1519,7 +1519,11 @@ router.post(
  * /inbox/tips:
  *   post:
  *     summary: Kullanıcıya TIPS gönder
- *     description: Bir kullanıcıya TIPS gönderir. TIPS gönderildiğinde `new_message` socket event'i messageType alanı "send-tips" olacak şekilde tetiklenir.
+ *     description: |
+ *       Oturum açmış kullanıcı (JWT'deki userId) bir kullanıcıya TIPS gönderir.
+ *       - **Gönderen (sender):** JWT'deki userId; wallet olarak bu kullanıcının **smartAccountAddress** (ERC-4337) kullanılır.
+ *       - **Alıcı (recipient):** Body'deki recipientUserId; wallet olarak bu kullanıcının **smartAccountAddress** (ERC-4337) kullanılır.
+ *       TIPS gönderildiğinde `new_message` socket event'i messageType "send-tips" olacak şekilde tetiklenir.
  *     tags: [Inbox]
  *     security:
  *       - bearerAuth: []
@@ -1530,21 +1534,15 @@ router.post(
  *           schema:
  *             type: object
  *             required:
- *               - senderUserId
  *               - recipientUserId
  *               - message
  *               - amount
  *               - timestamp
  *             properties:
- *               senderUserId:
- *                 type: string
- *                 format: uuid
- *                 description: TIPS gönderen kullanıcının ID'si (JWT token'daki userId ile eşleşmeli)
- *                 example: "550e8400-e29b-41d4-a716-446655440000"
  *               recipientUserId:
  *                 type: string
  *                 format: uuid
- *                 description: TIPS gönderilecek kullanıcının ID'si
+ *                 description: TIPS gönderilecek kullanıcının ID'si (alıcının smartAccountAddress kullanılır)
  *                 example: "660e8400-e29b-41d4-a716-446655440001"
  *               message:
  *                 type: string
@@ -1561,7 +1559,6 @@ router.post(
  *                 description: İşlem zamanı (ISO 8601 formatında)
  *                 example: "2024-01-15T10:30:00Z"
  *           example:
- *             senderUserId: "550e8400-e29b-41d4-a716-446655440000"
  *             recipientUserId: "660e8400-e29b-41d4-a716-446655440001"
  *             message: "Teşekkürler!"
  *             amount: 100.50
@@ -1599,8 +1596,6 @@ router.post(
  *                       value: "Invalid timestamp format. Expected ISO 8601 format (e.g., 2024-01-15T10:30:00Z)"
  *       401:
  *         description: Kimlik doğrulaması başarısız
- *       403:
- *         description: senderUserId JWT token'daki userId ile eşleşmiyor
  */
 router.post(
   '/tips',
@@ -1611,36 +1606,25 @@ router.post(
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
-    const { senderUserId, recipientUserId, message, amount, timestamp } = req.body as SendTipsCreate;
-    
-    // Validate required fields
-    if (!senderUserId || typeof senderUserId !== 'string') {
-      return res.status(400).json({ message: 'senderUserId is required' });
-    }
-    
-    // Security check: senderUserId must match JWT token
-    if (String(senderId) !== String(senderUserId)) {
-      return res.status(403).json({ message: 'senderUserId does not match authenticated user' });
-    }
-    
+    const { recipientUserId, message, amount, timestamp } = req.body as SendTipsCreate;
+
     if (!recipientUserId || typeof recipientUserId !== 'string') {
       return res.status(400).json({ message: 'recipientUserId is required' });
     }
-    
+
     if (!message || typeof message !== 'string' || message.trim() === '') {
       return res.status(400).json({ message: 'message is required' });
     }
-    
+
     const numericAmount = Number(amount);
     if (Number.isNaN(numericAmount) || numericAmount <= 0) {
       return res.status(400).json({ message: 'amount must be a positive number' });
     }
-    
+
     if (!timestamp || typeof timestamp !== 'string') {
       return res.status(400).json({ message: 'timestamp is required' });
     }
-    
-    // Validate timestamp format
+
     const timestampDate = new Date(timestamp);
     if (isNaN(timestampDate.getTime())) {
       return res.status(400).json({ message: 'Invalid timestamp format. Expected ISO 8601 format (e.g., 2024-01-15T10:30:00Z)' });
@@ -1656,7 +1640,6 @@ router.post(
 
       return res.status(201).end();
     } catch (error: unknown) {
-      // Handle user not found errors
       if (errorMessageIncludes(error, 'not found')) {
         return res.status(404).json({
           success: false,
@@ -1668,7 +1651,6 @@ router.post(
           },
         });
       }
-      // Re-throw other errors to be handled by global error handler
       throw error;
     }
   }),
@@ -2054,7 +2036,6 @@ router.put(
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
       return res.status(400).json({ message: 'message is required and must be a non-empty string' });
     }
-
     try {
       await messagingService.updateMessage(String(userId), messageId, message.trim());
       return res.status(200).json({ success: true, message: 'Message updated successfully' });

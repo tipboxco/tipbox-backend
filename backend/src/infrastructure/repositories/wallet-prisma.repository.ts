@@ -29,6 +29,22 @@ export class WalletPrismaRepository {
   }
 
   /**
+   * Tip alımı için tercih edilen wallet: önce smartAccountAddress olan, yoksa aktif wallet.
+   * Alıcı tarafında tip'in Smart Account adresine gitmesi için kullanılır.
+   */
+  async findPreferredForReceivingByUserId(userId: string): Promise<Wallet | null> {
+    const withSmart = await this.prisma.wallet.findFirst({
+      where: {
+        userId,
+        smartAccountAddress: { not: null }
+      },
+      orderBy: { updatedAt: 'desc' }
+    });
+    if (withSmart) return this.toDomain(withSmart);
+    return this.findActiveByUserId(userId);
+  }
+
+  /**
    * Public address (wallet adresi) ile wallet bulur
    * Thirdweb webhook entegrasyonu için kullanılır
    */
@@ -111,6 +127,18 @@ export class WalletPrismaRepository {
       }
     });
     return wallet ? this.toDomain(wallet) : null;
+  }
+
+  /**
+   * Takip (webhook/event) için adres ile wallet bulur.
+   * Önce smart_account_address ile eşleştirir, yoksa public_address ile fallback.
+   */
+  async findByAddressForTracking(address: string): Promise<Wallet | null> {
+    const normalized = address?.trim();
+    if (!normalized) return null;
+    const bySmart = await this.findBySmartAccountAddress(normalized);
+    if (bySmart) return bySmart;
+    return this.findByPublicAddress(normalized);
   }
 
   async updateConnectionStatus(id: string, isConnected: boolean): Promise<Wallet | null> {

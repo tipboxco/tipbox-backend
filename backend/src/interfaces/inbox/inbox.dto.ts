@@ -143,18 +143,15 @@
  *     SendTipsCreate:
  *       type: object
  *       required:
- *         - senderUserId
  *         - recipientUserId
  *         - message
  *         - amount
  *         - timestamp
  *       properties:
- *         senderUserId:
- *           type: string
- *           format: uuid
  *         recipientUserId:
  *           type: string
  *           format: uuid
+ *           description: TIPS gönderilecek kullanıcının ID'si (alıcının smartAccountAddress kullanılır)
  *         message:
  *           type: string
  *         amount:
@@ -162,6 +159,7 @@
  *         timestamp:
  *           type: string
  *           format: date-time
+ *       description: Gönderen (sender) JWT'deki userId'dir; gönderen wallet olarak bu kullanıcının smartAccountAddress kullanılır.
  */
 
 export type SupportType = 'GENERAL' | 'TECHNICAL' | 'PRODUCT';
@@ -297,7 +295,7 @@ export interface SupportRequestCreate {
 }
 
 export interface SendTipsCreate {
-  senderUserId: string;
+  /** TIPS gönderilecek kullanıcının ID'si (alıcı tarafın smartAccountAddress kullanılır) */
   recipientUserId: string;
   message: string;
   amount: number;
