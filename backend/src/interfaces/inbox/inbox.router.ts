@@ -461,7 +461,7 @@ router.post(
       }
     } catch (error: unknown) {
       const errorMessage = getErrorMessage(error);
-      if (hasErrorMessage(error) && (errorMessage.includes('not found') || errorMessage.includes('User not found'))) {
+      if (errorMessage.includes('not found') || errorMessage.includes('User not found')) {
         return res.status(404).json({ message: 'Recipient user not found' });
       }
       logger.error('Send message error:', error);
@@ -1126,8 +1126,8 @@ router.post(
       if (errorMessageIncludes(error, 'Only the recipient')) {
         return res.status(403).json({ message: getErrorMessage(error) });
       }
-      if (error.message.includes('Only pending')) {
-        return res.status(400).json({ message: error.message });
+      if (errorMessageIncludes(error, 'Only pending')) {
+        return res.status(400).json({ message: getErrorMessage(error) });
       }
       throw error;
     }
@@ -1186,8 +1186,8 @@ router.post(
       if (errorMessageIncludes(error, 'Only the sender')) {
         return res.status(403).json({ message: getErrorMessage(error) });
       }
-      if (error.message.includes('Only pending')) {
-        return res.status(400).json({ message: error.message });
+      if (errorMessageIncludes(error, 'Only pending')) {
+        return res.status(400).json({ message: getErrorMessage(error) });
       }
       throw error;
     }
@@ -2060,13 +2060,13 @@ router.put(
       return res.status(200).json({ success: true, message: 'Message updated successfully' });
     } catch (error: unknown) {
       const message = getErrorMessage(error);
-      if (hasErrorMessage(error) && (message.includes('not found') || message.includes('Message not found'))) {
+      if (message.includes('not found') || message.includes('Message not found')) {
         return res.status(404).json({ message: 'Message not found' });
       }
-      if (hasErrorMessage(error) && (message.includes('Forbidden') || message.includes('does not own'))) {
+      if (message.includes('Forbidden') || message.includes('does not own')) {
         return res.status(403).json({ message: 'You are not allowed to update this message' });
       }
-      if (hasErrorMessage(error) && message.includes('5 minutes')) {
+      if (message.includes('5 minutes')) {
         return res.status(400).json({ message: 'Message can only be updated within 5 minutes of sending' });
       }
       throw error;
@@ -2147,10 +2147,10 @@ router.delete(
       return res.status(204).send();
     } catch (error: unknown) {
       const message = getErrorMessage(error);
-      if (hasErrorMessage(error) && (message.includes('not found') || message.includes('Thread not found'))) {
+      if (message.includes('not found') || message.includes('Thread not found')) {
         return res.status(404).json({ message: 'Thread not found' });
       }
-      if (hasErrorMessage(error) && (message.includes('Forbidden') || message.includes('not part of'))) {
+      if (message.includes('Forbidden') || message.includes('not part of')) {
         return res.status(403).json({ message: 'You are not part of this thread' });
       }
       throw error;
@@ -2224,13 +2224,13 @@ router.patch(
       });
     } catch (error: unknown) {
       const message = getErrorMessage(error);
-      if (hasErrorMessage(error) && (message.includes('not found') || message.includes('Message not found'))) {
+      if (message.includes('not found') || message.includes('Message not found')) {
         return res.status(404).json({ message: 'Message not found' });
       }
-      if (hasErrorMessage(error) && (message.includes('Forbidden') || message.includes('own messages'))) {
+      if (message.includes('Forbidden') || message.includes('own messages')) {
         return res.status(403).json({ message: 'You can only edit your own messages' });
       }
-      if (hasErrorMessage(error) && message.includes('15 minutes')) {
+      if (message.includes('15 minutes')) {
         return res.status(400).json({ message: 'Message cannot be edited after 15 minutes' });
       }
       throw error;
@@ -2295,10 +2295,10 @@ router.delete(
       });
     } catch (error: unknown) {
       const message = getErrorMessage(error);
-      if (hasErrorMessage(error) && (message.includes('not found') || message.includes('Message not found'))) {
+      if (message.includes('not found') || message.includes('Message not found')) {
         return res.status(404).json({ message: 'Message not found' });
       }
-      if (hasErrorMessage(error) && (message.includes('Forbidden') || message.includes('own messages'))) {
+      if (message.includes('Forbidden') || message.includes('own messages')) {
         return res.status(403).json({ message: 'You can only delete your own messages' });
       }
       throw error;
@@ -2351,10 +2351,10 @@ router.delete(
       });
     } catch (error: unknown) {
       const message = getErrorMessage(error);
-      if (hasErrorMessage(error) && (message.includes('not found') || message.includes('Message not found'))) {
+      if (message.includes('not found') || message.includes('Message not found')) {
         return res.status(404).json({ message: 'Message not found' });
       }
-      if (hasErrorMessage(error) && (message.includes('Forbidden') || message.includes('own messages'))) {
+      if (message.includes('Forbidden') || message.includes('own messages')) {
         return res.status(403).json({ message: 'You can only delete your own messages' });
       }
       throw error;
@@ -2424,10 +2424,10 @@ router.post(
       });
     } catch (error: unknown) {
       const message = getErrorMessage(error);
-      if (hasErrorMessage(error) && (message.includes('not found') || message.includes('Message not found'))) {
+      if (message.includes('not found') || message.includes('Message not found')) {
         return res.status(404).json({ message: 'Message not found' });
       }
-      if (hasErrorMessage(error) && message.includes('Already reacted')) {
+      if (message.includes('Already reacted')) {
         return res.status(400).json({ message: 'Already reacted with this emoji' });
       }
       throw error;
@@ -2477,7 +2477,7 @@ router.get(
       });
     } catch (error: unknown) {
       const message = getErrorMessage(error);
-      if (hasErrorMessage(error) && (message.includes('not found') || message.includes('Message not found'))) {
+      if (message.includes('not found') || message.includes('Message not found')) {
         return res.status(404).json({ message: 'Message not found' });
       }
       throw error;
@@ -2550,7 +2550,7 @@ router.delete(
       });
     } catch (error: unknown) {
       const message = getErrorMessage(error);
-      if (hasErrorMessage(error) && (message.includes('not found') || message.includes('Message not found'))) {
+      if (message.includes('not found') || message.includes('Message not found')) {
         return res.status(404).json({ message: 'Message not found' });
       }
       throw error;
@@ -2643,10 +2643,10 @@ router.get(
       });
     } catch (error: unknown) {
       const message = getErrorMessage(error);
-      if (hasErrorMessage(error) && (message.includes('not found') || message.includes('Thread not found'))) {
+      if (errorMessageIncludes(error, 'not found') || errorMessageIncludes(error, 'Thread not found')) {
         return res.status(404).json({ message: 'Thread not found' });
       }
-      if (hasErrorMessage(error) && (message.includes('Forbidden') || message.includes('not part of'))) {
+      if (errorMessageIncludes(error, 'Forbidden') || errorMessageIncludes(error, 'not part of')) {
         return res.status(403).json({ message: 'Access denied' });
       }
       throw error;
@@ -2802,10 +2802,10 @@ router.post(
       });
     } catch (error: unknown) {
       const message = getErrorMessage(error);
-      if (hasErrorMessage(error) && (message.includes('not found') || message.includes('Thread not found'))) {
+      if (message.includes('not found') || message.includes('Thread not found')) {
         return res.status(404).json({ message: 'Thread not found' });
       }
-      if (hasErrorMessage(error) && (message.includes('Forbidden') || message.includes('not part of'))) {
+      if (message.includes('Forbidden') || message.includes('not part of')) {
         return res.status(403).json({ message: 'Access denied' });
       }
       logger.error('Media upload error:', error);

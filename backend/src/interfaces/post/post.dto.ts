@@ -204,20 +204,26 @@ import { ExperienceStatus } from '../../domain/content/experience-status.enum';
  *     CreateUpdatePostRequest:
  *       type: object
  *       required:
- *         - contextType
- *         - contextId
+ *         - experiencePostId
  *         - content
  *       properties:
- *         contextType:
- *           $ref: '#/components/schemas/ContextType'
- *         contextId:
+ *         experiencePostId:
  *           type: string
+ *           description: Experience post ID (ULID/UUID) that this update is related to
  *         content:
  *           type: string
+ *           description: Update post content
+ *         contextType:
+ *           $ref: '#/components/schemas/ContextType'
+ *           description: Optional, always normalized to PRODUCT for update posts
+ *         contextId:
+ *           type: string
+ *           description: Optional product ID, derived from experience post if not provided
  *         images:
  *           type: array
  *           items:
  *             type: string
+ *           description: Optional image URLs (max 10)
  *         eventId:
  *           type: string
  *           description: Optional event ID to link post to event

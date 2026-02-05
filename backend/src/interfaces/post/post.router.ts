@@ -1402,7 +1402,8 @@ router.post(
     const images = await processPostImages(req, String(userId));
 
     const request: CreateUpdatePostRequest = {
-      contextType: (req.body.contextType as ContextType) || ContextType.PRODUCT,
+      // Update posts are always for products, ignore sent contextType
+      contextType: ContextType.PRODUCT,
       contextId: req.body.contextId != null && req.body.contextId !== '' ? String(req.body.contextId).trim() : undefined,
       experiencePostId: (req.body.experiencePostId ?? '').toString().trim(),
       content: req.body.content,
@@ -1420,11 +1421,25 @@ router.post(
       const result = await postService.createUpdatePost(String(userId), request);
       return res.status(201).json(result);
     } catch (err: any) {
+      if (err?.message === 'LEGACY_INVENTORY_NO_POST') {
+        return res.status(400).json({
+          message: 'This is a legacy inventory item without an associated experience post',
+          code: 'LEGACY_INVENTORY_NO_POST',
+          hint: 'Update posts can only be created for experience posts. This inventory item was created before the new post system and does not have a corresponding post. Please create a new experience post for this product first.',
+        });
+      }
       if (err?.message === 'Experience post not found') {
         return res.status(404).json({
           message: err.message,
           code: 'EXPERIENCE_POST_NOT_FOUND',
           hint: 'experiencePostId must be the experience post id (ULID, 26 chars from post detail or feed item id). If opening from bookmarks, use the post id from the item (item.id), not the bookmark id.',
+        });
+      }
+      if (err?.message?.includes('legacy inventory-based reviews')) {
+        return res.status(400).json({
+          message: err.message,
+          code: 'LEGACY_REVIEW_NOT_SUPPORTED',
+          hint: 'Update posts cannot be created for old inventory-based reviews. The review must be a ContentPost (experience post). Please create a new experience post for this product first.',
         });
       }
       throw err;

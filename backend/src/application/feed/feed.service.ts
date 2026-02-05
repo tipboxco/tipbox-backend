@@ -1180,30 +1180,64 @@ export class FeedService {
   /**
    * Kart header / navigasyon için context bilgisini oluşturur.
    */
-  private buildContextData(post: any, ownedProductIds?: Set<string>): ContextData {
+  private async buildContextData(post: any, ownedProductIds?: Set<string>): Promise<ContextData> {
     const contextType = this.mapContextType(post);
 
-    if (contextType === ContextType.PRODUCT && post.product) {
-      const product = post.product;
-      const group = product.group;
-      const subCategory = group?.subCategory;
+    if (contextType === ContextType.PRODUCT) {
+      // PRODUCT context için veri hazırlama
+      if (post.product) {
+        const product = post.product;
+        const group = product.group;
+        const subCategory = group?.subCategory;
 
-      const base: ContextData = {
-        id: String(product.id),
-        name: product.name,
-        subName: group?.name || subCategory?.name || '',
-        image: this.buildFullMediaUrl(product.imageUrl),
-        isOwned: ownedProductIds ? ownedProductIds.has(String(product.id)) : undefined,
-      };
+        const base: ContextData = {
+          id: String(product.id),
+          name: product.name,
+          subName: group?.name || subCategory?.name || '',
+          image: this.buildFullMediaUrl(product.imageUrl),
+          isOwned: ownedProductIds ? ownedProductIds.has(String(product.id)) : undefined,
+        };
 
-      // isOwned bilgisi sadece PRODUCT context'inde ve inventorde sahiplik bilgimiz varsa anlamlı.
-      // Şu an için burada set etmiyoruz; ileride user inventory bilgisi geçirildiğinde doldurulabilir.
-      return base;
+        // isOwned bilgisi sadece PRODUCT context'inde ve inventorde sahiplik bilgimiz varsa anlamlı.
+        return base;
+      }
+
+      // Relation yüklenmemişse ID'den fetch et
+      if (post.productId) {
+        const product = await this.prisma.product.findUnique({
+          where: { id: post.productId },
+          include: {
+            group: {
+              include: {
+                subCategory: {
+                  include: {
+                    mainCategory: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        if (product) {
+          const group = product.group;
+          const subCategory = group?.subCategory;
+
+          return {
+            id: String(product.id),
+            name: product.name,
+            subName: group?.name || subCategory?.name || '',
+            image: this.buildFullMediaUrl(product.imageUrl),
+            isOwned: ownedProductIds ? ownedProductIds.has(String(product.id)) : undefined,
+          };
+        }
+      }
     }
 
     if (contextType === ContextType.PRODUCT_GROUP) {
-      const group = post.productGroup;
-      if (group) {
+      // PRODUCT_GROUP context için veri hazırlama
+      if (post.productGroup) {
+        const group = post.productGroup;
         const subCategory = group.subCategory;
         const imagePath = group.imageUrl || subCategory?.imageUrl || subCategory?.mainCategory?.imageUrl || null;
         return {
@@ -1214,26 +1248,100 @@ export class FeedService {
         };
       }
 
-      return {
-        id: post.productGroupId ? String(post.productGroupId) : 'unknown',
-        name: '',
-        subName: '',
-        image: null,
-      };
+      // Relation yüklenmemişse, categoryId'den fetch et (categories tablosu - pcat_ prefix'li)
+      if (post.categoryId) {
+        const category = await this.prisma.category.findUnique({
+          where: { id: post.categoryId },
+        });
+
+        if (category) {
+          return {
+            id: String(category.id),
+            name: category.name,
+            subName: '',
+            image: this.buildFullMediaUrl(category.imageUrl),
+          };
+        }
+      }
+
+      // Eski UUID sistemini de destekle
+      if (post.productGroupId) {
+        const group = await this.prisma.productGroup.findUnique({
+          where: { id: post.productGroupId },
+          include: {
+            subCategory: {
+              include: {
+                mainCategory: true,
+              },
+            },
+          },
+        });
+
+        if (group) {
+          const subCategory = group.subCategory;
+          const imagePath = group.imageUrl || subCategory?.imageUrl || subCategory?.mainCategory?.imageUrl || null;
+          return {
+            id: String(group.id),
+            name: group.name,
+            subName: subCategory?.name || '',
+            image: this.buildFullMediaUrl(imagePath),
+          };
+        }
+      }
     }
 
-    // SUB_CATEGORIES (fallback olarak mainCategory bilgisini de kullan)
-    if (post.subCategory) {
-      const subCategory = post.subCategory;
-      const imagePath = subCategory.imageUrl || subCategory.mainCategory?.imageUrl || null;
-      return {
-        id: String(subCategory.id),
-        name: subCategory.name,
-        subName: subCategory.mainCategory?.name || '',
-        image: this.buildFullMediaUrl(imagePath),
-      };
+    // SUB_CATEGORY context için veri hazırlama
+    if (contextType === ContextType.SUB_CATEGORY) {
+      // Önce relation object'i kontrol et
+      if (post.subCategory) {
+        const subCategory = post.subCategory;
+        const imagePath = subCategory.imageUrl || subCategory.mainCategory?.imageUrl || null;
+        return {
+          id: String(subCategory.id),
+          name: subCategory.name,
+          subName: subCategory.mainCategory?.name || '',
+          image: this.buildFullMediaUrl(imagePath),
+        };
+      }
+
+      // ✅ YENİ: categoryId'den fetch et (categories tablosu - pcat_ prefix'li)
+      if (post.categoryId) {
+        const category = await this.prisma.category.findUnique({
+          where: { id: post.categoryId },
+        });
+
+        if (category) {
+          return {
+            id: String(category.id),
+            name: category.name,
+            subName: '',
+            image: this.buildFullMediaUrl(category.imageUrl),
+          };
+        }
+      }
+
+      // Eski UUID sistemini de destekle (sub_categories tablosu)
+      if (post.subCategoryId) {
+        const subCategory = await this.prisma.subCategory.findUnique({
+          where: { id: post.subCategoryId },
+          include: {
+            mainCategory: true,
+          },
+        });
+
+        if (subCategory) {
+          const imagePath = subCategory.imageUrl || subCategory.mainCategory?.imageUrl || null;
+          return {
+            id: String(subCategory.id),
+            name: subCategory.name,
+            subName: subCategory.mainCategory?.name || '',
+            image: this.buildFullMediaUrl(imagePath),
+          };
+        }
+      }
     }
 
+    // Fallback: mainCategory varsa kullan
     if (post.mainCategory) {
       return {
         id: String(post.mainCategory.id),
@@ -1243,8 +1351,20 @@ export class FeedService {
       };
     }
 
+    // Son fallback: boş contextData
+    logger.warn({
+      message: 'Unable to build contextData for post',
+      postId: post.id,
+      contextType,
+      productId: post.productId,
+      productGroupId: post.productGroupId,
+      subCategoryId: post.subCategoryId,
+      categoryId: post.categoryId,
+      mainCategoryId: post.mainCategoryId,
+    });
+
     return {
-      id: post.subCategoryId ? String(post.subCategoryId) : 'unknown',
+      id: post.categoryId || post.subCategoryId || post.productGroupId || post.productId || 'unknown',
       name: '',
       subName: '',
       image: null,
@@ -1348,14 +1468,14 @@ export class FeedService {
     return [...items].sort((a, b) => toTime(b) - toTime(a));
   }
 
-  private mapToPostItem(
+  private async mapToPostItem(
     post: any,
     basePost: any,
     type: FeedItemType.POST | FeedItemType.QUESTION,
     images: string[] = [],
     ownedProductIds?: Set<string>
-  ): FeedItem {
-    const contextData = this.buildContextData(post, ownedProductIds);
+  ): Promise<FeedItem> {
+    const contextData = await this.buildContextData(post, ownedProductIds);
     const postData: Post = {
       ...basePost,
       contextData,
@@ -1369,12 +1489,12 @@ export class FeedService {
     };
   }
 
-  private mapToBenchmarkItem(
+  private async mapToBenchmarkItem(
     post: any,
     basePost: any,
     ownedProductIds: Set<string>,
     images: string[] = []
-  ): FeedItem {
+  ): Promise<FeedItem> {
     const comparison = post.comparison;
     if (!comparison) {
       // Fallback to regular post if no comparison
@@ -1407,7 +1527,7 @@ export class FeedService {
 
     const benchmarkData: BenchmarkPost = {
       ...basePost,
-      contextData: this.buildContextData(post, ownedProductIds),
+      contextData: await this.buildContextData(post, ownedProductIds),
       products,
       content: comparison.comparisonSummary || post.body,
     };
@@ -1418,17 +1538,17 @@ export class FeedService {
     };
   }
 
-  private mapToTipsAndTricksItem(
+  private async mapToTipsAndTricksItem(
     post: any,
     basePost: any,
     images: string[] = [],
     ownedProductIds?: Set<string>
-  ): FeedItem {
+  ): Promise<FeedItem> {
     const tag = post.tags?.[0]?.tag || post.contentPostTags?.[0]?.tag || '';
 
     const tipsData: TipsAndTricksPost = {
       ...basePost,
-      contextData: this.buildContextData(post, ownedProductIds),
+      contextData: await this.buildContextData(post, ownedProductIds),
       content: post.body,
       tag,
       images,
@@ -1440,13 +1560,13 @@ export class FeedService {
     };
   }
 
-  private mapToExperienceItem(
+  private async mapToExperienceItem(
     post: any,
     basePost: any,
     type: FeedItemType.EXPERIENCE | FeedItemType.UPDATE,
     images: string[] = [],
     ownedProductIds?: Set<string>
-  ): FeedItem {
+  ): Promise<FeedItem> {
     // Build product info
     const productBase = post.product
       ? this.getProductBase(post.product)

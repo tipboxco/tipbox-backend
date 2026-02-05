@@ -117,28 +117,81 @@ export class IdResolverService {
     const trimmed = id?.trim() || '';
     if (!trimmed) return null;
 
+    logger.debug(`[ID Resolution] Resolving post ID: ${trimmed} (length: ${trimmed.length})`);
+
+    // 1. Önce ContentPost'ta ara (ULID)
     const post = await this.prisma.contentPost.findUnique({
       where: { id: trimmed },
       select: { id: true },
     });
-    if (post) return post.id;
+    if (post) {
+      logger.debug(`[ID Resolution] Found ContentPost directly: ${post.id}`);
+      return post.id;
+    }
 
+    // 2. UUID formatında mı kontrol et (36 karakter)
     if (
       trimmed.length === 36 &&
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed)
     ) {
+      logger.debug(`[ID Resolution] UUID format detected, checking alternative sources...`);
+
+      // 2a. ContentFavorite'te ara
       const fav = await this.prisma.contentFavorite.findUnique({
         where: { id: trimmed },
         select: { postId: true },
       });
-      if (fav?.postId) return fav.postId;
+      if (fav?.postId) {
+        logger.debug(`[ID Resolution] Found in ContentFavorite, resolved to post: ${fav.postId}`);
+        return fav.postId;
+      }
 
+      // 2b. ContentLike'ta ara
       const like = await this.prisma.contentLike.findUnique({
         where: { id: trimmed },
         select: { postId: true },
       });
-      if (like?.postId) return like.postId;
+      if (like?.postId) {
+        logger.debug(`[ID Resolution] Found in ContentLike, resolved to post: ${like.postId}`);
+        return like.postId;
+      }
+
+      // 2c. Inventory'de ara (legacy review system)
+      const inventory = await this.prisma.inventory.findUnique({
+        where: { id: trimmed },
+        select: { experienceSnippetId: true, userId: true, productId: true },
+      });
+      logger.debug(`[ID Resolution] Inventory lookup result: ${inventory ? 'found' : 'not found'}`, {
+        hasExperienceSnippetId: !!inventory?.experienceSnippetId,
+      });
+
+      if (inventory) {
+        // experienceSnippetId ile ilişkili ContentPost'u bul
+        const relatedPost = await this.prisma.contentPost.findFirst({
+          where: {
+            userId: inventory.userId,
+            productId: inventory.productId,
+            type: 'EXPERIENCE',
+            ...(inventory.experienceSnippetId && { experienceSnippetId: inventory.experienceSnippetId }),
+          },
+          select: { id: true },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (relatedPost) {
+          logger.debug(`[ID Resolution] Found related ContentPost via Inventory: ${relatedPost.id}`);
+          return relatedPost.id;
+        } else {
+          logger.warn(`[ID Resolution] Inventory found but no related ContentPost exists`, {
+            inventoryId: trimmed,
+            experienceSnippetId: inventory.experienceSnippetId || 'null',
+            userId: inventory.userId,
+            productId: inventory.productId,
+          });
+        }
+      }
     }
+
+    logger.warn(`[ID Resolution] Failed to resolve post ID: ${trimmed}`);
     return null;
   }
 }

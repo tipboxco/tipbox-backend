@@ -402,11 +402,14 @@ export class PostService {
       case ContextType.SUB_CATEGORY:
         // Medusa modu: tek tablo (categories). contextId = categories.id
         const resolvedCategoryIdSub = await this.idResolver.resolveCategoryId(contextId);
+        // ✅ Sadece categoryId döndür (prefix'li ID için - pcat_xxx)
+        // subCategoryId UUID tipinde olduğu için prefix'li ID kabul etmiyor
         return { categoryId: resolvedCategoryIdSub };
 
       case ContextType.PRODUCT_GROUP:
         // Medusa modu: tek tablo (categories). contextId = categories.id (örn. pcat_xxx)
         const resolvedCategoryIdGroup = await this.idResolver.resolveCategoryId(contextId);
+        // ✅ Sadece categoryId döndür (prefix'li ID için)
         return { categoryId: resolvedCategoryIdGroup };
 
       case ContextType.PRODUCT:
@@ -1426,10 +1429,8 @@ export class PostService {
     request: CreateUpdatePostRequest
   ): Promise<{ id: string; message: string; success: boolean }> {
     try {
-      const contextType = request.contextType ?? ContextType.PRODUCT;
-      if (contextType !== ContextType.PRODUCT) {
-        throw new Error('Update posts can only be created for products');
-      }
+      // Update posts are always for products (contextType is normalized to PRODUCT in router)
+      const contextType = ContextType.PRODUCT;
 
       // Experience post validation - update posts can only be created on experience posts
       if (!request.experiencePostId) {
@@ -1438,7 +1439,20 @@ export class PostService {
 
       // experiencePostId: ULID veya UUID (ContentFavorite id) ile gelebilir; diğer servislerdeki gibi çözümle
       const resolvedExperiencePostId = await this.idResolver.resolvePostId(request.experiencePostId);
+      
+      logger.debug(`[Create Update Post] ID Resolution result`, {
+        original: request.experiencePostId,
+        resolved: resolvedExperiencePostId,
+      });
+
       if (!resolvedExperiencePostId) {
+        // Check if this is a legacy inventory ID (UUID format)
+        if (
+          request.experiencePostId.length === 36 &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(request.experiencePostId)
+        ) {
+          throw new Error('LEGACY_INVENTORY_NO_POST');
+        }
         throw new Error('Experience post not found');
       }
 
@@ -1448,6 +1462,13 @@ export class PostService {
       });
 
       if (!experiencePost) {
+        // Check if this is a legacy inventory ID (UUID format)
+        if (
+          request.experiencePostId.length === 36 &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(request.experiencePostId)
+        ) {
+          throw new Error('Cannot create update post for legacy inventory-based reviews. Please create a new experience post first.');
+        }
         throw new Error('Experience post not found');
       }
 

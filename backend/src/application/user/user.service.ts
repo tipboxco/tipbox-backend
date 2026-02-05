@@ -1410,48 +1410,168 @@ export class UserService {
     return this.normalizeContextType(ContextType.SUB_CATEGORY);
   }
 
-  private buildContextDataFromPost(post: any, ownedProductIds?: Set<string> | null) {
+  private async buildContextDataFromPost(post: any, ownedProductIds?: Set<string> | null): Promise<any> {
     const contextType = this.mapContextType(post);
 
-    if (contextType === ContextType.PRODUCT && post.product) {
-      const product = post.product;
-      const group = product.group;
-      const subCategory = group?.subCategory;
-      const mainCategory = subCategory?.mainCategory || post.subCategory?.mainCategory || post.mainCategory;
-      const imagePath = product.imageUrl || group?.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
-      return {
-        id: String(product.id),
-        name: product.name,
-        subName: group?.name || subCategory?.name || mainCategory?.name || '',
-        image: resolveMediaUrl(imagePath),
-        isOwned: ownedProductIds ? ownedProductIds.has(String(product.id)) : undefined,
-      };
+    // PRODUCT context
+    if (contextType === ContextType.PRODUCT) {
+      if (post.product) {
+        const product = post.product;
+        const group = product.group;
+        const subCategory = group?.subCategory;
+        const mainCategory = subCategory?.mainCategory || post.subCategory?.mainCategory || post.mainCategory;
+        const imagePath = product.imageUrl || group?.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
+        return {
+          id: String(product.id),
+          name: product.name,
+          subName: group?.name || subCategory?.name || mainCategory?.name || '',
+          image: resolveMediaUrl(imagePath),
+          isOwned: ownedProductIds ? ownedProductIds.has(String(product.id)) : undefined,
+        };
+      }
+
+      // ✅ Relation yoksa ID'den fetch et
+      if (post.productId) {
+        const product = await this.prisma.product.findUnique({
+          where: { id: post.productId },
+          include: {
+            group: {
+              include: {
+                subCategory: {
+                  include: {
+                    mainCategory: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        if (product) {
+          const group = product.group;
+          const subCategory = group?.subCategory;
+          const mainCategory = subCategory?.mainCategory;
+          const imagePath = product.imageUrl || group?.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
+          return {
+            id: String(product.id),
+            name: product.name,
+            subName: group?.name || subCategory?.name || mainCategory?.name || '',
+            image: resolveMediaUrl(imagePath),
+            isOwned: ownedProductIds ? ownedProductIds.has(String(product.id)) : undefined,
+          };
+        }
+      }
     }
 
-    if (contextType === ContextType.PRODUCT_GROUP && post.productGroup) {
-      const group = post.productGroup;
-      const subCategory = group.subCategory;
-      const mainCategory = subCategory?.mainCategory || post.mainCategory;
-      const imagePath = group.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
-      return {
-        id: String(group.id),
-        name: group.name,
-        subName: subCategory?.name || mainCategory?.name || '',
-        image: resolveMediaUrl(imagePath),
-      };
+    // PRODUCT_GROUP context
+    if (contextType === ContextType.PRODUCT_GROUP) {
+      if (post.productGroup) {
+        const group = post.productGroup;
+        const subCategory = group.subCategory;
+        const mainCategory = subCategory?.mainCategory || post.mainCategory;
+        const imagePath = group.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
+        return {
+          id: String(group.id),
+          name: group.name,
+          subName: subCategory?.name || mainCategory?.name || '',
+          image: resolveMediaUrl(imagePath),
+        };
+      }
+
+      // ✅ Relation yoksa ID'den fetch et
+      if (post.productGroupId) {
+        const group = await this.prisma.productGroup.findUnique({
+          where: { id: post.productGroupId },
+          include: {
+            subCategory: {
+              include: {
+                mainCategory: true,
+              },
+            },
+          },
+        });
+
+        if (group) {
+          const subCategory = group.subCategory;
+          const mainCategory = subCategory?.mainCategory;
+          const imagePath = group.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
+          return {
+            id: String(group.id),
+            name: group.name,
+            subName: subCategory?.name || mainCategory?.name || '',
+            image: resolveMediaUrl(imagePath),
+          };
+        }
+      }
     }
 
-    if (contextType === ContextType.SUB_CATEGORY && post.subCategory) {
-      const subCategory = post.subCategory;
-      const imagePath = subCategory.imageUrl || subCategory.mainCategory?.imageUrl || null;
-      return {
-        id: String(subCategory.id),
-        name: subCategory.name,
-        subName: subCategory.mainCategory?.name || '',
-        image: resolveMediaUrl(imagePath),
-      };
+    // SUB_CATEGORY context
+    if (contextType === ContextType.SUB_CATEGORY) {
+      if (post.subCategory) {
+        const subCategory = post.subCategory;
+        const imagePath = subCategory.imageUrl || subCategory.mainCategory?.imageUrl || null;
+        return {
+          id: String(subCategory.id),
+          name: subCategory.name,
+          subName: subCategory.mainCategory?.name || '',
+          image: resolveMediaUrl(imagePath),
+        };
+      }
+
+      // ✅ YENİ: categoryId'den fetch et (categories tablosu - pcat_ prefix'li)
+      if (post.categoryId) {
+        const category = await this.prisma.category.findUnique({
+          where: { id: post.categoryId },
+        });
+
+        if (category) {
+          return {
+            id: String(category.id),
+            name: category.name,
+            subName: '',
+            image: resolveMediaUrl(category.imageUrl),
+          };
+        }
+      }
+
+      // Eski UUID sistemini de destekle (sub_categories tablosu)
+      if (post.subCategoryId) {
+        const subCategory = await this.prisma.subCategory.findUnique({
+          where: { id: post.subCategoryId },
+          include: {
+            mainCategory: true,
+          },
+        });
+
+        if (subCategory) {
+          const imagePath = subCategory.imageUrl || subCategory.mainCategory?.imageUrl || null;
+          return {
+            id: String(subCategory.id),
+            name: subCategory.name,
+            subName: subCategory.mainCategory?.name || '',
+            image: resolveMediaUrl(imagePath),
+          };
+        }
+      }
     }
 
+    // PRODUCT_GROUP context için categoryId kontrolü ekle
+    if (contextType === ContextType.PRODUCT_GROUP && post.categoryId) {
+      const category = await this.prisma.category.findUnique({
+        where: { id: post.categoryId },
+      });
+
+      if (category) {
+        return {
+          id: String(category.id),
+          name: category.name,
+          subName: '',
+          image: resolveMediaUrl(category.imageUrl),
+        };
+      }
+    }
+
+    // Fallback: mainCategory
     if (post.mainCategory) {
       return {
         id: String(post.mainCategory.id),
@@ -1460,6 +1580,17 @@ export class UserService {
         image: resolveMediaUrl(post.mainCategory.imageUrl || null),
       };
     }
+
+    // Son fallback: null döndür
+    logger.warn({
+      message: 'Unable to build contextData from post (user.service)',
+      postId: post.id,
+      contextType,
+      productId: post.productId,
+      productGroupId: post.productGroupId,
+      subCategoryId: post.subCategoryId,
+      categoryId: post.categoryId,
+    });
 
     return null;
   }
@@ -1574,17 +1705,18 @@ export class UserService {
     
     // getPostStats yerine post'un kendi alanlarını kullan (N+1 query'yi önle)
     // Experience/Update: feed ile aynı yapı (type: experience, product, experienceContent, tags, status)
-    const results = paginatedPosts.map((post) => {
-      const stats = {
-        likes: post.likesCount || 0,
-        comments: post.commentsCount || 0,
-        shares: post.sharesCount || 0,
-        bookmarks: post.favoritesCount || 0,
-      };
-      const contextType = this.mapContextType(post);
-      const contextData = this.buildContextDataFromPost(post, ownedProductIds);
-      const images = postMediaMap.get(post.id) || [];
-      const postType = post.type as string;
+    const results = await Promise.all(
+      paginatedPosts.map(async (post) => {
+        const stats = {
+          likes: post.likesCount || 0,
+          comments: post.commentsCount || 0,
+          shares: post.sharesCount || 0,
+          bookmarks: post.favoritesCount || 0,
+        };
+        const contextType = this.mapContextType(post);
+        const contextData = await this.buildContextDataFromPost(post, ownedProductIds);
+        const images = postMediaMap.get(post.id) || [];
+        const postType = post.type as string;
 
       if (postType === 'UPDATE' && (post as any).updateContent?.experiencePost) {
         const expPost = (post as any).updateContent.experiencePost;
@@ -1666,8 +1798,9 @@ export class UserService {
         content: post.body,
         images,
       };
-    });
-    return results;
+    })
+  );
+  return results;
   }
 
   /** Experience post body'den experienceContent array (feed ile aynı yapı) */
@@ -1781,7 +1914,7 @@ export class UserService {
       posts.map(async (post) => {
         const stats = await this.getPostStats(post.id);
         const contextType = this.mapContextType(post);
-        const contextData = this.buildContextDataFromPost(post, ownedProductIds);
+        const contextData = await this.buildContextDataFromPost(post, ownedProductIds);
         // Get images for this post from PostMedia (orderIndex'e göre sıralı)
         const images = postMediaMap.get(post.id) || [];
         const productBase = contextData
@@ -2478,7 +2611,7 @@ export class UserService {
       posts.map(async (post) => {
         const stats = await this.getPostStats(String(post.id));
         const contextType = this.mapContextType(post);
-        const contextData = this.buildContextDataFromPost(post, ownedProductIds);
+        const contextData = await this.buildContextDataFromPost(post, ownedProductIds);
         const tags = await this.prisma.postTag.findMany({ where: { postId: String(post.id) } as any });
         return {
           id: String(post.id),
