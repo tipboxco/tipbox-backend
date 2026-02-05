@@ -442,6 +442,111 @@ export class CatalogService {
   }
 
   /**
+   * Context ID'ye göre otomatik olarak doğru post listesini döndürür
+   * Context: main_category, sub_category, product_group, product
+   * ID prefix veya veritabanı sorgusu ile context type'ı otomatik belirlenir
+   */
+  async getContextPosts(
+    contextId: string,
+    userId?: string,
+    options?: { 
+      cursor?: string; 
+      limit?: number; 
+      filter?: string;
+      sort?: string;
+    }
+  ): Promise<{
+    items: Array<{ type: string; data: any }>;
+    pagination: { cursor?: string; hasMore: boolean; limit: number };
+    contextType: string; // Hangi context'ten geldiğini frontend'e bildir
+  }> {
+    const trimmedId = contextId.trim();
+    
+    // 1. Önce Product mı kontrol et (prod_ prefix veya product tablosunda var mı)
+    if (trimmedId.startsWith('prod_')) {
+      try {
+        const result = await this.getProductPosts(trimmedId, userId, options);
+        return { ...result, contextType: 'product' };
+      } catch (error) {
+        logger.debug(`Not a product: ${trimmedId}`);
+      }
+    }
+    
+    // 2. Category kontrol et (pcat_ prefix veya categories tablosunda var mı)
+    if (trimmedId.startsWith('pcat_')) {
+      try {
+        // Categories tablosunda var mı ve parent_id'si var mı kontrol et
+        const category = await prisma.category.findUnique({
+          where: { id: trimmedId },
+          select: { id: true, parentId: true },
+        });
+        
+        if (category) {
+          if (category.parentId) {
+            // Sub Category
+            const result = await this.getSubCategoryPosts(trimmedId, userId, options);
+            return { ...result, contextType: 'sub_category' };
+          } else {
+            // Main Category
+            const result = await this.getMainCategoryPosts(trimmedId, userId, options);
+            return { ...result, contextType: 'main_category' };
+          }
+        }
+      } catch (error) {
+        logger.debug(`Not a category: ${trimmedId}`);
+      }
+    }
+    
+    // 3. UUID formatındaysa, her yerde ara
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (uuidRegex.test(trimmedId)) {
+      // ProductGroup kontrol et
+      try {
+        const productGroup = await prisma.productGroup.findUnique({
+          where: { id: trimmedId },
+          select: { id: true },
+        });
+        if (productGroup) {
+          const result = await this.getProductGroupPosts(trimmedId, userId, options);
+          return { ...result, contextType: 'product_group' };
+        }
+      } catch (error) {
+        logger.debug(`Not a product group: ${trimmedId}`);
+      }
+      
+      // SubCategory kontrol et (UUID format)
+      try {
+        const subCategory = await prisma.subCategory.findUnique({
+          where: { id: trimmedId },
+          select: { id: true },
+        });
+        if (subCategory) {
+          const result = await this.getSubCategoryPosts(trimmedId, userId, options);
+          return { ...result, contextType: 'sub_category' };
+        }
+      } catch (error) {
+        logger.debug(`Not a sub category: ${trimmedId}`);
+      }
+      
+      // MainCategory kontrol et (UUID format)
+      try {
+        const mainCategory = await prisma.mainCategory.findUnique({
+          where: { id: trimmedId },
+          select: { id: true },
+        });
+        if (mainCategory) {
+          const result = await this.getMainCategoryPosts(trimmedId, userId, options);
+          return { ...result, contextType: 'main_category' };
+        }
+      } catch (error) {
+        logger.debug(`Not a main category: ${trimmedId}`);
+      }
+    }
+    
+    throw new Error(`Context not found with ID: ${contextId}`);
+  }
+
+  /**
    * Product'a ait post'ları getir
    * Filtreler: all, free, tips_and_tricks, questions, updates, benchmarks, reviews
    * Sıralama: newest, oldest, most_popular

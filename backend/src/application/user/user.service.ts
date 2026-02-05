@@ -1529,7 +1529,7 @@ export class UserService {
             id: String(category.id),
             name: category.name,
             subName: '',
-            image: resolveMediaUrl(category.imageUrl),
+            image: resolveMediaUrl(category.thumbnail),
           };
         }
       }
@@ -1566,7 +1566,7 @@ export class UserService {
           id: String(category.id),
           name: category.name,
           subName: '',
-          image: resolveMediaUrl(category.imageUrl),
+          image: resolveMediaUrl(category.thumbnail),
         };
       }
     }
@@ -1635,6 +1635,14 @@ export class UserService {
         comments: true,
         favorites: true,
         contentPostTags: true,
+        comparison: {
+          include: {
+            product1: true,
+            product2: true,
+            scores: true,
+          },
+        },
+        tip: true,
         updateContent: {
           include: {
             experiencePost: {
@@ -1772,7 +1780,7 @@ export class UserService {
             : post.body || '';
         return {
           id: String(post.id),
-          type: (postType === 'UPDATE' ? 'update' : 'experience') as const,
+          type: postType === 'UPDATE' ? ('update' as const) : ('experience' as const),
           user: userBase,
           stats,
           createdAt: post.createdAt.toISOString(),
@@ -1787,6 +1795,75 @@ export class UserService {
         };
       }
 
+      // COMPARE (benchmark) tipindeki postlar
+      if (postType === 'COMPARE') {
+        const comp = (post as any).comparison;
+        if (comp) {
+          const choiceProductId = this.selectComparisonWinner(comp);
+          return {
+            id: String(post.id),
+            type: 'benchmark' as const,
+            user: userBase,
+            stats,
+            createdAt: post.createdAt.toISOString(),
+            contextType,
+            products: [
+              {
+                ...(await this.getProductBase(String(comp.product1Id)))!,
+                isOwned: ownedProductIds.has(String(comp.product1Id)),
+                choice: choiceProductId ? choiceProductId === String(comp.product1Id) : true,
+              },
+              {
+                ...(await this.getProductBase(String(comp.product2Id)))!,
+                isOwned: ownedProductIds.has(String(comp.product2Id)),
+                choice: choiceProductId ? choiceProductId === String(comp.product2Id) : false,
+              },
+            ],
+            content: post.body,
+          };
+        }
+      }
+
+      // TIPS tipindeki postlar
+      if (postType === 'TIPS') {
+        const tip = (post as any).tip;
+        const benefit = tip?.benefitCategory;
+        const benefitMap: Record<string, { title: string; icon: string }> = {
+          time_saving: { title: 'Zaman Kazandırır', icon: 'clock' },
+          energy_efficiency: { title: 'Enerji Tasarrufu', icon: 'bolt' },
+          durability: { title: 'Daha Dayanıklı', icon: 'shield' },
+          better_result: { title: 'Daha İyi Sonuç', icon: 'star' },
+        };
+        return {
+          id: String(post.id),
+          type: 'tipsAndTricks' as const,
+          user: userBase,
+          stats,
+          createdAt: post.createdAt.toISOString(),
+          contextType,
+          contextData,
+          benefit: benefit && benefitMap[benefit] ? benefitMap[benefit] : { title: 'Fayda', icon: 'lightbulb' },
+          content: post.body,
+          images,
+        };
+      }
+
+      // QUESTION tipindeki postlar
+      if (postType === 'QUESTION') {
+        return {
+          id: String(post.id),
+          type: 'question' as const,
+          user: userBase,
+          stats,
+          createdAt: post.createdAt.toISOString(),
+          contextType,
+          contextData,
+          content: post.body,
+          images,
+        };
+      }
+
+      // FREE ve diğer post tipleri
       return {
         id: String(post.id),
         type: 'post' as const,
@@ -2607,12 +2684,47 @@ export class UserService {
     });
     const ownedProductIds = new Set(ownedProducts.map((inv) => String(inv.productId)));
 
+    // Batch fetch images from PostMedia
+    const postIds = posts.map((p) => p.id);
+    const postMediaMap = new Map<string, string[]>();
+    
+    if (postIds.length > 0) {
+      const allPostMedia = await this.prisma.postMedia.findMany({
+        where: {
+          postId: { in: postIds },
+        },
+        orderBy: { orderIndex: 'asc' },
+        select: { postId: true, mediaUrl: true },
+      });
+
+      allPostMedia.forEach((media) => {
+        if (!postMediaMap.has(media.postId)) {
+          postMediaMap.set(media.postId, []);
+        }
+        const resolvedUrl = resolveMediaUrl(media.mediaUrl);
+        if (resolvedUrl) {
+          postMediaMap.get(media.postId)!.push(resolvedUrl);
+        }
+      });
+    }
+
+    // Benefit category mapping
+    const benefitMap: Record<string, { title: string; icon: string }> = {
+      time_saving: { title: 'Zaman Kazandırır', icon: 'clock' },
+      energy_efficiency: { title: 'Enerji Tasarrufu', icon: 'bolt' },
+      durability: { title: 'Daha Dayanıklı', icon: 'shield' },
+      better_result: { title: 'Daha İyi Sonuç', icon: 'star' },
+    };
+
     const results = await Promise.all(
       posts.map(async (post) => {
         const stats = await this.getPostStats(String(post.id));
         const contextType = this.mapContextType(post);
         const contextData = await this.buildContextDataFromPost(post, ownedProductIds);
-        const tags = await this.prisma.postTag.findMany({ where: { postId: String(post.id) } as any });
+        const images = postMediaMap.get(post.id) || [];
+        const tip = (post as any).tip;
+        const benefitCategory = tip?.benefitCategory;
+        
         return {
           id: String(post.id),
           type: 'tipsAndTricks' as const,
@@ -2621,9 +2733,11 @@ export class UserService {
           createdAt: post.createdAt.toISOString(),
           contextType,
           contextData,
+          benefit: benefitCategory && benefitMap[benefitCategory] 
+            ? benefitMap[benefitCategory] 
+            : { title: 'Fayda', icon: 'lightbulb' },
           content: post.body,
-          tag: tags[0]?.tag || '',
-          images: [], // TODO: InventoryMedia
+          images,
         };
       })
     );
@@ -2968,7 +3082,7 @@ export class UserService {
       const stats = await this.getPostStats(String(post.id));
 
       const contextType = this.mapContextType(post);
-      const contextData = this.buildContextDataFromPost(post, ownedSet);
+      const contextData = await this.buildContextDataFromPost(post, ownedSet);
 
       // Post type'ına göre formatla
       switch (post.type) {
@@ -4082,7 +4196,7 @@ export class UserService {
         expertNotifications?: boolean;
         eventNotifications?: boolean;
         systemNotifications?: boolean;
-        receiveNotifications?: boolean | null;
+        receiveNotifications?: boolean;
       } = {};
 
       // Backward compatibility: Eğer array formatında gelirse (eski format)
@@ -4163,7 +4277,7 @@ export class UserService {
         }
 
         if (settings.global) {
-          if (settings.global.receiveNotifications !== undefined) {
+          if (settings.global.receiveNotifications !== undefined && settings.global.receiveNotifications !== null) {
             updateData.receiveNotifications = settings.global.receiveNotifications;
           }
         }
