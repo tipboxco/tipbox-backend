@@ -19,7 +19,7 @@ export const SplitView = ({
       <div className={clx(leftWidth, "border-r border-ui-border-base flex flex-col bg-white")}>
         {leftPanel}
       </div>
-      <div className="flex-1 overflow-y-auto bg-white">
+      <div className="flex-1 flex flex-col min-h-0 bg-white">
         {rightPanel}
       </div>
     </div>

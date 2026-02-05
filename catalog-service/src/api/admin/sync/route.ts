@@ -62,7 +62,7 @@ export const POST = async (
       })
     }
     
-    const validModuleTypes = ["product", "category", "brand", "brand_category"]
+    const validModuleTypes = ["product", "category", "brand", "brand_category", "backend_seed"]
     if (!validModuleTypes.includes(module_type)) {
       return res.status(400).json({
         error: `Geçersiz module_type. Geçerli değerler: ${validModuleTypes.join(", ")}`,

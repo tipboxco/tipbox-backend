@@ -1,17 +1,8 @@
 import { useState, useEffect, useRef } from "react"
-import { 
-  Drawer, 
-  Label, 
-  Input, 
-  Select,
-  Switch, 
-  Button, 
-  Text,
-} from "@medusajs/ui"
+import { Drawer, Label, Input, Select, Switch, Button, Text } from "@medusajs/ui"
+import type { ModuleType } from "./types"
 
-type ModuleType = "product" | "category" | "brand"
-
-type SyncFormData = {
+export type SyncFormData = {
   name: string
   module_type: ModuleType
   target_url: string
@@ -101,6 +92,7 @@ export const SyncForm = ({
                 <Select.Item value="category">Kategoriler</Select.Item>
                 <Select.Item value="brand">Markalar</Select.Item>
                 <Select.Item value="brand_category">Marka Kategorileri</Select.Item>
+                <Select.Item value="backend_seed">Backend Seed</Select.Item>
               </Select.Content>
             </Select>
           </div>

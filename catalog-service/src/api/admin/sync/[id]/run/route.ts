@@ -6,6 +6,9 @@ import type SyncManagerService from "../../../../../modules/sync-manager/service
 import type BrandModuleService from "../../../../../modules/brand/service"
 import { ModuleType, SyncPayload } from "../../../../../modules/sync-manager/types"
 
+const TIPBOX_BACKEND_URL = process.env.TIPBOX_BACKEND_URL || "http://localhost:3000"
+const TIPBOX_BACKEND_API_KEY = process.env.TIPBOX_BACKEND_API_KEY
+
 /**
  * POST /admin/sync/:id/run
  * Sync işlemini başlatır
@@ -33,54 +36,149 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
       return res.status(400).json({ error: "Bu sync config için zaten çalışan bir job var" })
     }
 
-    // Veri sayısını al
+    // Veri sayısını al (backend_seed gibi veri temelli olmayan sync'ler 0 dönebilir)
     const totalRecords = await getRecordCount(config.module_type as ModuleType, query, req.scope)
-
-    if (totalRecords === 0) {
-      return res.status(400).json({ error: "Senkronize edilecek veri bulunamadı" })
-    }
 
     // Batch boyutunu sınırla - çok büyük batch'ler kilitlenmeye neden olur
     const batchSize = Math.min(config.batch_size || 100, 100) // Max 100 kayıt per batch
-    const totalBatches = Math.ceil(totalRecords / batchSize)
+    // backend_seed: veri sayısı yok, tek "batch" ile job çalıştırılır (arka planda seed run tetiklenir)
+    const totalBatches =
+      (config.module_type as string) === "backend_seed"
+        ? 1
+        : totalRecords === 0
+          ? 0
+          : Math.ceil(totalRecords / batchSize)
+
+    // backend_seed için total_records 0 olabilir; job yine de oluşturulur
+    const jobTotalRecords = (config.module_type as string) === "backend_seed" ? 0 : totalRecords
 
     // Job oluştur
     const job = await syncManager.createJob({
       sync_config_id: id,
-      total_records: totalRecords,
+      total_records: jobTotalRecords,
       total_batches: totalBatches,
       metadata: {
         batch_size: batchSize,
         module_type: config.module_type,
+        ...(config.metadata as object),
       },
     })
 
-    // Response'u HEMEN gönder
+    // backend_seed: NDJSON stream döndür, loglar gerçek zamanlı client'a gider
+    if ((config.module_type as string) === "backend_seed") {
+      const meta = (config.metadata || {}) as Record<string, unknown>
+      const seedId = meta.seed_id as string | undefined
+      const seedName = meta.seed_name as string | undefined
+      if (!seedId || !seedName) {
+        await syncManager.failJob(job.id, "Backend seed config'de seed_id/seed_name yok")
+        return res.status(400).json({ error: "Backend seed config'de seed_id/seed_name yok" })
+      }
+      await syncManager.startJob(job.id)
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        ...(TIPBOX_BACKEND_API_KEY ? { "X-Seed-Token": TIPBOX_BACKEND_API_KEY } : {}),
+      }
+      const backendRes = await fetch(`${TIPBOX_BACKEND_URL}/api/seeds/run`, {
+        method: "POST",
+        headers,
+        credentials: "omit",
+        body: JSON.stringify({ seed_id: seedId, seed_name: seedName }),
+      })
+      if (!backendRes.ok || !backendRes.body) {
+        await syncManager.failJob(job.id, "Backend seed isteği başarısız")
+        return res.status(502).json({ error: "Backend seed isteği başarısız" })
+      }
+      res.setHeader("Content-Type", "application/x-ndjson")
+      res.setHeader("Cache-Control", "no-cache")
+      res.setHeader("X-Accel-Buffering", "no")
+      res.setHeader("X-Seed-Job-Id", job.id)
+      res.flushHeaders?.()
+      const logLines: Array<{ type: "stdout" | "stderr"; line: string }> = []
+      let exitCode: number | undefined
+      const yieldToClient = () => new Promise<void>(r => setImmediate(r))
+      const send = async (obj: object) => {
+        res.write(JSON.stringify(obj) + "\n")
+        ;(res as any).flush?.()
+        await yieldToClient()
+      }
+      await send({ type: "job", job_id: job.id })
+      const reader = backendRes.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ""
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split("\n")
+          buffer = lines.pop() ?? ""
+          for (const raw of lines) {
+            if (!raw.trim()) continue
+            try {
+              const data = JSON.parse(raw) as { type: string; line?: string }
+              if (data.type === "stdout" || data.type === "stderr") {
+                logLines.push({ type: data.type as "stdout" | "stderr", line: data.line ?? "" })
+                await send(data)
+                const exitMatch = (data.line ?? "").match(/\[Exit code: (\d+)\]/)
+                if (exitMatch) exitCode = parseInt(exitMatch[1], 10)
+              }
+            } catch {
+              await send({ type: "stdout", line: raw })
+              logLines.push({ type: "stdout", line: raw })
+            }
+          }
+        }
+        if (buffer.trim()) {
+          try {
+            const data = JSON.parse(buffer) as { type: string; line?: string }
+            if (data.type === "stdout" || data.type === "stderr") {
+              logLines.push({ type: data.type as "stdout" | "stderr", line: data.line ?? buffer })
+              await send(data)
+              const exitMatch = (data.line ?? buffer).match(/\[Exit code: (\d+)\]/)
+              if (exitMatch) exitCode = parseInt(exitMatch[1], 10)
+            }
+          } catch {
+            await send({ type: "stdout", line: buffer })
+            logLines.push({ type: "stdout", line: buffer })
+          }
+        }
+        const status = exitCode === 0 ? "completed" : "failed"
+        await syncManager.updateJobWithLogs(job.id, status, logLines, exitCode)
+        if (status === "completed") await syncManager.updateLastSyncTime(id)
+        await send({ type: "job_complete", job_id: job.id, status, exit_code: exitCode })
+      } catch (streamErr) {
+        const msg = streamErr instanceof Error ? streamErr.message : "Stream hatası"
+        await syncManager.failJob(job.id, msg)
+        await send({ type: "stderr", line: `[Error] ${msg}` })
+      }
+      res.end()
+      return
+    }
+
+    // Diğer modüller: JSON dön, background'da çalıştır
     res.json({
       message: "Sync başlatıldı",
       job_id: job.id,
-      total_records: totalRecords,
+      total_records: jobTotalRecords,
       total_batches: totalBatches,
       batch_size: batchSize,
     })
 
-    // Sync context'i sakla
     const syncContext: SyncContext = {
       syncManager,
       query,
       productService: req.scope.resolve(Modules.PRODUCT),
-      brandService: (config.module_type === "brand" || config.module_type === "brand_category") 
-        ? req.scope.resolve(BRAND_MODULE) as BrandModuleService 
+      brandService: (config.module_type === "brand" || config.module_type === "brand_category")
+        ? req.scope.resolve(BRAND_MODULE) as BrandModuleService
         : null,
     }
 
-    // Background işlemi TAMAMEN detach et - setTimeout ile
     setTimeout(() => {
       runSyncInBackground(
         syncContext,
         config,
         job.id,
-        totalRecords,
+        jobTotalRecords,
         batchSize,
         totalBatches
       ).catch(error => {
@@ -129,6 +227,8 @@ async function getRecordCount(
       const brandCategories = await brandService.listBrandCategories()
       return brandCategories.length
     }
+    case "backend_seed":
+      return 0
     default:
       return 0
   }
@@ -395,7 +495,6 @@ async function getRecordsBatch(
           : null,
         brand_id: product.brand_id || (product.brand ? product.brand.id : null),
       }))
-      console.log(`[Sync] Products: ${JSON.stringify(productsWithCategoryAndBrand)}`)
       return productsWithCategoryAndBrand
     }
     case "category": {
@@ -493,6 +592,79 @@ async function runSyncInBackground(
     // Job'ı başlat
     await syncManager.startJob(jobId)
 
+    // backend_seed: veri batch'i yok, Tipbox seed run tetiklenir
+    if ((config.module_type as string) === "backend_seed") {
+      const meta = (config.metadata || {}) as Record<string, unknown>
+      const seedId = meta.seed_id as string | undefined
+      const seedName = meta.seed_name as string | undefined
+      if (!seedId || !seedName) {
+        await syncManager.failJob(jobId, "Backend seed config'de seed_id/seed_name yok")
+        return
+      }
+      const logLines: Array<{ type: "stdout" | "stderr"; line: string }> = []
+      let exitCode: number | undefined
+      try {
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+          ...(TIPBOX_BACKEND_API_KEY ? { "X-Seed-Token": TIPBOX_BACKEND_API_KEY } : {}),
+        }
+        const backendRes = await fetch(`${TIPBOX_BACKEND_URL}/api/seeds/run`, {
+          method: "POST",
+          headers,
+          credentials: "omit",
+          body: JSON.stringify({ seed_id: seedId, seed_name: seedName }),
+        })
+        if (!backendRes.ok || !backendRes.body) {
+          await syncManager.failJob(jobId, "Backend seed isteği başarısız")
+          return
+        }
+        const reader = backendRes.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ""
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split("\n")
+          buffer = lines.pop() ?? ""
+          for (const raw of lines) {
+            if (!raw.trim()) continue
+            try {
+              const data = JSON.parse(raw) as { type: string; line?: string }
+              if (data.type === "stdout" || data.type === "stderr") {
+                logLines.push({ type: data.type as "stdout" | "stderr", line: data.line ?? "" })
+                const exitMatch = (data.line ?? "").match(/\[Exit code: (\d+)\]/)
+                if (exitMatch) exitCode = parseInt(exitMatch[1], 10)
+              }
+            } catch {
+              logLines.push({ type: "stdout", line: raw })
+            }
+          }
+        }
+        if (buffer.trim()) {
+          try {
+            const data = JSON.parse(buffer) as { type: string; line?: string }
+            if (data.type === "stdout" || data.type === "stderr") {
+              logLines.push({ type: data.type as "stdout" | "stderr", line: data.line ?? buffer })
+              const exitMatch = (data.line ?? buffer).match(/\[Exit code: (\d+)\]/)
+              if (exitMatch) exitCode = parseInt(exitMatch[1], 10)
+            }
+          } catch {
+            logLines.push({ type: "stdout", line: buffer })
+          }
+        }
+        const status = exitCode === 0 ? "completed" : "failed"
+        await syncManager.updateJobWithLogs(jobId, status, logLines, exitCode)
+        if (status === "completed") await syncManager.updateLastSyncTime(config.id)
+        console.log(`[Sync] Backend seed job ${jobId} ${status}, exit code: ${exitCode}`)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Unknown error"
+        await syncManager.failJob(jobId, msg)
+        console.error(`[Sync] Backend seed job ${jobId} error:`, msg)
+      }
+      return
+    }
+
     // Category için cache'i önceden yükle - tüm kategorileri çek ve sırala
     if (config.module_type === "category") {
       console.log(`[Sync] Pre-loading categories for job ${jobId}...`)
@@ -503,8 +675,12 @@ async function runSyncInBackground(
     let totalProcessed = 0
     let totalFailed = 0
     const timestamp = new Date().toISOString()
+    const logLines: Array<{ type: "stdout" | "stderr"; line: string }> = []
 
-    console.log(`[Sync] Starting job ${jobId}: ${totalRecords} records in ${totalBatches} batches`)
+    const startMsg = `[Sync] Starting job ${jobId}: ${totalRecords} records in ${totalBatches} batches`
+    console.log(startMsg)
+    logLines.push({ type: "stdout", line: startMsg })
+    await syncManager.updateBatchProgressWithLogs(jobId, 0, 0, 0, logLines)
 
     // Her batch için
     for (let batch = 1; batch <= totalBatches; batch++) {
@@ -556,6 +732,10 @@ async function runSyncInBackground(
         // Event loop'a kontrol ver (JSON.stringify öncesi)
         await delay(5)
 
+        const sendingMsg = `[SyncManager] Sending batch ${batch} to ${config.target_url}...`
+        console.log(sendingMsg)
+        const batchLogs: Array<{ type: "stdout" | "stderr"; line: string }> = [{ type: "stdout", line: sendingMsg }]
+
         // Batch'i gönder
         const result = await syncManager.sendBatch(
           config.target_url,
@@ -566,15 +746,23 @@ async function runSyncInBackground(
         totalProcessed += result.processed
         totalFailed += result.failed
 
-        // İlerlemeyi güncelle
-        await syncManager.updateBatchProgress(jobId, batch, totalProcessed, totalFailed)
+        const successMsg = `[SyncManager] Batch ${batch} success: ${result.processed} processed, ${result.failed} failed`
+        const syncMsg = `[Sync] Batch ${batch}/${totalBatches}: ${result.processed} OK, ${result.failed} failed`
+        console.log(successMsg)
+        console.log(syncMsg)
+        batchLogs.push({ type: "stdout", line: successMsg }, { type: "stdout", line: syncMsg })
 
-        console.log(`[Sync] Batch ${batch}/${totalBatches}: ${result.processed} OK, ${result.failed} failed`)
+        // İlerlemeyi ve logları güncelle (SSE ile client'a gider)
+        await syncManager.updateBatchProgressWithLogs(jobId, batch, totalProcessed, totalFailed, batchLogs)
 
       } catch (batchError) {
+        const errMsg = batchError instanceof Error ? batchError.message : String(batchError)
         console.error(`[Sync] Batch ${batch} error:`, batchError)
         totalFailed += batchSize
-        await syncManager.updateBatchProgress(jobId, batch, totalProcessed, totalFailed)
+        const batchLogs: Array<{ type: "stdout" | "stderr"; line: string }> = [
+          { type: "stderr", line: `[Sync] Batch ${batch} error: ${errMsg}` },
+        ]
+        await syncManager.updateBatchProgressWithLogs(jobId, batch, totalProcessed, totalFailed, batchLogs)
       }
 
       // Batch arası bekleme - event loop için
@@ -589,14 +777,17 @@ async function runSyncInBackground(
       return
     }
 
-    // Job'ı tamamla
+    // Son log satırı ve job'ı tamamla
+    const completedMsg = `[Sync] Job ${jobId} completed: ${totalProcessed} processed, ${totalFailed} failed`
+    console.log(completedMsg)
+    await syncManager.updateBatchProgressWithLogs(jobId, totalBatches, totalProcessed, totalFailed, [
+      { type: "stdout", line: completedMsg },
+    ])
     await syncManager.completeJob(jobId, totalProcessed, totalFailed)
     await syncManager.updateLastSyncTime(config.id)
 
     // Cache'i temizle
     categoryCache.delete(jobId)
-
-    console.log(`[Sync] Job ${jobId} completed: ${totalProcessed} processed, ${totalFailed} failed`)
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error"
 
@@ -607,7 +798,14 @@ async function runSyncInBackground(
       return
     }
 
+    const failedMsg = `[Sync] Job ${jobId} failed: ${errorMessage}`
+    console.error(failedMsg)
+    const jobs = await syncManager.listSyncJobs({ id: jobId })
+    const job = Array.isArray(jobs) ? jobs[0] : jobs
+    const existingMeta = (job?.metadata as Record<string, unknown> | null) ?? {}
+    const existingLogs = (existingMeta.log_lines as Array<{ type: string; line: string }> | undefined) ?? []
+    const metadata = { ...existingMeta, log_lines: [...existingLogs, { type: "stderr", line: failedMsg }] }
+    await syncManager.updateJob(jobId, { metadata })
     await syncManager.failJob(jobId, errorMessage)
-    console.error(`[Sync] Job ${jobId} failed: ${errorMessage}`)
   }
 }

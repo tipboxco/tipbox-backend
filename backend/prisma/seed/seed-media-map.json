@@ -20,36 +20,6 @@
   "user.avatar.ozan": {
     "targetKey": "profile-pictures/dddddddd-dddd-4ddd-dddd-dddddddddddd/seed-avatar.jpg"
   },
-  "user.avatar.man1": {
-    "targetKey": "profile-pictures/11111111-1111-4111-a111-111111111111/seed-avatar.jpg"
-  },
-  "user.avatar.man2": {
-    "targetKey": "profile-pictures/33333333-3333-4333-a333-333333333333/seed-avatar.png"
-  },
-  "user.avatar.man3": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000002/seed-avatar.jpg"
-  },
-  "user.avatar.man4": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000004/seed-avatar.jpg"
-  },
-  "user.avatar.man5": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000006/seed-avatar.jpg"
-  },
-  "user.avatar.woman1": {
-    "targetKey": "profile-pictures/aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa/seed-avatar.jpg"
-  },
-  "user.avatar.woman2": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000001/seed-avatar.jpg"
-  },
-  "user.avatar.woman3": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000003/seed-avatar.jpg"
-  },
-  "user.avatar.woman4": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000005/seed-avatar.jpg"
-  },
-  "user.avatar.woman5": {
-    "targetKey": "profile-pictures/10000000-0000-4000-a000-000000000007/seed-avatar.jpg"
-  },
   "user.banner.primary": {
     "targetKey": "profile-banners/480f5de9-b691-4d70-a6a8-2789226f4e07/seed-banner.png"
   },
@@ -175,42 +145,6 @@
   },
   "catalog.smart-home-devices": {
     "targetKey": "catalog/smart home devices.png"
-  },
-  "catalog.main-category.appliances": {
-    "targetKey": "catalog/main-category/Appliances.png"
-  },
-  "catalog.main-category.automotive-motorcycle": {
-    "targetKey": "catalog/main-category/Automotive-Motorcycle.png"
-  },
-  "catalog.main-category.baby-kids": {
-    "targetKey": "catalog/main-category/baby-kids.png"
-  },
-  "catalog.main-category.cosmetic": {
-    "targetKey": "catalog/main-category/cosmetic.png"
-  },
-  "catalog.main-category.electronic": {
-    "targetKey": "catalog/main-category/electronic.png"
-  },
-  "catalog.main-category.fashion": {
-    "targetKey": "catalog/main-category/fashion.png"
-  },
-  "catalog.main-category.garden-hardware": {
-    "targetKey": "catalog/main-category/Garden-Hardware.png"
-  },
-  "catalog.main-category.hobbies-music-art": {
-    "targetKey": "catalog/main-category/Hobbies-Music-Art.png"
-  },
-  "catalog.main-category.home-living": {
-    "targetKey": "catalog/main-category/home-living.png"
-  },
-  "catalog.main-category.office-stationery": {
-    "targetKey": "catalog/main-category/Office-Stationery.png"
-  },
-  "catalog.main-category.pet-supplies": {
-    "targetKey": "catalog/main-category/Pet-Supplies.png"
-  },
-  "catalog.main-category.sports-outdoors": {
-    "targetKey": "catalog/main-category/sports-outdoors.png"
   },
   "event.communityevents-the-content-creator": {
     "targetKey": "events/communityevents-the-content-creator.jpg"
