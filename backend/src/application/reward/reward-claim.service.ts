@@ -240,7 +240,7 @@ export class RewardClaimService {
         actionType: TransactionActionType.CLAIM_REWARD,
         amount: rewardClaim.amount,
         fromAddress: null,
-        toAddress: wallet.publicAddress,
+        toAddress: wallet.smartAccountAddress ?? wallet.publicAddress,
         metadata: {
           rewardClaimId: rewardClaim.id,
           rewardType: rewardClaim.rewardType,
@@ -340,7 +340,7 @@ export class RewardClaimService {
         actionType: TransactionActionType.CLAIM_REWARD,
         amount: totalAmount,
         fromAddress: null,
-        toAddress: wallet.publicAddress,
+        toAddress: wallet.smartAccountAddress ?? wallet.publicAddress,
         metadata: {
           claimCount: claimableRewards.length,
           claimIds: claimableRewards.map((c) => c.id),

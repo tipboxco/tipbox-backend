@@ -885,6 +885,12 @@ router.post('/pending-tips/claim', asyncHandler(async (req: Request, res: Respon
   let result = await sdk.claim(userIdStr);
 
   if (result.success) {
+    const thirdwebWallet = await walletService.getThirdwebWallet(userIdStr);
+    if (thirdwebWallet?.id) {
+      walletService.syncWalletBalanceFromChain(thirdwebWallet.id).catch((err) => {
+        logger.warn({ userId: userIdStr, walletId: thirdwebWallet.id, error: String(err), message: 'syncWalletBalanceFromChain after claim failed' });
+      });
+    }
     return res.status(200).json({
       success: true,
       eoaAddress: result.eoaAddress ?? null,
@@ -921,6 +927,12 @@ router.post('/pending-tips/claim', asyncHandler(async (req: Request, res: Respon
 
     result = await sdk.claim(userIdStr);
     if (result.success) {
+      const thirdwebWallet = await walletService.getThirdwebWallet(userIdStr);
+      if (thirdwebWallet?.id) {
+        walletService.syncWalletBalanceFromChain(thirdwebWallet.id).catch((err) => {
+          logger.warn({ userId: userIdStr, walletId: thirdwebWallet.id, error: String(err), message: 'syncWalletBalanceFromChain after claim failed' });
+        });
+      }
       return res.status(200).json({
         success: true,
         eoaAddress: result.eoaAddress ?? null,

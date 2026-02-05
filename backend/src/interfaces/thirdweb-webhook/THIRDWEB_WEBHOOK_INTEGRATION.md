@@ -150,8 +150,8 @@ Webhook’lar hangi **DB tablolarını** okuyup yazıyor, **Wallet** ve **Transa
 │                                                                                           │
 │   Payload (data.toAddress, data.queueId, data.transactionHash, data.status)               │
 │        │                                                                                  │
-│        ├──► Wallet tablosu        : findByPublicAddress(toAddress)  → walletId           │
-│        │                            (eşleşme: publicAddress, case-insensitive)            │
+│        ├──► Wallet tablosu        : findByAddressForTracking(toAddress) → walletId       │
+│        │                            (eşleşme: publicAddress veya smartAccountAddress)     │
 │        │                                                                                  │
 │        ├──► Transaction tablosu  : queueId / txHash / pending ile bulunur                │
 │        │                            • sent   → status = PENDING, txHash güncelleme        │
@@ -169,7 +169,7 @@ Webhook’lar hangi **DB tablolarını** okuyup yazıyor, **Wallet** ve **Transa
 │                                                                                           │
 │   Payload (data[].data.decoded.indexed_params.from / .to, amount, eventName)             │
 │        │                                                                                  │
-│        ├──► Wallet tablosu        : findByPublicAddress(from) / findByPublicAddress(to)   │
+│        ├──► Wallet tablosu        : findByAddressForTracking(from) / (to); public veya smart account eşleşir   │
 │        │                            Sadece from veya to DB’de kayıtlıysa event işlenir    │
 │        │                            (relevance check)                                      │
 │        │                                                                                  │
@@ -189,7 +189,7 @@ Webhook’lar hangi **DB tablolarını** okuyup yazıyor, **Wallet** ve **Transa
 
 | Tablo / Yapı | Transaction webhook | v1.events (Contract) |
 |--------------|---------------------|----------------------|
-| **Wallet** | Okuma: `toAddress` ile eşleşen wallet bulunur. | Okuma: `from` / `to` ile eşleşen wallet’lar bulunur; sadece biri varsa işlem yapılır. |
+| **Wallet** | Okuma: `toAddress` ile `findByAddressForTracking` (public veya smart account). | Okuma: `from` / `to` ile `findByAddressForTracking`; en az biri kayıtlıysa wallet’lar bulunur; sadece biri varsa işlem yapılır. |
 | **Transaction** | Okuma: queueId, txHash veya pending tx ile bulunur. Güncelleme: status (PENDING → confirmed/failed), txHash. | Okuma: Pending DEPOSIT/WITHDRAW/TIP_* ile eşleşme. Oluşturma: Yeni DEPOSIT/WITHDRAW. Güncelleme: confirmTransaction(). |
 | **ThirdwebWebhookLog** | Yazma: Her transaction webhook için upsert (queueId); transactionId FK. | Kullanılmaz. |
 | **ContractEventLog** | Kullanılmaz. | Yazma: Her işlenen event için insert; walletId, transactionId FK. |
@@ -842,8 +842,8 @@ Contract subscription oluşturulduktan sonra sistem otomatik olarak:
 const transferEvent = parseTransferEvent(data.decodedLog, TOKEN_DECIMALS);
 // transferEvent.tokenType = TokenType.ERC20
 
-// 2. Alıcı wallet bulunur
-const toWallet = await this.walletRepo.findByPublicAddress(transferEvent.to);
+// 2. Alıcı wallet bulunur (public veya smart account ile eşleşir)
+const toWallet = await this.walletRepo.findByAddressForTracking(transferEvent.to);
 
 // 3. Balance güncellenir
 if (toWallet) {

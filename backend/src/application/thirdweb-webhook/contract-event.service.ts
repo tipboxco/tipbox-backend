@@ -322,21 +322,21 @@ export class ContractEventService {
         }
 
         for (const addr of addresses) {
-          const wallet = await this.walletRepo.findByPublicAddress(addr);
+          const wallet = await this.walletRepo.findByAddressForTracking(addr);
           if (wallet) {
             matchedWallets.push(wallet.id);
           }
         }
 
         if (transferEvent.isMint && transferEvent.to) {
-          const toWallet = await this.walletRepo.findByPublicAddress(transferEvent.to);
+          const toWallet = await this.walletRepo.findByAddressForTracking(transferEvent.to);
           if (toWallet) {
             return { isRelevant: true, addresses, matchedWallets: [toWallet.id] };
           }
         }
 
         if (transferEvent.isBurn && transferEvent.from) {
-          const fromWallet = await this.walletRepo.findByPublicAddress(transferEvent.from);
+          const fromWallet = await this.walletRepo.findByAddressForTracking(transferEvent.from);
           if (fromWallet) {
             return { isRelevant: true, addresses, matchedWallets: [fromWallet.id] };
           }
@@ -351,7 +351,7 @@ export class ContractEventService {
       if (approvalEvent) {
         addresses.push(approvalEvent.owner.toLowerCase());
         
-        const ownerWallet = await this.walletRepo.findByPublicAddress(approvalEvent.owner);
+        const ownerWallet = await this.walletRepo.findByAddressForTracking(approvalEvent.owner);
         if (ownerWallet) {
           return { isRelevant: true, addresses, matchedWallets: [ownerWallet.id] };
         }
@@ -772,7 +772,7 @@ export class ContractEventService {
 
         // Wallet eşleştirmesi
         for (const addr of addresses) {
-          const wallet = await this.walletRepo.findByPublicAddress(addr);
+          const wallet = await this.walletRepo.findByAddressForTracking(addr);
           if (wallet) {
             matchedWallets.push(wallet.id);
           }
@@ -780,7 +780,7 @@ export class ContractEventService {
 
         // Mint durumunda sadece to adresi kontrol edilir
         if (transferEvent.isMint && transferEvent.to) {
-          const toWallet = await this.walletRepo.findByPublicAddress(transferEvent.to);
+          const toWallet = await this.walletRepo.findByAddressForTracking(transferEvent.to);
           if (toWallet) {
             return { isRelevant: true, addresses, matchedWallets: [toWallet.id] };
           }
@@ -788,7 +788,7 @@ export class ContractEventService {
 
         // Burn durumunda sadece from adresi kontrol edilir
         if (transferEvent.isBurn && transferEvent.from) {
-          const fromWallet = await this.walletRepo.findByPublicAddress(transferEvent.from);
+          const fromWallet = await this.walletRepo.findByAddressForTracking(transferEvent.from);
           if (fromWallet) {
             return { isRelevant: true, addresses, matchedWallets: [fromWallet.id] };
           }
@@ -803,7 +803,7 @@ export class ContractEventService {
       if (approvalEvent) {
         addresses.push(approvalEvent.owner.toLowerCase());
         
-        const ownerWallet = await this.walletRepo.findByPublicAddress(approvalEvent.owner);
+        const ownerWallet = await this.walletRepo.findByAddressForTracking(approvalEvent.owner);
         if (ownerWallet) {
           return { isRelevant: true, addresses, matchedWallets: [ownerWallet.id] };
         }
@@ -1174,7 +1174,7 @@ export class ContractEventService {
       });
 
       // İlgili transaction'ı bul ve fail olarak işaretle
-      const wallet = await this.walletRepo.findByPublicAddress(data.to);
+      const wallet = await this.walletRepo.findByAddressForTracking(data.to);
       if (wallet) {
         const prisma = getPrisma();
         const pendingTx = await prisma.transaction.findFirst({
@@ -1296,7 +1296,7 @@ export class ContractEventService {
           const transferEvent = parseTransferEvent(event.decodedLog);
           
           if (transferEvent) {
-            const toWallet = await this.walletRepo.findByPublicAddress(transferEvent.to);
+            const toWallet = await this.walletRepo.findByAddressForTracking(transferEvent.to);
             
             if (toWallet) {
               await this.eventLogRepo.markAsProcessed(event.id, undefined, toWallet.id);
