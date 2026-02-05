@@ -1,4 +1,4 @@
-export type ModuleType = "product" | "category" | "brand" | "brand_category"
+export type ModuleType = "product" | "category" | "brand" | "brand_category" | "backend_seed"
 export type SyncJobStatus = "pending" | "running" | "completed" | "failed" | "cancelled"
 
 export interface SyncConfigDTO {

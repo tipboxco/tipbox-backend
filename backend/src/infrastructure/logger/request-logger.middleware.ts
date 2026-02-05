@@ -10,7 +10,7 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
 
   const start = Date.now();
 
-  res.on('finish', () => {
+  /*res.on('finish', () => {
     console.log('RequestLogger res.on(finish) tetiklendi');
     const duration = Date.now() - start;
     logger.info({
@@ -25,6 +25,6 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction) =
       userAgent: req.headers['user-agent'],
     });
   });
-
+*/
   next();
 }; 

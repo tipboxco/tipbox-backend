@@ -23,7 +23,6 @@
     "test:unit": "TEST_TYPE=unit NODE_OPTIONS=--experimental-vm-modules jest --silent --runInBand --forceExit",
     "db:generate": "medusa db:generate",
     "db:migrate": "medusa db:migrate"
-
   },
   "dependencies": {
     "@medusajs/admin-sdk": "2.12.3",
@@ -33,6 +32,7 @@
     "@medusajs/medusa": "2.12.3",
     "@types/adm-zip": "^0.5.7",
     "@types/papaparse": "^5.5.2",
+    "@xterm/xterm": "^6.0.0",
     "adm-zip": "^0.5.16",
     "minio": "^7.1.3",
     "multer": "^2.0.2",

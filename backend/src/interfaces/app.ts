@@ -32,6 +32,7 @@ import auth0Router from './auth0/auth0.router';
 import cannyRouter from './canny/canny.router';
 import surveyRouter from './survey/survey.router';
 import subscriptionRouter from './subscription/subscription.router';
+import seedRouter from './seed/seed.router';
 
 // Middleware
 import { authMiddleware } from './auth/auth.middleware';
@@ -369,6 +370,7 @@ app.use('/interactions', interactionRouter);
 app.use('/notifications', authMiddleware, notificationRouter);
 app.use('/surveys', surveyRouter);
 app.use('/api/cache', cacheRouter);
+app.use('/api/seeds', seedRouter);
 app.use('/api/sync-receiver', syncReceiverRouter);
 app.use('/canny', cannyRouter);
 app.use('/subscription', authMiddleware, subscriptionRouter);

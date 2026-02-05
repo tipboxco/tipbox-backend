@@ -5503,7 +5503,7 @@ async function ensureBrandCategory(config: { name: string; description?: string;
     data: {
       name: config.name,
       imageUrl,
-      categoryId,
+      ...(categoryId ? { category: { connect: { id: categoryId } } } : {}),
     }
   });
 }

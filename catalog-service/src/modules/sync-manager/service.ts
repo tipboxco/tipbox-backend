@@ -89,6 +89,120 @@ class SyncManagerService extends MedusaService({SyncConfig,SyncJob}) {
   }
 
   /**
+   * Batch ilerlemesini ve log satırlarını günceller (SSE ile client'a gider).
+   */
+  async updateBatchProgressWithLogs(
+    id: string,
+    currentBatch: number,
+    processed: number,
+    failed: number,
+    newLogLines: Array<{ type: "stdout" | "stderr"; line: string }>
+  ) {
+    const jobs = await this.listSyncJobs({ id })
+    const job = Array.isArray(jobs) ? jobs[0] : jobs
+    const existingMeta = (job?.metadata as Record<string, unknown> | null) ?? {}
+    const existingLogs = (existingMeta.log_lines as Array<{ type: string; line: string }> | undefined) ?? []
+    const log_lines = [...existingLogs, ...newLogLines]
+    const metadata = { ...existingMeta, log_lines }
+    return await this.updateJob(id, {
+      current_batch: currentBatch,
+      processed_records: processed,
+      failed_records: failed,
+      metadata,
+    })
+  }
+
+  /**
+   * Backend seed sync config varsa döndürür; yoksa null. Asla oluşturmaz.
+   * @deprecated Tek bir "Backend Seed" yerine her seed için ayrı config kullanın (getBackendSeedConfigForSeed / ensureBackendSeedConfigForSeed).
+   */
+  async getBackendSeedConfigIfExists(): Promise<{ id: string; name: string; module_type: string } | null> {
+    const existing = await this.listSyncConfigs({ module_type: "backend_seed" as ModuleType })
+    if (existing.length > 0) {
+      const c = Array.isArray(existing) ? existing[0] : existing
+      return { id: c.id, name: c.name, module_type: c.module_type }
+    }
+    return null
+  }
+
+  /**
+   * Belirli bir seed'e ait backend seed sync config döndürür; yoksa null.
+   * Önce metadata.seed_id ile, bulunamazsa name "Backend Seed: {seedName}" ile arar (duplicate önleme).
+   */
+  async getBackendSeedConfigForSeed(
+    seedId: string,
+    seedName?: string
+  ): Promise<{ id: string; name: string; module_type: string } | null> {
+    const all = await this.listSyncConfigs({ module_type: "backend_seed" as ModuleType })
+    const list = Array.isArray(all) ? all : [all]
+    let found = list.find((c) => (c.metadata as Record<string, unknown> | null)?.seed_id === seedId)
+    if (!found && seedName) {
+      const expectedName = `Backend Seed: ${seedName}`
+      found = list.find((c) => c.name === expectedName)
+    }
+    return found ? { id: found.id, name: found.name, module_type: found.module_type } : null
+  }
+
+  /**
+   * Her backend seed için ayrı sync config: bu seed için config varsa döndürür, yoksa oluşturur (tek kayıt).
+   */
+  async ensureBackendSeedConfigForSeed(
+    seedId: string,
+    seedName: string,
+    relativePath?: string
+  ): Promise<{ id: string; name: string; module_type: string }> {
+    const existing = await this.getBackendSeedConfigForSeed(seedId, seedName)
+    if (existing) return existing
+    const backendUrl = process.env.TIPBOX_BACKEND_URL || "http://localhost:3000"
+    const created = await this.createSyncConfigs({
+      name: `Backend Seed: ${seedName}`,
+      module_type: "backend_seed" as ModuleType,
+      target_url: `${backendUrl}/api/seeds`,
+      batch_size: 1,
+      is_active: true,
+      metadata: { seed_id: seedId, seed_name: seedName, relative_path: relativePath ?? null },
+    })
+    const c = Array.isArray(created) ? created[0] : created
+    return { id: c.id, name: c.name, module_type: c.module_type }
+  }
+
+  /**
+   * Herhangi bir backend_seed config için çalışan/pending job var mı (aynı anda tek seed run).
+   */
+  async hasRunningJobForAnyBackendSeed(): Promise<boolean> {
+    const configs = await this.listSyncConfigs({ module_type: "backend_seed" as ModuleType })
+    const list = Array.isArray(configs) ? configs : [configs]
+    for (const config of list) {
+      if (await this.hasRunningJob(config.id)) return true
+    }
+    return false
+  }
+
+  /**
+   * Job'ı log satırları ve çıkış kodu ile günceller (seed run sonunda).
+   * Mevcut metadata (örn. seed_id, seed_name) korunur.
+   */
+  async updateJobWithLogs(
+    id: string,
+    status: "completed" | "failed",
+    logLines: Array<{ type: "stdout" | "stderr"; line: string }>,
+    exitCode?: number
+  ) {
+    const existing = await this.listSyncJobs({ id })
+    const current = Array.isArray(existing) ? existing[0] : existing
+    const existingMeta = (current?.metadata as Record<string, unknown> | null) ?? {}
+    const metadata = { ...existingMeta, log_lines: logLines, exit_code: exitCode }
+    return await this.updateJob(id, {
+      status,
+      completed_at: new Date(),
+      metadata,
+      ...(status === "failed" && logLines.length > 0
+        ? { error_message: logLines[logLines.length - 1]?.line?.slice(0, 500) }
+        : {}),
+    })
+  }
+
+  /**
    * Belirli bir sync config için job'ları getirir
    */
   async getJobsBySyncConfig(syncConfigId: string, limit: number = 20) {

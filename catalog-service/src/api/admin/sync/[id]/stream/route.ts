@@ -22,52 +22,69 @@ export const GET = async (req: MedusaRequest, res: MedusaResponse) => {
   res.flushHeaders()
 
   let isFirstUpdate = true
-  
-  // Veriyi gönder - her zaman gönder (hash karşılaştırması yok)
-  const sendUpdate = async (): Promise<void> => {
+  let interval: ReturnType<typeof setInterval> | null = null
+
+  const cleanup = () => {
+    if (interval) {
+      clearInterval(interval)
+      interval = null
+    }
     try {
-      // İlk güncellemede stale job'ları kontrol et
+      res.end()
+    } catch {
+      // ignore
+    }
+  }
+
+  // Veriyi gönder; running/pending job yoksa true döner (stream durdurulmalı)
+  const sendUpdate = async (): Promise<boolean> => {
+    try {
       if (isFirstUpdate) {
         await syncManager.checkAndMarkStaleJobs(id)
         isFirstUpdate = false
       }
-      
+
       const config = await syncManager.retrieveSyncConfig(id)
       const stats = await syncManager.getSyncStats(id)
       const jobs = await syncManager.getJobsBySyncConfig(id, 20)
-      
+
       const data = {
         sync_config: config,
         stats,
         jobs,
         timestamp: new Date().toISOString(),
       }
-      
-      // Her zaman gönder - 500ms interval zaten yeterli throttle
+
       res.write(`data: ${JSON.stringify(data)}\n\n`)
+
+      const hasRunning = jobs.some(
+        (j: { status: string }) => j.status === "running" || j.status === "pending"
+      )
+      return !hasRunning
     } catch (error) {
       console.error("[SSE] Error:", error)
+      return true
     }
   }
 
-  // İlk güncellemeyi gönder
+  // İlk güncellemeyi gönder ama "running yok" diye bağlantıyı kapatma: client önce
+  // bağlanıp sonra job başlatabilir; interval açık kalsın, bir sonraki tick'te job görünür.
   await sendUpdate()
-  
-  // Sabit 500ms interval - hızlı güncelleme
-  const interval = setInterval(async () => {
+
+  interval = setInterval(async () => {
     try {
-      await sendUpdate()
+      const noRunningNow = await sendUpdate()
+      if (noRunningNow && interval) {
+        clearInterval(interval)
+        interval = null
+        res.write(`data: ${JSON.stringify({ type: "stream_end", reason: "no_running_jobs" })}\n\n`)
+        res.end()
+      }
     } catch {
-      // Ignore
+      // ignore
     }
   }, 500)
 
-  // Cleanup
-  const cleanup = () => {
-    clearInterval(interval)
-    res.end()
-  }
-  
   req.on("close", cleanup)
   req.on("error", cleanup)
 }
