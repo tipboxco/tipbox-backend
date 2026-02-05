@@ -25,6 +25,16 @@ export interface BrandItem {
   image: string | null;
 }
 
+/** Kategoriye göre markalar listesi - pagination ile */
+export interface BrandsByCategoryResponse {
+  items: BrandItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    hasMore: boolean;
+  };
+}
+
 export interface BrandCatalogResponse {
   brandId: string;
   name: string;
@@ -330,12 +340,18 @@ export class BrandService {
   }
 
   /**
-   * Kategoriye göre markaları listele
+   * Kategoriye göre markaları listele (pagination ile)
    * categoryId UUID veya kategori adı olabilir
    */
-  async getBrandsByCategoryId(categoryId: string): Promise<BrandItem[]> {
+  async getBrandsByCategoryId(
+    categoryId: string,
+    options?: { page?: number; limit?: number }
+  ): Promise<BrandsByCategoryResponse> {
     try {
-      // Önce kategoriyi bul (UUID veya name ile)
+      const page = options?.page && options.page >= 1 ? options.page : 1;
+      const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+      const skip = (page - 1) * limit;
+
       const category = await this.prisma.brandCategory.findFirst({
         where: {
           OR: [
@@ -359,20 +375,29 @@ export class BrandService {
           name: true,
           imageUrl: true,
         },
-        orderBy: {
-          products: { _count: 'desc' },
+        orderBy: [
+          { products: { _count: 'desc' } },
+          { id: 'asc' },
+        ],
+        skip,
+        take: limit + 1,
+      });
+
+      const hasMore = brands.length > limit;
+      const items = (hasMore ? brands.slice(0, limit) : brands).map((brand) => ({
+        brandId: brand.id,
+        name: brand.name,
+        image: brand.imageUrl,
+      }));
+
+      return {
+        items,
+        pagination: {
+          page,
+          limit,
+          hasMore,
         },
-      });
-
-      return brands.map((brand) => {
-        const imageUrl = brand.imageUrl;
-
-        return {
-          brandId: brand.id,
-          name: brand.name,
-          image: imageUrl,
-        };
-      });
+      };
     } catch (error) {
       logger.error(`Failed to get brands for category ${categoryId}:`, error);
       throw error;

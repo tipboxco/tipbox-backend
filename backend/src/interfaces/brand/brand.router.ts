@@ -53,7 +53,7 @@ router.get(
  * /brands/categories/{categoryId}/brands:
  *   get:
  *     summary: Kategoriye göre markaları listele
- *     description: Kullanıcının seçtiği categorye bağlı markalar, markaya ait ürün sayısına göre (çoktan aza) sıralanarak döner.
+ *     description: Kullanıcının seçtiği categorye bağlı markalar, markaya ait ürün sayısına göre (çoktan aza) sıralanarak pagination ile döner.
  *     tags: [Brand Catalog]
  *     security:
  *       - bearerAuth: []
@@ -64,24 +64,51 @@ router.get(
  *         schema:
  *           type: string
  *         description: Brand kategori ID'si
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Sayfa numarası
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 20
+ *         description: Sayfa başına marka sayısı
  *     responses:
  *       200:
  *         description: Markalar başarıyla listelendi.
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   brandId:
- *                     type: string
- *                     format: uuid
- *                   name:
- *                     type: string
- *                   image:
- *                     type: string
- *                     nullable: true
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       brandId:
+ *                         type: string
+ *                         format: uuid
+ *                       name:
+ *                         type: string
+ *                       image:
+ *                         type: string
+ *                         nullable: true
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     page:
+ *                       type: integer
+ *                     limit:
+ *                       type: integer
+ *                     hasMore:
+ *                       type: boolean
  *       401:
  *         description: Kimlik doğrulaması başarısız.
  */
@@ -89,8 +116,12 @@ router.get(
   '/categories/:categoryId/brands',
   asyncHandler(async (req: Request, res: Response) => {
     const { categoryId } = req.params;
-    const brands = await brandService.getBrandsByCategoryId(categoryId);
-    return res.json(brands);
+    const pageParam = req.query.page ? Number(req.query.page) : undefined;
+    const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
+    const page = pageParam && !Number.isNaN(pageParam) && pageParam >= 1 ? pageParam : 1;
+    const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
+    const result = await brandService.getBrandsByCategoryId(categoryId, { page, limit });
+    return res.json(result);
   }),
 );
 
