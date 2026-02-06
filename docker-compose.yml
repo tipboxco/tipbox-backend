@@ -81,6 +81,7 @@ services:
       - S3_REGION=eu-central-1
       - S3_ACCESS_KEY=minioadmin
       - S3_SECRET_KEY=minioadmin123
+      - SEED_API_TOKEN=deneme
       
     depends_on:
       - postgres
@@ -168,6 +169,7 @@ services:
       - NODE_ENV=development
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/medusa-store?sslmode=disable
       - REDIS_URL=redis://redis:6379
+      - TIPBOX_BACKEND_API_KEY=deneme
       # CORS ayarları (Medusa için gerekli)
       - STORE_CORS=http://localhost:8000,http://localhost:3000
       - ADMIN_CORS=http://localhost:5173,http://localhost:9002
