@@ -33,6 +33,7 @@ import cannyRouter from './canny/canny.router';
 import surveyRouter from './survey/survey.router';
 import subscriptionRouter from './subscription/subscription.router';
 import seedRouter from './seed/seed.router';
+import adminRouter from './admin/admin.router';
 
 // Middleware
 import { authMiddleware } from './auth/auth.middleware';
@@ -374,6 +375,7 @@ app.use('/api/seeds', seedRouter);
 app.use('/api/sync-receiver', syncReceiverRouter);
 app.use('/canny', cannyRouter);
 app.use('/subscription', authMiddleware, subscriptionRouter);
+app.use('/admin', adminRouter);
 
 // Dashboard routes (must be last)
 app.use('/', dashboardRouter);
