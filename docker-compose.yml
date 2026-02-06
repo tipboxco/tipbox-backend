@@ -65,15 +65,19 @@ services:
     container_name: tipbox_backend
     restart: always
     ports:
-      - "3000:3000"  # Tüm network interface'lerinden erişim için (0.0.0.0:3000:3000 yerine)
+      - "3000:3000"
+    # Gizli kalması gerekenler (JWT_SECRET, CLIENT_SECRET, API key'ler vb.) sadece .env'de tanımlanır
     env_file:
       - ./backend/.env
     environment:
+      - PORT=3000
       - NODE_ENV=development
       - NODE_OPTIONS=--max-old-space-size=4096
       - SKIP_DB_MIGRATIONS=${SKIP_DB_MIGRATIONS:-0}
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/tipbox_dev
       - REDIS_URL=redis://redis:6379
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:5173,http://localhost:9002,https://api-test.tipbox.co
+      - CORS_METHODS=GET,POST,PUT,DELETE,OPTIONS,PATCH
       - S3_ENDPOINT=http://minio:9000
       - MINIO_ROOT_USER=minioadmin
       - MINIO_ROOT_PASSWORD=minioadmin123
@@ -81,8 +85,21 @@ services:
       - S3_REGION=eu-central-1
       - S3_ACCESS_KEY=minioadmin
       - S3_SECRET_KEY=minioadmin123
+      - BASE_URL=http://localhost:3000
+      - SEED_MEDIA_BASE_URL=http://localhost:9000
       - SEED_API_TOKEN=deneme
-      
+      - GEMINI_MODEL=gemini-2.5-pro
+      - GEMINI_MAX_RETRIES=3
+      - GEMINI_TIMEOUT=30000
+      - EMAIL_FROM_NAME=Tipbox
+      - GOOGLE_APPLICATION_CREDENTIALS=./tipboxbackend-3e2c3d3c0b31.json
+      - THIRDWEB_WALLET_ID=tipbox-embedded-wallet
+      - THIRDWEB_DEFAULT_CHAIN_ID=11155111
+      - THIRDWEB_SPONSOR_GAS=true
+      - THIRDWEB_WEBHOOK_EXPIRATION_SECONDS=300
+      - THIRDWEB_WEBHOOK_SKIP_SIGNATURE_IN_DEV=true
+      - THIRDWEB_WATCHED_CONTRACTS=${THIRDWEB_WATCHED_CONTRACTS:-0xa6352D525BeBFd87F3De30DB7D42D08f6Ca015C6}
+      - TIPS_TOKEN_DECIMALS=18
     depends_on:
       - postgres
       - redis
