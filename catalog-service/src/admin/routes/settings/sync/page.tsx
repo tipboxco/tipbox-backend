@@ -360,13 +360,25 @@ const SyncPage = () => {
           <Spinner className="animate-spin h-6 w-6 text-ui-fg-interactive" />
         </div>
       ) : configs.length === 0 ? (
-        <EmptyState
-          icon={<ArrowsPointingOut className="h-8 w-8 text-ui-fg-muted" />}
-          heading="Henüz sync yok"
-          description="Bulk veri göndermek için sync oluşturun"
-          actionLabel="Oluştur"
-          onAction={openCreateDrawer}
-        />
+        <>
+          <EmptyState
+            icon={<ArrowsPointingOut className="h-8 w-8 text-ui-fg-muted" />}
+            heading="Henüz sync yok"
+            description="Bulk veri göndermek için sync oluşturun"
+            actionLabel="Oluştur"
+            onAction={openCreateDrawer}
+          />
+          <BackendSeedSection
+            seeds={backendSeeds}
+            loading={backendSeedLoading}
+            runLoading={backendRunLoading}
+            addingId={addingSeedId}
+            runningId={runningSeedId}
+            onRefresh={fetchBackendSeeds}
+            onAdd={handleAddBackendSeed}
+            onRun={handleRunBackendSeedForSeed}
+          />
+        </>
       ) : (
         <>
           {selectedCount > 0 && (
