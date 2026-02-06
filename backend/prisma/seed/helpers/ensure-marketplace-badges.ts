@@ -88,8 +88,8 @@ export async function ensureMarketplaceBadges(prisma: PrismaClient): Promise<voi
     const categoryMap = new Map<BadgeType, string>();
 
     const categories = [
-      { name: 'Başarı Rozetleri', type: BadgeType.ACHIEVEMENT, description: 'Belirli başarılara ulaşan kullanıcılar için' },
-      { name: 'Kozmetik Rozetleri', type: BadgeType.COSMETIC, description: 'Özel görünüm rozetleri' }
+      { name: 'Achievement', type: BadgeType.ACHIEVEMENT, description: 'Belirli başarılara ulaşan kullanıcılar için' },
+      { name: 'Cosmetic', type: BadgeType.COSMETIC, description: 'Özel görünüm rozetleri' }
     ];
 
     for (const cat of categories) {

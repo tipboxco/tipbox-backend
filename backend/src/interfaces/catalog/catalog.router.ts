@@ -203,8 +203,9 @@ router.get(
     const cursor = req.query.cursor as string | undefined;
     const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
     
-    if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
-      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+    // Limit kontrolü - max 50, ama 100'e kadar kabul et (frontend 100 gönderiyor)
+    if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 100)) {
+      return res.status(400).json({ message: 'Limit must be between 1 and 100' });
     }
 
     const productGroups = await catalogService.getProductGroupsBySubCategoryId(subCategoryId, {
@@ -321,8 +322,7 @@ router.get(
  *         required: true
  *         schema:
  *           type: string
- *           format: uuid
- *         description: Sub category ID'si
+ *         description: Sub category ID'si (UUID veya external ID formatında olabilir)
  *       - in: query
  *         name: filter
  *         schema:
@@ -427,8 +427,7 @@ router.get(
  *         required: true
  *         schema:
  *           type: string
- *           format: uuid
- *         description: Product group ID'si
+ *         description: Product group ID'si (UUID veya external ID formatında olabilir)
  *       - in: query
  *         name: filter
  *         schema:
@@ -707,6 +706,100 @@ router.get(
     const result = await catalogService.searchProductsGlobally(search, {
       cursor,
       limit: limitParam,
+    });
+
+    return res.json(result);
+  }),
+);
+
+/**
+ * @openapi
+ * /catalog/context/{contextId}/posts:
+ *   get:
+ *     summary: Context'e ait post'ları getir (Smart Endpoint)
+ *     description: |
+ *       Herhangi bir context ID'si (main category, sub category, product group, product) alır ve otomatik olarak doğru post listesini döndürür.
+ *       ID prefix veya veritabanı sorgusu ile context type'ı otomatik belirlenir.
+ *       - `pcat_` ile başlayan ID'ler → Category (main veya sub)
+ *       - `prod_` ile başlayan ID'ler → Product
+ *       - UUID formatındaki ID'ler → ProductGroup, SubCategory veya MainCategory (otomatik tespit)
+ *       
+ *       Response'ta `contextType` field'ı ile hangi context'ten geldiği belirtilir: 'main_category', 'sub_category', 'product_group', 'product'
+ *     tags: [Product Catalog]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: contextId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Context ID (category, product group, product - herhangi bir format)
+ *       - in: query
+ *         name: filter
+ *         schema:
+ *           type: string
+ *           enum: [all, free, tips_and_tricks, questions, updates, benchmarks, reviews]
+ *         description: Post tipi filtresi
+ *       - in: query
+ *         name: sort
+ *         schema:
+ *           type: string
+ *           enum: [newest, oldest, most_popular]
+ *         description: Sıralama türü
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *         description: Sayfa başına item sayısı (1-50)
+ *     responses:
+ *       200:
+ *         description: Post listesi başarıyla döndürüldü
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 pagination:
+ *                   type: object
+ *                 contextType:
+ *                   type: string
+ *                   enum: [main_category, sub_category, product_group, product]
+ *       404:
+ *         description: Context bulunamadı
+ */
+router.get(
+  '/context/:contextId/posts',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    const { contextId } = req.params;
+    
+    const filter = req.query.filter as string | undefined;
+    const sort = req.query.sort as string | undefined;
+    const cursor = req.query.cursor as string | undefined;
+    const limitParam = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+
+    if (typeof limitParam === 'number' && (limitParam < 1 || limitParam > 50)) {
+      return res.status(400).json({ message: 'Limit must be between 1 and 50' });
+    }
+
+    const result = await catalogService.getContextPosts(contextId, userId, {
+      filter,
+      sort,
+      cursor,
+      ...(typeof limitParam === 'number' ? { limit: limitParam } : {}),
     });
 
     return res.json(result);

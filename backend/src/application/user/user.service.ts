@@ -1155,7 +1155,11 @@ export class UserService {
     userId: string,
     query?: string,
     options?: { cursor?: string; limit?: number }
-  ): Promise<{ items: CollectionResponse[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+  ): Promise<{
+    brand: { items: CollectionResponse[] };
+    achievement: { items: CollectionResponse[] };
+    pagination: { cursor?: string; hasMore: boolean; limit: number };
+  }> {
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
     const cursor = options?.cursor;
 
@@ -1221,6 +1225,7 @@ export class UserService {
         id: string;
         name: string;
         rarity: string;
+        type?: string;
         imageUrl?: string | null;
         achievementGoals?: Array<{
           id: string;
@@ -1232,8 +1237,10 @@ export class UserService {
         };
       };
     };
-    
-    const items = (paginatedRewards as RewardWithBadge[]).map((rw) => {
+
+    const BRAND_TYPE = 'BRAND';
+
+    const itemsWithType = (paginatedRewards as RewardWithBadge[]).map((rw) => {
       const badge = rw.badge;
       type AchievementGoalType = {
         id: string;
@@ -1247,7 +1254,7 @@ export class UserService {
         type: inferTaskType(goal.title, goal.requirement),
       }));
 
-      return {
+      const item: CollectionResponse = {
         id: String(badge?.id || ''),
         title: badge?.name || '',
         rarity: COLLECTION_RARITY_MAP[badge?.rarity || 'COMMON'] || 'Usual',
@@ -1258,12 +1265,19 @@ export class UserService {
         totalEarned: badge?._count?.bridgeRewards ?? 0,
         tasks,
       };
+      const badgeType = badge?.type ?? '';
+      return { item, badgeType };
     });
 
-    const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].id : undefined;
+    const brandItems = itemsWithType.filter((x) => x.badgeType === BRAND_TYPE).map((x) => x.item);
+    const achievementItems = itemsWithType.filter((x) => x.badgeType !== BRAND_TYPE).map((x) => x.item);
+
+    const allItems = itemsWithType.map((x) => x.item);
+    const nextCursor = hasMore && allItems.length > 0 ? allItems[allItems.length - 1].id : undefined;
 
     return {
-      items,
+      brand: { items: brandItems },
+      achievement: { items: achievementItems },
       pagination: {
         cursor: nextCursor,
         hasMore,
@@ -1396,48 +1410,168 @@ export class UserService {
     return this.normalizeContextType(ContextType.SUB_CATEGORY);
   }
 
-  private buildContextDataFromPost(post: any, ownedProductIds?: Set<string> | null) {
+  private async buildContextDataFromPost(post: any, ownedProductIds?: Set<string> | null): Promise<any> {
     const contextType = this.mapContextType(post);
 
-    if (contextType === ContextType.PRODUCT && post.product) {
-      const product = post.product;
-      const group = product.group;
-      const subCategory = group?.subCategory;
-      const mainCategory = subCategory?.mainCategory || post.subCategory?.mainCategory || post.mainCategory;
-      const imagePath = product.imageUrl || group?.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
-      return {
-        id: String(product.id),
-        name: product.name,
-        subName: group?.name || subCategory?.name || mainCategory?.name || '',
-        image: resolveMediaUrl(imagePath),
-        isOwned: ownedProductIds ? ownedProductIds.has(String(product.id)) : undefined,
-      };
+    // PRODUCT context
+    if (contextType === ContextType.PRODUCT) {
+      if (post.product) {
+        const product = post.product;
+        const group = product.group;
+        const subCategory = group?.subCategory;
+        const mainCategory = subCategory?.mainCategory || post.subCategory?.mainCategory || post.mainCategory;
+        const imagePath = product.imageUrl || group?.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
+        return {
+          id: String(product.id),
+          name: product.name,
+          subName: group?.name || subCategory?.name || mainCategory?.name || '',
+          image: resolveMediaUrl(imagePath),
+          isOwned: ownedProductIds ? ownedProductIds.has(String(product.id)) : undefined,
+        };
+      }
+
+      // ✅ Relation yoksa ID'den fetch et
+      if (post.productId) {
+        const product = await this.prisma.product.findUnique({
+          where: { id: post.productId },
+          include: {
+            group: {
+              include: {
+                subCategory: {
+                  include: {
+                    mainCategory: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        if (product) {
+          const group = product.group;
+          const subCategory = group?.subCategory;
+          const mainCategory = subCategory?.mainCategory;
+          const imagePath = product.imageUrl || group?.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
+          return {
+            id: String(product.id),
+            name: product.name,
+            subName: group?.name || subCategory?.name || mainCategory?.name || '',
+            image: resolveMediaUrl(imagePath),
+            isOwned: ownedProductIds ? ownedProductIds.has(String(product.id)) : undefined,
+          };
+        }
+      }
     }
 
-    if (contextType === ContextType.PRODUCT_GROUP && post.productGroup) {
-      const group = post.productGroup;
-      const subCategory = group.subCategory;
-      const mainCategory = subCategory?.mainCategory || post.mainCategory;
-      const imagePath = group.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
-      return {
-        id: String(group.id),
-        name: group.name,
-        subName: subCategory?.name || mainCategory?.name || '',
-        image: resolveMediaUrl(imagePath),
-      };
+    // PRODUCT_GROUP context
+    if (contextType === ContextType.PRODUCT_GROUP) {
+      if (post.productGroup) {
+        const group = post.productGroup;
+        const subCategory = group.subCategory;
+        const mainCategory = subCategory?.mainCategory || post.mainCategory;
+        const imagePath = group.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
+        return {
+          id: String(group.id),
+          name: group.name,
+          subName: subCategory?.name || mainCategory?.name || '',
+          image: resolveMediaUrl(imagePath),
+        };
+      }
+
+      // ✅ Relation yoksa ID'den fetch et
+      if (post.productGroupId) {
+        const group = await this.prisma.productGroup.findUnique({
+          where: { id: post.productGroupId },
+          include: {
+            subCategory: {
+              include: {
+                mainCategory: true,
+              },
+            },
+          },
+        });
+
+        if (group) {
+          const subCategory = group.subCategory;
+          const mainCategory = subCategory?.mainCategory;
+          const imagePath = group.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
+          return {
+            id: String(group.id),
+            name: group.name,
+            subName: subCategory?.name || mainCategory?.name || '',
+            image: resolveMediaUrl(imagePath),
+          };
+        }
+      }
     }
 
-    if (contextType === ContextType.SUB_CATEGORY && post.subCategory) {
-      const subCategory = post.subCategory;
-      const imagePath = subCategory.imageUrl || subCategory.mainCategory?.imageUrl || null;
-      return {
-        id: String(subCategory.id),
-        name: subCategory.name,
-        subName: subCategory.mainCategory?.name || '',
-        image: resolveMediaUrl(imagePath),
-      };
+    // SUB_CATEGORY context
+    if (contextType === ContextType.SUB_CATEGORY) {
+      if (post.subCategory) {
+        const subCategory = post.subCategory;
+        const imagePath = subCategory.imageUrl || subCategory.mainCategory?.imageUrl || null;
+        return {
+          id: String(subCategory.id),
+          name: subCategory.name,
+          subName: subCategory.mainCategory?.name || '',
+          image: resolveMediaUrl(imagePath),
+        };
+      }
+
+      // ✅ YENİ: categoryId'den fetch et (categories tablosu - pcat_ prefix'li)
+      if (post.categoryId) {
+        const category = await this.prisma.category.findUnique({
+          where: { id: post.categoryId },
+        });
+
+        if (category) {
+          return {
+            id: String(category.id),
+            name: category.name,
+            subName: '',
+            image: resolveMediaUrl(category.thumbnail),
+          };
+        }
+      }
+
+      // Eski UUID sistemini de destekle (sub_categories tablosu)
+      if (post.subCategoryId) {
+        const subCategory = await this.prisma.subCategory.findUnique({
+          where: { id: post.subCategoryId },
+          include: {
+            mainCategory: true,
+          },
+        });
+
+        if (subCategory) {
+          const imagePath = subCategory.imageUrl || subCategory.mainCategory?.imageUrl || null;
+          return {
+            id: String(subCategory.id),
+            name: subCategory.name,
+            subName: subCategory.mainCategory?.name || '',
+            image: resolveMediaUrl(imagePath),
+          };
+        }
+      }
     }
 
+    // PRODUCT_GROUP context için categoryId kontrolü ekle
+    if (contextType === ContextType.PRODUCT_GROUP && post.categoryId) {
+      const category = await this.prisma.category.findUnique({
+        where: { id: post.categoryId },
+      });
+
+      if (category) {
+        return {
+          id: String(category.id),
+          name: category.name,
+          subName: '',
+          image: resolveMediaUrl(category.thumbnail),
+        };
+      }
+    }
+
+    // Fallback: mainCategory
     if (post.mainCategory) {
       return {
         id: String(post.mainCategory.id),
@@ -1447,13 +1581,24 @@ export class UserService {
       };
     }
 
+    // Son fallback: null döndür
+    logger.warn({
+      message: 'Unable to build contextData from post (user.service)',
+      postId: post.id,
+      contextType,
+      productId: post.productId,
+      productGroupId: post.productGroupId,
+      subCategoryId: post.subCategoryId,
+      categoryId: post.categoryId,
+    });
+
     return null;
   }
 
   async getUserPosts(userId: string, options?: { limit?: number }): Promise<any[]> {
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 50;
     
-    // ✅ DÜZELTME: Tüm post tiplerini getir (sadece FREE değil) - limit ile
+    // ✅ Tüm post tiplerini getir (EXPERIENCE + UPDATE Experience tabında listelenir)
     const posts = await this.prisma.contentPost.findMany({
       where: { userId },
       take: limit + 1, // hasMore kontrolü için +1
@@ -1489,6 +1634,33 @@ export class UserService {
         likes: true,
         comments: true,
         favorites: true,
+        contentPostTags: true,
+        comparison: {
+          include: {
+            product1: true,
+            product2: true,
+            scores: true,
+          },
+        },
+        tip: true,
+        updateContent: {
+          include: {
+            experiencePost: {
+              include: {
+                product: {
+                  include: {
+                    group: {
+                      include: {
+                        subCategory: { include: { mainCategory: true } },
+                      },
+                    },
+                  },
+                },
+                contentPostTags: true,
+              },
+            },
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -1540,17 +1712,158 @@ export class UserService {
     const paginatedPosts = posts.slice(0, limit);
     
     // getPostStats yerine post'un kendi alanlarını kullan (N+1 query'yi önle)
-    const results = paginatedPosts.map((post) => {
-      const stats = {
-        likes: post.likesCount || 0,
-        comments: post.commentsCount || 0,
-        shares: post.sharesCount || 0,
-        bookmarks: post.favoritesCount || 0,
-      };
-      const contextType = this.mapContextType(post);
-      const contextData = this.buildContextDataFromPost(post, ownedProductIds);
-      // Get images for this post from PostMedia (orderIndex'e göre sıralı)
-      const images = postMediaMap.get(post.id) || [];
+    // Experience/Update: feed ile aynı yapı (type: experience, product, experienceContent, tags, status)
+    const results = await Promise.all(
+      paginatedPosts.map(async (post) => {
+        const stats = {
+          likes: post.likesCount || 0,
+          comments: post.commentsCount || 0,
+          shares: post.sharesCount || 0,
+          bookmarks: post.favoritesCount || 0,
+        };
+        const contextType = this.mapContextType(post);
+        const contextData = await this.buildContextDataFromPost(post, ownedProductIds);
+        const images = postMediaMap.get(post.id) || [];
+        const postType = post.type as string;
+
+      if (postType === 'UPDATE' && (post as any).updateContent?.experiencePost) {
+        const expPost = (post as any).updateContent.experiencePost;
+        const expProduct = expPost.product
+          ? {
+              id: expPost.product.id,
+              name: expPost.product.name,
+              subName: expPost.product.group?.name ?? '',
+              image: resolveMediaUrl(expPost.product.imageUrl) ?? null,
+              isOwned: ownedProductIds.has(String(expPost.productId)),
+            }
+          : { id: expPost.productId || '', name: '', subName: '', image: null, isOwned: false };
+        const expContent = this.parseExperienceContentFromBody(expPost.body);
+        const expContentString =
+          expContent.length > 0
+            ? expContent
+                .map((item) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`)
+                .join('\n\n')
+            : expPost.body || '';
+        const updateContentText = (post as any).updateContent.content || post.body || '';
+        return {
+          id: String(post.id),
+          type: 'update' as const,
+          user: userBase,
+          stats,
+          createdAt: post.createdAt.toISOString(),
+          contextType,
+          relatedPost: {
+            id: String(expPost.id),
+            product: expProduct,
+            content: expContentString,
+            experienceContent: expContent,
+            tags: expPost.contentPostTags?.map((t: any) => t.tag) || [],
+            images: [],
+            status: expPost.productStatus ?? undefined,
+            statusLabel: expPost.productStatus === 'own' ? 'I owned' : expPost.productStatus === 'tried' ? 'I tried' : undefined,
+          },
+          content: updateContentText,
+          images,
+        };
+      }
+
+      if (postType === 'EXPERIENCE' || postType === 'UPDATE') {
+        const product = contextData
+          ? { ...contextData, isOwned: contextData.isOwned ?? ownedProductIds.has(String(post.productId)) }
+          : { id: post.productId || '', name: '', subName: '', image: null, isOwned: false };
+        const experienceContent = this.parseExperienceContentFromBody(post.body);
+        const contentString =
+          experienceContent.length > 0
+            ? experienceContent
+                .map((item) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`)
+                .join('\n\n')
+            : post.body || '';
+        return {
+          id: String(post.id),
+          type: postType === 'UPDATE' ? ('update' as const) : ('experience' as const),
+          user: userBase,
+          stats,
+          createdAt: post.createdAt.toISOString(),
+          contextType,
+          product,
+          content: contentString,
+          experienceContent,
+          tags: post.contentPostTags?.map((t: any) => t.tag) || [],
+          images,
+          status: post.productStatus === 'own' || post.productStatus === 'tried' ? post.productStatus : undefined,
+          statusLabel: post.productStatus === 'own' ? 'I owned' : post.productStatus === 'tried' ? 'I tried' : undefined,
+        };
+      }
+
+      // COMPARE (benchmark) tipindeki postlar
+      if (postType === 'COMPARE') {
+        const comp = (post as any).comparison;
+        if (comp) {
+          const choiceProductId = this.selectComparisonWinner(comp);
+          return {
+            id: String(post.id),
+            type: 'benchmark' as const,
+            user: userBase,
+            stats,
+            createdAt: post.createdAt.toISOString(),
+            contextType,
+            products: [
+              {
+                ...(await this.getProductBase(String(comp.product1Id)))!,
+                isOwned: ownedProductIds.has(String(comp.product1Id)),
+                choice: choiceProductId ? choiceProductId === String(comp.product1Id) : true,
+              },
+              {
+                ...(await this.getProductBase(String(comp.product2Id)))!,
+                isOwned: ownedProductIds.has(String(comp.product2Id)),
+                choice: choiceProductId ? choiceProductId === String(comp.product2Id) : false,
+              },
+            ],
+            content: post.body,
+          };
+        }
+      }
+
+      // TIPS tipindeki postlar
+      if (postType === 'TIPS') {
+        const tip = (post as any).tip;
+        const benefit = tip?.benefitCategory;
+        const benefitMap: Record<string, { title: string; icon: string }> = {
+          time_saving: { title: 'Zaman Kazandırır', icon: 'clock' },
+          energy_efficiency: { title: 'Enerji Tasarrufu', icon: 'bolt' },
+          durability: { title: 'Daha Dayanıklı', icon: 'shield' },
+          better_result: { title: 'Daha İyi Sonuç', icon: 'star' },
+        };
+        return {
+          id: String(post.id),
+          type: 'tipsAndTricks' as const,
+          user: userBase,
+          stats,
+          createdAt: post.createdAt.toISOString(),
+          contextType,
+          contextData,
+          benefit: benefit && benefitMap[benefit] ? benefitMap[benefit] : { title: 'Fayda', icon: 'lightbulb' },
+          content: post.body,
+          images,
+        };
+      }
+
+      // QUESTION tipindeki postlar
+      if (postType === 'QUESTION') {
+        return {
+          id: String(post.id),
+          type: 'question' as const,
+          user: userBase,
+          stats,
+          createdAt: post.createdAt.toISOString(),
+          contextType,
+          contextData,
+          content: post.body,
+          images,
+        };
+      }
+
+      // FREE ve diğer post tipleri
       return {
         id: String(post.id),
         type: 'post' as const,
@@ -1562,8 +1875,28 @@ export class UserService {
         content: post.body,
         images,
       };
-    });
-    return results;
+    })
+  );
+  return results;
+  }
+
+  /** Experience post body'den experienceContent array (feed ile aynı yapı) */
+  private parseExperienceContentFromBody(body: string): Array<{ title: string; content: string; rating: number }> {
+    if (!body) {
+      return [{ title: 'Product and Usage Experience', content: '', rating: 0 }];
+    }
+    const content: Array<{ title: string; content: string; rating: number }> = [];
+    const ratingMatch = body.match(/Rating:\s*(\d+)/i);
+    const r = ratingMatch ? Math.min(5, Math.max(1, parseInt(ratingMatch[1], 10))) : 0;
+    const priceMatch = body.match(/\[(?:price_and_shopping|Price and Shopping)[^\]]*\](.*?)(?:\[|Rating:|$)/is);
+    const usageMatch = body.match(/\[(?:product_and_usage|Product and Usage)[^\]]*\](.*?)(?:\[|Rating:|$)/is);
+    if (priceMatch) content.push({ title: 'Price and Shopping Experience', content: priceMatch[1].trim(), rating: r });
+    if (usageMatch) content.push({ title: 'Product and Usage Experience', content: usageMatch[1].trim(), rating: r });
+    if (content.length === 0) {
+      content.push({ title: 'Price and Shopping Experience', content: body, rating: r });
+      content.push({ title: 'Product and Usage Experience', content: body, rating: r });
+    }
+    return content;
   }
 
   async getUserUpdates(
@@ -1658,7 +1991,7 @@ export class UserService {
       posts.map(async (post) => {
         const stats = await this.getPostStats(post.id);
         const contextType = this.mapContextType(post);
-        const contextData = this.buildContextDataFromPost(post, ownedProductIds);
+        const contextData = await this.buildContextDataFromPost(post, ownedProductIds);
         // Get images for this post from PostMedia (orderIndex'e göre sıralı)
         const images = postMediaMap.get(post.id) || [];
         const productBase = contextData
@@ -1765,7 +2098,14 @@ export class UserService {
         id: String(inv.id),
         type: 'experience' as const,
         user: userBase,
-        stats: this.buildExperienceStats(String(inv.id)),
+        // Legacy inventory-based experience'lar için mock istatistikler gösterme.
+        // Gerçek like/comment/share/bookmark verisi olmadığı için hepsini 0 döndürüyoruz.
+        stats: {
+          likes: 0,
+          comments: 0,
+          shares: 0,
+          bookmarks: 0,
+        },
         createdAt: inv.createdAt.toISOString(),
         contextType: ContextType.PRODUCT,
         contextData,
@@ -1801,8 +2141,48 @@ export class UserService {
       take: limit + 1,
     });
 
-    // Batch fetch images from PostMedia (orderIndex'e göre sıralı)
-    const postIds = experiencePosts.map((p) => p.id);
+    // 3. ContentPost tablosundan UPDATE tipindeki gönderileri çek (experience’a yapılan güncellemeler)
+    const updatePosts = await this.prisma.contentPost.findMany({
+      where: {
+        userId,
+        type: ContentPostType.UPDATE,
+      },
+      include: {
+        product: {
+          include: {
+            group: {
+              include: {
+                subCategory: {
+                  include: {
+                    mainCategory: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        updateContent: {
+          include: {
+            experiencePost: {
+              include: {
+                product: {
+                  include: {
+                    group: true,
+                  },
+                },
+                contentPostTags: true,
+              },
+            },
+          },
+        },
+        contentPostTags: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit + 1,
+    });
+
+    // Batch fetch images from PostMedia (experience + update post id’leri)
+    const postIds = [...experiencePosts.map((p) => p.id), ...updatePosts.map((p) => p.id)];
     const postMediaMap = new Map<string, string[]>();
     if (postIds.length > 0) {
       const allPostMedia = await this.prisma.postMedia.findMany({
@@ -1875,6 +2255,98 @@ export class UserService {
         contextType: ContextType.PRODUCT,
         contextData,
         content: experienceContent,
+        tags,
+        images,
+      });
+    }
+
+    // 4. UPDATE postlarını ekle: feed/catalog ile aynı yapı (relatedPost = bağlı experience özeti)
+    for (const post of updatePosts) {
+      const images = postMediaMap.get(post.id) || [];
+      const tags = (post.contentPostTags || [])
+        .map((cpt: any) => cpt.tag)
+        .filter((tag: string | null | undefined) => tag);
+      const updateText = (post as any).updateContent?.content ?? post.body ?? '';
+      const contextData = post.product
+        ? {
+            product: {
+              id: post.product.id,
+              name: post.product.name,
+              image: resolveMediaUrl(post.product.imageUrl),
+              group: post.product.group
+                ? {
+                    id: post.product.group.id,
+                    name: post.product.group.name,
+                  }
+                : null,
+              subCategory: post.product.group?.subCategory
+                ? {
+                    id: post.product.group.subCategory.id,
+                    name: post.product.group.subCategory.name,
+                    mainCategory: post.product.group.subCategory.mainCategory
+                      ? {
+                          id: post.product.group.subCategory.mainCategory.id,
+                          name: post.product.group.subCategory.mainCategory.name,
+                        }
+                      : null,
+                  }
+                : null,
+            },
+          }
+        : null;
+      const stats = {
+        likes: post.likesCount || 0,
+        comments: post.commentsCount || 0,
+        shares: post.sharesCount || 0,
+        bookmarks: post.favoritesCount || 0,
+      };
+
+      // relatedPost = bağlı experience post özeti (UpdatePost yapısı, feed/catalog ile uyumlu)
+      const expPost = (post as any).updateContent?.experiencePost;
+      let relatedPost: {
+        id: string;
+        product: { id: string; name: string; subName: string; image: string | null };
+        content: string;
+        experienceContent?: ExperienceContent[];
+        tags: string[];
+        images: string[];
+      } | undefined;
+      if (expPost) {
+        const expProduct = expPost.product
+          ? {
+              id: expPost.product.id,
+              name: expPost.product.name,
+              subName: expPost.product.group?.name ?? '',
+              image: resolveMediaUrl(expPost.product.imageUrl) ?? null,
+            }
+          : { id: expPost.productId || '', name: '', subName: '', image: null as string | null };
+        const expContent = this.parseExperienceContentFromPost(expPost.body);
+        const expContentString =
+          expContent.length > 0
+            ? expContent
+                .map((item) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`)
+                .join('\n\n')
+            : expPost.body || '';
+        relatedPost = {
+          id: expPost.id,
+          product: expProduct,
+          content: expContentString,
+          experienceContent: expContent,
+          tags: (expPost.contentPostTags || []).map((cpt: any) => cpt.tag).filter(Boolean),
+          images: [], // experience post görselleri ayrı sorgulanabilir; reviews’ta opsiyonel
+        };
+      }
+
+      results.push({
+        id: post.id,
+        type: 'update' as const,
+        user: userBase,
+        stats,
+        createdAt: post.createdAt.toISOString(),
+        contextType: ContextType.PRODUCT,
+        contextData,
+        content: updateText,
+        relatedPost,
         tags,
         images,
       });
@@ -2212,12 +2684,47 @@ export class UserService {
     });
     const ownedProductIds = new Set(ownedProducts.map((inv) => String(inv.productId)));
 
+    // Batch fetch images from PostMedia
+    const postIds = posts.map((p) => p.id);
+    const postMediaMap = new Map<string, string[]>();
+    
+    if (postIds.length > 0) {
+      const allPostMedia = await this.prisma.postMedia.findMany({
+        where: {
+          postId: { in: postIds },
+        },
+        orderBy: { orderIndex: 'asc' },
+        select: { postId: true, mediaUrl: true },
+      });
+
+      allPostMedia.forEach((media) => {
+        if (!postMediaMap.has(media.postId)) {
+          postMediaMap.set(media.postId, []);
+        }
+        const resolvedUrl = resolveMediaUrl(media.mediaUrl);
+        if (resolvedUrl) {
+          postMediaMap.get(media.postId)!.push(resolvedUrl);
+        }
+      });
+    }
+
+    // Benefit category mapping
+    const benefitMap: Record<string, { title: string; icon: string }> = {
+      time_saving: { title: 'Zaman Kazandırır', icon: 'clock' },
+      energy_efficiency: { title: 'Enerji Tasarrufu', icon: 'bolt' },
+      durability: { title: 'Daha Dayanıklı', icon: 'shield' },
+      better_result: { title: 'Daha İyi Sonuç', icon: 'star' },
+    };
+
     const results = await Promise.all(
       posts.map(async (post) => {
         const stats = await this.getPostStats(String(post.id));
         const contextType = this.mapContextType(post);
-        const contextData = this.buildContextDataFromPost(post, ownedProductIds);
-        const tags = await this.prisma.postTag.findMany({ where: { postId: String(post.id) } as any });
+        const contextData = await this.buildContextDataFromPost(post, ownedProductIds);
+        const images = postMediaMap.get(post.id) || [];
+        const tip = (post as any).tip;
+        const benefitCategory = tip?.benefitCategory;
+        
         return {
           id: String(post.id),
           type: 'tipsAndTricks' as const,
@@ -2226,9 +2733,11 @@ export class UserService {
           createdAt: post.createdAt.toISOString(),
           contextType,
           contextData,
+          benefit: benefitCategory && benefitMap[benefitCategory] 
+            ? benefitMap[benefitCategory] 
+            : { title: 'Fayda', icon: 'lightbulb' },
           content: post.body,
-          tag: tags[0]?.tag || '',
-          images: [], // TODO: InventoryMedia
+          images,
         };
       })
     );
@@ -2509,6 +3018,7 @@ export class UserService {
             comparison: { include: { product1: true, product2: true } } as any,
             tip: true,
             question: true,
+            contentPostTags: true,
           },
         },
       },
@@ -2572,7 +3082,7 @@ export class UserService {
       const stats = await this.getPostStats(String(post.id));
 
       const contextType = this.mapContextType(post);
-      const contextData = this.buildContextDataFromPost(post, ownedSet);
+      const contextData = await this.buildContextDataFromPost(post, ownedSet);
 
       // Post type'ına göre formatla
       switch (post.type) {
@@ -2654,6 +3164,40 @@ export class UserService {
             content: post.body,
             expectedAnswerFormat: question?.expectedAnswerFormat || 'short',
             images: [], // TODO
+          });
+          break;
+        }
+
+        case 'EXPERIENCE':
+        case 'UPDATE': {
+          // Experience/Update: feed ve profil ile aynı yapı
+          const product = contextData
+            ? { ...contextData, isOwned: contextData.isOwned ?? ownedSet.has(String(post.productId)) }
+            : { id: post.productId || '', name: '', subName: '', image: null, isOwned: false };
+          const experienceContent = this.parseExperienceContentFromBody(post.body);
+          const contentString =
+            experienceContent.length > 0
+              ? experienceContent
+                  .map((item) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`)
+                  .join('\n\n')
+              : post.body || '';
+          const postTags = (post as any).contentPostTags?.map((t: any) => t.tag) || (post as any).tags?.map((t: any) => t.tag) || [];
+          const status = post.productStatus === 'own' || post.productStatus === 'tried' ? post.productStatus : null;
+          const statusLabel = post.productStatus === 'own' ? 'I owned' : post.productStatus === 'tried' ? 'I tried' : null;
+          results.push({
+            id: String(post.id),
+            type: 'experience' as const,
+            user: userBase,
+            stats,
+            createdAt: post.createdAt.toISOString(),
+            contextType,
+            product,
+            content: contentString,
+            experienceContent,
+            tags: postTags,
+            images: [],
+            status: status ?? undefined,
+            statusLabel: statusLabel ?? undefined,
           });
           break;
         }
@@ -2777,16 +3321,6 @@ export class UserService {
     });
 
     return tags.map((t) => t.tag);
-  }
-
-  private buildExperienceStats(seed: string): BasicStats {
-    const hash = this.generateDeterministicNumber(seed);
-    return {
-      likes: 30 + (hash % 40),
-      comments: 6 + (hash % 10),
-      shares: 2 + (hash % 5),
-      bookmarks: 4 + (hash % 7),
-    };
   }
 
   private calculateExperienceRating(seed: string): number {
@@ -3559,6 +4093,12 @@ export class UserService {
   }> {
     let settings = await this.settingsRepo.findByUserId(userId);
     if (!settings) {
+      // Kullanıcının veritabanında var olup olmadığını kontrol et
+      const user = await this.userRepo.findById(userId);
+      if (!user) {
+        throw new Error('User not found');
+      }
+      
       // Default settings oluştur
       settings = await this.settingsRepo.create(userId);
     }
@@ -3656,7 +4196,7 @@ export class UserService {
         expertNotifications?: boolean;
         eventNotifications?: boolean;
         systemNotifications?: boolean;
-        receiveNotifications?: boolean | null;
+        receiveNotifications?: boolean;
       } = {};
 
       // Backward compatibility: Eğer array formatında gelirse (eski format)
@@ -3737,7 +4277,7 @@ export class UserService {
         }
 
         if (settings.global) {
-          if (settings.global.receiveNotifications !== undefined) {
+          if (settings.global.receiveNotifications !== undefined && settings.global.receiveNotifications !== null) {
             updateData.receiveNotifications = settings.global.receiveNotifications;
           }
         }

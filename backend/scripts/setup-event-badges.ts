@@ -109,19 +109,19 @@ async function main() {
 
     // 2. Badge Category'yi bul veya oluştur
     let badgeCategory = await prisma.badgeCategory.findFirst({
-      where: { name: 'Event Rozetleri' },
+      where: { name: 'Event' },
     });
 
     if (!badgeCategory) {
       badgeCategory = await prisma.badgeCategory.create({
         data: {
-          name: 'Event Rozetleri',
+          name: 'Event',
           description: 'Event katılımı ve başarıları için verilen rozetler',
         },
       });
-      console.log('✅ Badge Category created: Event Rozetleri');
+      console.log('✅ Badge Category created: Event');
     } else {
-      console.log('✅ Badge Category found: Event Rozetleri');
+      console.log('✅ Badge Category found: Event');
     }
 
     // 3. Achievement Chain'i bul veya oluştur

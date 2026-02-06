@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react"
 import { defineRouteConfig } from "@medusajs/admin-sdk"
-import { 
-  Container, 
-  Heading, 
-  Table, 
-  Button, 
+import {
+  Container,
+  Heading,
+  Table,
+  Button,
   Text,
   toast,
   Badge,
@@ -12,7 +12,7 @@ import {
   Label,
   DropdownMenu,
 } from "@medusajs/ui"
-import { 
+import {
   AcademicCapSolid as Database,
   CheckCircleSolid,
   XCircleSolid,

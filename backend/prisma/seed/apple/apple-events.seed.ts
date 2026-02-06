@@ -70,13 +70,13 @@ export async function seedAppleEvents(brandId: string): Promise<{
 
   // Badge category oluştur veya bul
   let badgeCategory = await prisma.badgeCategory.findFirst({
-    where: { name: 'Event Rozetleri' },
+    where: { name: 'Event' },
   });
 
   if (!badgeCategory) {
     badgeCategory = await prisma.badgeCategory.create({
       data: {
-        name: 'Event Rozetleri',
+        name: 'Event',
         description: 'Event etkinliklerinde kazanılan özel rozetler',
       },
     });

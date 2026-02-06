@@ -7,7 +7,7 @@ import { model } from "@medusajs/framework/utils"
 export const SyncConfig = model.define("sync_config", {
   id: model.id().primaryKey(),
   name: model.text().searchable(),
-  module_type: model.enum(["product", "category", "brand", "brand_category"]),
+  module_type: model.enum(["product", "category", "brand", "brand_category", "backend_seed"]),
   target_url: model.text(),
   secret_token: model.text().nullable(),
   batch_size: model.number().default(1000),

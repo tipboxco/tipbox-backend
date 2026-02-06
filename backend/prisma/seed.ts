@@ -12,6 +12,13 @@ import { seedTaxonomy } from './seed/taxonomy.seed'
 import { seedProductCatalog } from './seed/product-catalog.seed'
 import { ensureEventBadgeSystem } from './seed/helpers/ensure-event-badge-system'
 import { ensureMarketplaceBadges } from './seed/helpers/ensure-marketplace-badges'
+import { seedBrandCatalog } from './seed/steps/brand-catalog.seed'
+import { seedUserAvatars } from './seed/steps/user-avatar.seed'
+import { seedSocialAndPreferences } from './seed/steps/social-and-preferences.seed'
+import { seedPayment } from './seed/steps/payment.seed'
+import { seedTipsTransfers } from './seed/steps/tips-transfer.seed'
+import { seedExpert } from './seed/steps/expert.seed'
+import { seedNotification } from './seed/steps/notification.seed'
 import { GeminiService } from '../src/infrastructure/ai/gemini.service'
 import { brandToWebsite } from '../src/data/brandToWebsite'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -2009,6 +2016,109 @@ async function seedUserInventories() {
   console.log(`   👥 Kullanıcı Başına Ortalama: ${(totalInventories / users.length).toFixed(1)} ürün`)
   console.log(`   📊 Media Oranı: ${((totalInventoryMedia / totalInventories) * 100).toFixed(1)}%`)
   console.log('═'.repeat(80) + '\n')
+}
+
+/**
+ * AiExperienceSplit seed: Her aşamada AI veri üretir.
+ * 1) Gemini generatePostContent(EXPERIENCE) → ürün hakkında ContentPost için post metni.
+ * 2) Gemini splitExperience(experienceText) → priceAndShopping / productAndUsage ayrıştırması.
+ * 3) AiExperienceSplit + inventory güncellemesi.
+ */
+async function seedAiExperienceSplits() {
+  const limit = 8
+  const ownedInventories = await prisma.inventory.findMany({
+    where: { hasOwned: true, experienceSnippetId: null },
+    include: {
+      product: {
+        include: { brand: { select: { name: true } } },
+      },
+    },
+    take: limit,
+    orderBy: { createdAt: 'desc' },
+  })
+  if (ownedInventories.length === 0) {
+    return
+  }
+  const geminiService = GeminiService.getInstance()
+  const createdSplitIds: string[] = []
+  for (const inv of ownedInventories) {
+    try {
+      // 1) ContentPost için ürün hakkında Experience metni üret (Gemini) — script ile aynı akış
+      let original = ''
+      try {
+        const genResult = await geminiService.generatePostContent({
+          postType: 'EXPERIENCE',
+          persona: 'product reviewer',
+          productName: inv.product.name,
+          productBrand: inv.product.brand?.name ?? undefined,
+          productDescription: inv.product.description ?? undefined,
+        })
+        if (genResult?.body?.trim()) {
+          original = genResult.body.trim()
+        }
+      } catch (genErr) {
+        console.warn(`   ⚠️  Gemini generate (${inv.product.name}) atlandı:`, genErr instanceof Error ? genErr.message : genErr)
+        continue
+      }
+      if (!original) continue
+
+      // 2) Üretilen metni Gemini ile split et (priceAndShopping / productAndUsage) — script ile aynı
+      let splitResult: Awaited<ReturnType<typeof geminiService.splitExperience>>
+      try {
+        splitResult = await geminiService.splitExperience({
+          productId: inv.productId ?? undefined,
+          productName: inv.product.name,
+          productBrand: inv.product.brand?.name ?? undefined,
+          productDescription: inv.product.description ?? undefined,
+          experienceText: original,
+        })
+      } catch (splitErr) {
+        console.warn(`   ⚠️  Gemini split (${inv.product.name}) atlandı:`, splitErr instanceof Error ? splitErr.message : splitErr)
+        continue
+      }
+
+      // 3) AiExperienceSplit kaydı (tüm alanlar AI çıktısı) — script'teki createInventoryItem ile aynı veri yapısı
+      const split = await prisma.aiExperienceSplit.create({
+        data: {
+          userId: inv.userId,
+          productId: inv.productId,
+          originalExperience: original,
+          priceAndShopping: splitResult.priceAndShopping?.content ?? null,
+          productAndUsage: splitResult.productAndUsage?.content ?? null,
+          priceAndShoppingRating: splitResult.priceAndShopping?.rating ?? null,
+          productAndUsageRating: splitResult.productAndUsage?.rating ?? null,
+          priceAndShoppingPlaceholder: splitResult.priceAndShopping?.placeholder ?? null,
+          productAndUsagePlaceholder: splitResult.productAndUsage?.placeholder ?? null,
+          priceAndShoppingIsEnhanced: splitResult.priceAndShopping?.isEnhanced ?? null,
+          productAndUsageIsEnhanced: splitResult.productAndUsage?.isEnhanced ?? null,
+          isEdited: false,
+          model: splitResult.metadata?.model ?? 'gemini-2.5-pro',
+          promptVersion: splitResult.metadata?.promptVersion ?? 'v1.0',
+          tokensUsed: splitResult.metadata?.tokensUsed ?? null,
+          processingTimeMs: splitResult.metadata?.processingTimeMs ?? null,
+        },
+      })
+      await prisma.inventory.update({
+        where: { id: inv.id },
+        data: { experienceSnippetId: split.id, experienceSummary: original.substring(0, 200) },
+      })
+      createdSplitIds.push(split.id)
+    } catch (e) {
+      // skip duplicate or constraint errors
+    }
+  }
+
+  // Doğrulama: ai_experience_splits tablosuna yazılan kayıtlar DB'de mevcut mu? (script ile aynı doğruluk)
+  if (createdSplitIds.length > 0) {
+    const verifiedCount = await prisma.aiExperienceSplit.count({
+      where: { id: { in: createdSplitIds } },
+    })
+    if (verifiedCount !== createdSplitIds.length) {
+      console.warn(`   ⚠️  AiExperienceSplit doğrulama: beklenen ${createdSplitIds.length}, DB'de ${verifiedCount} kayıt.`)
+    } else {
+      console.log(`✅ AiExperienceSplit: ${createdSplitIds.length} adet (Gemini: post metni + split, inventory'ye bağlandı, tabloda doğrulandı)\n`)
+    }
+  }
 }
 
 /**
@@ -5337,35 +5447,38 @@ async function updateBrandLogosFromLogoDev(): Promise<void> {
 }
 
 async function ensureBrandCategory(config: { name: string; description?: string; imageKey?: SeedMediaKey }): Promise<{ id: string; name: string }> {
-  // Eğer imageKey belirtilmemişse, mapping'den otomatik bul
+  // Medusa Category (pcat_...) name ile eşle - BrandCategory.categoryId doğru pcat_ ile dolsun
+  const medusaCategory = await prisma.category.findFirst({
+    where: { name: config.name },
+    select: { id: true },
+  }).catch(() => null);
+  const categoryId = medusaCategory?.id ?? null;
+
   let finalImageKey = config.imageKey;
   if (!finalImageKey) {
     finalImageKey = getBrandCategoryImageKey(config.name);
   }
-  
+
   const existing = await prisma.brandCategory.findUnique({
     where: { name: config.name }
   }).catch(() => null);
-  
+
   if (existing) {
-    // imageUrl için fallback: eğer key bulunamazsa, mapping'den bak
     let imageUrl: string | null = null;
     if (finalImageKey) {
       imageUrl = getSeedMediaPath(finalImageKey, true);
     }
-    
-    // Eğer hala null ise, mapping'den otomatik bul
     if (!imageUrl) {
       const mappingKey = getBrandCategoryImageKey(config.name);
       if (mappingKey) {
         imageUrl = getSeedMediaPath(mappingKey, true);
       }
     }
-    
-    const updateData: any = {};
-    if (config.description !== undefined) updateData.description = config.description;
+
+    const updateData: Record<string, unknown> = {};
     if (imageUrl) updateData.imageUrl = imageUrl;
-    
+    if (categoryId) updateData.categoryId = categoryId;
+
     if (Object.keys(updateData).length > 0) {
       return prisma.brandCategory.update({
         where: { id: existing.id },
@@ -5374,25 +5487,23 @@ async function ensureBrandCategory(config: { name: string; description?: string;
     }
     return existing;
   }
-  
-  // imageUrl için fallback: eğer key bulunamazsa, mapping'den bak
+
   let imageUrl: string | null = null;
   if (finalImageKey) {
     imageUrl = getSeedMediaPath(finalImageKey, true);
   }
-  
-  // Eğer hala null ise, mapping'den otomatik bul
   if (!imageUrl) {
     const mappingKey = getBrandCategoryImageKey(config.name);
     if (mappingKey) {
       imageUrl = getSeedMediaPath(mappingKey, true);
     }
   }
-  
+
   return prisma.brandCategory.create({
     data: {
       name: config.name,
       imageUrl,
+      ...(categoryId ? { category: { connect: { id: categoryId } } } : {}),
     }
   });
 }
@@ -6832,6 +6943,27 @@ async function main() {
     } else {
       console.warn(`⚠️  Default avatar dosyası bulunamadı: ${defaultAvatarFilePath}\n`)
     }
+
+    // Setup Profile için 12 temsili avatar'ı MinIO'ya yükle (GET /users/avatars path'leri ile uyumlu)
+    const avatarsDir = path.join(__dirname, '../tests/assets/avatars')
+    if (existsSync(avatarsDir)) {
+      let uploaded = 0
+      for (let i = 1; i <= 12; i++) {
+        const avatarName = `avatar-${i}.png`
+        const avatarPath = path.join(avatarsDir, avatarName)
+        if (existsSync(avatarPath)) {
+          const objectKey = `avatars/${avatarName}`
+          const buf = readFileSync(avatarPath)
+          await s3Service.uploadFile(objectKey, buf, 'image/png')
+          uploaded++
+        }
+      }
+      if (uploaded > 0) {
+        console.log(`✅ Setup Profile avatarları yüklendi: ${uploaded}/12 (avatars/avatar-1.png … avatar-12.png)\n`)
+      }
+    } else {
+      console.warn(`⚠️  Avatarlar klasörü bulunamadı: ${avatarsDir}\n`)
+    }
   } catch (error: any) {
     console.error('❌ MinIO bucket kontrolü başarısız!')
     console.error('   Hata:', error instanceof Error ? error.message : String(error))
@@ -6871,7 +7003,7 @@ async function main() {
   }
 
   // Progress bar oluştur (toplam 26 ana adım - Trending posts ve Feed distribution eklendi)
-  const totalSteps = 26 // Updated: Added trending posts and feed distribution steps
+  const totalSteps = 32 // Includes 8.1 steps: UserAvatar, Social&Preferences, Payment, TipsTransfer, Expert, Notification
   const progress = new ProgressBar(totalSteps, 50)
 
   // Seed başlangıcını işaretle (metadata için)
@@ -6938,6 +7070,16 @@ async function main() {
   console.log(`✅ ${seedUsers.size} kullanıcı oluşturuldu`)
   progress.increment('Seed kullanıcıları oluşturuldu')
 
+  // 2b. UserAvatar (ensure every seed user has active avatar for EP compatibility)
+  progress.increment('UserAvatar step...')
+  try {
+    await seedUserAvatars(prisma)
+    progress.increment('UserAvatar step tamamlandı')
+  } catch (error) {
+    console.warn('⚠️  UserAvatar step atlandı:', error instanceof Error ? error.message : error)
+    progress.increment('UserAvatar step atlandı')
+  }
+
   // 3. Experience Taxonomy (Duration, Location, Purpose - for Experience posts)
   await seedTaxonomy()
   progress.increment('Experience Taxonomy oluşturuldu')
@@ -6966,6 +7108,11 @@ async function main() {
   await seedUserInventories()
   progress.increment('Kullanıcı inventory\'leri oluşturuldu')
 
+  // 5b. AiExperienceSplit (owned inventory'ler için statik split kayıtları; Gemini çağrılmaz)
+  progress.increment('AiExperienceSplit seed...')
+  await seedAiExperienceSplits()
+  progress.increment('AiExperienceSplit seed tamamlandı')
+
   // 7. Posts (40 users × 70 posts = 2800 posts)
   progress.increment('Post\'lar oluşturuluyor...')
   await seedPosts()
@@ -6986,6 +7133,16 @@ async function main() {
   await seedTrustRelations()
   progress.increment('Trust relations oluşturuldu')
 
+  // 8b. Social & Preferences (UserBlock, UserMute, UserFeedPreferences)
+  progress.increment('Social & Preferences step...')
+  try {
+    await seedSocialAndPreferences(prisma)
+    progress.increment('Social & Preferences step tamamlandı')
+  } catch (error) {
+    console.warn('⚠️  Social & Preferences step atlandı:', error instanceof Error ? error.message : error)
+    progress.increment('Social & Preferences step atlandı')
+  }
+
   // 8.5. Trending Posts (Feed distribution'dan önce hazırlanmalı)
   progress.increment('Trending post\'lar oluşturuluyor...')
   await seedTrendingPosts()
@@ -6995,6 +7152,26 @@ async function main() {
   progress.increment('Wallet transactions oluşturuluyor...')
   await seedTransactions()
   progress.increment('Wallet transactions oluşturuldu')
+
+  // 9b. Payment step (SubscriptionPlan, PaymentMethod, UserSubscription, Invoice)
+  progress.increment('Payment step...')
+  try {
+    await seedPayment(prisma, { testUserEmail: 'omer@tipbox.co' })
+    progress.increment('Payment step tamamlandı')
+  } catch (error) {
+    console.warn('⚠️  Payment step atlandı:', error instanceof Error ? error.message : error)
+    progress.increment('Payment step atlandı')
+  }
+
+  // 9c. TipsTokenTransfer step
+  progress.increment('TipsTransfer step...')
+  try {
+    await seedTipsTransfers(prisma)
+    progress.increment('TipsTransfer step tamamlandı')
+  } catch (error) {
+    console.warn('⚠️  TipsTransfer step atlandı:', error instanceof Error ? error.message : error)
+    progress.increment('TipsTransfer step atlandı')
+  }
 
   // 12. Events (WishboxEvent + Participation + Rewards)
   progress.increment('Events oluşturuluyor...')
@@ -7867,6 +8044,44 @@ async function main() {
       console.error('   Stack:', error.stack)
     }
     console.log('⚠️  Seed devam ediyor ama event/marketplace badges oluşturulamadı')
+  }
+
+  // ===== BRAND CATALOG DATA SEEDING =====
+  console.log('\n📦 Brand Catalog data seeding starting...')
+  progress.increment('Brand Catalog verileri oluşturuluyor...')
+  
+  try {
+    await seedBrandCatalog(prisma)
+    progress.increment('Brand Catalog seeding tamamlandı')
+    console.log('✅ Brand Catalog data seeding completed')
+  } catch (error) {
+    console.error('❌ Brand Catalog seeding hatası:', error)
+    if (error instanceof Error) {
+      console.error('   Message:', error.message)
+      console.error('   Stack:', error.stack)
+    }
+    console.log('⚠️  Seed devam ediyor ama Brand Catalog verileri oluşturulamadı')
+  }
+
+  // ===== EXPERT & NOTIFICATION STEPS (8.1) =====
+  progress.increment('Expert step...')
+  try {
+    await seedExpert(prisma)
+    progress.increment('Expert step tamamlandı')
+    console.log('✅ Expert (ExpertRequest, ExpertAnswer) seeding completed')
+  } catch (error) {
+    console.warn('⚠️  Expert step atlandı:', error instanceof Error ? error.message : error)
+    progress.increment('Expert step atlandı')
+  }
+
+  progress.increment('Notification step...')
+  try {
+    await seedNotification(prisma)
+    progress.increment('Notification step tamamlandı')
+    console.log('✅ Notification & PushToken seeding completed')
+  } catch (error) {
+    console.warn('⚠️  Notification step atlandı:', error instanceof Error ? error.message : error)
+    progress.increment('Notification step atlandı')
   }
 
   // ===== NFT SEEDING FOR PRIORITY USERS =====

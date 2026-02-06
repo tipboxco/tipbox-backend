@@ -18,7 +18,6 @@ import {
   CreateBenchmarkPostRequest,
   CreateExperiencePostRequest,
   CreateUpdatePostRequest,
-  UpdatePostRequest,
   BoostOption,
   SplitExperienceRequest,
   SplitExperienceResponse,
@@ -38,6 +37,7 @@ import { EventMetricsService } from '../event/event-metrics.service';
 import { BadgeEligibilityService } from '../gamification/badge-eligibility.service';
 import { AchievementProgressService } from '../gamification/achievement-progress.service';
 import { AchievementGoalType } from '../../domain/gamification/achievement-goal-type.enum';
+import { IdResolverService } from '../../infrastructure/ids/id-resolver.service';
 
 export class PostService {
   private postRepo: ContentPostPrismaRepository;
@@ -53,6 +53,7 @@ export class PostService {
   private eventMetricsService: EventMetricsService;
   private badgeEligibilityService: BadgeEligibilityService;
   private achievementProgressService: AchievementProgressService;
+  private idResolver: IdResolverService;
 
   /**
    * Search posts by title and body
@@ -94,7 +95,7 @@ export class PostService {
     };
   }
 
-  constructor() {
+  constructor(idResolver?: IdResolverService) {
     this.postRepo = new ContentPostPrismaRepository();
     this.tipRepo = new PostTipPrismaRepository();
     this.questionRepo = new PostQuestionPrismaRepository();
@@ -108,6 +109,7 @@ export class PostService {
     this.eventMetricsService = new EventMetricsService();
     this.badgeEligibilityService = new BadgeEligibilityService();
     this.achievementProgressService = new AchievementProgressService();
+    this.idResolver = idResolver ?? new IdResolverService();
   }
 
   /**
@@ -163,41 +165,9 @@ export class PostService {
    * Public metod - router'dan da kullanılabilir
    * Tüm ID formatlarını kabul eder (UUID, ULID, Medusa ID, vb.)
    */
+  /** IdResolver'a delege eder; router ve diğer servisler bu metodu kullanabilir. */
   async resolveProductId(productIdOrExternalId: string): Promise<string> {
-    // Önce direkt id ile ara (herhangi bir format olabilir)
-    let product = await this.prisma.product.findUnique({
-      where: { id: productIdOrExternalId },
-      select: { id: true },
-    });
-
-    if (product) {
-      return product.id;
-    }
-
-    // Eğer bulunamazsa, metadata içindeki externalId ile ara
-    // PostgreSQL JSONB için raw SQL query kullan (Prisma JSON query syntax'ı sınırlı)
-    try {
-      const result = await this.prisma.$queryRaw<Array<{ id: string }>>`
-        SELECT id 
-        FROM products 
-        WHERE metadata->>'externalId' = ${productIdOrExternalId}
-        LIMIT 1
-      `;
-
-      if (result && result.length > 0) {
-        return result[0].id;
-      }
-    } catch (error) {
-      // Raw query hatası - log'la ve devam et
-      logger.warn({
-        message: 'Failed to query product by externalId',
-        productIdOrExternalId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-
-    // Hala bulunamazsa, hata fırlat
-    throw new Error(`Product not found with id or externalId: ${productIdOrExternalId}`);
+    return this.idResolver.resolveProductId(productIdOrExternalId);
   }
 
   /**
@@ -205,33 +175,60 @@ export class PostService {
    * Tüm ID formatlarını kabul eder (UUID, ULID, Medusa ID, vb.)
    */
   async resolveSubCategoryId(subCategoryIdOrExternalId: string): Promise<string> {
-    // Önce direkt id ile ara
-    let subCategory = await this.prisma.subCategory.findUnique({
-      where: { id: subCategoryIdOrExternalId },
-      select: { id: true },
-    });
+    const trimmedId = subCategoryIdOrExternalId.trim();
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const isUuid = uuidRegex.test(trimmedId);
 
-    if (subCategory) {
-      return subCategory.id;
+    // UUID formatındaysa, direkt id ile ara (try-catch ile)
+    if (isUuid) {
+      try {
+        const subCategory = await this.prisma.subCategory.findUnique({
+          where: { id: trimmedId },
+          select: { id: true },
+        });
+
+        if (subCategory) {
+          return subCategory.id;
+        }
+      } catch (error) {
+        // UUID formatı geçersiz olabilir - devam et
+        logger.debug({
+          message: 'SubCategory UUID query failed',
+          subCategoryIdOrExternalId: trimmedId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
-    // Eğer bulunamazsa, metadata içindeki externalId ile ara (eğer metadata field'ı varsa)
+    // UUID değilse veya bulunamazsa, Category tablosunda externalId ile ara
+    // SubCategory tablosunda metadata field'ı yok, bu yüzden Category tablosunda arama yapıyoruz
     try {
-      const result = await this.prisma.$queryRaw<Array<{ id: string }>>`
-        SELECT id 
-        FROM sub_categories 
-        WHERE metadata->>'externalId' = ${subCategoryIdOrExternalId}
+      const categoryResult = await this.prisma.$queryRaw<Array<{ id: string; name: string }>>`
+        SELECT id, name 
+        FROM categories 
+        WHERE metadata->>'externalId' = ${trimmedId}
+           OR metadata->>'medusaId' = ${trimmedId}
         LIMIT 1
       `;
 
-      if (result && result.length > 0) {
-        return result[0].id;
+      if (categoryResult && categoryResult.length > 0) {
+        const category = categoryResult[0];
+        
+        // Category name ile SubCategory'yi bul
+        const subCategory = await this.prisma.subCategory.findFirst({
+          where: { name: category.name },
+          select: { id: true },
+        });
+
+        if (subCategory) {
+          return subCategory.id;
+        }
       }
     } catch (error) {
-      // Metadata field'ı yoksa veya query hatası - devam et
       logger.debug({
-        message: 'SubCategory metadata query failed or not available',
-        subCategoryIdOrExternalId,
+        message: 'SubCategory Category lookup failed',
+        subCategoryIdOrExternalId: trimmedId,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
 
@@ -244,33 +241,80 @@ export class PostService {
    * Tüm ID formatlarını kabul eder (UUID, ULID, Medusa ID, vb.)
    */
   async resolveProductGroupId(productGroupIdOrExternalId: string): Promise<string> {
-    // Önce direkt id ile ara
-    let productGroup = await this.prisma.productGroup.findUnique({
-      where: { id: productGroupIdOrExternalId },
-      select: { id: true },
-    });
+    const trimmedId = productGroupIdOrExternalId.trim();
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const isUuid = uuidRegex.test(trimmedId);
 
-    if (productGroup) {
-      return productGroup.id;
+    // UUID formatındaysa, direkt id ile ara (try-catch ile)
+    if (isUuid) {
+      try {
+        const productGroup = await this.prisma.productGroup.findUnique({
+          where: { id: trimmedId },
+          select: { id: true },
+        });
+
+        if (productGroup) {
+          return productGroup.id;
+        }
+      } catch (error) {
+        // UUID formatı geçersiz olabilir - devam et
+        logger.debug({
+          message: 'ProductGroup UUID query failed',
+          productGroupIdOrExternalId: trimmedId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
-    // Eğer bulunamazsa, metadata içindeki externalId ile ara (eğer metadata field'ı varsa)
+    // UUID değilse: Category tablosunda id, externalId veya medusaId ile ara (pcat_, mcat_, scat_ vb.)
     try {
-      const result = await this.prisma.$queryRaw<Array<{ id: string }>>`
-        SELECT id 
-        FROM product_groups 
-        WHERE metadata->>'externalId' = ${productGroupIdOrExternalId}
+      const categoryResult = await this.prisma.$queryRaw<Array<{ id: string; name: string }>>`
+        SELECT id, name 
+        FROM categories 
+        WHERE id = ${trimmedId}
+           OR metadata->>'externalId' = ${trimmedId}
+           OR metadata->>'medusaId' = ${trimmedId}
         LIMIT 1
       `;
 
-      if (result && result.length > 0) {
-        return result[0].id;
+      if (categoryResult && categoryResult.length > 0) {
+        const category = categoryResult[0];
+
+        // Önce Category name ile ProductGroup'u bul
+        let productGroup = await this.prisma.productGroup.findFirst({
+          where: { name: category.name },
+          select: { id: true },
+        });
+
+        // ProductGroup name ile bulunamadıysa (pcat_ = main category): MainCategory -> SubCategory -> ilk ProductGroup
+        if (!productGroup) {
+          const mainCategory = await this.prisma.mainCategory.findFirst({
+            where: { name: category.name },
+            select: { id: true },
+          });
+          if (mainCategory) {
+            const subCategory = await this.prisma.subCategory.findFirst({
+              where: { mainCategoryId: mainCategory.id },
+              select: { id: true },
+            });
+            if (subCategory) {
+              productGroup = await this.prisma.productGroup.findFirst({
+                where: { subCategoryId: subCategory.id },
+                select: { id: true },
+              });
+            }
+          }
+        }
+
+        if (productGroup) {
+          return productGroup.id;
+        }
       }
     } catch (error) {
-      // Metadata field'ı yoksa veya query hatası - devam et
       logger.debug({
-        message: 'ProductGroup metadata query failed or not available',
-        productGroupIdOrExternalId,
+        message: 'ProductGroup Category lookup failed',
+        productGroupIdOrExternalId: trimmedId,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
 
@@ -283,33 +327,60 @@ export class PostService {
    * Tüm ID formatlarını kabul eder (UUID, ULID, Medusa ID, vb.)
    */
   async resolveMainCategoryId(mainCategoryIdOrExternalId: string): Promise<string> {
-    // Önce direkt id ile ara
-    let mainCategory = await this.prisma.mainCategory.findUnique({
-      where: { id: mainCategoryIdOrExternalId },
-      select: { id: true },
-    });
+    const trimmedId = mainCategoryIdOrExternalId.trim();
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const isUuid = uuidRegex.test(trimmedId);
 
-    if (mainCategory) {
-      return mainCategory.id;
+    // UUID formatındaysa, direkt id ile ara (try-catch ile)
+    if (isUuid) {
+      try {
+        const mainCategory = await this.prisma.mainCategory.findUnique({
+          where: { id: trimmedId },
+          select: { id: true },
+        });
+
+        if (mainCategory) {
+          return mainCategory.id;
+        }
+      } catch (error) {
+        // UUID formatı geçersiz olabilir - devam et
+        logger.debug({
+          message: 'MainCategory UUID query failed',
+          mainCategoryIdOrExternalId: trimmedId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
-    // Eğer bulunamazsa, metadata içindeki externalId ile ara (eğer metadata field'ı varsa)
+    // UUID değilse veya bulunamazsa, Category tablosunda externalId ile ara
+    // MainCategory tablosunda metadata field'ı yok, bu yüzden Category tablosunda arama yapıyoruz
     try {
-      const result = await this.prisma.$queryRaw<Array<{ id: string }>>`
-        SELECT id 
-        FROM main_categories 
-        WHERE metadata->>'externalId' = ${mainCategoryIdOrExternalId}
+      const categoryResult = await this.prisma.$queryRaw<Array<{ id: string; name: string }>>`
+        SELECT id, name 
+        FROM categories 
+        WHERE metadata->>'externalId' = ${trimmedId}
+           OR metadata->>'medusaId' = ${trimmedId}
         LIMIT 1
       `;
 
-      if (result && result.length > 0) {
-        return result[0].id;
+      if (categoryResult && categoryResult.length > 0) {
+        const category = categoryResult[0];
+        
+        // Category name ile MainCategory'yi bul
+        const mainCategory = await this.prisma.mainCategory.findFirst({
+          where: { name: category.name },
+          select: { id: true },
+        });
+
+        if (mainCategory) {
+          return mainCategory.id;
+        }
       }
     } catch (error) {
-      // Metadata field'ı yoksa veya query hatası - devam et
       logger.debug({
-        message: 'MainCategory metadata query failed or not available',
-        mainCategoryIdOrExternalId,
+        message: 'MainCategory Category lookup failed',
+        mainCategoryIdOrExternalId: trimmedId,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
 
@@ -321,6 +392,7 @@ export class PostService {
     contextType: ContextType,
     contextId: string
   ): Promise<{
+    categoryId?: string;
     subCategoryId?: string;
     productGroupId?: string;
     productId?: string;
@@ -328,44 +400,21 @@ export class PostService {
   }> {
     switch (contextType) {
       case ContextType.SUB_CATEGORY:
-        // ExternalId desteği ile subCategory'ı resolve et
-        const resolvedSubCategoryId = await this.resolveSubCategoryId(contextId);
-        const subCategory = await this.prisma.subCategory.findUnique({
-          where: { id: resolvedSubCategoryId },
-          include: { mainCategory: true },
-        });
-        if (!subCategory) {
-          logger.warn({
-            message: 'Sub-category not found in post creation',
-            contextId,
-            resolvedSubCategoryId,
-          });
-          throw new Error(`Sub-category does not exist or has been deleted. Please select a valid category.`);
-        }
-        return {
-          subCategoryId: resolvedSubCategoryId, // Resolved subCategory ID kullan
-          mainCategoryId: subCategory.mainCategoryId || undefined,
-        };
+        // Medusa modu: tek tablo (categories). contextId = categories.id
+        const resolvedCategoryIdSub = await this.idResolver.resolveCategoryId(contextId);
+        // ✅ Sadece categoryId döndür (prefix'li ID için - pcat_xxx)
+        // subCategoryId UUID tipinde olduğu için prefix'li ID kabul etmiyor
+        return { categoryId: resolvedCategoryIdSub };
 
       case ContextType.PRODUCT_GROUP:
-        // ExternalId desteği ile productGroup'ı resolve et
-        const resolvedProductGroupId = await this.resolveProductGroupId(contextId);
-        const productGroup = await this.prisma.productGroup.findUnique({
-          where: { id: resolvedProductGroupId },
-          include: { subCategory: { include: { mainCategory: true } } },
-        });
-        if (!productGroup) {
-          throw new Error(`Product group not found: ${contextId}`);
-        }
-        return {
-          productGroupId: resolvedProductGroupId, // Resolved productGroup ID kullan
-          subCategoryId: productGroup.subCategoryId || undefined,
-          mainCategoryId: productGroup.subCategory?.mainCategoryId || undefined,
-        };
+        // Medusa modu: tek tablo (categories). contextId = categories.id (örn. pcat_xxx)
+        const resolvedCategoryIdGroup = await this.idResolver.resolveCategoryId(contextId);
+        // ✅ Sadece categoryId döndür (prefix'li ID için)
+        return { categoryId: resolvedCategoryIdGroup };
 
       case ContextType.PRODUCT:
-        // ExternalId desteği ile product'ı resolve et
-        const resolvedProductId = await this.resolveProductId(contextId);
+        // Product ayrı tabloda; resolveProductId + product ilişkileri
+        const resolvedProductId = await this.idResolver.resolveProductId(contextId);
         const product = await this.prisma.product.findUnique({
           where: { id: resolvedProductId },
           include: {
@@ -377,17 +426,16 @@ export class PostService {
           },
         });
         if (!product) {
-          // Daha açıklayıcı hata mesajı
           logger.warn({
             message: 'Product not found in post creation',
             contextId,
             resolvedProductId,
-            userId: 'unknown', // userId buraya gelemez, stack'te ekleyelim
           });
           throw new Error(`Product does not exist or has been deleted. Please select a valid product.`);
         }
         return {
-          productId: resolvedProductId, // Resolved product ID kullan
+          productId: resolvedProductId,
+          categoryId: product.categoryId || undefined,
           productGroupId: product.groupId || undefined,
           subCategoryId: product.group?.subCategoryId || undefined,
           mainCategoryId: product.group?.subCategory?.mainCategoryId || undefined,
@@ -493,7 +541,8 @@ export class PostService {
         false,
         false,
         request.eventId,
-        request.productStatus
+        request.productStatus,
+        contextIds.categoryId
       );
 
       // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
@@ -696,7 +745,9 @@ export class PostService {
         contextIds.productId,
         false,
         false,
-        request.eventId // eventId
+        request.eventId,
+        undefined,
+        contextIds.categoryId
       );
 
       // Create PostTip
@@ -835,8 +886,10 @@ export class PostService {
         contextIds.productGroupId,
         contextIds.productId,
         false,
-        true, // isBoosted - question posts are boosted
-        request.eventId // eventId
+        true,
+        request.eventId,
+        undefined,
+        contextIds.categoryId
       );
 
       // Set boosted until date (e.g., 7 days from now)
@@ -1021,7 +1074,9 @@ export class PostService {
         contextIds.productId,
         false,
         false,
-        request.eventId // eventId
+        request.eventId,
+        undefined,
+        contextIds.categoryId
       );
 
       // Create PostComparison
@@ -1109,8 +1164,59 @@ export class PostService {
         request.contextId
       );
 
-      // Map status to hasOwned: OWN = true, TEST = false
+      if (!contextIds.productId) {
+        throw new Error('Product ID is required for experience posts');
+      }
+
+      // I owned ise ürünü kullanıcı envanterine ekle/güncelle (görseli ile); I tried ise envantere ekleme
       const hasOwned = request.status === ExperienceStatus.OWN;
+      if (hasOwned) {
+        const inventory = await this.prisma.inventory.upsert({
+          where: {
+            userId_productId: {
+              userId,
+              productId: contextIds.productId,
+            },
+          },
+          create: {
+            userId,
+            productId: contextIds.productId,
+            hasOwned: true,
+            experienceSummary: request.content?.slice(0, 500) || null,
+            experienceSnippetId: request.experienceSnippetId || null,
+            experienceDurationId: request.selectedDurationId || null,
+            experienceLocationId: request.selectedLocationId || null,
+            experiencePurposeId: request.selectedPurposeId || null,
+          },
+          update: {
+            hasOwned: true,
+            experienceSummary: request.content?.slice(0, 500) || undefined,
+            experienceSnippetId: request.experienceSnippetId || undefined,
+            experienceDurationId: request.selectedDurationId ?? undefined,
+            experienceLocationId: request.selectedLocationId ?? undefined,
+            experiencePurposeId: request.selectedPurposeId ?? undefined,
+          },
+        });
+        // Post görsellerini envanter kaydına da ekle (ürün envanterde görseli ile görünsün)
+        if (request.images && request.images.length > 0) {
+          await this.prisma.inventoryMedia.createMany({
+            data: request.images.map((mediaUrl) => ({
+              inventoryId: inventory.id,
+              mediaUrl,
+            })),
+          });
+        }
+        logger.info({
+          message: 'Inventory upserted for experience post (I owned)',
+          userId,
+          productId: contextIds.productId,
+          inventoryId: inventory.id,
+          mediaCount: request.images?.length ?? 0,
+        });
+      }
+
+      // Gönderi etiketi: I owned -> own, I tried -> tried
+      const productStatus: 'own' | 'tried' = hasOwned ? 'own' : 'tried';
 
       // Combine content and experiences
       const experienceText = request.experience
@@ -1133,9 +1239,11 @@ export class PostService {
         contextIds.mainCategoryId,
         contextIds.productGroupId,
         contextIds.productId,
-        true, // inventoryRequired - experience posts require inventory
+        true,
         false,
-        request.eventId // eventId
+        request.eventId,
+        productStatus,
+        contextIds.categoryId
       );
 
       // AI Split ID ve Taxonomy ID'leri kaydet
@@ -1159,6 +1267,28 @@ export class PostService {
             userId: userId,
             mediaUrl: imageUrl,
             orderIndex: index, // Kullanıcının yüklediği sırada
+          })),
+        });
+      }
+
+      // Tags = duration, location, purpose seçimlerinin isimleri (kullanıcı bu 3'ünü seçer, etiket olarak kaydedilir)
+      const [duration, location, purpose] = await Promise.all([
+        request.selectedDurationId
+          ? this.prisma.experienceDuration.findUnique({ where: { id: request.selectedDurationId }, select: { name: true } })
+          : null,
+        request.selectedLocationId
+          ? this.prisma.experienceLocation.findUnique({ where: { id: request.selectedLocationId }, select: { name: true } })
+          : null,
+        request.selectedPurposeId
+          ? this.prisma.experiencePurpose.findUnique({ where: { id: request.selectedPurposeId }, select: { name: true } })
+          : null,
+      ]);
+      const tagLabels = [duration?.name, location?.name, purpose?.name].filter((n): n is string => Boolean(n?.trim()));
+      if (tagLabels.length > 0) {
+        await this.prisma.contentPostTag.createMany({
+          data: tagLabels.map((tag) => ({
+            postId: post.id,
+            tag: tag.slice(0, 50),
           })),
         });
       }
@@ -1195,8 +1325,8 @@ export class PostService {
           });
       }
       
-      // Catalog posts cache'ini invalidate et
-      invalidateCatalogPostsCache({
+      // Catalog posts cache'ini invalidate et (product feed güncel dönsün diye await)
+      await invalidateCatalogPostsCache({
         subCategoryId: contextIds.subCategoryId,
         productGroupId: contextIds.productGroupId,
         productId: contextIds.productId,
@@ -1299,9 +1429,55 @@ export class PostService {
     request: CreateUpdatePostRequest
   ): Promise<{ id: string; message: string; success: boolean }> {
     try {
-      // Update posts can only be created for products
-      if (request.contextType !== ContextType.PRODUCT) {
-        throw new Error('Update posts can only be created for products');
+      // Update posts are always for products (contextType is normalized to PRODUCT in router)
+      const contextType = ContextType.PRODUCT;
+
+      // Experience post validation - update posts can only be created on experience posts
+      if (!request.experiencePostId) {
+        throw new Error('experiencePostId is required for update posts');
+      }
+
+      // experiencePostId: ULID veya UUID (ContentFavorite id) ile gelebilir; diğer servislerdeki gibi çözümle
+      const resolvedExperiencePostId = await this.idResolver.resolvePostId(request.experiencePostId);
+      
+      logger.debug(`[Create Update Post] ID Resolution result`, {
+        original: request.experiencePostId,
+        resolved: resolvedExperiencePostId,
+      });
+
+      if (!resolvedExperiencePostId) {
+        // Check if this is a legacy inventory ID (UUID format)
+        if (
+          request.experiencePostId.length === 36 &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(request.experiencePostId)
+        ) {
+          throw new Error('LEGACY_INVENTORY_NO_POST');
+        }
+        throw new Error('Experience post not found');
+      }
+
+      const experiencePost = await this.prisma.contentPost.findUnique({
+        where: { id: resolvedExperiencePostId },
+        select: { id: true, userId: true, type: true, productId: true },
+      });
+
+      if (!experiencePost) {
+        // Check if this is a legacy inventory ID (UUID format)
+        if (
+          request.experiencePostId.length === 36 &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(request.experiencePostId)
+        ) {
+          throw new Error('Cannot create update post for legacy inventory-based reviews. Please create a new experience post first.');
+        }
+        throw new Error('Experience post not found');
+      }
+
+      if (experiencePost.userId !== userId) {
+        throw new Error('You can only create update posts on your own experience posts');
+      }
+
+      if (experiencePost.type !== ContentPostType.EXPERIENCE) {
+        throw new Error('Update posts can only be created on experience posts');
       }
 
       // Event validation (if eventId is provided)
@@ -1309,10 +1485,22 @@ export class PostService {
         await this.validateEvent(request.eventId);
       }
 
+      // contextId opsiyonel: boşsa deneyim gönderisindeki productId kullanılır (Medusa: tek category tablosu, contextId zorunlu değil).
+      const effectiveContextId =
+        (request.contextId && String(request.contextId).trim()) || experiencePost.productId;
+      if (!effectiveContextId) {
+        throw new Error('Product context is required; experience post has no product. Either send contextId or ensure the experience post has a product.');
+      }
+
       const contextIds = await this.resolveContextIds(
-        request.contextType,
-        request.contextId
+        contextType,
+        effectiveContextId
       );
+
+      // Verify that the experience post is for the same product
+      if (experiencePost.productId !== contextIds.productId) {
+        throw new Error('Experience post and update post must be for the same product');
+      }
 
       const bodyWithImages = this.appendImagesToBody(
         request.content,
@@ -1328,10 +1516,21 @@ export class PostService {
         contextIds.mainCategoryId,
         contextIds.productGroupId,
         contextIds.productId,
-        true, // inventoryRequired - update posts require inventory
+        true,
         false,
-        request.eventId // eventId
+        request.eventId,
+        undefined,
+        contextIds.categoryId
       );
+
+      // Create PostUpdateContent record (resolved experience post id kullan)
+      await this.prisma.postUpdateContent.create({
+        data: {
+          postId: post.id,
+          experiencePostId: resolvedExperiencePostId,
+          content: request.content,
+        },
+      });
 
       // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
       if (request.images && request.images.length > 0) {
@@ -1345,7 +1544,7 @@ export class PostService {
         });
       }
 
-      logger.info(`Update post created: ${post.id} by user ${userId}`);
+      logger.info(`Update post created: ${post.id} by user ${userId} for experience post ${resolvedExperiencePostId}`);
       
       // Event cache'i invalidate et (eventId varsa)
       if (request.eventId) {
@@ -1524,11 +1723,36 @@ export class PostService {
       return null;
     };
 
-    return {
-      durationId: resolveOption(params.durationId, options.durations, 'duration'),
-      locationId: resolveOption(params.locationId, options.locations, 'location'),
-      purposeId: resolveOption(params.purposeId, options.purposes, 'purpose'),
+    let durationId = resolveOption(params.durationId, options.durations, 'duration');
+    let locationId = resolveOption(params.locationId, options.locations, 'location');
+    let purposeId = resolveOption(params.purposeId, options.purposes, 'purpose');
+
+    // İsim DB'de yoksa ilk kullanımda oluştur (seed gerekmez, uygulama gönderdiği değerle çalışır)
+    const ensureOption = async (
+      value: string | null | undefined,
+      resolvedId: string | null,
+      upsertFn: (args: { where: { name: string }; create: { name: string; isActive: boolean }; update: object }) => Promise<{ id: string }>
+    ): Promise<string | null> => {
+      if (resolvedId) return resolvedId;
+      if (!value || typeof value !== 'string') return null;
+      const name = value.trim();
+      if (!name || uuidRegex.test(name)) return null;
+      const created = await upsertFn({ where: { name }, create: { name, isActive: true }, update: {} });
+      logger.info(`Experience option created on first use`, { name, id: created.id });
+      return created.id;
     };
+
+    durationId = await ensureOption(params.durationId, durationId, (args) =>
+      this.prisma.experienceDuration.upsert(args)
+    );
+    locationId = await ensureOption(params.locationId, locationId, (args) =>
+      this.prisma.experienceLocation.upsert(args)
+    );
+    purposeId = await ensureOption(params.purposeId, purposeId, (args) =>
+      this.prisma.experiencePurpose.upsert(args)
+    );
+
+    return { durationId, locationId, purposeId };
   }
 
   /**
@@ -1572,11 +1796,26 @@ export class PostService {
    * - İlişkili kayıtlar FK ile otomatik temizlenir (post_tips, post_questions, post_comparisons vb.)
    */
   /**
-   * Post ID'sine göre post detayını getirir
+   * Gelen id'yi ContentPost.id'ye çözümler (tüm id tiplerine izin vermek için).
+   * Kabul eder: ContentPost.id (herhangi uzunluk), ContentFavorite.id (UUID), vb.
+   * Önce ContentPost'ta ara; bulunamazsa UUID ise ContentFavorite.id üzerinden postId döner.
    */
-  async getPostById(postId: string): Promise<any> {
+  /** IdResolver'a delege eder; router ve diğer servisler bu metodu kullanabilir. */
+  async resolvePostId(id: string): Promise<string | null> {
+    return this.idResolver.resolvePostId(id);
+  }
+
+  /**
+   * Post ID'sine göre post detayını getirir.
+   * Parametre ContentPost.id veya ContentFavorite.id (UUID) olabilir; resolvePostId ile çözülür.
+   * userId verilirse isOwned vb. doğru hesaplanır.
+   */
+  async getPostById(postId: string, userId?: string): Promise<any> {
+    const resolvedPostId = await this.resolvePostId(postId);
+    if (!resolvedPostId) return null;
+
     const post = await this.prisma.contentPost.findUnique({
-      where: { id: postId },
+      where: { id: resolvedPostId },
       include: {
         user: {
           include: {
@@ -1637,6 +1876,25 @@ export class PostService {
         },
         question: true,
         tip: true,
+        updateContent: {
+          include: {
+            experiencePost: {
+              include: {
+                product: {
+                  include: {
+                    group: {
+                      include: {
+                        subCategory: { include: { mainCategory: true } },
+                      },
+                    },
+                  },
+                },
+                contentPostTags: true,
+                media: { orderBy: { orderIndex: 'asc' as const } },
+              },
+            },
+          },
+        },
         tags: true,
         likes: true,
         comments: {
@@ -1666,144 +1924,53 @@ export class PostService {
       return null;
     }
 
-    // FeedService kullanarak post'u feed formatına çevir
-    const feedItem = await this.feedService.getPostAsFeedItem(post);
-    return feedItem?.data || null;
-  }
-
-  /**
-   * Post güncelleme
-   */
-  async updatePost(
-    userId: string,
-    postId: string,
-    request: UpdatePostRequest
-  ): Promise<{ id: string; message: string; success: boolean }> {
     try {
-      const post = await this.postRepo.findById(postId);
+      const feedItem = await this.feedService.getPostAsFeedItem(post, userId);
+      const data = feedItem?.data ?? null;
+      if (!data) return null;
 
-      if (!post) {
-        throw new Error('Post not found');
+      if (post.type === ContentPostType.UPDATE && (post as any).updateContent?.experiencePostId) {
+        const experiencePostId = (post as any).updateContent.experiencePostId as string;
+        const allUpdatesForExperience = await this.prisma.postUpdateContent.findMany({
+          where: { experiencePostId },
+          include: {
+            post: {
+              include: {
+                media: { orderBy: { orderIndex: 'asc' } },
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        });
+        const relatedUpdates = allUpdatesForExperience.map((uc) => ({
+          id: uc.post.id,
+          content: uc.content,
+          images: (uc.post.media || []).map((m: any) => resolveMediaUrl(m.mediaUrl)).filter(Boolean) as string[],
+          createdAt: uc.post.createdAt.toISOString(),
+        }));
+        return { ...data, relatedUpdates };
       }
 
-      if (!post.belongsToUser(userId)) {
-        throw new Error('Forbidden: user does not own this post');
-      }
-
-      // Post'un mevcut eventId'sini al (cache invalidation için)
-      const postWithEvent = await this.prisma.contentPost.findUnique({
-        where: { id: postId },
-        select: { eventId: true },
+      return data;
+    } catch (err) {
+      logger.error({
+        message: 'getPostAsFeedItem failed in getPostById',
+        postId: resolvedPostId,
+        postType: post.type,
+        error: err instanceof Error ? err.message : String(err),
       });
-      const oldEventId = postWithEvent?.eventId || null;
-
-      // Event validation (eğer yeni eventId verilmişse)
-      if (request.eventId && request.eventId !== oldEventId) {
-        await this.validateEvent(request.eventId);
-      }
-
-      // Body güncelleme
-      let updatedBody = post.body;
-      if (request.description !== undefined) {
-        updatedBody = this.appendImagesToBody(request.description, request.images);
-      }
-
-      // Post'u güncelle (Prisma ile direkt, çünkü eventId field'ı repository'de yok)
-      const updateData: any = {};
-      if (request.description !== undefined) {
-        updateData.body = updatedBody;
-      }
-      if (request.eventId !== undefined) {
-        updateData.eventId = request.eventId || null;
-      }
-
-      if (Object.keys(updateData).length > 0) {
-        await this.prisma.contentPost.update({
-          where: { id: postId },
-          data: updateData,
-        });
-      }
-
-      // Görselleri güncelle
-      if (request.images !== undefined) {
-        // Mevcut görselleri al
-        const existingMedia = await this.prisma.postMedia.findMany({
-          where: { postId },
-          orderBy: { orderIndex: 'asc' },
-        });
-
-        // Eski görselleri S3'ten sil
-        for (const media of existingMedia) {
-          try {
-            await this.s3Service.deleteFile(media.mediaUrl);
-          } catch (error) {
-            logger.warn({
-              message: 'Failed to delete old image from S3',
-              mediaUrl: media.mediaUrl,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
-        }
-
-        // Eski görselleri veritabanından sil
-        await this.prisma.postMedia.deleteMany({
-          where: { postId },
-        });
-
-        // Yeni görselleri ekle
-        if (request.images.length > 0) {
-          await this.prisma.postMedia.createMany({
-            data: request.images.map((imageUrl, index) => ({
-              postId: postId,
-              userId: userId,
-              mediaUrl: imageUrl,
-              orderIndex: index,
-            })),
-          });
-        }
-      }
-
-      logger.info(`Post updated: ${postId} by user ${userId}`);
-
-      // Event cache'i invalidate et (eski veya yeni eventId varsa)
-      const newEventId = request.eventId || oldEventId;
-      if (newEventId) {
-        this.eventService.invalidateEventCaches(newEventId, userId).catch((err) => {
-          logger.warn({
-            message: 'Failed to invalidate event caches',
-            eventId: newEventId,
-            error: err,
-          });
-        });
-      }
-
-      // Feed cache'lerini invalidate et (tüm kullanıcılar için)
-      // Feed cache pattern: feed:userId:cursor:limit
-      try {
-        const cacheService = CacheService.getInstance();
-        await cacheService.delPattern('feed:*').catch(() => {});
-      } catch (error) {
-        logger.warn({
-          message: 'Failed to invalidate feed cache',
-          postId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-
-      return {
-        id: postId,
-        message: 'Post başarıyla güncellendi',
-        success: true,
-      };
-    } catch (error) {
-      logger.error(`Failed to update post ${postId} by user ${userId}`, error);
-      throw error;
+      throw err;
     }
   }
 
   async deletePost(userId: string, postId: string): Promise<boolean> {
     try {
-      const post = await this.postRepo.findById(postId);
+      const resolvedPostId = await this.resolvePostId(postId?.trim() || '');
+      if (!resolvedPostId) {
+        return false; // Router 404 dönecek
+      }
+
+      const post = await this.postRepo.findById(resolvedPostId);
 
       if (!post) {
         return false; // Router 404 dönecek
@@ -1815,15 +1982,15 @@ export class PostService {
 
       // Post'un eventId'sini al (cache invalidation için) - Prisma'dan direkt çek
       const postWithEvent = await this.prisma.contentPost.findUnique({
-        where: { id: postId },
+        where: { id: resolvedPostId },
         select: { eventId: true }
       });
       const eventId = postWithEvent?.eventId || null;
 
-      const deleted = await this.postRepo.delete(postId);
+      const deleted = await this.postRepo.delete(resolvedPostId);
 
       if (deleted) {
-        logger.info(`Post deleted: ${postId} by user ${userId}`);
+        logger.info(`Post deleted: ${resolvedPostId} by user ${userId}`);
         
         // Event cache'i invalidate et (eventId varsa)
         if (eventId) {
@@ -1832,7 +1999,7 @@ export class PostService {
           });
         }
       } else {
-        logger.warn(`Post delete returned false for id: ${postId}`);
+        logger.warn(`Post delete returned false for id: ${resolvedPostId}`);
       }
 
       return deleted;

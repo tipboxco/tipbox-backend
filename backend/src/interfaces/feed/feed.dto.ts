@@ -246,6 +246,7 @@ export interface BaseStats {
 }
 
 export interface BasePost {
+  /** Post/kayıt id'si. Format (UUID, ULID, Medusa vb.) önemsiz; tablodaki değerle eşleşmesi önemli. */
   id: string;
   type?: FeedItemType; // Optional - type is only at FeedItem root level, not in data object
   user: BaseUser;
@@ -301,6 +302,9 @@ export interface ExperiencePost extends BasePost {
   experienceContent?: ExperienceContent[]; // Structured data (optional, for backward compatibility)
   tags: string[];
   images?: string[];
+  /** I owned / I tried: 'own' | 'tried' */
+  status?: 'own' | 'tried';
+  statusLabel?: 'I owned' | 'I tried';
 }
 
 // Update Post Item Types

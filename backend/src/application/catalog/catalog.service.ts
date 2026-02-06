@@ -7,6 +7,7 @@ import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
 import { FeedItem, FeedItemType } from '../../interfaces/feed/feed.dto';
 import { ContextType } from '../../domain/content/context-type.enum';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
+import { IdResolverService } from '../../infrastructure/ids/id-resolver.service';
 
 const prisma = getPrisma();
 
@@ -16,25 +17,26 @@ export interface CategoryItem {
   image: string | null;
 }
 
+// Medusa: Category tablosunda level ile ayrım (0=main, 1=sub, 2=group)
 export interface SubCategoryItem {
-  subCategoryId: string;
+  subCategoryId: string; // Medusa Category ID (level=1)
   name: string;
   image: string | null;
-  categoryId: string;
+  categoryId: string; // Main Category ID (parent)
 }
 
 export interface ProductGroupItem {
-  productGroupId: string;
+  productGroupId: string; // Medusa Category ID (level=2)
   name: string;
   image: string | null;
-  subCategoryId: string;
+  subCategoryId: string; // Sub Category ID (parent)
 }
 
 export interface ProductItem {
-  productId: string;
+  productId: string; // Medusa Product ID
   name: string;
   image: string | null;
-  productGroupId: string;
+  productGroupId: string; // Product Group ID (parent)
 }
 
 export interface ProductDetail {
@@ -54,83 +56,28 @@ export interface ProductDetail {
 }
 
 export class CatalogService {
-  /**
-   * Category ID'yi resolve eder - tüm ID formatlarını kabul eder
-   * Medusa ID formatlarını (pcat_, mcat_, scat_), UUID, ULID ve diğer formatları destekler
-   * Eğer Category tablosunda bulunamazsa, direkt ID'yi döndürür (parentId olarak kullanılabilir)
-   */
+  private readonly idResolver = new IdResolverService();
+
+  /** IdResolver'a delege eder. */
   private async resolveCategoryId(categoryId: string): Promise<string> {
-    if (!categoryId || categoryId.trim() === '') {
-      throw new Error('Category ID cannot be empty');
+    return this.idResolver.resolveCategoryId(categoryId);
+  }
+
+  /**
+   * Bir category id için kendisi + tüm alt (descendant) category id'lerini döndürür.
+   * categories tablosundaki parent_id hiyerarşisine göre rekürsif.
+   */
+  private async getAllDescendantCategoryIds(categoryId: string): Promise<string[]> {
+    const ids: string[] = [categoryId];
+    const children = await prisma.category.findMany({
+      where: { parentId: categoryId },
+      select: { id: true },
+    });
+    for (const child of children) {
+      const childDescendants = await this.getAllDescendantCategoryIds(child.id);
+      ids.push(...childDescendants);
     }
-
-    const trimmedId = categoryId.trim();
-
-    // 1. Önce direkt id ile ara - herhangi bir format kabul edilir
-    try {
-      const category = await prisma.category.findUnique({
-        where: { id: trimmedId },
-        select: { id: true },
-      });
-      if (category) {
-        return category.id;
-      }
-    } catch (error) {
-      // ID formatı Prisma için geçersiz olabilir - devam et
-    }
-
-    // 2. Metadata içindeki externalId ile ara
-    try {
-      const result = await prisma.$queryRaw<Array<{ id: string }>>`
-        SELECT id 
-        FROM categories 
-        WHERE metadata->>'externalId' = ${trimmedId}
-        LIMIT 1
-      `;
-
-      if (result && result.length > 0) {
-        return result[0].id;
-      }
-    } catch (error) {
-      // Metadata query hatası - devam et
-    }
-
-    // 3. Metadata içindeki medusaId ile ara (alternatif field adı)
-    try {
-      const result = await prisma.$queryRaw<Array<{ id: string }>>`
-        SELECT id 
-        FROM categories 
-        WHERE metadata->>'medusaId' = ${trimmedId}
-        LIMIT 1
-      `;
-
-      if (result && result.length > 0) {
-        return result[0].id;
-      }
-    } catch (error) {
-      // Metadata query hatası - devam et
-    }
-
-    // 4. Metadata içindeki herhangi bir field'da bu ID'yi ara
-    try {
-      const result = await prisma.$queryRaw<Array<{ id: string }>>`
-        SELECT id 
-        FROM categories 
-        WHERE metadata::text LIKE ${'%' + trimmedId + '%'}
-        LIMIT 1
-      `;
-
-      if (result && result.length > 0) {
-        return result[0].id;
-      }
-    } catch (error) {
-      // Metadata query hatası - devam et
-    }
-
-    // 5. Eğer hiçbir yerde bulunamazsa, direkt ID'yi döndür
-    // Category tablosunda ID String tipinde olduğu için herhangi bir format kabul edilir
-    // Bu ID parentId olarak kullanılabilir veya yeni bir Category oluşturulabilir
-    return trimmedId;
+    return ids;
   }
 
   /**
@@ -224,10 +171,10 @@ export class CatalogService {
         const imageUrl = resolveMediaUrl(subCategory.thumbnail);
 
         return {
-          subCategoryId: subCategory.id,
-          categoryId: resolvedCategoryId,
+          subCategoryId: subCategory.id, // ✅ Sub-Category ID (Medusa Category ID, level=1)
           name: subCategory.name,
           image: imageUrl,
+          categoryId: resolvedCategoryId, // ✅ Main Category ID (parent)
         };
       });
 
@@ -300,10 +247,10 @@ export class CatalogService {
         const imageUrl = resolveMediaUrl(group.thumbnail);
 
         return {
-          productGroupId: group.id,
+          productGroupId: group.id, // ✅ Product Group ID (Medusa Category ID, level=2)
           name: group.name,
           image: imageUrl,
-          subCategoryId: group.parentId || '',
+          subCategoryId: group.parentId || '', // ✅ Sub Category ID (parent)
         };
       });
 
@@ -406,7 +353,7 @@ export class CatalogService {
           productId: product.id,
           name: product.name,
           image: imageUrl,
-          productGroupId: product.categoryId || '',
+          productGroupId: product.categoryId || '', // ✅ Product Group ID (parent)
         };
       });
 
@@ -425,20 +372,28 @@ export class CatalogService {
   }
 
   /**
-   * Product detay bilgilerini getir
+   * Product detay bilgilerini getir (Medusa: Product.categoryId + Category breadcrumb; legacy: group.subCategory.mainCategory).
    */
   async getProductById(productId: string): Promise<ProductDetail> {
     try {
       const product = await prisma.product.findUnique({
         where: { id: productId },
         include: {
+          category: {
+            select: { id: true, name: true, parentId: true },
+            include: { parent: { select: { id: true, name: true } } },
+          },
           group: {
             include: {
-              subCategory: {
-                include: {
-                  mainCategory: true,
-                },
-              },
+              subCategory: { include: { mainCategory: true } },
+            },
+          },
+          brand: {
+            select: {
+              id: true,
+              name: true,
+              logoUrl: true,
+              imageUrl: true,
             },
           },
         },
@@ -448,41 +403,33 @@ export class CatalogService {
         throw new Error(`Product not found: ${productId}`);
       }
 
-      // Brand bilgisini al (product.brand string olarak saklanıyor)
+      const subName =
+        product.subName ??
+        product.category?.name ??
+        product.category?.parent?.name ??
+        product.group?.name ??
+        product.group?.subCategory?.name ??
+        null;
+
       let brandData: { id: string; name: string; image: string | null } | null = null;
       if (product.brand) {
-        const brand = await prisma.brand.findFirst({
-          where: { name: product.brand },
-          select: {
-            id: true,
-            name: true,
-            imageUrl: true,
-          },
-        });
-
-        if (brand) {
-          brandData = {
-            id: brand.id,
-            name: brand.name,
-            image: resolveMediaUrl(brand.imageUrl),
-          };
-        }
+        brandData = {
+          id: product.brand.id,
+          name: product.brand.name,
+          image: resolveMediaUrl(product.brand.logoUrl ?? product.brand.imageUrl),
+        };
       }
 
-      // Specs'i parse et (eğer description'da varsa veya ayrı bir alan varsa)
-      // Şimdilik boş array döndürüyoruz, ileride specs alanı eklenebilir
       const specs: string[] = [];
-
-      // Price ve currency şimdilik null, ileride eklenebilir
       const price: number | null = null;
       const currency: string | null = null;
 
       return {
         productId: product.id,
         name: product.name,
-        subName: product.subName,
+        subName,
         description: product.description,
-        image: resolveMediaUrl(product.imageUrl),
+        image: resolveMediaUrl(product.imageUrl ?? product.thumbnail),
         brand: brandData,
         specs,
         price,
@@ -492,6 +439,111 @@ export class CatalogService {
       logger.error(`Failed to get product detail for ${productId}:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Context ID'ye göre otomatik olarak doğru post listesini döndürür
+   * Context: main_category, sub_category, product_group, product
+   * ID prefix veya veritabanı sorgusu ile context type'ı otomatik belirlenir
+   */
+  async getContextPosts(
+    contextId: string,
+    userId?: string,
+    options?: { 
+      cursor?: string; 
+      limit?: number; 
+      filter?: string;
+      sort?: string;
+    }
+  ): Promise<{
+    items: Array<{ type: string; data: any }>;
+    pagination: { cursor?: string; hasMore: boolean; limit: number };
+    contextType: string; // Hangi context'ten geldiğini frontend'e bildir
+  }> {
+    const trimmedId = contextId.trim();
+    
+    // 1. Önce Product mı kontrol et (prod_ prefix veya product tablosunda var mı)
+    if (trimmedId.startsWith('prod_')) {
+      try {
+        const result = await this.getProductPosts(trimmedId, userId, options);
+        return { ...result, contextType: 'product' };
+      } catch (error) {
+        logger.debug(`Not a product: ${trimmedId}`);
+      }
+    }
+    
+    // 2. Category kontrol et (pcat_ prefix veya categories tablosunda var mı)
+    if (trimmedId.startsWith('pcat_')) {
+      try {
+        // Categories tablosunda var mı ve parent_id'si var mı kontrol et
+        const category = await prisma.category.findUnique({
+          where: { id: trimmedId },
+          select: { id: true, parentId: true },
+        });
+        
+        if (category) {
+          if (category.parentId) {
+            // Sub Category
+            const result = await this.getSubCategoryPosts(trimmedId, userId, options);
+            return { ...result, contextType: 'sub_category' };
+          } else {
+            // Main Category
+            const result = await this.getMainCategoryPosts(trimmedId, userId, options);
+            return { ...result, contextType: 'main_category' };
+          }
+        }
+      } catch (error) {
+        logger.debug(`Not a category: ${trimmedId}`);
+      }
+    }
+    
+    // 3. UUID formatındaysa, her yerde ara
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (uuidRegex.test(trimmedId)) {
+      // ProductGroup kontrol et
+      try {
+        const productGroup = await prisma.productGroup.findUnique({
+          where: { id: trimmedId },
+          select: { id: true },
+        });
+        if (productGroup) {
+          const result = await this.getProductGroupPosts(trimmedId, userId, options);
+          return { ...result, contextType: 'product_group' };
+        }
+      } catch (error) {
+        logger.debug(`Not a product group: ${trimmedId}`);
+      }
+      
+      // SubCategory kontrol et (UUID format)
+      try {
+        const subCategory = await prisma.subCategory.findUnique({
+          where: { id: trimmedId },
+          select: { id: true },
+        });
+        if (subCategory) {
+          const result = await this.getSubCategoryPosts(trimmedId, userId, options);
+          return { ...result, contextType: 'sub_category' };
+        }
+      } catch (error) {
+        logger.debug(`Not a sub category: ${trimmedId}`);
+      }
+      
+      // MainCategory kontrol et (UUID format)
+      try {
+        const mainCategory = await prisma.mainCategory.findUnique({
+          where: { id: trimmedId },
+          select: { id: true },
+        });
+        if (mainCategory) {
+          const result = await this.getMainCategoryPosts(trimmedId, userId, options);
+          return { ...result, contextType: 'main_category' };
+        }
+      } catch (error) {
+        logger.debug(`Not a main category: ${trimmedId}`);
+      }
+    }
+    
+    throw new Error(`Context not found with ID: ${contextId}`);
   }
 
   /**
@@ -513,9 +565,9 @@ export class CatalogService {
     pagination: { cursor?: string; hasMore: boolean; limit: number };
   }> {
     try {
-      // Product'ın var olup olmadığını kontrol et
+      const actualProductId = await this.idResolver.resolveProductId(productId.trim());
       const product = await prisma.product.findUnique({
-        where: { id: productId },
+        where: { id: actualProductId },
       });
 
       if (!product) {
@@ -538,14 +590,14 @@ export class CatalogService {
       } else if (filter === 'benchmarks') {
         typeFilter = [ContentPostType.COMPARE];
       } else if (filter === 'reviews') {
-        typeFilter = [ContentPostType.EXPERIENCE];
+        typeFilter = [ContentPostType.EXPERIENCE, ContentPostType.UPDATE];
       } else if (filter === 'all') {
         // Product için izin verilen tüm post tipleri (FREE hariç)
         typeFilter = this.getAllowedPostTypesForContext(ContextType.PRODUCT);
       }
 
       const whereClause: any = {
-        productId: productId,
+        productId: actualProductId,
       };
 
       if (typeFilter) {
@@ -601,6 +653,7 @@ export class CatalogService {
           question: true,
           tip: true,
           tags: true,
+          contentPostTags: true,
           likes: true,
           comments: true,
           favorites: true,
@@ -638,12 +691,23 @@ export class CatalogService {
       const resultPosts = hasMore ? sortedPosts.slice(0, limit) : sortedPosts;
       const nextCursor = hasMore && resultPosts.length > 0 ? resultPosts[resultPosts.length - 1].id : undefined;
 
-      // Map ContentPostType to FeedItemType
+      // Kullanıcının sahip olduğu ürünler (experience post product.isOwned için)
+      let ownedProductIds = new Set<string>();
+      if (userId) {
+        const inventories = await prisma.inventory.findMany({
+          where: { userId },
+          select: { productId: true },
+        });
+        ownedProductIds = new Set(inventories.map((inv) => String(inv.productId)));
+      }
+
+      // Map ContentPostType to FeedItemType (UPDATE ayrı tip; Experience/Reviews tabında listelenir)
       const mapContentPostTypeToFeedItemType = (type: ContentPostType): FeedItemType => {
         switch (type) {
           case ContentPostType.EXPERIENCE:
-          case ContentPostType.UPDATE:
             return FeedItemType.EXPERIENCE;
+          case ContentPostType.UPDATE:
+            return FeedItemType.UPDATE;
           case ContentPostType.COMPARE:
             return FeedItemType.BENCHMARK;
           case ContentPostType.QUESTION:
@@ -655,12 +719,13 @@ export class CatalogService {
         }
       };
 
-      // Convert posts to feed items
+      // Convert posts to feed items (experience: profil/feed ile aynı yapı)
       const feedItems: Array<{ type: string; data: any }> = resultPosts.map((post: any) => {
         const baseType = mapContentPostTypeToFeedItemType(post.type);
         const contextData = this.buildContextDataFromPost(post);
+        const images = (post.media || []).map((m: any) => resolveMediaUrl(m.mediaUrl)).filter((url: string | null): url is string => url !== null);
 
-        const baseData = {
+        const baseData: any = {
           id: post.id,
           type: baseType,
           user: {
@@ -678,8 +743,47 @@ export class CatalogService {
           contextType: post.product ? ContextType.PRODUCT : post.productGroup ? ContextType.PRODUCT_GROUP : ContextType.SUB_CATEGORY,
           contextData: contextData,
           content: post.body,
-          images: (post.media || []).map((m: any) => resolveMediaUrl(m.mediaUrl)).filter((url: string | null): url is string => url !== null),
+          images,
+          status: (post.productStatus === 'own' || post.productStatus === 'tried' ? post.productStatus : null) as 'own' | 'tried' | null,
+          statusLabel: post.productStatus === 'own' ? 'I owned' : post.productStatus === 'tried' ? 'I tried' : null,
         };
+
+        if (post.type === ContentPostType.UPDATE && post.updateContent?.experiencePost) {
+          const expPost = post.updateContent.experiencePost;
+          const expProduct = expPost.product
+            ? {
+                id: expPost.product.id,
+                name: expPost.product.name,
+                subName: expPost.product.group?.name ?? '',
+                image: resolveMediaUrl(expPost.product.imageUrl) ?? null,
+                isOwned: expPost.productId ? ownedProductIds.has(String(expPost.productId)) : false,
+              }
+            : { id: expPost.productId || '', name: '', subName: '', image: null, isOwned: false };
+          const expContent = this.parseExperienceContentForCatalog(expPost.body);
+          const expContentString =
+            expContent.length > 0
+              ? expContent.map((item: any) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`).join('\n\n')
+              : expPost.body || '';
+          baseData.relatedPost = {
+            id: String(expPost.id),
+            product: expProduct,
+            content: expContentString,
+            experienceContent: expContent,
+            tags: expPost.contentPostTags?.map((t: any) => t.tag) || [],
+            images: [],
+            status: expPost.productStatus ?? null,
+            statusLabel: expPost.productStatus === 'own' ? 'I owned' : expPost.productStatus === 'tried' ? 'I tried' : null,
+          };
+          baseData.content = post.updateContent.content || post.body;
+          baseData.tags = post.contentPostTags?.map((t: any) => t.tag) || post.tags?.map((t: any) => t.tag) || [];
+        } else if (post.type === ContentPostType.EXPERIENCE || post.type === ContentPostType.UPDATE) {
+          baseData.product = {
+            ...contextData,
+            isOwned: post.productId ? ownedProductIds.has(String(post.productId)) : false,
+          };
+          baseData.experienceContent = this.parseExperienceContentForCatalog(post.body);
+          baseData.tags = post.contentPostTags?.map((t: any) => t.tag) || post.tags?.map((t: any) => t.tag) || [];
+        }
 
         return {
           type: baseType,
@@ -781,6 +885,25 @@ export class CatalogService {
     };
   }
 
+  /** Experience post body'den experienceContent array üretir (feed ile aynı yapı) */
+  private parseExperienceContentForCatalog(body: string): Array<{ title: string; content: string; rating: number }> {
+    if (!body) {
+      return [{ title: 'Product and Usage Experience', content: '', rating: 0 }];
+    }
+    const content: Array<{ title: string; content: string; rating: number }> = [];
+    const ratingMatch = body.match(/Rating:\s*(\d+)/i);
+    const r = ratingMatch ? Math.min(5, Math.max(1, parseInt(ratingMatch[1], 10))) : 0;
+    const priceMatch = body.match(/\[(?:price_and_shopping|Price and Shopping)[^\]]*\](.*?)(?:\[|Rating:|$)/is);
+    const usageMatch = body.match(/\[(?:product_and_usage|Product and Usage)[^\]]*\](.*?)(?:\[|Rating:|$)/is);
+    if (priceMatch) content.push({ title: 'Price and Shopping Experience', content: priceMatch[1].trim(), rating: r });
+    if (usageMatch) content.push({ title: 'Product and Usage Experience', content: usageMatch[1].trim(), rating: r });
+    if (content.length === 0) {
+      content.push({ title: 'Price and Shopping Experience', content: body, rating: r });
+      content.push({ title: 'Product and Usage Experience', content: body, rating: r });
+    }
+    return content;
+  }
+
   /**
    * Sub category'ye ait post'ları getir (hiyerarşik feed)
    * Sub category'ye ait + alt product group'ların + alt product'ların gönderilerini getirir
@@ -801,109 +924,18 @@ export class CatalogService {
     pagination: { cursor?: string; hasMore: boolean; limit: number };
   }> {
     try {
-      // Sub category ID'yi resolve et - tüm ID formatlarını kabul eder
-      // Önce Category tablosunda ara (String ID kabul eder)
-      let resolvedSubCategoryId: string | null = null;
-      let actualSubCategoryId: string | null = null;
-
-      // 1. Önce Category tablosunda ara (Medusa ID formatlarını destekler)
-      const category = await prisma.category.findUnique({
-        where: { id: subCategoryId },
-        select: { id: true, name: true },
-      });
-
-      if (category) {
-        // Category bulundu - name ile SubCategory'de ara
-        const subCategory = await prisma.subCategory.findFirst({
-          where: { name: category.name },
-          select: { id: true },
-        });
-        if (subCategory) {
-          actualSubCategoryId = subCategory.id;
-          resolvedSubCategoryId = category.id; // Category ID'yi context için kullan
-        }
-      }
-
-      // 2. Category'de bulunamadı - direkt SubCategory'de ara (UUID formatı)
-      if (!actualSubCategoryId) {
-        try {
-          const subCategory = await prisma.subCategory.findUnique({
-            where: { id: subCategoryId },
-            select: { id: true },
-          });
-          if (subCategory) {
-            actualSubCategoryId = subCategory.id;
-            resolvedSubCategoryId = subCategory.id;
-          }
-        } catch (error) {
-          // UUID formatı değil - Category tablosunu kullan
-        }
-      }
-
-      // 3. Hiçbir yerde bulunamadı - Category ID'yi direkt kullan (parentId olarak)
-      if (!resolvedSubCategoryId) {
-        resolvedSubCategoryId = subCategoryId;
-      }
-
+      const trimmedId = subCategoryId.trim();
       const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 20;
       const cursor = options?.cursor;
-      const filter = options?.filter || 'all'; // all, free, tips_and_tricks, questions
-      const sort = options?.sort || 'newest'; // newest, oldest, most_popular
+      const filter = options?.filter || 'all';
+      const sort = options?.sort || 'newest';
 
-      // Alt product group'ları getir
-      // Eğer actualSubCategoryId varsa onu kullan, yoksa Category ID ile product group'ları bul
-      let productGroupIds: string[] = [];
-      
-      if (actualSubCategoryId) {
-        // SubCategory'den product group'ları getir
-        const productGroups = await prisma.productGroup.findMany({
-          where: { subCategoryId: actualSubCategoryId },
-          select: { id: true },
-        });
-        productGroupIds = productGroups.map((pg) => pg.id);
-      } else if (category) {
-        // Category ID ile product group'ları bul (Category tablosundan)
-        const categoryProductGroups = await prisma.category.findMany({
-          where: { parentId: category.id },
-          select: { id: true, name: true },
-        });
-        
-        // Category name'lerini kullanarak ProductGroup'ları bul
-        const categoryNames = categoryProductGroups.map(c => c.name);
-        if (categoryNames.length > 0) {
-          const productGroups = await prisma.productGroup.findMany({
-            where: { name: { in: categoryNames } },
-            select: { id: true },
-          });
-          productGroupIds = productGroups.map((pg) => pg.id);
-        }
-      }
+      // Sub-category = categories tablosunda bir düğüm. Altındaki tüm gönderiler:
+      // 1) category_id bu düğüm veya alt kategorilerde olan postlar
+      // 2) product_id setli ve product.categoryId bu ağaçta olan postlar
+      const resolvedCategoryId = await this.resolveCategoryId(trimmedId);
+      const descendantCategoryIds = await this.getAllDescendantCategoryIds(resolvedCategoryId);
 
-      // Alt product'ları getir - sadece geçerli UUID'ler varsa
-      // ProductGroup ID'lerinin UUID formatında olduğundan emin ol
-      let productIds: string[] = [];
-      if (productGroupIds.length > 0) {
-        // UUID formatını kontrol et (8-4-4-4-12 formatı)
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        const validProductGroupIds = productGroupIds.filter(id => uuidRegex.test(id));
-        
-        if (validProductGroupIds.length > 0) {
-          try {
-            const products = await prisma.product.findMany({
-              where: { groupId: { in: validProductGroupIds } },
-              select: { id: true },
-            });
-            productIds = products.map((p) => p.id);
-          } catch (error) {
-            // ProductGroup ID'leri geçersiz olabilir - boş bırak
-            logger.warn(`Failed to get products for product groups: ${validProductGroupIds.join(', ')}`, error);
-          }
-        } else {
-          logger.warn(`No valid UUID product group IDs found. Received: ${productGroupIds.join(', ')}`);
-        }
-      }
-
-      // Filtreleme: Sub category için
       let typeFilter: ContentPostType[] | undefined;
       if (filter === 'free') {
         typeFilter = [ContentPostType.FREE];
@@ -912,41 +944,16 @@ export class CatalogService {
       } else if (filter === 'questions') {
         typeFilter = [ContentPostType.QUESTION];
       } else {
-        // filter === 'all' ise context seviyesine göre otomatik filtreleme
         typeFilter = this.getAllowedPostTypesForContext(ContextType.SUB_CATEGORY);
       }
 
-      // Eğer SubCategory bulunamadıysa, Category'den child category'leri bul ve onların name'lerini kullan
-      if (!actualSubCategoryId && category) {
-        // Category'nin child category'lerini bul
-        const childCategories = await prisma.category.findMany({
-          where: { parentId: category.id },
-          select: { id: true, name: true },
-        });
-        
-        // Child category name'lerini kullanarak SubCategory'leri bul
-        const subCategoryNames = childCategories.map(c => c.name);
-        if (subCategoryNames.length > 0) {
-          const subCategories = await prisma.subCategory.findMany({
-            where: { name: { in: subCategoryNames } },
-            select: { id: true },
-          });
-          actualSubCategoryId = subCategories.length > 0 ? subCategories[0].id : null;
-        }
-      }
-
-      // Hiyerarşik where clause: sub category + alt product groups + alt products
       const whereClause: any = {
         OR: [
-          // SubCategory ID'yi kullan (UUID formatında)
-          ...(actualSubCategoryId ? [{ subCategoryId: actualSubCategoryId }] : []),
-          ...(productGroupIds.length > 0 ? [{ productGroupId: { in: productGroupIds } }] : []),
-          ...(productIds.length > 0 ? [{ productId: { in: productIds } }] : []),
+          { categoryId: { in: descendantCategoryIds } },
+          { productId: { not: null }, product: { categoryId: { in: descendantCategoryIds } } },
         ],
       };
-
-      // Post type filtreleme
-      if (typeFilter) {
+      if (typeFilter?.length) {
         whereClause.type = { in: typeFilter };
       }
 
@@ -1061,7 +1068,7 @@ export class CatalogService {
 
       // Convert posts to feed items
       const feedItems: Array<{ type: string; data: any }> = resultPosts.map((post) => {
-        const baseType = mapContentPostTypeToFeedItemType(post.type);
+        const baseType = mapContentPostTypeToFeedItemType(post.type as any);
         const contextData = this.buildContextDataFromPost(post);
 
         const baseData = {
@@ -1107,9 +1114,9 @@ export class CatalogService {
 
   /**
    * Product group'a ait post'ları getir (hiyerarşik feed)
-   * Product group'a ait + alt product'ların gönderilerini getirir
-   * Filtreler: all, free, tips_and_tricks, questions
-   * Sıralama: newest, oldest, most_popular
+   * Product group = categories tablosunda bir düğüm. Altındaki tüm gönderiler:
+   * 1) category_id bu düğüm veya alt kategorilerde olan postlar
+   * 2) product_id setli ve product.categoryId bu ağaçta olan postlar
    */
   async getProductGroupPosts(
     productGroupId: string,
@@ -1125,66 +1132,15 @@ export class CatalogService {
     pagination: { cursor?: string; hasMore: boolean; limit: number };
   }> {
     try {
-      // Product group ID'yi resolve et - tüm ID formatlarını kabul eder
-      let actualProductGroupId: string | null = null;
-
-      // 1. Önce Category tablosunda ara (Medusa ID formatlarını destekler)
-      const category = await prisma.category.findUnique({
-        where: { id: productGroupId },
-        select: { id: true, name: true },
-      });
-
-      if (category) {
-        // Category bulundu - name ile ProductGroup'da ara
-        const productGroup = await prisma.productGroup.findFirst({
-          where: { name: category.name },
-          select: { id: true },
-        });
-        if (productGroup) {
-          actualProductGroupId = productGroup.id;
-        }
-      }
-
-      // 2. Category'de bulunamadı - direkt ProductGroup'da ara (UUID formatı)
-      if (!actualProductGroupId) {
-        try {
-          const productGroup = await prisma.productGroup.findUnique({
-            where: { id: productGroupId },
-            select: { id: true },
-          });
-          if (productGroup) {
-            actualProductGroupId = productGroup.id;
-          }
-        } catch (error) {
-          // UUID formatı değil - devam et
-        }
-      }
-
-      if (!actualProductGroupId) {
-        // Product group bulunamadı - boş sonuç döndür
-        return {
-          items: [],
-          pagination: {
-            cursor: undefined,
-            hasMore: false,
-            limit: options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 20,
-          },
-        };
-      }
-
+      const trimmedId = productGroupId.trim();
       const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 20;
       const cursor = options?.cursor;
-      const filter = options?.filter || 'all'; // all, free, tips_and_tricks, questions
-      const sort = options?.sort || 'newest'; // newest, oldest, most_popular
+      const filter = options?.filter || 'all';
+      const sort = options?.sort || 'newest';
 
-      // Alt product'ları getir
-      const products = await prisma.product.findMany({
-        where: { groupId: actualProductGroupId },
-        select: { id: true },
-      });
-      const productIds = products.map((p) => p.id);
+      const resolvedCategoryId = await this.resolveCategoryId(trimmedId);
+      const descendantCategoryIds = await this.getAllDescendantCategoryIds(resolvedCategoryId);
 
-      // Filtreleme: Product group için
       let typeFilter: ContentPostType[] | undefined;
       if (filter === 'free') {
         typeFilter = [ContentPostType.FREE];
@@ -1193,20 +1149,16 @@ export class CatalogService {
       } else if (filter === 'questions') {
         typeFilter = [ContentPostType.QUESTION];
       } else {
-        // filter === 'all' ise context seviyesine göre otomatik filtreleme
         typeFilter = this.getAllowedPostTypesForContext(ContextType.PRODUCT_GROUP);
       }
 
-      // Hiyerarşik where clause: product group + alt products
       const whereClause: any = {
         OR: [
-          { productGroupId: actualProductGroupId },
-          ...(productIds.length > 0 ? [{ productId: { in: productIds } }] : []),
+          { categoryId: { in: descendantCategoryIds } },
+          { productId: { not: null }, product: { categoryId: { in: descendantCategoryIds } } },
         ],
       };
-
-      // Post type filtreleme
-      if (typeFilter) {
+      if (typeFilter?.length) {
         whereClause.type = { in: typeFilter };
       }
 
@@ -1321,7 +1273,7 @@ export class CatalogService {
 
       // Convert posts to feed items
       const feedItems: Array<{ type: string; data: any }> = resultPosts.map((post) => {
-        const baseType = mapContentPostTypeToFeedItemType(post.type);
+        const baseType = mapContentPostTypeToFeedItemType(post.type as any);
         const contextData = this.buildContextDataFromPost(post);
 
         const baseData = {
@@ -1386,7 +1338,14 @@ export class CatalogService {
       // Product'ın var olup olmadığını kontrol et
       const product = await prisma.product.findUnique({
         where: { id: productId },
-        select: { id: true, brand: true },
+        select: { 
+          id: true, 
+          brand: {
+            select: {
+              name: true,
+            },
+          },
+        },
       });
 
       if (!product) {
@@ -1429,7 +1388,7 @@ export class CatalogService {
       const newsItems = resultPosts.map((post: any) => {
         const title = post.title || post.body?.slice(0, 80) || 'News';
         const description = post.body || '';
-        const source = product.brand || 'tipbox';
+        const source = product.brand?.name || 'tipbox';
         const image =
           (post as any).imageUrl ||
           post.product?.imageUrl ||
@@ -1443,7 +1402,7 @@ export class CatalogService {
           description,
           source,
           date: post.createdAt.toISOString(),
-          image: resolveMediaUrl(image),
+          image: resolveMediaUrl(image) || '',
         };
       });
 

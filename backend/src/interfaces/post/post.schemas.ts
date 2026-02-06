@@ -45,23 +45,6 @@ export const CreatePostSchema = z.object({
 export type CreatePostRequest = z.infer<typeof CreatePostSchema>;
 
 /**
- * Update post schema
- */
-export const UpdatePostSchema = z.object({
-  content: z.string()
-    .min(1, 'İçerik boş olamaz')
-    .max(5000, 'İçerik en fazla 5000 karakter olabilir')
-    .trim()
-    .optional(),
-  title: z.string()
-    .max(200, 'Başlık en fazla 200 karakter olabilir')
-    .trim()
-    .optional(),
-});
-
-export type UpdatePostRequest = z.infer<typeof UpdatePostSchema>;
-
-/**
  * Get post params schema
  */
 export const GetPostParamsSchema = z.object({

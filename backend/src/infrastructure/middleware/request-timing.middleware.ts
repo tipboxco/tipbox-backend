@@ -51,7 +51,7 @@ export function requestTimingMiddleware(req: Request, res: Response, next: NextF
     // Cache bilgisi varsa ekle
     const cacheHit = (req as any).cacheHit;
     const cacheSource = cacheHit ? 'cache' : 'database';
-
+/*
     // Log'a yaz
     const logData = {
       method: req.method,
@@ -78,7 +78,7 @@ export function requestTimingMiddleware(req: Request, res: Response, next: NextF
         message: 'Request completed',
         ...logData,
       });
-    }
+    }*/
   });
 
   next();

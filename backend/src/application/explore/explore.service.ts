@@ -792,12 +792,24 @@ export class ExploreService {
       };
     }
 
+    const contentString =
+      experienceContent.length > 0
+        ? experienceContent
+            .map((item) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`)
+            .join('\n\n')
+        : post.body || '';
+
+    const status = post.productStatus === 'own' || post.productStatus === 'tried' ? post.productStatus : null;
+    const statusLabel = post.productStatus === 'own' ? 'I owned' : post.productStatus === 'tried' ? 'I tried' : null;
     const experienceData: ExperiencePost = {
       ...basePost,
       product,
-      content: experienceContent,
+      content: contentString,
+      experienceContent,
       tags,
       images,
+      status: status ?? undefined,
+      statusLabel: statusLabel ?? undefined,
     };
 
     return {

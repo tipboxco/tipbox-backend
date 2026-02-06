@@ -10,7 +10,6 @@ import {
   CreateBenchmarkPostRequest,
   CreateExperiencePostRequest,
   CreateUpdatePostRequest,
-  UpdatePostRequest,
   SplitExperienceRequest,
 } from './post.dto';
 import { ContextType } from '../../domain/content/context-type.enum';
@@ -621,24 +620,36 @@ router.post(
       });
     }
 
+    const description = (req.body.description ?? req.body.postText ?? req.body.body ?? req.body.content ?? '').trim();
+    const contextTypeRaw = req.body.contextType ?? req.body.context_type;
+    const contextType = contextTypeRaw && String(contextTypeRaw).toLowerCase() === 'product' ? ContextType.PRODUCT : undefined;
+    const contextId = req.body.contextId ?? req.body.context_id ?? req.body.productId;
+
     const request: CreateBenchmarkPostRequest = {
-      contextType: req.body.contextType as ContextType,
-      contextId: req.body.contextId,
+      contextType: contextType as ContextType,
+      contextId: contextId,
       products: products,
-      description: req.body.description || req.body.postText,
+      description,
       images: images,
-      eventId: normalizeEventId(req.body.eventId), // Optional event ID (normalized)
+      eventId: normalizeEventId(req.body.eventId ?? req.body.event_id),
     };
 
-    if (
-      !request.contextType ||
-      !request.contextId ||
-      !request.products ||
-      !request.description
-    ) {
+    if (!request.contextType) {
       return res.status(400).json({
-        message:
-          'contextType, contextId, products, and description are required',
+        message: 'contextType is required and must be "product"',
+        field: 'contextType',
+      });
+    }
+    if (!request.contextId || String(request.contextId).trim() === '') {
+      return res.status(400).json({
+        message: 'contextId is required (product id for context)',
+        field: 'contextId',
+      });
+    }
+    if (!request.description) {
+      return res.status(400).json({
+        message: 'description is required (or postText, body, content)',
+        field: 'description',
       });
     }
 
@@ -705,10 +716,24 @@ router.post(
       }
     }
 
-    // Support both new field names (selectedDurationId) and old field names (step1Duration)
+    // Support both new field names (selectedDurationId) and old field names (step1Duration). Duration, location, purpose zorunlu.
     const rawDurationId = req.body.selectedDurationId || req.body.step1Duration || req.body.selectedDuration || null;
     const rawLocationId = req.body.selectedLocationId || req.body.selectedCondition || req.body.selectedLocation || null;
     const rawPurposeId = req.body.selectedPurposeId || req.body.selectedFrequency || req.body.selectedPurpose || null;
+
+    const hasDuration = rawDurationId != null && String(rawDurationId).trim() !== '';
+    const hasLocation = rawLocationId != null && String(rawLocationId).trim() !== '';
+    const hasPurpose = rawPurposeId != null && String(rawPurposeId).trim() !== '';
+    if (!hasDuration || !hasLocation || !hasPurpose) {
+      return res.status(400).json({
+        message: 'duration, location and purpose are required. Send selectedDurationId, selectedLocationId (localization), selectedPurposeId (or legacy names: step1Duration, selectedLocation, selectedPurpose).',
+        fields: {
+          duration: !hasDuration ? 'missing' : 'provided',
+          location: !hasLocation ? 'missing' : 'provided',
+          purpose: !hasPurpose ? 'missing' : 'provided',
+        },
+      });
+    }
 
     // Resolve option IDs (name to UUID conversion handled in service layer)
     const resolvedIds = await postService.resolveExperienceOptionIds({
@@ -721,6 +746,27 @@ router.post(
     const selectedLocationId = resolvedIds.locationId;
     const selectedPurposeId = resolvedIds.purposeId;
 
+    const experienceSnippetId =
+      typeof req.body.experienceSnippetId === 'string' ? req.body.experienceSnippetId.trim() : '';
+
+    // status = I owned / I tried (ZORUNLU). Gönderi kullanıcının envanterindeki ürün mü yoksa sadece denediği ürün mü bilgisi olmadan kabul edilmez.
+    const hasStatusField = req.body.status !== undefined && req.body.status !== null && req.body.status !== '';
+    const hasIsOwnedField = req.body.isOwned !== undefined && req.body.isOwned !== null;
+    if (!hasStatusField && !hasIsOwnedField) {
+      return res.status(400).json({
+        message: 'status or isOwned is required. You must indicate whether the product is in your inventory (I owned) or you only tried it (I tried). Send status: "own"|"tested"|"tried" or isOwned: true|false.',
+        field: 'status',
+        allowedValues: { status: ['own', 'tested', 'tried'], isOwned: [true, false] },
+      });
+    }
+    let statusRaw = req.body.status;
+    if (statusRaw === undefined || statusRaw === null || statusRaw === '') {
+      statusRaw = req.body.isOwned === true || req.body.isOwned === 'true' ? ExperienceStatus.OWN : ExperienceStatus.TEST;
+    }
+    if (typeof statusRaw === 'string') statusRaw = statusRaw.trim().toLowerCase();
+    if (statusRaw === 'tried') statusRaw = ExperienceStatus.TEST;
+    const status = (statusRaw === ExperienceStatus.OWN || statusRaw === ExperienceStatus.TEST ? statusRaw : null) as ExperienceStatus | null;
+
     const request: CreateExperiencePostRequest = {
       contextType: req.body.contextType as ContextType,
       contextId: req.body.contextId,
@@ -729,35 +775,66 @@ router.post(
       selectedPurposeId: selectedPurposeId as string | null,
       content: req.body.content || req.body.experienceText || '',
       experience: Array.isArray(experience) ? experience : [],
-      status: req.body.status as ExperienceStatus,
+      status: status as ExperienceStatus,
       images: images,
-      experienceSnippetId: req.body.experienceSnippetId,
+      experienceSnippetId,
       eventId: normalizeEventId(req.body.eventId), // Optional event ID (normalized)
     };
 
-    // Validate required fields
+    // Validate required fields (duration, location, purpose zorunlu). Resolution başarısızsa kabul edilen değerleri döndür.
     if (
       !request.contextType ||
       !request.contextId ||
+      !request.selectedDurationId ||
+      !request.selectedLocationId ||
+      !request.selectedPurposeId ||
       !request.content ||
       (typeof request.content === 'string' && request.content.trim() === '') ||
       !Array.isArray(request.experience) ||
       request.experience.length === 0 ||
-      !request.status
+      !request.experienceSnippetId
     ) {
-      return res.status(400).json({
+      const missingResolution =
+        !request.selectedDurationId ||
+        !request.selectedLocationId ||
+        !request.selectedPurposeId;
+      const body: Record<string, unknown> = {
         message:
-          'Required fields: contextType, contextId, content, experience (array), status',
+          'Required fields: contextType, contextId, selectedDurationId (duration), selectedLocationId (location), selectedPurposeId (purpose), content, experience (array), status, experienceSnippetId. Sent values for duration/location/purpose must match an option name or UUID.',
         received: {
           contextType: request.contextType,
           contextId: request.contextId,
-          selectedDurationId: request.selectedDurationId || null,
-          selectedLocationId: request.selectedLocationId || null,
-          selectedPurposeId: request.selectedPurposeId || null,
+          selectedDurationId: request.selectedDurationId ? 'provided' : 'missing',
+          selectedLocationId: request.selectedLocationId ? 'provided' : 'missing',
+          selectedPurposeId: request.selectedPurposeId ? 'provided' : 'missing',
           content: request.content ? 'provided' : 'missing',
           experience: Array.isArray(request.experience) ? `array(${request.experience.length})` : typeof request.experience,
-          status: request.status,
+          status: request.status ?? 'missing',
+          experienceSnippetId: request.experienceSnippetId ? 'provided' : 'missing',
         },
+      };
+      if (missingResolution) {
+        try {
+          const options = await postService.getExperienceOptions();
+          body.availableOptions = {
+            duration: options.durations.map((d) => d.name),
+            location: options.locations.map((l) => l.name),
+            purpose: options.purposes.map((p) => p.name),
+          };
+        } catch {
+          // ignore
+        }
+      }
+      return res.status(400).json(body);
+    }
+
+    // status zorunlu ve sadece 'own' (I owned) veya 'tested' (I tried) kabul et
+    if (!request.status || !Object.values(ExperienceStatus).includes(request.status as ExperienceStatus)) {
+      return res.status(400).json({
+        message: 'status is required and must be "own" (I owned) or "tested" (I tried). It indicates whether the product is in the user\'s inventory or was only tried.',
+        field: 'status',
+        allowedValues: [ExperienceStatus.OWN, ExperienceStatus.TEST],
+        received: request.status ?? 'missing',
       });
     }
 
@@ -936,7 +1013,8 @@ router.get(
       return res.status(400).json({ message: 'id is required' });
     }
 
-    const post = await postService.getPostById(id);
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    const post = await postService.getPostById(id, userId ? String(userId) : undefined);
     if (!post) {
       return res.status(404).json({ message: 'Post not found' });
     }
@@ -1045,12 +1123,16 @@ router.get(
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
-    const { id: postId } = req.params;
-    if (!postId) {
+    const { id: rawPostId } = req.params;
+    if (!rawPostId) {
       return res.status(400).json({ message: 'Post ID is required' });
     }
 
-    // Post'un var olup olmadığını kontrol et
+    const postId = await postService.resolvePostId(rawPostId.trim());
+    if (!postId) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
     const { getPrisma } = await import('../../infrastructure/repositories/prisma.client');
     const prisma = getPrisma();
     const post = await prisma.contentPost.findUnique({
@@ -1220,102 +1302,6 @@ router.get(
 /**
  * @openapi
  * /posts/{id}:
- *   put:
- *     summary: Gönderi güncelle
- *     description: Sadece gönderinin sahibi kendi gönderisini güncelleyebilir. Description, images ve eventId güncellenebilir.
- *     tags: [Posts]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: Güncellenecek post ID'si
- *     requestBody:
- *       required: false
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               description:
- *                 type: string
- *                 description: Post açıklaması
- *               images:
- *                 type: array
- *                 items:
- *                   type: string
- *                 description: Görsel URL'leri (S3 path'leri)
- *               eventId:
- *                 type: string
- *                 nullable: true
- *                 description: Event ID (opsiyonel)
- *     responses:
- *       200:
- *         description: Gönderi başarıyla güncellendi
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 id:
- *                   type: string
- *                 message:
- *                   type: string
- *                 success:
- *                   type: boolean
- *       401:
- *         description: Kimlik doğrulaması başarısız
- *       403:
- *         description: Kullanıcının bu gönderiyi güncelleme yetkisi yok
- *       404:
- *         description: Gönderi bulunamadı
- */
-router.put(
-  '/:id',
-  upload.array('images', 10), // Support up to 10 images via multipart/form-data
-  asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = req.user;
-    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-    if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
-    }
-
-    const { id } = req.params;
-    if (!id) {
-      return res.status(400).json({ message: 'id is required' });
-    }
-
-    try {
-      // Process images (from files or URLs)
-      const images = await processPostImages(req, String(userId));
-
-      const request: UpdatePostRequest = {
-        description: req.body.description,
-        images: images.length > 0 ? images : req.body.images,
-        eventId: normalizeEventId(req.body.eventId), // Optional event ID (normalized)
-      };
-
-      const result = await postService.updatePost(String(userId), id, request);
-      return res.status(200).json(result);
-    } catch (error: unknown) {
-      const message = getErrorMessage(error);
-      if (error instanceof Error && message.startsWith('Forbidden')) {
-        return res.status(403).json({ message: 'You are not allowed to update this post' });
-      }
-      if (error instanceof Error && message.includes('not found')) {
-        return res.status(404).json({ message: 'Post not found' });
-      }
-      throw error;
-    }
-  })
-);
-
-/**
- * @openapi
- * /posts/{id}:
  *   delete:
  *     summary: Gönderi sil
  *     description: Sadece gönderinin sahibi kendi gönderisini silebilir.
@@ -1354,7 +1340,7 @@ router.delete(
     }
 
     try {
-      const deleted = await postService.deletePost(String(userId), id);
+      const deleted = await postService.deletePost(String(userId), id.trim());
       if (!deleted) {
         return res.status(404).json({ message: 'Post not found' });
       }
@@ -1374,7 +1360,10 @@ router.delete(
  * /posts/update:
  *   post:
  *     summary: Güncelleme gönderisi oluştur
- *     description: Product için güncelleme gönderisi oluşturur.
+ *     description: |
+ *       Product için güncelleme gönderisi oluşturur.
+ *       Zorunlu alanlar experiencePostId ve content. contextType/contextId opsiyoneldir;
+ *       boşsa experience post'taki productId kullanılır (Medusa'da tek category tablosu ile category/subcategory/product group aynı yapıda, contextId zorunlu değil).
  *     tags: [Posts]
  *     security:
  *       - bearerAuth: []
@@ -1413,21 +1402,48 @@ router.post(
     const images = await processPostImages(req, String(userId));
 
     const request: CreateUpdatePostRequest = {
-      contextType: req.body.contextType as ContextType,
-      contextId: req.body.contextId,
+      // Update posts are always for products, ignore sent contextType
+      contextType: ContextType.PRODUCT,
+      contextId: req.body.contextId != null && req.body.contextId !== '' ? String(req.body.contextId).trim() : undefined,
+      experiencePostId: (req.body.experiencePostId ?? '').toString().trim(),
       content: req.body.content,
       images: images,
-      eventId: normalizeEventId(req.body.eventId), // Optional event ID (normalized)
+      eventId: normalizeEventId(req.body.eventId),
     };
 
-    if (!request.contextType || !request.contextId || !request.content) {
+    if (!request.experiencePostId || !request.content) {
       return res.status(400).json({
-        message: 'contextType, contextId, and content are required',
+        message: 'experiencePostId and content are required. contextType/contextId are optional (derived from experience post when missing).',
       });
     }
 
-    const result = await postService.createUpdatePost(String(userId), request);
-    return res.status(201).json(result);
+    try {
+      const result = await postService.createUpdatePost(String(userId), request);
+      return res.status(201).json(result);
+    } catch (err: any) {
+      if (err?.message === 'LEGACY_INVENTORY_NO_POST') {
+        return res.status(400).json({
+          message: 'This is a legacy inventory item without an associated experience post',
+          code: 'LEGACY_INVENTORY_NO_POST',
+          hint: 'Update posts can only be created for experience posts. This inventory item was created before the new post system and does not have a corresponding post. Please create a new experience post for this product first.',
+        });
+      }
+      if (err?.message === 'Experience post not found') {
+        return res.status(404).json({
+          message: err.message,
+          code: 'EXPERIENCE_POST_NOT_FOUND',
+          hint: 'experiencePostId must be the experience post id (ULID, 26 chars from post detail or feed item id). If opening from bookmarks, use the post id from the item (item.id), not the bookmark id.',
+        });
+      }
+      if (err?.message?.includes('legacy inventory-based reviews')) {
+        return res.status(400).json({
+          message: err.message,
+          code: 'LEGACY_REVIEW_NOT_SUPPORTED',
+          hint: 'Update posts cannot be created for old inventory-based reviews. The review must be a ContentPost (experience post). Please create a new experience post for this product first.',
+        });
+      }
+      throw err;
+    }
   })
 );
 

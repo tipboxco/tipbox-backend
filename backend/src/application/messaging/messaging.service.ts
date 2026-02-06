@@ -1184,7 +1184,7 @@ export class MessagingService {
           if (lastMsgAll && lastMsgAll.isDeleted) {
             lastMessagesMap.set(threadId, {
               message: 'Bu mesaj silindi',
-              sentAt: lastMsgAll.sentAt,
+              sentAt: lastMsgAll.sentAt as unknown as Date,
               isDeleted: true,
             });
             return;
@@ -1227,7 +1227,7 @@ export class MessagingService {
             
             lastMessagesMap.set(threadId, {
               message: messageText,
-              sentAt: lastMsg.sentAt,
+              sentAt: lastMsg.sentAt as unknown as Date,
             });
           }
         });

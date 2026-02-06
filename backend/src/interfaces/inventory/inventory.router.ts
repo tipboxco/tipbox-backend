@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { InventoryService } from '../../application/inventory/inventory.service';
+import { PostService } from '../../application/post/post.service';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { authMiddleware } from '../auth/auth.middleware';
 import { CreateInventoryRequest } from './inventory.dto';
@@ -7,6 +8,7 @@ import { ExperienceStatus } from '../../domain/content/experience-status.enum';
 
 const router = Router();
 const inventoryService = new InventoryService();
+const postService = new PostService();
 
 /**
  * @openapi
@@ -111,14 +113,15 @@ router.post(
       errors.push('selectedPurposeId is required');
     }
 
-    if (!body.content || typeof body.content !== 'string') {
-      errors.push('content is required');
+    // owned (own) ise content opsiyonel: boş/eksikse backend Gemini ile Experience metni üretir
+    if (typeof body.content !== 'string') {
+      errors.push('content must be a string (can be empty for own status to trigger AI generation)');
     }
 
-    if (!Array.isArray(body.experience) || body.experience.length === 0) {
-      errors.push('experience must be a non-empty array');
-    } else {
-      body.experience.forEach((exp, index) => {
+    if (!Array.isArray(body.experience)) {
+      errors.push('experience must be an array');
+    } else if (body.experience.length > 0) {
+      body.experience.forEach((exp: { type?: string; content?: string; rating?: number }, index: number) => {
         if (!exp.type || typeof exp.type !== 'string') {
           errors.push(`experience[${index}].type is required`);
         }
@@ -152,8 +155,38 @@ router.post(
       return res.status(400).json({ message: 'Validation failed', errors });
     }
 
+    // Resolve option IDs (name to UUID conversion - supports both UUID and string names)
+    const resolvedIds = await postService.resolveExperienceOptionIds({
+      durationId: body.selectedDurationId,
+      locationId: body.selectedLocationId,
+      purposeId: body.selectedPurposeId,
+    });
+
+    const selectedDurationId = resolvedIds.durationId;
+    const selectedLocationId = resolvedIds.locationId;
+    const selectedPurposeId = resolvedIds.purposeId;
+
+    // Validation: Ensure all IDs were successfully resolved
+    if (!selectedDurationId || !selectedLocationId || !selectedPurposeId) {
+      const missingFields = [];
+      if (!selectedDurationId) missingFields.push('selectedDurationId');
+      if (!selectedLocationId) missingFields.push('selectedLocationId');
+      if (!selectedPurposeId) missingFields.push('selectedPurposeId');
+      
+      return res.status(400).json({
+        message: 'Failed to resolve experience option IDs',
+        missingFields,
+        hint: 'Sent values for duration/location/purpose must match an option name or UUID. Use GET /posts/experience/options to see available options.',
+      });
+    }
+
     const created = await inventoryService.createInventoryItem(String(userId), {
       ...body,
+      selectedDurationId,
+      selectedLocationId,
+      selectedPurposeId,
+      content: body.content ?? '',
+      experience: Array.isArray(body.experience) ? body.experience : [],
       images: body.images || [],
     });
 
