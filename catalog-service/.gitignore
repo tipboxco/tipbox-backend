@@ -24,3 +24,6 @@ build
 !.yarn/versions
 
 .medusa
+
+# Tipbox seed/catalog veri dosyaları (büyük CSV'ler)
+src/scripts/tipbox-datas/*.csv
