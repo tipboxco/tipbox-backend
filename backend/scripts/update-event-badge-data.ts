@@ -21,7 +21,7 @@ async function updateEventBadgeData(): Promise<void> {
 
   try {
     // Event'i bul
-    const event = await prisma.wishboxEvent.findUnique({
+    const event = await prisma.event.findUnique({
       where: { id: EVENT_ID },
       select: { id: true, title: true, description: true, imageUrl: true, startDate: true, endDate: true },
     });
@@ -58,7 +58,7 @@ async function updateEventBadgeData(): Promise<void> {
     }
 
     // Event'i güncelle
-    const updatedEvent = await prisma.wishboxEvent.update({
+    const updatedEvent = await prisma.event.update({
       where: { id: EVENT_ID },
       data: {
         title: newTitle,

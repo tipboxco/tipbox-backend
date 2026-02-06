@@ -167,7 +167,7 @@ export async function ensureEventBadgeSystem(prisma: PrismaClient): Promise<void
     console.log('📅 Test Event Oluşturuluyor...\n');
 
     const eventId = '00MKFPNIQ30000064YDGL62K7Q';
-    let event = await prisma.wishboxEvent.findUnique({
+    let event = await prisma.event.findUnique({
       where: { id: eventId }
     });
 
@@ -178,7 +178,7 @@ export async function ensureEventBadgeSystem(prisma: PrismaClient): Promise<void
       const imageName = imageKeyParts[imageKeyParts.length - 1]; // 'event-batarya'
       const imageUrl = `events/${imageName}.png`;
 
-      event = await prisma.wishboxEvent.create({
+      event = await prisma.event.create({
         data: {
           id: eventId,
           title: 'Akıllı Telefon Batarya Performansı',

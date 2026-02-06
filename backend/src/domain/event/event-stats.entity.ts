@@ -1,4 +1,4 @@
-export class WishboxStats {
+export class EventStats {
   constructor(
     public readonly id: string,
     public readonly userId: number,

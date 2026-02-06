@@ -137,7 +137,7 @@ export class PostService {
       throw new Error(`Invalid eventId value: "${eventId}"`);
     }
 
-    const event = await this.prisma.wishboxEvent.findUnique({
+    const event = await this.prisma.event.findUnique({
       where: { id: trimmed },
     });
 
@@ -502,7 +502,7 @@ export class PostService {
         await this.validateEventMembership(userId, request.eventId);
 
         // ✅ ROASTS event'lerde productStatus beklenir (app own|tried gönderir)
-        const event = await this.prisma.wishboxEvent.findUnique({
+        const event = await this.prisma.event.findUnique({
           where: { id: request.eventId },
           select: { feedType: true },
         });
@@ -561,7 +561,7 @@ export class PostService {
       if (request.eventId) {
         try {
           // Increment post count for user's event stats
-          await this.prisma.wishboxStats.updateMany({
+          await this.prisma.eventStats.updateMany({
             where: {
               userId: userId,
               eventId: request.eventId,
@@ -635,7 +635,7 @@ export class PostService {
    * Event membership validation - kullanıcı event'e katılmış mı?
    */
   private async validateEventMembership(userId: string, eventId: string): Promise<void> {
-    const userStats = await this.prisma.wishboxStats.findUnique({
+    const userStats = await this.prisma.eventStats.findUnique({
       where: {
         userId_eventId: {
           userId: userId,

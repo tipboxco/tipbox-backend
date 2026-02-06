@@ -1,8 +1,7 @@
-export enum WishboxEventType {
+export enum EventType {
   SURVEY = 'SURVEY',
   POLL = 'POLL',
   CONTEST = 'CONTEST',
   CHALLENGE = 'CHALLENGE',
   PROMOTION = 'PROMOTION'
 }
-

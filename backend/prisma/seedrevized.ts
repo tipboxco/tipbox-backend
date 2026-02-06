@@ -6314,7 +6314,7 @@ async function main() {
   console.log('✅ Additional NFT transactions created for Sell NFT endpoints')
 
   // ===== EXPLORE SECTION - Marketplace Banners, Trending Posts, Events =====
-  progress.increment('Wishbox event\'leri oluşturuluyor...')
+  progress.increment('Event\'ler oluşturuluyor...')
   console.log('🔍 Creating explore data...')
 
   // 1. Marketplace Banners
@@ -6414,9 +6414,9 @@ async function main() {
   }
   console.log(`✅ ${trendingPosts.length} trending post oluşturuldu (çeşitli type'larda)`)
 
-  // 3. Wishbox Events (What's News) - Diverse event types
-  progress.increment('Wishbox event\'leri oluşturuluyor...')
-  console.log('\n🎪 Creating wishbox events...')
+  // 3. Events (What's News) - Diverse event types
+  progress.increment('Event\'ler oluşturuluyor...')
+  console.log('\n🎪 Creating events...')
 
   // 3.a Ensure event images are uploaded to MinIO (event/event.png & event/eventcardbg.png)
   // ÖNEMLİ: Önce MinIO'ya yükle, sonra DB'ye yaz
@@ -6488,7 +6488,7 @@ async function main() {
 
   const events = await Promise.all(
     eventTemplates.map((template) =>
-      prisma.wishboxEvent
+      prisma.event
         .create({
           data: {
             id: generateUlid(),
@@ -6498,14 +6498,13 @@ async function main() {
             startDate: today,
             endDate: template.endDate,
             status: 'PUBLISHED',
-            eventType: template.eventType,
           } as any,
         })
         .catch(() => null)
     )
   )
   const createdEvents = events.filter(Boolean) as any[]
-  console.log(`✅ ${createdEvents.length} wishbox event oluşturuldu (tüm eventType'larda çeşitli)`)
+  console.log(`✅ ${createdEvents.length} event oluşturuldu (tüm eventType'larda çeşitli)`)
 
   // Brand-specific events (8 per brand, English, unique per brand)
   const brandEventTemplates = [
@@ -6532,7 +6531,7 @@ async function main() {
         const endDate = new Date(startDate)
         endDate.setDate(startDate.getDate() + 7 + templateIndex)
 
-        return prisma.wishboxEvent
+        return prisma.event
           .create({
             data: {
               id: generateUlid(),
@@ -6542,7 +6541,6 @@ async function main() {
               startDate,
               endDate,
               status: 'PUBLISHED',
-              eventType: template.eventType,
               brandId: brand.id,
             } as any,
           })
@@ -6551,7 +6549,7 @@ async function main() {
     )
   )
   const createdBrandEvents = brandSpecificEvents.filter(Boolean) as any[]
-  console.log(`✅ ${createdBrandEvents.length} brand-specific wishbox event oluşturuldu (${brandEventTemplates.length} per brand)`)
+  console.log(`✅ ${createdBrandEvents.length} brand-specific event oluşturuldu (${brandEventTemplates.length} per brand)`)
 
   // Brand 081d5660-a6d6-412a-b0ae-1557acaaa028 için özel 12 event oluştur
   const TARGET_BRAND_ID_FOR_EVENTS = '081d5660-a6d6-412a-b0ae-1557acaaa028'
@@ -6578,7 +6576,7 @@ async function main() {
 
     // Batch kontrol: Tüm mevcut event'leri tek sorguda al
     // Not: brandId filtrelemesi Prisma client'ında henüz mevcut olmadığı için tüm event'leri alıyoruz
-    const existingEvents = await prisma.wishboxEvent.findMany({
+    const existingEvents = await prisma.event.findMany({
       where: { brandId: targetBrandForEvents.id } as any,
       select: { title: true },
     }).catch(() => [])
@@ -6594,7 +6592,7 @@ async function main() {
       const endDate = new Date(startDate)
       endDate.setDate(startDate.getDate() + template.durationDays)
 
-      await prisma.wishboxEvent
+      await prisma.event
         .create({
           data: {
             id: generateUlid(),
@@ -6604,7 +6602,6 @@ async function main() {
             startDate,
             endDate,
             status: 'PUBLISHED',
-            eventType: template.eventType,
             brandId: targetBrandForEvents.id,
           } as any,
         })
@@ -6613,7 +6610,7 @@ async function main() {
       existingTitles.add(template.title) // Set'e ekle ki tekrar kontrol etmesin
       createdTargetBrandEvents++
     }
-    console.log(`✅ ${createdTargetBrandEvents} wishbox event brand ${targetBrandForEvents.name ?? TARGET_BRAND_ID_FOR_EVENTS} için oluşturuldu (hedef: 12)`)
+    console.log(`✅ ${createdTargetBrandEvents} event brand ${targetBrandForEvents.name ?? TARGET_BRAND_ID_FOR_EVENTS} için oluşturuldu (hedef: 12)`)
 
     // Aynı brand için survey sekmesinin dolu gelmesi adına 12 SURVEY ağırlıklı event
     const targetBrandSurveyTemplates = [
@@ -6642,7 +6639,7 @@ async function main() {
       const endDate = new Date(startDate)
       endDate.setDate(startDate.getDate() + template.durationDays)
 
-      await prisma.wishboxEvent
+      await prisma.event
         .create({
           data: {
             id: generateUlid(),
@@ -6652,7 +6649,6 @@ async function main() {
             startDate,
             endDate,
             status: 'PUBLISHED',
-            eventType: 'SURVEY',
             brandId: targetBrandForEvents.id,
           } as any,
         })
@@ -6675,7 +6671,7 @@ async function main() {
       startDate.setDate(today.getDate() - (idx + 3))
       const endDate = new Date(startDate)
       endDate.setDate(startDate.getDate() + 2)
-      return prisma.wishboxEvent
+      return prisma.event
         .create({
           data: {
             id: generateUlid(),
@@ -6685,7 +6681,6 @@ async function main() {
             startDate,
             endDate,
             status: 'PUBLISHED',
-            eventType: 'SURVEY',
             brandId: brand.id,
           } as any,
         })
@@ -6694,19 +6689,18 @@ async function main() {
   )
   const createdHistorySurveyEvents = historySurveyEvents.filter(Boolean) as any[]
 
-  // Kullanıcı bazlı basit istatistikler ekle (foreign key tutarlılığı için)
+  // Kullanıcı bazlı basit istatistikler ekle (EventStats: totalParticipated, totalComments, helpfulVotesReceived)
   const historyStats = await Promise.all(
     createdHistorySurveyEvents.flatMap((event: any, eventIdx) =>
       surveyUsers.slice(0, 5).map((user, userIdx) =>
-        prisma.wishboxStats.create({
+        prisma.eventStats.create({
           data: {
-            id: generateUlid(),
             eventId: event.id,
             userId: user.id,
-            votes: 1 + ((eventIdx + userIdx) % 3),
-            impressions: 10 + eventIdx * 5 + userIdx,
-            responses: 1 + (userIdx % 2),
-          } as any,
+            totalParticipated: 1 + ((eventIdx + userIdx) % 3),
+            totalComments: 1 + (userIdx % 2),
+            helpfulVotesReceived: 10 + eventIdx * 5 + userIdx,
+          },
         }).catch(() => null)
       )
     )
@@ -6844,7 +6838,7 @@ async function main() {
 
   const upcomingEvents = await Promise.all(
     upcomingEventTemplates.map((template) =>
-      prisma.wishboxEvent
+      prisma.event
         .create({
           data: {
             id: generateUlid(),
@@ -6854,7 +6848,6 @@ async function main() {
             startDate: template.startDate,
             endDate: template.endDate,
             status: 'PUBLISHED',
-            eventType: template.eventType,
           } as any,
         })
         .catch(() => null)
@@ -6863,63 +6856,9 @@ async function main() {
   const createdUpcomingEvents = upcomingEvents.filter(Boolean) as any[]
   console.log(`✅ ${createdUpcomingEvents.length} yaklaşan event oluşturuldu`)
 
-  // Create scenarios for events (first 3 events)
-  console.log('🎯 Creating event scenarios...')
-  const scenarios = await Promise.all([
-    // Event 1 - New Year survey scenarios
-    createdEvents[0]
-      ? prisma.wishboxScenario
-          .create({
-            data: {
-              eventId: createdEvents[0].id,
-              title: 'Best Phone of the Year',
-              description: 'Which phone should be the champion of 2024?',
-              orderIndex: 1,
-            },
-          })
-          .catch(() => null)
-      : null,
-    createdEvents[0]
-      ? prisma.wishboxScenario
-          .create({
-            data: {
-              eventId: createdEvents[0].id,
-              title: 'Best Laptop of the Year',
-              description: 'Which laptop delivered the best performance for you?',
-              orderIndex: 2,
-            },
-          })
-          .catch(() => null)
-      : null,
-    // Event 2 - Technology scenarios
-    createdEvents[1]
-      ? prisma.wishboxScenario
-          .create({
-            data: {
-              eventId: createdEvents[1].id,
-              title: 'Most Anticipated Smartwatch',
-              description: 'Which smartwatch are you planning to buy in 2024?',
-              orderIndex: 1,
-            },
-          })
-          .catch(() => null)
-      : null,
-    // Event 3 - Coffee scenarios
-    createdEvents[2]
-      ? prisma.wishboxScenario
-          .create({
-            data: {
-              eventId: createdEvents[2].id,
-              title: 'Fully Automatic vs Manual',
-              description: 'Do you prefer a fully automatic or a manual coffee machine?',
-              orderIndex: 1,
-            },
-          })
-          .catch(() => null)
-      : null,
-  ])
-  const createdScenarios = scenarios.filter(Boolean)
-  console.log(`✅ ${createdScenarios.length} scenario oluşturuldu`)
+  // Scenario/ScenarioChoice modelleri kaldırıldı (Wishbox → Event geçişi) - atlanıyor
+  const createdScenarios: unknown[] = []
+  console.log('🎯 Event scenarios skipped (model removed)')
 
   // Add event statistics for some users
   console.log('📊 Creating event statistics...')
@@ -6927,7 +6866,7 @@ async function main() {
   const eventStats = await Promise.all(
     createdEvents.flatMap((event) =>
       event ? allUserIds.map((userId) =>
-        prisma.wishboxStats.create({
+        prisma.eventStats.create({
           data: {
             userId,
             eventId: event.id,
@@ -6941,48 +6880,10 @@ async function main() {
   )
   console.log(`✅ ${eventStats.length} event stat oluşturuldu`)
 
-  // 3.d Limited event için senaryolar ve katılımcılar (events/{id}/posts endpoint'i için)
-  console.log('🧩 Creating scenarios & choices for limited-time promotion event...')
+  // Scenario/ScenarioChoice modelleri kaldırıldı (Wishbox → Event geçişi) - atlanıyor
   const limitedEvent = createdEvents.find((e) => e && e.title === 'Special Discount Campaign')
   if (limitedEvent) {
-    const limitedEventId = limitedEvent.id as string
-
-    // Hottest / limited event örneğinde kullanılan kullanıcılar:
-    const limitedEventUserIds = [
-      TRUST_USER_IDS[2], // 3333...
-      TARGET_USER_ID,    // 248c...
-      TRUST_USER_IDS[1], // 2222...
-      TEST_USER_ID,      // 480f...
-    ]
-
-    // Tek bir senaryo oluştur
-    const scenario = await prisma.wishboxScenario.create({
-      data: {
-        eventId: limitedEventId,
-        title: 'Special Discount Engagement',
-        description: 'Users participating in the Special Discount Campaign.',
-        orderIndex: 1,
-      },
-    })
-
-    // Her kullanıcı için 10 adet choice oluşturalım (toplam 40 satır)
-    const choicesData = limitedEventUserIds.flatMap((userId) =>
-      Array.from({ length: 10 }).map((_, idx) => ({
-        scenarioId: scenario.id,
-        userId,
-        choiceText: `Participation #${idx + 1} for user ${userId}`,
-        isSelected: true,
-      }))
-    )
-
-    await prisma.scenarioChoice.createMany({
-      data: choicesData,
-      skipDuplicates: true,
-    })
-
-    console.log(`✅ Limited event için ${choicesData.length} scenario choice oluşturuldu`)
-  } else {
-    console.log('⚠️ Special Discount Campaign eventi bulunamadı, limited event için ekstra scenario oluşturulmadı')
+    console.log('🧩 Scenario/choice skipped for limited event (models removed)')
   }
 
   // Add badge rewards to events
@@ -7012,7 +6913,7 @@ async function main() {
           const randomUser = allUserIds[Math.floor(Math.random() * allUserIds.length)]
           // rewardId için achievement goal'un id'sini kullan (Int olarak)
           const rewardIdInt = parseInt(goal.id.replace(/-/g, '').substring(0, 8), 16) % 2147483647
-          await prisma.wishboxReward.create({
+          await prisma.eventReward.create({
             data: {
               userId: randomUser,
               eventId: event.id,
@@ -11266,7 +11167,7 @@ async function main() {
   summaryLines.push(`• ${marketplaceListings.length} Marketplace Listings`)
   summaryLines.push(`• ${banners.length} Marketplace Banners`)
   summaryLines.push(`• ${trendingPosts.length} Trending Posts`)
-  summaryLines.push(`• ${createdEvents.length} Wishbox Events`)
+  summaryLines.push(`• ${createdEvents.length} Events`)
   summaryLines.push(`• ${createdScenarios.length} Event Scenarios`)
   summaryLines.push(`• ${eventStats.length} Event Statistics`)
   summaryLines.push(`• ${createdBrands.length} Brands`)

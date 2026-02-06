@@ -24,7 +24,7 @@ Bu doküman, mevcut seed yapısının durumunu, hangi modüllerin/feature'ların
 10. **seedTrustRelations** – TrustRelation
 11. **seedTrendingPosts** – TrendingPost
 12. **seedTransactions** – Transaction (Wallet ile)
-13. **seedEvents** – WishboxEvent, WishboxStats, WishboxReward, EventBadge
+13. **seedEvents** – Event, EventStats, EventReward, EventBadge
 14. **seedMessaging** – DMThread, DMMessage, DMRequest
 15. **seedNFTMarketplace** – NFT, NFTTransaction, NFTMarketListing
 16. **seedRemainingSystemTables** – Badge, BadgeCategory, UserBadge, AchievementChain, AchievementGoal, UserAchievement, ComparisonMetric, BoostOption, Experience taxonomy, MarketplaceBanner, vb.
@@ -72,7 +72,7 @@ Bu doküman, mevcut seed yapısının durumunu, hangi modüllerin/feature'ların
 - **AchievementChain, AchievementGoal, UserAchievement** – seedRemainingSystemTables
 - **RewardClaim** – seedRewardClaims
 - **BridgeFollower, BrandSurvey, BrandSurveyQuestion, BrandSurveyAnswer, BridgePost, BridgeReward, News** – seedBrandCatalog
-- **WishboxEvent, WishboxStats, WishboxReward, EventBadge** – seedEvents (+ ensureEventBadgeSystem)
+- **Event, EventStats, EventReward, EventBadge** – seedEvents (+ ensureEventBadgeSystem)
 - **Wallet, Transaction** – createSeedUsers (Wallet), seedTransactions
 - **NFT, NFTTransaction, NFTMarketListing** – seedNFTMarketplace, seedPriorityUserNFTs
 - **DMThread, DMMessage, DMRequest** – seedMessaging
@@ -83,7 +83,7 @@ Bu doküman, mevcut seed yapısının durumunu, hangi modüllerin/feature'ların
 
 ### 2.2 Kısmen / Koşullu Seed Olan Modeller
 
-- **WishboxStats** – seedEvents içinde güncelleniyor (create/update); tam ayrı bir “WishboxStats seed” yok, event katılımlarıyla dolduruluyor.
+- **EventStats** – seedEvents içinde güncelleniyor (create/update); tam ayrı bir “EventStats seed” yok, event katılımlarıyla dolduruluyor.
 - **UserSubscription, Invoice, SubscriptionPlan** – Sadece `seed-payment-subscription-data.ts` ile (manuel). Ana seed’e entegre değil.
 
 ### 2.3 Hiç Seed Edilmeyen veya Eksik Modeller

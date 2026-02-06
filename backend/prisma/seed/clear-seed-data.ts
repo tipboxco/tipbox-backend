@@ -99,13 +99,13 @@ async function clearAllData(): Promise<void> {
     await prisma.nFT.deleteMany({});
 
     // Explore verileri
-    await prisma.wishboxStats.deleteMany({});
-    await prisma.wishboxReward.deleteMany({});
+    await prisma.eventStats.deleteMany({});
+    await prisma.eventReward.deleteMany({});
     // Scenario tables removed - no longer exist
     // await prisma.choiceComment.deleteMany({});
     // await prisma.scenarioChoice.deleteMany({});
-    // await prisma.wishboxScenario.deleteMany({});
-    await prisma.wishboxEvent.deleteMany({});
+    // await prisma.eventScenario.deleteMany({});
+    await prisma.event.deleteMany({});
     await prisma.bridgeReward.deleteMany({});
     await prisma.bridgeUserStats.deleteMany({});
     await prisma.bridgeLeaderboard.deleteMany({});
@@ -357,7 +357,7 @@ async function clearDataBeforeTimestamp(timestamp: Date, seedUserIds: string[]):
       });
       
       // Explore verileri - seed kullanıcılarına ait
-      await prisma.wishboxStats.deleteMany({
+      await prisma.eventStats.deleteMany({
         where: { userId: { in: seedUserIds } }
       });
       
@@ -634,7 +634,7 @@ async function clearDataBeforeTimestamp(timestamp: Date, seedUserIds: string[]):
       });
       
       // Explore bridge verileri - timestamp'e göre
-      await prisma.wishboxReward.deleteMany({
+      await prisma.eventReward.deleteMany({
         where: { createdAt: { lt: timestamp } }
       });
       
@@ -647,11 +647,11 @@ async function clearDataBeforeTimestamp(timestamp: Date, seedUserIds: string[]):
       //   where: { createdAt: { lt: timestamp } }
       // });
       
-      // await prisma.wishboxScenario.deleteMany({
+      // await prisma.eventScenario.deleteMany({
       //   where: { createdAt: { lt: timestamp } }
       // });
       
-      await prisma.wishboxEvent.deleteMany({
+      await prisma.event.deleteMany({
         where: { createdAt: { lt: timestamp } }
       });
       

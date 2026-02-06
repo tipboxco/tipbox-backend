@@ -3384,7 +3384,7 @@ async function seedTransactions() {
 // ==================== PHASE 12: EVENTS ====================
 
 /**
- * WishboxEvent oluştur (10-15 kaliteli, gerçekçi event)
+ * Event oluştur (10-15 kaliteli, gerçekçi event)
  * Event participation, scenarios, rewards ekle
  */
 // Yeni seedEvents fonksiyonu - Elektronik ve Beauty odaklı, ürün bazlı
@@ -3613,7 +3613,8 @@ async function seedEvents() {
       imageUrl = `events/${imageName}.png`
     }
     
-    await prisma.wishboxEvent.create({
+    const eventDelegate = (prisma as { event?: { create: (arg: { data: unknown }) => Promise<unknown> } }).event!;
+    await eventDelegate.create({
       data: {
         id: eventId,
         title: config.title,
@@ -3776,12 +3777,12 @@ async function seedEvents() {
       
       totalEventPosts++
       
-      // WishboxStats güncelle
-      await prisma.wishboxStats.upsert({
+      // EventStats güncelle
+      await (prisma as unknown as { eventStats: { upsert: (arg: { where: { userId_eventId: { userId: string; eventId: string } }; create: Record<string, unknown>; update: Record<string, unknown> }) => Promise<unknown> } }).eventStats.upsert({
         where: {
           userId_eventId: {
             userId: user.id,
-          eventId,
+            eventId,
           }
         },
         create: {
@@ -3793,7 +3794,7 @@ async function seedEvents() {
         },
         update: {
           totalParticipated: { increment: 1 },
-    }
+        }
       })
     }
   }
@@ -3861,7 +3862,7 @@ async function seedEvents() {
     }
     
     // Event'in kategorisine göre template seç
-    const event = await prisma.wishboxEvent.findUnique({
+    const event = await (prisma as unknown as { event: { findUnique: (args: { where: { id: string }; select?: { title: boolean } }) => Promise<{ title: string } | null> } }).event.findUnique({
       where: { id: post.eventId! },
       select: { title: true },
     })
@@ -7173,7 +7174,7 @@ async function main() {
     progress.increment('TipsTransfer step atlandı')
   }
 
-  // 12. Events (WishboxEvent + Participation + Rewards)
+  // 12. Events (Event + Participation + Rewards)
   progress.increment('Events oluşturuluyor...')
   try {
     await seedEvents()

@@ -30,7 +30,7 @@
 - **Blockchain**: Wallet entegrasyonu, NFT sistemi, token transferleri
 - **Real-time**: Socket.IO ile anlık mesajlaşma
 - **Brand Bridge**: Marka-kullanıcı etkileşim platformu
-- **Wishbox**: Senaryo tabanlı etkinlik sistemi
+- **Event**: Etkinlik sistemi (önceki Wishbox kavramının yerini aldı)
 
 ---
 

@@ -1,4 +1,4 @@
-export class WishboxScenario {
+export class EventScenario {
   constructor(
     public readonly id: string,
     public readonly eventId: number,

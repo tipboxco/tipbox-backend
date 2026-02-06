@@ -1,11 +1,11 @@
-import { WishboxRewardType } from './wishbox-reward-type.enum';
+import { RewardType } from './reward-type.enum';
 
-export class WishboxReward {
+export class EventReward {
   constructor(
     public readonly id: string,
     public readonly userId: number,
     public readonly eventId: number,
-    public readonly rewardType: WishboxRewardType,
+    public readonly rewardType: RewardType,
     public readonly rewardId: number,
     public readonly amount: number | null,
     public readonly awardedAt: Date,
@@ -23,15 +23,15 @@ export class WishboxReward {
   }
 
   isTipsReward(): boolean {
-    return this.rewardType === WishboxRewardType.TIPS;
+    return this.rewardType === RewardType.TIPS;
   }
 
   isBadgeReward(): boolean {
-    return this.rewardType === WishboxRewardType.BADGE;
+    return this.rewardType === RewardType.BADGE;
   }
 
   isTitleReward(): boolean {
-    return this.rewardType === WishboxRewardType.TITLE;
+    return this.rewardType === RewardType.TITLE;
   }
 
   hasAmount(): boolean {
@@ -44,17 +44,17 @@ export class WishboxReward {
 
   getRewardTypeDisplayName(): string {
     switch (this.rewardType) {
-      case WishboxRewardType.TIPS: return 'TIPS';
-      case WishboxRewardType.BADGE: return 'Rozet';
-      case WishboxRewardType.TITLE: return 'Unvan';
+      case RewardType.TIPS: return 'TIPS';
+      case RewardType.BADGE: return 'Rozet';
+      case RewardType.TITLE: return 'Unvan';
     }
   }
 
   getRewardIcon(): string {
     switch (this.rewardType) {
-      case WishboxRewardType.TIPS: return '💰';
-      case WishboxRewardType.BADGE: return '🏅';
-      case WishboxRewardType.TITLE: return '👑';
+      case RewardType.TIPS: return '💰';
+      case RewardType.BADGE: return '🏅';
+      case RewardType.TITLE: return '👑';
     }
   }
 
@@ -71,14 +71,14 @@ export class WishboxReward {
 
   getFormattedAmount(): string {
     if (!this.hasAmount()) return '';
-    
+
     if (this.isTipsReward()) {
       const amount = this.getAmount();
       if (amount >= 1000000) return `${(amount / 1000000).toFixed(1)}M TIPS`;
       if (amount >= 1000) return `${(amount / 1000).toFixed(1)}K TIPS`;
       return `${amount} TIPS`;
     }
-    
+
     return this.getAmount().toString();
   }
 
@@ -108,7 +108,7 @@ export class WishboxReward {
 
   getTimeAgo(): string {
     const days = this.getDaysSinceAwarded();
-    
+
     if (days === 0) return 'Bugün';
     if (days === 1) return 'Dün';
     if (days < 7) return `${days} gün önce`;

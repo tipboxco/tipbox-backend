@@ -1,13 +1,13 @@
-import { WishboxEventStatus } from './wishbox-event-status.enum';
+import { EventStatus } from './event-status.enum';
 
-export class WishboxEvent {
+export class Event {
   constructor(
     public readonly id: string,
     public readonly title: string,
     public readonly description: string | null,
     public readonly startDate: Date,
     public readonly endDate: Date,
-    public readonly status: WishboxEventStatus,
+    public readonly status: EventStatus,
     public readonly createdAt: Date,
     public readonly updatedAt: Date
   ) {}
@@ -22,15 +22,15 @@ export class WishboxEvent {
   }
 
   isDraft(): boolean {
-    return this.status === WishboxEventStatus.DRAFT;
+    return this.status === EventStatus.DRAFT;
   }
 
   isPublished(): boolean {
-    return this.status === WishboxEventStatus.PUBLISHED;
+    return this.status === EventStatus.PUBLISHED;
   }
 
   isClosed(): boolean {
-    return this.status === WishboxEventStatus.CLOSED;
+    return this.status === EventStatus.CLOSED;
   }
 
   isActive(): boolean {

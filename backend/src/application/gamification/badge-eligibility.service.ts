@@ -19,7 +19,7 @@ export class BadgeEligibilityService {
    */
   async isEventActive(eventId: string): Promise<boolean> {
     try {
-      const event = await this.prisma.wishboxEvent.findUnique({
+      const event = await this.prisma.event.findUnique({
         where: { id: eventId },
         select: {
           status: true,
@@ -89,7 +89,7 @@ export class BadgeEligibilityService {
       }
 
       // ✅ YENİ: Kullanıcının event'e join olup olmadığını kontrol et
-      const userStats = await this.prisma.wishboxStats.findUnique({
+      const userStats = await this.prisma.eventStats.findUnique({
         where: {
           userId_eventId: {
             userId,

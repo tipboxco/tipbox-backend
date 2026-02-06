@@ -14,8 +14,8 @@ export class EventMetricsService {
    */
   async incrementUserPostCount(userId: string, eventId: string): Promise<EventMetrics> {
     try {
-      // WishboxStats kaydını bul veya oluştur
-      const stats = await this.prisma.wishboxStats.upsert({
+      // EventStats kaydını bul veya oluştur
+      const stats = await this.prisma.eventStats.upsert({
         where: {
           userId_eventId: {
             userId,
@@ -58,8 +58,8 @@ export class EventMetricsService {
    */
   async incrementUserLikesReceived(userId: string, eventId: string): Promise<EventMetrics> {
     try {
-      // WishboxStats kaydını bul veya oluştur
-      const stats = await this.prisma.wishboxStats.upsert({
+      // EventStats kaydını bul veya oluştur
+      const stats = await this.prisma.eventStats.upsert({
         where: {
           userId_eventId: {
             userId,
@@ -102,7 +102,7 @@ export class EventMetricsService {
    */
   async decrementUserLikesReceived(userId: string, eventId: string): Promise<EventMetrics> {
     try {
-      const existingStats = await this.prisma.wishboxStats.findUnique({
+      const existingStats = await this.prisma.eventStats.findUnique({
         where: {
           userId_eventId: {
             userId,
@@ -121,7 +121,7 @@ export class EventMetricsService {
         };
       }
 
-      const stats = await this.prisma.wishboxStats.update({
+      const stats = await this.prisma.eventStats.update({
         where: {
           userId_eventId: {
             userId,
@@ -155,7 +155,7 @@ export class EventMetricsService {
    */
   async getUserMetrics(userId: string, eventId: string): Promise<EventMetrics> {
     try {
-      const stats = await this.prisma.wishboxStats.findUnique({
+      const stats = await this.prisma.eventStats.findUnique({
         where: {
           userId_eventId: {
             userId,
@@ -194,7 +194,7 @@ export class EventMetricsService {
     likesReceivedCount: number;
   }>> {
     try {
-      const stats = await this.prisma.wishboxStats.findMany({
+      const stats = await this.prisma.eventStats.findMany({
         where: {
           eventId,
         },

@@ -4,8 +4,8 @@ import { S3Service } from '../../src/infrastructure/s3/s3.service';
 import { readFileSync, existsSync } from 'fs';
 import path from 'path';
 
-// Wishbox istatistikleri için kullanılacak maksimum kullanıcı sayısı (default: 5)
-const MAX_WISHBOX_STATS_USERS = Number.parseInt(process.env.SEED_WISHBOX_USER_LIMIT || '5', 10);
+// Event istatistikleri için kullanılacak maksimum kullanıcı sayısı (default: 5)
+const MAX_EVENT_STATS_USERS = Number.parseInt(process.env.SEED_EVENT_STATS_USER_LIMIT || '5', 10);
 
 export async function seedExplore(): Promise<void> {
   console.log('🔍 [seed] explore (full)');
@@ -101,12 +101,12 @@ export async function seedExplore(): Promise<void> {
     )
   );
 
-  // Wishbox events
+  // Events
   const today = new Date();
   const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   const nextMonth = new Date(new Date().setMonth(today.getMonth() + 1));
   const events = await Promise.all([
-    prisma.wishboxEvent.create({
+    prisma.event.create({
       data: {
         id: generateUlid(),
         title: 'Yılbaşı Mega Ödül Anketi',
@@ -117,7 +117,7 @@ export async function seedExplore(): Promise<void> {
         feedType: 'PICKS',
       },
     }),
-    prisma.wishboxEvent.create({
+    prisma.event.create({
       data: {
         id: generateUlid(),
         title: 'Teknoloji Trendleri 2024',
@@ -129,7 +129,7 @@ export async function seedExplore(): Promise<void> {
         feedType: 'PICKS',
       },
     }),
-    prisma.wishboxEvent.create({
+    prisma.event.create({
       data: {
         id: generateUlid(),
         title: 'Kahve Tutkunlarının Anketi',
@@ -144,7 +144,7 @@ export async function seedExplore(): Promise<void> {
   ]).catch(() => [] as any);
 
   if (events && events.length >= 3) {
-    // WishboxScenario modeli kaldırıldı (migration 20260111132616); scenario oluşturma atlandı
+    // EventScenario modeli kaldırıldı (migration 20260111132616); scenario oluşturma atlandı
 
     const allUserIds = [
       (await prisma.user.findUnique({ where: { id: TEST_USER_ID } }))?.id,
@@ -152,12 +152,12 @@ export async function seedExplore(): Promise<void> {
       ...TRUST_USER_IDS,
     ].filter(Boolean) as string[];
 
-    const limitedUserIds = allUserIds.slice(0, MAX_WISHBOX_STATS_USERS);
+    const limitedUserIds = allUserIds.slice(0, MAX_EVENT_STATS_USERS);
 
     await Promise.all(
       events.flatMap((event: any) =>
         limitedUserIds.map((userId) =>
-          prisma.wishboxStats.create({
+          prisma.eventStats.create({
             data: {
               userId,
               eventId: event.id,

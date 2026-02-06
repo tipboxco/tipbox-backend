@@ -153,7 +153,7 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
   const eventNames = new Map<string, string | null>();
   const eventTypes = new Map<string, string | null>();
   if (eventIds.size > 0) {
-    const events = await prisma.wishboxEvent.findMany({
+    const events = await prisma.event.findMany({
       where: { id: { in: Array.from(eventIds) } },
       select: { id: true, imageUrl: true, title: true },
     });
@@ -170,7 +170,7 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
     try {
       const eventsWithType = await prisma.$queryRaw<any[]>`
         SELECT id, event_type
-        FROM wishbox_events
+        FROM events
         WHERE id = ANY(${Array.from(eventIds)}::text[])
       `;
       eventsWithType.forEach((event) => {
@@ -180,7 +180,7 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       });
     } catch (error) {
       // eventType field'ı yoksa null kalır, sorun değil
-      logger.debug('eventType field not found in wishbox_events table');
+      logger.debug('eventType field not found in events table');
     }
   }
 
@@ -433,7 +433,7 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
         randomImageCache = resolveMediaUrl(randomProduct.imageUrl);
       } else {
         // Event'lerden random seç
-        const randomEvent = await prisma.wishboxEvent.findFirst({
+        const randomEvent = await prisma.event.findFirst({
           orderBy: { createdAt: 'desc' },
           take: 1,
           select: { imageUrl: true },

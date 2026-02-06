@@ -141,7 +141,7 @@ Bu dokümantasyon, `docs/YENI_EKLENEN_ENDPOINTLER.md` dosyasında belirtilen end
 **Açıklama:**
 - Event'e katılma endpoint'i yok
 - Event service'te join metodu kontrol edilmeli
-- `wishboxStats` tablosuna kayıt yapılması gerekebilir
+- `event_stats` (EventStats) tablosuna kayıt yapılması gerekebilir
 
 **Gerekli İşlemler:**
 - Event router'a POST endpoint eklenmeli

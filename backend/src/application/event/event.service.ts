@@ -1,3 +1,4 @@
+import { PrismaClient } from '@prisma/client';
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import logger from '../../infrastructure/logger/logger';
 import {
@@ -30,7 +31,7 @@ import { EventMetricsService } from './event-metrics.service';
 import { BadgeEligibilityService } from '../gamification/badge-eligibility.service';
 
 export class EventService {
-  private prisma: ReturnType<typeof getPrisma>;
+  private prisma: PrismaClient;
   private cacheService: CacheService;
   private eventMetricsService: EventMetricsService;
   private badgeEligibilityService: BadgeEligibilityService;
@@ -40,6 +41,18 @@ export class EventService {
     this.cacheService = CacheService.getInstance();
     this.eventMetricsService = new EventMetricsService();
     this.badgeEligibilityService = new BadgeEligibilityService();
+  }
+
+  /** Prisma Event model delegate (cast for extended client type compatibility) */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private get eventDelegate(): any {
+    return (this.prisma as unknown as { event: unknown }).event;
+  }
+
+  /** Prisma EventStats model delegate (cast for extended client type compatibility) */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private get eventStatsDelegate(): any {
+    return (this.prisma as unknown as { eventStats: unknown }).eventStats;
   }
 
   /**
@@ -158,7 +171,7 @@ export class EventService {
         endDate: { gte: now },
       };
 
-      const events = (await this.prisma.wishboxEvent.findMany({
+      const events = (await this.eventDelegate.findMany({
         where,
         orderBy: { startDate: 'asc' },
         include: {
@@ -250,7 +263,7 @@ export class EventService {
         startDate: { gt: now },
       };
 
-      const events = (await this.prisma.wishboxEvent.findMany({
+      const events = (await this.eventDelegate.findMany({
         where,
         orderBy: { startDate: 'asc' },
         include: {
@@ -348,7 +361,7 @@ export class EventService {
       }
 
       // Bu event'lerden aktif olanları getir
-      const events = (await this.prisma.wishboxEvent.findMany({
+      const events = (await this.eventDelegate.findMany({
         where: {
           id: { in: eventIds },
           status: 'PUBLISHED',
@@ -434,7 +447,7 @@ export class EventService {
    */
   async getEventDetail(eventId: string, userId?: string): Promise<EventDetail> {
     try {
-      const event = (await this.prisma.wishboxEvent.findUnique({
+      const event = (await this.eventDelegate.findUnique({
         where: { id: eventId },
         include: {
           product: {
@@ -460,7 +473,7 @@ export class EventService {
       // Check if user joined (has stats for this event)
       let isJoined = false;
       if (userId) {
-        const userStats = await this.prisma.wishboxStats.findUnique({
+        const userStats = await this.eventStatsDelegate.findUnique({
           where: {
             userId_eventId: {
               userId,
@@ -559,7 +572,7 @@ export class EventService {
       }
 
       // Verify event exists
-      const event = await this.prisma.wishboxEvent.findUnique({
+      const event = await this.eventDelegate.findUnique({
         where: { id: eventId },
       });
 
@@ -721,7 +734,7 @@ export class EventService {
       const limit = Math.min(options?.limit || 5, 5); // Max 5 badges per event
 
       // Event'in varlığını doğrula
-      const event = await this.prisma.wishboxEvent.findUnique({
+      const event = await this.eventDelegate.findUnique({
         where: { id: eventId },
       });
 
@@ -734,7 +747,7 @@ export class EventService {
       const eventKeywords = event.title
         .toLowerCase()
         .split(' ')
-        .filter(word => word.length > 3); // 3 harften uzun kelimeleri al
+        .filter((word: string) => word.length > 3); // 3 harften uzun kelimeleri al
 
       // Tüm EVENT tipindeki badge'leri al
       const allEventBadges = await this.prisma.badge.findMany({
@@ -748,7 +761,7 @@ export class EventService {
         
         // Event title'daki keyword'lerden biri badge description'da var mı?
         const badgeText = `${badge.name} ${badge.description || ''}`.toLowerCase();
-        return eventKeywords.some(keyword => badgeText.includes(keyword));
+        return eventKeywords.some((keyword: string) => badgeText.includes(keyword));
       });
 
       // Önce event-specific badge'leri al, sonra generic EVENT badge'leri
@@ -847,7 +860,7 @@ export class EventService {
       const limit = Math.min(options?.limit || 20, 50); // Max 50 badges
 
       // Event'in varlığını doğrula
-      const event = await this.prisma.wishboxEvent.findUnique({
+      const event = await this.eventDelegate.findUnique({
         where: { id: eventId },
       });
 
@@ -965,7 +978,7 @@ export class EventService {
     const now = new Date();
 
     // Aktif ve bitiş tarihi ileride olan ilk event'i limited event olarak kullanalım
-    const event = await this.prisma.wishboxEvent.findFirst({
+    const event = await this.eventDelegate.findFirst({
       where: {
         status: 'PUBLISHED',
         endDate: { gt: now },
@@ -978,7 +991,7 @@ export class EventService {
     }
 
     // Leaderboard için en yüksek skora sahip kullanıcıları çek
-    const stats = await this.prisma.wishboxStats.findMany({
+    const stats = await this.eventStatsDelegate.findMany({
       where: { eventId: event.id },
       include: {
         user: {
@@ -1017,7 +1030,7 @@ export class EventService {
     // Kullanıcının kendi skoru ve sırası
     const userStat =
       sortedByScore.find((s) => s.userId === userId) ||
-      (await this.prisma.wishboxStats.findUnique({
+      (await this.eventStatsDelegate.findUnique({
         where: {
           userId_eventId: {
             userId,
@@ -1068,7 +1081,7 @@ export class EventService {
    */
   private async getEventInteraction(eventId: string): Promise<number> {
     const [participantsCount, contentPostsCount] = await Promise.all([
-      this.prisma.wishboxStats.count({
+      this.eventStatsDelegate.count({
         where: { eventId },
       }),
       this.prisma.contentPost.count({
@@ -1086,7 +1099,7 @@ export class EventService {
    * Helper: Get event participants (limited)
    */
   private async getEventParticipants(eventId: string, limit: number = 2): Promise<EventParticipant[]> {
-    const stats = await this.prisma.wishboxStats.findMany({
+    const stats = await this.eventStatsDelegate.findMany({
       where: { eventId },
       include: {
         user: {
@@ -1104,7 +1117,8 @@ export class EventService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return stats.map((stat) => ({
+    type StatWithUser = (typeof stats)[number];
+    return stats.map((stat: StatWithUser) => ({
       userId: stat.user.id,
       avatar: resolveMediaUrl(stat.user.avatars?.[0]?.imageUrl || null, true),
       userName: stat.user.profile?.displayName || stat.user.email || 'Anonymous',
@@ -1133,7 +1147,7 @@ export class EventService {
   async joinEvent(eventId: string, userId: string): Promise<EventDetail> {
     try {
       // Event'in var olup olmadığını kontrol et
-      const event = await this.prisma.wishboxEvent.findUnique({
+      const event = await this.eventDelegate.findUnique({
         where: { id: eventId },
       });
 
@@ -1156,7 +1170,7 @@ export class EventService {
       }
 
       // Kullanıcının zaten katılmış olup olmadığını kontrol et
-      const existingStats = await this.prisma.wishboxStats.findUnique({
+      const existingStats = await this.eventStatsDelegate.findUnique({
         where: {
           userId_eventId: {
             userId,
@@ -1171,8 +1185,8 @@ export class EventService {
         return await this.getEventDetail(eventId, userId);
       }
 
-      // wishboxStats'a kayıt ekle
-      await this.prisma.wishboxStats.create({
+      // eventStats'a kayıt ekle
+      await this.eventStatsDelegate.create({
         data: {
           userId,
           eventId: event.id,
@@ -1201,7 +1215,7 @@ export class EventService {
   async leaveEvent(eventId: string, userId: string): Promise<EventDetail> {
     try {
       // Event'in var olup olmadığını kontrol et
-      const event = await this.prisma.wishboxEvent.findUnique({
+      const event = await this.eventDelegate.findUnique({
         where: { id: eventId },
       });
 
@@ -1210,7 +1224,7 @@ export class EventService {
       }
 
       // Kullanıcının katılım kaydını kontrol et
-      const existingStats = await this.prisma.wishboxStats.findUnique({
+      const existingStats = await this.eventStatsDelegate.findUnique({
         where: {
           userId_eventId: {
             userId,
@@ -1225,8 +1239,8 @@ export class EventService {
         return await this.getEventDetail(eventId, userId);
       }
 
-      // wishboxStats kaydını sil
-      await this.prisma.wishboxStats.delete({
+      // eventStats kaydını sil
+      await this.eventStatsDelegate.delete({
         where: {
           userId_eventId: {
             userId,
@@ -1272,7 +1286,7 @@ export class EventService {
   }> {
     try {
       // Event'in var olup olmadığını kontrol et
-      const event = await this.prisma.wishboxEvent.findUnique({
+      const event = await this.eventDelegate.findUnique({
         where: { id: eventId },
       });
 
@@ -1281,7 +1295,7 @@ export class EventService {
       }
 
       // Kullanıcının event stats'ını al
-      const userStats = await this.prisma.wishboxStats.findUnique({
+      const userStats = await this.eventStatsDelegate.findUnique({
         where: {
           userId_eventId: {
             userId,
@@ -1533,7 +1547,7 @@ export class EventService {
       }
 
       // Event'in varlığını kontrol et
-      const event = await this.prisma.wishboxEvent.findUnique({
+      const event = await this.eventDelegate.findUnique({
         where: { id: eventId },
         select: { id: true },
       });
@@ -1719,7 +1733,7 @@ export class EventService {
       });
     }
 
-    const events = await this.prisma.wishboxEvent.findMany({
+    const events = await this.eventDelegate.findMany({
       where,
       orderBy: eventType === 'community' ? { startDate: 'asc' } : { createdAt: 'desc' },
       take: limit + 1,
@@ -1734,8 +1748,9 @@ export class EventService {
     const nextCursor = hasMore && resultEvents.length > 0 ? resultEvents[resultEvents.length - 1].id : undefined;
 
     // Map events to response format
+    type EventItem = (typeof resultEvents)[number];
     const items = await Promise.all(
-      resultEvents.map(async (event) => {
+      resultEvents.map(async (event: EventItem) => {
         const interaction = await this.getEventInteraction(event.id);
         const participants = await this.getEventParticipants(event.id, 2);
 
@@ -1751,7 +1766,7 @@ export class EventService {
           image: imageUrl || undefined,
           startDate: event.startDate.toISOString(),
           endDate: event.endDate.toISOString(),
-          eventType: event.eventType || 'SURVEY',
+          eventType: (event as { feedType?: string }).feedType ?? 'SURVEY',
           interaction,
           participants: participants.map((p) => ({
             userId: p.userId,
