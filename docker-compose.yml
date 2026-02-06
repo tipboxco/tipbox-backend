@@ -170,6 +170,7 @@ services:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/medusa-store?sslmode=disable
       - REDIS_URL=redis://redis:6379
       - TIPBOX_BACKEND_API_KEY=deneme
+      - TIPBOX_BACKEND_URL=http://backend:3000
       # CORS ayarları (Medusa için gerekli)
       - STORE_CORS=http://localhost:8000,http://localhost:3000
       - ADMIN_CORS=http://localhost:5173,http://localhost:9002
