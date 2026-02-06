@@ -29,18 +29,22 @@ import { CacheService } from '../../infrastructure/cache/cache.service';
 import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
 import { EventMetricsService } from './event-metrics.service';
 import { BadgeEligibilityService } from '../gamification/badge-eligibility.service';
+import { AchievementProgressService } from '../gamification/achievement-progress.service';
+import { MainAction } from '../../domain/gamification/main-action.enum';
 
 export class EventService {
   private prisma: PrismaClient;
   private cacheService: CacheService;
   private eventMetricsService: EventMetricsService;
   private badgeEligibilityService: BadgeEligibilityService;
+  private achievementProgressService: AchievementProgressService;
 
   constructor() {
     this.prisma = getPrisma();
     this.cacheService = CacheService.getInstance();
     this.eventMetricsService = new EventMetricsService();
     this.badgeEligibilityService = new BadgeEligibilityService();
+    this.achievementProgressService = new AchievementProgressService();
   }
 
   /** Prisma Event model delegate (cast for extended client type compatibility) */
@@ -1197,6 +1201,18 @@ export class EventService {
       });
 
       logger.info(`User ${userId} joined event ${eventId}`);
+
+      // Collection badge progress (async)
+      this.achievementProgressService
+        .incrementProgressByCode(userId, MainAction.JOIN, 'ALL', 1)
+        .catch((err) => {
+          logger.warn({
+            message: 'Failed to increment achievement progress for event join',
+            userId,
+            eventId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
 
       // Cache'i invalidate et
       await this.invalidateEventCaches(eventId, userId);

@@ -1,9 +1,22 @@
 {
   "permissions": {
     "allow": [
-      "Bash(docker compose up:*)",
-      "Bash(npx prisma generate:*)",
-      "Bash(npx tsc:*)"
-    ]
+      "Bash(npx prisma db push:*)",
+      "Bash(npx prisma migrate:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(DATABASE_URL=\"postgresql://postgres:postgres@localhost:5432/tipbox_dev\" npx prisma migrate:*)",
+      "Bash(DATABASE_URL=\"postgresql://postgres:postgres@localhost:5432/tipbox_dev\" npx prisma db push:*)",
+      "Bash(PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=\"evet, devam et\" DATABASE_URL=\"postgresql://postgres:postgres@localhost:5432/tipbox_dev\" npx prisma db push:*)",
+      "Bash(DATABASE_URL=\"postgresql://postgres:postgres@localhost:5432/tipbox_dev\" npm run seed:*)",
+      "Bash(DATABASE_URL=\"postgresql://postgres:postgres@localhost:5432/tipbox_dev\" npx prisma db seed:*)",
+      "Bash(npm run seed:*)",
+      "Bash(npx prisma db seed:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker-compose exec:*)",
+      "Bash(docker-compose logs:*)",
+      "Bash(docker-compose restart:*)",
+      "Bash(docker cp:*)"
+    ],
+    "defaultMode": "bypassPermissions"
   }
 }

@@ -36,7 +36,7 @@ import { invalidateCatalogPostsCache } from '../../infrastructure/cache/cache-in
 import { EventMetricsService } from '../event/event-metrics.service';
 import { BadgeEligibilityService } from '../gamification/badge-eligibility.service';
 import { AchievementProgressService } from '../gamification/achievement-progress.service';
-import { AchievementGoalType } from '../../domain/gamification/achievement-goal-type.enum';
+import { MainAction } from '../../domain/gamification/main-action.enum';
 import { IdResolverService } from '../../infrastructure/ids/id-resolver.service';
 
 export class PostService {
@@ -619,8 +619,20 @@ export class PostService {
       this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
         logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
       });
-      
-      return { 
+
+      // Collection badge progress (async, hata olsa bile devam et)
+      // Post type'a göre farklı action code'ları kullanılabilir
+      const postTypeCode = 'GENERAL'; // Default
+      this.achievementProgressService.incrementProgressByCode(
+        userId,
+        MainAction.POST,
+        postTypeCode,
+        1
+      ).catch((err) => {
+        logger.warn({ message: 'Failed to increment post achievement progress', userId, postId: post.id, error: err });
+      });
+
+      return {
         id: post.id,
         message: 'Post created successfully',
         success: true
@@ -1297,9 +1309,9 @@ export class PostService {
         experienceSnippetId: request.experienceSnippetId || null
       });
 
-      // Achievement Ladder progress (event dışı) - async
+      // Collection badge progress (POST + EXPERIENCE) - async
       this.achievementProgressService
-        .incrementProgress(userId, AchievementGoalType.POST, 1)
+        .incrementProgressByCode(userId, MainAction.POST, 'EXPERIENCE', 1)
         .catch((err) => {
           logger.warn({
             message: 'Failed to increment achievement progress for experience post',

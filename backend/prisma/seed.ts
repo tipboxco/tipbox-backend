@@ -3613,7 +3613,7 @@ async function seedEvents() {
       imageUrl = `events/${imageName}.png`
     }
     
-    const eventDelegate = (prisma as { event?: { create: (arg: { data: unknown }) => Promise<unknown> } }).event!;
+    const eventDelegate = (prisma as any).event;
     await eventDelegate.create({
       data: {
         id: eventId,
@@ -4425,36 +4425,36 @@ async function seedRemainingSystemTables() {
   
   // Badge isimleri ve yapılandırmaları
   // Özel isimli badge'ler (görsel dosyasından çıkarılan isimler)
-  const badgeConfigs: Array<{ name: string; type: 'ACHIEVEMENT' | 'EVENT' | 'COSMETIC' | 'BRAND'; rarity: 'COMMON' | 'RARE' | 'EPIC' }> = [
+  const badgeConfigs: Array<{ name: string; type: 'COLLECTION' | 'EVENT' | 'COSMETIC' | 'BRAND'; rarity: 'COMMON' | 'RARE' | 'EPIC' }> = [
     // Özel badge'ler
-    { name: 'Early Adapter', type: 'ACHIEVEMENT', rarity: 'EPIC' },
-    { name: 'Hardware Expert', type: 'ACHIEVEMENT', rarity: 'EPIC' },
-    { name: 'Premium Shopper', type: 'ACHIEVEMENT', rarity: 'RARE' },
-    { name: 'Wish Marker', type: 'ACHIEVEMENT', rarity: 'RARE' },
+    { name: 'Early Adapter', type: 'COLLECTION', rarity: 'EPIC' },
+    { name: 'Hardware Expert', type: 'COLLECTION', rarity: 'EPIC' },
+    { name: 'Premium Shopper', type: 'COLLECTION', rarity: 'RARE' },
+    { name: 'Wish Marker', type: 'COLLECTION', rarity: 'RARE' },
     // Numaralı badge'ler (1-10)
-    { name: 'Tech Enthusiast', type: 'ACHIEVEMENT', rarity: 'COMMON' },
+    { name: 'Tech Enthusiast', type: 'COLLECTION', rarity: 'COMMON' },
     { name: 'Beauty Guru', type: 'COSMETIC', rarity: 'COMMON' },
-    { name: 'Gadget Master', type: 'ACHIEVEMENT', rarity: 'RARE' },
+    { name: 'Gadget Master', type: 'COLLECTION', rarity: 'RARE' },
     { name: 'Style Curator', type: 'COSMETIC', rarity: 'COMMON' },
-    { name: 'Smart Buyer', type: 'ACHIEVEMENT', rarity: 'COMMON' },
-    { name: 'Product Expert', type: 'ACHIEVEMENT', rarity: 'RARE' },
-    { name: 'Review Pro', type: 'ACHIEVEMENT', rarity: 'RARE' },
-    { name: 'Content Creator', type: 'ACHIEVEMENT', rarity: 'COMMON' },
-    { name: 'Community Star', type: 'ACHIEVEMENT', rarity: 'RARE' },
+    { name: 'Smart Buyer', type: 'COLLECTION', rarity: 'COMMON' },
+    { name: 'Product Expert', type: 'COLLECTION', rarity: 'RARE' },
+    { name: 'Review Pro', type: 'COLLECTION', rarity: 'RARE' },
+    { name: 'Content Creator', type: 'COLLECTION', rarity: 'COMMON' },
+    { name: 'Community Star', type: 'COLLECTION', rarity: 'RARE' },
     { name: 'Trend Spotter', type: 'COSMETIC', rarity: 'COMMON' },
     // İsimli badge'ler (11-22) - görsel dosyalarından alınan isimler
-    { name: 'Crimson Roast', type: 'ACHIEVEMENT', rarity: 'EPIC' },
-    { name: 'Golden Pick', type: 'ACHIEVEMENT', rarity: 'EPIC' },
+    { name: 'Crimson Roast', type: 'COLLECTION', rarity: 'EPIC' },
+    { name: 'Golden Pick', type: 'COLLECTION', rarity: 'EPIC' },
     { name: 'Trendsetter', type: 'COSMETIC', rarity: 'RARE' },
-    { name: 'Web3 Architect', type: 'ACHIEVEMENT', rarity: 'EPIC' },
-    { name: 'Deal Maven', type: 'ACHIEVEMENT', rarity: 'RARE' },
-    { name: 'Ladder Vanguard', type: 'ACHIEVEMENT', rarity: 'EPIC' },
-    { name: 'Top Picks', type: 'ACHIEVEMENT', rarity: 'RARE' },
-    { name: 'Product Roast', type: 'ACHIEVEMENT', rarity: 'EPIC' },
-    { name: 'Ladder Ranker', type: 'ACHIEVEMENT', rarity: 'RARE' },
-    { name: 'Genesis Member', type: 'ACHIEVEMENT', rarity: 'EPIC' },
+    { name: 'Web3 Architect', type: 'COLLECTION', rarity: 'EPIC' },
+    { name: 'Deal Maven', type: 'COLLECTION', rarity: 'RARE' },
+    { name: 'Ladder Vanguard', type: 'COLLECTION', rarity: 'EPIC' },
+    { name: 'Top Picks', type: 'COLLECTION', rarity: 'RARE' },
+    { name: 'Product Roast', type: 'COLLECTION', rarity: 'EPIC' },
+    { name: 'Ladder Ranker', type: 'COLLECTION', rarity: 'RARE' },
+    { name: 'Genesis Member', type: 'COLLECTION', rarity: 'EPIC' },
     { name: 'Outdoor Explorer', type: 'COSMETIC', rarity: 'RARE' },
-    { name: 'Critical Review', type: 'ACHIEVEMENT', rarity: 'EPIC' },
+    { name: 'Critical Review', type: 'COLLECTION', rarity: 'EPIC' },
     // Brand badge'ler (brandbadges/ klasöründen) - BRAND tipi
     { name: 'Brand Badge 1', type: 'BRAND', rarity: 'RARE' },
     { name: 'Brand Badge 2', type: 'BRAND', rarity: 'RARE' },
@@ -4704,51 +4704,6 @@ const MEDIA_IMAGE_MAPPING: {
     'Baby': 'brand.category.kucukev',
     'Automotive': 'brand.category.otomotiv',
   },
-  // Badge görselleri (tests/assets/badge klasöründen)
-  badge: {
-    // Özel badge'ler
-    'Early Adapter': 'badge.earlyadapter',
-    'Hardware Expert': 'badge.hardwareexpert',
-    'Premium Shopper': 'badge.premiumshoper',
-    'Wish Marker': 'badge.wishmarker',
-    // Numaralı badge'ler (1-10)
-    'Tech Enthusiast': 'badge.badge-1',
-    'Beauty Guru': 'badge.badge-2',
-    'Gadget Master': 'badge.badge-3',
-    'Style Curator': 'badge.badge-4',
-    'Smart Buyer': 'badge.badge-5',
-    'Product Expert': 'badge.badge-6',
-    'Review Pro': 'badge.badge-7',
-    'Content Creator': 'badge.badge-8',
-    'Community Star': 'badge.badge-9',
-    'Trend Spotter': 'badge.badge-10',
-    // İsimli badge'ler (11-22)
-    'Crimson Roast': 'badge.badge-11-crimson-roast',
-    'Golden Pick': 'badge.badge-12-golden-pick',
-    'Trendsetter': 'badge.badge-13-trendsetter',
-    'Web3 Architect': 'badge.badge-14-web3-architect',
-    'Deal Maven': 'badge.badge-15-deal-maven',
-    'Ladder Vanguard': 'badge.badge-16-ladder-vanguard',
-    'Top Picks': 'badge.badge-17-top-picks',
-    'Product Roast': 'badge.badge-18-product-roast',
-    'Ladder Ranker': 'badge.badge-19-ladder-ranker',
-    'Genesis Member': 'badge.badge-20-genesis-member',
-    'Outdoor Explorer': 'badge.badge-21-outdoor-explorer',
-    'Critical Review': 'badge.badge-22-critical-review',
-    // Brand badge'ler (brandbadges/ klasöründen)
-    'Brand Badge 1': 'badge.brand.brandbadge1',
-    'Brand Badge 2': 'badge.brand.brandbadge2',
-    'Brand Badge 3': 'badge.brand.brandbadge3',
-    'Brand Badge 4': 'badge.brand.brandbadge4',
-    'Brand Badge 5': 'badge.brand.brandbadge5',
-    'Brand Badge 6': 'badge.brand.brandbadge6',
-    // Event badge'ler (eventbadges/ klasöründen)
-    '[Event] İlk Adım': 'badge.event.1',
-    '[Event] İlk Beğeni': 'badge.event.4',
-    '[Event] Aktif Katılımcı': 'badge.event.2',
-    '[Event] Popüler': 'badge.event.5',
-    '[Event] İçerik Ustası': 'badge.event.3',
-  },
   // User avatar görselleri (tests/assets/userprofile klasöründen)
   // Not: Mevcut avatarlar man1-5 ve woman1-5 olarak rotasyonlu kullanılıyor
   userAvatar: {
@@ -4877,10 +4832,10 @@ function getBrandImageKey(brandName: string): SeedMediaKey | undefined {
 }
 
 /**
- * Badge için görsel key'ini bul
+ * Badge için görsel key'ini bul (deprecated - badges no longer seeded)
  */
 function getBadgeImageKey(badgeName: string): SeedMediaKey | undefined {
-  return MEDIA_IMAGE_MAPPING.badge?.[badgeName];
+  return undefined; // Badge images removed from seed
 }
 
 /**
@@ -5577,186 +5532,36 @@ async function ensureBadgeCategory(config: { name: string; description?: string 
   const existing = await prisma.badgeCategory.findFirst({
     where: { name: config.name }
   });
-  
+
   if (existing) {
     return existing;
   }
-  
+
   return prisma.badgeCategory.create({
     data: config
   });
 }
 
-// Badge için idempotent create/update
-async function ensureBadge(config: { name: string; categoryId: string; description?: string; type: string; rarity: string; boostMultiplier?: number; rewardMultiplier?: number; imageKey?: SeedMediaKey }): Promise<{ id: string; name: string; categoryId: string }> {
-  // Eğer imageKey belirtilmemişse, mapping'den otomatik bul
-  let finalImageKey = config.imageKey;
-  if (!finalImageKey) {
-    finalImageKey = getBadgeImageKey(config.name);
-  }
-  
-  const existing = await prisma.badge.findFirst({
-    where: { name: config.name }
+// ActionType için idempotent create/update
+async function ensureActionType(config: { mainAction: string; code: string; label: string }): Promise<{ id: string; mainAction: string; code: string }> {
+  const existing = await prisma.actionType.findFirst({
+    where: {
+      mainAction: config.mainAction as any,
+      code: config.code
+    }
   });
-  
+
   if (existing) {
-    const updateData: any = {};
-    if (config.description !== undefined) updateData.description = config.description;
-    if (config.type) updateData.type = config.type as any;
-    if (config.rarity) updateData.rarity = config.rarity as any;
-    if (config.boostMultiplier !== undefined) updateData.boostMultiplier = config.boostMultiplier;
-    if (config.rewardMultiplier !== undefined) updateData.rewardMultiplier = config.rewardMultiplier;
-    if (config.categoryId) updateData.categoryId = config.categoryId;
-    if (finalImageKey) {
-      const imageUrl = getSeedMediaPath(finalImageKey, true);
-      if (imageUrl) updateData.imageUrl = imageUrl;
-    }
-    
-    if (Object.keys(updateData).length > 0) {
-      return prisma.badge.update({
-        where: { id: existing.id },
-        data: updateData
-      });
-    }
     return existing;
   }
-  
-  return prisma.badge.create({
+
+  return prisma.actionType.create({
     data: {
-      name: config.name,
-      description: config.description,
-      categoryId: config.categoryId,
-      type: config.type as any,
-      rarity: config.rarity as any,
-      boostMultiplier: config.boostMultiplier,
-      rewardMultiplier: config.rewardMultiplier,
-      imageUrl: finalImageKey ? (getSeedMediaPath(finalImageKey, true) || null) : null,
+      mainAction: config.mainAction as any,
+      code: config.code,
+      label: config.label
     }
   });
-}
-
-/**
- * Badge'leri kullanıcılara atar
- * - Öne çıkan olmayan kullanıcılara: Early Adapter
- * - Öne çıkan kullanıcılara: Early Adapter + 3 ACHIEVEMENT + 1 BRAND (Event badge'leri yok)
- */
-async function assignBadgesToUsers(badges: Array<{ id: string; name: string; type: string }>): Promise<void> {
-  console.log('\n🎖️  Badgeler kullanıcılara atanıyor...\n')
-
-  // Öne çıkan kullanıcı ID'leri
-  const featuredUserIds = [
-    TEST_USER_ID, // omer
-    TRUST_USER_IDS[0], // tuna
-    TRUST_USER_IDS[2], // ibrahim
-    TRUST_USER_IDS[3], // burakcan
-    TRUST_USER_IDS[4], // mihrac
-    TRUSTER_USER_IDS[1], // furkan
-    TRUSTER_USER_IDS[2], // aycan
-    TRUSTER_USER_IDS[0], // irem
-    JULIA_USER_ID, // ozan
-  ]
-
-  // Tüm kullanıcıları al
-  const allUsers = await prisma.user.findMany({
-    select: { id: true }
-  })
-
-  if (allUsers.length === 0) {
-    console.log('⚠️  Kullanıcı bulunamadı, badge atama atlanıyor')
-    return
-  }
-
-  // Badge'leri type'a göre filtrele
-  const earlyAdapterBadge = badges.find(b => b.name === 'Early Adapter')
-  const achievementBadges = badges.filter(b => 
-    b.type === 'ACHIEVEMENT' && b.name !== 'Early Adapter'
-  )
-  const brandBadges = badges.filter(b => b.type === 'BRAND')
-
-  if (!earlyAdapterBadge) {
-    console.log('⚠️  Early Adapter badge bulunamadı, atlanıyor')
-    return
-  }
-
-  let assignedCount = 0
-  let featuredAssignedCount = 0
-  let nonFeaturedAssignedCount = 0
-
-  // Her kullanıcı için badge atama
-  for (const user of allUsers) {
-    const isFeatured = featuredUserIds.includes(user.id)
-    
-    // Mevcut UserBadge'leri kontrol et (duplicate önlemek için)
-    const existingUserBadges = await prisma.userBadge.findMany({
-      where: { userId: user.id },
-      select: { badgeId: true }
-    })
-    const existingBadgeIds = new Set(existingUserBadges.map(ub => ub.badgeId))
-
-    if (isFeatured) {
-      // Öne çıkan kullanıcılar: Early Adapter + 3 ACHIEVEMENT + 1 BRAND
-      const badgesToAssign: string[] = []
-
-      // Early Adapter (her zaman)
-      if (!existingBadgeIds.has(earlyAdapterBadge.id)) {
-        badgesToAssign.push(earlyAdapterBadge.id)
-      }
-
-      // 3 random ACHIEVEMENT badge (Early Adapter hariç)
-      const availableAchievementBadges = achievementBadges.filter(b => !existingBadgeIds.has(b.id))
-      const shuffledAchievements = [...availableAchievementBadges].sort(() => Math.random() - 0.5)
-      const selectedAchievements = shuffledAchievements.slice(0, 3)
-      badgesToAssign.push(...selectedAchievements.map(b => b.id))
-
-      // 1 random BRAND badge
-      const availableBrandBadges = brandBadges.filter(b => !existingBadgeIds.has(b.id))
-      if (availableBrandBadges.length > 0) {
-        const randomBrandBadge = availableBrandBadges[Math.floor(Math.random() * availableBrandBadges.length)]
-        badgesToAssign.push(randomBrandBadge.id)
-      }
-
-      // UserBadge'leri oluştur
-      for (let i = 0; i < badgesToAssign.length; i++) {
-        const badgeId = badgesToAssign[i]
-        if (!existingBadgeIds.has(badgeId)) {
-          await prisma.userBadge.create({
-            data: {
-              userId: user.id,
-              badgeId,
-              isVisible: true,
-              visibility: 'PUBLIC',
-              claimed: true,
-              claimedAt: new Date(),
-              displayOrder: i + 1,
-            }
-          })
-          assignedCount++
-        }
-      }
-      featuredAssignedCount += badgesToAssign.length
-    } else {
-      // Öne çıkan olmayan kullanıcılar: Sadece Early Adapter
-      if (!existingBadgeIds.has(earlyAdapterBadge.id)) {
-        await prisma.userBadge.create({
-          data: {
-            userId: user.id,
-            badgeId: earlyAdapterBadge.id,
-            isVisible: true,
-            visibility: 'PUBLIC',
-            claimed: true,
-            claimedAt: new Date(),
-            displayOrder: 1,
-          }
-        })
-        assignedCount++
-        nonFeaturedAssignedCount++
-      }
-    }
-  }
-
-  console.log(`✅ ${assignedCount} badge atandı`)
-  console.log(`   Öne çıkan kullanıcılar: ${featuredAssignedCount} badge`)
-  console.log(`   Diğer kullanıcılar: ${nonFeaturedAssignedCount} badge (Early Adapter)`)
 }
 
 // UserTheme için idempotent create/update
@@ -5801,42 +5606,6 @@ async function ensureBoostOption(config: { title: string; description?: string; 
   
   return prisma.boostOption.create({
     data: config as any
-  });
-}
-
-// AchievementChain için idempotent create/update
-async function ensureAchievementChain(config: { name: string; description?: string; category: string }): Promise<{ id: string; name: string }> {
-  const existing = await prisma.achievementChain.findFirst({
-    where: { name: config.name }
-  });
-  
-  if (existing) {
-    return existing;
-  }
-  
-  return prisma.achievementChain.create({
-    data: config
-  });
-}
-
-// AchievementGoal için idempotent create/update
-async function ensureAchievementGoal(config: { chainId: string; title: string; requirement: string; rewardBadgeId?: string; pointsRequired: number; difficulty: string }): Promise<{ id: string; chainId: string; title: string }> {
-  const existing = await prisma.achievementGoal.findFirst({
-    where: { 
-      chainId: config.chainId,
-      title: config.title
-    }
-  });
-  
-  if (existing) {
-    return existing;
-  }
-  
-  return prisma.achievementGoal.create({
-    data: {
-      ...config,
-      difficulty: config.difficulty as any,
-    }
   });
 }
 
@@ -7210,10 +6979,10 @@ async function main() {
   progress.increment('Badge kategorileri oluşturuluyor...')
   console.log('\n🏆 Creating badge categories...')
   const badgeCategoryConfigs = [
-    { name: 'Achievement', description: 'Başarı rozetleri - belirli hedeflere ulaşma' },
-    { name: 'Event', description: 'Etkinlik rozetleri - özel günler ve kampanyalar' },
-    { name: 'Cosmetic', description: 'Kozmetik rozetler - görsel özelleştirme' },
-    { name: 'Community', description: 'Topluluk rozetleri - sosyal aktiviteler' }
+    { name: 'Cosmetic', description: 'Badges available for purchase in the marketplace.' },
+    { name: 'Event', description: 'Badges earned during events (e.g. by upvote ranking).' },
+    { name: 'Collection', description: 'Badges earned by completing action-based goals in collections.' },
+    { name: 'Brand', description: 'Badges associated with brands.' }
   ]
   
   const badgeCategories = await Promise.all(
@@ -7222,6 +6991,36 @@ async function main() {
     })
   )
   console.log(`✅ ${badgeCategories.length} badge kategorisi oluşturuldu/güncellendi`)
+
+  // Action Types (for Collection badge goals)
+  progress.increment('Action Types oluşturuluyor...')
+  console.log('\n⚡ Creating action types...')
+  const actionTypeConfigs = [
+    // POST actions
+    { mainAction: 'POST', code: 'EXPERIENCE', label: 'Experience Post' },
+    { mainAction: 'POST', code: 'TIPS', label: 'Tips Post' },
+    { mainAction: 'POST', code: 'REVIEW', label: 'Review Post' },
+    { mainAction: 'POST', code: 'GENERAL', label: 'General Post' },
+    // LIKE actions
+    { mainAction: 'LIKE', code: 'ALL', label: 'Like Action' },
+    // COMMENT actions
+    { mainAction: 'COMMENT', code: 'ALL', label: 'Comment Action' },
+    // BOOKMARK actions
+    { mainAction: 'BOOKMARK', code: 'ALL', label: 'Bookmark Action' },
+    // JOIN actions
+    { mainAction: 'JOIN', code: 'ALL', label: 'Join Action' },
+    // SYSTEM actions
+    { mainAction: 'SYSTEM', code: 'PROFILE_COMPLETE', label: 'Complete Profile' },
+    { mainAction: 'SYSTEM', code: 'BIO_ADD', label: 'Add Bio' },
+    { mainAction: 'SYSTEM', code: 'INVENTORY_ADD', label: 'Add Inventory Item' },
+  ]
+
+  const actionTypes = await Promise.all(
+    actionTypeConfigs.map(async (config) => {
+      return ensureActionType(config)
+    })
+  )
+  console.log(`✅ ${actionTypes.length} action type oluşturuldu/güncellendi`)
 
   // 4. Default Badges
   // NOT: Ana badge'ler (17 badge) artık setup-badges.ts script'i ile oluşturuluyor
@@ -8026,18 +7825,20 @@ async function main() {
   }
 
   // ===== EVENT BADGES & MARKETPLACE BADGES SEEDING =====
-  console.log('\n🏆 Event Badge Sistemi ve Marketplace Badge\'leri oluşturuluyor...')
-  progress.increment('Event & Marketplace badges seeding...')
-  
+  console.log('\n🏆 Event Badge Sistemi ve Marketplace Badge\'leri (Deprecated - Skipped)')
+  progress.increment('Event & Marketplace badges (skipped)...')
+
   try {
     // Event badge sistemi (badge + event + EventBadge join table)
-    await ensureEventBadgeSystem(prisma)
-    
+    // DEPRECATED: Old event badge system disabled - now using EventBadgeDistributorService with rank-based distribution
+    // await ensureEventBadgeSystem(prisma)
+
     // Marketplace badge'leri
-    await ensureMarketplaceBadges(prisma)
-    
-    progress.increment('Event & Marketplace badges tamamlandı')
-    console.log('✅ Event & Marketplace badges seeding completed')
+    // DEPRECATED: Badge seeding removed - badges are now created via admin panel or scripts
+    // await ensureMarketplaceBadges(prisma)
+
+    progress.increment('Event & Marketplace badges (skipped)')
+    console.log('✅ Event & Marketplace badges seeding skipped (deprecated)')
   } catch (error) {
     console.error('❌ Event/Marketplace badges seeding hatası:', error)
     if (error instanceof Error) {

@@ -17,7 +17,7 @@ import { NotificationType } from '../../domain/notification/notification-type.en
 import { EventMetricsService } from '../event/event-metrics.service';
 import { BadgeEligibilityService } from '../gamification/badge-eligibility.service';
 import { AchievementProgressService } from '../gamification/achievement-progress.service';
-import { AchievementGoalType } from '../../domain/gamification/achievement-goal-type.enum';
+import { MainAction } from '../../domain/gamification/main-action.enum';
 import logger from '../../infrastructure/logger/logger';
 
 export class InteractionService {
@@ -74,33 +74,19 @@ export class InteractionService {
         select: { eventId: true, userId: true },
       });
 
-      // Achievement Ladder progress (event dışı) - async
+      // Collection badge progress (async)
       this.achievementProgressService
-        .incrementProgress(userId, AchievementGoalType.LIKE_GIVEN, 1)
+        .incrementProgressByCode(userId, MainAction.LIKE, 'ALL', 1)
         .catch((err) => {
           logger.warn({
-            message: 'Failed to increment achievement progress for like given',
+            message: 'Failed to increment achievement progress for like',
             userId,
             postId,
             error: err instanceof Error ? err.message : String(err),
           });
         });
-      if (postWithEventId?.userId) {
-        this.achievementProgressService
-          .incrementProgress(
-            String(postWithEventId.userId),
-            AchievementGoalType.LIKE_RECEIVED,
-            1
-          )
-          .catch((err) => {
-            logger.warn({
-              message: 'Failed to increment achievement progress for like received',
-              userId: String(postWithEventId.userId),
-              postId,
-              error: err instanceof Error ? err.message : String(err),
-            });
-          });
-      }
+      // Note: LIKE_RECEIVED is not tracked in the new Collection badge system
+      // Collection badges only track actions by the user, not received actions
 
       if (postWithEventId?.eventId) {
         // Async olarak event metrik ve badge kontrolü yap (hata olsa bile devam et)
@@ -229,6 +215,18 @@ export class InteractionService {
           );
         }
       }
+
+      // Collection badge progress (async)
+      this.achievementProgressService
+        .incrementProgressByCode(userId, MainAction.BOOKMARK, 'ALL', 1)
+        .catch((err) => {
+          logger.warn({
+            message: 'Failed to increment achievement progress for bookmark',
+            userId,
+            postId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
 
       logger.info(`User ${userId} favorited post ${postId}`);
       return favorite;
@@ -373,6 +371,18 @@ export class InteractionService {
           }
         }
       }
+
+      // Collection badge progress (async)
+      this.achievementProgressService
+        .incrementProgressByCode(userId, MainAction.COMMENT, 'ALL', 1)
+        .catch((err) => {
+          logger.warn({
+            message: 'Failed to increment achievement progress for comment',
+            userId,
+            postId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
 
       logger.info(`User ${userId} commented on post ${postId}`);
       return comment;
