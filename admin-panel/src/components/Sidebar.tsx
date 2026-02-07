@@ -41,6 +41,7 @@ const menuItems: MenuItem[] = [
       { path: '/content/trending', label: 'Trending Posts' },
       { path: '/content/moderation', label: 'Moderation Queue' },
       { path: '/content/reviews', label: 'Manual Reviews' },
+      { path: '/content/feed-highlights', label: 'Feed Highlights' },
       { path: '/content/tags', label: 'Tags & Categories' },
     ],
   },

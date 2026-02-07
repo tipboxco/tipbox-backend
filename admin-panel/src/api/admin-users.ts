@@ -14,7 +14,6 @@ import type {
   AdminWalletSummaryItem,
   AdminTipsSummaryResponse,
   AdminTipsTransactionListItem,
-  PaginationMeta,
 } from '../types/admin';
 
 const prefix = '/admin';

@@ -6,39 +6,44 @@ import Button from '../../components/Button';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import EmptyState from '../../components/EmptyState';
 import {
-  fetchTrending,
-  createTrending,
-  updateTrending,
-  deleteTrending,
+  fetchFeedHighlights,
+  createFeedHighlight,
+  updateFeedHighlight,
+  deleteFeedHighlight,
 } from '../../api/admin-content';
-import type { AdminTrendingPostListItem } from '../../types/admin';
+import type { AdminFeedHighlightListItem } from '../../types/admin';
 import './content.css';
 
 const PAGE_SIZE = 20;
 
-function TrendingPosts() {
-  const [rows, setRows] = useState<AdminTrendingPostListItem[]>([]);
+const REASONS = [
+  { value: 'STAFF_PICK', label: 'Staff Pick' },
+  { value: 'MOST_LIKED', label: 'Most Liked' },
+  { value: 'BOOSTED', label: 'Boosted' },
+];
+
+function FeedHighlights() {
+  const [rows, setRows] = useState<AdminFeedHighlightListItem[]>([]);
   const [pagination, setPagination] = useState({
     total: 0,
     limit: PAGE_SIZE,
     offset: 0,
   });
   const [loading, setLoading] = useState(true);
-  const [trendPeriod, setTrendPeriod] = useState<string>('');
+  const [reasonFilter, setReasonFilter] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [newPostId, setNewPostId] = useState('');
-  const [newPeriod, setNewPeriod] = useState('DAILY');
-  const [newScore, setNewScore] = useState('');
+  const [newReason, setNewReason] = useState('STAFF_PICK');
 
   const load = async () => {
     setLoading(true);
     try {
-      const res = await fetchTrending({
+      const res = await fetchFeedHighlights({
         limit: PAGE_SIZE,
         offset: pagination.offset,
-        trendPeriod: trendPeriod || undefined,
+        reason: reasonFilter || undefined,
       });
       setRows(res.data ?? []);
       if (res.pagination) setPagination((p) => ({ ...p, ...res.pagination }));
@@ -51,20 +56,18 @@ function TrendingPosts() {
 
   useEffect(() => {
     load();
-  }, [pagination.offset, trendPeriod]);
+  }, [pagination.offset, reasonFilter]);
 
   const handleAdd = async () => {
     if (!newPostId.trim()) return;
     setActionLoading('add');
     try {
-      await createTrending({
+      await createFeedHighlight({
         postId: newPostId.trim(),
-        trendPeriod: newPeriod,
-        score: newScore ? Number(newScore) : undefined,
+        reason: newReason,
       });
       setShowAdd(false);
       setNewPostId('');
-      setNewScore('');
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Eklenemedi');
@@ -74,10 +77,10 @@ function TrendingPosts() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Trending\'den kaldırmak istediğinize emin misiniz?')) return;
+    if (!window.confirm('Bu highlight kaldırılsın mı?')) return;
     setActionLoading(id);
     try {
-      await deleteTrending(id);
+      await deleteFeedHighlight(id);
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Kaldırılamadı');
@@ -92,9 +95,9 @@ function TrendingPosts() {
   return (
     <div className="content-page">
       <PageHeader
-        title="Trending Posts"
-        description="View and manage trending content"
-        icon="fa-fire"
+        title="Feed Highlights"
+        description="Manage feed highlighted posts"
+        icon="fa-star"
       />
 
       {error && (
@@ -104,23 +107,26 @@ function TrendingPosts() {
       )}
 
       <DataCard
-        title="Trending listesi"
+        title="Feed highlight listesi"
         action={
           <div className="content-filters">
             <select
-              value={trendPeriod}
+              value={reasonFilter}
               onChange={(e) => {
-                setTrendPeriod(e.target.value);
+                setReasonFilter(e.target.value);
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
               className="content-filter-select"
             >
-              <option value="">Tüm periyotlar</option>
-              <option value="DAILY">Günlük</option>
-              <option value="WEEKLY">Haftalık</option>
+              <option value="">Tüm sebepler</option>
+              {REASONS.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
+              ))}
             </select>
             <Button size="sm" variant="primary" onClick={() => setShowAdd(!showAdd)}>
-              {showAdd ? 'İptal' : 'Trending\'e ekle'}
+              {showAdd ? 'İptal' : 'Highlight ekle'}
             </Button>
           </div>
         }
@@ -136,22 +142,17 @@ function TrendingPosts() {
               style={{ marginRight: 8 }}
             />
             <select
-              value={newPeriod}
-              onChange={(e) => setNewPeriod(e.target.value)}
+              value={newReason}
+              onChange={(e) => setNewReason(e.target.value)}
               className="content-filter-select"
               style={{ marginRight: 8 }}
             >
-              <option value="DAILY">DAILY</option>
-              <option value="WEEKLY">WEEKLY</option>
+              {REASONS.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
+              ))}
             </select>
-            <input
-              type="number"
-              placeholder="Score (opsiyonel)"
-              value={newScore}
-              onChange={(e) => setNewScore(e.target.value)}
-              className="content-filter-input"
-              style={{ width: 120, marginRight: 8 }}
-            />
             <Button
               size="sm"
               variant="primary"
@@ -169,8 +170,8 @@ function TrendingPosts() {
           </div>
         ) : rows.length === 0 ? (
           <EmptyState
-            icon="fa-fire"
-            title="Trending post yok"
+            icon="fa-star"
+            title="Highlight yok"
             description="Filtreleri değiştirin veya yeni ekleyin."
           />
         ) : (
@@ -181,9 +182,8 @@ function TrendingPosts() {
                   <tr>
                     <th>Post</th>
                     <th>Yazar</th>
-                    <th>Score</th>
-                    <th>Periyot</th>
-                    <th>Hesaplanma</th>
+                    <th>Sebep</th>
+                    <th>Öne çıkarılma</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -196,13 +196,8 @@ function TrendingPosts() {
                         </Link>
                       </td>
                       <td>{r.userDisplayName ?? '—'}</td>
-                      <td className="tabular-nums">{r.score}</td>
-                      <td>{r.trendPeriod}</td>
-                      <td>
-                        {r.calculatedAt
-                          ? new Date(r.calculatedAt).toLocaleString('tr-TR')
-                          : '—'}
-                      </td>
+                      <td>{r.reason}</td>
+                      <td>{new Date(r.highlightedAt).toLocaleString('tr-TR')}</td>
                       <td>
                         <Button
                           size="sm"
@@ -255,4 +250,4 @@ function TrendingPosts() {
   );
 }
 
-export default TrendingPosts;
+export default FeedHighlights;

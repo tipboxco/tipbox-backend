@@ -1,0 +1,209 @@
+/* Content — posts, comments, trending, moderation */
+
+.content-page {
+  width: 100%;
+  animation: fadeInUp 0.5s var(--ease-out-expo) backwards;
+}
+
+.content-error {
+  padding: var(--spacing-2) var(--spacing-3);
+  background: rgba(var(--danger-rgb), 0.15);
+  border: var(--border-thin);
+  border-radius: var(--radius-md);
+  color: var(--danger);
+  margin-bottom: var(--gap-8);
+}
+
+.content-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--gap-8);
+  margin-bottom: var(--gap-8);
+}
+
+@media (max-width: 1024px) {
+  .content-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .content-stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.content-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-2);
+  align-items: center;
+}
+
+.content-filter-input {
+  min-width: 200px;
+  padding: 8px 12px;
+  background: var(--bg-glass);
+  border: var(--border-thin);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+}
+
+.content-filter-input::placeholder {
+  color: var(--text-muted);
+}
+
+.content-filter-select {
+  padding: 8px 12px;
+  background: var(--bg-glass);
+  border: var(--border-thin);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+}
+
+.content-loading {
+  display: flex;
+  justify-content: center;
+  padding: var(--spacing-6);
+}
+
+.content-table-wrap {
+  overflow-x: auto;
+  margin-bottom: var(--spacing-4);
+}
+
+.content-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.content-table th,
+.content-table td {
+  padding: var(--spacing-2) var(--spacing-3);
+  text-align: left;
+  border-bottom: var(--border-thin);
+}
+
+.content-table th {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.content-table tbody tr:hover {
+  background: var(--bg-hover);
+}
+
+.content-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+}
+
+.content-badge-free { background: rgba(var(--neutral-rgb), 0.2); color: var(--text-muted); }
+.content-badge-tips { background: rgba(var(--success-rgb), 0.2); color: var(--success); }
+.content-badge-experience { background: rgba(var(--accent-rgb), 0.2); color: var(--accent); }
+.content-badge-question { background: rgba(100, 149, 237, 0.2); color: #6495ed; }
+.content-badge-compare { background: rgba(255, 165, 0, 0.2); color: orange; }
+.content-badge-update { background: rgba(148, 0, 211, 0.2); color: #9400d3; }
+
+.content-link {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.content-link:hover {
+  text-decoration: underline;
+}
+
+.content-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-2);
+}
+
+.content-pagination-info {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.content-pagination-btns {
+  display: flex;
+  gap: var(--spacing-2);
+}
+
+/* ContentPostDetail */
+
+.content-detail-page {
+  width: 100%;
+  animation: fadeInUp 0.5s var(--ease-out-expo) backwards;
+}
+
+.content-detail-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  color: var(--accent);
+  text-decoration: none;
+  font-size: var(--text-sm);
+  margin-bottom: var(--spacing-4);
+}
+
+.content-detail-back:hover {
+  text-decoration: underline;
+}
+
+.content-detail-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--spacing-2);
+  margin-bottom: var(--spacing-4);
+}
+
+.content-detail-title {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  margin: 0;
+}
+
+.content-detail-id {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.content-detail-section {
+  margin-bottom: var(--spacing-6);
+}
+
+.content-detail-body {
+  white-space: pre-wrap;
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+.content-detail-actions {
+  display: flex;
+  gap: var(--spacing-2);
+  margin-top: var(--spacing-4);
+}
+
+.content-detail-empty {
+  padding: var(--spacing-6);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.content-detail-meta {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  margin-bottom: var(--spacing-2);
+}

@@ -7,7 +7,6 @@ import type {
   AdminEventAnalyticsResponse,
   AdminEventBadgeListItem,
   AdminEventRewardListItem,
-  PaginationMeta,
 } from '../types/admin';
 
 const prefix = '/admin';

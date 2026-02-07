@@ -24,6 +24,7 @@ import {
   banUser,
   unbanUser,
 } from '../../api/admin-users';
+import { fetchUserPosts } from '../../api/admin-content';
 import type {
   AdminUserDetailResponse,
   AdminModerationHistoryItem,
@@ -36,10 +37,11 @@ import type {
   AdminTipsSummaryResponse,
   AdminTipsTransactionListItem,
   PaginationMeta,
+  AdminContentPostListItem,
 } from '../../types/admin';
 import './users.css';
 
-type TabId = 'overview' | 'profile' | 'roles' | 'events' | 'badges' | 'wallet' | 'moderation' | 'trust' | 'login';
+type TabId = 'overview' | 'profile' | 'roles' | 'events' | 'badges' | 'posts' | 'wallet' | 'moderation' | 'trust' | 'login';
 
 function UserDetail() {
   const { id } = useParams<{ id: string }>();
@@ -50,11 +52,13 @@ function UserDetail() {
   const [avatar, setAvatar] = useState<AdminAvatarResponse | null | undefined>(undefined);
   const [userEvents, setUserEvents] = useState<AdminUserEventListItem[]>([]);
   const [userBadges, setUserBadges] = useState<AdminUserBadgeListItem[]>([]);
+  const [userPosts, setUserPosts] = useState<AdminContentPostListItem[]>([]);
   const [wallet, setWallet] = useState<AdminWalletSummaryItem[]>([]);
   const [tipsSummary, setTipsSummary] = useState<AdminTipsSummaryResponse | null>(null);
   const [tipsTransactions, setTipsTransactions] = useState<AdminTipsTransactionListItem[]>([]);
   const [eventsPagination, setEventsPagination] = useState<PaginationMeta | undefined>(undefined);
   const [badgesPagination, setBadgesPagination] = useState<PaginationMeta | undefined>(undefined);
+  const [postsPagination, setPostsPagination] = useState<PaginationMeta | undefined>(undefined);
   const [tipsPagination, setTipsPagination] = useState<PaginationMeta | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [loadingTab, setLoadingTab] = useState(false);
@@ -193,6 +197,24 @@ function UserDetail() {
         if (!cancelled) {
           setUserBadges(res.data ?? []);
           setBadgesPagination(res.pagination);
+        }
+      } finally {
+        if (!cancelled) setLoadingTab(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [id, activeTab]);
+
+  useEffect(() => {
+    if (!id || activeTab !== 'posts') return;
+    let cancelled = false;
+    setLoadingTab(true);
+    (async () => {
+      try {
+        const res = await fetchUserPosts(id, { limit: 20, offset: 0 });
+        if (!cancelled) {
+          setUserPosts(res.data ?? []);
+          setPostsPagination(res.pagination);
         }
       } finally {
         if (!cancelled) setLoadingTab(false);
@@ -414,6 +436,7 @@ function UserDetail() {
     { id: 'roles', label: 'Roller' },
     { id: 'events', label: 'Etkinlikler' },
     { id: 'badges', label: 'Rozetler' },
+    { id: 'posts', label: 'Postları' },
     { id: 'wallet', label: 'Cüzdan & Tips' },
     { id: 'moderation', label: 'Moderation geçmişi' },
     { id: 'trust', label: 'Trust skorları' },
@@ -765,6 +788,63 @@ function UserDetail() {
                 {eventsPagination && eventsPagination.total > eventsPagination.limit && (
                   <p className="users-pagination-info">
                     Toplam {eventsPagination.total} kayıt (gösterilen: {userEvents.length})
+                  </p>
+                )}
+              </>
+            )}
+          </DataCard>
+        )}
+
+        {activeTab === 'posts' && (
+          <DataCard
+            title="Kullanıcının postları"
+            action={
+              <Link to="/content/posts" className="users-link">
+                Tüm postlar
+              </Link>
+            }
+          >
+            {loadingTab ? (
+              <LoadingSpinner fullScreen={false} />
+            ) : userPosts.length === 0 ? (
+              <p className="users-detail-field-value">Kayıt yok</p>
+            ) : (
+              <>
+                <div className="users-table-wrap">
+                  <table className="users-table">
+                    <thead>
+                      <tr>
+                        <th>Başlık</th>
+                        <th>Tür</th>
+                        <th>Beğeni</th>
+                        <th>Yorum</th>
+                        <th>Oluşturulma</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {userPosts.map((p) => (
+                        <tr key={p.id}>
+                          <td title={p.title}>
+                            {p.title.length > 50 ? p.title.slice(0, 50) + '…' : p.title}
+                          </td>
+                          <td>{p.type}</td>
+                          <td className="tabular-nums">{p.likesCount}</td>
+                          <td className="tabular-nums">{p.commentsCount}</td>
+                          <td>{p.createdAt ? new Date(p.createdAt).toLocaleDateString('tr-TR') : '—'}</td>
+                          <td>
+                            <Link to={`/content/posts/${p.id}`} className="users-link">
+                              Post detay
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {postsPagination && postsPagination.total > postsPagination.limit && (
+                  <p className="users-pagination-info">
+                    Toplam {postsPagination.total} kayıt (gösterilen: {userPosts.length})
                   </p>
                 )}
               </>

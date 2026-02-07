@@ -18,11 +18,13 @@ import BannedUsers from './pages/users/BannedUsers';
 
 // Content pages
 import ContentPosts from './pages/content/ContentPosts';
+import ContentPostDetail from './pages/content/ContentPostDetail';
 import ContentComments from './pages/content/ContentComments';
 import TrendingPosts from './pages/content/TrendingPosts';
 import ModerationQueue from './pages/content/ModerationQueue';
 import ManualReviews from './pages/content/ManualReviews';
 import TagsCategories from './pages/content/TagsCategories';
+import FeedHighlights from './pages/content/FeedHighlights';
 
 // Product pages
 import ProductCatalog from './pages/products/ProductCatalog';
@@ -41,7 +43,9 @@ import BrandRewards from './pages/brands/BrandRewards';
 
 // Gamification pages
 import Badges from './pages/gamification/Badges';
+import BadgeDetail from './pages/gamification/BadgeDetail';
 import BadgeCollections from './pages/gamification/BadgeCollections';
+import CollectionDetail from './pages/gamification/CollectionDetail';
 import Achievements from './pages/gamification/Achievements';
 import AchievementChains from './pages/gamification/AchievementChains';
 import UserProgress from './pages/gamification/UserProgress';
@@ -103,12 +107,14 @@ function App() {
           <Route path="users/banned" element={<BannedUsers />} />
           <Route path="users/:id" element={<UserDetail />} />
 
-          {/* Content */}
+          {/* Content — posts/:id before other content so :id matches */}
           <Route path="content/posts" element={<ContentPosts />} />
+          <Route path="content/posts/:id" element={<ContentPostDetail />} />
           <Route path="content/comments" element={<ContentComments />} />
           <Route path="content/trending" element={<TrendingPosts />} />
           <Route path="content/moderation" element={<ModerationQueue />} />
           <Route path="content/reviews" element={<ManualReviews />} />
+          <Route path="content/feed-highlights" element={<FeedHighlights />} />
           <Route path="content/tags" element={<TagsCategories />} />
 
           {/* Products */}
@@ -128,7 +134,9 @@ function App() {
 
           {/* Gamification */}
           <Route path="gamification/badges" element={<Badges />} />
+          <Route path="gamification/badges/:id" element={<BadgeDetail />} />
           <Route path="gamification/collections" element={<BadgeCollections />} />
+          <Route path="gamification/collections/:id" element={<CollectionDetail />} />
           <Route path="gamification/achievements" element={<Achievements />} />
           <Route path="gamification/chains" element={<AchievementChains />} />
           <Route path="gamification/progress" element={<UserProgress />} />

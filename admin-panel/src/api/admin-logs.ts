@@ -1,5 +1,5 @@
 import { get } from './client';
-import type { AdminLogListItem, PaginationMeta } from '../types/admin';
+import type { AdminLogListItem } from '../types/admin';
 
 const prefix = '/admin';
 

@@ -1,5 +1,5 @@
 import { get, patch } from './client';
-import type { AdminUserReportListItem, AdminUserReportDetailResponse, PaginationMeta } from '../types/admin';
+import type { AdminUserReportListItem, AdminUserReportDetailResponse } from '../types/admin';
 
 const prefix = '/admin';
 

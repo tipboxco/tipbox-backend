@@ -1,0 +1,306 @@
+/* Gamification — Badges & Collections list & detail */
+
+.gamification-page {
+  width: 100%;
+  animation: fadeInUp 0.5s var(--ease-out-expo) backwards;
+}
+
+.gamification-error {
+  padding: var(--spacing-2) var(--spacing-3);
+  background: rgba(var(--danger-rgb), 0.15);
+  border: var(--border-thin);
+  border-radius: var(--radius-md);
+  color: var(--danger);
+  margin-bottom: var(--gap-8);
+}
+
+.gamification-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--gap-8);
+  margin-bottom: var(--gap-8);
+}
+
+@media (max-width: 1024px) {
+  .gamification-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .gamification-stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.gamification-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-2);
+  align-items: center;
+}
+
+.gamification-filter-input {
+  min-width: 200px;
+  padding: 8px 12px;
+  background: var(--bg-glass);
+  border: var(--border-thin);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+}
+
+.gamification-filter-input::placeholder {
+  color: var(--text-muted);
+}
+
+.gamification-filter-select {
+  padding: 8px 12px;
+  background: var(--bg-glass);
+  border: var(--border-thin);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+}
+
+.gamification-loading {
+  display: flex;
+  justify-content: center;
+  padding: var(--spacing-6);
+}
+
+.gamification-table-wrap {
+  overflow-x: auto;
+  margin-bottom: var(--spacing-4);
+}
+
+.gamification-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.gamification-table th,
+.gamification-table td {
+  padding: var(--spacing-2) var(--spacing-3);
+  text-align: left;
+  border-bottom: var(--border-thin);
+}
+
+.gamification-table th {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.gamification-table tbody tr:hover {
+  background: var(--bg-hover);
+}
+
+.gamification-badge-thumb {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  vertical-align: middle;
+  margin-right: var(--spacing-2);
+}
+
+.gamification-badge-type,
+.gamification-badge-rarity {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  margin-left: var(--spacing-2);
+  background: rgba(var(--neutral-rgb), 0.2);
+  color: var(--text-muted);
+}
+
+.gamification-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-2);
+}
+
+.gamification-pagination-info {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.gamification-empty-text {
+  padding: var(--spacing-6);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+/* Detail pages */
+
+.badge-detail-page,
+.collection-detail-page {
+  width: 100%;
+  animation: fadeInUp 0.5s var(--ease-out-expo) backwards;
+}
+
+.gamification-detail-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  color: var(--accent);
+  text-decoration: none;
+  font-size: var(--text-sm);
+  margin-bottom: var(--spacing-4);
+}
+
+.gamification-detail-back:hover {
+  text-decoration: underline;
+}
+
+.badge-detail-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-4);
+  margin-bottom: var(--spacing-4);
+}
+
+.badge-detail-image {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+}
+
+.badge-detail-title {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  margin: 0;
+}
+
+.badge-detail-id {
+  display: block;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.collection-detail-header {
+  margin-bottom: var(--spacing-4);
+}
+
+.collection-detail-title {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  margin: 0;
+}
+
+.collection-detail-id {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.gamification-detail-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: var(--border-thin);
+  margin-bottom: var(--spacing-4);
+}
+
+.gamification-detail-tab {
+  padding: var(--spacing-2) var(--spacing-4);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.gamification-detail-tab:hover {
+  color: var(--text-primary);
+}
+
+.gamification-detail-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.gamification-detail-section {
+  margin-bottom: var(--spacing-6);
+}
+
+.gamification-detail-section p {
+  margin-bottom: var(--spacing-2);
+  font-size: var(--text-sm);
+}
+
+.gamification-detail-section label {
+  display: block;
+  margin-bottom: var(--spacing-2);
+  font-size: var(--text-sm);
+}
+
+.gamification-detail-section input,
+.gamification-detail-section select {
+  margin-left: var(--spacing-2);
+  padding: 6px 10px;
+  background: var(--bg-glass);
+  border: var(--border-thin);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+}
+
+.gamification-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--spacing-4);
+}
+
+.gamification-form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+}
+
+.gamification-form-grid label input {
+  margin-left: 0;
+  width: 100%;
+}
+
+.gamification-detail-actions {
+  display: flex;
+  gap: var(--spacing-2);
+  margin-top: var(--spacing-4);
+}
+
+.gamification-confirm-delete {
+  margin-top: var(--spacing-4);
+  padding: var(--spacing-4);
+  background: rgba(var(--danger-rgb), 0.08);
+  border: var(--border-thin);
+  border-radius: var(--radius-md);
+}
+
+.gamification-confirm-delete p {
+  margin-bottom: var(--spacing-2);
+}
+
+.gamification-confirm-delete button + button {
+  margin-left: var(--spacing-2);
+}
+
+.gamification-badges-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-2);
+  align-items: center;
+  margin-bottom: var(--spacing-4);
+}
+
+.gamification-badges-toolbar select {
+  min-width: 220px;
+}

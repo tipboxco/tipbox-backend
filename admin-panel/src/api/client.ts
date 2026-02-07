@@ -40,7 +40,16 @@ export async function request<T>(
   }
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(json.message || json.error || `HTTP ${res.status}`);
+    const raw = json.message ?? json.error;
+    const msg =
+      typeof raw === 'string'
+        ? raw
+        : raw && typeof raw === 'object' && 'message' in raw
+          ? String((raw as { message?: unknown }).message)
+          : raw != null
+            ? JSON.stringify(raw)
+            : `HTTP ${res.status}`;
+    throw new Error(msg === '[object Object]' ? `HTTP ${res.status}` : msg);
   }
   return json as ApiResponse<T>;
 }
