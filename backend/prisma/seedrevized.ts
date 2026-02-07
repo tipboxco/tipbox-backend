@@ -6856,7 +6856,7 @@ async function main() {
   const createdUpcomingEvents = upcomingEvents.filter(Boolean) as any[]
   console.log(`✅ ${createdUpcomingEvents.length} yaklaşan event oluşturuldu`)
 
-  // Scenario/ScenarioChoice modelleri kaldırıldı (Wishbox → Event geçişi) - atlanıyor
+  // Scenario/ScenarioChoice modelleri kaldırıldı - atlanıyor
   const createdScenarios: unknown[] = []
   console.log('🎯 Event scenarios skipped (model removed)')
 
@@ -6880,7 +6880,7 @@ async function main() {
   )
   console.log(`✅ ${eventStats.length} event stat oluşturuldu`)
 
-  // Scenario/ScenarioChoice modelleri kaldırıldı (Wishbox → Event geçişi) - atlanıyor
+  // Scenario/ScenarioChoice modelleri kaldırıldı - atlanıyor
   const limitedEvent = createdEvents.find((e) => e && e.title === 'Special Discount Campaign')
   if (limitedEvent) {
     console.log('🧩 Scenario/choice skipped for limited event (models removed)')

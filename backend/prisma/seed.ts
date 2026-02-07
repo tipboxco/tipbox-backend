@@ -19,6 +19,7 @@ import { seedPayment } from './seed/steps/payment.seed'
 import { seedTipsTransfers } from './seed/steps/tips-transfer.seed'
 import { seedExpert } from './seed/steps/expert.seed'
 import { seedNotification } from './seed/steps/notification.seed'
+import { ensureAdminUser } from './seed/steps/admin-user.seed'
 import { GeminiService } from '../src/infrastructure/ai/gemini.service'
 import { brandToWebsite } from '../src/data/brandToWebsite'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -51,6 +52,25 @@ const TRUSTER_USER_IDS = [
 // Julia Havk user ID
 const JULIA_USER_ID = '99999999-9999-4999-9999-999999999999' // ozan@tipbox.co
 const COMMUNITY_COACH_USER_ID = '10000000-0000-4000-a000-000000000017' // ebru@tipbox.co
+
+/** Öne çıkan kullanıcılar: sadece bunlar için post ve inventory oluşturulur (SEED_FEATURED_ONLY=true ise) */
+const FEATURED_USER_IDS = [
+  TEST_USER_ID,
+  TRUST_USER_IDS[0],
+  TRUST_USER_IDS[2],
+  TRUST_USER_IDS[3],
+  TRUST_USER_IDS[4],
+  TRUSTER_USER_IDS[0],
+  TRUSTER_USER_IDS[1],
+  TRUSTER_USER_IDS[2],
+  JULIA_USER_ID,
+]
+
+function isFeaturedOnlyMode(): boolean {
+  const v = process.env.SEED_FEATURED_ONLY
+  if (v == null || v === '') return true
+  return ['1', 'true', 'yes', 'y'].includes(v.trim().toLowerCase())
+}
 
 // Hash the default password for all users
 const DEFAULT_PASSWORD = 'password123'
@@ -1891,8 +1911,14 @@ async function seedPostTags() {
  */
 async function seedUserInventories() {
   console.log('\n🎒 Kullanıcı inventory\'leri oluşturuluyor...\n')
-  
-  const users = await prisma.user.findMany({ take: 40 })
+
+  const featuredOnly = isFeaturedOnlyMode()
+  const users = featuredOnly
+    ? await prisma.user.findMany({ where: { id: { in: FEATURED_USER_IDS } } })
+    : await prisma.user.findMany({ take: 40 })
+  if (featuredOnly) {
+    console.log(`   📌 Sadece öne çıkan kullanıcılar için inventory (${users.length} kullanıcı). SEED_FEATURED_ONLY=false ile tüm kullanıcılar kullanılır.\n`)
+  }
   const allProducts = await prisma.product.findMany({ take: 500 })
   
   if (allProducts.length === 0) {
@@ -2384,11 +2410,20 @@ async function seedPosts() {
     console.log(`⚠️ Sadece ${allUsers.length} kullanıcı bulundu, devam ediliyor...`)
   }
   
-  // Öne çıkan kullanıcıları önce al, sonra diğerlerini ekle
+  // Öne çıkan kullanıcıları önce al; SEED_FEATURED_ONLY=true ise sadece onlar post paylaşır
   const featuredUsers = allUsers.filter(u => featuredUserIds.includes(u.id))
   const otherUsers = allUsers.filter(u => !featuredUserIds.includes(u.id))
-  const users = [...featuredUsers, ...otherUsers].slice(0, 30)
-  
+  const featuredOnly = isFeaturedOnlyMode()
+  let users = featuredOnly
+    ? featuredUsers
+    : [...featuredUsers, ...otherUsers].slice(0, 30)
+  if (featuredOnly && users.length === 0) {
+    console.warn('   ⚠️ Öne çıkan kullanıcı bulunamadı, ilk 5 kullanıcı kullanılıyor.')
+    users = allUsers.slice(0, 5)
+  }
+  if (featuredOnly && users.length > 0) {
+    console.log(`   📌 Sadece öne çıkan kullanıcılar için post (${users.length} kullanıcı). SEED_FEATURED_ONLY=false ile daha fazla kullanıcı eklenir.\n`)
+  }
   console.log(`👥 Toplam ${users.length} kullanıcı (${featuredUsers.length} öne çıkan, ${otherUsers.length} diğer)`)
   
   // Experience taxonomy'leri getir
@@ -6839,6 +6874,12 @@ async function main() {
   const allUserIds = Array.from(seedUsers.keys())
   console.log(`✅ ${seedUsers.size} kullanıcı oluşturuldu`)
   progress.increment('Seed kullanıcıları oluşturuldu')
+
+  // 2a. Admin user (admin@tipbox.co, ADMIN rolü)
+  progress.increment('Admin kullanıcı oluşturuluyor...')
+  await ensureAdminUser(prisma, passwordHash)
+  console.log('✅ Admin kullanıcı (admin@tipbox.co) hazır')
+  progress.increment('Admin kullanıcı oluşturuldu')
 
   // 2b. UserAvatar (ensure every seed user has active avatar for EP compatibility)
   progress.increment('UserAvatar step...')

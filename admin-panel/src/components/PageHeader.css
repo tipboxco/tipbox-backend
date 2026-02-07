@@ -1,0 +1,101 @@
+/* ============================================
+   PAGE HEADER — Section title block
+   ============================================ */
+
+.page-header {
+  margin-bottom: var(--gap-10);
+  padding-bottom: var(--gap-8);
+  border-bottom: var(--border-thin);
+  animation: fadeInUp 0.5s var(--ease-out-expo) backwards;
+}
+
+.page-header-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-4);
+  flex-wrap: wrap;
+}
+
+.page-header-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-2) var(--spacing-3);
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  border-radius: var(--radius-md);
+  border: var(--border-thin);
+  background: var(--bg-glass);
+  transition: color var(--transition-base), background var(--transition-base), border-color var(--transition-base);
+}
+
+.page-header-back:hover {
+  color: var(--accent);
+  background: var(--bg-glass-hover);
+  border-color: rgba(var(--accent-rgb), 0.3);
+}
+
+.page-header-text {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+}
+
+.page-icon {
+  font-size: var(--text-xl);
+  color: var(--accent);
+  filter: drop-shadow(0 0 12px rgba(var(--accent-rgb), 0.4));
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-dim);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-base);
+}
+
+.page-header:hover .page-icon {
+  filter: drop-shadow(0 0 16px rgba(var(--accent-rgb), 0.5));
+  box-shadow: 0 0 20px var(--accent-glow);
+}
+
+/* Ana başlık: %100 beyaz */
+.page-title {
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-1);
+  line-height: var(--leading-tight);
+}
+
+/* Alt açıklama: %60 opaklık */
+.page-description {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin: 0;
+  margin-top: 4px;
+  line-height: var(--leading-relaxed);
+  max-width: 480px;
+}
+
+.page-actions {
+  display: flex;
+  gap: var(--spacing-2);
+}
+
+@media (max-width: 768px) {
+  .page-title {
+    font-size: var(--text-lg);
+  }
+
+  .page-icon {
+    font-size: var(--text-lg);
+    width: 40px;
+    height: 40px;
+  }
+}

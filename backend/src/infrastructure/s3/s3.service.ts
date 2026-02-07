@@ -333,6 +333,32 @@ export class S3Service {
   }
 
   /**
+   * Belirtilen prefix altındaki tüm object key'lerini listeler
+   * @param prefix - Prefix (örn: 'badges/custom/')
+   * @returns Key listesi (örn: ['badges/custom/foo.png', 'badges/custom/bar.png'])
+   */
+  async listObjectKeys(prefix: string): Promise<string[]> {
+    const keys: string[] = [];
+    let continuationToken: string | undefined;
+    do {
+      const listCommand = new ListObjectsV2Command({
+        Bucket: s3Config.bucketName,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+        MaxKeys: 1000,
+      });
+      const response = await this.s3Client.send(listCommand);
+      if (response.Contents?.length) {
+        for (const obj of response.Contents) {
+          if (obj.Key) keys.push(obj.Key);
+        }
+      }
+      continuationToken = response.NextContinuationToken;
+    } while (continuationToken);
+    return keys;
+  }
+
+  /**
    * Klasördeki tüm dosyaları recursive olarak sil
    * @param folderPrefix - Klasör prefix'i (örn: 'users/', 'posts/')
    * @returns Silinen dosya sayısı

@@ -14,6 +14,9 @@
  * Kullanım:
  *   npx ts-node scripts/clear-and-seed.ts          # Taxonomy korunur (sadece user/content temizlenir)
  *   npx ts-node scripts/clear-and-seed.ts --all    # Tüm veriler temizlenir (taxonomy dahil)
+ *
+ * Post ve inventory sadece öne çıkan kullanıcılar için oluşturulur (varsayılan).
+ * Tüm kullanıcılar için post/inventory isterseniz: SEED_FEATURED_ONLY=false npx ts-node scripts/clear-and-seed.ts
  */
 
 import { execSync } from 'child_process';

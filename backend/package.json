@@ -53,7 +53,8 @@
     "test:tuna-georgia": "docker-compose exec backend npx ts-node scripts/tuna-georgia-socket-test.ts",
     "test:support-flow": "docker-compose exec backend npx ts-node scripts/test-support-request-flow.ts",
     "clear:georgia": "docker-compose exec backend npx ts-node scripts/clear-georgia-all-data.ts",
-    "delete:georgia-threads": "docker-compose exec backend npx ts-node scripts/delete-georgia-threads-complete.ts"
+    "delete:georgia-threads": "docker-compose exec backend npx ts-node scripts/delete-georgia-threads-complete.ts",
+    "sync-badge-images": "npx ts-node scripts/sync-badge-images-from-minio.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

@@ -32,8 +32,9 @@ Bu doküman, **localhost:3000** üzerinde sunulan **Tipbox Developer Console** (
 
 | Amaç | Değer | Kullanım |
 |------|--------|----------|
-| Birincil metin | `#FAFAFA` | Başlıklar, ana metin, buton yazısı |
-| İkincil / soluk metin | `#A3A3A3` | Açıklamalar, URL (normal), status metni |
+| Birincil metin | `#FFFFFF` | Başlıklar, ana metin, buton yazısı |
+| İkincil metin | `rgba(255, 255, 255, 0.95)` | Navigasyon, etiketler |
+| Soluk metin | `rgba(255, 255, 255, 0.82)` | Açıklamalar, zaman damgası, status metni |
 | Vurgu / link | `#D0F205` | Accent, ikonlar, hover’da URL, commit linki |
 | Kod / inline code | `#D0F205` + `rgba(208, 242, 5, 0.1)` arka plan | `.command-description code` |
 
