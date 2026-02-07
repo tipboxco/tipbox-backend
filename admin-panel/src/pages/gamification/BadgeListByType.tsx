@@ -2,63 +2,59 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import PageHeader from '../../components/PageHeader';
 import DataCard from '../../components/DataCard';
-import StatsCard from '../../components/StatsCard';
 import Button from '../../components/Button';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import EmptyState from '../../components/EmptyState';
-import {
-  fetchCollectionsStats,
-  fetchCollections,
-} from '../../api/admin-badges-collections';
-import type { AdminCollectionListItem, AdminCollectionStatsResponse } from '../../types/admin';
-import CreateCollectionModal from './CreateCollectionModal';
+import { fetchBadges } from '../../api/admin-badges-collections';
+import type { AdminBadgeListItem } from '../../types/admin';
 import './gamification.css';
 
 const PAGE_SIZE = 20;
 
-function BadgeCollections() {
-  const [stats, setStats] = useState<AdminCollectionStatsResponse | null>(null);
-  const [collections, setCollections] = useState<AdminCollectionListItem[]>([]);
+export type BadgeTypeSlug = 'EVENT' | 'BRAND' | 'COSMETIC';
+
+export interface BadgeListByTypeProps {
+  badgeType: BadgeTypeSlug;
+  listPath: string;
+  title: string;
+  description: string;
+  icon?: string;
+  onOpenCreate?: () => void;
+}
+
+function BadgeListByType({
+  badgeType,
+  listPath,
+  title,
+  description,
+  icon = 'fa-medal',
+  onOpenCreate,
+}: BadgeListByTypeProps) {
+  const [badges, setBadges] = useState<AdminBadgeListItem[]>([]);
   const [pagination, setPagination] = useState({ total: 0, limit: PAGE_SIZE, offset: 0 });
-  const [loading, setLoading] = useState(true);
   const [loadingList, setLoadingList] = useState(true);
   const [search, setSearch] = useState('');
+  const [rarity, setRarity] = useState<string>('');
   const [sort, setSort] = useState<'createdAt' | 'name'>('createdAt');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const [error, setError] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetchCollectionsStats();
-        if (!cancelled && res.data) setStats(res.data);
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'İstatistikler yüklenemedi');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
     setLoadingList(true);
     (async () => {
       try {
-        const res = await fetchCollections({
+        const res = await fetchBadges({
           limit: PAGE_SIZE,
           offset: pagination.offset,
           search: search || undefined,
+          type: badgeType,
+          rarity: rarity || undefined,
           sort,
           order,
         });
         if (!cancelled) {
-          setCollections(res.data ?? []);
+          setBadges(res.data ?? []);
           if (res.pagination) setPagination((prev) => ({ ...prev, ...res.pagination }));
         }
       } catch (e) {
@@ -70,7 +66,7 @@ function BadgeCollections() {
     return () => {
       cancelled = true;
     };
-  }, [pagination.offset, search, sort, order]);
+  }, [badgeType, pagination.offset, search, rarity, sort, order]);
 
   const totalPages = Math.ceil(pagination.total / pagination.limit) || 1;
   const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
@@ -78,9 +74,9 @@ function BadgeCollections() {
   return (
     <div className="gamification-page">
       <PageHeader
-        title="Collections"
-        description="Koleksiyon listesi, filtreleme ve yönetim (achievement badge'ler koleksiyon içinde yönetilir)"
-        icon="fa-folder-open"
+        title={title}
+        description={description}
+        icon={icon}
       />
 
       {error && (
@@ -89,26 +85,18 @@ function BadgeCollections() {
         </div>
       )}
 
-      {loading ? (
-        <LoadingSpinner />
-      ) : (
-        stats && (
-          <div className="gamification-stats-grid">
-            <StatsCard title="Toplam koleksiyon" value={stats.total} icon="fa-folder-open" color="accent" />
-          </div>
-        )
-      )}
-
       <DataCard
-        title="Koleksiyon listesi"
+        title={`${title} listesi`}
         action={
           <div className="gamification-filters">
-            <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
-              Yeni koleksiyon
-            </Button>
+            {onOpenCreate && (
+              <Button variant="primary" size="sm" onClick={onOpenCreate}>
+                Yeni badge
+              </Button>
+            )}
             <input
               type="text"
-              placeholder="Ara (ad)"
+              placeholder="Ara (ad, açıklama)"
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -116,6 +104,19 @@ function BadgeCollections() {
               }}
               className="gamification-filter-input"
             />
+            <select
+              value={rarity}
+              onChange={(e) => {
+                setRarity(e.target.value);
+                setPagination((p) => ({ ...p, offset: 0 }));
+              }}
+              className="gamification-filter-select"
+            >
+              <option value="">Tüm rarity</option>
+              <option value="COMMON">COMMON</option>
+              <option value="RARE">RARE</option>
+              <option value="EPIC">EPIC</option>
+            </select>
             <select
               value={sort}
               onChange={(e) => {
@@ -145,11 +146,11 @@ function BadgeCollections() {
           <div className="gamification-loading">
             <LoadingSpinner />
           </div>
-        ) : collections.length === 0 ? (
+        ) : badges.length === 0 ? (
           <EmptyState
-            icon="fa-folder-open"
-            title="Koleksiyon bulunamadı"
-            description="Filtreleri değiştirin veya yeni koleksiyon oluşturun."
+            icon={icon}
+            title="Badge bulunamadı"
+            description="Filtreleri değiştirin veya yeni badge oluşturun."
           />
         ) : (
           <>
@@ -158,23 +159,26 @@ function BadgeCollections() {
                 <thead>
                   <tr>
                     <th>Ad</th>
+                    <th>Rarity</th>
                     <th>Kategori</th>
-                    <th>Badge sayısı</th>
-                    <th>Hedef sayısı</th>
                     <th>Oluşturulma</th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {collections.map((c) => (
-                    <tr key={c.id}>
-                      <td>{c.name}</td>
-                      <td>{c.categoryName ?? c.categoryId}</td>
-                      <td>{c.badgesCount}</td>
-                      <td>{c.goalsCount ?? 0}</td>
-                      <td>{new Date(c.createdAt).toLocaleString('tr-TR')}</td>
+                  {badges.map((b) => (
+                    <tr key={b.id}>
                       <td>
-                        <Link to={`/gamification/collections/${c.id}`}>
+                        {b.imageUrl && (
+                          <img src={b.imageUrl} alt="" className="gamification-badge-thumb" />
+                        )}
+                        <span>{b.name}</span>
+                      </td>
+                      <td>{b.rarity}</td>
+                      <td>{b.categoryName ?? b.categoryId}</td>
+                      <td>{new Date(b.createdAt).toLocaleString('tr-TR')}</td>
+                      <td>
+                        <Link to={`${listPath}/${b.id}`}>
                           <Button variant="secondary" size="sm">
                             Detay
                           </Button>
@@ -218,28 +222,8 @@ function BadgeCollections() {
           </>
         )}
       </DataCard>
-      {createOpen && (
-        <CreateCollectionModal
-          onClose={() => setCreateOpen(false)}
-          onSuccess={() => {
-            setCreateOpen(false);
-            setPagination((p) => ({ ...p, offset: 0 }));
-            setLoadingList(true);
-            fetchCollections({
-              limit: PAGE_SIZE,
-              offset: 0,
-              sort,
-              order,
-              search: search || undefined,
-            }).then((res) => {
-              setCollections(res.data ?? []);
-              if (res.pagination) setPagination((prev) => ({ ...prev, ...res.pagination }));
-            }).finally(() => setLoadingList(false));
-          }}
-        />
-      )}
     </div>
   );
 }
 
-export default BadgeCollections;
+export default BadgeListByType;

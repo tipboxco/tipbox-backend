@@ -72,8 +72,10 @@ const menuItems: MenuItem[] = [
     label: 'Gamification',
     icon: 'fa-trophy',
     subItems: [
-      { path: '/gamification/badges', label: 'Badges' },
-      { path: '/gamification/collections', label: 'Badge Collections' },
+      { path: '/gamification/collections', label: 'Collections' },
+      { path: '/gamification/event-badges', label: 'Event Badges (Community Badges)' },
+      { path: '/gamification/brand-badges', label: 'Brand Badges' },
+      { path: '/gamification/cosmetic-badges', label: 'Cosmetic Badges' },
       { path: '/gamification/achievements', label: 'Achievements' },
       { path: '/gamification/chains', label: 'Achievement Chains' },
       { path: '/gamification/progress', label: 'User Progress' },

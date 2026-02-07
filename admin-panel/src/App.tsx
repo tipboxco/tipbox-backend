@@ -42,10 +42,12 @@ import BrandLeaderboards from './pages/brands/BrandLeaderboards';
 import BrandRewards from './pages/brands/BrandRewards';
 
 // Gamification pages
-import Badges from './pages/gamification/Badges';
 import BadgeDetail from './pages/gamification/BadgeDetail';
 import BadgeCollections from './pages/gamification/BadgeCollections';
 import CollectionDetail from './pages/gamification/CollectionDetail';
+import EventBadgesList from './pages/gamification/EventBadgesList';
+import BrandBadgesList from './pages/gamification/BrandBadgesList';
+import CosmeticBadgesList from './pages/gamification/CosmeticBadgesList';
 import Achievements from './pages/gamification/Achievements';
 import AchievementChains from './pages/gamification/AchievementChains';
 import UserProgress from './pages/gamification/UserProgress';
@@ -133,10 +135,16 @@ function App() {
           <Route path="brands/rewards" element={<BrandRewards />} />
 
           {/* Gamification */}
-          <Route path="gamification/badges" element={<Badges />} />
-          <Route path="gamification/badges/:id" element={<BadgeDetail />} />
+          <Route path="gamification/badges" element={<Navigate to="/gamification/event-badges" replace />} />
           <Route path="gamification/collections" element={<BadgeCollections />} />
+          <Route path="gamification/collections/:id/badges/:badgeId" element={<BadgeDetail />} />
           <Route path="gamification/collections/:id" element={<CollectionDetail />} />
+          <Route path="gamification/event-badges" element={<EventBadgesList />} />
+          <Route path="gamification/event-badges/:id" element={<BadgeDetail />} />
+          <Route path="gamification/brand-badges" element={<BrandBadgesList />} />
+          <Route path="gamification/brand-badges/:id" element={<BadgeDetail />} />
+          <Route path="gamification/cosmetic-badges" element={<CosmeticBadgesList />} />
+          <Route path="gamification/cosmetic-badges/:id" element={<BadgeDetail />} />
           <Route path="gamification/achievements" element={<Achievements />} />
           <Route path="gamification/chains" element={<AchievementChains />} />
           <Route path="gamification/progress" element={<UserProgress />} />

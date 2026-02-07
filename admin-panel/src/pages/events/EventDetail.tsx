@@ -23,6 +23,7 @@ import type {
   AdminEventBadgeListItem,
   AdminEventRewardListItem,
 } from '../../types/admin';
+import '../gamification/gamification.css';
 import './events.css';
 
 type TabId = 'summary' | 'badges' | 'participants' | 'analytics' | 'rewards';
@@ -81,6 +82,7 @@ function EventDetail() {
       </Link>
 
       <div className="event-detail-header">
+        <i className="fa-solid fa-calendar-check event-detail-title-icon" aria-hidden />
         <h1 className="event-detail-title">{event.title}</h1>
         <span className="event-detail-id">ID: {event.id}</span>
         <span
@@ -189,16 +191,91 @@ function EventSummaryTab({
     <DataCard title="Event bilgisi">
       {!editing ? (
         <>
-          <div className="event-detail-section">
-            <p><strong>Başlık:</strong> {event.title}</p>
-            <p><strong>Açıklama:</strong> {event.description ?? '—'}</p>
-            <p><strong>Başlangıç:</strong> {new Date(event.startDate).toLocaleString('tr-TR')}</p>
-            <p><strong>Bitiş:</strong> {new Date(event.endDate).toLocaleString('tr-TR')}</p>
-            <p><strong>Durum:</strong> {event.status} · <strong>Feed:</strong> {event.feedType}</p>
-            {event.imageUrl && <p><strong>Görsel:</strong> <a href={event.imageUrl} target="_blank" rel="noreferrer">Görüntüle</a></p>}
-            {event.product && <p><strong>Ürün:</strong> {event.product.name ?? event.productId}</p>}
-            {event.brand && <p><strong>Marka:</strong> {event.brand.name ?? event.brandId}</p>}
+          <div className="info-card-hero-event">
+            <div className="info-card-visual-event">
+              {event.imageUrl ? (
+                <img src={event.imageUrl} alt={event.title} />
+              ) : (
+                <div className="info-card-image-placeholder">
+                  <i className="fa-solid fa-calendar-days" aria-hidden />
+                  <span>Event görseli yok</span>
+                </div>
+              )}
+            </div>
+            <div className="info-card-chips">
+              <span
+                className={`info-chip events-badge ${
+                  event.status === 'DRAFT'
+                    ? 'events-badge-draft'
+                    : event.status === 'PUBLISHED'
+                      ? 'events-badge-published'
+                      : 'events-badge-closed'
+                }`}
+              >
+                {event.status}
+              </span>
+              <span className="info-chip info-chip-feed">{event.feedType}</span>
+            </div>
           </div>
+
+          <div className="info-card-stats info-card-stats-event">
+            <div className="info-stat-pill info-stat-pill-wide">
+              <i className="fa-regular fa-calendar-check" aria-hidden />
+              <div>
+                <span className="info-stat-label">Başlangıç</span>
+                <span className="info-stat-value">
+                  {new Date(event.startDate).toLocaleString('tr-TR')}
+                </span>
+              </div>
+            </div>
+            <div className="info-stat-pill info-stat-pill-wide">
+              <i className="fa-regular fa-calendar-xmark" aria-hidden />
+              <div>
+                <span className="info-stat-label">Bitiş</span>
+                <span className="info-stat-value">
+                  {new Date(event.endDate).toLocaleString('tr-TR')}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {event.description && (
+            <div className="info-description">
+              <p>{event.description}</p>
+            </div>
+          )}
+
+          {(event.product || event.brand) && (
+            <div className="info-card-chips" style={{ marginBottom: 'var(--spacing-4)' }}>
+              {event.product && (
+                <span className="info-chip info-chip-link">
+                  <i className="fa-solid fa-box" aria-hidden />
+                  {event.product.name ?? event.productId}
+                </span>
+              )}
+              {event.brand && (
+                <span className="info-chip info-chip-type info-chip-brand">
+                  <i className="fa-solid fa-tag" aria-hidden />
+                  {event.brand.name ?? event.brandId}
+                </span>
+              )}
+            </div>
+          )}
+
+          {event.imageUrl && (
+            <div className="info-meta">
+              <a
+                href={event.imageUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="info-meta-item info-meta-link"
+              >
+                <i className="fa-solid fa-external-link" aria-hidden />
+                Görseli aç
+              </a>
+            </div>
+          )}
+
           <div className="event-detail-actions">
             <Button variant="secondary" onClick={() => setEditing(true)}>Düzenle</Button>
             {!confirmDelete ? (

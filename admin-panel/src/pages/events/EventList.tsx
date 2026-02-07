@@ -85,7 +85,7 @@ function EventList() {
       <PageHeader
         title="Events"
         description="Event listesi, filtreleme ve yönetim"
-        icon="fa-calendar-star"
+        icon="fa-calendar-check"
       />
 
       {error && (
@@ -99,7 +99,7 @@ function EventList() {
       ) : (
         stats && (
           <div className="events-stats-grid">
-            <StatsCard title="Toplam" value={stats.total} icon="fa-calendar-star" color="accent" />
+            <StatsCard title="Toplam" value={stats.total} icon="fa-calendar-check" color="accent" />
             <StatsCard title="Taslak" value={stats.draft} icon="fa-file" color="neutral" />
             <StatsCard title="Yayında" value={stats.published} icon="fa-broadcast-tower" color="success" />
             <StatsCard title="Kapalı" value={stats.closed} icon="fa-archive" color="danger" />
@@ -179,7 +179,7 @@ function EventList() {
           </div>
         ) : events.length === 0 ? (
           <EmptyState
-            icon="fa-calendar-star"
+            icon="fa-calendar-check"
             title="Event bulunamadı"
             description="Filtreleri değiştirerek tekrar deneyin."
           />
@@ -189,6 +189,7 @@ function EventList() {
               <table className="events-table">
                 <thead>
                   <tr>
+                    <th className="events-table-col-thumb">Görsel</th>
                     <th>Başlık</th>
                     <th>Durum</th>
                     <th>Feed</th>
@@ -202,6 +203,20 @@ function EventList() {
                 <tbody>
                   {events.map((e) => (
                     <tr key={e.id}>
+                      <td className="events-table-col-thumb">
+                        {e.imageUrl ? (
+                          <img
+                            src={e.imageUrl}
+                            alt=""
+                            className="events-list-thumb"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <span className="events-list-thumb-placeholder" aria-hidden>
+                            <i className="fa-regular fa-image" />
+                          </span>
+                        )}
+                      </td>
                       <td>{e.title}</td>
                       <td>
                         <span className={`events-badge ${statusBadgeClass(e.status)}`}>{e.status}</span>

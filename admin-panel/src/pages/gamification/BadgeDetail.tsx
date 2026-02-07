@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
 import DataCard from '../../components/DataCard';
 import Button from '../../components/Button';
 import LoadingSpinner from '../../components/LoadingSpinner';
@@ -27,18 +27,33 @@ type TabId = 'summary' | 'owners';
 
 const OWNERS_PAGE_SIZE = 20;
 
+function getListPathFromPathname(pathname: string, badgeType?: string): string {
+  const collectionMatch = pathname.match(/\/gamification\/collections\/([^/]+)(?:\/badges\/?|$)/);
+  if (collectionMatch) return `/gamification/collections/${collectionMatch[1]}`;
+  if (pathname.includes('/event-badges')) return '/gamification/event-badges';
+  if (pathname.includes('/brand-badges')) return '/gamification/brand-badges';
+  if (pathname.includes('/cosmetic-badges')) return '/gamification/cosmetic-badges';
+  if (badgeType === 'EVENT') return '/gamification/event-badges';
+  if (badgeType === 'BRAND') return '/gamification/brand-badges';
+  if (badgeType === 'COSMETIC') return '/gamification/cosmetic-badges';
+  if (badgeType === 'COLLECTION') return '/gamification/collections';
+  return '/gamification/event-badges';
+}
+
 function BadgeDetail() {
-  const { id } = useParams<{ id: string }>();
+  const { id, badgeId } = useParams<{ id?: string; badgeId?: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const badgeIdToFetch = badgeId ?? id;
   const [badge, setBadge] = useState<AdminBadgeDetailResponse | null>(null);
   const [tab, setTab] = useState<TabId>('summary');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const loadBadge = useCallback(async () => {
-    if (!id) return;
+    if (!badgeIdToFetch) return;
     try {
-      const res = await fetchBadge(id);
+      const res = await fetchBadge(badgeIdToFetch);
       if (res.data) setBadge(res.data);
       else setError('Badge bulunamadı');
     } catch (e) {
@@ -46,17 +61,19 @@ function BadgeDetail() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [badgeIdToFetch]);
 
   useEffect(() => {
     loadBadge();
   }, [loadBadge]);
 
-  if (!id) {
+  const listPath = getListPathFromPathname(location.pathname, badge?.type);
+
+  if (!badgeIdToFetch) {
     return (
       <div className="badge-detail-page">
         <p>Geçersiz badge ID.</p>
-        <Link to="/gamification/badges" className="gamification-detail-back">
+        <Link to={listPath} className="gamification-detail-back">
           <i className="fa-solid fa-arrow-left"></i> Listeye dön
         </Link>
       </div>
@@ -66,7 +83,7 @@ function BadgeDetail() {
   if (loading || !badge) {
     return (
       <div className="badge-detail-page">
-        <Link to="/gamification/badges" className="gamification-detail-back">
+        <Link to={listPath} className="gamification-detail-back">
           <i className="fa-solid fa-arrow-left"></i> Listeye dön
         </Link>
         {loading ? <LoadingSpinner /> : error ? <p className="gamification-error">{error}</p> : null}
@@ -74,9 +91,11 @@ function BadgeDetail() {
     );
   }
 
+  const backPath = getListPathFromPathname(location.pathname, badge.type);
+
   return (
     <div className="badge-detail-page">
-      <Link to="/gamification/badges" className="gamification-detail-back">
+      <Link to={backPath} className="gamification-detail-back">
         <i className="fa-solid fa-arrow-left"></i> Listeye dön
       </Link>
 
@@ -111,7 +130,7 @@ function BadgeDetail() {
       </div>
 
       {tab === 'summary' && (
-        <BadgeSummaryTab badge={badge} onUpdated={loadBadge} onDeleted={() => navigate('/gamification/badges')} />
+        <BadgeSummaryTab badge={badge} onUpdated={loadBadge} onDeleted={() => navigate(backPath)} />
       )}
       {tab === 'owners' && <BadgeOwnersTab badgeId={id} />}
     </div>
@@ -183,26 +202,87 @@ function BadgeSummaryTab({
     <DataCard title="Badge bilgisi">
       {!editing ? (
         <>
-          <div className="gamification-detail-section">
-            <p><strong>Ad:</strong> {badge.name}</p>
-            <p><strong>Açıklama:</strong> {badge.description ?? '—'}</p>
-            <p><strong>Tip:</strong> {badge.type} · <strong>Rarity:</strong> {badge.rarity}</p>
-            <p><strong>Kategori:</strong> {badge.categoryName ?? badge.categoryId}</p>
-            {badge.collectionId && (
-              <p>
-                <strong>Koleksiyon:</strong>{' '}
-                <Link to={`/gamification/collections/${badge.collectionId}`}>
-                  {badge.collectionName ?? badge.collectionId}
-                </Link>
-              </p>
-            )}
-            {badge.boostMultiplier != null && <p><strong>Boost çarpanı:</strong> {badge.boostMultiplier}</p>}
-            {badge.rewardMultiplier != null && <p><strong>Ödül çarpanı:</strong> {badge.rewardMultiplier}</p>}
-            {badge.imageUrl && (
-              <p><strong>Görsel:</strong> <a href={badge.imageUrl} target="_blank" rel="noreferrer">Görüntüle</a></p>
-            )}
-            <p><strong>Oluşturulma:</strong> {new Date(badge.createdAt).toLocaleString('tr-TR')}</p>
+          <div className="info-card-hero">
+            <div className="info-card-visual">
+              {badge.imageUrl ? (
+                <img src={badge.imageUrl} alt={badge.name} className="info-card-image" />
+              ) : (
+                <div className="info-card-image-placeholder">
+                  <i className="fa-solid fa-medal" aria-hidden />
+                  <span>Görsel yok</span>
+                </div>
+              )}
+            </div>
+            <div className="info-card-head">
+              <h2 className="info-card-title">{badge.name}</h2>
+              <div className="info-card-chips">
+                <span className={`info-chip info-chip-type info-chip-${badge.type.toLowerCase()}`}>
+                  {badge.type}
+                </span>
+                <span className={`info-chip info-chip-rarity info-chip-rarity-${badge.rarity.toLowerCase()}`}>
+                  {badge.rarity}
+                </span>
+                {badge.categoryName && (
+                  <span className="info-chip info-chip-category">{badge.categoryName}</span>
+                )}
+                {badge.collectionId && (
+                  <Link
+                    to={`/gamification/collections/${badge.collectionId}`}
+                    className="info-chip info-chip-link"
+                  >
+                    {badge.collectionName ?? 'Koleksiyon'}
+                    <i className="fa-solid fa-arrow-right" aria-hidden />
+                  </Link>
+                )}
+              </div>
+            </div>
           </div>
+
+          {(badge.boostMultiplier != null || badge.rewardMultiplier != null) && (
+            <div className="info-card-stats">
+              {badge.boostMultiplier != null && (
+                <div className="info-stat-pill">
+                  <i className="fa-solid fa-arrow-trend-up" aria-hidden />
+                  <span className="info-stat-label">Boost</span>
+                  <span className="info-stat-value">{badge.boostMultiplier}×</span>
+                </div>
+              )}
+              {badge.rewardMultiplier != null && (
+                <div className="info-stat-pill">
+                  <i className="fa-solid fa-gift" aria-hidden />
+                  <span className="info-stat-label">Ödül</span>
+                  <span className="info-stat-value">{badge.rewardMultiplier}×</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {badge.description && (
+            <div className="info-description">
+              <p>{badge.description}</p>
+            </div>
+          )}
+
+          <div className="info-meta">
+            {badge.createdAt && (
+              <span className="info-meta-item">
+                <i className="fa-regular fa-calendar" aria-hidden />
+                {new Date(badge.createdAt).toLocaleString('tr-TR')}
+              </span>
+            )}
+            {badge.imageUrl && (
+              <a
+                href={badge.imageUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="info-meta-item info-meta-link"
+              >
+                <i className="fa-solid fa-external-link" aria-hidden />
+                Görseli aç
+              </a>
+            )}
+          </div>
+
           <div className="gamification-detail-actions">
             <Button variant="primary" onClick={() => setEditing(true)}>
               Düzenle
@@ -318,7 +398,7 @@ function BadgeOwnersTab({ badgeId }: { badgeId: string }) {
                     <td>{o.userEmail ?? '—'}</td>
                     <td>{o.claimed ? 'Evet' : 'Hayır'}</td>
                     <td>{o.claimedAt ? new Date(o.claimedAt).toLocaleString('tr-TR') : '—'}</td>
-                    <td>{new Date(o.createdAt).toLocaleString('tr-TR')}</td>
+                    <td>{o.createdAt ? new Date(o.createdAt).toLocaleString('tr-TR') : '—'}</td>
                     <td>
                       <Link to={`/users/${o.userId}`}>
                         <Button variant="secondary" size="sm">

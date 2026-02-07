@@ -8,12 +8,12 @@ function EventAnalytics() {
       <PageHeader
         title="Event Analytics"
         description="View event performance metrics"
-        icon="fa-chart-column"
+        icon="fa-calendar-check"
       />
 
       <DataCard title="Event Analytics Management">
         <EmptyState
-          icon="fa-chart-column"
+          icon="fa-calendar-check"
           title="Coming Soon"
           description="Event Analytics management interface will be implemented here."
         />

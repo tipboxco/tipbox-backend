@@ -4,6 +4,7 @@ import type {
   AdminCollectionListItem,
   AdminCollectionDetailResponse,
   AdminCollectionBadgeListItem,
+  AdminBadgeCategoryListItem,
   AdminBadgeStatsResponse,
   AdminBadgeListItem,
   AdminBadgeDetailResponse,
@@ -11,6 +12,12 @@ import type {
 } from '../types/admin';
 
 const prefix = '/admin';
+
+/* ========== Badge Categories ========== */
+
+export async function fetchBadgeCategories() {
+  return get<AdminBadgeCategoryListItem[]>(`${prefix}/badge-categories`);
+}
 
 /* ========== Collections ========== */
 

@@ -341,6 +341,12 @@ export type AdminCollectionBadgeListItem = {
   createdAt: string;
 };
 
+export type AdminBadgeCategoryListItem = {
+  id: string;
+  name: string;
+  description: string | null;
+};
+
 /* ========== Admin Badges ========== */
 
 export type AdminBadgeStatsResponse = {
@@ -366,7 +372,7 @@ export type AdminBadgeListItem = {
 export type AdminBadgeDetailResponse = AdminBadgeListItem & {
   boostMultiplier: number | null;
   rewardMultiplier: number | null;
-  updatedAt: string;
+  updatedAt: string | null;
   category?: { id: string; name: string } | null;
   collection?: { id: string; name: string } | null;
 };
@@ -397,6 +403,7 @@ export type AdminContentPostListItem = {
   type: string;
   title: string;
   bodyExcerpt: string | null;
+  thumbnailUrl: string | null;
   createdAt: string;
   likesCount: number;
   commentsCount: number;

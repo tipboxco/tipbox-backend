@@ -17,6 +17,7 @@ import type {
   AdminCollectionBadgeListItem,
   AdminBadgeListItem,
 } from '../../types/admin';
+import CreateBadgeModal from './CreateBadgeModal';
 import './gamification.css';
 
 type TabId = 'summary' | 'badges';
@@ -105,7 +106,11 @@ function CollectionDetail() {
         />
       )}
       {tab === 'badges' && (
-        <CollectionBadgesTab collectionId={id} collectionName={collection.name} onUpdated={loadCollection} />
+        <CollectionBadgesTab
+          collectionId={id}
+          collectionName={collection.name}
+          onUpdated={loadCollection}
+        />
       )}
     </div>
   );
@@ -295,6 +300,7 @@ function CollectionBadgesTab({
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [createBadgeOpen, setCreateBadgeOpen] = useState(false);
 
   const loadBadges = useCallback(async () => {
     try {
@@ -358,6 +364,9 @@ function CollectionBadgesTab({
   return (
     <DataCard title={`Bu koleksiyon: ${collectionName}`}>
       <div className="gamification-badges-toolbar">
+        <Button variant="primary" size="sm" onClick={() => setCreateBadgeOpen(true)}>
+          Yeni badge oluştur
+        </Button>
         <select
           value={selectedBadgeId}
           onChange={(e) => setSelectedBadgeId(e.target.value)}
@@ -402,7 +411,7 @@ function CollectionBadgesTab({
                 <tr key={b.id}>
                   <td>
                     {b.imageUrl && <img src={b.imageUrl} alt="" className="gamification-badge-thumb" />}
-                    <Link to={`/gamification/badges/${b.id}`}>{b.name}</Link>
+                    <Link to={`/gamification/collections/${collectionId}/badges/${b.id}`}>{b.name}</Link>
                   </td>
                   <td>{b.type}</td>
                   <td>{b.rarity}</td>
@@ -423,6 +432,19 @@ function CollectionBadgesTab({
             </tbody>
           </table>
         </div>
+      )}
+      {createBadgeOpen && (
+        <CreateBadgeModal
+          badgeType="COLLECTION"
+          listPath={`/gamification/collections/${collectionId}`}
+          collectionId={collectionId}
+          onClose={() => setCreateBadgeOpen(false)}
+          onSuccess={() => {
+            setCreateBadgeOpen(false);
+            loadBadges();
+            onUpdated();
+          }}
+        />
       )}
     </DataCard>
   );

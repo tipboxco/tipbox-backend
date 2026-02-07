@@ -293,6 +293,238 @@
   margin-left: var(--spacing-2);
 }
 
+/* Info card — görsel öncelikli layout (Badge / Event bilgisi) */
+.info-card-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--spacing-4);
+  margin-bottom: var(--spacing-4);
+}
+
+.info-card-visual {
+  flex-shrink: 0;
+  width: 120px;
+  height: 120px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-glass);
+  border: var(--border-thin);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.info-card-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.info-card-image-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-1);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.info-card-image-placeholder i {
+  font-size: 2rem;
+  opacity: 0.6;
+}
+
+.info-card-head {
+  flex: 1;
+  min-width: 200px;
+}
+
+.info-card-title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  margin: 0 0 var(--spacing-2) 0;
+  color: var(--text-primary);
+}
+
+.info-card-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-1);
+  align-items: center;
+}
+
+.info-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  text-decoration: none;
+  color: inherit;
+}
+
+.info-chip-type.info-chip-collection {
+  background: rgba(134, 239, 172, 0.15);
+  color: var(--success);
+}
+
+.info-chip-type.info-chip-event {
+  background: rgba(208, 242, 5, 0.15);
+  color: var(--accent);
+}
+
+.info-chip-type.info-chip-cosmetic {
+  background: rgba(196, 181, 253, 0.2);
+  color: #c4b5fd;
+}
+
+.info-chip-type.info-chip-brand {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+}
+
+.info-chip-type.info-chip-achievement {
+  background: rgba(134, 239, 172, 0.12);
+  color: var(--success);
+}
+
+.info-chip-rarity.info-chip-rarity-common {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+}
+
+.info-chip-rarity.info-chip-rarity-rare {
+  background: rgba(96, 165, 250, 0.2);
+  color: #60a5fa;
+}
+
+.info-chip-rarity.info-chip-rarity-epic {
+  background: rgba(192, 132, 252, 0.2);
+  color: #c084fc;
+}
+
+.info-chip-category {
+  background: var(--bg-glass);
+  color: var(--text-secondary);
+  border: var(--border-thin);
+}
+
+.info-chip-link {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.info-chip-link:hover {
+  background: rgba(var(--accent-rgb), 0.2);
+}
+
+.info-card-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-2);
+  margin-bottom: var(--spacing-4);
+}
+
+.info-stat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  padding: var(--spacing-1) var(--spacing-2);
+  border-radius: var(--radius-md);
+  background: var(--bg-glass);
+  border: var(--border-thin);
+}
+
+.info-stat-pill i {
+  color: var(--accent);
+  font-size: var(--text-sm);
+}
+
+.info-stat-label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.info-stat-value {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.info-description {
+  padding: var(--spacing-2) var(--spacing-3);
+  background: var(--bg-glass);
+  border-radius: var(--radius-md);
+  border-left: 3px solid var(--accent);
+  margin-bottom: var(--spacing-4);
+}
+
+.info-description p {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: var(--leading-relaxed);
+}
+
+.info-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-3);
+  align-items: center;
+  margin-bottom: var(--spacing-4);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.info-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+}
+
+.info-meta-item i {
+  opacity: 0.8;
+}
+
+.info-meta-link {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.info-meta-link:hover {
+  text-decoration: underline;
+}
+
+/* Event info card — büyük görsel hero */
+.info-card-hero-event {
+  margin-bottom: var(--spacing-4);
+}
+
+.info-card-visual-event {
+  width: 100%;
+  max-height: 280px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-glass);
+  border: var(--border-thin);
+  margin-bottom: var(--spacing-3);
+}
+
+.info-card-visual-event img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.info-card-visual-event .info-card-image-placeholder {
+  min-height: 160px;
+  width: 100%;
+}
+
 .gamification-badges-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -303,4 +535,80 @@
 
 .gamification-badges-toolbar select {
   min-width: 220px;
+}
+
+/* Modal (Create Badge / Create Collection) */
+.gamification-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: var(--spacing-4);
+}
+
+.gamification-modal {
+  background: var(--bg-primary, #fff);
+  border-radius: var(--radius-lg);
+  border: var(--border-thin);
+  max-width: 480px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+.gamification-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-4);
+  border-bottom: var(--border-thin);
+}
+
+.gamification-modal-header h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.gamification-modal-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: var(--spacing-2);
+  color: var(--text-muted);
+  font-size: 1.25rem;
+}
+
+.gamification-modal-close:hover {
+  color: var(--text-primary);
+}
+
+.gamification-modal-form {
+  padding: var(--spacing-4);
+}
+
+.gamification-form-label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+  margin-bottom: var(--spacing-4);
+  font-size: var(--text-sm);
+}
+
+.gamification-form-input {
+  padding: 8px 12px;
+  background: var(--bg-glass);
+  border: var(--border-thin);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+}
+
+.gamification-modal-actions {
+  display: flex;
+  gap: var(--spacing-2);
+  margin-top: var(--spacing-4);
 }

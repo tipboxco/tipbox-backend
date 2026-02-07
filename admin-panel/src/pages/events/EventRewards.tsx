@@ -8,12 +8,12 @@ function EventRewards() {
       <PageHeader
         title="Event Rewards"
         description="Set up event reward structures"
-        icon="fa-trophy"
+        icon="fa-calendar-check"
       />
 
       <DataCard title="Event Rewards Management">
         <EmptyState
-          icon="fa-trophy"
+          icon="fa-calendar-check"
           title="Coming Soon"
           description="Event Rewards management interface will be implemented here."
         />

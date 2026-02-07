@@ -111,6 +111,9 @@ function ContentPosts() {
   const userDisplay = (p: AdminContentPostListItem) =>
     p.userDisplayName || p.userName || p.userId?.slice(0, 8) || '—';
 
+  const titleDisplay = (p: AdminContentPostListItem) =>
+    (p.title && p.title.trim()) || (p.bodyExcerpt && p.bodyExcerpt.trim().slice(0, 80)) || '—';
+
   return (
     <div className="content-page">
       <PageHeader
@@ -230,7 +233,8 @@ function ContentPosts() {
               <table className="content-table">
                 <thead>
                   <tr>
-                    <th>Başlık</th>
+                    <th className="col-thumb" scope="col">Görsel</th>
+                    <th className="col-title" scope="col">Başlık</th>
                     <th>Tür</th>
                     <th>Yazar</th>
                     <th>Beğeni</th>
@@ -243,9 +247,21 @@ function ContentPosts() {
                 <tbody>
                   {posts.map((p) => (
                     <tr key={p.id}>
-                      <td>
-                        <span title={p.title}>
-                          {p.title.length > 50 ? p.title.slice(0, 50) + '…' : p.title}
+                      <td className="col-thumb">
+                        {p.thumbnailUrl ? (
+                          <img
+                            src={p.thumbnailUrl}
+                            alt=""
+                            className="content-thumb"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <span className="content-thumb-placeholder">—</span>
+                        )}
+                      </td>
+                      <td className="col-title">
+                        <span title={titleDisplay(p) !== '—' ? titleDisplay(p) : undefined}>
+                          {titleDisplay(p).length > 80 ? titleDisplay(p).slice(0, 80) + '…' : titleDisplay(p)}
                         </span>
                       </td>
                       <td>

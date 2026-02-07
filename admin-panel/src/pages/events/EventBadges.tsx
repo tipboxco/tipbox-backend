@@ -8,12 +8,12 @@ function EventBadges() {
       <PageHeader
         title="Event Badges"
         description="Configure event-specific badges"
-        icon="fa-award"
+        icon="fa-calendar-check"
       />
 
       <DataCard title="Event Badges Management">
         <EmptyState
-          icon="fa-award"
+          icon="fa-calendar-check"
           title="Coming Soon"
           description="Event Badges management interface will be implemented here."
         />

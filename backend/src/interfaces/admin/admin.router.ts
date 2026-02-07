@@ -97,6 +97,7 @@ import type {
   AdminCollectionListItem,
   AdminCollectionDetailResponse,
   AdminCollectionBadgeListItem,
+  AdminBadgeCategoryListItem,
   AdminBadgeStatsResponse,
   AdminBadgeListItem,
   AdminBadgeDetailResponse,
@@ -1463,6 +1464,44 @@ router.get(
   })
 );
 
+/**
+ * @openapi
+ * /admin/users/{id}/posts:
+ *   get:
+ *     summary: Kullanıcının postları (sayfalı)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *       - in: query
+ *         name: offset
+ *         schema: { type: integer, default: 0 }
+ *       - in: query
+ *         name: type
+ *         schema: { type: string }
+ *       - in: query
+ *         name: sort
+ *         schema: { type: string }
+ *       - in: query
+ *         name: order
+ *         schema: { type: string, enum: [asc, desc] }
+ *     responses:
+ *       200:
+ *         description: Kullanıcının post listesi (AdminContentPostListItem formatında)
+ *       404:
+ *         description: Kullanıcı bulunamadı
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.get(
   '/users/:id/posts',
   authMiddleware,
@@ -1487,30 +1526,38 @@ router.get(
         orderBy: { [q.sort]: q.order },
         take: q.limit,
         skip: q.offset,
-        include: { user: { include: { profile: { select: { displayName: true, userName: true } } } } },
+        include: {
+          user: { include: { profile: { select: { displayName: true, userName: true } } } },
+          media: { select: { mediaUrl: true, orderIndex: true }, orderBy: { orderIndex: 'asc' }, take: 1 },
+        },
       }),
       prisma.contentPost.count({ where }),
     ]);
-    const data: AdminContentPostListItem[] = posts.map((p) => ({
-      id: p.id,
-      userId: p.userId,
-      type: p.type,
-      title: p.title,
-      bodyExcerpt: p.body.length > 200 ? p.body.slice(0, 200) + '...' : p.body,
-      createdAt: p.createdAt.toISOString(),
-      likesCount: p.likesCount,
-      commentsCount: p.commentsCount,
-      favoritesCount: p.favoritesCount,
-      viewsCount: p.viewsCount,
-      isBoosted: p.isBoosted,
-      boostedUntil: p.boostedUntil?.toISOString() ?? null,
-      eventId: p.eventId,
-      mainCategoryId: p.mainCategoryId,
-      subCategoryId: p.subCategoryId,
-      productId: p.productId,
-      userDisplayName: p.user.profile?.displayName ?? null,
-      userName: p.user.profile?.userName ?? null,
-    }));
+    const data: AdminContentPostListItem[] = posts.map((p) => {
+      const firstMedia = p.media?.[0];
+      const thumbnailUrl = firstMedia ? resolveMediaUrl(firstMedia.mediaUrl, true) : null;
+      return {
+        id: p.id,
+        userId: p.userId,
+        type: p.type,
+        title: p.title,
+        bodyExcerpt: p.body.length > 200 ? p.body.slice(0, 200) + '...' : p.body,
+        thumbnailUrl,
+        createdAt: p.createdAt.toISOString(),
+        likesCount: p.likesCount,
+        commentsCount: p.commentsCount,
+        favoritesCount: p.favoritesCount,
+        viewsCount: p.viewsCount,
+        isBoosted: p.isBoosted,
+        boostedUntil: p.boostedUntil?.toISOString() ?? null,
+        eventId: p.eventId,
+        mainCategoryId: p.mainCategoryId,
+        subCategoryId: p.subCategoryId,
+        productId: p.productId,
+        userDisplayName: p.user.profile?.displayName ?? null,
+        userName: p.user.profile?.userName ?? null,
+      };
+    });
     const pagination: PaginationMeta = { total, limit: q.limit, offset: q.offset };
     return res.json({ success: true, data, pagination });
   })
@@ -3491,6 +3538,26 @@ router.delete(
   })
 );
 
+/* ========== Admin Badge Categories ========== */
+
+router.get(
+  '/badge-categories',
+  authMiddleware,
+  requireAdmin,
+  asyncHandler(async (_req: Request, res: Response) => {
+    const categories = await prisma.badgeCategory.findMany({
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, description: true },
+    });
+    const data: AdminBadgeCategoryListItem[] = categories.map((c) => ({
+      id: c.id,
+      name: c.name,
+      description: c.description,
+    }));
+    return res.json({ success: true, data });
+  })
+);
+
 /* ========== Admin Badges ========== */
 
 router.get(
@@ -3636,7 +3703,7 @@ router.get(
       createdAt: badge.createdAt.toISOString(),
       boostMultiplier: badge.boostMultiplier,
       rewardMultiplier: badge.rewardMultiplier,
-      updatedAt: badge.updatedAt.toISOString(),
+      updatedAt: (badge as { updatedAt?: Date }).updatedAt?.toISOString() ?? null,
       category: badge.category ? { id: badge.category.id, name: badge.category.name } : null,
       collection: badge.collection ? { id: badge.collection.id, name: badge.collection.name } : null,
     };
@@ -3690,7 +3757,7 @@ router.post(
       createdAt: badge.createdAt.toISOString(),
       boostMultiplier: badge.boostMultiplier,
       rewardMultiplier: badge.rewardMultiplier,
-      updatedAt: badge.updatedAt.toISOString(),
+      updatedAt: (badge as { updatedAt?: Date }).updatedAt?.toISOString() ?? null,
       category: badge.category ? { id: badge.category.id, name: badge.category.name } : null,
       collection: badge.collection ? { id: badge.collection.id, name: badge.collection.name } : null,
     };
@@ -3748,7 +3815,7 @@ router.patch(
       createdAt: updated.createdAt.toISOString(),
       boostMultiplier: updated.boostMultiplier,
       rewardMultiplier: updated.rewardMultiplier,
-      updatedAt: updated.updatedAt.toISOString(),
+      updatedAt: (updated as { updatedAt?: Date }).updatedAt?.toISOString() ?? null,
       category: updated.category ? { id: updated.category.id, name: updated.category.name } : null,
       collection: updated.collection ? { id: updated.collection.id, name: updated.collection.name } : null,
     };
@@ -3782,6 +3849,22 @@ router.delete(
 
 /* ========== Admin Content ========== */
 
+/**
+ * @openapi
+ * /admin/content/posts/stats:
+ *   get:
+ *     summary: İçerik post istatistikleri (toplam, türe göre, boosted, event’e bağlı)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: İstatistikler
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.get(
   '/content/posts/stats',
   authMiddleware,
@@ -3802,6 +3885,47 @@ router.get(
   })
 );
 
+/**
+ * @openapi
+ * /admin/content/posts:
+ *   get:
+ *     summary: Post listesi (sayfalama, filtre, arama)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *       - in: query
+ *         name: offset
+ *         schema: { type: integer, default: 0 }
+ *       - in: query
+ *         name: type
+ *         schema: { type: string }
+ *       - in: query
+ *         name: userId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: eventId
+ *         schema: { type: string }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *       - in: query
+ *         name: sort
+ *         schema: { type: string, enum: [createdAt, likesCount, commentsCount, viewsCount, title] }
+ *       - in: query
+ *         name: order
+ *         schema: { type: string, enum: [asc, desc] }
+ *     responses:
+ *       200:
+ *         description: Post listesi
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.get(
   '/content/posts',
   authMiddleware,
@@ -3840,35 +3964,66 @@ router.get(
         orderBy: { [q.sort]: q.order },
         take: q.limit,
         skip: q.offset,
-        include: { user: { include: { profile: { select: { displayName: true, userName: true } } } } },
+        include: {
+          user: { include: { profile: { select: { displayName: true, userName: true } } } },
+          media: { select: { mediaUrl: true, orderIndex: true }, orderBy: { orderIndex: 'asc' }, take: 1 },
+        },
       }),
       prisma.contentPost.count({ where }),
     ]);
-    const data: AdminContentPostListItem[] = posts.map((p) => ({
-      id: p.id,
-      userId: p.userId,
-      type: p.type,
-      title: p.title,
-      bodyExcerpt: p.body.length > 200 ? p.body.slice(0, 200) + '...' : p.body,
-      createdAt: p.createdAt.toISOString(),
-      likesCount: p.likesCount,
-      commentsCount: p.commentsCount,
-      favoritesCount: p.favoritesCount,
-      viewsCount: p.viewsCount,
-      isBoosted: p.isBoosted,
-      boostedUntil: p.boostedUntil?.toISOString() ?? null,
-      eventId: p.eventId,
-      mainCategoryId: p.mainCategoryId,
-      subCategoryId: p.subCategoryId,
-      productId: p.productId,
-      userDisplayName: p.user.profile?.displayName ?? null,
-      userName: p.user.profile?.userName ?? null,
-    }));
+    const data: AdminContentPostListItem[] = posts.map((p) => {
+      const firstMedia = p.media?.[0];
+      const thumbnailUrl = firstMedia ? resolveMediaUrl(firstMedia.mediaUrl, true) : null;
+      return {
+        id: p.id,
+        userId: p.userId,
+        type: p.type,
+        title: p.title,
+        bodyExcerpt: p.body.length > 200 ? p.body.slice(0, 200) + '...' : p.body,
+        thumbnailUrl,
+        createdAt: p.createdAt.toISOString(),
+        likesCount: p.likesCount,
+        commentsCount: p.commentsCount,
+        favoritesCount: p.favoritesCount,
+        viewsCount: p.viewsCount,
+        isBoosted: p.isBoosted,
+        boostedUntil: p.boostedUntil?.toISOString() ?? null,
+        eventId: p.eventId,
+        mainCategoryId: p.mainCategoryId,
+        subCategoryId: p.subCategoryId,
+        productId: p.productId,
+        userDisplayName: p.user.profile?.displayName ?? null,
+        userName: p.user.profile?.userName ?? null,
+      };
+    });
     const pagination: PaginationMeta = { total, limit: q.limit, offset: q.offset };
     return res.json({ success: true, data, pagination });
   })
 );
 
+/**
+ * @openapi
+ * /admin/content/posts/{id}:
+ *   get:
+ *     summary: Tek post detayı
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Post detayı
+ *       404:
+ *         description: Post bulunamadı
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.get(
   '/content/posts/:id',
   authMiddleware,
@@ -3947,6 +4102,39 @@ router.get(
   })
 );
 
+/**
+ * @openapi
+ * /admin/content/posts/{id}:
+ *   patch:
+ *     summary: Post güncelle (title, body, isBoosted, category vb.)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title: { type: string }
+ *               body: { type: string }
+ *               isBoosted: { type: boolean }
+ *               boostedUntil: { type: string, nullable: true }
+ *     responses:
+ *       200:
+ *         description: Post güncellendi
+ *       404:
+ *         description: Post bulunamadı
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.patch(
   '/content/posts/:id',
   authMiddleware,
@@ -3993,15 +4181,21 @@ router.patch(
     ]);
     const updated = await prisma.contentPost.findUnique({
       where: { id },
-      include: { user: { include: { profile: { select: { displayName: true, userName: true } } } } },
+      include: {
+        user: { include: { profile: { select: { displayName: true, userName: true } } } },
+        media: { select: { mediaUrl: true, orderIndex: true }, orderBy: { orderIndex: 'asc' }, take: 1 },
+      },
     });
     const p = updated!;
+    const firstMedia = p.media?.[0];
+    const thumbnailUrl = firstMedia ? resolveMediaUrl(firstMedia.mediaUrl, true) : null;
     const data: AdminContentPostListItem = {
       id: p.id,
       userId: p.userId,
       type: p.type,
       title: p.title,
       bodyExcerpt: p.body.length > 200 ? p.body.slice(0, 200) + '...' : p.body,
+      thumbnailUrl,
       createdAt: p.createdAt.toISOString(),
       likesCount: p.likesCount,
       commentsCount: p.commentsCount,
@@ -4020,6 +4214,29 @@ router.patch(
   })
 );
 
+/**
+ * @openapi
+ * /admin/content/posts/{id}:
+ *   delete:
+ *     summary: Post sil (cascade: yorumlar, beğeniler vb.)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Post silindi
+ *       404:
+ *         description: Post bulunamadı
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.delete(
   '/content/posts/:id',
   authMiddleware,
@@ -4044,6 +4261,22 @@ router.delete(
   })
 );
 
+/**
+ * @openapi
+ * /admin/content/comments/stats:
+ *   get:
+ *     summary: Yorum istatistikleri
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: İstatistikler
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.get(
   '/content/comments/stats',
   authMiddleware,
@@ -4055,6 +4288,35 @@ router.get(
   })
 );
 
+/**
+ * @openapi
+ * /admin/content/comments:
+ *   get:
+ *     summary: Yorum listesi (sayfalama, postId, userId filtreleri)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *       - in: query
+ *         name: offset
+ *         schema: { type: integer, default: 0 }
+ *       - in: query
+ *         name: postId
+ *         schema: { type: string }
+ *       - in: query
+ *         name: userId
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Yorum listesi
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.get(
   '/content/comments',
   authMiddleware,
@@ -4107,6 +4369,29 @@ router.get(
   })
 );
 
+/**
+ * @openapi
+ * /admin/content/comments/{id}:
+ *   get:
+ *     summary: Tek yorum detayı
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Yorum detayı
+ *       404:
+ *         description: Yorum bulunamadı
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.get(
   '/content/comments/:id',
   authMiddleware,
@@ -4149,6 +4434,29 @@ router.get(
   })
 );
 
+/**
+ * @openapi
+ * /admin/content/comments/{id}:
+ *   patch:
+ *     summary: Yorum güncelle (body)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Yorum güncellendi
+ *       404:
+ *         description: Yorum bulunamadı
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.patch(
   '/content/comments/:id',
   authMiddleware,
@@ -4196,6 +4504,29 @@ router.patch(
   })
 );
 
+/**
+ * @openapi
+ * /admin/content/comments/{id}:
+ *   delete:
+ *     summary: Yorum sil
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Yorum silindi
+ *       404:
+ *         description: Yorum bulunamadı
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.delete(
   '/content/comments/:id',
   authMiddleware,
@@ -4220,6 +4551,35 @@ router.delete(
   })
 );
 
+/**
+ * @openapi
+ * /admin/content/feed-highlights:
+ *   get:
+ *     summary: Feed highlight listesi
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *       - in: query
+ *         name: offset
+ *         schema: { type: integer, default: 0 }
+ *       - in: query
+ *         name: postId
+ *         schema: { type: string }
+ *       - in: query
+ *         name: reason
+ *         schema: { type: string, enum: [MOST_LIKED, STAFF_PICK, BOOSTED] }
+ *     responses:
+ *       200:
+ *         description: Feed highlight listesi
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.get(
   '/content/feed-highlights',
   authMiddleware,
@@ -4254,6 +4614,33 @@ router.get(
   })
 );
 
+/**
+ * @openapi
+ * /admin/content/feed-highlights:
+ *   post:
+ *     summary: Feed highlight ekle
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [postId, reason]
+ *             properties:
+ *               postId: { type: string }
+ *               reason: { type: string, enum: [MOST_LIKED, STAFF_PICK, BOOSTED] }
+ *     responses:
+ *       201:
+ *         description: Feed highlight oluşturuldu
+ *       404:
+ *         description: Post bulunamadı
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.post(
   '/content/feed-highlights',
   authMiddleware,
@@ -4286,6 +4673,29 @@ router.post(
   })
 );
 
+/**
+ * @openapi
+ * /admin/content/feed-highlights/{id}:
+ *   patch:
+ *     summary: Feed highlight güncelle (reason)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Güncellendi
+ *       404:
+ *         description: Feed highlight bulunamadı
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.patch(
   '/content/feed-highlights/:id',
   authMiddleware,
@@ -4319,6 +4729,29 @@ router.patch(
   })
 );
 
+/**
+ * @openapi
+ * /admin/content/feed-highlights/{id}:
+ *   delete:
+ *     summary: Feed highlight kaldır
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Kaldırıldı
+ *       404:
+ *         description: Feed highlight bulunamadı
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.delete(
   '/content/feed-highlights/:id',
   authMiddleware,
@@ -4337,6 +4770,32 @@ router.delete(
   })
 );
 
+/**
+ * @openapi
+ * /admin/content/trending:
+ *   get:
+ *     summary: Trending post listesi
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *       - in: query
+ *         name: offset
+ *         schema: { type: integer, default: 0 }
+ *       - in: query
+ *         name: trendPeriod
+ *         schema: { type: string, enum: [DAILY, WEEKLY] }
+ *     responses:
+ *       200:
+ *         description: Trending listesi
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.get(
   '/content/trending',
   authMiddleware,
@@ -4371,6 +4830,34 @@ router.get(
   })
 );
 
+/**
+ * @openapi
+ * /admin/content/trending:
+ *   post:
+ *     summary: Trending’e post ekle
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [postId, trendPeriod]
+ *             properties:
+ *               postId: { type: string }
+ *               trendPeriod: { type: string, enum: [DAILY, WEEKLY] }
+ *               score: { type: number }
+ *     responses:
+ *       201:
+ *         description: Eklendi
+ *       404:
+ *         description: Post bulunamadı
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.post(
   '/content/trending',
   authMiddleware,
@@ -4409,6 +4896,29 @@ router.post(
   })
 );
 
+/**
+ * @openapi
+ * /admin/content/trending/{id}:
+ *   patch:
+ *     summary: Trending kaydı güncelle (score, trendPeriod)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Güncellendi
+ *       404:
+ *         description: Trending post bulunamadı
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.patch(
   '/content/trending/:id',
   authMiddleware,
@@ -4446,6 +4956,29 @@ router.patch(
   })
 );
 
+/**
+ * @openapi
+ * /admin/content/trending/{id}:
+ *   delete:
+ *     summary: Trending’den kaldır
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Kaldırıldı
+ *       404:
+ *         description: Trending post bulunamadı
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.delete(
   '/content/trending/:id',
   authMiddleware,
@@ -4464,6 +4997,32 @@ router.delete(
   })
 );
 
+/**
+ * @openapi
+ * /admin/content/top-community-choices:
+ *   get:
+ *     summary: Top community choice listesi
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *       - in: query
+ *         name: offset
+ *         schema: { type: integer, default: 0 }
+ *       - in: query
+ *         name: postId
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Liste
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.get(
   '/content/top-community-choices',
   authMiddleware,
@@ -4497,6 +5056,34 @@ router.get(
   })
 );
 
+/**
+ * @openapi
+ * /admin/content/top-community-choices:
+ *   post:
+ *     summary: Top community choice ekle
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [postId, badgeLabel]
+ *             properties:
+ *               postId: { type: string }
+ *               reason: { type: string, nullable: true }
+ *               badgeLabel: { type: string }
+ *     responses:
+ *       201:
+ *         description: Eklendi
+ *       404:
+ *         description: Post bulunamadı
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.post(
   '/content/top-community-choices',
   authMiddleware,
@@ -4528,6 +5115,29 @@ router.post(
   })
 );
 
+/**
+ * @openapi
+ * /admin/content/top-community-choices/{id}:
+ *   patch:
+ *     summary: Top community choice güncelle (reason, badgeLabel)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Güncellendi
+ *       404:
+ *         description: Bulunamadı
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.patch(
   '/content/top-community-choices/:id',
   authMiddleware,
@@ -4564,6 +5174,29 @@ router.patch(
   })
 );
 
+/**
+ * @openapi
+ * /admin/content/top-community-choices/{id}:
+ *   delete:
+ *     summary: Top community choice kaldır
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Kaldırıldı
+ *       404:
+ *         description: Bulunamadı
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.delete(
   '/content/top-community-choices/:id',
   authMiddleware,
@@ -4582,6 +5215,35 @@ router.delete(
   })
 );
 
+/**
+ * @openapi
+ * /admin/content/manual-review-flags:
+ *   get:
+ *     summary: Manual review flag listesi
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *       - in: query
+ *         name: offset
+ *         schema: { type: integer, default: 0 }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string }
+ *       - in: query
+ *         name: contentType
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Liste
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.get(
   '/content/manual-review-flags',
   authMiddleware,
@@ -4619,6 +5281,29 @@ router.get(
   })
 );
 
+/**
+ * @openapi
+ * /admin/content/manual-review-flags/{id}:
+ *   get:
+ *     summary: Tek manual review flag detayı
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Flag detayı
+ *       404:
+ *         description: Bulunamadı
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.get(
   '/content/manual-review-flags/:id',
   authMiddleware,
@@ -4647,6 +5332,36 @@ router.get(
   })
 );
 
+/**
+ * @openapi
+ * /admin/content/manual-review-flags/{id}:
+ *   patch:
+ *     summary: Manual review flag güncelle (status)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status: { type: string }
+ *     responses:
+ *       200:
+ *         description: Güncellendi
+ *       404:
+ *         description: Bulunamadı
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.patch(
   '/content/manual-review-flags/:id',
   authMiddleware,
@@ -4686,6 +5401,38 @@ router.patch(
   })
 );
 
+/**
+ * @openapi
+ * /admin/content/moderation-actions:
+ *   get:
+ *     summary: Moderation action listesi
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *       - in: query
+ *         name: offset
+ *         schema: { type: integer, default: 0 }
+ *       - in: query
+ *         name: targetUserId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: contentType
+ *         schema: { type: string }
+ *       - in: query
+ *         name: actionType
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Liste
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.get(
   '/content/moderation-actions',
   authMiddleware,
@@ -4728,6 +5475,29 @@ router.get(
   })
 );
 
+/**
+ * @openapi
+ * /admin/content/moderation-actions/{id}:
+ *   get:
+ *     summary: Tek moderation action detayı
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Detay
+ *       404:
+ *         description: Bulunamadı
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.get(
   '/content/moderation-actions/:id',
   authMiddleware,
@@ -4761,6 +5531,35 @@ router.get(
   })
 );
 
+/**
+ * @openapi
+ * /admin/content/tags:
+ *   get:
+ *     summary: İçerik tag listesi (aggregate veya postId’ye göre)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 50 }
+ *       - in: query
+ *         name: offset
+ *         schema: { type: integer, default: 0 }
+ *       - in: query
+ *         name: postId
+ *         schema: { type: string }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Tag listesi (tag, count)
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
 router.get(
   '/content/tags',
   authMiddleware,
