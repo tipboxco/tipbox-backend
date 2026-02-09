@@ -1,4 +1,6 @@
 import { Router, Request, Response } from 'express';
+import multer, { FileFilterCallback } from 'multer';
+import { v4 as uuidv4 } from 'uuid';
 import { authMiddleware } from '../auth/auth.middleware';
 import { requireAdmin } from '../../infrastructure/middleware/rbac.middleware';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
@@ -10,6 +12,7 @@ import { isAdmin } from '../../infrastructure/auth/role-checker';
 import { ProfilePrismaRepository } from '../../infrastructure/repositories/profile-prisma.repository';
 import { UserAvatarPrismaRepository } from '../../infrastructure/repositories/user-avatar-prisma.repository';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
+import { S3Service } from '../../infrastructure/s3/s3.service';
 import { LoginSchema } from '../auth/auth.schemas';
 import {
   AdminUpdateUserSchema,
@@ -35,6 +38,7 @@ import {
   AdminCreateCollectionSchema,
   AdminUpdateCollectionSchema,
   AdminAddCollectionBadgeSchema,
+  AdminCreateCollectionGoalSchema,
   AdminBadgesQuerySchema,
   AdminCreateBadgeSchema,
   AdminUpdateBadgeSchema,
@@ -60,6 +64,7 @@ import {
 import type {
   AdminCreateCollectionInput,
   AdminUpdateCollectionInput,
+  AdminCreateCollectionGoalInput,
   AdminCreateBadgeInput,
   AdminUpdateBadgeInput,
 } from './admin.schemas';
@@ -118,11 +123,25 @@ import type {
   AdminContentTagListItem,
 } from './admin.dto';
 import logger from '../../infrastructure/logger/logger';
-import { NotFoundError } from '../../infrastructure/errors/custom-errors';
+import { NotFoundError, ValidationError } from '../../infrastructure/errors/custom-errors';
 
 const router = Router();
 const prisma = getPrisma();
 const authService = new AuthService();
+const s3Service = new S3Service();
+
+const adminUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
+    const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (file.mimetype && allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Sadece JPG, PNG, GIF ve WebP desteklenir'));
+    }
+  },
+});
 const profileRepo = new ProfilePrismaRepository();
 const avatarRepo = new UserAvatarPrismaRepository();
 
@@ -2062,8 +2081,8 @@ router.get(
         take: limit,
         skip: offset,
         include: {
-          reportedUser: { select: { email: true }, include: { profile: { select: { displayName: true } } } },
-          reporter: { select: { email: true }, include: { profile: { select: { displayName: true } } } },
+          reportedUser: { select: { email: true, profile: { select: { displayName: true } } } },
+          reporter: { select: { email: true, profile: { select: { displayName: true } } } },
         },
       }),
       prisma.userReport.count({ where }),
@@ -2119,8 +2138,8 @@ router.get(
     const report = await prisma.userReport.findUnique({
       where: { id },
       include: {
-        reportedUser: { select: { id: true, email: true }, include: { profile: { select: { displayName: true } } } },
-        reporter: { select: { id: true, email: true }, include: { profile: { select: { displayName: true } } } },
+        reportedUser: { select: { id: true, email: true, profile: { select: { displayName: true } } } },
+        reporter: { select: { id: true, email: true, profile: { select: { displayName: true } } } },
       },
     });
     if (!report) {
@@ -3160,6 +3179,27 @@ router.delete(
   })
 );
 
+/* ========== Admin ActionTypes (Aktivasyon tipleri) ========== */
+
+router.get(
+  '/action-types',
+  authMiddleware,
+  requireAdmin,
+  asyncHandler(async (_req: Request, res: Response) => {
+    const list = await prisma.actionType.findMany({
+      orderBy: [{ mainAction: 'asc' }, { code: 'asc' }],
+      select: { id: true, mainAction: true, code: true, label: true },
+    });
+    const data = list.map((a) => ({
+      id: a.id,
+      mainAction: a.mainAction,
+      code: a.code,
+      label: a.label,
+    }));
+    return res.json({ success: true, data });
+  })
+);
+
 /* ========== Admin Collections (BadgeCollection) ========== */
 
 router.get(
@@ -3169,6 +3209,38 @@ router.get(
   asyncHandler(async (_req: Request, res: Response) => {
     const total = await prisma.badgeCollection.count();
     const data: AdminCollectionStatsResponse = { total };
+    return res.json({ success: true, data });
+  })
+);
+
+/** Koleksiyon formu için Category ağacı: Ana (parentId null) ve Alt (parentId = ana id). Sadece 1. ve 2. seviye. */
+router.get(
+  '/collections/categories',
+  authMiddleware,
+  requireAdmin,
+  asyncHandler(async (_req: Request, res: Response) => {
+    const mainCategories = await prisma.category.findMany({
+      where: { parentId: null },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true },
+    });
+    const mainIds = mainCategories.map((m) => m.id);
+    const subCategories = mainIds.length
+      ? await prisma.category.findMany({
+          where: { parentId: { in: mainIds } },
+          orderBy: { name: 'asc' },
+          select: { id: true, name: true, parentId: true },
+        })
+      : [];
+    const childrenByParent = new Map<string | null, Array<{ id: string; name: string }>>();
+    for (const m of mainCategories) {
+      childrenByParent.set(m.id, subCategories.filter((s) => s.parentId === m.id).map((s) => ({ id: s.id, name: s.name })));
+    }
+    const data = mainCategories.map((m) => ({
+      id: m.id,
+      name: m.name,
+      children: childrenByParent.get(m.id) ?? [],
+    }));
     return res.json({ success: true, data });
   })
 );
@@ -3307,6 +3379,50 @@ router.delete(
       },
     });
     return res.json({ success: true, message: 'Badge koleksiyondan çıkarıldı' });
+  })
+);
+
+router.post(
+  '/collections/:id/goals',
+  authMiddleware,
+  requireAdmin,
+  validateBody(AdminCreateCollectionGoalSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const adminId = req.user?.id;
+    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+    const { id: collectionId } = req.params;
+    const body = req.body as AdminCreateCollectionGoalInput;
+    const collection = await prisma.badgeCollection.findUnique({ where: { id: collectionId } });
+    if (!collection) throw new NotFoundError('Koleksiyon bulunamadı');
+    const actionType = await prisma.actionType.findUnique({ where: { id: body.actionTypeId } });
+    if (!actionType) throw new NotFoundError('ActionType bulunamadı');
+    const badge = await prisma.badge.findUnique({ where: { id: body.rewardBadgeId } });
+    if (!badge) throw new NotFoundError('Badge bulunamadı');
+    if (badge.collectionId !== collectionId) throw new ValidationError('Badge bu koleksiyona ait değil');
+    const title = body.title ?? badge.name;
+    const requirement = body.requirement ?? `${actionType.label}: ${body.pointsRequired} adet`;
+    const goal = await prisma.achievementGoal.create({
+      data: {
+        collectionId,
+        title,
+        requirement,
+        mainAction: actionType.mainAction,
+        actionTypeId: body.actionTypeId,
+        rewardBadgeId: body.rewardBadgeId,
+        pointsRequired: body.pointsRequired,
+        difficulty: body.difficulty,
+      },
+    });
+    await prisma.adminLog.create({
+      data: {
+        adminId,
+        action: 'COLLECTION_GOAL_CREATE',
+        description: `collectionId: ${collectionId}, goalId: ${goal.id}, rewardBadgeId: ${body.rewardBadgeId}`,
+        entityType: 'badge_collection',
+        entityId: 0,
+      },
+    });
+    return res.status(201).json({ success: true, data: { id: goal.id } });
   })
 );
 
@@ -3535,6 +3651,29 @@ router.delete(
       },
     });
     return res.json({ success: true, message: 'Koleksiyon silindi' });
+  })
+);
+
+/* ========== Admin Media (upload for banners, avatars, etc.) ========== */
+
+router.post(
+  '/media/upload',
+  authMiddleware,
+  requireAdmin,
+  adminUpload.single('file'),
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Dosya gerekli (field: file)' });
+    }
+    const ext = req.file.originalname?.split('.').pop()?.toLowerCase() || 'jpg';
+    const allowedExt = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    if (!allowedExt.includes(ext)) {
+      return res.status(400).json({ success: false, message: 'Sadece JPG, PNG, GIF ve WebP desteklenir' });
+    }
+    const fileName = `admin/collections/${uuidv4()}.${ext}`;
+    const path = await s3Service.uploadFile(fileName, req.file.buffer, req.file.mimetype);
+    const url = resolveMediaUrl(path);
+    return res.json({ success: true, data: { url: url ?? path } });
   })
 );
 

@@ -11,7 +11,6 @@ import {
   fetchCollections,
 } from '../../api/admin-badges-collections';
 import type { AdminCollectionListItem, AdminCollectionStatsResponse } from '../../types/admin';
-import CreateCollectionModal from './CreateCollectionModal';
 import './gamification.css';
 
 const PAGE_SIZE = 20;
@@ -26,7 +25,6 @@ function BadgeCollections() {
   const [sort, setSort] = useState<'createdAt' | 'name'>('createdAt');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const [error, setError] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,9 +101,9 @@ function BadgeCollections() {
         title="Koleksiyon listesi"
         action={
           <div className="gamification-filters">
-            <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
-              Yeni koleksiyon
-            </Button>
+            <Link to="/gamification/collections/new">
+              <Button variant="primary" size="sm">Yeni koleksiyon</Button>
+            </Link>
             <input
               type="text"
               placeholder="Ara (ad)"
@@ -218,26 +216,6 @@ function BadgeCollections() {
           </>
         )}
       </DataCard>
-      {createOpen && (
-        <CreateCollectionModal
-          onClose={() => setCreateOpen(false)}
-          onSuccess={() => {
-            setCreateOpen(false);
-            setPagination((p) => ({ ...p, offset: 0 }));
-            setLoadingList(true);
-            fetchCollections({
-              limit: PAGE_SIZE,
-              offset: 0,
-              sort,
-              order,
-              search: search || undefined,
-            }).then((res) => {
-              setCollections(res.data ?? []);
-              if (res.pagination) setPagination((prev) => ({ ...prev, ...res.pagination }));
-            }).finally(() => setLoadingList(false));
-          }}
-        />
-      )}
     </div>
   );
 }

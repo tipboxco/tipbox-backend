@@ -6,7 +6,6 @@ import type {
   AdminRolesResponse,
   AdminModerationHistoryItem,
   AdminUsersStatsResponse,
-  AdminTrustScoreListItem,
   AdminLoginAttemptListItem,
   AdminAvatarResponse,
   AdminUserEventListItem,
@@ -62,11 +61,6 @@ export async function fetchUserModerationHistory(id: string, params?: { limit?: 
     ? { limit: params.limit ?? 20, offset: params.offset ?? 0 }
     : undefined;
   const res = await get<AdminModerationHistoryItem[]>(`${prefix}/users/${id}/moderation-history`, query);
-  return res;
-}
-
-export async function fetchUserTrustScores(id: string, params?: { limit?: number; offset?: number }) {
-  const res = await get<AdminTrustScoreListItem[]>(`${prefix}/users/${id}/trust-scores`, params);
   return res;
 }
 

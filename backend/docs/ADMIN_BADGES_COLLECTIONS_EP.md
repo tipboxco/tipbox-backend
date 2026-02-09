@@ -23,6 +23,8 @@ Bu doküman, admin-panel **Badges** ve **Badge Collections** bölümleri için y
 | 7 | GET | `/admin/collections/:id/badges` | Koleksiyona ait badge listesi |
 | 8 | POST | `/admin/collections/:id/badges` | Koleksiyona badge ekle (body: badgeId) |
 | 9 | DELETE | `/admin/collections/:id/badges/:badgeId` | Badge'i koleksiyondan çıkar |
+| 9b | GET | `/admin/action-types` | Aktivasyon tipleri listesi (ActionType: id, mainAction, code, label) |
+| 9c | POST | `/admin/collections/:id/goals` | Koleksiyon için AchievementGoal oluştur (body: actionTypeId, rewardBadgeId, pointsRequired, title?, requirement?, difficulty?) |
 
 ### Badge'ler
 
@@ -99,6 +101,24 @@ Bu doküman, admin-panel **Badges** ve **Badge Collections** bölümleri için y
 ### DELETE /admin/collections/:id/badges/:badgeId
 
 Badge.collectionId = null yapılır. AdminLog: COLLECTION_BADGE_REMOVE.
+
+---
+
+### GET /admin/action-types
+
+**Açıklama:** Badge aktivasyon tipi seçimi için ActionType listesi (Aktivasyon tipi = mainAction + code ile eşleşen hedef).
+
+**Response:** `{ success, data: AdminActionTypeListItem[] }`. Her öğe: id, mainAction, code, label.
+
+---
+
+### POST /admin/collections/:id/goals
+
+**Açıklama:** Koleksiyona bağlı bir AchievementGoal oluşturur. Badge bu koleksiyona ait olmalı (rewardBadgeId'nin collectionId'si path'teki id ile aynı).
+
+**Body:** actionTypeId (UUID), rewardBadgeId (UUID), pointsRequired (number, min 1), title? (string), requirement? (string), difficulty? (EASY | MEDIUM | HARD, default MEDIUM).
+
+**Response:** `201` `{ success, data: { id: string } }`. AdminLog: COLLECTION_GOAL_CREATE.
 
 ---
 

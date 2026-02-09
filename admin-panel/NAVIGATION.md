@@ -2,7 +2,7 @@
 
 ## 📊 Overview
 
-The Tipbox Admin Panel features a hierarchical navigation system with 12 main menu items and 47 sub-pages, organized according to the backend domain structure.
+The Tipbox Admin Panel features a hierarchical navigation system with 12 main menu items and 45 sub-pages, organized according to the backend domain structure.
 
 ## 🗂️ Navigation Hierarchy
 
@@ -17,24 +17,23 @@ Main overview page with statistics, recent activity, and quick actions.
 
 ---
 
-### 2. 👥 **Users** (5 sub-pages)
+### 2. 👥 **Users** (4 sub-pages)
 User account management and moderation.
 
 | Page | Path | Description |
 |------|------|-------------|
 | **User List** | `/users` | Browse and search all platform users |
 | **KYC Verification** | `/users/kyc` | Review and approve KYC submissions |
-| **Trust Scores** | `/users/trust-scores` | Monitor user trust and reputation |
 | **User Reports** | `/users/reports` | Handle user-reported content |
 | **Banned Users** | `/users/banned` | Manage banned/suspended accounts |
 
 **Domain:** `backend/src/domain/user`
 
-**Key Entities:** User, Profile, UserTrustScore, UserKYCRecord
+**Key Entities:** User, Profile, UserKYCRecord
 
 ---
 
-### 3. 📝 **Content** (6 sub-pages)
+### 3. 📝 **Content** (5 sub-pages)
 User-generated content management and moderation.
 
 | Page | Path | Description |
@@ -42,8 +41,7 @@ User-generated content management and moderation.
 | **All Posts** | `/content/posts` | Manage all user posts (tips, comparisons, questions) |
 | **Comments** | `/content/comments` | Moderate user comments |
 | **Trending Posts** | `/content/trending` | View and curate trending content |
-| **Moderation Queue** | `/content/moderation` | Review flagged content |
-| **Manual Reviews** | `/content/reviews` | Content requiring manual review |
+| **Feed Highlights** | `/content/feed-highlights` | Curate feed highlights |
 | **Tags & Categories** | `/content/tags` | Manage content taxonomy |
 
 **Domain:** `backend/src/domain/content` + `backend/src/domain/interaction`
@@ -100,20 +98,18 @@ Brand partnerships and engagement (Bridge program).
 
 ---
 
-### 6. 🎮 **Gamification** (5 sub-pages)
+### 6. 🎮 **Gamification** (3 sub-pages)
 Achievement and badge system management.
 
 | Page | Path | Description |
 |------|------|-------------|
 | **Badges** | `/gamification/badges` | Create and manage badges |
 | **Badge Collections** | `/gamification/collections` | Organize badges into collections |
-| **Achievements** | `/gamification/achievements` | Define user achievements |
-| **Achievement Chains** | `/gamification/chains` | Create progressive achievement paths |
 | **User Progress** | `/gamification/progress` | Track user achievement progress |
 
 **Domain:** `backend/src/domain/gamification`
 
-**Key Entities:** Badge, BadgeCollection, AchievementChain, UserAchievement
+**Key Entities:** Badge, BadgeCollection, UserAchievement
 
 **Badge Types:**
 - COLLECTION: Badge collections
@@ -286,7 +282,7 @@ System administration and configuration.
 
 ## 📊 Statistics
 
-- **Total Routes**: 47 pages
+- **Total Routes**: 45 pages
 - **Main Menu Items**: 12
 - **Submenus**: 10
 - **Single Pages**: 2 (Dashboard, Analytics)

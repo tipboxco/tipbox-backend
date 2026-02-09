@@ -23,7 +23,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--spacing-4);
+  padding: var(--spacing-2) var(--spacing-3);
   border-bottom: var(--border-thin);
   background: rgba(255, 255, 255, 0.02);
 }
@@ -46,5 +46,36 @@
 }
 
 .data-card-body {
-  padding: var(--spacing-4);
+  padding: var(--spacing-2) var(--spacing-3);
+}
+
+/* Varyant: compact — daha az boşluk, satır kırılmasını azaltır */
+.data-card-variant-compact .data-card-header {
+  padding: var(--spacing-2) var(--spacing-3);
+}
+
+.data-card-variant-compact .data-card-body {
+  padding: var(--spacing-2) var(--spacing-3);
+}
+
+.data-card-variant-compact .data-card-title {
+  font-size: var(--text-sm);
+}
+
+/* Varyant: bordered — sol accent çizgisi */
+.data-card-variant-bordered {
+  border-left: 4px solid var(--accent);
+}
+
+.data-card-variant-bordered .data-card-header {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Varyant: elevated — daha belirgin gölge */
+.data-card-variant-elevated {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.data-card-variant-elevated:hover {
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.08);
 }

@@ -9,25 +9,26 @@ import type { AdminStatsResponse } from '../types/admin';
 import './Dashboard.css';
 
 const recentActivity = [
-  { id: 1, type: 'user', message: 'New user registered: johndoe@example.com', time: '2 min ago', icon: 'fa-user-plus' },
-  { id: 2, type: 'event', message: 'Event "Tech Summit 2024" published', time: '15 min ago', icon: 'fa-calendar-check' },
-  { id: 3, type: 'payment', message: 'Payment received: ₺1,250', time: '1 hour ago', icon: 'fa-credit-card' },
-  { id: 4, type: 'brand', message: 'Brand "TechCorp" verified', time: '2 hours ago', icon: 'fa-badge-check' },
-  { id: 5, type: 'content', message: 'New content published by @expert_user', time: '3 hours ago', icon: 'fa-file-lines' },
+  { id: 1, type: 'user', message: 'New user registered: johndoe@example.com', time: '2m', icon: 'fa-user-plus' },
+  { id: 2, type: 'event', message: 'Event "Tech Summit 2024" published', time: '15m', icon: 'fa-calendar-check' },
+  { id: 3, type: 'payment', message: 'Payment received: ₺1,250', time: '1h', icon: 'fa-credit-card' },
+  { id: 4, type: 'brand', message: 'Brand "TechCorp" verified', time: '2h', icon: 'fa-badge-check' },
+  { id: 5, type: 'content', message: 'New content by @expert_user', time: '3h', icon: 'fa-file-lines' },
+  { id: 6, type: 'report', message: 'Report #442 resolved', time: '4h', icon: 'fa-flag' },
 ];
 
 const quickActions = [
-  { title: 'Create Event', icon: 'fa-calendar-plus', color: 'accent' },
-  { title: 'Add User', icon: 'fa-user-plus', color: 'success' },
-  { title: 'View Reports', icon: 'fa-chart-bar', color: 'neutral' },
-  { title: 'Settings', icon: 'fa-gear', color: 'neutral' },
+  { title: 'Create Event', icon: 'fa-calendar-plus', color: 'accent', path: '/events' },
+  { title: 'Users', icon: 'fa-user-plus', color: 'success', path: '/users' },
+  { title: 'Reports', icon: 'fa-chart-bar', color: 'neutral', path: '/users/reports' },
+  { title: 'Settings', icon: 'fa-gear', color: 'neutral', path: '/system/settings' },
 ];
 
 const systemStatus = [
-  { name: 'API Server', status: 'online', uptime: '99.9%' },
-  { name: 'Database', status: 'online', uptime: '100%' },
-  { name: 'Cache Server', status: 'online', uptime: '98.5%' },
-  { name: 'Payment Gateway', status: 'online', uptime: '99.2%' },
+  { name: 'API Server', status: 'online', uptime: '99.9%', latency: '12ms' },
+  { name: 'Database', status: 'online', uptime: '100%', latency: '3ms' },
+  { name: 'Cache', status: 'online', uptime: '98.5%', latency: '1ms' },
+  { name: 'Payments', status: 'online', uptime: '99.2%', latency: '—' },
 ];
 
 function Dashboard() {
@@ -73,24 +74,53 @@ function Dashboard() {
         </div>
       )}
 
-      {/* Stats Grid — GET /admin/stats */}
+      {/* Stats Grid — GET /admin/stats — Varyantlı kartlar, ek veri */}
       <div className="stats-grid">
         {loading ? (
           <LoadingSpinner fullScreen={false} />
         ) : stats ? (
           <>
-            <StatsCard title="Kullanıcılar" value={stats.users} icon="fa-users" color="accent" />
-            <StatsCard title="Gönderiler" value={stats.posts} icon="fa-file-lines" color="success" />
-            <StatsCard title="Yasaklı Kullanıcılar" value={stats.bannedUsers} icon="fa-user-slash" color="danger" />
-            <StatsCard title="Admin Log Kayıtları" value={stats.adminLogs} icon="fa-clock-rotate-left" color="neutral" />
+            <StatsCard
+              title="Kullanıcılar"
+              value={stats.users}
+              icon="fa-users"
+              color="accent"
+              variant="hero"
+              subtitle="Toplam kayıtlı"
+            />
+            <StatsCard
+              title="Gönderiler"
+              value={stats.posts}
+              icon="fa-file-lines"
+              color="success"
+              variant="compact"
+              subtitle={stats.users ? `~${(stats.posts / Math.max(stats.users, 1)).toFixed(1)} / kullanıcı` : undefined}
+            />
+            <StatsCard
+              title="Yasaklı"
+              value={stats.bannedUsers}
+              icon="fa-user-slash"
+              color="danger"
+              variant="pulse"
+              subtitle={stats.users ? `%${((stats.bannedUsers / stats.users) * 100).toFixed(1)} kullanıcı` : undefined}
+            />
+            <StatsCard
+              title="Admin Log"
+              value={stats.adminLogs}
+              icon="fa-clock-rotate-left"
+              color="info"
+              variant="minimal"
+              subtitle="Kayıt sayısı"
+            />
           </>
         ) : null}
       </div>
 
-      {/* Main Content Grid */}
+      {/* Main Content Grid — Farklı kart varyantları, sıkı yerleşim */}
       <div className="dashboard-grid">
-        {/* Recent Activity */}
+        {/* Recent Activity — bordered, daha fazla satır */}
         <DataCard
+          variant="bordered"
           title="Recent Activity"
           action={
             <Button variant="secondary" size="sm" onClick={() => navigate('/system/logs')}>
@@ -117,14 +147,16 @@ function Dashboard() {
           </div>
         </DataCard>
 
-        {/* Quick Actions */}
-        <DataCard title="Quick Actions">
+        {/* Quick Actions — compact, 4 tile tek satırda */}
+        <DataCard variant="compact" title="Quick Actions">
           <div className="quick-actions-grid">
             {quickActions.map((action, index) => (
               <button
                 key={action.title}
+                type="button"
                 className={`quick-action-btn quick-action-${action.color}`}
                 style={{ animationDelay: `${index * 0.05}s` }}
+                onClick={() => action.path && navigate(action.path)}
               >
                 <i className={`fa-solid ${action.icon}`}></i>
                 <span>{action.title}</span>
@@ -133,8 +165,9 @@ function Dashboard() {
           </div>
         </DataCard>
 
-        {/* System Status */}
+        {/* System Status — elevated, latency bilgisi */}
         <DataCard
+          variant="elevated"
           title="System Status"
           action={
             <div className="status-indicator">
@@ -152,13 +185,11 @@ function Dashboard() {
               >
                 <div className="system-info">
                   <span className="system-name">{system.name}</span>
-                  <span className="system-uptime">{system.uptime} uptime</span>
+                  <span className="system-uptime">{system.uptime} · {system.latency}</span>
                 </div>
-                <div className="system-status">
-                  <span className={`status-badge status-badge-${system.status}`}>
-                    {system.status}
-                  </span>
-                </div>
+                <span className={`status-badge status-badge-${system.status}`}>
+                  {system.status}
+                </span>
               </div>
             ))}
           </div>

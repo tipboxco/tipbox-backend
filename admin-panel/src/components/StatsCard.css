@@ -1,5 +1,5 @@
 /* ============================================
-   STATS CARD — Yatay, kompakt özet kartı
+   STATS CARD — Varyantlı özet kartları
    ============================================ */
 
 .stats-card {
@@ -17,6 +17,99 @@
   position: relative;
   overflow: hidden;
   box-shadow: var(--shadow-card);
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+/* Varyant: hero — büyük sayı, sol çizgi vurgusu */
+.stats-card-variant-hero {
+  padding: var(--spacing-3) var(--spacing-4);
+  border-left: 4px solid var(--accent);
+  min-height: 72px;
+}
+
+.stats-card-variant-hero .stats-value {
+  font-size: var(--text-2xl);
+}
+
+.stats-card-variant-hero .stats-icon {
+  width: 48px;
+  height: 48px;
+  font-size: 1.25rem;
+}
+
+/* Varyant: compact — daha az padding, tek satır */
+.stats-card-variant-compact {
+  padding: var(--spacing-2) var(--spacing-3);
+  min-height: 52px;
+  gap: var(--spacing-2);
+}
+
+.stats-card-variant-compact .stats-value {
+  font-size: var(--text-lg);
+}
+
+.stats-card-variant-compact .stats-icon {
+  width: 36px;
+  height: 36px;
+  font-size: 0.9rem;
+}
+
+/* Varyant: minimal — sadece sayı + etiket, ikon küçük */
+.stats-card-variant-minimal {
+  padding: var(--spacing-2) var(--spacing-3);
+  min-height: 48px;
+  gap: var(--spacing-2);
+}
+
+.stats-card-variant-minimal .stats-icon {
+  width: 32px;
+  height: 32px;
+  font-size: 0.8rem;
+  border-radius: var(--radius-sm);
+}
+
+.stats-card-variant-minimal .stats-value {
+  font-size: var(--text-base);
+}
+
+.stats-card-variant-minimal .stats-title {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Varyant: pulse — sağ alt köşe glow */
+.stats-card-variant-pulse {
+  border-radius: var(--radius-xl);
+}
+
+.stats-card-variant-pulse::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  opacity: 0.15;
+  pointer-events: none;
+}
+
+.stats-card-danger.stats-card-variant-pulse::after {
+  background: var(--danger);
+}
+
+.stats-card-success.stats-card-variant-pulse::after {
+  background: var(--success);
+}
+
+.stats-subtitle {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+  font-weight: var(--font-regular);
 }
 
 /* Top accent bar */
@@ -49,6 +142,7 @@
 .stats-card-success::before { background: var(--success); }
 .stats-card-danger::before { background: var(--danger); }
 .stats-card-neutral::before { background: rgba(255, 255, 255, 0.4); }
+.stats-card-info::before { background: #3b82f6; box-shadow: 0 0 12px rgba(59, 130, 246, 0.3); }
 
 .stats-icon {
   width: 40px;
@@ -81,6 +175,11 @@
 .stats-icon-neutral {
   background: rgba(255, 255, 255, 0.08);
   color: var(--text-primary);
+}
+
+.stats-icon-info {
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
 }
 
 .stats-card:hover .stats-icon {

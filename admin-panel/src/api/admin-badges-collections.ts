@@ -1,9 +1,10 @@
-import { get, post, patch, del } from './client';
+import { get, post, patch, del, postFormData } from './client';
 import type {
   AdminCollectionStatsResponse,
   AdminCollectionListItem,
   AdminCollectionDetailResponse,
   AdminCollectionBadgeListItem,
+  AdminActionTypeListItem,
   AdminBadgeCategoryListItem,
   AdminBadgeStatsResponse,
   AdminBadgeListItem,
@@ -20,6 +21,20 @@ export async function fetchBadgeCategories() {
 }
 
 /* ========== Collections ========== */
+
+export type AdminCollectionCategorySub = { id: string; name: string };
+export type AdminCollectionCategoryMain = { id: string; name: string; children: AdminCollectionCategorySub[] };
+
+export async function fetchCollectionCategories() {
+  return get<AdminCollectionCategoryMain[]>(`${prefix}/collections/categories`);
+}
+
+export async function uploadMedia(file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await postFormData<{ url: string }>(`${prefix}/media/upload`, formData);
+  return res;
+}
 
 export async function fetchCollectionsStats() {
   return get<AdminCollectionStatsResponse>(`${prefix}/collections/stats`);
@@ -115,6 +130,24 @@ export async function addCollectionBadge(collectionId: string, body: { badgeId: 
 
 export async function removeCollectionBadge(collectionId: string, badgeId: string) {
   return del<{ message: string }>(`${prefix}/collections/${collectionId}/badges/${badgeId}`);
+}
+
+export async function fetchActionTypes() {
+  return get<AdminActionTypeListItem[]>(`${prefix}/action-types`);
+}
+
+export async function createCollectionGoal(
+  collectionId: string,
+  body: {
+    actionTypeId: string;
+    rewardBadgeId: string;
+    pointsRequired: number;
+    title?: string;
+    requirement?: string;
+    difficulty?: 'EASY' | 'MEDIUM' | 'HARD';
+  }
+) {
+  return post<{ id: string }>(`${prefix}/collections/${collectionId}/goals`, body);
 }
 
 /* ========== Badges ========== */

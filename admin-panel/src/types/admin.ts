@@ -112,16 +112,6 @@ export type AdminKycDetailResponse = AdminKycListItem & {
   lastUpdatedAt: string;
 };
 
-export type AdminTrustScoreListItem = {
-  id: string;
-  userId: string;
-  userEmail?: string | null;
-  score: number;
-  reason: string | null;
-  calculatedAt: string;
-  createdAt: string;
-};
-
 export type AdminLoginAttemptListItem = {
   id: string;
   userId: string | null;
@@ -339,6 +329,13 @@ export type AdminCollectionBadgeListItem = {
   categoryId: string;
   categoryName?: string | null;
   createdAt: string;
+};
+
+export type AdminActionTypeListItem = {
+  id: string;
+  mainAction: string;
+  code: string;
+  label: string;
 };
 
 export type AdminBadgeCategoryListItem = {

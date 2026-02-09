@@ -11,7 +11,7 @@ function EventBadgesList() {
       <BadgeListByType
         badgeType={'EVENT' as BadgeTypeSlug}
         listPath="/gamification/event-badges"
-        title="Event Badges (Community Badges)"
+        title="Event Badges"
         description="Event / topluluk badge'leri listesi ve yönetimi"
         icon="fa-medal"
         onOpenCreate={() => setCreateOpen(true)}

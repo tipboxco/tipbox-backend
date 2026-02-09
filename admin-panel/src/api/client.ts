@@ -80,3 +80,30 @@ export async function post<T>(path: string, body: unknown): Promise<ApiResponse<
 export async function del<T>(path: string): Promise<ApiResponse<T>> {
   return request<T>(path, { method: 'DELETE' });
 }
+
+/** FormData ile POST (Content-Type set edilmez; boundary browser tarafından eklenir). */
+export async function postFormData<T>(
+  path: string,
+  formData: FormData,
+  options: RequestInit = {}
+): Promise<ApiResponse<T>> {
+  const base = getBaseUrl();
+  const url = path.startsWith('http') ? path : `${base}${path.startsWith('/') ? '' : '/'}${path}`;
+  const token = getToken();
+  const headers: HeadersInit = { ...(options.headers as Record<string, string>) };
+  if (token) {
+    (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+  }
+  const res = await fetch(url, {
+    ...options,
+    method: 'POST',
+    body: formData,
+    headers,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json.message ?? json.error ?? `HTTP ${res.status}`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+  return json as ApiResponse<T>;
+}

@@ -345,6 +345,13 @@ export type AdminCollectionBadgeListItem = {
   createdAt: string;
 };
 
+export type AdminActionTypeListItem = {
+  id: string;
+  mainAction: string;
+  code: string;
+  label: string;
+};
+
 /* ========== Admin Badge Categories ========== */
 
 export type AdminBadgeCategoryListItem = {

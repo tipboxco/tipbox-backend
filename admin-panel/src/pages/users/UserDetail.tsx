@@ -7,7 +7,6 @@ import LoadingSpinner from '../../components/LoadingSpinner';
 import {
   fetchUser,
   fetchUserModerationHistory,
-  fetchUserTrustScores,
   fetchUserLoginAttempts,
   fetchUserAvatar,
   updateUserAvatar,
@@ -28,7 +27,6 @@ import { fetchUserPosts } from '../../api/admin-content';
 import type {
   AdminUserDetailResponse,
   AdminModerationHistoryItem,
-  AdminTrustScoreListItem,
   AdminLoginAttemptListItem,
   AdminAvatarResponse,
   AdminUserEventListItem,
@@ -41,13 +39,12 @@ import type {
 } from '../../types/admin';
 import './users.css';
 
-type TabId = 'overview' | 'profile' | 'roles' | 'events' | 'badges' | 'posts' | 'wallet' | 'moderation' | 'trust' | 'login';
+type TabId = 'overview' | 'profile' | 'roles' | 'events' | 'badges' | 'posts' | 'wallet' | 'moderation' | 'login';
 
 function UserDetail() {
   const { id } = useParams<{ id: string }>();
   const [user, setUser] = useState<AdminUserDetailResponse | null>(null);
   const [moderation, setModeration] = useState<AdminModerationHistoryItem[]>([]);
-  const [trustScores, setTrustScores] = useState<AdminTrustScoreListItem[]>([]);
   const [loginAttempts, setLoginAttempts] = useState<AdminLoginAttemptListItem[]>([]);
   const [avatar, setAvatar] = useState<AdminAvatarResponse | null | undefined>(undefined);
   const [userEvents, setUserEvents] = useState<AdminUserEventListItem[]>([]);
@@ -105,21 +102,6 @@ function UserDetail() {
       try {
         const res = await fetchUserModerationHistory(id, { limit: 50, offset: 0 });
         if (!cancelled) setModeration(res.data ?? []);
-      } finally {
-        if (!cancelled) setLoadingTab(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [id, activeTab]);
-
-  useEffect(() => {
-    if (!id || activeTab !== 'trust') return;
-    let cancelled = false;
-    setLoadingTab(true);
-    (async () => {
-      try {
-        const res = await fetchUserTrustScores(id, { limit: 50, offset: 0 });
-        if (!cancelled) setTrustScores(res.data ?? []);
       } finally {
         if (!cancelled) setLoadingTab(false);
       }
@@ -439,7 +421,6 @@ function UserDetail() {
     { id: 'posts', label: 'Postları' },
     { id: 'wallet', label: 'Cüzdan & Tips' },
     { id: 'moderation', label: 'Moderation geçmişi' },
-    { id: 'trust', label: 'Trust skorları' },
     { id: 'login', label: 'Giriş denemeleri' },
   ];
 
@@ -1116,41 +1097,6 @@ function UserDetail() {
                         </td>
                         <td>{m.moderatorEmail ?? '—'}</td>
                         <td>{m.reason ?? '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </DataCard>
-        )}
-
-        {activeTab === 'trust' && (
-          <DataCard title="Trust skorları">
-            {loadingTab ? (
-              <LoadingSpinner fullScreen={false} />
-            ) : trustScores.length === 0 ? (
-              <p className="users-detail-field-value">Kayıt yok</p>
-            ) : (
-              <div className="users-table-wrap">
-                <table className="users-table">
-                  <thead>
-                    <tr>
-                      <th>Kayıt ID</th>
-                      <th>Tarih</th>
-                      <th>Skor</th>
-                      <th>Gerekçe</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {trustScores.map((s) => (
-                      <tr key={s.id}>
-                        <td className="users-id-cell" title={s.id}>
-                          {s.id}
-                        </td>
-                        <td>{new Date(s.calculatedAt).toLocaleString('tr-TR')}</td>
-                        <td className="tabular-nums">{s.score}</td>
-                        <td>{s.reason ?? '—'}</td>
                       </tr>
                     ))}
                   </tbody>

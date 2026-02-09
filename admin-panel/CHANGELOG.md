@@ -18,11 +18,11 @@ Complete restructuring of the admin panel navigation based on comprehensive back
 - **Dot indicators** for submenu items
 
 #### New Page Structure
-- **Users Domain** (5 pages)
-  - User List, KYC Verification, Trust Scores, User Reports, Banned Users
+- **Users Domain** (4 pages)
+  - User List, KYC Verification, User Reports, Banned Users
 
-- **Content Domain** (6 pages)
-  - All Posts, Comments, Trending Posts, Moderation Queue, Manual Reviews, Tags & Categories
+- **Content Domain** (5 pages)
+  - All Posts, Comments, Trending Posts, Feed Highlights, Tags & Categories
 
 - **Products Domain** (6 pages)
   - Product Catalog, Categories, Product Groups, Product Suggestions, User Inventories, Comparisons
@@ -30,8 +30,8 @@ Complete restructuring of the admin panel navigation based on comprehensive back
 - **Brands Domain** (5 pages)
   - Brand List, Bridge Program, Brand Surveys, Leaderboards, Rewards
 
-- **Gamification Domain** (5 pages)
-  - Badges, Badge Collections, Achievements, Achievement Chains, User Progress
+- **Gamification Domain** (3 pages)
+  - Badges, Badge Collections, User Progress
 
 - **Events Domain** (4 pages)
   - Event List, Event Badges, Event Rewards, Event Analytics

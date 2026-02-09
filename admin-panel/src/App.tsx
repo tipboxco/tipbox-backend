@@ -10,7 +10,6 @@ import Analytics from './pages/Analytics';
 import UserList from './pages/users/UserList';
 import UserDetail from './pages/users/UserDetail';
 import UserKYC from './pages/users/UserKYC';
-import UserTrustScores from './pages/users/UserTrustScores';
 import UserReports from './pages/users/UserReports';
 import UserReportDetail from './pages/users/UserReportDetail';
 import UserKycDetail from './pages/users/UserKycDetail';
@@ -21,8 +20,6 @@ import ContentPosts from './pages/content/ContentPosts';
 import ContentPostDetail from './pages/content/ContentPostDetail';
 import ContentComments from './pages/content/ContentComments';
 import TrendingPosts from './pages/content/TrendingPosts';
-import ModerationQueue from './pages/content/ModerationQueue';
-import ManualReviews from './pages/content/ManualReviews';
 import TagsCategories from './pages/content/TagsCategories';
 import FeedHighlights from './pages/content/FeedHighlights';
 
@@ -44,12 +41,11 @@ import BrandRewards from './pages/brands/BrandRewards';
 // Gamification pages
 import BadgeDetail from './pages/gamification/BadgeDetail';
 import BadgeCollections from './pages/gamification/BadgeCollections';
+import CreateCollectionPage from './pages/gamification/CreateCollectionPage';
 import CollectionDetail from './pages/gamification/CollectionDetail';
 import EventBadgesList from './pages/gamification/EventBadgesList';
 import BrandBadgesList from './pages/gamification/BrandBadgesList';
 import CosmeticBadgesList from './pages/gamification/CosmeticBadgesList';
-import Achievements from './pages/gamification/Achievements';
-import AchievementChains from './pages/gamification/AchievementChains';
 import UserProgress from './pages/gamification/UserProgress';
 
 // Event pages
@@ -103,7 +99,6 @@ function App() {
           <Route path="users" element={<UserList />} />
           <Route path="users/kyc" element={<UserKYC />} />
           <Route path="users/kyc/:userId" element={<UserKycDetail />} />
-          <Route path="users/trust-scores" element={<UserTrustScores />} />
           <Route path="users/reports" element={<UserReports />} />
           <Route path="users/reports/:id" element={<UserReportDetail />} />
           <Route path="users/banned" element={<BannedUsers />} />
@@ -114,8 +109,6 @@ function App() {
           <Route path="content/posts/:id" element={<ContentPostDetail />} />
           <Route path="content/comments" element={<ContentComments />} />
           <Route path="content/trending" element={<TrendingPosts />} />
-          <Route path="content/moderation" element={<ModerationQueue />} />
-          <Route path="content/reviews" element={<ManualReviews />} />
           <Route path="content/feed-highlights" element={<FeedHighlights />} />
           <Route path="content/tags" element={<TagsCategories />} />
 
@@ -137,6 +130,7 @@ function App() {
           {/* Gamification */}
           <Route path="gamification/badges" element={<Navigate to="/gamification/event-badges" replace />} />
           <Route path="gamification/collections" element={<BadgeCollections />} />
+          <Route path="gamification/collections/new" element={<CreateCollectionPage />} />
           <Route path="gamification/collections/:id/badges/:badgeId" element={<BadgeDetail />} />
           <Route path="gamification/collections/:id" element={<CollectionDetail />} />
           <Route path="gamification/event-badges" element={<EventBadgesList />} />
@@ -145,8 +139,6 @@ function App() {
           <Route path="gamification/brand-badges/:id" element={<BadgeDetail />} />
           <Route path="gamification/cosmetic-badges" element={<CosmeticBadgesList />} />
           <Route path="gamification/cosmetic-badges/:id" element={<BadgeDetail />} />
-          <Route path="gamification/achievements" element={<Achievements />} />
-          <Route path="gamification/chains" element={<AchievementChains />} />
           <Route path="gamification/progress" element={<UserProgress />} />
 
           {/* Events — statik yollar önce, :id en sonda */}

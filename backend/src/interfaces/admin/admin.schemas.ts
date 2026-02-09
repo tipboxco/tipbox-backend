@@ -204,6 +204,19 @@ export const AdminAddCollectionBadgeSchema = z.object({
   badgeId: z.string().uuid(),
 });
 
+const AchievementDifficultyEnum = z.enum(['EASY', 'MEDIUM', 'HARD']);
+
+export const AdminCreateCollectionGoalSchema = z.object({
+  actionTypeId: z.string().uuid(),
+  rewardBadgeId: z.string().uuid(),
+  pointsRequired: z.coerce.number().int().min(1),
+  title: z.string().min(1).max(500).optional(),
+  requirement: z.string().max(1000).optional(),
+  difficulty: AchievementDifficultyEnum.default('MEDIUM'),
+});
+
+export type AdminCreateCollectionGoalInput = z.infer<typeof AdminCreateCollectionGoalSchema>;
+
 /* ========== Admin Badges ========== */
 
 const BadgeTypeEnum = z.enum(['COLLECTION', 'EVENT', 'COSMETIC', 'BRAND']);
