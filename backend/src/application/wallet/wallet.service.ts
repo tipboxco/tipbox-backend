@@ -214,7 +214,6 @@ export class WalletService {
    */
   async syncWalletBalanceFromChain(walletId: string): Promise<{ success: boolean; error?: string }> {
     const wallet = await this.walletRepo.findById(walletId);
-    console.log("wallet", wallet);
     if (!wallet) {
       return { success: false, error: 'Wallet not found' };
     }

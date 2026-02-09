@@ -176,6 +176,14 @@ export class TransactionService {
       this.confirmTransaction(receiveTransaction.id, txHash)
     ]);
 
+    // Contract → DB sync: balance ve locked (pendingTips) güncelle
+    Promise.all([
+      this.walletService.syncWalletBalanceFromChain(fromWallet.id),
+      this.walletService.syncWalletBalanceFromChain(toWallet.id),
+    ]).catch(err => {
+      logger.warn({ error: String(err), message: 'syncWalletBalanceFromChain after sendTip failed' });
+    });
+
     logger.info(`Tip sent: ${request.amount} TIPS from ${request.fromUserId} to ${request.toUserId}`);
 
     // Send notifications asynchronously

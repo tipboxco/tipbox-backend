@@ -41,6 +41,7 @@ import { requestLogger } from '../infrastructure/logger/request-logger.middlewar
 import { errorHandler } from '../infrastructure/logger/error-handler.middleware';
 import { requestTimingMiddleware } from '../infrastructure/middleware/request-timing.middleware';
 import { requestContextMiddleware } from '../infrastructure/middleware/request-context.middleware';
+import { bigIntSerializerMiddleware } from '../infrastructure/middleware/bigint-serializer.middleware';
 import { metricsMiddleware } from '../infrastructure/metrics/metrics.middleware';
 
 // Services & Config
@@ -212,6 +213,7 @@ app.use(requestContextMiddleware);
 app.use(requestTimingMiddleware);
 app.use(requestLogger);
 app.use(metricsMiddleware);
+app.use(bigIntSerializerMiddleware);
 
 // Static files
 const socketMessagingUiPath = path.resolve(process.cwd(), 'DmMessagingUI');
@@ -409,7 +411,7 @@ app.use('/', dashboardRouter);
 app.use('/dashboard', dashboardRouter);
 
 // Error handler (must be last)
-/*app.use(errorHandler);
+app.use(errorHandler);
 
 // Global error handlers
 process.on('uncaughtException', (err) => {
@@ -419,5 +421,5 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason) => {
   logger.error({ message: 'Unhandled Rejection', error: reason });
 });
-*/
+
 export default app;

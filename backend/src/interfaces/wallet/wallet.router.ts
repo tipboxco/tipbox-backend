@@ -78,6 +78,14 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   // Wallet yoksa Thirdweb ile oturum açıp DB'ye otomatik kaydet
   await walletService.ensureWalletForUser(String(userId));
 
+  // Contract → DB sync: preferred wallet balance/locked güncelle (background)
+  const preferredWallet = await walletService.getPreferredWalletForBalance(String(userId));
+  if (preferredWallet?.id) {
+    walletService.syncWalletBalanceFromChain(preferredWallet.id).catch((err) => {
+      logger.debug({ walletId: preferredWallet.id, error: String(err), message: 'syncWalletBalanceFromChain on wallet list' });
+    });
+  }
+
   const wallets = await walletService.getUserWallets(String(userId));
   const response: WalletResponse[] = wallets.map(wallet => ({
     id: wallet.id,
@@ -613,6 +621,9 @@ router.get('/transactions', asyncHandler(async (req: Request, res: Response) => 
  *                 available:
  *                   type: number
  *                   description: Kullanılabilir TIPS miktarı (balance - locked)
+ *                 pendingTips:
+ *                   type: number
+ *                   description: Tipbox contract pendingTips(address) - claim bekleyen tutar (locked ile aynı)
  *       401:
  *         description: Unauthorized
  *       503:
@@ -658,7 +669,8 @@ router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
   ]);
 
   const balance = balanceResult.balanceFormatted ?? 0;
-  const locked = pendingResult.pendingFormatted ?? 0;
+  const pendingTips = pendingResult.pendingFormatted ?? 0; // Tipbox contract pendingTips(address)
+  const locked = pendingTips;
   const available = Math.max(0, balance - locked);
 
   await walletService.setBalanceFromContract(wallet.id, balance, locked);
@@ -668,6 +680,7 @@ router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
     currency: 'TIPS',
     locked,
     available,
+    pendingTips,
   });
 }));
 
