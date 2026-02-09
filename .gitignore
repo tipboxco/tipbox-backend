@@ -1,0 +1,7 @@
+# Cloudflare credentials (güvenlik için)
+.cloudflared/*.json
+!.cloudflared/.gitkeep
+cloudflared/.env
+cloudflared/config.yml
+.env
+.cloudflared/

@@ -409,7 +409,7 @@ app.use('/', dashboardRouter);
 app.use('/dashboard', dashboardRouter);
 
 // Error handler (must be last)
-app.use(errorHandler);
+/*app.use(errorHandler);
 
 // Global error handlers
 process.on('uncaughtException', (err) => {
@@ -419,5 +419,5 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason) => {
   logger.error({ message: 'Unhandled Rejection', error: reason });
 });
-
+*/
 export default app;

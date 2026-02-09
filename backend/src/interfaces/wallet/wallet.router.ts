@@ -4,6 +4,7 @@ import { TipsBalanceService } from '../../application/wallet/tips-balance.servic
 import { TransactionService } from '../../application/transaction/transaction.service';
 import { RewardClaimService } from '../../application/reward/reward-claim.service';
 import { getThirdwebSdkService } from '../../application/wallet/thirdweb-sdk/thirdweb-sdk.service';
+import { parseContractError } from '../../application/wallet/thirdweb-sdk/contract-errors';
 import { createWeb3NftService } from '../../application/wallet/web3-nft-service';
 import { ConnectWalletRequest,WalletResponse} from './wallet.dto';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
@@ -614,6 +615,8 @@ router.get('/transactions', asyncHandler(async (req: Request, res: Response) => 
  *                   description: Kullanılabilir TIPS miktarı (balance - locked)
  *       401:
  *         description: Unauthorized
+ *       503:
+ *         description: Contract/blockchain erişilemiyor
  */
 router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
@@ -640,45 +643,31 @@ router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
     });
   }
 
-  const address = wallet.smartAccountAddress ?? wallet.publicAddress;
   const sdk = getThirdwebSdkService();
-  console.log("sdk", sdk.isConfigured());
-  if (sdk.isConfigured()) {
-
-      const balanceResult = await sdk.getTokenBalanceForAddress(address);
-      const pendingResult = await sdk.getPendingTips(address);
-      console.log({balanceResult,pendingResult,address,smartAddress:wallet.smartAccountAddress});
-      if (balanceResult.success) {
-        const balance = balanceResult.balanceFormatted ?? 0;
-        const locked = pendingResult.success ? (pendingResult.pendingFormatted ?? 0) : (wallet.lockedBalance ?? 0);
-        const available = Math.max(0, balance - locked);
-
-        await walletService.setBalanceFromContract(wallet.id, balance, locked);
-
-        return res.json({
-          balance,
-          currency: 'TIPS',
-          locked,
-          available,
-        });
-      }
-      try {
-      } catch (error) {
-      logger.warn({
-        userId,
-        address,
-        error: error instanceof Error ? error.message : String(error),
-        message: 'Contract balance fetch failed, falling back to DB',
-      });
-    }
+  if (!sdk.isConfigured()) {
+    return res.status(503).json({
+      message: 'Blockchain service not configured',
+      code: 'SERVICE_UNAVAILABLE',
+    });
   }
 
-  const balanceInfo = await walletService.getUserBalance(String(userId));
+  const address = wallet.smartAccountAddress ?? wallet.publicAddress;
+  const [balanceResult, pendingResult] = await Promise.all([
+    sdk.getTokenBalanceForAddress(address),
+    sdk.getPendingTips(address),
+  ]);
+
+  const balance = balanceResult.balanceFormatted ?? 0;
+  const locked = pendingResult.pendingFormatted ?? 0;
+  const available = Math.max(0, balance - locked);
+
+  await walletService.setBalanceFromContract(wallet.id, balance, locked);
+
   return res.json({
-    balance: balanceInfo.balance,
+    balance,
     currency: 'TIPS',
-    locked: balanceInfo.lockedBalance,
-    available: balanceInfo.available,
+    locked,
+    available,
   });
 }));
 
@@ -919,9 +908,19 @@ router.post('/pending-tips/claim', asyncHandler(async (req: Request, res: Respon
   }
 
   const userIdStr = String(userId);
-  let result = await sdk.claim(userIdStr);
 
-  if (result.success) {
+  const tryClaim = async (): Promise<{ success: true; result: Awaited<ReturnType<typeof sdk.claim>> } | { success: false; error: unknown }> => {
+    try {
+      const result = await sdk.claim(userIdStr);
+      return { success: true, result };
+    } catch (err) {
+      return { success: false, error: err };
+    }
+  };
+
+  let attempt = await tryClaim();
+
+  if (attempt.success) {
     const thirdwebWallet = await walletService.getThirdwebWallet(userIdStr);
     if (thirdwebWallet?.id) {
       walletService.syncWalletBalanceFromChain(thirdwebWallet.id).catch((err) => {
@@ -930,60 +929,68 @@ router.post('/pending-tips/claim', asyncHandler(async (req: Request, res: Respon
     }
     return res.status(200).json({
       success: true,
-      eoaAddress: result.eoaAddress ?? null,
-      smartAccountAddress: result.smartAccountAddress ?? null,
-      receipt: result.receipt ?? undefined,
+      eoaAddress: attempt.result.eoaAddress ?? null,
+      smartAccountAddress: attempt.result.smartAccountAddress ?? null,
+      receipt: attempt.result.receipt ?? undefined,
       badgeMinted: false,
     });
   }
 
-  if (result.contractError === CONTRACT_ERROR_NO_BADGE_OWNED && result.smartAccountAddress) {
-    logger.info({
-      userId: userIdStr,
-      smartAccountAddress: result.smartAccountAddress,
-      message: 'Pending tips claim failed with NoBadgeOwned; minting badge to smartAccountAddress',
-    });
+  const errMsg = attempt.error instanceof Error ? attempt.error.message : String(attempt.error);
+  const contractError = parseContractError(errMsg);
 
-    const nftService = createWeb3NftService();
-    const mintResult = await nftService.mintDefaultBadge(result.smartAccountAddress);
+  if (contractError === CONTRACT_ERROR_NO_BADGE_OWNED) {
+    const auth = await sdk.authenticateAndGetAddresses(userIdStr);
+    const smartAccountAddress = auth.success ? auth.smartAccountAddress : undefined;
 
-    if (!mintResult.success) {
-      logger.error({
+    if (smartAccountAddress) {
+      logger.info({
         userId: userIdStr,
-        smartAccountAddress: result.smartAccountAddress,
-        error: mintResult.error,
-        contractError: mintResult.contractError,
-        message: 'Badge mint failed for pending-tips claim',
+        smartAccountAddress,
+        message: 'Pending tips claim failed with NoBadgeOwned; minting badge to smartAccountAddress',
       });
-      return res.status(502).json({
-        success: false,
-        error: mintResult.error ?? 'Badge mint failed',
-        contractError: mintResult.contractError ?? undefined,
-      });
-    }
 
-    result = await sdk.claim(userIdStr);
-    if (result.success) {
-      const thirdwebWallet = await walletService.getThirdwebWallet(userIdStr);
-      if (thirdwebWallet?.id) {
-        walletService.syncWalletBalanceFromChain(thirdwebWallet.id).catch((err) => {
-          logger.warn({ userId: userIdStr, walletId: thirdwebWallet.id, error: String(err), message: 'syncWalletBalanceFromChain after claim failed' });
+      const nftService = createWeb3NftService();
+      const mintResult = await nftService.mintDefaultBadge(smartAccountAddress);
+
+      if (!mintResult.success) {
+        logger.error({
+          userId: userIdStr,
+          smartAccountAddress,
+          error: mintResult.error,
+          contractError: mintResult.contractError,
+          message: 'Badge mint failed for pending-tips claim',
+        });
+        return res.status(502).json({
+          success: false,
+          error: mintResult.error ?? 'Badge mint failed',
+          contractError: mintResult.contractError ?? undefined,
         });
       }
-      return res.status(200).json({
-        success: true,
-        eoaAddress: result.eoaAddress ?? null,
-        smartAccountAddress: result.smartAccountAddress ?? null,
-        receipt: result.receipt ?? undefined,
-        badgeMinted: true,
-      });
+
+      attempt = await tryClaim();
+      if (attempt.success) {
+        const thirdwebWallet = await walletService.getThirdwebWallet(userIdStr);
+        if (thirdwebWallet?.id) {
+          walletService.syncWalletBalanceFromChain(thirdwebWallet.id).catch((err) => {
+            logger.warn({ userId: userIdStr, walletId: thirdwebWallet.id, error: String(err), message: 'syncWalletBalanceFromChain after claim failed' });
+          });
+        }
+        return res.status(200).json({
+          success: true,
+          eoaAddress: attempt.result.eoaAddress ?? null,
+          smartAccountAddress: attempt.result.smartAccountAddress ?? null,
+          receipt: attempt.result.receipt ?? undefined,
+          badgeMinted: true,
+        });
+      }
     }
   }
 
   return res.status(400).json({
     success: false,
-    error: result.error ?? 'Claim failed',
-    contractError: result.contractError ?? undefined,
+    error: errMsg,
+    contractError: contractError ?? undefined,
   });
 }));
 

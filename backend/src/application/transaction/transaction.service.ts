@@ -108,16 +108,22 @@ export class TransactionService {
     if (!sdk.isConfigured()) {
       throw new ValidationError('Thirdweb SDK is not configured. Cannot send tip on-chain.');
     }
-    const sdkResult = await sdk.sendTip(request.fromUserId, amountWei, toAddress);
-    if (!sdkResult.success) {
+    let sdkResult: Awaited<ReturnType<typeof sdk.sendTip>>;
+    try {
+      sdkResult = await sdk.sendTip(request.fromUserId, amountWei, toAddress);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
       logger.warn({
         fromUserId: request.fromUserId,
         toUserId: request.toUserId,
         amount: request.amount,
-        error: sdkResult.error,
-        contractError: sdkResult.contractError,
+        error: msg,
         message: 'Thirdweb sendTip failed',
       });
+      throw new ValidationError(msg);
+    }
+
+    if (!sdkResult.success) {
       throw new ValidationError(sdkResult.error ?? 'Tip send failed on-chain');
     }
 

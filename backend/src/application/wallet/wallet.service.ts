@@ -229,12 +229,8 @@ export class WalletService {
         sdk.getTokenBalanceForAddress(address),
         sdk.getPendingTips(address),
       ]);
-      if (!balanceResult.success) {
-        logger.warn({ walletId, address, error: balanceResult.error, message: 'Contract balance fetch failed' });
-        return { success: false, error: balanceResult.error };
-      }
       const balance = balanceResult.balanceFormatted ?? 0;
-      const lockedBalance = pendingResult.success ? (pendingResult.pendingFormatted ?? 0) : (wallet.lockedBalance ?? 0);
+      const lockedBalance = pendingResult.pendingFormatted ?? 0;
       await this.walletRepo.setBalance(walletId, balance, lockedBalance);
       logger.info({
         walletId,

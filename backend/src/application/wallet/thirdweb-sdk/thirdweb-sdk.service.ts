@@ -14,7 +14,7 @@
  */
 
 import { CONFIG } from "../config/config";
-import { parseContractError, toUserMessage } from "./contract-errors";
+import { toUserMessage } from "./contract-errors";
 import type {
   ClaimResult,
   PendingTipsResult,
@@ -24,7 +24,7 @@ import type {
   WalletBalanceResult,
   WalletNFTsResult,
 } from "./types";
-import { ThirdwebCore, decodeBytes32ToString, type ThirdwebCoreContracts } from "./thirdweb.core";
+import { ThirdwebCore, type ThirdwebCoreContracts } from "./thirdweb.core";
 import { createWeb3NftService } from "../web3-nft-service";
 
 // Re-export types for backward compatibility
@@ -64,30 +64,13 @@ export class ThirdwebSdkService {
     userId: string,
     _chainId?: number
   ): Promise<ThirdwebSdkAuthResult> {
-    const chain = this.core.getChain();
-    let eoaAddress: string | undefined;
-    let smartAccountAddress: string | undefined;
-
-    try {
-      const connected = await this.core.connectWalletAndSmartAccount(userId);
-      eoaAddress = connected.eoaAddress;
-      smartAccountAddress = connected.smartAccountAddress;
-
-      return {
-        success: true,
-        eoaAddress,
-        smartAccountAddress,
-        thirdwebUserId: userId,
-      };
-    } catch (error) {
-      return this.handleAuthError(
-        error,
-        userId,
-        chain.id,
-        eoaAddress,
-        smartAccountAddress
-      );
-    }
+    const connected = await this.core.connectWalletAndSmartAccount(userId);
+    return {
+      success: true,
+      eoaAddress: connected.eoaAddress,
+      smartAccountAddress: connected.smartAccountAddress,
+      thirdwebUserId: userId,
+    };
   }
 
   // ==========================================================================
@@ -161,28 +144,6 @@ export class ThirdwebSdkService {
     return this.core.sendTransactionAndWait(tipTx, account);
   }
 
-  /** Maps auth/wallet errors to ThirdwebSdkAuthResult with user message and optional contractError. */
-  private handleAuthError(
-    error: unknown,
-    userId: string,
-    chainId: number,
-    eoaAddress?: string,
-    smartAccountAddress?: string
-  ): ThirdwebSdkAuthResult {
-    const message = error instanceof Error ? error.message : String(error);
-    const contractError = parseContractError(message);
-    const userMessage = toUserMessage(contractError ?? message);
-
-    return {
-      success: false,
-      error: userMessage,
-      contractError: contractError ?? undefined,
-      eoaAddress,
-      smartAccountAddress,
-      thirdwebUserId: userId,
-    };
-  }
-
   /**
    * Sends a tip: connects wallet for userId and transfers amountWei to targetAddress via Tipbox.
    */
@@ -191,65 +152,47 @@ export class ThirdwebSdkService {
     amountWei: bigint,
     targetAddress: string
   ): Promise<TipResult> {
-    let eoaAddress: string | undefined;
-    let smartAccountAddress: string | undefined;
+    const connected = await this.core.connectWalletAndSmartAccount(userId);
+    const smartAccountAddress = connected.smartAccountAddress;
 
-    try {
-      const connected = await this.core.connectWalletAndSmartAccount(userId);
-      eoaAddress = connected.eoaAddress;
-      smartAccountAddress = connected.smartAccountAddress;
+    const hasSufficientBalance = await this.checkTokenBalanceAndLog(
+      smartAccountAddress,
+      amountWei
+    );
 
-      const hasSufficientBalance = await this.checkTokenBalanceAndLog(
-        smartAccountAddress,
-        amountWei
-      );
-
-      if (!hasSufficientBalance) {
-        const userMessage = toUserMessage("ERC20InsufficientBalance");
-        return {
-          success: false,
-          error: userMessage,
-          contractError: "ERC20InsufficientBalance",
-          eoaAddress,
-          smartAccountAddress,
-          thirdwebUserId: userId,
-        };
-      }
-
-      await this.ensureTokenAllowance(
-        connected.smartAccount,
-        smartAccountAddress,
-        amountWei
-      );
-
-      const receipt = await this.executeTip(
-        connected.smartAccount,
-        amountWei,
-        targetAddress
-      );
-
-      return {
-        success: true,
-        eoaAddress,
-        smartAccountAddress,
-        thirdwebUserId: userId,
-        receipt,
-        amountWei: amountWei.toString(),
-        targetAddress,
-      };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      const contractError = parseContractError(message);
-      const userMessage = toUserMessage(contractError ?? message);
+    if (!hasSufficientBalance) {
+      const userMessage = toUserMessage("ERC20InsufficientBalance");
       return {
         success: false,
         error: userMessage,
-        contractError: contractError ?? undefined,
-        eoaAddress,
+        contractError: "ERC20InsufficientBalance",
+        eoaAddress: connected.eoaAddress,
         smartAccountAddress,
         thirdwebUserId: userId,
       };
     }
+
+    await this.ensureTokenAllowance(
+      connected.smartAccount,
+      smartAccountAddress,
+      amountWei
+    );
+
+    const receipt = await this.executeTip(
+      connected.smartAccount,
+      amountWei,
+      targetAddress
+    );
+
+    return {
+      success: true,
+      eoaAddress: connected.eoaAddress,
+      smartAccountAddress,
+      thirdwebUserId: userId,
+      receipt,
+      amountWei: amountWei.toString(),
+      targetAddress,
+    };
   }
 
   /**
@@ -257,35 +200,15 @@ export class ThirdwebSdkService {
    * If NoBadgeOwned is returned, the caller (e.g. controller) may mint a badge and retry claim.
    */
   async claim(userId: string): Promise<ClaimResult> {
-    let eoaAddress: string | undefined;
-    let smartAccountAddress: string | undefined;
-
-    try {
-      const connected = await this.core.connectWalletAndSmartAccount(userId);
-      eoaAddress = connected.eoaAddress;
-      smartAccountAddress = connected.smartAccountAddress;
-
-      const receipt = await this.executeClaim(connected);
-      return {
-        success: true,
-        eoaAddress,
-        smartAccountAddress,
-        thirdwebUserId: userId,
-        receipt,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const contractError = parseContractError(message);
-      const userMessage = toUserMessage(contractError ?? message);
-      return {
-        success: false,
-        error: userMessage,
-        contractError: contractError ?? undefined,
-        eoaAddress,
-        smartAccountAddress,
-        thirdwebUserId: userId,
-      };
-    }
+    const connected = await this.core.connectWalletAndSmartAccount(userId);
+    const receipt = await this.executeClaim(connected);
+    return {
+      success: true,
+      eoaAddress: connected.eoaAddress,
+      smartAccountAddress: connected.smartAccountAddress,
+      thirdwebUserId: userId,
+      receipt,
+    };
   }
 
   /**
@@ -310,38 +233,26 @@ export class ThirdwebSdkService {
     { success: true; transactionHash?: string; eoaAddress: string; smartAccountAddress: string; thirdwebUserId: string } |
     { success: false; error?: string; contractError?: string; eoaAddress?: string; smartAccountAddress?: string; thirdwebUserId: string }
   > {
-    try {
-      const connected = await this.core.connectWalletAndSmartAccount(userId);
-      const nftService = createWeb3NftService();
-      const mintResult = await nftService.mintDefaultBadge(connected.smartAccountAddress);
-      if (!mintResult.success) {
-        return {
-          success: false,
-          error: mintResult.error,
-          contractError: mintResult.contractError,
-          eoaAddress: connected.eoaAddress,
-          smartAccountAddress: connected.smartAccountAddress,
-          thirdwebUserId: userId,
-        };
-      }
+    const connected = await this.core.connectWalletAndSmartAccount(userId);
+    const nftService = createWeb3NftService();
+    const mintResult = await nftService.mintDefaultBadge(connected.smartAccountAddress);
+    if (!mintResult.success) {
       return {
-        success: true,
-        transactionHash: mintResult.transactionHash,
+        success: false,
+        error: mintResult.error,
+        contractError: mintResult.contractError,
         eoaAddress: connected.eoaAddress,
         smartAccountAddress: connected.smartAccountAddress,
         thirdwebUserId: userId,
       };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const contractError = parseContractError(message);
-      const userMessage = toUserMessage(contractError ?? message);
-      return {
-        success: false,
-        error: userMessage,
-        contractError: contractError ?? undefined,
-        thirdwebUserId: userId,
-      };
     }
+    return {
+      success: true,
+      transactionHash: mintResult.transactionHash,
+      eoaAddress: connected.eoaAddress,
+      smartAccountAddress: connected.smartAccountAddress,
+      thirdwebUserId: userId,
+    };
   }
 
   /**
@@ -350,32 +261,11 @@ export class ThirdwebSdkService {
    */
   private async readTokenNameOrSymbol(method: "name" | "symbol"): Promise<string> {
     const tokenContract = this.core.getTokenContract();
-    try {
-      const value = await this.core.readContractSafe<string>(
-        { contract: tokenContract, method, params: [] },
-        ""
-      );
-      return value ?? "";
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      const isDecodeError =
-        message.includes("Position") && message.includes("out of bounds");
-      const isZeroData = /AbiDecodingZeroDataError|Cannot decode zero data|zero data/i.test(message);
-      if (!isDecodeError && !isZeroData) throw err;
-      try {
-        const hex = await this.core.readContractSafe<`0x${string}`>(
-          {
-            contract: this.core.getTokenContractNameSymbolBytes32(),
-            method,
-            params: [],
-          },
-          "0x"
-        );
-        return decodeBytes32ToString(hex);
-      } catch {
-        return "";
-      }
-    }
+    const value = await this.core.readContractSafe<string>(
+      { contract: tokenContract, method, params: [] },
+      ""
+    );
+    return value ?? "";
   }
 
   /**
@@ -384,64 +274,52 @@ export class ThirdwebSdkService {
    * If token returns name/symbol as bytes32 (causing viem "Position out of bounds"), falls back to bytes32 decode.
    */
   async getWalletBalanceForUser(userId: string): Promise<WalletBalanceResult> {
-    try {
-      const connected = await this.core.connectWalletAndSmartAccount(userId);
-      const tokenContract = this.core.getTokenContract();
+    const connected = await this.core.connectWalletAndSmartAccount(userId);
+    const tokenContract = this.core.getTokenContract();
 
-      const [nativeBalance, tokenBalanceWei, decimals] = await Promise.all([
-        this.core.getNativeBalance(connected.smartAccountAddress),
-        this.core.readContractSafe<bigint>(
-          {
-            contract: tokenContract,
-            method: "balanceOf",
-            params: [connected.smartAccountAddress as `0x${string}`],
-          },
-          0n
-        ),
-        this.core.readContractSafe<number>(
-          { contract: tokenContract, method: "decimals", params: [] },
-          18
-        ),
-      ]);
-
-      const tokenName = await this.readTokenNameOrSymbol("name");
-      const tokenSymbol = await this.readTokenNameOrSymbol("symbol");
-
-      const tokenFormatted = Number(tokenBalanceWei) / 10 ** decimals;
-
-      const tokens: WalletBalanceResult["tokens"] = [
+    const [nativeBalance, tokenBalanceWei, decimals] = await Promise.all([
+      this.core.getNativeBalance(connected.smartAccountAddress),
+      this.core.readContractSafe<bigint>(
         {
-          symbol: nativeBalance.symbol,
-          balanceWei: nativeBalance.balance,
-          balanceFormatted: nativeBalance.formatted,
+          contract: tokenContract,
+          method: "balanceOf",
+          params: [connected.smartAccountAddress as `0x${string}`],
         },
-        {
-          name: tokenName,
-          symbol: tokenSymbol,
-          address: tokenContract.address,
-          balanceWei: tokenBalanceWei.toString(),
-          balanceFormatted: String(tokenFormatted),
-          decimals,
-        },
-      ];
+        0n
+      ),
+      this.core.readContractSafe<number>(
+        { contract: tokenContract, method: "decimals", params: [] },
+        18
+      ),
+    ]);
 
-      return {
-        success: true,
-        eoaAddress: connected.eoaAddress,
-        smartAccountAddress: connected.smartAccountAddress,
-        tokens,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const contractError = parseContractError(message);
-      const userMessage = toUserMessage(contractError ?? message);
-      return {
-        success: false,
-        tokens: [],
-        error: userMessage,
-        contractError: contractError ?? undefined,
-      };
-    }
+    const tokenName = await this.readTokenNameOrSymbol("name");
+    const tokenSymbol = await this.readTokenNameOrSymbol("symbol");
+
+    const tokenFormatted = Number(tokenBalanceWei) / 10 ** decimals;
+
+    const tokens: WalletBalanceResult["tokens"] = [
+      {
+        symbol: nativeBalance.symbol,
+        balanceWei: nativeBalance.balance,
+        balanceFormatted: nativeBalance.formatted,
+      },
+      {
+        name: tokenName,
+        symbol: tokenSymbol,
+        address: tokenContract.address,
+        balanceWei: tokenBalanceWei.toString(),
+        balanceFormatted: String(tokenFormatted),
+        decimals,
+      },
+    ];
+
+    return {
+      success: true,
+      eoaAddress: connected.eoaAddress,
+      smartAccountAddress: connected.smartAccountAddress,
+      tokens,
+    };
   }
 
   /**
@@ -449,19 +327,8 @@ export class ThirdwebSdkService {
    * Use with the same user as authenticate (THIRDWEB_USER_ID).
    */
   async getPendingTipsForUser(userId: string): Promise<PendingTipsResult> {
-    try {
-      const connected = await this.core.connectWalletAndSmartAccount(userId);
-      return this.getPendingTips(connected.smartAccountAddress);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const contractError = parseContractError(message);
-      const userMessage = toUserMessage(contractError ?? message);
-      return {
-        success: false,
-        error: userMessage,
-        contractError: contractError ?? undefined,
-      };
-    }
+    const connected = await this.core.connectWalletAndSmartAccount(userId);
+    return this.getPendingTips(connected.smartAccountAddress);
   }
 
 
@@ -470,99 +337,73 @@ export class ThirdwebSdkService {
    * userId ile wallet bağlanır, Smart Account’a ait NFT listesi web3-nft-service üzerinden döndürülür.
    */
   async getWalletNFTsForUser(userId: string): Promise<WalletNFTsResult> {
-    try {
-      const connected = await this.core.connectWalletAndSmartAccount(userId);
-      const nftService = createWeb3NftService();
-      const listResult = await nftService.getWalletNFTs(connected.smartAccountAddress);
-      if (!listResult.success) {
-        return {
-          success: false,
-          nfts: [],
-          error: listResult.error,
-          contractError: listResult.contractError,
-        };
-      }
-      return {
-        success: true,
-        eoaAddress: connected.eoaAddress,
-        smartAccountAddress: connected.smartAccountAddress,
-        nfts: listResult.nfts,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const contractError = parseContractError(message);
-      const userMessage = toUserMessage(contractError ?? message);
+    const connected = await this.core.connectWalletAndSmartAccount(userId);
+    const nftService = createWeb3NftService();
+    const listResult = await nftService.getWalletNFTs(connected.smartAccountAddress);
+    if (!listResult.success) {
       return {
         success: false,
         nfts: [],
-        error: userMessage,
-        contractError: contractError ?? undefined,
+        error: listResult.error,
+        contractError: listResult.contractError,
       };
     }
+    return {
+      success: true,
+      eoaAddress: connected.eoaAddress,
+      smartAccountAddress: connected.smartAccountAddress,
+      nfts: listResult.nfts,
+    };
   }
 
   /**
-   * Contract'tan adrese göre token balance okur (webhook sync için).
+   * Contract'tan adrese göre token balance okur (webhook sync, /wallets/balance için).
    * TIPS token contract balanceOf(address) + decimals kullanır.
    */
   async getTokenBalanceForAddress(address: string): Promise<TokenBalanceForAddressResult> {
-      const tokenContract = this.core.getTokenContract();
-      const balanceWei = await this.core.readContractSafe<bigint>(
-        {
-          contract: tokenContract,
-          method: "balanceOf",
-          params: [address as `0x${string}`],
-        },
-        0n
-      );
-      const decimals = await this.core.readContractSafe<number>(
-        { contract: tokenContract, method: "decimals", params: [] },
-        18
-      );
-      const balanceFormatted = Number(balanceWei) / 10 ** decimals;
-      return {
-        success: true,
-        balanceWei: balanceWei.toString(),
-        balanceFormatted,
-      };
-      try {
-      } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      };
-    }
+    const tokenContract = this.core.getTokenContract();
+    const balanceWei = await this.core.readContractSafe<bigint>(
+      {
+        contract: tokenContract,
+        method: "balanceOf",
+        params: [address as `0x${string}`],
+      },
+      0n
+    );
+    const decimals = await this.core.readContractSafe<number>(
+      { contract: tokenContract, method: "decimals", params: [] },
+      18
+    );
+    const balanceFormatted = Number(balanceWei) / 10 ** decimals;
+    return {
+      success: true,
+      balanceWei: balanceWei.toString(),
+      balanceFormatted,
+    };
   }
 
   /**
    * Returns pending tip amount for the given address (read-only).
    */
   async getPendingTips(address: string): Promise<PendingTipsResult> {
-    try {
-      const pendingWei = await this.core.readContractSafe<bigint>(
-        {
-          contract: this.core.getTipboxContract(),
-          method: "pendingTips",
-          params: [address as `0x${string}`],
-        },
-        0n
-      );
-      const decimals = await this.core.readContractSafe<number>(
-        { contract: this.core.getTokenContract(), method: "decimals", params: [] },
-        18
-      );
-      const pendingFormatted = Number(pendingWei) / 10 ** decimals;
-      return {
-        success: true,
-        pendingWei: pendingWei.toString(),
-        pendingFormatted,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      };
-    }
+    const pendingWei = await this.core.readContractSafe<bigint>(
+      {
+        contract: this.core.getTipboxContract(),
+        method: "pendingTips",
+        params: [address as `0x${string}`],
+      },
+      0n
+    );
+    const decimals = await this.core.readContractSafe<number>(
+      { contract: this.core.getTokenContract(), method: "decimals", params: [] },
+      18
+    );
+    const pendingFormatted = Number(pendingWei) / 10 ** decimals;
+    return {
+      success: true,
+      pendingWei: pendingWei.toString(),
+      pendingFormatted,
+    };
   }
 
   // ==========================================================================
