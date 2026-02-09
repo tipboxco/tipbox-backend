@@ -1,14 +1,31 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import {
+  Row,
+  Col,
+  Card,
+  Statistic,
+  Table,
+  Input,
+  Select,
+  Space,
+  Tag,
+  Button,
+  Spin,
+  Empty,
+  Alert,
+} from 'antd';
+import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
+import {
+  UserOutlined,
+  UserDeleteOutlined,
+  SafetyCertificateOutlined,
+  UserAddOutlined,
+  SearchOutlined,
+} from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import StatsCard from '../../components/StatsCard';
-import Button from '../../components/Button';
-import LoadingSpinner from '../../components/LoadingSpinner';
-import EmptyState from '../../components/EmptyState';
 import { fetchUsersStats, fetchUsers } from '../../api/admin-users';
 import type { AdminUserListItem, AdminUsersStatsResponse } from '../../types/admin';
-import './users.css';
 
 const PAGE_SIZE = 20;
 
@@ -16,14 +33,24 @@ function UserList() {
   const [searchParams] = useSearchParams();
   const [stats, setStats] = useState<AdminUsersStatsResponse | null>(null);
   const [users, setUsers] = useState<AdminUserListItem[]>([]);
-  const [pagination, setPagination] = useState({ total: 0, limit: PAGE_SIZE, offset: 0 });
+  const [pagination, setPagination] = useState({
+    total: 0,
+    limit: PAGE_SIZE,
+    offset: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [loadingList, setLoadingList] = useState(true);
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [status, setStatus] = useState<string>(searchParams.get('status') ?? '');
-  const [emailVerified, setEmailVerified] = useState<string>(searchParams.get('emailVerified') ?? '');
-  const [sort, setSort] = useState<'email' | 'createdAt'>((searchParams.get('sort') as 'email' | 'createdAt') ?? 'createdAt');
-  const [order, setOrder] = useState<'asc' | 'desc'>((searchParams.get('order') as 'asc' | 'desc') ?? 'desc');
+  const [emailVerified, setEmailVerified] = useState<string>(
+    searchParams.get('emailVerified') ?? ''
+  );
+  const [sort, setSort] = useState<'email' | 'createdAt'>(
+    (searchParams.get('sort') as 'email' | 'createdAt') ?? 'createdAt'
+  );
+  const [order, setOrder] = useState<'asc' | 'desc'>(
+    (searchParams.get('order') as 'asc' | 'desc') ?? 'desc'
+  );
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -33,12 +60,15 @@ function UserList() {
         const res = await fetchUsersStats();
         if (!cancelled && res.data) setStats(res.data);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'İstatistikler yüklenemedi');
+        if (!cancelled)
+          setError(e instanceof Error ? e.message : 'İstatistikler yüklenemedi');
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -51,7 +81,12 @@ function UserList() {
           offset: pagination.offset,
           search: search || undefined,
           status: status || undefined,
-          emailVerified: emailVerified === 'true' ? true : emailVerified === 'false' ? false : undefined,
+          emailVerified:
+            emailVerified === 'true'
+              ? true
+              : emailVerified === 'false'
+              ? false
+              : undefined,
           sort,
           order,
         });
@@ -60,179 +95,245 @@ function UserList() {
           if (res.pagination) setPagination(res.pagination);
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Liste yüklenemedi');
+        if (!cancelled)
+          setError(e instanceof Error ? e.message : 'Liste yüklenemedi');
       } finally {
         if (!cancelled) setLoadingList(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [pagination.offset, search, status, emailVerified, sort, order]);
 
-  const totalPages = Math.ceil(pagination.total / pagination.limit) || 1;
+  const columns: ColumnsType<AdminUserListItem> = [
+    {
+      title: 'Görünen ad',
+      dataIndex: 'displayName',
+      key: 'displayName',
+      render: (text) => text ?? '—',
+    },
+    {
+      title: 'Kullanıcı adı',
+      dataIndex: 'userName',
+      key: 'userName',
+      render: (text) => text ?? '—',
+    },
+    {
+      title: 'Email',
+      dataIndex: 'email',
+      key: 'email',
+      render: (text) => text ?? '—',
+    },
+    {
+      title: 'Durum',
+      dataIndex: 'status',
+      key: 'status',
+      render: (status) => (
+        <Tag color={status === 'BANNED' ? 'red' : 'default'}>
+          {status ?? '—'}
+        </Tag>
+      ),
+    },
+    {
+      title: 'Email doğru',
+      dataIndex: 'emailVerified',
+      key: 'emailVerified',
+      render: (verified) => (
+        <Tag color={verified ? 'success' : 'default'}>
+          {verified ? 'Evet' : 'Hayır'}
+        </Tag>
+      ),
+    },
+    {
+      title: 'Kayıt',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      render: (date) =>
+        date ? new Date(date).toLocaleDateString('tr-TR') : '—',
+    },
+    {
+      title: '',
+      key: 'action',
+      render: (_, record) => (
+        <Link to={`/users/${record.id}`}>
+          <Button type="link" size="small">
+            Detay
+          </Button>
+        </Link>
+      ),
+    },
+  ];
+
+  const handleTableChange = (pag: TablePaginationConfig) => {
+    const newOffset = ((pag.current ?? 1) - 1) * PAGE_SIZE;
+    setPagination((prev) => ({ ...prev, offset: newOffset }));
+  };
+
   const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
 
   return (
-    <div className="users-page">
+    <div>
       <PageHeader
         title="Kullanıcılar"
         description="Platform kullanıcılarını listele, filtrele ve yönet"
-        icon="fa-users"
+        icon={<UserOutlined />}
       />
 
       {error && (
-        <div className="users-error">
-          <span>{error}</span>
-        </div>
+        <Alert
+          message="Hata"
+          description={error}
+          type="error"
+          closable
+          onClose={() => setError(null)}
+          style={{ marginBottom: 24 }}
+        />
       )}
 
+      {/* Stats Grid */}
       {loading ? (
-        <LoadingSpinner />
-      ) : stats && (
-        <div className="users-stats-grid">
-          <StatsCard title="Toplam" value={stats.total} icon="fa-users" color="accent" />
-          <StatsCard title="Yasaklı" value={stats.bannedCount} icon="fa-user-slash" color="danger" />
-          <StatsCard title="Email Doğrulu" value={stats.emailVerifiedCount} icon="fa-envelope-circle-check" color="success" />
-          <StatsCard title="Bu Hafta Yeni" value={stats.newThisWeek} icon="fa-user-plus" color="neutral" />
+        <div style={{ textAlign: 'center', padding: 48 }}>
+          <Spin size="large" />
         </div>
+      ) : (
+        stats && (
+          <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+            <Col xs={24} sm={12} lg={6}>
+              <Card bordered>
+                <Statistic
+                  title="Toplam"
+                  value={stats.total}
+                  prefix={<UserOutlined />}
+                  valueStyle={{ fontWeight: 700 }}
+                />
+              </Card>
+            </Col>
+            <Col xs={24} sm={12} lg={6}>
+              <Card bordered>
+                <Statistic
+                  title="Yasaklı"
+                  value={stats.bannedCount}
+                  prefix={<UserDeleteOutlined />}
+                  valueStyle={{ fontWeight: 700, color: '#ff4d4f' }}
+                />
+              </Card>
+            </Col>
+            <Col xs={24} sm={12} lg={6}>
+              <Card bordered>
+                <Statistic
+                  title="Email Doğrulu"
+                  value={stats.emailVerifiedCount}
+                  prefix={<SafetyCertificateOutlined />}
+                  valueStyle={{ fontWeight: 700, color: '#52c41a' }}
+                />
+              </Card>
+            </Col>
+            <Col xs={24} sm={12} lg={6}>
+              <Card bordered>
+                <Statistic
+                  title="Bu Hafta Yeni"
+                  value={stats.newThisWeek}
+                  prefix={<UserAddOutlined />}
+                  valueStyle={{ fontWeight: 700 }}
+                />
+              </Card>
+            </Col>
+          </Row>
+        )
       )}
 
-      <DataCard
+      {/* User List Table */}
+      <Card
+        bordered
         title="Kullanıcı listesi"
-        action={
-          <div className="users-filters">
-            <input
-              type="text"
+        extra={
+          <Space wrap>
+            <Input
               placeholder="Ara (email, displayName, userName)"
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              className="users-filter-input"
+              prefix={<SearchOutlined />}
+              style={{ width: 280 }}
+              allowClear
             />
-            <select
+            <Select
               value={status}
-              onChange={(e) => {
-                setStatus(e.target.value);
+              onChange={(value) => {
+                setStatus(value);
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              className="users-filter-select"
+              style={{ width: 140 }}
+              placeholder="Tüm durumlar"
             >
-              <option value="">Tüm durumlar</option>
-              <option value="ACTIVE">Aktif</option>
-              <option value="BANNED">Yasaklı</option>
-            </select>
-            <select
+              <Select.Option value="">Tüm durumlar</Select.Option>
+              <Select.Option value="ACTIVE">Aktif</Select.Option>
+              <Select.Option value="BANNED">Yasaklı</Select.Option>
+            </Select>
+            <Select
               value={emailVerified}
-              onChange={(e) => {
-                setEmailVerified(e.target.value);
+              onChange={(value) => {
+                setEmailVerified(value);
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              className="users-filter-select"
+              style={{ width: 160 }}
+              placeholder="Email doğrulama"
             >
-              <option value="">Email doğrulama</option>
-              <option value="true">Doğrulanmış</option>
-              <option value="false">Doğrulanmamış</option>
-            </select>
-            <select
+              <Select.Option value="">Email doğrulama</Select.Option>
+              <Select.Option value="true">Doğrulanmış</Select.Option>
+              <Select.Option value="false">Doğrulanmamış</Select.Option>
+            </Select>
+            <Select
               value={sort}
-              onChange={(e) => {
-                setSort(e.target.value as 'email' | 'createdAt');
+              onChange={(value) => {
+                setSort(value as 'email' | 'createdAt');
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              className="users-filter-select"
+              style={{ width: 100 }}
             >
-              <option value="createdAt">Tarih</option>
-              <option value="email">Email</option>
-            </select>
-            <select
+              <Select.Option value="createdAt">Tarih</Select.Option>
+              <Select.Option value="email">Email</Select.Option>
+            </Select>
+            <Select
               value={order}
-              onChange={(e) => {
-                setOrder(e.target.value as 'asc' | 'desc');
+              onChange={(value) => {
+                setOrder(value as 'asc' | 'desc');
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              className="users-filter-select"
+              style={{ width: 100 }}
             >
-              <option value="desc">Azalan</option>
-              <option value="asc">Artan</option>
-            </select>
-          </div>
+              <Select.Option value="desc">Azalan</Select.Option>
+              <Select.Option value="asc">Artan</Select.Option>
+            </Select>
+          </Space>
         }
       >
-        {loadingList ? (
-          <div className="users-loading">
-            <LoadingSpinner />
-          </div>
-        ) : users.length === 0 ? (
-          <EmptyState
-            icon="fa-users"
-            title="Kullanıcı bulunamadı"
-            description="Filtreleri değiştirerek tekrar deneyin."
-          />
-        ) : (
-          <>
-            <div className="users-table-wrap">
-              <table className="users-table">
-                <thead>
-                  <tr>
-                    <th>Görünen ad</th>
-                    <th>Kullanıcı adı</th>
-                    <th>Email</th>
-                    <th>Durum</th>
-                    <th>Email doğru</th>
-                    <th>Kayıt</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((u) => (
-                    <tr key={u.id}>
-                      <td>{u.displayName ?? '—'}</td>
-                      <td>{u.userName ?? '—'}</td>
-                      <td>{u.email ?? '—'}</td>
-                      <td>
-                        <span className={`users-badge users-badge-${u.status === 'BANNED' ? 'danger' : 'neutral'}`}>
-                          {u.status ?? '—'}
-                        </span>
-                      </td>
-                      <td>{u.emailVerified ? 'Evet' : 'Hayır'}</td>
-                      <td>{u.createdAt ? new Date(u.createdAt).toLocaleDateString('tr-TR') : '—'}</td>
-                      <td>
-                        <Link to={`/users/${u.id}`} className="users-link">
-                          Detay
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="users-pagination">
-              <span className="users-pagination-info">
-                {pagination.total} kayıt, sayfa {currentPage} / {totalPages}
-              </span>
-              <div className="users-pagination-btns">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={pagination.offset === 0}
-                  onClick={() => setPagination((p) => ({ ...p, offset: Math.max(0, p.offset - p.limit) }))}
-                >
-                  Önceki
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={pagination.offset + pagination.limit >= pagination.total}
-                  onClick={() => setPagination((p) => ({ ...p, offset: p.offset + p.limit }))}
-                >
-                  Sonraki
-                </Button>
-              </div>
-            </div>
-          </>
-        )}
-      </DataCard>
+        <Table
+          columns={columns}
+          dataSource={users}
+          rowKey="id"
+          loading={loadingList}
+          pagination={{
+            current: currentPage,
+            pageSize: PAGE_SIZE,
+            total: pagination.total,
+            showSizeChanger: false,
+            showTotal: (total) => `Toplam ${total} kayıt`,
+          }}
+          onChange={handleTableChange}
+          locale={{
+            emptyText: (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="Kullanıcı bulunamadı"
+              />
+            ),
+          }}
+        />
+      </Card>
     </div>
   );
 }

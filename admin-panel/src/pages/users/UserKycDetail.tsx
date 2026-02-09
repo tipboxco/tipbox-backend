@@ -1,12 +1,24 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
+import {
+  Row,
+  Col,
+  Card,
+  Button,
+  Spin,
+  Alert,
+  Typography,
+  Space,
+  Select,
+  Input,
+  message as antdMessage,
+} from 'antd';
+import { IdcardOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import Button from '../../components/Button';
-import LoadingSpinner from '../../components/LoadingSpinner';
 import { fetchUserKycByUserId, updateKycReview } from '../../api/admin-kyc';
 import type { AdminKycDetailResponse } from '../../types/admin';
-import './users.css';
+
+const { Text } = Typography;
 
 function UserKycDetail() {
   const { userId } = useParams<{ userId: string }>();
@@ -18,7 +30,6 @@ function UserKycDetail() {
   const [reviewResult, setReviewResult] = useState('');
   const [reviewReason, setReviewReason] = useState('');
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -34,18 +45,20 @@ function UserKycDetail() {
           setReviewReason(res.data.reviewReason ?? '');
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'KYC kaydı yüklenemedi');
+        if (!cancelled)
+          setError(e instanceof Error ? e.message : 'KYC kaydı yüklenemedi');
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [userId]);
 
   const handleSave = async () => {
     if (!record) return;
     setSaving(true);
-    setMessage(null);
     try {
       await updateKycReview(record.id, {
         reviewStatus: reviewStatus || undefined,
@@ -54,9 +67,9 @@ function UserKycDetail() {
       });
       const res = await fetchUserKycByUserId(userId!);
       if (res.data) setRecord(res.data);
-      setMessage('KYC inceleme sonucu güncellendi');
+      antdMessage.success('KYC inceleme sonucu güncellendi');
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : 'Güncelleme başarısız');
+      antdMessage.error(e instanceof Error ? e.message : 'Güncelleme başarısız');
     } finally {
       setSaving(false);
     }
@@ -64,125 +77,165 @@ function UserKycDetail() {
 
   if (!userId) {
     return (
-      <div className="users-page">
-        <p>Geçersiz kullanıcı</p>
+      <div>
+        <Alert message="Geçersiz kullanıcı" type="error" />
       </div>
     );
   }
 
   if (loading || !record) {
     return (
-      <div className="users-page">
-        <LoadingSpinner fullScreen={false} />
+      <div style={{ textAlign: 'center', padding: 48 }}>
+        <Spin size="large" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="users-page">
-        <PageHeader title="Hata" description={error} icon="fa-exclamation-triangle" />
-        <Button variant="secondary" onClick={() => navigate('/users/kyc')}>
-          Listeye dön
-        </Button>
+      <div>
+        <PageHeader
+          title="Hata"
+          description={error}
+          icon={<ExclamationCircleOutlined />}
+        />
+        <Button onClick={() => navigate('/users/kyc')}>Listeye dön</Button>
       </div>
     );
   }
 
   return (
-    <div className="users-page">
+    <div>
       <PageHeader
         title={`KYC — ${record.userEmail ?? userId}`}
         description={`Kayıt: ${record.id.slice(0, 8)}…`}
-        icon="fa-id-card"
+        icon={<IdcardOutlined />}
         actions={
-          <div className="users-detail-header-actions">
-            <Button size="sm" variant="secondary" onClick={() => navigate('/users/kyc')}>
+          <Space>
+            <Button onClick={() => navigate('/users/kyc')}>
               Listeye dön
             </Button>
-            <Button size="sm" variant="secondary" onClick={() => navigate(`/users/${userId}`)}>
+            <Button onClick={() => navigate(`/users/${userId}`)}>
               Kullanıcı detayı
             </Button>
-          </div>
+          </Space>
         }
       />
 
-      {message && (
-        <div className={`users-message users-message-success`}>{message}</div>
-      )}
+      <Card bordered title="KYC bilgileri" style={{ marginBottom: 16 }}>
+        <Row gutter={[16, 16]}>
+          <Col xs={24} sm={12}>
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <div>
+                <Text type="secondary">Kullanıcı ID</Text>
+                <div>
+                  <Link to={`/users/${record.userId}`}>
+                    <Button type="link" size="small" style={{ padding: 0 }}>
+                      {record.userId}
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+              <div>
+                <Text type="secondary">Sumsub Applicant ID</Text>
+                <div>
+                  <Text>{record.sumsubApplicantId}</Text>
+                </div>
+              </div>
+              <div>
+                <Text type="secondary">İnceleme durumu</Text>
+                <div>
+                  <Text>{record.reviewStatus}</Text>
+                </div>
+              </div>
+              <div>
+                <Text type="secondary">Sonuç</Text>
+                <div>
+                  <Text>{record.reviewResult}</Text>
+                </div>
+              </div>
+            </Space>
+          </Col>
+          <Col xs={24} sm={12}>
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <div>
+                <Text type="secondary">KYC seviye</Text>
+                <div>
+                  <Text>{record.kycLevel ?? '—'}</Text>
+                </div>
+              </div>
+              <div>
+                <Text type="secondary">Oluşturulma</Text>
+                <div>
+                  <Text>
+                    {new Date(record.createdAt).toLocaleString('tr-TR')}
+                  </Text>
+                </div>
+              </div>
+              <div>
+                <Text type="secondary">Son güncelleme</Text>
+                <div>
+                  <Text>
+                    {new Date(record.updatedAt).toLocaleString('tr-TR')}
+                  </Text>
+                </div>
+              </div>
+            </Space>
+          </Col>
+        </Row>
+      </Card>
 
-      <DataCard title="KYC bilgileri">
-        <div className="users-detail-grid">
-          <div className="users-detail-field">
-            <div className="users-detail-field-label">Kullanıcı ID</div>
-            <div className="users-detail-field-value">
-              <a href={`/users/${record.userId}`} className="users-link">
-                {record.userId}
-              </a>
-            </div>
+      <Card bordered title="İnceleme güncelle">
+        <Space direction="vertical" style={{ width: '100%' }} size={16}>
+          <div style={{ width: '100%' }}>
+            <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+              İnceleme durumu
+            </Text>
+            <Select
+              value={reviewStatus}
+              onChange={setReviewStatus}
+              style={{ width: '100%' }}
+            >
+              <Select.Option value="INIT">INIT</Select.Option>
+              <Select.Option value="PENDING">PENDING</Select.Option>
+              <Select.Option value="COMPLETED">COMPLETED</Select.Option>
+              <Select.Option value="DECLINED">DECLINED</Select.Option>
+              <Select.Option value="ON_HOLD">ON_HOLD</Select.Option>
+            </Select>
           </div>
-          <div className="users-detail-field">
-            <div className="users-detail-field-label">Sumsub Applicant ID</div>
-            <div className="users-detail-field-value">{record.sumsubApplicantId}</div>
-          </div>
-          <div className="users-detail-field">
-            <div className="users-detail-field-label">İnceleme durumu</div>
-            <div className="users-detail-field-value">{record.reviewStatus}</div>
-          </div>
-          <div className="users-detail-field">
-            <div className="users-detail-field-label">Sonuç</div>
-            <div className="users-detail-field-value">{record.reviewResult}</div>
-          </div>
-          <div className="users-detail-field">
-            <div className="users-detail-field-label">KYC seviye</div>
-            <div className="users-detail-field-value">{record.kycLevel ?? '—'}</div>
-          </div>
-          <div className="users-detail-field">
-            <div className="users-detail-field-label">Oluşturulma</div>
-            <div className="users-detail-field-value">{new Date(record.createdAt).toLocaleString('tr-TR')}</div>
-          </div>
-          <div className="users-detail-field">
-            <div className="users-detail-field-label">Son güncelleme</div>
-            <div className="users-detail-field-value">{new Date(record.updatedAt).toLocaleString('tr-TR')}</div>
-          </div>
-        </div>
-      </DataCard>
 
-      <DataCard title="İnceleme güncelle">
-        <div className="users-form-group">
-          <label>İnceleme durumu</label>
-          <select value={reviewStatus} onChange={(e) => setReviewStatus(e.target.value)}>
-            <option value="INIT">INIT</option>
-            <option value="PENDING">PENDING</option>
-            <option value="COMPLETED">COMPLETED</option>
-            <option value="DECLINED">DECLINED</option>
-            <option value="ON_HOLD">ON_HOLD</option>
-          </select>
-        </div>
-        <div className="users-form-group">
-          <label>Sonuç</label>
-          <select value={reviewResult} onChange={(e) => setReviewResult(e.target.value)}>
-            <option value="NULL">NULL</option>
-            <option value="GREEN">GREEN</option>
-            <option value="YELLOW">YELLOW</option>
-            <option value="RED">RED</option>
-          </select>
-        </div>
-        <div className="users-form-group">
-          <label>Gerekçe</label>
-          <input
-            type="text"
-            value={reviewReason}
-            onChange={(e) => setReviewReason(e.target.value)}
-            placeholder="İsteğe bağlı"
-          />
-        </div>
-        <div className="users-form-actions">
-          <Button onClick={handleSave} disabled={saving}>
+          <div style={{ width: '100%' }}>
+            <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+              Sonuç
+            </Text>
+            <Select
+              value={reviewResult}
+              onChange={setReviewResult}
+              style={{ width: '100%' }}
+            >
+              <Select.Option value="NULL">NULL</Select.Option>
+              <Select.Option value="GREEN">GREEN</Select.Option>
+              <Select.Option value="YELLOW">YELLOW</Select.Option>
+              <Select.Option value="RED">RED</Select.Option>
+            </Select>
+          </div>
+
+          <div style={{ width: '100%' }}>
+            <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+              Gerekçe
+            </Text>
+            <Input
+              value={reviewReason}
+              onChange={(e) => setReviewReason(e.target.value)}
+              placeholder="İsteğe bağlı"
+            />
+          </div>
+
+          <Button type="primary" onClick={handleSave} loading={saving}>
             Kaydet
           </Button>
-        </div>
-      </DataCard>
+        </Space>
+      </Card>
     </div>
   );
 }

@@ -1,18 +1,26 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import {
+  Card,
+  Table,
+  Select,
+  Input,
+  Button,
+  Space,
+  Empty,
+  Alert,
+  Modal,
+  message as antdMessage,
+} from 'antd';
+import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
+import { StarOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import Button from '../../components/Button';
-import LoadingSpinner from '../../components/LoadingSpinner';
-import EmptyState from '../../components/EmptyState';
 import {
   fetchFeedHighlights,
   createFeedHighlight,
-  updateFeedHighlight,
   deleteFeedHighlight,
 } from '../../api/admin-content';
 import type { AdminFeedHighlightListItem } from '../../types/admin';
-import './content.css';
 
 const PAGE_SIZE = 20;
 
@@ -59,7 +67,10 @@ function FeedHighlights() {
   }, [pagination.offset, reasonFilter]);
 
   const handleAdd = async () => {
-    if (!newPostId.trim()) return;
+    if (!newPostId.trim()) {
+      antdMessage.warning('Lütfen Post ID girin');
+      return;
+    }
     setActionLoading('add');
     try {
       await createFeedHighlight({
@@ -68,184 +79,192 @@ function FeedHighlights() {
       });
       setShowAdd(false);
       setNewPostId('');
+      antdMessage.success('Highlight eklendi');
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Eklenemedi');
+      antdMessage.error(e instanceof Error ? e.message : 'Eklenemedi');
     } finally {
       setActionLoading(null);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Bu highlight kaldırılsın mı?')) return;
-    setActionLoading(id);
-    try {
-      await deleteFeedHighlight(id);
-      load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Kaldırılamadı');
-    } finally {
-      setActionLoading(null);
-    }
+    Modal.confirm({
+      title: 'Highlight Kaldır',
+      content: 'Bu highlight kaldırılsın mı?',
+      okText: 'Kaldır',
+      cancelText: 'İptal',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        setActionLoading(id);
+        try {
+          await deleteFeedHighlight(id);
+          antdMessage.success('Highlight kaldırıldı');
+          load();
+        } catch (e) {
+          antdMessage.error(e instanceof Error ? e.message : 'Kaldırılamadı');
+        } finally {
+          setActionLoading(null);
+        }
+      },
+    });
   };
 
-  const totalPages = Math.ceil(pagination.total / pagination.limit) || 1;
+  const columns: ColumnsType<AdminFeedHighlightListItem> = [
+    {
+      title: 'Post',
+      key: 'post',
+      render: (_, record) => (
+        <Link to={`/content/posts/${record.postId}`}>
+          <Button type="link" size="small" style={{ padding: 0 }}>
+            {record.postTitle
+              ? record.postTitle.length > 40
+                ? record.postTitle.slice(0, 40) + '…'
+                : record.postTitle
+              : record.postId}
+          </Button>
+        </Link>
+      ),
+    },
+    {
+      title: 'Yazar',
+      dataIndex: 'userDisplayName',
+      key: 'userDisplayName',
+      render: (text) => text ?? '—',
+    },
+    {
+      title: 'Sebep',
+      dataIndex: 'reason',
+      key: 'reason',
+    },
+    {
+      title: 'Öne çıkarılma',
+      dataIndex: 'highlightedAt',
+      key: 'highlightedAt',
+      render: (date) => new Date(date).toLocaleString('tr-TR'),
+    },
+    {
+      title: '',
+      key: 'action',
+      width: 100,
+      render: (_, record) => (
+        <Button
+          danger
+          size="small"
+          loading={actionLoading === record.id}
+          onClick={() => handleDelete(record.id)}
+        >
+          Kaldır
+        </Button>
+      ),
+    },
+  ];
+
+  const handleTableChange = (pag: TablePaginationConfig) => {
+    const newOffset = ((pag.current ?? 1) - 1) * PAGE_SIZE;
+    setPagination((prev) => ({ ...prev, offset: newOffset }));
+  };
+
   const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
 
   return (
-    <div className="content-page">
+    <div>
       <PageHeader
         title="Feed Highlights"
         description="Manage feed highlighted posts"
-        icon="fa-star"
+        icon={<StarOutlined />}
       />
 
       {error && (
-        <div className="content-error">
-          <span>{error}</span>
-        </div>
+        <Alert
+          message="Hata"
+          description={error}
+          type="error"
+          closable
+          onClose={() => setError(null)}
+          style={{ marginBottom: 24 }}
+        />
       )}
 
-      <DataCard
+      <Card
+        bordered
         title="Feed highlight listesi"
-        action={
-          <div className="content-filters">
-            <select
+        extra={
+          <Space>
+            <Select
               value={reasonFilter}
-              onChange={(e) => {
-                setReasonFilter(e.target.value);
+              onChange={(value) => {
+                setReasonFilter(value);
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              className="content-filter-select"
+              style={{ width: 140 }}
+              placeholder="Tüm sebepler"
             >
-              <option value="">Tüm sebepler</option>
+              <Select.Option value="">Tüm sebepler</Select.Option>
               {REASONS.map((r) => (
-                <option key={r.value} value={r.value}>
+                <Select.Option key={r.value} value={r.value}>
                   {r.label}
-                </option>
+                </Select.Option>
               ))}
-            </select>
-            <Button size="sm" variant="primary" onClick={() => setShowAdd(!showAdd)}>
+            </Select>
+            <Button type="primary" onClick={() => setShowAdd(!showAdd)}>
               {showAdd ? 'İptal' : 'Highlight ekle'}
             </Button>
-          </div>
+          </Space>
         }
       >
         {showAdd && (
-          <div className="content-detail-section" style={{ marginBottom: 16 }}>
-            <input
-              type="text"
+          <Space style={{ marginBottom: 16, width: '100%' }}>
+            <Input
               placeholder="Post ID"
               value={newPostId}
               onChange={(e) => setNewPostId(e.target.value)}
-              className="content-filter-input"
-              style={{ marginRight: 8 }}
+              style={{ width: 200 }}
             />
-            <select
+            <Select
               value={newReason}
-              onChange={(e) => setNewReason(e.target.value)}
-              className="content-filter-select"
-              style={{ marginRight: 8 }}
+              onChange={setNewReason}
+              style={{ width: 140 }}
             >
               {REASONS.map((r) => (
-                <option key={r.value} value={r.value}>
+                <Select.Option key={r.value} value={r.value}>
                   {r.label}
-                </option>
+                </Select.Option>
               ))}
-            </select>
+            </Select>
             <Button
-              size="sm"
-              variant="primary"
-              disabled={actionLoading === 'add'}
+              type="primary"
+              loading={actionLoading === 'add'}
               onClick={handleAdd}
             >
               Ekle
             </Button>
-          </div>
+          </Space>
         )}
 
-        {loading ? (
-          <div className="content-loading">
-            <LoadingSpinner />
-          </div>
-        ) : rows.length === 0 ? (
-          <EmptyState
-            icon="fa-star"
-            title="Highlight yok"
-            description="Filtreleri değiştirin veya yeni ekleyin."
-          />
-        ) : (
-          <>
-            <div className="content-table-wrap">
-              <table className="content-table">
-                <thead>
-                  <tr>
-                    <th>Post</th>
-                    <th>Yazar</th>
-                    <th>Sebep</th>
-                    <th>Öne çıkarılma</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.id}>
-                      <td>
-                        <Link to={`/content/posts/${r.postId}`} className="content-link">
-                          {r.postTitle ? (r.postTitle.length > 40 ? r.postTitle.slice(0, 40) + '…' : r.postTitle) : r.postId}
-                        </Link>
-                      </td>
-                      <td>{r.userDisplayName ?? '—'}</td>
-                      <td>{r.reason}</td>
-                      <td>{new Date(r.highlightedAt).toLocaleString('tr-TR')}</td>
-                      <td>
-                        <Button
-                          size="sm"
-                          variant="danger"
-                          disabled={actionLoading === r.id}
-                          onClick={() => handleDelete(r.id)}
-                        >
-                          Kaldır
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="content-pagination">
-              <span className="content-pagination-info">
-                {pagination.total} kayıt, sayfa {currentPage} / {totalPages}
-              </span>
-              <div className="content-pagination-btns">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={pagination.offset === 0}
-                  onClick={() =>
-                    setPagination((p) => ({
-                      ...p,
-                      offset: Math.max(0, p.offset - p.limit),
-                    }))
-                  }
-                >
-                  Önceki
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={pagination.offset + pagination.limit >= pagination.total}
-                  onClick={() =>
-                    setPagination((p) => ({ ...p, offset: p.offset + p.limit }))
-                  }
-                >
-                  Sonraki
-                </Button>
-              </div>
-            </div>
-          </>
-        )}
-      </DataCard>
+        <Table
+          columns={columns}
+          dataSource={rows}
+          rowKey="id"
+          loading={loading}
+          pagination={{
+            current: currentPage,
+            pageSize: PAGE_SIZE,
+            total: pagination.total,
+            showSizeChanger: false,
+            showTotal: (total) => `Toplam ${total} kayıt`,
+          }}
+          onChange={handleTableChange}
+          locale={{
+            emptyText: (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="Highlight yok. Filtreleri değiştirin veya yeni ekleyin."
+              />
+            ),
+          }}
+        />
+      </Card>
     </div>
   );
 }

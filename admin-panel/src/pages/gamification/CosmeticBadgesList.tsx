@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { BgColorsOutlined } from '@ant-design/icons';
 import BadgeListByType from './BadgeListByType';
 import type { BadgeTypeSlug } from './BadgeListByType';
 import CreateBadgeModal from './CreateBadgeModal';
@@ -13,7 +14,7 @@ function CosmeticBadgesList() {
         listPath="/gamification/cosmetic-badges"
         title="Cosmetic Badges"
         description="Kozmetik badge'leri listesi ve yönetimi"
-        icon="fa-palette"
+        icon={<BgColorsOutlined />}
         onOpenCreate={() => setCreateOpen(true)}
       />
       {createOpen && (

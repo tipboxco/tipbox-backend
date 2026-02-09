@@ -1,12 +1,10 @@
 import { useState, useEffect } from 'react';
+import { Card, Table, Empty, Alert } from 'antd';
+import { HistoryOutlined } from '@ant-design/icons';
+import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import Button from '../../components/Button';
-import LoadingSpinner from '../../components/LoadingSpinner';
-import EmptyState from '../../components/EmptyState';
 import { fetchAdminLogs } from '../../api/admin-logs';
 import type { AdminLogListItem } from '../../types/admin';
-import './AdminLogs.css';
 
 const PAGE_SIZE = 50;
 
@@ -35,90 +33,100 @@ function AdminLogs() {
     return () => { cancelled = true; };
   }, [pagination.offset]);
 
-  const totalPages = Math.ceil(pagination.total / pagination.limit) || 1;
-  const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
+  const columns: ColumnsType<AdminLogListItem> = [
+    {
+      title: 'Kayıt ID',
+      dataIndex: 'id',
+      key: 'id',
+      ellipsis: true,
+      width: 120,
+      render: (id: string) => (
+        <span title={id} style={{ fontFamily: 'monospace', fontSize: '12px' }}>
+          {id}
+        </span>
+      ),
+    },
+    {
+      title: 'Tarih',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      width: 180,
+      render: (date: string) => new Date(date).toLocaleString('tr-TR'),
+    },
+    {
+      title: 'Admin ID',
+      dataIndex: 'adminId',
+      key: 'adminId',
+      ellipsis: true,
+      width: 120,
+      render: (id: string) => (
+        <span title={id} style={{ fontFamily: 'monospace', fontSize: '12px' }}>
+          {id}
+        </span>
+      ),
+    },
+    {
+      title: 'İşlem',
+      dataIndex: 'action',
+      key: 'action',
+      width: 150,
+    },
+    {
+      title: 'Açıklama',
+      dataIndex: 'description',
+      key: 'description',
+      render: (desc: string | null) => desc ?? '—',
+    },
+    {
+      title: 'Entity',
+      key: 'entity',
+      width: 150,
+      render: (_, record) => (
+        <>
+          {record.entityType} {record.entityId ? `#${record.entityId}` : ''}
+        </>
+      ),
+    },
+  ];
+
+  const tablePagination: TablePaginationConfig = {
+    current: Math.floor(pagination.offset / pagination.limit) + 1,
+    pageSize: pagination.limit,
+    total: pagination.total,
+    showSizeChanger: false,
+    showTotal: (total, range) => `${range[0]}-${range[1]} / ${total} kayıt`,
+    onChange: (page) => {
+      setPagination((p) => ({ ...p, offset: (page - 1) * p.limit }));
+    },
+  };
 
   return (
-    <div className="admin-logs-page">
+    <div>
       <PageHeader
         title="Admin Logs"
         description="Admin işlem geçmişi"
-        icon="fa-clock-rotate-left"
+        icon={<HistoryOutlined />}
       />
 
-      {error && (
-        <div className="admin-logs-error" role="alert">
-          {error}
-        </div>
-      )}
+      {error && <Alert message={error} type="error" showIcon closable style={{ marginBottom: 16 }} />}
 
-      <DataCard title="Admin işlem logları">
-        {loading ? (
-          <LoadingSpinner fullScreen={false} />
-        ) : logs.length === 0 ? (
-          <EmptyState
-            icon="fa-clock-rotate-left"
-            title="Kayıt yok"
-            description="Henüz admin log kaydı bulunmuyor."
-          />
-        ) : (
-          <>
-            <div className="admin-logs-table-wrap">
-              <table className="admin-logs-table">
-                <thead>
-                  <tr>
-                    <th>Kayıt ID</th>
-                    <th>Tarih</th>
-                    <th>Admin ID</th>
-                    <th>İşlem</th>
-                    <th>Açıklama</th>
-                    <th>Entity</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {logs.map((log) => (
-                    <tr key={log.id}>
-                      <td className="admin-logs-id-cell" title={log.id}>
-                        {log.id}
-                      </td>
-                      <td>{new Date(log.createdAt).toLocaleString('tr-TR')}</td>
-                      <td className="admin-logs-id-cell" title={log.adminId}>
-                        {log.adminId}
-                      </td>
-                      <td>{log.action}</td>
-                      <td>{log.description ?? '—'}</td>
-                      <td>{log.entityType} {log.entityId ? `#${log.entityId}` : ''}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="admin-logs-pagination">
-              <span className="admin-logs-pagination-info">
-                Toplam {pagination.total} kayıt, sayfa {currentPage} / {totalPages}
-              </span>
-              <div className="admin-logs-pagination-btns">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={pagination.offset === 0}
-                  onClick={() => setPagination((p) => ({ ...p, offset: Math.max(0, p.offset - p.limit) }))}
-                >
-                  Önceki
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={pagination.offset + pagination.limit >= pagination.total}
-                  onClick={() => setPagination((p) => ({ ...p, offset: p.offset + p.limit }))}
-                >
-                  Sonraki
-                </Button>
-              </div>
-            </div>
-          </>
-        )}
-      </DataCard>
+      <Card bordered title="Admin işlem logları">
+        <Table<AdminLogListItem>
+          columns={columns}
+          dataSource={logs}
+          rowKey="id"
+          loading={loading}
+          pagination={tablePagination}
+          locale={{
+            emptyText: (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="Henüz admin log kaydı bulunmuyor."
+              />
+            ),
+          }}
+        />
+      </Card>
     </div>
   );
 }

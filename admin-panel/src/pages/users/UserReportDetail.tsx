@@ -1,12 +1,25 @@
 import { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
+import {
+  Row,
+  Col,
+  Card,
+  Button,
+  Spin,
+  Alert,
+  Typography,
+  Space,
+  Tag,
+  Checkbox,
+  Input,
+  message as antdMessage,
+} from 'antd';
+import { FlagOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import Button from '../../components/Button';
-import LoadingSpinner from '../../components/LoadingSpinner';
 import { fetchUserReport, resolveUserReport } from '../../api/admin-reports';
 import type { AdminUserReportDetailResponse } from '../../types/admin';
-import './users.css';
+
+const { Text, Paragraph } = Typography;
 
 function UserReportDetail() {
   const { id } = useParams<{ id: string }>();
@@ -17,7 +30,6 @@ function UserReportDetail() {
   const [resolved, setResolved] = useState(false);
   const [adminNote, setAdminNote] = useState('');
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -31,25 +43,29 @@ function UserReportDetail() {
           setResolved(res.data.resolved ?? false);
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Rapor yüklenemedi');
+        if (!cancelled)
+          setError(e instanceof Error ? e.message : 'Rapor yüklenemedi');
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   const handleResolve = async () => {
     if (!id) return;
     setSaving(true);
-    setMessage(null);
     try {
       await resolveUserReport(id, { resolved, adminNote: adminNote || undefined });
       const res = await fetchUserReport(id);
       if (res.data) setReport(res.data);
-      setMessage(resolved ? 'Rapor çözüldü olarak işaretlendi' : 'Rapor güncellendi');
+      antdMessage.success(
+        resolved ? 'Rapor çözüldü olarak işaretlendi' : 'Rapor güncellendi'
+      );
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : 'İşlem başarısız');
+      antdMessage.error(e instanceof Error ? e.message : 'İşlem başarısız');
     } finally {
       setSaving(false);
     }
@@ -57,131 +73,153 @@ function UserReportDetail() {
 
   if (!id) {
     return (
-      <div className="users-page">
-        <p>Geçersiz rapor</p>
+      <div>
+        <Alert message="Geçersiz rapor" type="error" />
       </div>
     );
   }
 
   if (loading || !report) {
     return (
-      <div className="users-page">
-        <LoadingSpinner fullScreen={false} />
+      <div style={{ textAlign: 'center', padding: 48 }}>
+        <Spin size="large" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="users-page">
-        <PageHeader title="Hata" description={error} icon="fa-exclamation-triangle" />
-        <Button variant="secondary" onClick={() => navigate('/users/reports')}>
-          Listeye dön
-        </Button>
+      <div>
+        <PageHeader
+          title="Hata"
+          description={error}
+          icon={<ExclamationCircleOutlined />}
+        />
+        <Button onClick={() => navigate('/users/reports')}>Listeye dön</Button>
       </div>
     );
   }
 
   return (
-    <div className="users-page">
+    <div>
       <PageHeader
         title={`Rapor #${report.id.slice(0, 8)}`}
         description={report.category}
-        icon="fa-flag"
-        actions={
-          <Button size="sm" variant="secondary" onClick={() => navigate('/users/reports')}>
-            Listeye dön
-          </Button>
-        }
+        icon={<FlagOutlined />}
+        backTo="/users/reports"
+        backLabel="Listeye dön"
       />
 
-      {message && (
-        <div className={`users-message ${message.includes('başarısız') ? 'users-message-error' : 'users-message-success'}`}>
-          {message}
-        </div>
-      )}
+      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+        <Col xs={24} md={12}>
+          <Card bordered title="Şikayet edilen kullanıcı">
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <div>
+                <Text type="secondary">ID</Text>
+                <div>
+                  <Link to={`/users/${report.reportedUserId}`}>
+                    <Button type="link" size="small" style={{ padding: 0 }}>
+                      {report.reportedUserId}
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+              <div>
+                <Text type="secondary">Görünen ad / Email</Text>
+                <div>
+                  <Text>
+                    {report.reportedUserDisplayName ??
+                      report.reportedUserEmail ??
+                      '—'}
+                  </Text>
+                </div>
+              </div>
+            </Space>
+          </Card>
+        </Col>
 
-      <div className="users-detail-grid">
-        <DataCard title="Şikayet edilen kullanıcı">
-          <div className="users-detail-fields">
-            <div className="users-detail-field">
-              <div className="users-detail-field-label">ID</div>
-              <div className="users-detail-field-value">
-                <Link to={`/users/${report.reportedUserId}`} className="users-link">
-                  {report.reportedUserId}
-                </Link>
+        <Col xs={24} md={12}>
+          <Card bordered title="Şikayet eden">
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <div>
+                <Text type="secondary">ID</Text>
+                <div>
+                  <Link to={`/users/${report.reporterId}`}>
+                    <Button type="link" size="small" style={{ padding: 0 }}>
+                      {report.reporterId}
+                    </Button>
+                  </Link>
+                </div>
               </div>
-            </div>
-            <div className="users-detail-field">
-              <div className="users-detail-field-label">Görünen ad / Email</div>
-              <div className="users-detail-field-value">
-                {report.reportedUserDisplayName ?? report.reportedUserEmail ?? '—'}
+              <div>
+                <Text type="secondary">Görünen ad / Email</Text>
+                <div>
+                  <Text>
+                    {report.reporterDisplayName ??
+                      report.reporterEmail ??
+                      '—'}
+                  </Text>
+                </div>
               </div>
+            </Space>
+          </Card>
+        </Col>
+      </Row>
+
+      <Card bordered title="Açıklama" style={{ marginBottom: 16 }}>
+        <Space direction="vertical" style={{ width: '100%' }} size={16}>
+          <Paragraph>{report.description ?? '—'}</Paragraph>
+          <div>
+            <Text type="secondary">Tarih</Text>
+            <div>
+              <Text>{new Date(report.createdAt).toLocaleString('tr-TR')}</Text>
             </div>
           </div>
-        </DataCard>
-        <DataCard title="Şikayet eden">
-          <div className="users-detail-fields">
-            <div className="users-detail-field">
-              <div className="users-detail-field-label">ID</div>
-              <div className="users-detail-field-value">
-                <Link to={`/users/${report.reporterId}`} className="users-link">
-                  {report.reporterId}
-                </Link>
-              </div>
-            </div>
-            <div className="users-detail-field">
-              <div className="users-detail-field-label">Görünen ad / Email</div>
-              <div className="users-detail-field-value">
-                {report.reporterDisplayName ?? report.reporterEmail ?? '—'}
-              </div>
+          <div>
+            <Text type="secondary">Durum</Text>
+            <div>
+              <Tag color={report.resolved ? 'success' : 'default'}>
+                {report.resolved ? 'Çözüldü' : 'Bekliyor'}
+              </Tag>
+              {report.resolvedAt && (
+                <Text type="secondary" style={{ marginLeft: 8 }}>
+                  {new Date(report.resolvedAt).toLocaleString('tr-TR')}
+                </Text>
+              )}
             </div>
           </div>
-        </DataCard>
-      </div>
+        </Space>
+      </Card>
 
-      <DataCard title="Açıklama" className="users-detail-panel">
-        <p className="users-detail-field-value">{report.description ?? '—'}</p>
-        <div className="users-detail-field">
-          <div className="users-detail-field-label">Tarih</div>
-          <div className="users-detail-field-value">{new Date(report.createdAt).toLocaleString('tr-TR')}</div>
-        </div>
-        <div className="users-detail-field">
-          <div className="users-detail-field-label">Durum</div>
-          <div className="users-detail-field-value">
-            <span className={`users-badge ${report.resolved ? 'users-badge-success' : 'users-badge-neutral'}`}>
-              {report.resolved ? 'Çözüldü' : 'Bekliyor'}
-            </span>
-            {report.resolvedAt && (
-              <span className="users-detail-field-value" style={{ marginLeft: 8 }}>
-                {new Date(report.resolvedAt).toLocaleString('tr-TR')}
-              </span>
-            )}
+      <Card bordered title="Çözümle">
+        <Space direction="vertical" style={{ width: '100%' }} size={16}>
+          <Checkbox
+            checked={resolved}
+            onChange={(e) => setResolved(e.target.checked)}
+          >
+            Çözüldü
+          </Checkbox>
+
+          <div style={{ width: '100%' }}>
+            <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+              Admin notu
+            </Text>
+            <Input
+              value={adminNote}
+              onChange={(e) => setAdminNote(e.target.value)}
+              placeholder="İsteğe bağlı not"
+            />
           </div>
-        </div>
-      </DataCard>
 
-      <DataCard title="Çözümle">
-        <div className="users-form-group">
-          <label>
-            <input type="checkbox" checked={resolved} onChange={(e) => setResolved(e.target.checked)} /> Çözüldü
-          </label>
-        </div>
-        <div className="users-form-group">
-          <label>Admin notu</label>
-          <input
-            type="text"
-            value={adminNote}
-            onChange={(e) => setAdminNote(e.target.value)}
-            placeholder="İsteğe bağlı not"
-          />
-        </div>
-        <div className="users-form-actions">
-          <Button onClick={handleResolve} disabled={saving}>
+          <Button
+            type="primary"
+            onClick={handleResolve}
+            loading={saving}
+          >
             Kaydet
           </Button>
-        </div>
-      </DataCard>
+        </Space>
+      </Card>
     </div>
   );
 }

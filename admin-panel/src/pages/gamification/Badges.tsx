@@ -1,17 +1,28 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import {
+  Row,
+  Col,
+  Card,
+  Statistic,
+  Table,
+  Input,
+  Select,
+  Space,
+  Spin,
+  Empty,
+  Alert,
+  Image,
+  Button,
+} from 'antd';
+import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
+import { TrophyOutlined, SearchOutlined, TagOutlined, StarOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import StatsCard from '../../components/StatsCard';
-import Button from '../../components/Button';
-import LoadingSpinner from '../../components/LoadingSpinner';
-import EmptyState from '../../components/EmptyState';
 import {
   fetchBadgesStats,
   fetchBadges,
 } from '../../api/admin-badges-collections';
 import type { AdminBadgeListItem, AdminBadgeStatsResponse } from '../../types/admin';
-import './gamification.css';
 
 const PAGE_SIZE = 20;
 
@@ -74,189 +85,254 @@ function Badges() {
     };
   }, [pagination.offset, search, type, rarity, sort, order]);
 
-  const totalPages = Math.ceil(pagination.total / pagination.limit) || 1;
+  const columns: ColumnsType<AdminBadgeListItem> = [
+    {
+      title: 'Görsel',
+      dataIndex: 'imageUrl',
+      key: 'image',
+      width: 80,
+      render: (url) =>
+        url ? (
+          <Image
+            src={url}
+            alt=""
+            width={48}
+            height={48}
+            style={{ objectFit: 'cover', borderRadius: 4 }}
+            preview={false}
+          />
+        ) : (
+          <div
+            style={{
+              width: 48,
+              height: 48,
+              background: '#f0f0f0',
+              borderRadius: 4,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            —
+          </div>
+        ),
+    },
+    {
+      title: 'Ad',
+      dataIndex: 'name',
+      key: 'name',
+    },
+    {
+      title: 'Tip',
+      dataIndex: 'type',
+      key: 'type',
+      width: 120,
+    },
+    {
+      title: 'Rarity',
+      dataIndex: 'rarity',
+      key: 'rarity',
+      width: 100,
+    },
+    {
+      title: 'Kategori',
+      key: 'category',
+      width: 120,
+      render: (_, record) => record.categoryName ?? record.categoryId,
+    },
+    {
+      title: 'Koleksiyon',
+      key: 'collection',
+      width: 150,
+      render: (_, record) => record.collectionName ?? (record.collectionId ? '—' : '—'),
+    },
+    {
+      title: 'Oluşturulma',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      width: 150,
+      render: (date) => new Date(date).toLocaleString('tr-TR'),
+    },
+    {
+      title: '',
+      key: 'action',
+      width: 80,
+      render: (_, record) => (
+        <Link to={`/gamification/badges/${record.id}`}>
+          <Button type="link" size="small">
+            Detay
+          </Button>
+        </Link>
+      ),
+    },
+  ];
+
+  const handleTableChange = (pag: TablePaginationConfig) => {
+    const newOffset = ((pag.current ?? 1) - 1) * PAGE_SIZE;
+    setPagination((prev) => ({ ...prev, offset: newOffset }));
+  };
+
   const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
 
   return (
-    <div className="gamification-page">
+    <div>
       <PageHeader
         title="Badges"
         description="Badge listesi, filtreleme ve yönetim"
-        icon="fa-medal"
+        icon={<TrophyOutlined />}
       />
 
       {error && (
-        <div className="gamification-error">
-          <span>{error}</span>
-        </div>
+        <Alert
+          message="Hata"
+          description={error}
+          type="error"
+          closable
+          onClose={() => setError(null)}
+          style={{ marginBottom: 24 }}
+        />
       )}
 
+      {/* Stats */}
       {loading ? (
-        <LoadingSpinner />
+        <div style={{ textAlign: 'center', padding: 48 }}>
+          <Spin size="large" />
+        </div>
       ) : (
         stats && (
-          <div className="gamification-stats-grid">
-            <StatsCard title="Toplam" value={stats.total} icon="fa-medal" color="accent" />
+          <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+            <Col xs={24} sm={12} lg={6}>
+              <Card bordered>
+                <Statistic
+                  title="Toplam"
+                  value={stats.total}
+                  prefix={<TrophyOutlined />}
+                  valueStyle={{ fontWeight: 700 }}
+                />
+              </Card>
+            </Col>
             {Object.entries(stats.byType || {}).map(([t, count]) => (
-              <StatsCard key={t} title={t} value={count} icon="fa-tag" color="neutral" />
+              <Col xs={24} sm={12} lg={6} key={t}>
+                <Card bordered>
+                  <Statistic
+                    title={t}
+                    value={count}
+                    prefix={<TagOutlined />}
+                    valueStyle={{ fontWeight: 600 }}
+                  />
+                </Card>
+              </Col>
             ))}
             {Object.entries(stats.byRarity || {}).map(([r, count]) => (
-              <StatsCard key={r} title={r} value={count} icon="fa-star" color="neutral" />
+              <Col xs={24} sm={12} lg={6} key={r}>
+                <Card bordered>
+                  <Statistic
+                    title={r}
+                    value={count}
+                    prefix={<StarOutlined />}
+                    valueStyle={{ fontWeight: 600 }}
+                  />
+                </Card>
+              </Col>
             ))}
-          </div>
+          </Row>
         )
       )}
 
-      <DataCard
+      {/* Badge List */}
+      <Card
+        bordered
         title="Badge listesi"
-        action={
-          <div className="gamification-filters">
-            <input
-              type="text"
+        extra={
+          <Space wrap>
+            <Input
               placeholder="Ara (ad, açıklama)"
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              className="gamification-filter-input"
+              prefix={<SearchOutlined />}
+              style={{ width: 180 }}
+              allowClear
             />
-            <select
+            <Select
               value={type}
-              onChange={(e) => {
-                setType(e.target.value);
+              onChange={(value) => {
+                setType(value);
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              className="gamification-filter-select"
+              style={{ width: 130 }}
+              placeholder="Tüm tipler"
             >
-              <option value="">Tüm tipler</option>
-              <option value="COLLECTION">COLLECTION</option>
-              <option value="EVENT">EVENT</option>
-              <option value="COSMETIC">COSMETIC</option>
-              <option value="BRAND">BRAND</option>
-            </select>
-            <select
+              <Select.Option value="">Tüm tipler</Select.Option>
+              <Select.Option value="COLLECTION">COLLECTION</Select.Option>
+              <Select.Option value="EVENT">EVENT</Select.Option>
+              <Select.Option value="COSMETIC">COSMETIC</Select.Option>
+              <Select.Option value="BRAND">BRAND</Select.Option>
+            </Select>
+            <Select
               value={rarity}
-              onChange={(e) => {
-                setRarity(e.target.value);
+              onChange={(value) => {
+                setRarity(value);
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              className="gamification-filter-select"
+              style={{ width: 120 }}
+              placeholder="Tüm rarity"
             >
-              <option value="">Tüm rarity</option>
-              <option value="COMMON">COMMON</option>
-              <option value="RARE">RARE</option>
-              <option value="EPIC">EPIC</option>
-            </select>
-            <select
+              <Select.Option value="">Tüm rarity</Select.Option>
+              <Select.Option value="COMMON">COMMON</Select.Option>
+              <Select.Option value="RARE">RARE</Select.Option>
+              <Select.Option value="EPIC">EPIC</Select.Option>
+            </Select>
+            <Select
               value={sort}
-              onChange={(e) => {
-                setSort(e.target.value as 'createdAt' | 'name');
+              onChange={(value) => {
+                setSort(value as 'createdAt' | 'name');
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              className="gamification-filter-select"
+              style={{ width: 120 }}
             >
-              <option value="createdAt">Oluşturulma</option>
-              <option value="name">Ad</option>
-            </select>
-            <select
+              <Select.Option value="createdAt">Oluşturulma</Select.Option>
+              <Select.Option value="name">Ad</Select.Option>
+            </Select>
+            <Select
               value={order}
-              onChange={(e) => {
-                setOrder(e.target.value as 'asc' | 'desc');
+              onChange={(value) => {
+                setOrder(value as 'asc' | 'desc');
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              className="gamification-filter-select"
+              style={{ width: 100 }}
             >
-              <option value="desc">Azalan</option>
-              <option value="asc">Artan</option>
-            </select>
-          </div>
+              <Select.Option value="desc">Azalan</Select.Option>
+              <Select.Option value="asc">Artan</Select.Option>
+            </Select>
+          </Space>
         }
       >
-        {loadingList ? (
-          <div className="gamification-loading">
-            <LoadingSpinner />
-          </div>
-        ) : badges.length === 0 ? (
-          <EmptyState
-            icon="fa-medal"
-            title="Badge bulunamadı"
-            description="Filtreleri değiştirin veya yeni badge oluşturun."
-          />
-        ) : (
-          <>
-            <div className="gamification-table-wrap">
-              <table className="gamification-table">
-                <thead>
-                  <tr>
-                    <th>Ad</th>
-                    <th>Tip</th>
-                    <th>Rarity</th>
-                    <th>Kategori</th>
-                    <th>Koleksiyon</th>
-                    <th>Oluşturulma</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {badges.map((b) => (
-                    <tr key={b.id}>
-                      <td>
-                        {b.imageUrl && (
-                          <img src={b.imageUrl} alt="" className="gamification-badge-thumb" />
-                        )}
-                        <span>{b.name}</span>
-                      </td>
-                      <td>{b.type}</td>
-                      <td>{b.rarity}</td>
-                      <td>{b.categoryName ?? b.categoryId}</td>
-                      <td>{b.collectionName ?? (b.collectionId ? '—' : '—')}</td>
-                      <td>{new Date(b.createdAt).toLocaleString('tr-TR')}</td>
-                      <td>
-                        <Link to={`/gamification/badges/${b.id}`}>
-                          <Button variant="secondary" size="sm">
-                            Detay
-                          </Button>
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {pagination.total > pagination.limit && (
-              <div className="gamification-pagination">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={currentPage <= 1}
-                  onClick={() =>
-                    setPagination((p) => ({ ...p, offset: Math.max(0, p.offset - p.limit) }))
-                  }
-                >
-                  Önceki
-                </Button>
-                <span className="gamification-pagination-info">
-                  {currentPage} / {totalPages} (toplam {pagination.total})
-                </span>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={currentPage >= totalPages}
-                  onClick={() =>
-                    setPagination((p) => ({
-                      ...p,
-                      offset: Math.min(pagination.total, p.offset + p.limit),
-                    }))
-                  }
-                >
-                  Sonraki
-                </Button>
-              </div>
-            )}
-          </>
-        )}
-      </DataCard>
+        <Table
+          columns={columns}
+          dataSource={badges}
+          rowKey="id"
+          loading={loadingList}
+          pagination={{
+            current: currentPage,
+            pageSize: PAGE_SIZE,
+            total: pagination.total,
+            showSizeChanger: false,
+            showTotal: (total) => `Toplam ${total} kayıt`,
+          }}
+          onChange={handleTableChange}
+          locale={{
+            emptyText: (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="Badge bulunamadı. Filtreleri değiştirin veya yeni badge oluşturun."
+              />
+            ),
+          }}
+        />
+      </Card>
     </div>
   );
 }

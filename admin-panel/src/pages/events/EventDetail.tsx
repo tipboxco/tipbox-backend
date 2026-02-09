@@ -1,9 +1,36 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import DataCard from '../../components/DataCard';
-import Button from '../../components/Button';
-import LoadingSpinner from '../../components/LoadingSpinner';
-import StatsCard from '../../components/StatsCard';
+import {
+  Card,
+  Tabs,
+  Button,
+  Input,
+  Select,
+  InputNumber,
+  Form,
+  Space,
+  Spin,
+  Empty,
+  Modal,
+  Alert,
+  Row,
+  Col,
+  Typography,
+  Table,
+  Tag,
+  Image,
+  Statistic,
+  Descriptions,
+  Checkbox,
+  message as antdMessage,
+} from 'antd';
+import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
+import {
+  ArrowLeftOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  PlusOutlined,
+} from '@ant-design/icons';
 import {
   fetchEvent,
   updateEvent,
@@ -23,16 +50,14 @@ import type {
   AdminEventBadgeListItem,
   AdminEventRewardListItem,
 } from '../../types/admin';
-import '../gamification/gamification.css';
-import './events.css';
 
-type TabId = 'summary' | 'badges' | 'participants' | 'analytics' | 'rewards';
+const { TextArea } = Input;
+const { Title, Text } = Typography;
 
 function EventDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [event, setEvent] = useState<AdminEventDetailResponse | null>(null);
-  const [tab, setTab] = useState<TabId>('summary');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,77 +80,97 @@ function EventDetail() {
 
   if (!id) {
     return (
-      <div className="event-detail-page">
-        <p>Geçersiz event ID.</p>
-        <Link to="/events" className="event-detail-back">
-          <i className="fa-solid fa-arrow-left"></i> Listeye dön
+      <div>
+        <Link to="/events">
+          <Button icon={<ArrowLeftOutlined />}>Listeye dön</Button>
         </Link>
+        <Text>Geçersiz event ID</Text>
       </div>
     );
   }
 
   if (loading || !event) {
     return (
-      <div className="event-detail-page">
-        <Link to="/events" className="event-detail-back">
-          <i className="fa-solid fa-arrow-left"></i> Listeye dön
+      <div>
+        <Link to="/events">
+          <Button icon={<ArrowLeftOutlined />} style={{ marginBottom: 16 }}>
+            Listeye dön
+          </Button>
         </Link>
-        {loading ? <LoadingSpinner /> : error ? <p className="events-error">{error}</p> : null}
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: 48 }}>
+            <Spin size="large" />
+          </div>
+        ) : (
+          <Text type="danger">{error}</Text>
+        )}
       </div>
     );
   }
 
+  const tabItems = [
+    {
+      key: 'summary',
+      label: 'Özet',
+      children: <EventSummaryTab event={event} onUpdated={loadEvent} onDeleted={() => navigate('/events')} />,
+    },
+    {
+      key: 'badges',
+      label: "Badge'ler",
+      children: <EventBadgesTab eventId={id} eventTitle={event.title} />,
+    },
+    {
+      key: 'participants',
+      label: 'Katılımcılar',
+      children: <EventParticipantsTab eventId={id} />,
+    },
+    {
+      key: 'analytics',
+      label: 'Analitik',
+      children: <EventAnalyticsTab eventId={id} />,
+    },
+    {
+      key: 'rewards',
+      label: 'Ödüller',
+      children: <EventRewardsTab eventId={id} />,
+    },
+  ];
+
   return (
-    <div className="event-detail-page">
-      <Link to="/events" className="event-detail-back">
-        <i className="fa-solid fa-arrow-left"></i> Listeye dön
+    <div>
+      <Link to="/events">
+        <Button icon={<ArrowLeftOutlined />} style={{ marginBottom: 16 }}>
+          Listeye dön
+        </Button>
       </Link>
 
-      <div className="event-detail-header">
-        <i className="fa-solid fa-calendar-check event-detail-title-icon" aria-hidden />
-        <h1 className="event-detail-title">{event.title}</h1>
-        <span className="event-detail-id">ID: {event.id}</span>
-        <span
-          className={`events-badge ${
-            event.status === 'DRAFT'
-              ? 'events-badge-draft'
-              : event.status === 'PUBLISHED'
-                ? 'events-badge-published'
-                : 'events-badge-closed'
-          }`}
-        >
-          {event.status}
-        </span>
-      </div>
+      <Card bordered style={{ marginBottom: 16 }}>
+        {event.imageUrl && (
+          <Image
+            src={event.imageUrl}
+            alt={event.title}
+            style={{ width: '100%', maxHeight: 300, objectFit: 'cover', borderRadius: 8, marginBottom: 16 }}
+          />
+        )}
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Title level={2} style={{ marginBottom: 0 }}>
+            {event.title}
+          </Title>
+          <Space wrap>
+            <Text type="secondary">ID: {event.id}</Text>
+            <Tag
+              color={
+                event.status === 'DRAFT' ? 'default' : event.status === 'PUBLISHED' ? 'success' : 'error'
+              }
+            >
+              {event.status}
+            </Tag>
+            <Tag>{event.feedType}</Tag>
+          </Space>
+        </Space>
+      </Card>
 
-      <div className="event-detail-tabs">
-        {(
-          [
-            ['summary', 'Özet'],
-            ['badges', "Badge'ler"],
-            ['participants', 'Katılımcılar'],
-            ['analytics', 'Analitik'],
-            ['rewards', 'Ödüller'],
-          ] as const
-        ).map(([tabId, label]) => (
-          <button
-            key={tabId}
-            type="button"
-            className={`event-detail-tab ${tab === tabId ? 'active' : ''}`}
-            onClick={() => setTab(tabId)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'summary' && (
-        <EventSummaryTab event={event} onUpdated={loadEvent} onDeleted={() => navigate('/events')} />
-      )}
-      {tab === 'badges' && <EventBadgesTab eventId={id} eventTitle={event.title} />}
-      {tab === 'participants' && <EventParticipantsTab eventId={id} />}
-      {tab === 'analytics' && <EventAnalyticsTab eventId={id} />}
-      {tab === 'rewards' && <EventRewardsTab eventId={id} />}
+      <Tabs items={tabItems} />
     </div>
   );
 }
@@ -141,8 +186,6 @@ function EventSummaryTab({
 }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const [form, setForm] = useState({
     title: event.title,
     description: event.description ?? '',
@@ -166,200 +209,139 @@ function EventSummaryTab({
         imageUrl: form.imageUrl || null,
       });
       setEditing(false);
+      antdMessage.success('Event güncellendi');
       onUpdated();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Güncellenemedi');
+      antdMessage.error(e instanceof Error ? e.message : 'Güncellenemedi');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDelete = async () => {
-    if (!confirmDelete) return;
-    setDeleting(true);
-    try {
-      await deleteEvent(event.id);
-      onDeleted();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Silinemedi');
-    } finally {
-      setDeleting(false);
-    }
+  const handleDelete = () => {
+    Modal.confirm({
+      title: 'Event Sil',
+      content: 'Bu event silinecek. Emin misiniz?',
+      okText: 'Evet, sil',
+      cancelText: 'İptal',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await deleteEvent(event.id);
+          antdMessage.success('Event silindi');
+          onDeleted();
+        } catch (e) {
+          antdMessage.error(e instanceof Error ? e.message : 'Silinemedi');
+        }
+      },
+    });
   };
 
   return (
-    <DataCard title="Event bilgisi">
+    <Card bordered>
       {!editing ? (
         <>
-          <div className="info-card-hero-event">
-            <div className="info-card-visual-event">
-              {event.imageUrl ? (
-                <img src={event.imageUrl} alt={event.title} />
-              ) : (
-                <div className="info-card-image-placeholder">
-                  <i className="fa-solid fa-calendar-days" aria-hidden />
-                  <span>Event görseli yok</span>
-                </div>
-              )}
-            </div>
-            <div className="info-card-chips">
-              <span
-                className={`info-chip events-badge ${
-                  event.status === 'DRAFT'
-                    ? 'events-badge-draft'
-                    : event.status === 'PUBLISHED'
-                      ? 'events-badge-published'
-                      : 'events-badge-closed'
-                }`}
+          <Descriptions title="Event bilgileri" bordered column={1}>
+            <Descriptions.Item label="Başlık">{event.title}</Descriptions.Item>
+            <Descriptions.Item label="Açıklama">{event.description || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Durum">
+              <Tag
+                color={
+                  event.status === 'DRAFT' ? 'default' : event.status === 'PUBLISHED' ? 'success' : 'error'
+                }
               >
                 {event.status}
-              </span>
-              <span className="info-chip info-chip-feed">{event.feedType}</span>
-            </div>
-          </div>
-
-          <div className="info-card-stats info-card-stats-event">
-            <div className="info-stat-pill info-stat-pill-wide">
-              <i className="fa-regular fa-calendar-check" aria-hidden />
-              <div>
-                <span className="info-stat-label">Başlangıç</span>
-                <span className="info-stat-value">
-                  {new Date(event.startDate).toLocaleString('tr-TR')}
-                </span>
-              </div>
-            </div>
-            <div className="info-stat-pill info-stat-pill-wide">
-              <i className="fa-regular fa-calendar-xmark" aria-hidden />
-              <div>
-                <span className="info-stat-label">Bitiş</span>
-                <span className="info-stat-value">
-                  {new Date(event.endDate).toLocaleString('tr-TR')}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {event.description && (
-            <div className="info-description">
-              <p>{event.description}</p>
-            </div>
-          )}
-
-          {(event.product || event.brand) && (
-            <div className="info-card-chips" style={{ marginBottom: 'var(--spacing-4)' }}>
-              {event.product && (
-                <span className="info-chip info-chip-link">
-                  <i className="fa-solid fa-box" aria-hidden />
-                  {event.product.name ?? event.productId}
-                </span>
+              </Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="Feed türü">{event.feedType}</Descriptions.Item>
+            <Descriptions.Item label="Başlangıç">
+              {new Date(event.startDate).toLocaleString('tr-TR')}
+            </Descriptions.Item>
+            <Descriptions.Item label="Bitiş">{new Date(event.endDate).toLocaleString('tr-TR')}</Descriptions.Item>
+            <Descriptions.Item label="Görsel">
+              {event.imageUrl ? (
+                <a href={event.imageUrl} target="_blank" rel="noreferrer">
+                  Görüntüle
+                </a>
+              ) : (
+                '—'
               )}
-              {event.brand && (
-                <span className="info-chip info-chip-type info-chip-brand">
-                  <i className="fa-solid fa-tag" aria-hidden />
-                  {event.brand.name ?? event.brandId}
-                </span>
-              )}
-            </div>
-          )}
-
-          {event.imageUrl && (
-            <div className="info-meta">
-              <a
-                href={event.imageUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="info-meta-item info-meta-link"
-              >
-                <i className="fa-solid fa-external-link" aria-hidden />
-                Görseli aç
-              </a>
-            </div>
-          )}
-
-          <div className="event-detail-actions">
-            <Button variant="secondary" onClick={() => setEditing(true)}>Düzenle</Button>
-            {!confirmDelete ? (
-              <Button variant="danger" onClick={() => setConfirmDelete(true)}>Event sil</Button>
-            ) : (
-              <>
-                <span className="event-detail-empty">Silmek istediğinize emin misiniz?</span>
-                <Button variant="danger" disabled={deleting} onClick={handleDelete}>Evet, sil</Button>
-                <Button variant="secondary" onClick={() => setConfirmDelete(false)}>Vazgeç</Button>
-              </>
+            </Descriptions.Item>
+            {event.product && (
+              <Descriptions.Item label="Ürün">{event.product.name ?? event.productId}</Descriptions.Item>
             )}
-          </div>
+            {event.brand && (
+              <Descriptions.Item label="Marka">{event.brand.name ?? event.brandId}</Descriptions.Item>
+            )}
+          </Descriptions>
+
+          <Space style={{ marginTop: 24 }}>
+            <Button type="primary" icon={<EditOutlined />} onClick={() => setEditing(true)}>
+              Düzenle
+            </Button>
+            <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>
+              Sil
+            </Button>
+          </Space>
         </>
       ) : (
         <>
-          <div className="event-detail-form-row">
-            <div className="event-detail-form-group">
-              <label>Başlık</label>
-              <input
-                value={form.title}
-                onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-              />
-            </div>
-            <div className="event-detail-form-group">
-              <label>Açıklama</label>
-              <textarea
+          <Space direction="vertical" size="large" style={{ width: '100%' }}>
+            <Form.Item label="Başlık">
+              <Input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
+            </Form.Item>
+            <Form.Item label="Açıklama">
+              <TextArea
                 value={form.description}
                 onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                rows={2}
+                rows={3}
               />
-            </div>
-            <div className="event-detail-form-group">
-              <label>Başlangıç</label>
-              <input
+            </Form.Item>
+            <Form.Item label="Başlangıç">
+              <Input
                 type="datetime-local"
                 value={form.startDate}
                 onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))}
               />
-            </div>
-            <div className="event-detail-form-group">
-              <label>Bitiş</label>
-              <input
+            </Form.Item>
+            <Form.Item label="Bitiş">
+              <Input
                 type="datetime-local"
                 value={form.endDate}
                 onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))}
               />
-            </div>
-            <div className="event-detail-form-group">
-              <label>Durum</label>
-              <select
-                value={form.status}
-                onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
-              >
-                <option value="DRAFT">DRAFT</option>
-                <option value="PUBLISHED">PUBLISHED</option>
-                <option value="CLOSED">CLOSED</option>
-              </select>
-            </div>
-            <div className="event-detail-form-group">
-              <label>Feed türü</label>
-              <select
-                value={form.feedType}
-                onChange={(e) => setForm((f) => ({ ...f, feedType: e.target.value }))}
-              >
-                <option value="PICKS">PICKS</option>
-                <option value="ROASTS">ROASTS</option>
-              </select>
-            </div>
-            <div className="event-detail-form-group">
-              <label>Görsel URL</label>
-              <input
+            </Form.Item>
+            <Form.Item label="Durum">
+              <Select value={form.status} onChange={(value) => setForm((f) => ({ ...f, status: value }))}>
+                <Select.Option value="DRAFT">DRAFT</Select.Option>
+                <Select.Option value="PUBLISHED">PUBLISHED</Select.Option>
+                <Select.Option value="CLOSED">CLOSED</Select.Option>
+              </Select>
+            </Form.Item>
+            <Form.Item label="Feed türü">
+              <Select value={form.feedType} onChange={(value) => setForm((f) => ({ ...f, feedType: value }))}>
+                <Select.Option value="PICKS">PICKS</Select.Option>
+                <Select.Option value="ROASTS">ROASTS</Select.Option>
+              </Select>
+            </Form.Item>
+            <Form.Item label="Görsel URL">
+              <Input
                 value={form.imageUrl}
                 onChange={(e) => setForm((f) => ({ ...f, imageUrl: e.target.value }))}
                 placeholder="https://..."
               />
-            </div>
-          </div>
-          <div className="event-detail-actions">
-            <Button variant="primary" disabled={saving} onClick={handleSave}>Kaydet</Button>
-            <Button variant="secondary" onClick={() => setEditing(false)}>Vazgeç</Button>
-          </div>
+            </Form.Item>
+          </Space>
+
+          <Space style={{ marginTop: 24 }}>
+            <Button type="primary" onClick={handleSave} loading={saving}>
+              {saving ? 'Kaydediliyor...' : 'Kaydet'}
+            </Button>
+            <Button onClick={() => setEditing(false)}>İptal</Button>
+          </Space>
         </>
       )}
-    </DataCard>
+    </Card>
   );
 }
 
@@ -369,11 +351,11 @@ function EventBadgesTab({ eventId, eventTitle }: { eventId: string; eventTitle: 
   const [showAdd, setShowAdd] = useState(false);
   const [addBadgeId, setAddBadgeId] = useState('');
   const [addRank, setAddRank] = useState(0);
-  const [addDisplayOrder, setAddDisplayOrder] = useState<number | ''>('');
+  const [addDisplayOrder, setAddDisplayOrder] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editRank, setEditRank] = useState(0);
-  const [editDisplayOrder, setEditDisplayOrder] = useState<number | ''>('');
+  const [editDisplayOrder, setEditDisplayOrder] = useState<number | null>(null);
   const [editEnabled, setEditEnabled] = useState(true);
 
   const load = useCallback(async () => {
@@ -396,15 +378,16 @@ function EventBadgesTab({ eventId, eventTitle }: { eventId: string; eventTitle: 
       await addEventBadge(eventId, {
         badgeId: addBadgeId.trim(),
         rank: addRank,
-        displayOrder: addDisplayOrder === '' ? undefined : addDisplayOrder,
+        displayOrder: addDisplayOrder ?? undefined,
       });
       setAddBadgeId('');
       setAddRank(list.length);
-      setAddDisplayOrder('');
+      setAddDisplayOrder(null);
       setShowAdd(false);
+      antdMessage.success('Badge eklendi');
       load();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Eklenemedi');
+      antdMessage.error(e instanceof Error ? e.message : 'Eklenemedi');
     } finally {
       setSubmitting(false);
     }
@@ -415,160 +398,227 @@ function EventBadgesTab({ eventId, eventTitle }: { eventId: string; eventTitle: 
     try {
       await updateEventBadge(eventId, eventBadgeId, {
         rank: editRank,
-        displayOrder: editDisplayOrder === '' ? null : editDisplayOrder,
+        displayOrder: editDisplayOrder,
         enabled: editEnabled,
       });
       setEditingId(null);
+      antdMessage.success('Badge güncellendi');
       load();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Güncellenemedi');
+      antdMessage.error(e instanceof Error ? e.message : 'Güncellenemedi');
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleRemove = async (eventBadgeId: string) => {
-    if (!window.confirm("Bu badge event'ten kaldırılacak. Emin misiniz?")) return;
-    try {
-      await removeEventBadge(eventId, eventBadgeId);
-      load();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'Kaldırılamadı');
-    }
+    Modal.confirm({
+      title: 'Badge Kaldır',
+      content: "Bu badge event'ten kaldırılacak. Emin misiniz?",
+      okText: 'Evet, kaldır',
+      cancelText: 'İptal',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await removeEventBadge(eventId, eventBadgeId);
+          antdMessage.success('Badge kaldırıldı');
+          load();
+        } catch (e) {
+          antdMessage.error(e instanceof Error ? e.message : 'Kaldırılamadı');
+        }
+      },
+    });
   };
 
-  return (
-    <DataCard title="Event Badge'leri">
-      <p className="event-detail-badge-context">
-        Bu event: <strong>{eventTitle}</strong> (ID: {eventId})
-      </p>
-      {loading ? (
-        <LoadingSpinner />
-      ) : (
-        <>
-          <div className="event-detail-actions" style={{ marginBottom: '1rem' }}>
-            <Button variant="primary" size="sm" onClick={() => setShowAdd(!showAdd)}>
-              {showAdd ? 'İptal' : "Event'e badge ekle"}
-            </Button>
+  const columns: ColumnsType<AdminEventBadgeListItem> = [
+    {
+      title: 'Badge',
+      key: 'badge',
+      render: (_, record) => (
+        <Space>
+          {record.badgeImageUrl && (
+            <Image src={record.badgeImageUrl} width={32} height={32} style={{ borderRadius: 4 }} preview={false} />
+          )}
+          <div>
+            <div>{record.badgeName}</div>
+            <Text type="secondary" style={{ fontSize: 11 }}>
+              {record.badgeId.slice(0, 8)}...
+            </Text>
           </div>
-          {showAdd && (
-            <div className="event-detail-section" style={{ marginBottom: '1rem', padding: '1rem', background: 'var(--bg-glass)', borderRadius: 'var(--radius-md)' }}>
-              <div className="event-detail-form-row">
-                <div className="event-detail-form-group">
-                  <label>Badge ID (UUID)</label>
-                  <input
+        </Space>
+      ),
+    },
+    {
+      title: 'Rank',
+      dataIndex: 'rank',
+      key: 'rank',
+      width: 100,
+      render: (rank, record) =>
+        editingId === record.id ? (
+          <InputNumber
+            min={0}
+            value={editRank}
+            onChange={(value) => setEditRank(value || 0)}
+            style={{ width: '100%' }}
+          />
+        ) : (
+          rank
+        ),
+    },
+    {
+      title: 'Display order',
+      dataIndex: 'displayOrder',
+      key: 'displayOrder',
+      width: 120,
+      render: (order, record) =>
+        editingId === record.id ? (
+          <InputNumber
+            value={editDisplayOrder}
+            onChange={(value) => setEditDisplayOrder(value)}
+            style={{ width: '100%' }}
+            placeholder="—"
+          />
+        ) : (
+          order ?? '—'
+        ),
+    },
+    {
+      title: 'Enabled',
+      dataIndex: 'enabled',
+      key: 'enabled',
+      width: 100,
+      render: (enabled, record) =>
+        editingId === record.id ? (
+          <Checkbox checked={editEnabled} onChange={(e) => setEditEnabled(e.target.checked)} />
+        ) : enabled ? (
+          'Evet'
+        ) : (
+          'Hayır'
+        ),
+    },
+    {
+      title: 'Oluşturulma',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      width: 130,
+      render: (date) => new Date(date).toLocaleDateString('tr-TR'),
+    },
+    {
+      title: 'İşlemler',
+      key: 'actions',
+      width: 150,
+      render: (_, record) =>
+        editingId === record.id ? (
+          <Space>
+            <Button type="primary" size="small" loading={submitting} onClick={() => handleUpdate(record.id)}>
+              Kaydet
+            </Button>
+            <Button size="small" onClick={() => setEditingId(null)}>
+              İptal
+            </Button>
+          </Space>
+        ) : (
+          <Space>
+            <Button
+              type="link"
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => {
+                setEditingId(record.id);
+                setEditRank(record.rank);
+                setEditDisplayOrder(record.displayOrder ?? null);
+                setEditEnabled(record.enabled);
+              }}
+            >
+              Düzenle
+            </Button>
+            <Button
+              type="link"
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              onClick={() => handleRemove(record.id)}
+            >
+              Kaldır
+            </Button>
+          </Space>
+        ),
+    },
+  ];
+
+  return (
+    <div>
+      <Card bordered title={`Event Badge'leri: ${eventTitle}`} style={{ marginBottom: 16 }}>
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={() => setShowAdd(!showAdd)}
+          style={{ marginBottom: 16 }}
+        >
+          {showAdd ? 'İptal' : "Event'e badge ekle"}
+        </Button>
+
+        {showAdd && (
+          <Card bordered style={{ marginBottom: 16, background: '#fafafa' }}>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item label="Badge ID (UUID)">
+                  <Input
                     value={addBadgeId}
                     onChange={(e) => setAddBadgeId(e.target.value)}
                     placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                   />
-                </div>
-                <div className="event-detail-form-group">
-                  <label>Rank</label>
-                  <input
-                    type="number"
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item label="Rank">
+                  <InputNumber
                     min={0}
                     value={addRank}
-                    onChange={(e) => setAddRank(parseInt(e.target.value, 10) || 0)}
+                    onChange={(value) => setAddRank(value || 0)}
+                    style={{ width: '100%' }}
                   />
-                </div>
-                <div className="event-detail-form-group">
-                  <label>Display order (opsiyonel)</label>
-                  <input
-                    type="number"
+                </Form.Item>
+              </Col>
+              <Col span={6}>
+                <Form.Item label="Display order">
+                  <InputNumber
                     value={addDisplayOrder}
-                    onChange={(e) => setAddDisplayOrder(e.target.value === '' ? '' : parseInt(e.target.value, 10))}
-                    placeholder="—"
+                    onChange={(value) => setAddDisplayOrder(value)}
+                    style={{ width: '100%' }}
+                    placeholder="Opsiyonel"
                   />
-                </div>
-              </div>
-              <Button variant="primary" size="sm" disabled={submitting} onClick={handleAdd}>Ekle</Button>
-            </div>
-          )}
-          {list.length === 0 ? (
-            <div className="event-detail-empty">
-              Bu event'e henüz badge eklenmemiş. &quot;Event'e badge ekle&quot; ile ekleyin.
-            </div>
-          ) : (
-            <div className="events-table-wrap">
-              <table className="events-table">
-                <thead>
-                  <tr>
-                    <th>Badge</th>
-                    <th>Rank</th>
-                    <th>Display order</th>
-                    <th>Enabled</th>
-                    <th>Oluşturulma</th>
-                    <th>İşlemler</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {list.map((row) => (
-                    <tr key={row.id}>
-                      <td>
-                        {row.badgeImageUrl && (
-                          <img src={row.badgeImageUrl} alt="" className="event-detail-badge-thumb" />
-                        )}
-                        {row.badgeName} <span className="event-detail-id">({row.badgeId.slice(0, 8)}…)</span>
-                      </td>
-                      <td>
-                        {editingId === row.id ? (
-                          <input
-                            type="number"
-                            min={0}
-                            value={editRank}
-                            onChange={(e) => setEditRank(parseInt(e.target.value, 10) || 0)}
-                            style={{ width: 60 }}
-                          />
-                        ) : (
-                          row.rank
-                        )}
-                      </td>
-                      <td>
-                        {editingId === row.id ? (
-                          <input
-                            type="number"
-                            value={editDisplayOrder}
-                            onChange={(e) => setEditDisplayOrder(e.target.value === '' ? '' : parseInt(e.target.value, 10))}
-                            style={{ width: 60 }}
-                          />
-                        ) : (
-                          row.displayOrder ?? '—'
-                        )}
-                      </td>
-                      <td>
-                        {editingId === row.id ? (
-                          <input
-                            type="checkbox"
-                            checked={editEnabled}
-                            onChange={(e) => setEditEnabled(e.target.checked)}
-                          />
-                        ) : (
-                          row.enabled ? 'Evet' : 'Hayır'
-                        )}
-                      </td>
-                      <td>{new Date(row.createdAt).toLocaleDateString('tr-TR')}</td>
-                      <td>
-                        {editingId === row.id ? (
-                          <>
-                            <Button size="sm" variant="primary" disabled={submitting} onClick={() => handleUpdate(row.id)}>Kaydet</Button>
-                            <Button size="sm" variant="secondary" onClick={() => setEditingId(null)}>İptal</Button>
-                          </>
-                        ) : (
-                          <>
-                            <Button size="sm" variant="secondary" onClick={() => { setEditingId(row.id); setEditRank(row.rank); setEditDisplayOrder(row.displayOrder ?? ''); setEditEnabled(row.enabled); }}>Düzenle</Button>
-                            <Button size="sm" variant="danger" onClick={() => handleRemove(row.id)}>Kaldır</Button>
-                          </>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
-      )}
-    </DataCard>
+                </Form.Item>
+              </Col>
+            </Row>
+            <Button type="primary" loading={submitting} onClick={handleAdd}>
+              Ekle
+            </Button>
+          </Card>
+        )}
+
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: 48 }}>
+            <Spin size="large" />
+          </div>
+        ) : (
+          <Table
+            columns={columns}
+            dataSource={list}
+            rowKey="id"
+            pagination={false}
+            locale={{
+              emptyText: (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description="Bu event'e henüz badge eklenmemiş."
+                />
+              ),
+            }}
+          />
+        )}
+      </Card>
+    </div>
   );
 }
 
@@ -596,71 +646,86 @@ function EventParticipantsTab({ eventId }: { eventId: string }) {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [eventId, pagination.offset]);
 
+  const columns: ColumnsType<AdminEventParticipantListItem> = [
+    {
+      title: 'Kullanıcı',
+      key: 'user',
+      render: (_, record) => (
+        <Link to={`/users/${record.userId}`}>
+          <Button type="link" size="small" style={{ padding: 0 }}>
+            {record.userDisplayName ?? record.userId.slice(0, 8) + '...'}
+          </Button>
+        </Link>
+      ),
+    },
+    {
+      title: 'Email',
+      dataIndex: 'userEmail',
+      key: 'email',
+      render: (email) => email ?? '—',
+    },
+    {
+      title: 'Post',
+      dataIndex: 'eventPostsCount',
+      key: 'posts',
+      width: 80,
+      align: 'right',
+    },
+    {
+      title: 'Beğeni',
+      dataIndex: 'eventLikesReceived',
+      key: 'likes',
+      width: 80,
+      align: 'right',
+    },
+    {
+      title: 'Katılım',
+      dataIndex: 'totalParticipated',
+      key: 'participated',
+      width: 80,
+      align: 'right',
+    },
+    {
+      title: 'Yorum',
+      dataIndex: 'totalComments',
+      key: 'comments',
+      width: 80,
+      align: 'right',
+    },
+  ];
+
+  const handleTableChange = (pag: TablePaginationConfig) => {
+    const newOffset = ((pag.current ?? 1) - 1) * 20;
+    setPagination((prev) => ({ ...prev, offset: newOffset }));
+  };
+
+  const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
+
   return (
-    <DataCard title="Katılımcılar">
-      {loading ? (
-        <LoadingSpinner />
-      ) : list.length === 0 ? (
-        <div className="event-detail-empty">Henüz katılımcı yok.</div>
-      ) : (
-        <>
-          <div className="events-table-wrap">
-            <table className="events-table">
-              <thead>
-                <tr>
-                  <th>Kullanıcı</th>
-                  <th>Email</th>
-                  <th>Post</th>
-                  <th>Beğeni</th>
-                  <th>Katılım</th>
-                  <th>Yorum</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.map((row) => (
-                  <tr key={row.id}>
-                    <td>{row.userDisplayName ?? row.userId.slice(0, 8)}…</td>
-                    <td>{row.userEmail ?? '—'}</td>
-                    <td>{row.eventPostsCount}</td>
-                    <td>{row.eventLikesReceived}</td>
-                    <td>{row.totalParticipated}</td>
-                    <td>{row.totalComments}</td>
-                    <td>
-                      <Link to={`/users/${row.userId}`} className="events-link">Kullanıcı</Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="events-pagination">
-            <span className="events-pagination-info">{pagination.total} kayıt</span>
-            <div className="events-pagination-btns">
-              <Button
-                size="sm"
-                variant="secondary"
-                disabled={pagination.offset === 0}
-                onClick={() => setPagination((p) => ({ ...p, offset: Math.max(0, p.offset - p.limit) }))}
-              >
-                Önceki
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                disabled={pagination.offset + pagination.limit >= pagination.total}
-                onClick={() => setPagination((p) => ({ ...p, offset: p.offset + p.limit }))}
-              >
-                Sonraki
-              </Button>
-            </div>
-          </div>
-        </>
-      )}
-    </DataCard>
+    <Card bordered title="Katılımcılar">
+      <Table
+        columns={columns}
+        dataSource={list}
+        rowKey="id"
+        loading={loading}
+        pagination={{
+          current: currentPage,
+          pageSize: 20,
+          total: pagination.total,
+          showSizeChanger: false,
+          showTotal: (total) => `Toplam ${total} kayıt`,
+        }}
+        onChange={handleTableChange}
+        locale={{
+          emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Henüz katılımcı yok." />,
+        }}
+      />
+    </Card>
   );
 }
 
@@ -678,21 +743,50 @@ function EventAnalyticsTab({ eventId }: { eventId: string }) {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [eventId]);
 
-  if (loading) return <LoadingSpinner />;
-  if (!data) return <div className="event-detail-empty">Analitik yüklenemedi.</div>;
+  if (loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: 48 }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <Alert message="Hata" description="Analitik yüklenemedi." type="error" />
+    );
+  }
 
   return (
-    <DataCard title="Analitik özet">
-      <div className="events-stats-grid">
-        <StatsCard title="Katılımcı sayısı" value={data.participantCount} icon="fa-users" color="accent" />
-        <StatsCard title="Toplam post" value={data.totalPosts} icon="fa-file-lines" color="neutral" />
-        <StatsCard title="Verilen ödül" value={data.totalRewardsGranted} icon="fa-gift" color="success" />
-        <StatsCard title="Badge sayısı" value={data.badgesCount} icon="fa-medal" color="neutral" />
-      </div>
-    </DataCard>
+    <Card bordered title="Analitik özet">
+      <Row gutter={[16, 16]}>
+        <Col xs={24} sm={12} lg={6}>
+          <Card bordered>
+            <Statistic title="Katılımcı sayısı" value={data.participantCount} valueStyle={{ fontWeight: 700 }} />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card bordered>
+            <Statistic title="Toplam post" value={data.totalPosts} valueStyle={{ fontWeight: 600 }} />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card bordered>
+            <Statistic title="Verilen ödül" value={data.totalRewardsGranted} valueStyle={{ fontWeight: 600 }} />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card bordered>
+            <Statistic title="Badge sayısı" value={data.badgesCount} valueStyle={{ fontWeight: 600 }} />
+          </Card>
+        </Col>
+      </Row>
+    </Card>
   );
 }
 
@@ -720,67 +814,84 @@ function EventRewardsTab({ eventId }: { eventId: string }) {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [eventId, pagination.offset]);
 
+  const columns: ColumnsType<AdminEventRewardListItem> = [
+    {
+      title: 'Kullanıcı',
+      key: 'user',
+      render: (_, record) => record.userDisplayName ?? record.userId.slice(0, 8) + '...',
+    },
+    {
+      title: 'Email',
+      dataIndex: 'userEmail',
+      key: 'email',
+      render: (email) => email ?? '—',
+    },
+    {
+      title: 'Tür',
+      dataIndex: 'rewardType',
+      key: 'type',
+      width: 120,
+    },
+    {
+      title: 'Reward ID',
+      dataIndex: 'rewardId',
+      key: 'rewardId',
+      width: 150,
+      render: (id) => (
+        <Text style={{ fontSize: 12 }} type="secondary">
+          {id}
+        </Text>
+      ),
+    },
+    {
+      title: 'Amount',
+      dataIndex: 'amount',
+      key: 'amount',
+      width: 100,
+      align: 'right',
+      render: (amount) => amount ?? '—',
+    },
+    {
+      title: 'Verilme',
+      dataIndex: 'awardedAt',
+      key: 'awardedAt',
+      width: 150,
+      render: (date) => new Date(date).toLocaleString('tr-TR'),
+    },
+  ];
+
+  const handleTableChange = (pag: TablePaginationConfig) => {
+    const newOffset = ((pag.current ?? 1) - 1) * 20;
+    setPagination((prev) => ({ ...prev, offset: newOffset }));
+  };
+
+  const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
+
   return (
-    <DataCard title="Ödüller">
-      {loading ? (
-        <LoadingSpinner />
-      ) : list.length === 0 ? (
-        <div className="event-detail-empty">Henüz ödül kaydı yok.</div>
-      ) : (
-        <>
-          <div className="events-table-wrap">
-            <table className="events-table">
-              <thead>
-                <tr>
-                  <th>Kullanıcı</th>
-                  <th>Email</th>
-                  <th>Tür</th>
-                  <th>Reward ID</th>
-                  <th>Amount</th>
-                  <th>Verilme</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.map((row) => (
-                  <tr key={row.id}>
-                    <td>{row.userDisplayName ?? row.userId.slice(0, 8)}…</td>
-                    <td>{row.userEmail ?? '—'}</td>
-                    <td>{row.rewardType}</td>
-                    <td>{row.rewardId}</td>
-                    <td>{row.amount ?? '—'}</td>
-                    <td>{new Date(row.awardedAt).toLocaleString('tr-TR')}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="events-pagination">
-            <span className="events-pagination-info">{pagination.total} kayıt</span>
-            <div className="events-pagination-btns">
-              <Button
-                size="sm"
-                variant="secondary"
-                disabled={pagination.offset === 0}
-                onClick={() => setPagination((p) => ({ ...p, offset: Math.max(0, p.offset - p.limit) }))}
-              >
-                Önceki
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                disabled={pagination.offset + pagination.limit >= pagination.total}
-                onClick={() => setPagination((p) => ({ ...p, offset: p.offset + p.limit }))}
-              >
-                Sonraki
-              </Button>
-            </div>
-          </div>
-        </>
-      )}
-    </DataCard>
+    <Card bordered title="Ödüller">
+      <Table
+        columns={columns}
+        dataSource={list}
+        rowKey="id"
+        loading={loading}
+        pagination={{
+          current: currentPage,
+          pageSize: 20,
+          total: pagination.total,
+          showSizeChanger: false,
+          showTotal: (total) => `Toplam ${total} kayıt`,
+        }}
+        onChange={handleTableChange}
+        locale={{
+          emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Henüz ödül kaydı yok." />,
+        }}
+      />
+    </Card>
   );
 }
 

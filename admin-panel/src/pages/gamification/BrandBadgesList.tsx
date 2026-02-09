@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { TagOutlined } from '@ant-design/icons';
 import BadgeListByType from './BadgeListByType';
 import type { BadgeTypeSlug } from './BadgeListByType';
 import CreateBadgeModal from './CreateBadgeModal';
@@ -13,7 +14,7 @@ function BrandBadgesList() {
         listPath="/gamification/brand-badges"
         title="Brand Badges"
         description="Marka badge'leri listesi ve yönetimi"
-        icon="fa-tag"
+        icon={<TagOutlined />}
         onOpenCreate={() => setCreateOpen(true)}
       />
       {createOpen && (

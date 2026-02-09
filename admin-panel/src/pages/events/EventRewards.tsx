@@ -1,6 +1,6 @@
+import { Card, Empty } from 'antd';
+import { CalendarOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import EmptyState from '../../components/EmptyState';
 
 function EventRewards() {
   return (
@@ -8,16 +8,15 @@ function EventRewards() {
       <PageHeader
         title="Event Rewards"
         description="Set up event reward structures"
-        icon="fa-calendar-check"
+        icon={<CalendarOutlined />}
       />
 
-      <DataCard title="Event Rewards Management">
-        <EmptyState
-          icon="fa-calendar-check"
-          title="Coming Soon"
+      <Card bordered title="Event Rewards Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="Event Rewards management interface will be implemented here."
         />
-      </DataCard>
+      </Card>
     </div>
   );
 }

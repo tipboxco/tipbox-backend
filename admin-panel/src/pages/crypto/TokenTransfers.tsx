@@ -1,6 +1,6 @@
+import { Card, Empty } from 'antd';
+import { SwapOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import EmptyState from '../../components/EmptyState';
 
 function TokenTransfers() {
   return (
@@ -8,16 +8,15 @@ function TokenTransfers() {
       <PageHeader
         title="Token Transfers"
         description="View TIPS token transactions"
-        icon="fa-arrow-right-arrow-left"
+        icon={<SwapOutlined />}
       />
 
-      <DataCard title="Token Transfers Management">
-        <EmptyState
-          icon="fa-arrow-right-arrow-left"
-          title="Coming Soon"
+      <Card bordered title="Token Transfers Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="Token Transfers management interface will be implemented here."
         />
-      </DataCard>
+      </Card>
     </div>
   );
 }

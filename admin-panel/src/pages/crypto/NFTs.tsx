@@ -1,6 +1,6 @@
+import { Card, Empty } from 'antd';
+import { PictureOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import EmptyState from '../../components/EmptyState';
 
 function NFTs() {
   return (
@@ -8,16 +8,15 @@ function NFTs() {
       <PageHeader
         title="NFTs"
         description="Manage platform NFT assets"
-        icon="fa-image"
+        icon={<PictureOutlined />}
       />
 
-      <DataCard title="NFTs Management">
-        <EmptyState
-          icon="fa-image"
-          title="Coming Soon"
+      <Card bordered title="NFTs Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="NFTs management interface will be implemented here."
         />
-      </DataCard>
+      </Card>
     </div>
   );
 }

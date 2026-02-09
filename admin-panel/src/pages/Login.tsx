@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { Form, Input, Button, Card, Typography, Space, Alert } from 'antd';
+import { MailOutlined, LockOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
-import Button from '../components/Button';
-import './Login.css';
+
+const { Title, Text } = Typography;
 
 function Login() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
@@ -14,12 +14,11 @@ function Login() {
   const location = useLocation();
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? '/';
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (values: { email: string; password: string }) => {
     setError(null);
     setLoading(true);
     try {
-      await login(email.trim(), password);
+      await login(values.email.trim(), values.password);
       navigate(from, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Giriş yapılamadı');
@@ -29,63 +28,113 @@ function Login() {
   };
 
   return (
-    <div className="login-page">
-      <div className="login-card">
-        <div className="login-header">
-          <img
-            src="https://tipbox.co/images/tipbox-logo-yellow.png"
-            alt="Tipbox"
-            className="login-logo"
-          />
-          <h1 className="login-title">Admin Panel</h1>
-          <p className="login-subtitle">Yönetim paneline giriş yapın</p>
-        </div>
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+      }}
+    >
+      <Card
+        style={{
+          width: '100%',
+          maxWidth: 420,
+        }}
+      >
+        <Space direction="vertical" size={24} style={{ width: '100%' }}>
+          {/* Logo and Header */}
+          <div style={{ textAlign: 'center' }}>
+            <img
+              src="https://tipbox.co/images/tipbox-logo-yellow.png"
+              alt="Tipbox"
+              style={{
+                height: 48,
+                marginBottom: 16,
+              }}
+            />
+            <Title level={2} style={{ margin: 0, fontWeight: 700 }}>
+              Admin Panel
+            </Title>
+            <Text type="secondary">Yönetim paneline giriş yapın</Text>
+          </div>
 
-        <form className="login-form" onSubmit={handleSubmit}>
+          {/* Error Alert */}
           {error && (
-            <div className="login-error" role="alert">
-              {error}
-            </div>
+            <Alert
+              message="Giriş Hatası"
+              description={error}
+              type="error"
+              closable
+              onClose={() => setError(null)}
+            />
           )}
-          <label className="login-label" htmlFor="login-email">
-            E-posta
-          </label>
-          <input
-            id="login-email"
-            type="email"
-            className="login-input"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="admin@tipbox.co"
-            autoComplete="email"
-            required
-            disabled={loading}
-          />
-          <label className="login-label" htmlFor="login-password">
-            Şifre
-          </label>
-          <input
-            id="login-password"
-            type="password"
-            className="login-input"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            autoComplete="current-password"
-            required
-            disabled={loading}
-          />
-          <Button
-            type="submit"
-            variant="primary"
-            size="lg"
-            className="login-submit"
-            disabled={loading}
+
+          {/* Login Form */}
+          <Form
+            name="login"
+            onFinish={handleSubmit}
+            layout="vertical"
+            requiredMark={false}
+            autoComplete="off"
           >
-            {loading ? 'Giriş yapılıyor...' : 'Giriş yap'}
-          </Button>
-        </form>
-      </div>
+            <Form.Item
+              label="E-posta"
+              name="email"
+              rules={[
+                {
+                  required: true,
+                  message: 'Lütfen e-posta adresinizi girin',
+                },
+                {
+                  type: 'email',
+                  message: 'Geçerli bir e-posta adresi girin',
+                },
+              ]}
+            >
+              <Input
+                prefix={<MailOutlined />}
+                placeholder="admin@tipbox.co"
+                size="large"
+                autoComplete="email"
+                disabled={loading}
+              />
+            </Form.Item>
+
+            <Form.Item
+              label="Şifre"
+              name="password"
+              rules={[
+                {
+                  required: true,
+                  message: 'Lütfen şifrenizi girin',
+                },
+              ]}
+            >
+              <Input.Password
+                prefix={<LockOutlined />}
+                placeholder="••••••••"
+                size="large"
+                autoComplete="current-password"
+                disabled={loading}
+              />
+            </Form.Item>
+
+            <Form.Item style={{ marginBottom: 0 }}>
+              <Button
+                type="primary"
+                htmlType="submit"
+                size="large"
+                loading={loading}
+                block
+              >
+                {loading ? 'Giriş yapılıyor...' : 'Giriş yap'}
+              </Button>
+            </Form.Item>
+          </Form>
+        </Space>
+      </Card>
     </div>
   );
 }

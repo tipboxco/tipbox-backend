@@ -1,6 +1,6 @@
+import { Card, Empty } from 'antd';
+import { CustomerServiceOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import EmptyState from '../../components/EmptyState';
 
 function SupportRequests() {
   return (
@@ -8,16 +8,15 @@ function SupportRequests() {
       <PageHeader
         title="Support Requests"
         description="Handle user support tickets"
-        icon="fa-headset"
+        icon={<CustomerServiceOutlined />}
       />
 
-      <DataCard title="Support Requests Management">
-        <EmptyState
-          icon="fa-headset"
-          title="Coming Soon"
+      <Card bordered title="Support Requests Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="Support Requests management interface will be implemented here."
         />
-      </DataCard>
+      </Card>
     </div>
   );
 }

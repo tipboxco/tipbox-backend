@@ -1,6 +1,6 @@
+import { Card, Empty } from 'antd';
+import { FormOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import EmptyState from '../../components/EmptyState';
 
 function BrandSurveys() {
   return (
@@ -8,16 +8,15 @@ function BrandSurveys() {
       <PageHeader
         title="Brand Surveys"
         description="Create and manage brand surveys"
-        icon="fa-clipboard-question"
+        icon={<FormOutlined />}
       />
 
-      <DataCard title="Brand Surveys Management">
-        <EmptyState
-          icon="fa-clipboard-question"
-          title="Coming Soon"
+      <Card bordered title="Brand Surveys Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="Brand Surveys management interface will be implemented here."
         />
-      </DataCard>
+      </Card>
     </div>
   );
 }

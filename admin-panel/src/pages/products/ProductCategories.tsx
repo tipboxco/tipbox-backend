@@ -1,6 +1,6 @@
+import { Card, Empty } from 'antd';
+import { AppstoreOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import EmptyState from '../../components/EmptyState';
 
 function ProductCategories() {
   return (
@@ -8,16 +8,15 @@ function ProductCategories() {
       <PageHeader
         title="Categories"
         description="Manage product categories"
-        icon="fa-layer-group"
+        icon={<AppstoreOutlined />}
       />
 
-      <DataCard title="Categories Management">
-        <EmptyState
-          icon="fa-layer-group"
-          title="Coming Soon"
+      <Card bordered title="Categories Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="Categories management interface will be implemented here."
         />
-      </DataCard>
+      </Card>
     </div>
   );
 }

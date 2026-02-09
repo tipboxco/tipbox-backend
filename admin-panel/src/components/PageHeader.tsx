@@ -1,34 +1,59 @@
 import { Link } from 'react-router-dom';
-import './PageHeader.css';
+import { Space, Typography, Button } from 'antd';
+import { ArrowLeftOutlined } from '@ant-design/icons';
+import type { ReactNode } from 'react';
+
+const { Title, Text } = Typography;
 
 interface PageHeaderProps {
   title: string;
   description?: string;
-  icon?: string;
-  /** Sol üstte gösterilecek geri linki (örn. listeye dön) */
+  icon?: ReactNode;
   backTo?: string;
   backLabel?: string;
-  actions?: React.ReactNode;
+  actions?: ReactNode;
 }
 
-function PageHeader({ title, description, icon, backTo, backLabel = 'Listeye dön', actions }: PageHeaderProps) {
+function PageHeader({
+  title,
+  description,
+  icon,
+  backTo,
+  backLabel = 'Listeye dön',
+  actions
+}: PageHeaderProps) {
   return (
-    <div className="page-header fade-in">
-      <div className="page-header-content">
-        {backTo && (
-          <Link to={backTo} className="page-header-back">
-            <i className="fa-solid fa-arrow-left" aria-hidden />
-            <span>{backLabel}</span>
+    <div style={{ marginBottom: 24 }}>
+      {backTo && (
+        <div style={{ marginBottom: 12 }}>
+          <Link to={backTo}>
+            <Button type="link" icon={<ArrowLeftOutlined />} style={{ paddingLeft: 0 }}>
+              {backLabel}
+            </Button>
           </Link>
-        )}
-        <div className="page-header-text">
-          {icon && <i className={`fa-solid ${icon} page-icon`}></i>}
-          <div>
-            <h1 className="page-title">{title}</h1>
-            {description && <p className="page-description">{description}</p>}
-          </div>
         </div>
-        {actions && <div className="page-actions">{actions}</div>}
+      )}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+        }}
+      >
+        <Space direction="vertical" size={4}>
+          <Space align="center" size={12}>
+            {icon && <span style={{ fontSize: 24 }}>{icon}</span>}
+            <Title level={2} style={{ margin: 0, fontWeight: 700 }}>
+              {title}
+            </Title>
+          </Space>
+          {description && (
+            <Text type="secondary" style={{ fontSize: 14 }}>
+              {description}
+            </Text>
+          )}
+        </Space>
+        {actions && <div>{actions}</div>}
       </div>
     </div>
   );

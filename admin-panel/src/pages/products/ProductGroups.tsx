@@ -1,6 +1,6 @@
+import { Card, Empty } from 'antd';
+import { FolderOpenOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import EmptyState from '../../components/EmptyState';
 
 function ProductGroups() {
   return (
@@ -8,16 +8,15 @@ function ProductGroups() {
       <PageHeader
         title="Product Groups"
         description="Organize products into groups"
-        icon="fa-boxes-stacked"
+        icon={<FolderOpenOutlined />}
       />
 
-      <DataCard title="Product Groups Management">
-        <EmptyState
-          icon="fa-boxes-stacked"
-          title="Coming Soon"
+      <Card bordered title="Product Groups Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="Product Groups management interface will be implemented here."
         />
-      </DataCard>
+      </Card>
     </div>
   );
 }

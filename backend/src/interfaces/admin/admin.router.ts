@@ -151,7 +151,7 @@ const avatarRepo = new UserAvatarPrismaRepository();
  *   post:
  *     summary: Admin girişi
  *     description: Sadece ADMIN rolüne sahip kullanıcılar giriş yapabilir. Başarılı yanıtta dönen token'ı Bearer olarak kullanarak diğer admin endpoint'lerine erişin.
- *     tags: [Admin]
+ *     tags: [Admin - Auth]
  *     requestBody:
  *       required: true
  *       content:
@@ -242,7 +242,7 @@ router.post(
  * /admin/stats:
  *   get:
  *     summary: Genel istatistikler (kullanıcı, post, ban, admin log sayıları)
- *     tags: [Admin]
+ *     tags: [Admin - Dashboard]
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -287,7 +287,7 @@ router.get(
  * /admin/users:
  *   get:
  *     summary: Kullanıcı listesi (sayfalama)
- *     tags: [Admin]
+ *     tags: [Admin - Users]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -407,7 +407,7 @@ router.get(
  * /admin/users/stats:
  *   get:
  *     summary: Users bölümü özet istatistikleri
- *     tags: [Admin]
+ *     tags: [Admin - Users]
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -446,7 +446,7 @@ router.get(
  * /admin/users/{id}/avatar:
  *   get:
  *     summary: Kullanıcının aktif avatar bilgisi
- *     tags: [Admin]
+ *     tags: [Admin - Users]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -510,7 +510,7 @@ router.get(
  * /admin/users/{id}/avatar:
  *   patch:
  *     summary: Kullanıcı avatar güncelle (imageUrl veya aktif kayıt)
- *     tags: [Admin]
+ *     tags: [Admin - Users]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -626,7 +626,7 @@ router.patch(
  * /admin/users/{id}/avatar:
  *   post:
  *     summary: Kullanıcıya yeni avatar ekle
- *     tags: [Admin]
+ *     tags: [Admin - Users]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -698,7 +698,7 @@ router.post(
  * /admin/users/{id}/events:
  *   get:
  *     summary: Kullanıcının katıldığı event'ler (EventStats)
- *     tags: [Admin]
+ *     tags: [Admin - Users]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -770,7 +770,7 @@ router.get(
  * /admin/users/{id}/badges:
  *   get:
  *     summary: Kullanıcının badge'leri (UserBadge + Badge)
- *     tags: [Admin]
+ *     tags: [Admin - Users]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -844,7 +844,7 @@ router.get(
  * /admin/users/{id}/badges:
  *   post:
  *     summary: Kullanıcıya badge ver
- *     tags: [Admin]
+ *     tags: [Admin - Users]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -952,7 +952,7 @@ router.post(
  * /admin/users/{id}/badges/{userBadgeId}:
  *   delete:
  *     summary: Kullanıcıdan badge al
- *     tags: [Admin]
+ *     tags: [Admin - Users]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -1009,7 +1009,7 @@ router.delete(
  * /admin/users/{id}/wallet:
  *   get:
  *     summary: Kullanıcının cüzdan özeti
- *     tags: [Admin]
+ *     tags: [Admin - Users]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -1057,7 +1057,7 @@ router.get(
  * /admin/users/{id}/tips-summary:
  *   get:
  *     summary: Kullanıcının tips özeti (toplam gönderilen/alınan)
- *     tags: [Admin]
+ *     tags: [Admin - Users]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -1102,7 +1102,7 @@ router.get(
  * /admin/users/{id}/tips-transactions:
  *   get:
  *     summary: Kullanıcının tips işlem listesi (sayfalı)
- *     tags: [Admin]
+ *     tags: [Admin - Users]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -1181,7 +1181,7 @@ router.get(
  * /admin/users/{id}/profile:
  *   get:
  *     summary: Kullanıcı profil bilgisi (admin görünümü)
- *     tags: [Admin]
+ *     tags: [Admin - Users]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -1233,7 +1233,7 @@ router.get(
  * /admin/users/{id}/roles:
  *   get:
  *     summary: Kullanıcı rolleri
- *     tags: [Admin]
+ *     tags: [Admin - Users]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -1278,7 +1278,7 @@ router.get(
  * /admin/users/{id}/moderation-history:
  *   get:
  *     summary: Kullanıcı moderation geçmişi (ban/warn/mute)
- *     tags: [Admin]
+ *     tags: [Admin - Users]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -1348,7 +1348,7 @@ router.get(
  * /admin/users/{id}/trust-scores:
  *   get:
  *     summary: Kullanıcının trust score geçmişi
- *     tags: [Admin]
+ *     tags: [Admin - Users]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -1414,7 +1414,7 @@ router.get(
  * /admin/users/{id}/login-attempts:
  *   get:
  *     summary: Kullanıcının giriş denemeleri (güvenlik)
- *     tags: [Admin]
+ *     tags: [Admin - Users]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -1488,7 +1488,7 @@ router.get(
  * /admin/users/{id}/posts:
  *   get:
  *     summary: Kullanıcının postları (sayfalı)
- *     tags: [Admin]
+ *     tags: [Admin - Users]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -1587,7 +1587,7 @@ router.get(
  * /admin/users/{id}:
  *   get:
  *     summary: Tek kullanıcı detayı (admin görünümü)
- *     tags: [Admin]
+ *     tags: [Admin - Users]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -1687,7 +1687,7 @@ router.get(
  * /admin/users/{id}:
  *   patch:
  *     summary: Kullanıcı bilgilerini güncelle (email, status, emailVerified)
- *     tags: [Admin]
+ *     tags: [Admin - Users]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -1790,7 +1790,7 @@ router.patch(
  * /admin/users/{id}/roles:
  *   put:
  *     summary: Kullanıcı rollerini güncelle (tamamen değiştirir)
- *     tags: [Admin]
+ *     tags: [Admin - Users]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -1873,7 +1873,7 @@ router.put(
  * /admin/users/{id}/ban:
  *   patch:
  *     summary: Kullanıcıyı yasakla
- *     tags: [Admin]
+ *     tags: [Admin - Users]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -1963,7 +1963,7 @@ router.patch(
  * /admin/users/{id}/unban:
  *   patch:
  *     summary: Kullanıcı yasağını kaldır
- *     tags: [Admin]
+ *     tags: [Admin - Users]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -2034,7 +2034,7 @@ router.patch(
  * /admin/user-reports:
  *   get:
  *     summary: Kullanıcı şikayetleri listesi
- *     tags: [Admin]
+ *     tags: [Admin - Reports & KYC]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -2113,7 +2113,7 @@ router.get(
  * /admin/user-reports/{id}:
  *   get:
  *     summary: Tek şikayet detayı
- *     tags: [Admin]
+ *     tags: [Admin - Reports & KYC]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -2178,7 +2178,7 @@ router.get(
  * /admin/user-reports/{id}/resolve:
  *   patch:
  *     summary: Şikayeti çözüldü olarak işaretle
- *     tags: [Admin]
+ *     tags: [Admin - Reports & KYC]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -2265,7 +2265,7 @@ router.patch(
  * /admin/user-kyc:
  *   get:
  *     summary: KYC kayıtları listesi
- *     tags: [Admin]
+ *     tags: [Admin - Reports & KYC]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -2333,7 +2333,7 @@ router.get(
  * /admin/user-kyc/{userId}:
  *   get:
  *     summary: Kullanıcının KYC kaydı (en güncel)
- *     tags: [Admin]
+ *     tags: [Admin - Reports & KYC]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -2386,7 +2386,7 @@ router.get(
  * /admin/user-kyc/{recordId}/review:
  *   patch:
  *     summary: KYC inceleme sonucu (approve/decline/on_hold)
- *     tags: [Admin]
+ *     tags: [Admin - Reports & KYC]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -2475,7 +2475,7 @@ router.patch(
  * /admin/user-trust-scores:
  *   get:
  *     summary: Trust score listesi (kullanıcı bazlı veya genel)
- *     tags: [Admin]
+ *     tags: [Admin - Reports & KYC]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -2538,7 +2538,7 @@ router.get(
  * /admin/logs:
  *   get:
  *     summary: Admin işlem logları listesi (sayfalama)
- *     tags: [Admin]
+ *     tags: [Admin - Logs]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -3993,7 +3993,7 @@ router.delete(
  * /admin/content/posts/stats:
  *   get:
  *     summary: İçerik post istatistikleri (toplam, türe göre, boosted, event’e bağlı)
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -4029,7 +4029,7 @@ router.get(
  * /admin/content/posts:
  *   get:
  *     summary: Post listesi (sayfalama, filtre, arama)
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -4145,7 +4145,7 @@ router.get(
  * /admin/content/posts/{id}:
  *   get:
  *     summary: Tek post detayı
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -4246,7 +4246,7 @@ router.get(
  * /admin/content/posts/{id}:
  *   patch:
  *     summary: Post güncelle (title, body, isBoosted, category vb.)
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -4358,7 +4358,7 @@ router.patch(
  * /admin/content/posts/{id}:
  *   delete:
  *     summary: Post sil (cascade: yorumlar, beğeniler vb.)
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -4405,7 +4405,7 @@ router.delete(
  * /admin/content/comments/stats:
  *   get:
  *     summary: Yorum istatistikleri
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -4432,7 +4432,7 @@ router.get(
  * /admin/content/comments:
  *   get:
  *     summary: Yorum listesi (sayfalama, postId, userId filtreleri)
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -4513,7 +4513,7 @@ router.get(
  * /admin/content/comments/{id}:
  *   get:
  *     summary: Tek yorum detayı
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -4578,7 +4578,7 @@ router.get(
  * /admin/content/comments/{id}:
  *   patch:
  *     summary: Yorum güncelle (body)
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -4648,7 +4648,7 @@ router.patch(
  * /admin/content/comments/{id}:
  *   delete:
  *     summary: Yorum sil
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -4695,7 +4695,7 @@ router.delete(
  * /admin/content/feed-highlights:
  *   get:
  *     summary: Feed highlight listesi
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -4758,7 +4758,7 @@ router.get(
  * /admin/content/feed-highlights:
  *   post:
  *     summary: Feed highlight ekle
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -4817,7 +4817,7 @@ router.post(
  * /admin/content/feed-highlights/{id}:
  *   patch:
  *     summary: Feed highlight güncelle (reason)
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -4873,7 +4873,7 @@ router.patch(
  * /admin/content/feed-highlights/{id}:
  *   delete:
  *     summary: Feed highlight kaldır
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -4914,7 +4914,7 @@ router.delete(
  * /admin/content/trending:
  *   get:
  *     summary: Trending post listesi
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -4974,7 +4974,7 @@ router.get(
  * /admin/content/trending:
  *   post:
  *     summary: Trending’e post ekle
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -5040,7 +5040,7 @@ router.post(
  * /admin/content/trending/{id}:
  *   patch:
  *     summary: Trending kaydı güncelle (score, trendPeriod)
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -5100,7 +5100,7 @@ router.patch(
  * /admin/content/trending/{id}:
  *   delete:
  *     summary: Trending’den kaldır
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -5141,7 +5141,7 @@ router.delete(
  * /admin/content/top-community-choices:
  *   get:
  *     summary: Top community choice listesi
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -5200,7 +5200,7 @@ router.get(
  * /admin/content/top-community-choices:
  *   post:
  *     summary: Top community choice ekle
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -5259,7 +5259,7 @@ router.post(
  * /admin/content/top-community-choices/{id}:
  *   patch:
  *     summary: Top community choice güncelle (reason, badgeLabel)
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -5318,7 +5318,7 @@ router.patch(
  * /admin/content/top-community-choices/{id}:
  *   delete:
  *     summary: Top community choice kaldır
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -5359,7 +5359,7 @@ router.delete(
  * /admin/content/manual-review-flags:
  *   get:
  *     summary: Manual review flag listesi
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -5425,7 +5425,7 @@ router.get(
  * /admin/content/manual-review-flags/{id}:
  *   get:
  *     summary: Tek manual review flag detayı
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -5476,7 +5476,7 @@ router.get(
  * /admin/content/manual-review-flags/{id}:
  *   patch:
  *     summary: Manual review flag güncelle (status)
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -5545,7 +5545,7 @@ router.patch(
  * /admin/content/moderation-actions:
  *   get:
  *     summary: Moderation action listesi
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -5619,7 +5619,7 @@ router.get(
  * /admin/content/moderation-actions/{id}:
  *   get:
  *     summary: Tek moderation action detayı
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -5675,7 +5675,7 @@ router.get(
  * /admin/content/tags:
  *   get:
  *     summary: İçerik tag listesi (aggregate veya postId’ye göre)
- *     tags: [Admin]
+ *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []
  *     parameters:

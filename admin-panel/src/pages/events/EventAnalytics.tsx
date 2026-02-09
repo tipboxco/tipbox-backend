@@ -1,6 +1,6 @@
+import { Card, Empty } from 'antd';
+import { CalendarOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import EmptyState from '../../components/EmptyState';
 
 function EventAnalytics() {
   return (
@@ -8,16 +8,15 @@ function EventAnalytics() {
       <PageHeader
         title="Event Analytics"
         description="View event performance metrics"
-        icon="fa-calendar-check"
+        icon={<CalendarOutlined />}
       />
 
-      <DataCard title="Event Analytics Management">
-        <EmptyState
-          icon="fa-calendar-check"
-          title="Coming Soon"
+      <Card bordered title="Event Analytics Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="Event Analytics management interface will be implemented here."
         />
-      </DataCard>
+      </Card>
     </div>
   );
 }

@@ -1,6 +1,6 @@
+import { Card, Empty } from 'antd';
+import { GiftOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import EmptyState from '../../components/EmptyState';
 
 function BrandRewards() {
   return (
@@ -8,16 +8,15 @@ function BrandRewards() {
       <PageHeader
         title="Rewards"
         description="Manage brand rewards and incentives"
-        icon="fa-gift"
+        icon={<GiftOutlined />}
       />
 
-      <DataCard title="Rewards Management">
-        <EmptyState
-          icon="fa-gift"
-          title="Coming Soon"
+      <Card bordered title="Rewards Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="Rewards management interface will be implemented here."
         />
-      </DataCard>
+      </Card>
     </div>
   );
 }

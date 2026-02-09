@@ -1,6 +1,6 @@
+import { Card, Empty } from 'antd';
+import { BellOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import EmptyState from '../../components/EmptyState';
 
 function Notifications() {
   return (
@@ -8,16 +8,15 @@ function Notifications() {
       <PageHeader
         title="Notifications"
         description="Manage system notifications"
-        icon="fa-bell"
+        icon={<BellOutlined />}
       />
 
-      <DataCard title="Notifications Management">
-        <EmptyState
-          icon="fa-bell"
-          title="Coming Soon"
+      <Card bordered title="Notifications Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="Notifications management interface will be implemented here."
         />
-      </DataCard>
+      </Card>
     </div>
   );
 }

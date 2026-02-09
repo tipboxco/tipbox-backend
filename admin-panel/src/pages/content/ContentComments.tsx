@@ -1,11 +1,22 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import {
+  Row,
+  Col,
+  Card,
+  Statistic,
+  Table,
+  Input,
+  Select,
+  Space,
+  Button,
+  Spin,
+  Empty,
+  Alert,
+} from 'antd';
+import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
+import { CommentOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import StatsCard from '../../components/StatsCard';
-import Button from '../../components/Button';
-import LoadingSpinner from '../../components/LoadingSpinner';
-import EmptyState from '../../components/EmptyState';
 import {
   fetchContentCommentsStats,
   fetchContentComments,
@@ -14,7 +25,6 @@ import type {
   AdminContentCommentStatsResponse,
   AdminContentCommentListItem,
 } from '../../types/admin';
-import './content.css';
 
 const PAGE_SIZE = 20;
 
@@ -81,181 +91,208 @@ function ContentComments() {
     };
   }, [pagination.offset, postId, userId, sort, order]);
 
-  const totalPages = Math.ceil(pagination.total / pagination.limit) || 1;
-  const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
-
   const userDisplay = (c: AdminContentCommentListItem) =>
     c.userDisplayName || c.userName || c.userId?.slice(0, 8) || '—';
 
+  const columns: ColumnsType<AdminContentCommentListItem> = [
+    {
+      title: 'Yorum (özet)',
+      key: 'comment',
+      ellipsis: true,
+      render: (_, record) => (
+        <span title={record.comment}>
+          {record.commentExcerpt ??
+            (record.comment.length > 80
+              ? record.comment.slice(0, 80) + '…'
+              : record.comment)}
+        </span>
+      ),
+    },
+    {
+      title: 'Post',
+      key: 'post',
+      width: 200,
+      render: (_, record) => (
+        <Link to={`/content/posts/${record.postId}`}>
+          <Button type="link" size="small" style={{ padding: 0 }}>
+            {record.postTitle
+              ? record.postTitle.length > 30
+                ? record.postTitle.slice(0, 30) + '…'
+                : record.postTitle
+              : record.postId}
+          </Button>
+        </Link>
+      ),
+    },
+    {
+      title: 'Yazar',
+      key: 'user',
+      width: 150,
+      render: (_, record) => (
+        <Link to={`/users/${record.userId}`}>
+          <Button type="link" size="small" style={{ padding: 0 }}>
+            {userDisplay(record)}
+          </Button>
+        </Link>
+      ),
+    },
+    {
+      title: 'Cevap mı',
+      dataIndex: 'isAnswer',
+      key: 'isAnswer',
+      width: 90,
+      render: (isAnswer) => (isAnswer ? 'Evet' : '—'),
+    },
+    {
+      title: 'Beğeni',
+      dataIndex: 'likesCount',
+      key: 'likesCount',
+      width: 80,
+      align: 'right',
+    },
+    {
+      title: 'Oluşturulma',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      width: 120,
+      render: (date) => (date ? new Date(date).toLocaleDateString('tr-TR') : '—'),
+    },
+    {
+      title: '',
+      key: 'action',
+      width: 100,
+      render: (_, record) => (
+        <Link to={`/content/posts/${record.postId}`}>
+          <Button type="link" size="small">
+            Post detay
+          </Button>
+        </Link>
+      ),
+    },
+  ];
+
+  const handleTableChange = (pag: TablePaginationConfig) => {
+    const newOffset = ((pag.current ?? 1) - 1) * PAGE_SIZE;
+    setPagination((prev) => ({ ...prev, offset: newOffset }));
+  };
+
+  const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
+
   return (
-    <div className="content-page">
+    <div>
       <PageHeader
         title="Comments"
         description="Moderate user comments"
-        icon="fa-comments"
+        icon={<CommentOutlined />}
       />
 
       {error && (
-        <div className="content-error">
-          <span>{error}</span>
-        </div>
+        <Alert
+          message="Hata"
+          description={error}
+          type="error"
+          closable
+          onClose={() => setError(null)}
+          style={{ marginBottom: 24 }}
+        />
       )}
 
+      {/* Stats */}
       {loading ? (
-        <LoadingSpinner />
+        <div style={{ textAlign: 'center', padding: 48 }}>
+          <Spin size="large" />
+        </div>
       ) : (
         stats && (
-          <div className="content-stats-grid">
-            <StatsCard
-              title="Toplam yorum"
-              value={stats.total}
-              icon="fa-comments"
-              color="accent"
-            />
-          </div>
+          <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+            <Col xs={24} sm={12} lg={6}>
+              <Card bordered>
+                <Statistic
+                  title="Toplam yorum"
+                  value={stats.total}
+                  prefix={<CommentOutlined />}
+                  valueStyle={{ fontWeight: 700 }}
+                />
+              </Card>
+            </Col>
+          </Row>
         )
       )}
 
-      <DataCard
+      {/* Comment List */}
+      <Card
+        bordered
         title="Yorum listesi"
-        action={
-          <div className="content-filters">
-            <input
-              type="text"
+        extra={
+          <Space wrap>
+            <Input
               placeholder="Post ID"
               value={postId}
               onChange={(e) => {
                 setPostId(e.target.value.trim());
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              className="content-filter-input"
+              style={{ width: 150 }}
+              allowClear
             />
-            <input
-              type="text"
+            <Input
               placeholder="User ID (UUID)"
               value={userId}
               onChange={(e) => {
                 setUserId(e.target.value.trim());
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              className="content-filter-input"
+              style={{ width: 180 }}
+              allowClear
             />
-            <select
+            <Select
               value={sort}
-              onChange={(e) => {
-                setSort(e.target.value as 'createdAt' | 'likesCount');
+              onChange={(value) => {
+                setSort(value as 'createdAt' | 'likesCount');
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              className="content-filter-select"
+              style={{ width: 120 }}
             >
-              <option value="createdAt">Oluşturulma</option>
-              <option value="likesCount">Beğeni</option>
-            </select>
-            <select
+              <Select.Option value="createdAt">Oluşturulma</Select.Option>
+              <Select.Option value="likesCount">Beğeni</Select.Option>
+            </Select>
+            <Select
               value={order}
-              onChange={(e) => {
-                setOrder(e.target.value as 'asc' | 'desc');
+              onChange={(value) => {
+                setOrder(value as 'asc' | 'desc');
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              className="content-filter-select"
+              style={{ width: 100 }}
             >
-              <option value="desc">Azalan</option>
-              <option value="asc">Artan</option>
-            </select>
-          </div>
+              <Select.Option value="desc">Azalan</Select.Option>
+              <Select.Option value="asc">Artan</Select.Option>
+            </Select>
+          </Space>
         }
       >
-        {loadingList ? (
-          <div className="content-loading">
-            <LoadingSpinner />
-          </div>
-        ) : comments.length === 0 ? (
-          <EmptyState
-            icon="fa-comments"
-            title="Yorum bulunamadı"
-            description="Filtreleri değiştirerek tekrar deneyin."
-          />
-        ) : (
-          <>
-            <div className="content-table-wrap">
-              <table className="content-table">
-                <thead>
-                  <tr>
-                    <th>Yorum (özet)</th>
-                    <th>Post</th>
-                    <th>Yazar</th>
-                    <th>Cevap mı</th>
-                    <th>Beğeni</th>
-                    <th>Oluşturulma</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {comments.map((c) => (
-                    <tr key={c.id}>
-                      <td title={c.comment}>
-                        {c.commentExcerpt ?? (c.comment.length > 80 ? c.comment.slice(0, 80) + '…' : c.comment)}
-                      </td>
-                      <td>
-                        <Link to={`/content/posts/${c.postId}`} className="content-link">
-                          {c.postTitle ? (c.postTitle.length > 30 ? c.postTitle.slice(0, 30) + '…' : c.postTitle) : c.postId}
-                        </Link>
-                      </td>
-                      <td>
-                        <Link to={`/users/${c.userId}`} className="content-link">
-                          {userDisplay(c)}
-                        </Link>
-                      </td>
-                      <td>{c.isAnswer ? 'Evet' : '—'}</td>
-                      <td className="tabular-nums">{c.likesCount}</td>
-                      <td>
-                        {c.createdAt
-                          ? new Date(c.createdAt).toLocaleDateString('tr-TR')
-                          : '—'}
-                      </td>
-                      <td>
-                        <Link to={`/content/posts/${c.postId}`} className="content-link">
-                          Post detay
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="content-pagination">
-              <span className="content-pagination-info">
-                {pagination.total} kayıt, sayfa {currentPage} / {totalPages}
-              </span>
-              <div className="content-pagination-btns">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={pagination.offset === 0}
-                  onClick={() =>
-                    setPagination((p) => ({
-                      ...p,
-                      offset: Math.max(0, p.offset - p.limit),
-                    }))
-                  }
-                >
-                  Önceki
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={pagination.offset + pagination.limit >= pagination.total}
-                  onClick={() =>
-                    setPagination((p) => ({ ...p, offset: p.offset + p.limit }))
-                  }
-                >
-                  Sonraki
-                </Button>
-              </div>
-            </div>
-          </>
-        )}
-      </DataCard>
+        <Table
+          columns={columns}
+          dataSource={comments}
+          rowKey="id"
+          loading={loadingList}
+          pagination={{
+            current: currentPage,
+            pageSize: PAGE_SIZE,
+            total: pagination.total,
+            showSizeChanger: false,
+            showTotal: (total) => `Toplam ${total} kayıt`,
+          }}
+          onChange={handleTableChange}
+          locale={{
+            emptyText: (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="Yorum bulunamadı. Filtreleri değiştirerek tekrar deneyin."
+              />
+            ),
+          }}
+        />
+      </Card>
     </div>
   );
 }

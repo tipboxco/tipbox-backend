@@ -1,7 +1,6 @@
+import { Card, Empty, Button } from 'antd';
+import { PieChartOutlined, DownloadOutlined } from '@ant-design/icons';
 import PageHeader from '../components/PageHeader';
-import DataCard from '../components/DataCard';
-import EmptyState from '../components/EmptyState';
-import Button from '../components/Button';
 
 function Analytics() {
   return (
@@ -9,18 +8,18 @@ function Analytics() {
       <PageHeader
         title="Analytics"
         description="Manage platform analytics"
-        icon="fa-chart-pie"
-        actions={<Button icon="fa-download">Export Report</Button>}
+        icon={<PieChartOutlined />}
+        actions={<Button icon={<DownloadOutlined />}>Export Report</Button>}
       />
 
-      <DataCard title="Analytics Management">
-        <EmptyState
-          icon="fa-chart-pie"
-          title="No analytics found"
+      <Card bordered title="Analytics Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="Analytics management interface will be implemented here."
-          action={<Button variant="secondary">Learn More</Button>}
-        />
-      </DataCard>
+        >
+          <Button>Learn More</Button>
+        </Empty>
+      </Card>
     </div>
   );
 }

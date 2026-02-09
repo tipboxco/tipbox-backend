@@ -1,6 +1,6 @@
+import { Card, Empty } from 'antd';
+import { GiftOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import EmptyState from '../../components/EmptyState';
 
 function Lootboxes() {
   return (
@@ -8,16 +8,15 @@ function Lootboxes() {
       <PageHeader
         title="Lootboxes"
         description="Manage lootbox system"
-        icon="fa-box-open"
+        icon={<GiftOutlined />}
       />
 
-      <DataCard title="Lootboxes Management">
-        <EmptyState
-          icon="fa-box-open"
-          title="Coming Soon"
+      <Card bordered title="Lootboxes Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="Lootboxes management interface will be implemented here."
         />
-      </DataCard>
+      </Card>
     </div>
   );
 }

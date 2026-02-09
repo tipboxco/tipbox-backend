@@ -1,6 +1,6 @@
+import { Card, Empty } from 'antd';
+import { FileTextOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import EmptyState from '../../components/EmptyState';
 
 function Invoices() {
   return (
@@ -8,16 +8,15 @@ function Invoices() {
       <PageHeader
         title="Invoices"
         description="View payment invoices"
-        icon="fa-file-invoice-dollar"
+        icon={<FileTextOutlined />}
       />
 
-      <DataCard title="Invoices Management">
-        <EmptyState
-          icon="fa-file-invoice-dollar"
-          title="Coming Soon"
+      <Card bordered title="Invoices Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="Invoices management interface will be implemented here."
         />
-      </DataCard>
+      </Card>
     </div>
   );
 }

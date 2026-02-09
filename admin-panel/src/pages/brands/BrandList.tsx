@@ -1,6 +1,6 @@
+import { Card, Empty } from 'antd';
+import { ShopOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import EmptyState from '../../components/EmptyState';
 
 function BrandList() {
   return (
@@ -8,16 +8,15 @@ function BrandList() {
       <PageHeader
         title="Brands"
         description="Manage brand partnerships"
-        icon="fa-store"
+        icon={<ShopOutlined />}
       />
 
-      <DataCard title="Brands Management">
-        <EmptyState
-          icon="fa-store"
-          title="Coming Soon"
+      <Card bordered title="Brands Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="Brands management interface will be implemented here."
         />
-      </DataCard>
+      </Card>
     </div>
   );
 }

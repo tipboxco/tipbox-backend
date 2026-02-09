@@ -1,6 +1,6 @@
+import { Card, Empty } from 'antd';
+import { LinkOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import EmptyState from '../../components/EmptyState';
 
 function BridgeProgram() {
   return (
@@ -8,16 +8,15 @@ function BridgeProgram() {
       <PageHeader
         title="Bridge Program"
         description="Manage brand community engagement"
-        icon="fa-bridge"
+        icon={<LinkOutlined />}
       />
 
-      <DataCard title="Bridge Program Management">
-        <EmptyState
-          icon="fa-bridge"
-          title="Coming Soon"
+      <Card bordered title="Bridge Program Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="Bridge Program management interface will be implemented here."
         />
-      </DataCard>
+      </Card>
     </div>
   );
 }

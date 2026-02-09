@@ -1,14 +1,32 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import {
+  Row,
+  Col,
+  Card,
+  Statistic,
+  Table,
+  Input,
+  Select,
+  Space,
+  Spin,
+  Empty,
+  Alert,
+  Image,
+  Tag,
+  Button,
+} from 'antd';
+import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
+import {
+  CalendarOutlined,
+  FileOutlined,
+  SignalFilled,
+  InboxOutlined,
+  SearchOutlined,
+} from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import StatsCard from '../../components/StatsCard';
-import Button from '../../components/Button';
-import LoadingSpinner from '../../components/LoadingSpinner';
-import EmptyState from '../../components/EmptyState';
 import { fetchEventsStats, fetchEvents } from '../../api/admin-events';
 import type { AdminEventListItem, AdminEventStatsResponse } from '../../types/admin';
-import './events.css';
 
 const PAGE_SIZE = 20;
 
@@ -71,197 +89,278 @@ function EventList() {
     };
   }, [pagination.offset, search, status, feedType, sort, order]);
 
-  const totalPages = Math.ceil(pagination.total / pagination.limit) || 1;
-  const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
+  const columns: ColumnsType<AdminEventListItem> = [
+    {
+      title: 'Görsel',
+      dataIndex: 'imageUrl',
+      key: 'image',
+      width: 80,
+      render: (url) =>
+        url ? (
+          <Image
+            src={url}
+            alt=""
+            width={48}
+            height={48}
+            style={{ objectFit: 'cover', borderRadius: 4 }}
+            preview={false}
+          />
+        ) : (
+          <div
+            style={{
+              width: 48,
+              height: 48,
+              background: '#f0f0f0',
+              borderRadius: 4,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            —
+          </div>
+        ),
+    },
+    {
+      title: 'Başlık',
+      dataIndex: 'title',
+      key: 'title',
+    },
+    {
+      title: 'Durum',
+      dataIndex: 'status',
+      key: 'status',
+      width: 100,
+      render: (status) => {
+        const colorMap: Record<string, string> = {
+          DRAFT: 'default',
+          PUBLISHED: 'success',
+          CLOSED: 'error',
+        };
+        return <Tag color={colorMap[status] || 'default'}>{status}</Tag>;
+      },
+    },
+    {
+      title: 'Feed',
+      dataIndex: 'feedType',
+      key: 'feedType',
+      width: 100,
+    },
+    {
+      title: 'Başlangıç',
+      dataIndex: 'startDate',
+      key: 'startDate',
+      width: 120,
+      render: (date) => (date ? new Date(date).toLocaleDateString('tr-TR') : '—'),
+    },
+    {
+      title: 'Bitiş',
+      dataIndex: 'endDate',
+      key: 'endDate',
+      width: 120,
+      render: (date) => (date ? new Date(date).toLocaleDateString('tr-TR') : '—'),
+    },
+    {
+      title: 'Katılımcı',
+      dataIndex: 'participantsCount',
+      key: 'participantsCount',
+      width: 100,
+      align: 'right',
+      render: (count) => count ?? 0,
+    },
+    {
+      title: 'Oluşturulma',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      width: 120,
+      render: (date) => (date ? new Date(date).toLocaleDateString('tr-TR') : '—'),
+    },
+    {
+      title: '',
+      key: 'action',
+      width: 80,
+      render: (_, record) => (
+        <Link to={`/events/${record.id}`}>
+          <Button type="link" size="small">
+            Detay
+          </Button>
+        </Link>
+      ),
+    },
+  ];
 
-  const statusBadgeClass = (s: string) => {
-    if (s === 'DRAFT') return 'events-badge-draft';
-    if (s === 'PUBLISHED') return 'events-badge-published';
-    return 'events-badge-closed';
+  const handleTableChange = (pag: TablePaginationConfig) => {
+    const newOffset = ((pag.current ?? 1) - 1) * PAGE_SIZE;
+    setPagination((prev) => ({ ...prev, offset: newOffset }));
   };
 
+  const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
+
   return (
-    <div className="events-page">
+    <div>
       <PageHeader
         title="Events"
         description="Event listesi, filtreleme ve yönetim"
-        icon="fa-calendar-check"
+        icon={<CalendarOutlined />}
       />
 
       {error && (
-        <div className="events-error">
-          <span>{error}</span>
-        </div>
+        <Alert
+          message="Hata"
+          description={error}
+          type="error"
+          closable
+          onClose={() => setError(null)}
+          style={{ marginBottom: 24 }}
+        />
       )}
 
+      {/* Stats */}
       {loading ? (
-        <LoadingSpinner />
+        <div style={{ textAlign: 'center', padding: 48 }}>
+          <Spin size="large" />
+        </div>
       ) : (
         stats && (
-          <div className="events-stats-grid">
-            <StatsCard title="Toplam" value={stats.total} icon="fa-calendar-check" color="accent" />
-            <StatsCard title="Taslak" value={stats.draft} icon="fa-file" color="neutral" />
-            <StatsCard title="Yayında" value={stats.published} icon="fa-broadcast-tower" color="success" />
-            <StatsCard title="Kapalı" value={stats.closed} icon="fa-archive" color="danger" />
-          </div>
+          <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+            <Col xs={24} sm={12} lg={6}>
+              <Card bordered>
+                <Statistic
+                  title="Toplam"
+                  value={stats.total}
+                  prefix={<CalendarOutlined />}
+                  valueStyle={{ fontWeight: 700 }}
+                />
+              </Card>
+            </Col>
+            <Col xs={24} sm={12} lg={6}>
+              <Card bordered>
+                <Statistic
+                  title="Taslak"
+                  value={stats.draft}
+                  prefix={<FileOutlined />}
+                  valueStyle={{ fontWeight: 600 }}
+                />
+              </Card>
+            </Col>
+            <Col xs={24} sm={12} lg={6}>
+              <Card bordered>
+                <Statistic
+                  title="Yayında"
+                  value={stats.published}
+                  prefix={<SignalFilled />}
+                  valueStyle={{ fontWeight: 600 }}
+                />
+              </Card>
+            </Col>
+            <Col xs={24} sm={12} lg={6}>
+              <Card bordered>
+                <Statistic
+                  title="Kapalı"
+                  value={stats.closed}
+                  prefix={<InboxOutlined />}
+                  valueStyle={{ fontWeight: 600 }}
+                />
+              </Card>
+            </Col>
+          </Row>
         )
       )}
 
-      <DataCard
+      {/* Event List */}
+      <Card
+        bordered
         title="Event listesi"
-        action={
-          <div className="events-filters">
-            <input
-              type="text"
+        extra={
+          <Space wrap>
+            <Input
               placeholder="Ara (başlık, açıklama)"
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              className="events-filter-input"
+              prefix={<SearchOutlined />}
+              style={{ width: 200 }}
+              allowClear
             />
-            <select
+            <Select
               value={status}
-              onChange={(e) => {
-                setStatus(e.target.value);
+              onChange={(value) => {
+                setStatus(value);
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              className="events-filter-select"
+              style={{ width: 130 }}
+              placeholder="Tüm durumlar"
             >
-              <option value="">Tüm durumlar</option>
-              <option value="DRAFT">Taslak</option>
-              <option value="PUBLISHED">Yayında</option>
-              <option value="CLOSED">Kapalı</option>
-            </select>
-            <select
+              <Select.Option value="">Tüm durumlar</Select.Option>
+              <Select.Option value="DRAFT">Taslak</Select.Option>
+              <Select.Option value="PUBLISHED">Yayında</Select.Option>
+              <Select.Option value="CLOSED">Kapalı</Select.Option>
+            </Select>
+            <Select
               value={feedType}
-              onChange={(e) => {
-                setFeedType(e.target.value);
+              onChange={(value) => {
+                setFeedType(value);
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              className="events-filter-select"
+              style={{ width: 150 }}
+              placeholder="Tüm feed türleri"
             >
-              <option value="">Tüm feed türleri</option>
-              <option value="PICKS">PICKS</option>
-              <option value="ROASTS">ROASTS</option>
-            </select>
-            <select
+              <Select.Option value="">Tüm feed türleri</Select.Option>
+              <Select.Option value="PICKS">PICKS</Select.Option>
+              <Select.Option value="ROASTS">ROASTS</Select.Option>
+            </Select>
+            <Select
               value={sort}
-              onChange={(e) => {
-                setSort(e.target.value as 'createdAt' | 'startDate' | 'endDate' | 'title');
+              onChange={(value) => {
+                setSort(value as 'createdAt' | 'startDate' | 'endDate' | 'title');
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              className="events-filter-select"
+              style={{ width: 130 }}
             >
-              <option value="createdAt">Oluşturulma</option>
-              <option value="startDate">Başlangıç</option>
-              <option value="endDate">Bitiş</option>
-              <option value="title">Başlık</option>
-            </select>
-            <select
+              <Select.Option value="createdAt">Oluşturulma</Select.Option>
+              <Select.Option value="startDate">Başlangıç</Select.Option>
+              <Select.Option value="endDate">Bitiş</Select.Option>
+              <Select.Option value="title">Başlık</Select.Option>
+            </Select>
+            <Select
               value={order}
-              onChange={(e) => {
-                setOrder(e.target.value as 'asc' | 'desc');
+              onChange={(value) => {
+                setOrder(value as 'asc' | 'desc');
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              className="events-filter-select"
+              style={{ width: 100 }}
             >
-              <option value="desc">Azalan</option>
-              <option value="asc">Artan</option>
-            </select>
-          </div>
+              <Select.Option value="desc">Azalan</Select.Option>
+              <Select.Option value="asc">Artan</Select.Option>
+            </Select>
+          </Space>
         }
       >
-        {loadingList ? (
-          <div className="events-loading">
-            <LoadingSpinner />
-          </div>
-        ) : events.length === 0 ? (
-          <EmptyState
-            icon="fa-calendar-check"
-            title="Event bulunamadı"
-            description="Filtreleri değiştirerek tekrar deneyin."
-          />
-        ) : (
-          <>
-            <div className="events-table-wrap">
-              <table className="events-table">
-                <thead>
-                  <tr>
-                    <th className="events-table-col-thumb">Görsel</th>
-                    <th>Başlık</th>
-                    <th>Durum</th>
-                    <th>Feed</th>
-                    <th>Başlangıç</th>
-                    <th>Bitiş</th>
-                    <th>Katılımcı</th>
-                    <th>Oluşturulma</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {events.map((e) => (
-                    <tr key={e.id}>
-                      <td className="events-table-col-thumb">
-                        {e.imageUrl ? (
-                          <img
-                            src={e.imageUrl}
-                            alt=""
-                            className="events-list-thumb"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <span className="events-list-thumb-placeholder" aria-hidden>
-                            <i className="fa-regular fa-image" />
-                          </span>
-                        )}
-                      </td>
-                      <td>{e.title}</td>
-                      <td>
-                        <span className={`events-badge ${statusBadgeClass(e.status)}`}>{e.status}</span>
-                      </td>
-                      <td>{e.feedType}</td>
-                      <td>{e.startDate ? new Date(e.startDate).toLocaleDateString('tr-TR') : '—'}</td>
-                      <td>{e.endDate ? new Date(e.endDate).toLocaleDateString('tr-TR') : '—'}</td>
-                      <td>{e.participantsCount ?? 0}</td>
-                      <td>{e.createdAt ? new Date(e.createdAt).toLocaleDateString('tr-TR') : '—'}</td>
-                      <td>
-                        <Link to={`/events/${e.id}`} className="events-link">
-                          Detay
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="events-pagination">
-              <span className="events-pagination-info">
-                {pagination.total} kayıt, sayfa {currentPage} / {totalPages}
-              </span>
-              <div className="events-pagination-btns">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={pagination.offset === 0}
-                  onClick={() => setPagination((p) => ({ ...p, offset: Math.max(0, p.offset - p.limit) }))}
-                >
-                  Önceki
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={pagination.offset + pagination.limit >= pagination.total}
-                  onClick={() => setPagination((p) => ({ ...p, offset: p.offset + p.limit }))}
-                >
-                  Sonraki
-                </Button>
-              </div>
-            </div>
-          </>
-        )}
-      </DataCard>
+        <Table
+          columns={columns}
+          dataSource={events}
+          rowKey="id"
+          loading={loadingList}
+          pagination={{
+            current: currentPage,
+            pageSize: PAGE_SIZE,
+            total: pagination.total,
+            showSizeChanger: false,
+            showTotal: (total) => `Toplam ${total} kayıt`,
+          }}
+          onChange={handleTableChange}
+          locale={{
+            emptyText: (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="Event bulunamadı. Filtreleri değiştirerek tekrar deneyin."
+              />
+            ),
+          }}
+        />
+      </Card>
     </div>
   );
 }

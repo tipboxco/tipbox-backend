@@ -1,6 +1,6 @@
+import { Card, Empty } from 'antd';
+import { CalendarOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import EmptyState from '../../components/EmptyState';
 
 function EventBadges() {
   return (
@@ -8,16 +8,15 @@ function EventBadges() {
       <PageHeader
         title="Event Badges"
         description="Configure event-specific badges"
-        icon="fa-calendar-check"
+        icon={<CalendarOutlined />}
       />
 
-      <DataCard title="Event Badges Management">
-        <EmptyState
-          icon="fa-calendar-check"
-          title="Coming Soon"
+      <Card bordered title="Event Badges Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="Event Badges management interface will be implemented here."
         />
-      </DataCard>
+      </Card>
     </div>
   );
 }

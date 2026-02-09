@@ -1,17 +1,27 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import {
+  Row,
+  Col,
+  Card,
+  Statistic,
+  Table,
+  Input,
+  Select,
+  Button,
+  Space,
+  Spin,
+  Empty,
+  Alert,
+} from 'antd';
+import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
+import { FolderOpenOutlined, SearchOutlined, PlusOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import StatsCard from '../../components/StatsCard';
-import Button from '../../components/Button';
-import LoadingSpinner from '../../components/LoadingSpinner';
-import EmptyState from '../../components/EmptyState';
 import {
   fetchCollectionsStats,
   fetchCollections,
 } from '../../api/admin-badges-collections';
 import type { AdminCollectionListItem, AdminCollectionStatsResponse } from '../../types/admin';
-import './gamification.css';
 
 const PAGE_SIZE = 20;
 
@@ -70,152 +80,171 @@ function BadgeCollections() {
     };
   }, [pagination.offset, search, sort, order]);
 
-  const totalPages = Math.ceil(pagination.total / pagination.limit) || 1;
+  const columns: ColumnsType<AdminCollectionListItem> = [
+    {
+      title: 'Ad',
+      dataIndex: 'name',
+      key: 'name',
+    },
+    {
+      title: 'Kategori',
+      key: 'category',
+      render: (_, record) => record.categoryName ?? record.categoryId,
+    },
+    {
+      title: 'Badge sayısı',
+      dataIndex: 'badgesCount',
+      key: 'badgesCount',
+      width: 120,
+      align: 'right',
+    },
+    {
+      title: 'Hedef sayısı',
+      dataIndex: 'goalsCount',
+      key: 'goalsCount',
+      width: 120,
+      align: 'right',
+      render: (count) => count ?? 0,
+    },
+    {
+      title: 'Oluşturulma',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      width: 150,
+      render: (date) => new Date(date).toLocaleString('tr-TR'),
+    },
+    {
+      title: '',
+      key: 'action',
+      width: 80,
+      render: (_, record) => (
+        <Link to={`/gamification/collections/${record.id}`}>
+          <Button type="link" size="small">
+            Detay
+          </Button>
+        </Link>
+      ),
+    },
+  ];
+
+  const handleTableChange = (pag: TablePaginationConfig) => {
+    const newOffset = ((pag.current ?? 1) - 1) * PAGE_SIZE;
+    setPagination((prev) => ({ ...prev, offset: newOffset }));
+  };
+
   const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
 
   return (
-    <div className="gamification-page">
+    <div>
       <PageHeader
         title="Collections"
         description="Koleksiyon listesi, filtreleme ve yönetim (achievement badge'ler koleksiyon içinde yönetilir)"
-        icon="fa-folder-open"
+        icon={<FolderOpenOutlined />}
       />
 
       {error && (
-        <div className="gamification-error">
-          <span>{error}</span>
-        </div>
+        <Alert
+          message="Hata"
+          description={error}
+          type="error"
+          closable
+          onClose={() => setError(null)}
+          style={{ marginBottom: 24 }}
+        />
       )}
 
+      {/* Stats */}
       {loading ? (
-        <LoadingSpinner />
+        <div style={{ textAlign: 'center', padding: 48 }}>
+          <Spin size="large" />
+        </div>
       ) : (
         stats && (
-          <div className="gamification-stats-grid">
-            <StatsCard title="Toplam koleksiyon" value={stats.total} icon="fa-folder-open" color="accent" />
-          </div>
+          <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+            <Col xs={24} sm={12} lg={6}>
+              <Card bordered>
+                <Statistic
+                  title="Toplam koleksiyon"
+                  value={stats.total}
+                  prefix={<FolderOpenOutlined />}
+                  valueStyle={{ fontWeight: 700 }}
+                />
+              </Card>
+            </Col>
+          </Row>
         )
       )}
 
-      <DataCard
+      {/* Collection List */}
+      <Card
+        bordered
         title="Koleksiyon listesi"
-        action={
-          <div className="gamification-filters">
+        extra={
+          <Space wrap>
             <Link to="/gamification/collections/new">
-              <Button variant="primary" size="sm">Yeni koleksiyon</Button>
+              <Button type="primary" icon={<PlusOutlined />}>
+                Yeni koleksiyon
+              </Button>
             </Link>
-            <input
-              type="text"
+            <Input
               placeholder="Ara (ad)"
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              className="gamification-filter-input"
+              prefix={<SearchOutlined />}
+              style={{ width: 150 }}
+              allowClear
             />
-            <select
+            <Select
               value={sort}
-              onChange={(e) => {
-                setSort(e.target.value as 'createdAt' | 'name');
+              onChange={(value) => {
+                setSort(value as 'createdAt' | 'name');
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              className="gamification-filter-select"
+              style={{ width: 120 }}
             >
-              <option value="createdAt">Oluşturulma</option>
-              <option value="name">Ad</option>
-            </select>
-            <select
+              <Select.Option value="createdAt">Oluşturulma</Select.Option>
+              <Select.Option value="name">Ad</Select.Option>
+            </Select>
+            <Select
               value={order}
-              onChange={(e) => {
-                setOrder(e.target.value as 'asc' | 'desc');
+              onChange={(value) => {
+                setOrder(value as 'asc' | 'desc');
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              className="gamification-filter-select"
+              style={{ width: 100 }}
             >
-              <option value="desc">Azalan</option>
-              <option value="asc">Artan</option>
-            </select>
-          </div>
+              <Select.Option value="desc">Azalan</Select.Option>
+              <Select.Option value="asc">Artan</Select.Option>
+            </Select>
+          </Space>
         }
       >
-        {loadingList ? (
-          <div className="gamification-loading">
-            <LoadingSpinner />
-          </div>
-        ) : collections.length === 0 ? (
-          <EmptyState
-            icon="fa-folder-open"
-            title="Koleksiyon bulunamadı"
-            description="Filtreleri değiştirin veya yeni koleksiyon oluşturun."
-          />
-        ) : (
-          <>
-            <div className="gamification-table-wrap">
-              <table className="gamification-table">
-                <thead>
-                  <tr>
-                    <th>Ad</th>
-                    <th>Kategori</th>
-                    <th>Badge sayısı</th>
-                    <th>Hedef sayısı</th>
-                    <th>Oluşturulma</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {collections.map((c) => (
-                    <tr key={c.id}>
-                      <td>{c.name}</td>
-                      <td>{c.categoryName ?? c.categoryId}</td>
-                      <td>{c.badgesCount}</td>
-                      <td>{c.goalsCount ?? 0}</td>
-                      <td>{new Date(c.createdAt).toLocaleString('tr-TR')}</td>
-                      <td>
-                        <Link to={`/gamification/collections/${c.id}`}>
-                          <Button variant="secondary" size="sm">
-                            Detay
-                          </Button>
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {pagination.total > pagination.limit && (
-              <div className="gamification-pagination">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={currentPage <= 1}
-                  onClick={() =>
-                    setPagination((p) => ({ ...p, offset: Math.max(0, p.offset - p.limit) }))
-                  }
-                >
-                  Önceki
-                </Button>
-                <span className="gamification-pagination-info">
-                  {currentPage} / {totalPages} (toplam {pagination.total})
-                </span>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={currentPage >= totalPages}
-                  onClick={() =>
-                    setPagination((p) => ({
-                      ...p,
-                      offset: Math.min(pagination.total, p.offset + p.limit),
-                    }))
-                  }
-                >
-                  Sonraki
-                </Button>
-              </div>
-            )}
-          </>
-        )}
-      </DataCard>
+        <Table
+          columns={columns}
+          dataSource={collections}
+          rowKey="id"
+          loading={loadingList}
+          pagination={{
+            current: currentPage,
+            pageSize: PAGE_SIZE,
+            total: pagination.total,
+            showSizeChanger: false,
+            showTotal: (total) => `Toplam ${total} kayıt`,
+          }}
+          onChange={handleTableChange}
+          locale={{
+            emptyText: (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="Koleksiyon bulunamadı. Filtreleri değiştirin veya yeni koleksiyon oluşturun."
+              />
+            ),
+          }}
+        />
+      </Card>
     </div>
   );
 }

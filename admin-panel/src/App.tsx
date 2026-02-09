@@ -1,5 +1,8 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { ConfigProvider, theme as antdTheme } from 'antd';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ThemeProvider, useTheme } from './contexts/ThemeContext';
+import { darkTheme, lightTheme } from './theme/antd-theme';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
@@ -86,13 +89,34 @@ function LoginRedirect() {
   return isAuthenticated ? <Navigate to="/" replace /> : <Login />;
 }
 
+/** Ant Design ConfigProvider wrapper - uses theme from ThemeContext */
+function ThemedApp({ children }: { children: React.ReactNode }) {
+  const { theme } = useTheme();
+
+  const antdConfig = theme === 'dark' ? darkTheme : lightTheme;
+  const algorithm = theme === 'dark' ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm;
+
+  return (
+    <ConfigProvider
+      theme={{
+        ...antdConfig,
+        algorithm,
+      }}
+    >
+      {children}
+    </ConfigProvider>
+  );
+}
+
 function App() {
   return (
-    <Router>
-      <AuthProvider>
-        <Routes>
-          <Route path="/login" element={<LoginRedirect />} />
-          <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+    <ThemeProvider>
+      <ThemedApp>
+        <Router>
+          <AuthProvider>
+          <Routes>
+            <Route path="/login" element={<LoginRedirect />} />
+            <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route index element={<Dashboard />} />
 
           {/* Users — statik yollar önce, users/:id en sonda */}
@@ -176,8 +200,10 @@ function App() {
           <Route path="system/moderation" element={<ModerationActions />} />
           </Route>
         </Routes>
-      </AuthProvider>
-    </Router>
+        </AuthProvider>
+        </Router>
+      </ThemedApp>
+    </ThemeProvider>
   );
 }
 

@@ -1,6 +1,6 @@
+import { Card, Empty } from 'antd';
+import { TrophyOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import EmptyState from '../../components/EmptyState';
 
 function BrandLeaderboards() {
   return (
@@ -8,16 +8,15 @@ function BrandLeaderboards() {
       <PageHeader
         title="Leaderboards"
         description="View brand engagement leaderboards"
-        icon="fa-ranking-star"
+        icon={<TrophyOutlined />}
       />
 
-      <DataCard title="Leaderboards Management">
-        <EmptyState
-          icon="fa-ranking-star"
-          title="Coming Soon"
+      <Card bordered title="Leaderboards Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="Leaderboards management interface will be implemented here."
         />
-      </DataCard>
+      </Card>
     </div>
   );
 }

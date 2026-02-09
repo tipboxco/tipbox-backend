@@ -1,6 +1,6 @@
+import { Card, Empty } from 'antd';
+import { LineChartOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import EmptyState from '../../components/EmptyState';
 
 function UserProgress() {
   return (
@@ -8,16 +8,15 @@ function UserProgress() {
       <PageHeader
         title="User Progress"
         description="Track user achievement progress"
-        icon="fa-chart-line"
+        icon={<LineChartOutlined />}
       />
 
-      <DataCard title="User Progress Management">
-        <EmptyState
-          icon="fa-chart-line"
-          title="Coming Soon"
+      <Card bordered title="User Progress Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="User Progress management interface will be implemented here."
         />
-      </DataCard>
+      </Card>
     </div>
   );
 }

@@ -1,6 +1,6 @@
+import { Card, Empty } from 'antd';
+import { SettingOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import EmptyState from '../../components/EmptyState';
 
 function SystemSettings() {
   return (
@@ -8,16 +8,15 @@ function SystemSettings() {
       <PageHeader
         title="Settings"
         description="Configure system settings"
-        icon="fa-sliders"
+        icon={<SettingOutlined />}
       />
 
-      <DataCard title="Settings Management">
-        <EmptyState
-          icon="fa-sliders"
-          title="Coming Soon"
+      <Card bordered title="Settings Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="Settings management interface will be implemented here."
         />
-      </DataCard>
+      </Card>
     </div>
   );
 }

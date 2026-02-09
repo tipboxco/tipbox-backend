@@ -1,11 +1,30 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import {
+  Row,
+  Col,
+  Card,
+  Statistic,
+  Table,
+  Input,
+  Select,
+  Space,
+  Tag,
+  Button,
+  Spin,
+  Empty,
+  Alert,
+  Image,
+} from 'antd';
+import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
+import {
+  FileTextOutlined,
+  FireOutlined,
+  CalendarOutlined,
+  TagsOutlined,
+  SearchOutlined,
+} from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import StatsCard from '../../components/StatsCard';
-import Button from '../../components/Button';
-import LoadingSpinner from '../../components/LoadingSpinner';
-import EmptyState from '../../components/EmptyState';
 import {
   fetchContentPostsStats,
   fetchContentPosts,
@@ -14,7 +33,6 @@ import type {
   AdminContentPostsStatsResponse,
   AdminContentPostListItem,
 } from '../../types/admin';
-import './content.css';
 
 const PAGE_SIZE = 20;
 
@@ -93,19 +111,16 @@ function ContentPosts() {
     };
   }, [pagination.offset, search, type, sort, order]);
 
-  const totalPages = Math.ceil(pagination.total / pagination.limit) || 1;
-  const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
-
-  const typeBadgeClass = (t: string) => {
+  const getTypeColor = (t: string) => {
     const map: Record<string, string> = {
-      FREE: 'content-badge-free',
-      TIPS: 'content-badge-tips',
-      EXPERIENCE: 'content-badge-experience',
-      QUESTION: 'content-badge-question',
-      COMPARE: 'content-badge-compare',
-      UPDATE: 'content-badge-update',
+      FREE: 'default',
+      TIPS: 'gold',
+      EXPERIENCE: 'blue',
+      QUESTION: 'purple',
+      COMPARE: 'cyan',
+      UPDATE: 'green',
     };
-    return map[t] ?? 'content-badge-free';
+    return map[t] ?? 'default';
   };
 
   const userDisplay = (p: AdminContentPostListItem) =>
@@ -114,217 +129,266 @@ function ContentPosts() {
   const titleDisplay = (p: AdminContentPostListItem) =>
     (p.title && p.title.trim()) || (p.bodyExcerpt && p.bodyExcerpt.trim().slice(0, 80)) || '—';
 
+  const columns: ColumnsType<AdminContentPostListItem> = [
+    {
+      title: 'Görsel',
+      dataIndex: 'thumbnailUrl',
+      key: 'thumbnail',
+      width: 80,
+      render: (url) =>
+        url ? (
+          <Image
+            src={url}
+            alt=""
+            width={60}
+            height={60}
+            style={{ objectFit: 'cover', borderRadius: 4 }}
+            preview={false}
+          />
+        ) : (
+          <div
+            style={{
+              width: 60,
+              height: 60,
+              background: '#f0f0f0',
+              borderRadius: 4,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            —
+          </div>
+        ),
+    },
+    {
+      title: 'Başlık',
+      key: 'title',
+      ellipsis: true,
+      render: (_, record) => titleDisplay(record),
+    },
+    {
+      title: 'Tür',
+      dataIndex: 'type',
+      key: 'type',
+      width: 120,
+      render: (type) => <Tag color={getTypeColor(type)}>{type}</Tag>,
+    },
+    {
+      title: 'Yazar',
+      key: 'user',
+      width: 150,
+      render: (_, record) => (
+        <Link to={`/users/${record.userId}`}>
+          <Button type="link" size="small" style={{ padding: 0 }}>
+            {userDisplay(record)}
+          </Button>
+        </Link>
+      ),
+    },
+    {
+      title: 'Beğeni',
+      dataIndex: 'likesCount',
+      key: 'likesCount',
+      width: 80,
+      align: 'right',
+    },
+    {
+      title: 'Yorum',
+      dataIndex: 'commentsCount',
+      key: 'commentsCount',
+      width: 80,
+      align: 'right',
+    },
+    {
+      title: 'Boosted',
+      dataIndex: 'isBoosted',
+      key: 'isBoosted',
+      width: 90,
+      render: (boosted) => (boosted ? 'Evet' : '—'),
+    },
+    {
+      title: 'Oluşturulma',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      width: 120,
+      render: (date) => (date ? new Date(date).toLocaleDateString('tr-TR') : '—'),
+    },
+    {
+      title: '',
+      key: 'action',
+      width: 80,
+      render: (_, record) => (
+        <Link to={`/content/posts/${record.id}`}>
+          <Button type="link" size="small">
+            Detay
+          </Button>
+        </Link>
+      ),
+    },
+  ];
+
+  const handleTableChange = (pag: TablePaginationConfig) => {
+    const newOffset = ((pag.current ?? 1) - 1) * PAGE_SIZE;
+    setPagination((prev) => ({ ...prev, offset: newOffset }));
+  };
+
+  const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
+
   return (
-    <div className="content-page">
+    <div>
       <PageHeader
         title="All Posts"
         description="Manage user-generated content posts"
-        icon="fa-newspaper"
+        icon={<FileTextOutlined />}
       />
 
       {error && (
-        <div className="content-error">
-          <span>{error}</span>
-        </div>
+        <Alert
+          message="Hata"
+          description={error}
+          type="error"
+          closable
+          onClose={() => setError(null)}
+          style={{ marginBottom: 24 }}
+        />
       )}
 
+      {/* Stats Grid */}
       {loading ? (
-        <LoadingSpinner />
+        <div style={{ textAlign: 'center', padding: 48 }}>
+          <Spin size="large" />
+        </div>
       ) : (
         stats && (
-          <div className="content-stats-grid">
-            <StatsCard
-              title="Toplam"
-              value={stats.total}
-              icon="fa-newspaper"
-              color="accent"
-            />
-            <StatsCard
-              title="Boosted"
-              value={stats.boostedCount}
-              icon="fa-fire"
-              color="success"
-            />
-            <StatsCard
-              title="Event'e bağlı"
-              value={stats.withEventCount}
-              icon="fa-calendar"
-              color="neutral"
-            />
-            <StatsCard
-              title="Türe göre"
-              value={Object.keys(stats.byType).length}
-              icon="fa-tags"
-              color="neutral"
-            />
-          </div>
+          <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+            <Col xs={24} sm={12} lg={6}>
+              <Card bordered>
+                <Statistic
+                  title="Toplam"
+                  value={stats.total}
+                  prefix={<FileTextOutlined />}
+                  valueStyle={{ fontWeight: 700 }}
+                />
+              </Card>
+            </Col>
+            <Col xs={24} sm={12} lg={6}>
+              <Card bordered>
+                <Statistic
+                  title="Boosted"
+                  value={stats.boostedCount}
+                  prefix={<FireOutlined />}
+                  valueStyle={{ fontWeight: 700, color: '#52c41a' }}
+                />
+              </Card>
+            </Col>
+            <Col xs={24} sm={12} lg={6}>
+              <Card bordered>
+                <Statistic
+                  title="Event'e bağlı"
+                  value={stats.withEventCount}
+                  prefix={<CalendarOutlined />}
+                  valueStyle={{ fontWeight: 700 }}
+                />
+              </Card>
+            </Col>
+            <Col xs={24} sm={12} lg={6}>
+              <Card bordered>
+                <Statistic
+                  title="Türe göre"
+                  value={Object.keys(stats.byType).length}
+                  prefix={<TagsOutlined />}
+                  valueStyle={{ fontWeight: 700 }}
+                />
+              </Card>
+            </Col>
+          </Row>
         )
       )}
 
-      <DataCard
+      {/* Post List Table */}
+      <Card
+        bordered
         title="Post listesi"
-        action={
-          <div className="content-filters">
-            <input
-              type="text"
+        extra={
+          <Space wrap>
+            <Input
               placeholder="Ara (başlık, içerik)"
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              className="content-filter-input"
+              prefix={<SearchOutlined />}
+              style={{ width: 200 }}
+              allowClear
             />
-            <select
+            <Select
               value={type}
-              onChange={(e) => {
-                setType(e.target.value);
+              onChange={(value) => {
+                setType(value);
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              className="content-filter-select"
+              style={{ width: 140 }}
+              placeholder="Tüm türler"
             >
               {POST_TYPES.map((opt) => (
-                <option key={opt.value || 'all'} value={opt.value}>
+                <Select.Option key={opt.value || 'all'} value={opt.value}>
                   {opt.label}
-                </option>
+                </Select.Option>
               ))}
-            </select>
-            <select
+            </Select>
+            <Select
               value={sort}
-              onChange={(e) => {
-                setSort(e.target.value as SortField);
+              onChange={(value) => {
+                setSort(value as SortField);
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              className="content-filter-select"
+              style={{ width: 130 }}
             >
-              <option value="createdAt">Oluşturulma</option>
-              <option value="likesCount">Beğeni</option>
-              <option value="commentsCount">Yorum</option>
-              <option value="viewsCount">Görüntülenme</option>
-              <option value="title">Başlık</option>
-            </select>
-            <select
+              <Select.Option value="createdAt">Oluşturulma</Select.Option>
+              <Select.Option value="likesCount">Beğeni</Select.Option>
+              <Select.Option value="commentsCount">Yorum</Select.Option>
+              <Select.Option value="viewsCount">Görüntülenme</Select.Option>
+              <Select.Option value="title">Başlık</Select.Option>
+            </Select>
+            <Select
               value={order}
-              onChange={(e) => {
-                setOrder(e.target.value as 'asc' | 'desc');
+              onChange={(value) => {
+                setOrder(value as 'asc' | 'desc');
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
-              className="content-filter-select"
+              style={{ width: 100 }}
             >
-              <option value="desc">Azalan</option>
-              <option value="asc">Artan</option>
-            </select>
-          </div>
+              <Select.Option value="desc">Azalan</Select.Option>
+              <Select.Option value="asc">Artan</Select.Option>
+            </Select>
+          </Space>
         }
       >
-        {loadingList ? (
-          <div className="content-loading">
-            <LoadingSpinner />
-          </div>
-        ) : posts.length === 0 ? (
-          <EmptyState
-            icon="fa-newspaper"
-            title="Post bulunamadı"
-            description="Filtreleri değiştirerek tekrar deneyin."
-          />
-        ) : (
-          <>
-            <div className="content-table-wrap">
-              <table className="content-table">
-                <thead>
-                  <tr>
-                    <th className="col-thumb" scope="col">Görsel</th>
-                    <th className="col-title" scope="col">Başlık</th>
-                    <th>Tür</th>
-                    <th>Yazar</th>
-                    <th>Beğeni</th>
-                    <th>Yorum</th>
-                    <th>Boosted</th>
-                    <th>Oluşturulma</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {posts.map((p) => (
-                    <tr key={p.id}>
-                      <td className="col-thumb">
-                        {p.thumbnailUrl ? (
-                          <img
-                            src={p.thumbnailUrl}
-                            alt=""
-                            className="content-thumb"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <span className="content-thumb-placeholder">—</span>
-                        )}
-                      </td>
-                      <td className="col-title">
-                        <span title={titleDisplay(p) !== '—' ? titleDisplay(p) : undefined}>
-                          {titleDisplay(p).length > 80 ? titleDisplay(p).slice(0, 80) + '…' : titleDisplay(p)}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={`content-badge ${typeBadgeClass(p.type)}`}>
-                          {p.type}
-                        </span>
-                      </td>
-                      <td>
-                        <Link to={`/users/${p.userId}`} className="content-link">
-                          {userDisplay(p)}
-                        </Link>
-                      </td>
-                      <td className="tabular-nums">{p.likesCount}</td>
-                      <td className="tabular-nums">{p.commentsCount}</td>
-                      <td>{p.isBoosted ? 'Evet' : '—'}</td>
-                      <td>
-                        {p.createdAt
-                          ? new Date(p.createdAt).toLocaleDateString('tr-TR')
-                          : '—'}
-                      </td>
-                      <td>
-                        <Link to={`/content/posts/${p.id}`} className="content-link">
-                          Detay
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="content-pagination">
-              <span className="content-pagination-info">
-                {pagination.total} kayıt, sayfa {currentPage} / {totalPages}
-              </span>
-              <div className="content-pagination-btns">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={pagination.offset === 0}
-                  onClick={() =>
-                    setPagination((p) => ({
-                      ...p,
-                      offset: Math.max(0, p.offset - p.limit),
-                    }))
-                  }
-                >
-                  Önceki
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={pagination.offset + pagination.limit >= pagination.total}
-                  onClick={() =>
-                    setPagination((p) => ({ ...p, offset: p.offset + p.limit }))
-                  }
-                >
-                  Sonraki
-                </Button>
-              </div>
-            </div>
-          </>
-        )}
-      </DataCard>
+        <Table
+          columns={columns}
+          dataSource={posts}
+          rowKey="id"
+          loading={loadingList}
+          pagination={{
+            current: currentPage,
+            pageSize: PAGE_SIZE,
+            total: pagination.total,
+            showSizeChanger: false,
+            showTotal: (total) => `Toplam ${total} kayıt`,
+          }}
+          onChange={handleTableChange}
+          locale={{
+            emptyText: (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="Post bulunamadı"
+              />
+            ),
+          }}
+        />
+      </Card>
     </div>
   );
 }

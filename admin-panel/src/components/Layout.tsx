@@ -1,15 +1,24 @@
 import { Outlet } from 'react-router-dom';
+import { Layout as AntLayout } from 'antd';
 import Sidebar from './Sidebar';
-import './Layout.css';
+
+const { Content } = AntLayout;
 
 function Layout() {
   return (
-    <div className="layout">
+    <AntLayout style={{ minHeight: '100vh' }}>
       <Sidebar />
-      <main className="main-content">
-        <Outlet />
-      </main>
-    </div>
+      <AntLayout style={{ marginLeft: 260, transition: 'margin-left 0.2s' }}>
+        <Content
+          style={{
+            padding: 24,
+            minHeight: '100vh',
+          }}
+        >
+          <Outlet />
+        </Content>
+      </AntLayout>
+    </AntLayout>
   );
 }
 

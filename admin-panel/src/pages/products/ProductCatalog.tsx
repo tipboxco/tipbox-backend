@@ -1,6 +1,6 @@
+import { Card, Empty } from 'antd';
+import { ShoppingOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import EmptyState from '../../components/EmptyState';
 
 function ProductCatalog() {
   return (
@@ -8,16 +8,15 @@ function ProductCatalog() {
       <PageHeader
         title="Product Catalog"
         description="Manage product database"
-        icon="fa-box"
+        icon={<ShoppingOutlined />}
       />
 
-      <DataCard title="Product Catalog Management">
-        <EmptyState
-          icon="fa-box"
-          title="Coming Soon"
+      <Card bordered title="Product Catalog Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="Product Catalog management interface will be implemented here."
         />
-      </DataCard>
+      </Card>
     </div>
   );
 }

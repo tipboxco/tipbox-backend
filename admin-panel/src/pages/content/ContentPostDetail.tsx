@@ -1,8 +1,29 @@
 import { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import DataCard from '../../components/DataCard';
-import Button from '../../components/Button';
-import LoadingSpinner from '../../components/LoadingSpinner';
+import {
+  Row,
+  Col,
+  Card,
+  Button,
+  Spin,
+  Alert,
+  Typography,
+  Space,
+  Tag,
+  Image,
+  Modal,
+  message as antdMessage,
+} from 'antd';
+import {
+  FileTextOutlined,
+  HeartOutlined,
+  CommentOutlined,
+  EyeOutlined,
+  StarOutlined,
+  LineChartOutlined,
+  DeleteOutlined,
+} from '@ant-design/icons';
+import PageHeader from '../../components/PageHeader';
 import {
   fetchContentPost,
   deleteContentPost,
@@ -10,15 +31,19 @@ import {
   createTrending,
 } from '../../api/admin-content';
 import type { AdminContentPostDetailResponse } from '../../types/admin';
-import './content.css';
 
-const typeBadgeClass: Record<string, string> = {
-  FREE: 'content-badge-free',
-  TIPS: 'content-badge-tips',
-  EXPERIENCE: 'content-badge-experience',
-  QUESTION: 'content-badge-question',
-  COMPARE: 'content-badge-compare',
-  UPDATE: 'content-badge-update',
+const { Text, Paragraph } = Typography;
+
+const getTypeColor = (type: string) => {
+  const map: Record<string, string> = {
+    FREE: 'default',
+    TIPS: 'gold',
+    EXPERIENCE: 'blue',
+    QUESTION: 'purple',
+    COMPARE: 'cyan',
+    UPDATE: 'green',
+  };
+  return map[type] ?? 'default';
 };
 
 function ContentPostDetail() {
@@ -28,7 +53,6 @@ function ContentPostDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -51,17 +75,26 @@ function ContentPostDetail() {
   }, [id]);
 
   const handleDelete = async () => {
-    if (!id || !window.confirm('Bu postu silmek istediğinize emin misiniz?')) return;
-    setActionLoading(true);
-    try {
-      await deleteContentPost(id);
-      setMessage('Post silindi.');
-      setTimeout(() => navigate('/content/posts'), 1500);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Silinemedi');
-    } finally {
-      setActionLoading(false);
-    }
+    if (!id) return;
+    Modal.confirm({
+      title: 'Postu Sil',
+      content: 'Bu postu silmek istediğinize emin misiniz? Bu işlem geri alınamaz.',
+      okText: 'Sil',
+      cancelText: 'İptal',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        setActionLoading(true);
+        try {
+          await deleteContentPost(id);
+          antdMessage.success('Post silindi');
+          setTimeout(() => navigate('/content/posts'), 1000);
+        } catch (e) {
+          antdMessage.error(e instanceof Error ? e.message : 'Silinemedi');
+        } finally {
+          setActionLoading(false);
+        }
+      },
+    });
   };
 
   const handleAddHighlight = async (reason: string) => {
@@ -69,11 +102,11 @@ function ContentPostDetail() {
     setActionLoading(true);
     try {
       await createFeedHighlight({ postId: id, reason });
-      setMessage('Feed highlight eklendi.');
+      antdMessage.success('Feed highlight eklendi');
       const res = await fetchContentPost(id);
       if (res.data) setPost(res.data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Eklenemedi');
+      antdMessage.error(e instanceof Error ? e.message : 'Eklenemedi');
     } finally {
       setActionLoading(false);
     }
@@ -84,9 +117,9 @@ function ContentPostDetail() {
     setActionLoading(true);
     try {
       await createTrending({ postId: id, trendPeriod });
-      setMessage('Trending\'e eklendi.');
+      antdMessage.success("Trending'e eklendi");
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Eklenemedi');
+      antdMessage.error(e instanceof Error ? e.message : 'Eklenemedi');
     } finally {
       setActionLoading(false);
     }
@@ -94,194 +127,252 @@ function ContentPostDetail() {
 
   if (!id) {
     return (
-      <div className="content-detail-page">
-        <p>Geçersiz post ID.</p>
-        <Link to="/content/posts" className="content-detail-back">
-          Listeye dön
+      <div>
+        <Alert message="Geçersiz post ID" type="error" />
+        <Link to="/content/posts">
+          <Button style={{ marginTop: 16 }}>Listeye dön</Button>
         </Link>
       </div>
     );
   }
 
-  if (loading) {
+  if (loading || !post) {
     return (
-      <div className="content-detail-page">
-        <LoadingSpinner />
+      <div style={{ textAlign: 'center', padding: 48 }}>
+        <Spin size="large" />
       </div>
     );
   }
 
-  if (error || !post) {
+  if (error) {
     return (
-      <div className="content-detail-page">
-        <p>{error || 'Post bulunamadı.'}</p>
-        <Link to="/content/posts" className="content-detail-back">
-          Listeye dön
+      <div>
+        <Alert
+          message="Hata"
+          description={error || 'Post bulunamadı'}
+          type="error"
+          style={{ marginBottom: 16 }}
+        />
+        <Link to="/content/posts">
+          <Button>Listeye dön</Button>
         </Link>
       </div>
     );
   }
 
   const userDisplay = post.userDisplayName || post.userName || post.userId?.slice(0, 8) || '—';
-  const badgeClass = typeBadgeClass[post.type] ?? 'content-badge-free';
-  const isImageUrl = (url: string) => /\.(jpe?g|png|gif|webp|avif)(\?|$)/i.test(url) || /\/image\//i.test(url);
+  const isImageUrl = (url: string) =>
+    /\.(jpe?g|png|gif|webp|avif)(\?|$)/i.test(url) || /\/image\//i.test(url);
 
   return (
-    <div className="content-detail-page">
-      <Link to="/content/posts" className="content-detail-back">
-        <i className="fa-solid fa-arrow-left" /> Listeye dön
-      </Link>
+    <div>
+      <PageHeader
+        title={post.title || 'Başlıksız Post'}
+        description={`ID: ${post.id}`}
+        icon={<FileTextOutlined />}
+        backTo="/content/posts"
+        backLabel="Listeye dön"
+      />
 
-      {message && (
-        <div className="content-detail-message content-detail-message-success">
-          {message}
-        </div>
-      )}
-      {error && (
-        <div className="content-error">
-          {error}
-        </div>
-      )}
+      {/* Header with badges */}
+      <Card bordered style={{ marginBottom: 16 }}>
+        <Space size="middle" wrap>
+          <Tag color={getTypeColor(post.type)}>{post.type}</Tag>
+          {post.isBoosted && <Tag color="gold">Boosted</Tag>}
+        </Space>
+      </Card>
 
-      <header className="content-detail-header">
-        <h1 className="content-detail-title">{post.title || 'Başlıksız'}</h1>
-        <div className="content-detail-header-meta">
-          <span className="content-detail-id">ID: {post.id}</span>
-          <span className={`content-badge ${badgeClass}`}>{post.type}</span>
-          {post.isBoosted && <span className="content-badge content-badge-tips">Boosted</span>}
-        </div>
-      </header>
+      {/* Summary */}
+      <Card bordered title="Özet" style={{ marginBottom: 16 }}>
+        <Row gutter={[16, 16]}>
+          <Col xs={24} md={12}>
+            <Space direction="vertical" style={{ width: '100%' }} size={12}>
+              <div>
+                <Text type="secondary">Yazar</Text>
+                <div>
+                  <Link to={`/users/${post.userId}`}>
+                    <Button type="link" size="small" style={{ padding: 0 }}>
+                      {userDisplay}
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+              <div>
+                <Text type="secondary">Oluşturulma</Text>
+                <div>
+                  <Text>
+                    {post.createdAt ? new Date(post.createdAt).toLocaleString('tr-TR') : '—'}
+                  </Text>
+                </div>
+              </div>
+              {(post.mainCategory || post.subCategory) && (
+                <div>
+                  <Text type="secondary">Kategori</Text>
+                  <div>
+                    <Text>
+                      {[post.mainCategory?.name, post.subCategory?.name]
+                        .filter(Boolean)
+                        .join(' / ')}
+                    </Text>
+                  </div>
+                </div>
+              )}
+            </Space>
+          </Col>
+          <Col xs={24} md={12}>
+            <Space direction="vertical" style={{ width: '100%' }} size={12}>
+              <Space size="large">
+                <Space>
+                  <HeartOutlined />
+                  <Text>{post.likesCount}</Text>
+                </Space>
+                <Space>
+                  <CommentOutlined />
+                  <Text>{post.commentsCount}</Text>
+                </Space>
+                <Space>
+                  <EyeOutlined />
+                  <Text>{post.viewsCount}</Text>
+                </Space>
+              </Space>
+              {post.product && (
+                <div>
+                  <Text type="secondary">Ürün</Text>
+                  <div>
+                    <Text>{post.product.name}</Text>
+                  </div>
+                </div>
+              )}
+              {post.event && (
+                <div>
+                  <Text type="secondary">Event</Text>
+                  <div>
+                    <Text>
+                      {post.event.title}{' '}
+                      <Text type="secondary">({post.event.status})</Text>
+                    </Text>
+                  </div>
+                </div>
+              )}
+            </Space>
+          </Col>
+        </Row>
 
-      <DataCard title="Özet" className="content-detail-card">
-        <div className="content-detail-meta-row">
-          <span className="content-detail-meta-label">Yazar</span>
-          <Link to={`/users/${post.userId}`} className="content-link">
-            {userDisplay}
-          </Link>
-          <span className="content-detail-meta-sep">·</span>
-          <span className="content-detail-meta-label">Oluşturulma</span>
-          <span>{post.createdAt ? new Date(post.createdAt).toLocaleString('tr-TR') : '—'}</span>
-        </div>
-        <div className="content-detail-stats">
-          <span className="content-detail-stat" title="Beğeni">
-            <i className="fa-solid fa-heart" /> {post.likesCount}
-          </span>
-          <span className="content-detail-stat" title="Yorum">
-            <i className="fa-solid fa-comment" /> {post.commentsCount}
-          </span>
-          <span className="content-detail-stat" title="Görüntülenme">
-            <i className="fa-solid fa-eye" /> {post.viewsCount}
-          </span>
-        </div>
-        {(post.mainCategory || post.subCategory) && (
-          <div className="content-detail-meta-row">
-            <span className="content-detail-meta-label">Kategori</span>
-            {[post.mainCategory?.name, post.subCategory?.name].filter(Boolean).join(' / ')}
-          </div>
-        )}
-        {post.product && (
-          <div className="content-detail-meta-row">
-            <span className="content-detail-meta-label">Ürün</span>
-            {post.product.name}
-          </div>
-        )}
-        {post.event && (
-          <div className="content-detail-meta-row">
-            <span className="content-detail-meta-label">Event</span>
-            {post.event.title} <span className="content-detail-meta-muted">({post.event.status})</span>
-          </div>
-        )}
         {post.tags && post.tags.length > 0 && (
-          <div className="content-detail-tags">
-            {post.tags.map((tag) => (
-              <span key={tag} className="content-detail-tag">{tag}</span>
-            ))}
+          <div style={{ marginTop: 16 }}>
+            <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+              Tag'ler
+            </Text>
+            <Space size={[8, 8]} wrap>
+              {post.tags.map((tag) => (
+                <Tag key={tag}>{tag}</Tag>
+              ))}
+            </Space>
           </div>
         )}
-      </DataCard>
+      </Card>
 
+      {/* Body Content */}
       {post.body && (
-        <DataCard title="İçerik" className="content-detail-card">
-          <div className="content-detail-body">{post.body}</div>
-        </DataCard>
+        <Card bordered title="İçerik" style={{ marginBottom: 16 }}>
+          <Paragraph style={{ whiteSpace: 'pre-wrap' }}>{post.body}</Paragraph>
+        </Card>
       )}
 
+      {/* Media */}
       {post.media && post.media.length > 0 && (
-        <DataCard title="Medya" className="content-detail-card">
-          <div className="content-detail-media-grid">
+        <Card bordered title="Medya" style={{ marginBottom: 16 }}>
+          <Row gutter={[16, 16]}>
             {post.media.map((m) => (
-              <a
-                key={m.id}
-                href={m.mediaUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="content-detail-media-item"
-                title={`Medya ${m.orderIndex + 1}`}
-              >
+              <Col xs={24} sm={12} md={8} lg={6} key={m.id}>
                 {isImageUrl(m.mediaUrl) ? (
-                  <img
+                  <Image
                     src={m.mediaUrl}
                     alt={`Medya ${m.orderIndex + 1}`}
-                    className="content-detail-media-img"
-                    loading="lazy"
+                    style={{
+                      width: '100%',
+                      height: 200,
+                      objectFit: 'cover',
+                      borderRadius: 4,
+                    }}
                   />
                 ) : (
-                  <div className="content-detail-media-placeholder">
-                    <i className="fa-solid fa-file-image" />
-                    <span>Medya {m.orderIndex + 1}</span>
-                    <span className="content-detail-media-open">Aç</span>
-                  </div>
+                  <a
+                    href={m.mediaUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      height: 200,
+                      border: '1px dashed rgba(255,255,255,0.12)',
+                      borderRadius: 4,
+                      textDecoration: 'none',
+                    }}
+                  >
+                    <Space direction="vertical" align="center">
+                      <FileTextOutlined style={{ fontSize: 32 }} />
+                      <Text>Medya {m.orderIndex + 1}</Text>
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        Aç
+                      </Text>
+                    </Space>
+                  </a>
                 )}
-              </a>
+              </Col>
             ))}
-          </div>
-        </DataCard>
+          </Row>
+        </Card>
       )}
 
-      <DataCard title="İşlemler" className="content-detail-card">
-        <div className="content-detail-actions">
-          <div className="content-detail-actions-group">
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={actionLoading}
-              onClick={() => handleAddHighlight('STAFF_PICK')}
-              className="content-detail-btn"
-            >
-              <i className="fa-solid fa-star" /> Staff Pick
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={actionLoading}
-              onClick={() => handleAddTrending('DAILY')}
-              className="content-detail-btn"
-            >
-              <i className="fa-solid fa-chart-line" /> Günlük Trending
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={actionLoading}
-              onClick={() => handleAddTrending('WEEKLY')}
-              className="content-detail-btn"
-            >
-              <i className="fa-solid fa-chart-line" /> Haftalık Trending
-            </Button>
+      {/* Actions */}
+      <Card bordered title="İşlemler">
+        <Space direction="vertical" style={{ width: '100%' }} size={16}>
+          <div>
+            <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+              Öne Çıkarma
+            </Text>
+            <Space wrap>
+              <Button
+                icon={<StarOutlined />}
+                disabled={actionLoading}
+                onClick={() => handleAddHighlight('STAFF_PICK')}
+              >
+                Staff Pick
+              </Button>
+              <Button
+                icon={<LineChartOutlined />}
+                disabled={actionLoading}
+                onClick={() => handleAddTrending('DAILY')}
+              >
+                Günlük Trending
+              </Button>
+              <Button
+                icon={<LineChartOutlined />}
+                disabled={actionLoading}
+                onClick={() => handleAddTrending('WEEKLY')}
+              >
+                Haftalık Trending
+              </Button>
+            </Space>
           </div>
-          <div className="content-detail-actions-group content-detail-actions-danger">
+
+          <div>
+            <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+              Tehlikeli İşlemler
+            </Text>
             <Button
-              size="sm"
-              variant="danger"
-              disabled={actionLoading}
+              danger
+              icon={<DeleteOutlined />}
+              loading={actionLoading}
               onClick={handleDelete}
-              className="content-detail-btn content-detail-btn-danger"
             >
-              <i className="fa-solid fa-trash" /> Postu sil
+              Postu Sil
             </Button>
           </div>
-        </div>
-      </DataCard>
+        </Space>
+      </Card>
     </div>
   );
 }

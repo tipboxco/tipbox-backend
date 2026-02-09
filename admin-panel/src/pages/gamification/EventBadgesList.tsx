@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { TrophyOutlined } from '@ant-design/icons';
 import BadgeListByType from './BadgeListByType';
 import type { BadgeTypeSlug } from './BadgeListByType';
 import CreateBadgeModal from './CreateBadgeModal';
@@ -13,7 +14,7 @@ function EventBadgesList() {
         listPath="/gamification/event-badges"
         title="Event Badges"
         description="Event / topluluk badge'leri listesi ve yönetimi"
-        icon="fa-medal"
+        icon={<TrophyOutlined />}
         onOpenCreate={() => setCreateOpen(true)}
       />
       {createOpen && (

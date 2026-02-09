@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Button from '../../components/Button';
-import LoadingSpinner from '../../components/LoadingSpinner';
+import { Modal, Form, Input, Select, InputNumber, Button, Alert, Spin, Space } from 'antd';
 import {
   fetchBadgeCategories,
   createBadge,
@@ -10,7 +9,6 @@ import {
   createCollectionGoal,
 } from '../../api/admin-badges-collections';
 import type { AdminBadgeCategoryListItem, AdminActionTypeListItem } from '../../types/admin';
-import './gamification.css';
 
 export type CreateBadgeModalType = 'EVENT' | 'BRAND' | 'COSMETIC' | 'COLLECTION';
 
@@ -22,11 +20,29 @@ interface CreateBadgeModalProps {
   onSuccess: () => void;
 }
 
+interface FormValues {
+  name: string;
+  description?: string;
+  imageUrl?: string;
+  rarity: 'COMMON' | 'RARE' | 'EPIC';
+  categoryId: string;
+  actionTypeId?: string;
+  pointsRequired?: number;
+  difficulty?: 'EASY' | 'MEDIUM' | 'HARD';
+}
+
 const isCollectionContext = (type: CreateBadgeModalType, cId?: string | null) =>
   type === 'COLLECTION' && cId;
 
-function CreateBadgeModal({ badgeType, listPath, collectionId, onClose, onSuccess }: CreateBadgeModalProps) {
+function CreateBadgeModal({
+  badgeType,
+  listPath,
+  collectionId,
+  onClose,
+  onSuccess,
+}: CreateBadgeModalProps) {
   const navigate = useNavigate();
+  const [form] = Form.useForm<FormValues>();
   const [categories, setCategories] = useState<AdminBadgeCategoryListItem[]>([]);
   const [actionTypes, setActionTypes] = useState<AdminActionTypeListItem[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(true);
@@ -34,16 +50,6 @@ function CreateBadgeModal({ badgeType, listPath, collectionId, onClose, onSucces
   const [loadingActionTypes, setLoadingActionTypes] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    name: '',
-    description: '',
-    imageUrl: '',
-    rarity: 'COMMON' as 'COMMON' | 'RARE' | 'EPIC',
-    categoryId: '',
-    actionTypeId: '',
-    pointsRequired: 1,
-    difficulty: 'MEDIUM' as 'EASY' | 'MEDIUM' | 'HARD',
-  });
 
   const inCollection = isCollectionContext(badgeType, collectionId);
 
@@ -56,11 +62,12 @@ function CreateBadgeModal({ badgeType, listPath, collectionId, onClose, onSucces
         if (!cancelled && data) {
           setCategories(data);
           if (data.length > 0 && !inCollection) {
-            setForm((f) => ({ ...f, categoryId: data[0].id }));
+            form.setFieldValue('categoryId', data[0].id);
           }
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Kategoriler yüklenemedi');
+        if (!cancelled)
+          setError(e instanceof Error ? e.message : 'Kategoriler yüklenemedi');
       } finally {
         if (!cancelled) setLoadingCategories(false);
       }
@@ -68,7 +75,7 @@ function CreateBadgeModal({ badgeType, listPath, collectionId, onClose, onSucces
     return () => {
       cancelled = true;
     };
-  }, [inCollection]);
+  }, [inCollection, form]);
 
   useEffect(() => {
     if (!inCollection || !collectionId) return;
@@ -79,10 +86,11 @@ function CreateBadgeModal({ badgeType, listPath, collectionId, onClose, onSucces
         const res = await fetchCollection(collectionId);
         const data = res.data;
         if (!cancelled && data?.categoryId) {
-          setForm((f) => ({ ...f, categoryId: data.categoryId }));
+          form.setFieldValue('categoryId', data.categoryId);
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Koleksiyon bilgisi alınamadı');
+        if (!cancelled)
+          setError(e instanceof Error ? e.message : 'Koleksiyon bilgisi alınamadı');
       } finally {
         if (!cancelled) setLoadingCollection(false);
       }
@@ -90,7 +98,7 @@ function CreateBadgeModal({ badgeType, listPath, collectionId, onClose, onSucces
     return () => {
       cancelled = true;
     };
-  }, [collectionId, inCollection]);
+  }, [collectionId, inCollection, form]);
 
   useEffect(() => {
     if (!inCollection) return;
@@ -102,10 +110,11 @@ function CreateBadgeModal({ badgeType, listPath, collectionId, onClose, onSucces
         const data = res.data;
         if (!cancelled && data?.length) {
           setActionTypes(data);
-          setForm((f) => (f.actionTypeId ? f : { ...f, actionTypeId: data[0].id }));
+          form.setFieldValue('actionTypeId', data[0].id);
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Aktivasyon tipleri yüklenemedi');
+        if (!cancelled)
+          setError(e instanceof Error ? e.message : 'Aktivasyon tipleri yüklenemedi');
       } finally {
         if (!cancelled) setLoadingActionTypes(false);
       }
@@ -113,41 +122,29 @@ function CreateBadgeModal({ badgeType, listPath, collectionId, onClose, onSucces
     return () => {
       cancelled = true;
     };
-  }, [inCollection]);
+  }, [inCollection, form]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.name.trim()) {
-      setError('Ad zorunludur.');
-      return;
-    }
-    if (!form.categoryId) {
-      setError(inCollection ? 'Koleksiyon bilgisi yükleniyor, lütfen bekleyin.' : 'Kategori seçin.');
-      return;
-    }
-    if (inCollection && (!form.actionTypeId || form.pointsRequired < 1)) {
-      setError('Aktivasyon tipi seçin ve hedef sayı en az 1 olmalıdır.');
-      return;
-    }
+  const handleSubmit = async (values: FormValues) => {
     setSaving(true);
     setError(null);
     try {
       const res = await createBadge({
-        name: form.name.trim(),
-        description: form.description.trim() || null,
-        imageUrl: form.imageUrl.trim() || null,
+        name: values.name.trim(),
+        description: values.description?.trim() || null,
+        imageUrl: values.imageUrl?.trim() || null,
         type: badgeType,
-        rarity: form.rarity,
-        categoryId: form.categoryId,
-        collectionId: badgeType === 'COLLECTION' && collectionId ? collectionId : null,
+        rarity: values.rarity,
+        categoryId: values.categoryId,
+        collectionId:
+          badgeType === 'COLLECTION' && collectionId ? collectionId : null,
       });
-      if (inCollection && collectionId && res.data?.id) {
+      if (inCollection && collectionId && res.data?.id && values.actionTypeId) {
         await createCollectionGoal(collectionId, {
-          actionTypeId: form.actionTypeId,
+          actionTypeId: values.actionTypeId,
           rewardBadgeId: res.data.id,
-          pointsRequired: form.pointsRequired,
-          title: form.name.trim(),
-          difficulty: form.difficulty,
+          pointsRequired: values.pointsRequired ?? 1,
+          title: values.name.trim(),
+          difficulty: values.difficulty ?? 'MEDIUM',
         });
       }
       onSuccess();
@@ -167,164 +164,140 @@ function CreateBadgeModal({ badgeType, listPath, collectionId, onClose, onSucces
     loadingCategories ||
     (inCollection && loadingCollection) ||
     (inCollection && loadingActionTypes);
-  const canSubmit =
-    form.categoryId &&
-    form.name.trim() &&
-    (!inCollection || (form.actionTypeId && form.pointsRequired >= 1));
 
   return (
-    <div className="gamification-modal-overlay" onClick={onClose}>
-      <div className="gamification-modal gamification-modal--create-badge" onClick={(e) => e.stopPropagation()}>
-        <div className="gamification-modal-header">
-          <h2>{inCollection ? 'Badge ekle' : `Yeni badge (${badgeType})`}</h2>
-          <button type="button" className="gamification-modal-close" onClick={onClose} aria-label="Kapat">
-            <i className="fa-solid fa-times"></i>
-          </button>
+    <Modal
+      title={inCollection ? 'Badge ekle' : `Yeni badge (${badgeType})`}
+      open
+      onCancel={onClose}
+      footer={null}
+      width={600}
+    >
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 48 }}>
+          <Spin size="large" />
         </div>
-        {loading ? (
-          <LoadingSpinner />
-        ) : (
-          <form onSubmit={handleSubmit} className="gamification-modal-form create-badge-form">
-            {error && (
-              <div className="gamification-error create-badge-form-error">
-                {error}
-              </div>
-            )}
-            <label className="create-badge-form-field create-badge-form-field--name">
-              <span className="create-badge-form-label">Ad</span>
-              <input
-                type="text"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                required
-                placeholder="Badge adı"
-                className="create-badge-form-input"
-              />
-            </label>
-            <label className="create-badge-form-field create-badge-form-field--description">
-              <span className="create-badge-form-label">Açıklama</span>
-              <input
-                type="text"
-                value={form.description}
-                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                placeholder="İsteğe bağlı"
-                className="create-badge-form-input"
-              />
-            </label>
-            <label className="create-badge-form-field create-badge-form-field--full">
-              <span className="create-badge-form-label">Görsel URL</span>
-              <input
-                type="url"
-                value={form.imageUrl}
-                onChange={(e) => setForm((f) => ({ ...f, imageUrl: e.target.value }))}
-                placeholder="https://..."
-                className="create-badge-form-input"
-              />
-            </label>
-            <label className="create-badge-form-field create-badge-form-field--rarity">
-              <span className="create-badge-form-label">Rarity</span>
-              <select
-                value={form.rarity}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, rarity: e.target.value as 'COMMON' | 'RARE' | 'EPIC' }))
-                }
-                className="create-badge-form-input"
+      ) : (
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={handleSubmit}
+          initialValues={{
+            rarity: 'COMMON',
+            difficulty: 'MEDIUM',
+            pointsRequired: 1,
+          }}
+        >
+          {error && (
+            <Alert
+              message="Hata"
+              description={error}
+              type="error"
+              closable
+              onClose={() => setError(null)}
+              style={{ marginBottom: 16 }}
+            />
+          )}
+
+          <Form.Item
+            label="Ad"
+            name="name"
+            rules={[{ required: true, message: 'Ad zorunludur' }]}
+          >
+            <Input placeholder="Badge adı" />
+          </Form.Item>
+
+          <Form.Item label="Açıklama" name="description">
+            <Input placeholder="İsteğe bağlı" />
+          </Form.Item>
+
+          <Form.Item label="Görsel URL" name="imageUrl">
+            <Input type="url" placeholder="https://..." />
+          </Form.Item>
+
+          <Form.Item
+            label="Rarity"
+            name="rarity"
+            rules={[{ required: true, message: 'Rarity seçin' }]}
+          >
+            <Select>
+              <Select.Option value="COMMON">COMMON</Select.Option>
+              <Select.Option value="RARE">RARE</Select.Option>
+              <Select.Option value="EPIC">EPIC</Select.Option>
+            </Select>
+          </Form.Item>
+
+          {!inCollection && (
+            <Form.Item
+              label="Kategori"
+              name="categoryId"
+              rules={[{ required: true, message: 'Kategori seçin' }]}
+            >
+              <Select placeholder="Seçin">
+                {categories.map((c) => (
+                  <Select.Option key={c.id} value={c.id}>
+                    {c.name}
+                  </Select.Option>
+                ))}
+              </Select>
+            </Form.Item>
+          )}
+
+          {inCollection && (
+            <>
+              <Form.Item
+                label="Aktivasyon tipi"
+                name="actionTypeId"
+                rules={[{ required: true, message: 'Aktivasyon tipi seçin' }]}
               >
-                <option value="COMMON">COMMON</option>
-                <option value="RARE">RARE</option>
-                <option value="EPIC">EPIC</option>
-              </select>
-            </label>
-            {!inCollection && (
-              <label className="create-badge-form-field create-badge-form-field--category">
-                <span className="create-badge-form-label">Kategori</span>
-                <select
-                  value={form.categoryId}
-                  onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))}
-                  required
-                  className="create-badge-form-input"
+                <Select
+                  placeholder={loadingActionTypes ? 'Yükleniyor…' : 'Seçin'}
+                  disabled={loadingActionTypes}
                 >
-                  <option value="">Seçin</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
+                  {actionTypes.map((a) => (
+                    <Select.Option key={a.id} value={a.id}>
+                      {a.label} ({a.mainAction} / {a.code})
+                    </Select.Option>
                   ))}
-                </select>
-              </label>
-            )}
-            {inCollection && (
-              <>
-                <label className="create-badge-form-field create-badge-form-field--full">
-                  <span className="create-badge-form-label">Aktivasyon tipi</span>
-                  <select
-                    value={form.actionTypeId}
-                    onChange={(e) => setForm((f) => ({ ...f, actionTypeId: e.target.value }))}
-                    className="create-badge-form-input"
-                    disabled={loadingActionTypes}
-                  >
-                    <option value="">
-                      {loadingActionTypes ? 'Yükleniyor…' : 'Seçin'}
-                    </option>
-                    {actionTypes.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.label} ({a.mainAction} / {a.code})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="create-badge-form-field create-badge-form-field--rarity">
-                  <span className="create-badge-form-label">Hedef sayı</span>
-                  <input
-                    type="number"
-                    min={1}
-                    value={form.pointsRequired}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        pointsRequired: Math.max(1, parseInt(e.target.value, 10) || 1),
-                      }))
-                    }
-                    className="create-badge-form-input"
-                  />
-                </label>
-                <label className="create-badge-form-field create-badge-form-field--rarity">
-                  <span className="create-badge-form-label">Zorluk</span>
-                  <select
-                    value={form.difficulty}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        difficulty: e.target.value as 'EASY' | 'MEDIUM' | 'HARD',
-                      }))
-                    }
-                    className="create-badge-form-input"
-                  >
-                    <option value="EASY">Kolay</option>
-                    <option value="MEDIUM">Orta</option>
-                    <option value="HARD">Zor</option>
-                  </select>
-                </label>
-              </>
-            )}
-            <div className="create-badge-form-actions">
-              <Button
-                type="submit"
-                variant="primary"
-                disabled={Boolean(
-                  saving || !canSubmit || (inCollection && (loadingActionTypes || !form.actionTypeId))
-                )}
+                </Select>
+              </Form.Item>
+
+              <Form.Item
+                label="Hedef sayı"
+                name="pointsRequired"
+                rules={[
+                  { required: true, message: 'Hedef sayı girin' },
+                  { type: 'number', min: 1, message: 'En az 1 olmalıdır' },
+                ]}
               >
+                <InputNumber min={1} style={{ width: '100%' }} />
+              </Form.Item>
+
+              <Form.Item
+                label="Zorluk"
+                name="difficulty"
+                rules={[{ required: true, message: 'Zorluk seçin' }]}
+              >
+                <Select>
+                  <Select.Option value="EASY">Kolay</Select.Option>
+                  <Select.Option value="MEDIUM">Orta</Select.Option>
+                  <Select.Option value="HARD">Zor</Select.Option>
+                </Select>
+              </Form.Item>
+            </>
+          )}
+
+          <Form.Item style={{ marginBottom: 0, marginTop: 24 }}>
+            <Space>
+              <Button type="primary" htmlType="submit" loading={saving}>
                 {saving ? 'Oluşturuluyor…' : 'Badge ekle'}
               </Button>
-              <Button type="button" variant="secondary" onClick={onClose}>
-                İptal
-              </Button>
-            </div>
-          </form>
-        )}
-      </div>
-    </div>
+              <Button onClick={onClose}>İptal</Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      )}
+    </Modal>
   );
 }
 

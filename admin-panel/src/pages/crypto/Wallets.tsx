@@ -1,6 +1,6 @@
+import { Card, Empty } from 'antd';
+import { WalletOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import EmptyState from '../../components/EmptyState';
 
 function Wallets() {
   return (
@@ -8,16 +8,15 @@ function Wallets() {
       <PageHeader
         title="Wallets"
         description="Manage user crypto wallets"
-        icon="fa-wallet"
+        icon={<WalletOutlined />}
       />
 
-      <DataCard title="Wallets Management">
-        <EmptyState
-          icon="fa-wallet"
-          title="Coming Soon"
+      <Card bordered title="Wallets Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="Wallets management interface will be implemented here."
         />
-      </DataCard>
+      </Card>
     </div>
   );
 }

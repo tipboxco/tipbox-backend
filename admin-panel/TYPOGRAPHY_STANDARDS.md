@@ -1,55 +1,50 @@
 # Tipbox Admin Panel - Typography & UI Standards
 
-**Version:** 2.0  
-**Last Updated:** 2026-02-07
+**Version:** 3.0  
+**Last Updated:** 2026-02-09
 
 ---
 
 ## 🎨 Design Philosophy
 
-High-end, professional, data-dense dashboard aesthetic with strict typography hierarchy and consistent spacing.
+Minimal, professional admin panel (Gitbook-style): strict typography hierarchy, consistent 8pt spacing, black/white/grey with minimal Tipbox accent. Supports **Light** and **Dark** themes via `data-theme="light"` / `data-theme="dark"` on `<html>`.
 
 ---
 
-## 📐 Typography Scale (Minor Third)
+## 📐 Typography Scale
 
 ### Font Sizes
 ```css
 --text-xs: 0.75rem;      /* 12px - Captions, tags, timestamps */
---text-sm: 0.875rem;     /* 14px - Body text, default (data-dense standard) */
---text-base: 1rem;       /* 16px - Sub-headers, large body text */
+--text-sm: 0.875rem;     /* 14px - Body text, default */
+--text-base: 1rem;       /* 16px - Sub-headers, large body */
 --text-lg: 1.25rem;      /* 20px - Section headers */
---text-xl: 1.5rem;       /* 24px - Page titles, main headers */
+--text-xl: 1.5rem;       /* 24px - Page titles */
+--text-2xl: 2rem;        /* 32px - Hero titles */
 ```
 
-### Font Weights (Limited to 3)
+### Font Weights
 ```css
 --font-regular: 400;     /* Body text, descriptions */
 --font-medium: 500;      /* UI elements, labels, navigation */
---font-semibold: 600;    /* Primary headings, titles */
+--font-semibold: 600;    /* Section headings, card titles */
+--font-bold: 700;        /* Page titles, key metrics (use sparingly) */
 ```
 
-**❌ Avoid:** Bold (700+) - Creates "clunky" appearance
+**Rule:** Use **bold (700)** only for page titles (`.page-title`) and primary numeric values (`.stats-value`). Prefer semibold (600) for other headings.
 
 ---
 
-## 🎨 Color Hierarchy (60-30-10 Rule)
+## 🎨 Color Hierarchy
 
-### Text Colors
-```css
---text-primary: #FFFFFF;     /* 60% - Main titles, critical data */
---text-secondary: #94A3B8;   /* 30% - Navigation, labels, secondary info */
---text-muted: #64748B;       /* 10% - Timestamps, breadcrumbs, placeholders */
-```
+### Text Colors (theme-dependent)
+- **Dark:** `--text-primary`, `--text-secondary`, `--text-muted` (white/grey scale)
+- **Light:** Same names, values from `[data-theme="light"]` (black/grey scale)
 
 **Rule:** No two adjacent text elements should have same color/weight unless part of a list.
 
-### Brand Colors
-```css
---accent: #D0F205;           /* Primary accent (lime) */
---success: #22c55e;          /* Success states */
---danger: #ef4444;           /* Error/danger states */
-```
+### Accent (minimal use)
+Use `--accent` only for: primary CTA button, active nav item, page header icon, key links. Cards/tables/borders use grey tokens (`--border`, `--text-secondary`).
 
 ---
 
@@ -84,33 +79,37 @@ Applied to: `.tabular-nums`, `table`, `.stats-value`, `.data-value`
 ## 📐 Spacing System (8pt Grid)
 
 ### Base Grid
-All spacing must be multiples of 8px:
+All spacing from a single scale (8px base):
 
 ```css
 --spacing-1: 0.5rem;     /* 8px */
 --spacing-2: 1rem;       /* 16px */
---spacing-3: 1.5rem;     /* 24px - Minimum card padding */
+--spacing-3: 1.5rem;     /* 24px */
 --spacing-4: 2rem;       /* 32px */
+--spacing-5: 2.5rem;     /* 40px */
 --spacing-6: 3rem;       /* 48px */
+--spacing-7: 3.5rem;     /* 56px */
 --spacing-8: 4rem;       /* 64px */
+--container-max: 1280px; /* Main content max-width */
 ```
 
 ### Container Rules
-- **Card Padding:** Minimum 24px (`--spacing-3`)
-- **Section Gaps:** 16px or 24px
-- **Element Gaps:** 8px or 16px
+- **Card padding:** `--spacing-2` / `--spacing-3`
+- **Section gaps:** `--spacing-3` or `--spacing-4`
+- **Table cell padding:** `--spacing-2` vertical, `--spacing-3` horizontal
 
 ---
 
-## 🎯 Border Radius (Consistent Softness)
+## 🎯 Border Radius
 
 ```css
---radius-sm: 0.5rem;     /* 8px - Small elements */
---radius-md: 0.75rem;    /* 12px - Standard (cards, buttons) */
---radius-lg: 1rem;       /* 16px - Large containers */
+--radius-sm: 6px;   /* Small elements */
+--radius-md: 8px;   /* Buttons, inputs */
+--radius-lg: 12px;  /* Cards, modals */
+--radius-xl: 16px;  /* Large containers */
 ```
 
-**Standard:** Use `--radius-md` (12px) for all cards and primary buttons.
+**Standard:** Use `--radius-md` for buttons/inputs, `--radius-lg` for cards and modals.
 
 ---
 
@@ -182,17 +181,17 @@ box-shadow: 0 8px 24px rgba(var(--accent-rgb), 0.15);
 
 ### Heading Hierarchy
 ```tsx
-<h1>Page Title</h1>          {/* 24px, semibold, primary, tight tracking */}
-<h2>Section Header</h2>      {/* 20px, semibold, primary, tight tracking */}
-<h3>Subsection</h3>          {/* 16px, semibold, primary */}
-<p>Body text</p>             {/* 14px, regular, secondary, relaxed line height */}
-<span className="text-muted">Timestamp</span>  {/* 14px, regular, muted */}
+<h1>Page Title</h1>          {/* text-2xl, semibold/bold, primary */}
+<h2>Section Header</h2>      {/* text-xl, semibold, primary */}
+<h3>Subsection</h3>          {/* text-lg, semibold, primary */}
+<p>Body text</p>             {/* text-sm, regular, secondary */}
+<span className="text-muted">Timestamp</span>  {/* text-sm, regular, muted */}
 ```
 
 ### Data Display
 ```tsx
-<div className="stats-value tabular-nums">12,458</div>  {/* 24px, semibold, primary */}
-<div className="stats-title">Total Users</div>          {/* 14px, regular, muted */}
+<div className="stats-value tabular-nums">12,458</div>  {/* xl, bold, primary */}
+<div className="stats-title">Total Users</div>          {/* xs, regular, muted */}
 ```
 
 ### Navigation
@@ -208,7 +207,7 @@ box-shadow: 0 8px 24px rgba(var(--accent-rgb), 0.15);
 ## ✅ Checklist for New Components
 
 - [ ] Font size from minor third scale
-- [ ] Font weight: 400, 500, or 600 only
+- [ ] Font weight: 400, 500, 600, or 700 (700 only for page title / key stats)
 - [ ] Text color: primary, secondary, or muted
 - [ ] Spacing: multiples of 8px
 - [ ] Border radius: 8px, 12px, or 16px
@@ -223,7 +222,7 @@ box-shadow: 0 8px 24px rgba(var(--accent-rgb), 0.15);
 ## 🚫 Common Mistakes to Avoid
 
 ❌ Using arbitrary font sizes (e.g., 13px, 15px, 17px)  
-❌ Bold (700+) font weights  
+❌ Bold (700) except page title and key metrics  
 ❌ Line height < 1.4  
 ❌ Spacing values not from 8pt grid  
 ❌ Inconsistent border radius  
@@ -234,10 +233,10 @@ box-shadow: 0 8px 24px rgba(var(--accent-rgb), 0.15);
 
 ## 📚 Reference
 
-**Font:** Inter (400, 500, 600)  
-**Import:** `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');`
+**Font:** Inter (400, 500, 600, 700)  
+**Themes:** Light and Dark via `data-theme` on `<html>`. Token sets in `src/index.css`.
 
-**Base:** All CSS variables defined in `src/index.css`
+**Base:** All CSS variables in `src/index.css`; theme-agnostic (spacing, typography scale) in `:root`, theme-specific (colors) in `[data-theme="light"]` and `[data-theme="dark"]`.
 
 **Components:** See individual component `.css` files for implementation examples.
 

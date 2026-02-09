@@ -1,6 +1,6 @@
+import { Card, Empty } from 'antd';
+import { SwapOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import EmptyState from '../../components/EmptyState';
 
 function ProductComparisons() {
   return (
@@ -8,16 +8,15 @@ function ProductComparisons() {
       <PageHeader
         title="Comparisons"
         description="Manage product comparison posts"
-        icon="fa-code-compare"
+        icon={<SwapOutlined />}
       />
 
-      <DataCard title="Comparisons Management">
-        <EmptyState
-          icon="fa-code-compare"
-          title="Coming Soon"
+      <Card bordered title="Comparisons Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="Comparisons management interface will be implemented here."
         />
-      </DataCard>
+      </Card>
     </div>
   );
 }

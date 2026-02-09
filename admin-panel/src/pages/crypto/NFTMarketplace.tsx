@@ -1,6 +1,6 @@
+import { Card, Empty } from 'antd';
+import { ShopOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import EmptyState from '../../components/EmptyState';
 
 function NFTMarketplace() {
   return (
@@ -8,16 +8,15 @@ function NFTMarketplace() {
       <PageHeader
         title="NFT Marketplace"
         description="Monitor NFT marketplace activity"
-        icon="fa-shop"
+        icon={<ShopOutlined />}
       />
 
-      <DataCard title="NFT Marketplace Management">
-        <EmptyState
-          icon="fa-shop"
-          title="Coming Soon"
+      <Card bordered title="NFT Marketplace Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="NFT Marketplace management interface will be implemented here."
         />
-      </DataCard>
+      </Card>
     </div>
   );
 }

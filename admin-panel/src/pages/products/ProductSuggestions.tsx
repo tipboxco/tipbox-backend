@@ -1,6 +1,6 @@
+import { Card, Empty } from 'antd';
+import { BulbOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import EmptyState from '../../components/EmptyState';
 
 function ProductSuggestions() {
   return (
@@ -8,16 +8,15 @@ function ProductSuggestions() {
       <PageHeader
         title="Product Suggestions"
         description="Review user-submitted products"
-        icon="fa-lightbulb"
+        icon={<BulbOutlined />}
       />
 
-      <DataCard title="Product Suggestions Management">
-        <EmptyState
-          icon="fa-lightbulb"
-          title="Coming Soon"
+      <Card bordered title="Product Suggestions Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="Product Suggestions management interface will be implemented here."
         />
-      </DataCard>
+      </Card>
     </div>
   );
 }

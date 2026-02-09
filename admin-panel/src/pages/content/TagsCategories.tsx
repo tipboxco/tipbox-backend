@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { Card, Table, Input, Empty, Alert, Typography } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
+import { TagsOutlined, SearchOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import LoadingSpinner from '../../components/LoadingSpinner';
-import EmptyState from '../../components/EmptyState';
 import { fetchContentTags } from '../../api/admin-content';
 import type { AdminContentTagListItem } from '../../types/admin';
-import './content.css';
 
+const { Text } = Typography;
 const PAGE_SIZE = 50;
 
 function TagsCategories() {
@@ -38,75 +39,81 @@ function TagsCategories() {
     };
   }, [search]);
 
+  const columns: ColumnsType<AdminContentTagListItem> = [
+    {
+      title: 'Tag',
+      dataIndex: 'tag',
+      key: 'tag',
+    },
+    {
+      title: 'Kullanım sayısı',
+      dataIndex: 'count',
+      key: 'count',
+      align: 'right',
+      render: (count) => <span style={{ fontVariantNumeric: 'tabular-nums' }}>{count}</span>,
+    },
+  ];
+
   return (
-    <div className="content-page">
+    <div>
       <PageHeader
         title="Tags & Categories"
         description="Manage content tags and categories"
-        icon="fa-tags"
+        icon={<TagsOutlined />}
       />
 
       {error && (
-        <div className="content-error">
-          <span>{error}</span>
-        </div>
+        <Alert
+          message="Hata"
+          description={error}
+          type="error"
+          closable
+          onClose={() => setError(null)}
+          style={{ marginBottom: 24 }}
+        />
       )}
 
-      <DataCard
+      <Card
+        bordered
         title="Kullanılan tag'ler"
-        action={
-          <div className="content-filters">
-            <input
-              type="text"
-              placeholder="Tag ara"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="content-filter-input"
-            />
-          </div>
-        }
-      >
-        {loading ? (
-          <div className="content-loading">
-            <LoadingSpinner />
-          </div>
-        ) : tags.length === 0 ? (
-          <EmptyState
-            icon="fa-tags"
-            title="Tag bulunamadı"
-            description="İçeriklerde kullanılan tag'ler burada listelenir."
+        extra={
+          <Input
+            placeholder="Tag ara"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            prefix={<SearchOutlined />}
+            style={{ width: 200 }}
+            allowClear
           />
-        ) : (
-          <div className="content-table-wrap">
-            <table className="content-table">
-              <thead>
-                <tr>
-                  <th>Tag</th>
-                  <th>Kullanım sayısı</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tags.map((t) => (
-                  <tr key={t.tag}>
-                    <td>{t.tag}</td>
-                    <td className="tabular-nums">{t.count}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </DataCard>
+        }
+        style={{ marginBottom: 16 }}
+      >
+        <Table
+          columns={columns}
+          dataSource={tags}
+          rowKey="tag"
+          loading={loading}
+          pagination={false}
+          locale={{
+            emptyText: (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="Tag bulunamadı. İçeriklerde kullanılan tag'ler burada listelenir."
+              />
+            ),
+          }}
+        />
+      </Card>
 
-      <DataCard title="Kategoriler" className="content-detail-section">
-        <p className="content-detail-meta">
+      <Card bordered title="Kategoriler">
+        <Text type="secondary">
           Kategori, ana kategori ve alt kategori yönetimi için{' '}
-          <a href="/products/categories" className="content-link">
+          <Link to="/products/categories" style={{ color: 'inherit', textDecoration: 'underline' }}>
             Ürün Kategorileri
-          </a>{' '}
+          </Link>{' '}
           sayfasını kullanın.
-        </p>
-      </DataCard>
+        </Text>
+      </Card>
     </div>
   );
 }

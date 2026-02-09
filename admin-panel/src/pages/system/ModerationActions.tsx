@@ -1,6 +1,6 @@
+import { Card, Empty } from 'antd';
+import { SafetyOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import EmptyState from '../../components/EmptyState';
 
 function ModerationActions() {
   return (
@@ -8,16 +8,15 @@ function ModerationActions() {
       <PageHeader
         title="Moderation Actions"
         description="Review moderation history"
-        icon="fa-shield"
+        icon={<SafetyOutlined />}
       />
 
-      <DataCard title="Moderation Actions Management">
-        <EmptyState
-          icon="fa-shield"
-          title="Coming Soon"
+      <Card bordered title="Moderation Actions Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="Moderation Actions management interface will be implemented here."
         />
-      </DataCard>
+      </Card>
     </div>
   );
 }

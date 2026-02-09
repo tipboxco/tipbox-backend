@@ -257,28 +257,22 @@ function getDynamicSwaggerOptions(req: express.Request) {
     definition: {
       ...baseOptions.definition,
       servers: getSwaggerServers().map(server => {
-        // Development ortamında request'ten gelen host'u kullan (dinamik)
+        const label = server.description?.includes('App API') ? 'App API' : 'Admin API';
         if (nodeEnv === 'development' && req.get('host')) {
           const protocol = req.protocol || 'http';
           const host = req.get('host');
-          return { 
-            ...server, 
+          return {
+            ...server,
             url: `${protocol}://${host}`,
-            description: `Development (${host})`
+            description: `${label} — Development (${host})`,
           };
         }
-        
-        // Test ve Production ortamlarında BASE_URL veya default değerleri kullan
         const baseUrl = process.env.BASE_URL;
         if (baseUrl && (nodeEnv === 'test' || nodeEnv === 'production')) {
           let cleanUrl = baseUrl.replace(/\/$/, '');
-          // Eğer protocol yoksa http:// ekle
-          if (!cleanUrl.match(/^https?:\/\//)) {
-            cleanUrl = `http://${cleanUrl}`;
-          }
-          return { ...server, url: cleanUrl };
+          if (!cleanUrl.match(/^https?:\/\//)) cleanUrl = `http://${cleanUrl}`;
+          return { ...server, url: cleanUrl, description: `${label} — ${server.description?.split(' — ')[1] || ''}` };
         }
-        
         return server;
       }),
     },
@@ -292,13 +286,10 @@ function replaceLocalhostExamplesInSwaggerSpec(spec: Record<string, unknown>): R
   try {
     const mediaBaseUrl = getPublicMediaBaseUrl();
     const specString = JSON.stringify(spec);
-    
-    // localhost:9000 örneklerini public media base URL ile değiştir
     const updatedSpecString = specString.replace(
       /http:\/\/localhost:9000/g,
       mediaBaseUrl
     );
-    
     return JSON.parse(updatedSpecString);
   } catch (error) {
     logger.warn('Swagger spec post-processing failed, using original spec', { error });
@@ -306,21 +297,62 @@ function replaceLocalhostExamplesInSwaggerSpec(spec: Record<string, unknown>): R
   }
 }
 
-app.get('/api-docs/swagger.json', (req, res) => {
+/** context: 'all' | 'app' | 'admin' — dropdown ile sadece ilgili EP'leri gösterir */
+function filterSpecByContext(
+  spec: Record<string, unknown>,
+  context: string
+): Record<string, unknown> {
+  if (!spec.paths || typeof spec.paths !== 'object') return spec;
+  const paths = spec.paths as Record<string, unknown>;
+  let filtered: Record<string, unknown>;
+  if (context === 'admin') {
+    filtered = Object.fromEntries(
+      Object.entries(paths).filter(([pathKey]) => pathKey.startsWith('/admin'))
+    );
+  } else if (context === 'app') {
+    filtered = Object.fromEntries(
+      Object.entries(paths).filter(([pathKey]) => !pathKey.startsWith('/admin'))
+    );
+  } else {
+    return spec;
+  }
+  const usedTags = new Set<string>();
+  for (const op of Object.values(filtered)) {
+    if (op && typeof op === 'object') {
+      for (const methodOp of Object.values(op as Record<string, unknown>)) {
+        const tags = (methodOp as Record<string, unknown>)?.tags as string[] | undefined;
+        if (Array.isArray(tags)) tags.forEach((t: string) => usedTags.add(t));
+      }
+    }
+  }
+  const tags = spec.tags as Array<{ name: string; description?: string }> | undefined;
+  if (Array.isArray(tags)) {
+    (spec as Record<string, unknown>).tags = tags.filter((t) => usedTags.has(t.name));
+  }
+  return { ...spec, paths: filtered };
+}
+
+function getSpecForRequest(req: express.Request): Record<string, unknown> {
+  const context = (req.query.context as string) || 'app';
+  const validContext = ['all', 'app', 'admin'].includes(context) ? context : 'app';
   const swaggerSpec = swaggerJSDoc(getDynamicSwaggerOptions(req));
   const processedSpec = replaceLocalhostExamplesInSwaggerSpec(swaggerSpec as Record<string, unknown>);
+  return filterSpecByContext(processedSpec, validContext);
+}
+
+app.get('/api-docs/swagger.json', (req, res) => {
+  const spec = getSpecForRequest(req);
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
-  res.send(processedSpec);
+  res.send(spec);
 });
 
 app.use('/api-docs', swaggerUi.serve);
 app.get('/api-docs', (req, res, next) => {
-  const swaggerSpec = swaggerJSDoc(getDynamicSwaggerOptions(req));
-  const processedSpec = replaceLocalhostExamplesInSwaggerSpec(swaggerSpec as Record<string, unknown>);
-  swaggerUi.setup(processedSpec, {
+  const spec = getSpecForRequest(req);
+  swaggerUi.setup(spec, {
     customCss: '.swagger-ui .topbar { display: none }',
     customSiteTitle: 'Tipbox API Documentation',
     customJs: '/api-docs/custom-swagger.js',

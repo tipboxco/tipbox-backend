@@ -1,6 +1,6 @@
+import { Card, Empty } from 'antd';
+import { MessageOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import EmptyState from '../../components/EmptyState';
 
 function DirectMessages() {
   return (
@@ -8,16 +8,15 @@ function DirectMessages() {
       <PageHeader
         title="Direct Messages"
         description="Monitor user messaging"
-        icon="fa-messages"
+        icon={<MessageOutlined />}
       />
 
-      <DataCard title="Direct Messages Management">
-        <EmptyState
-          icon="fa-messages"
-          title="Coming Soon"
+      <Card bordered title="Direct Messages Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="Direct Messages management interface will be implemented here."
         />
-      </DataCard>
+      </Card>
     </div>
   );
 }

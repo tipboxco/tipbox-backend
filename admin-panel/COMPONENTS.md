@@ -2,28 +2,14 @@
 
 ## 🎨 Design Tokens
 
-```css
-/* Colors */
---bg-primary: #272727          /* Main background */
---bg-glass: rgba(255,255,255,0.03)  /* Glass cards */
---accent: #D0F205              /* Lime accent */
---text-primary: #FAFAFA        /* Main text */
---text-secondary: #FAFAFA      /* Secondary text */
---success: #22c55e             /* Success state */
---danger: #ef4444              /* Error/danger state */
+Tokens are defined in `src/index.css`. **Light/Dark** themes via `data-theme="light"` | `data-theme="dark"` on `<html>` (see `ThemeContext`).
 
-/* Spacing */
---spacing-xs: 8px
---spacing-sm: 12px
---spacing-md: 16px
---spacing-lg: 24px
---spacing-xl: 32px
+- **Colors:** Theme-dependent (`--bg-page`, `--bg-card`, `--text-primary`, `--text-secondary`, `--text-muted`, `--accent`, `--border`, `--bg-hover`, etc.).
+- **Spacing (8pt grid):** `--spacing-1` (8px) … `--spacing-8` (64px), `--container-max` (1280px).
+- **Radius:** `--radius-sm` (6px), `--radius-md` (8px), `--radius-lg` (12px), `--radius-xl` (16px).
+- **Motion:** `--transition-fast`, `--transition-base`, `--transition-slow`, `--ease-out-expo`.
 
-/* Border Radius */
---radius-sm: 8px
---radius-md: 12px
---radius-lg: 16px
-```
+See [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) and [TYPOGRAPHY_STANDARDS.md](TYPOGRAPHY_STANDARDS.md) for full reference.
 
 ## 📦 Components
 
@@ -140,6 +126,29 @@ Animated loading indicator.
 <LoadingSpinner fullScreen={true} />
 ```
 
+### Modal
+
+Shared modal shell: overlay, box, header (title + close), body (children).
+
+**Props:**
+- `title`: string - Modal title
+- `onClose`: () => void - Close handler
+- `children`: ReactNode - Body content (form, etc.)
+- `size`: 'default' | 'wizard' - Optional; 'wizard' uses wider max-width
+
+**Example:**
+```tsx
+<Modal title="Edit Item" onClose={onClose}>
+  <form onSubmit={handleSubmit}>
+    {/* form fields */}
+    <div className="modal-actions">
+      <Button type="submit" variant="primary">Save</Button>
+      <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
+    </div>
+  </form>
+</Modal>
+```
+
 ## 🎯 Layout Components
 
 ### Sidebar
@@ -147,18 +156,22 @@ Animated loading indicator.
 Collapsible navigation sidebar with all module links.
 
 **Features:**
-- 14 pre-configured module routes
+- Pre-configured module routes
 - Collapse/expand functionality
-- Active route highlighting
+- Active route highlighting (accent pill)
+- **Theme toggle** (light/dark) in footer via `useTheme()`
 - Mobile-responsive with overlay
-- Smooth animations
 
 ### Layout
 
-Main layout wrapper that combines sidebar and content area.
+Main layout wrapper: Sidebar + main content area. Content is wrapped in `.main-content-inner` with `max-width: var(--container-max)` and centered padding from spacing scale.
 
 **Usage:**
 Automatically applied via React Router. All pages are wrapped in Layout.
+
+### ThemeContext
+
+Provides theme (light/dark) and toggle. App is wrapped in `ThemeProvider`; use `useTheme()` for `theme`, `setTheme`, `toggleTheme`. Persists to `localStorage`; initial value from `localStorage` or `prefers-color-scheme`.
 
 ## 🎨 Design Patterns
 
@@ -173,10 +186,14 @@ border-radius: var(--radius-md);
 
 ### Hover Effects
 
+Prefer subtle hover (no heavy glow/transform):
+
 ```css
 transition: all var(--transition-base);
-transform: translateY(-4px);
-box-shadow: 0 8px 24px rgba(var(--accent-rgb), 0.15);
+/* Optional: light border or background change */
+background: var(--bg-glass-hover);
+border-color: var(--border);
+box-shadow: var(--shadow-card-hover);
 ```
 
 ### Animations
@@ -200,10 +217,9 @@ Using Font Awesome 6.4.0 Solid icons:
 
 ## 📱 Responsive Breakpoints
 
-- **Mobile**: < 640px (single column)
-- **Tablet**: 640px - 1024px (2-3 columns, collapsible sidebar)
-- **Desktop**: 1024px - 1400px (full layout)
-- **Large**: > 1400px (max-width constrained)
+- **Mobile**: < 640px (single column, reduced padding)
+- **Tablet**: 640px - 1024px (2 columns for stats, collapsible sidebar overlay)
+- **Desktop**: ≥ 1024px (full layout; main content max-width `--container-max` 1280px)
 
 ## 🎨 Color Usage Guide
 

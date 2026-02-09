@@ -1,6 +1,6 @@
+import { Card, Empty } from 'antd';
+import { DollarOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import EmptyState from '../../components/EmptyState';
 
 function Rewards() {
   return (
@@ -8,16 +8,15 @@ function Rewards() {
       <PageHeader
         title="Rewards"
         description="Manage reward claims and distribution"
-        icon="fa-coins"
+        icon={<DollarOutlined />}
       />
 
-      <DataCard title="Rewards Management">
-        <EmptyState
-          icon="fa-coins"
-          title="Coming Soon"
+      <Card bordered title="Rewards Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="Rewards management interface will be implemented here."
         />
-      </DataCard>
+      </Card>
     </div>
   );
 }

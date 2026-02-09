@@ -1,6 +1,6 @@
+import { Card, Empty } from 'antd';
+import { UnorderedListOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import EmptyState from '../../components/EmptyState';
 
 function UserInventories() {
   return (
@@ -8,16 +8,15 @@ function UserInventories() {
       <PageHeader
         title="User Inventories"
         description="View user product ownership"
-        icon="fa-clipboard-list"
+        icon={<UnorderedListOutlined />}
       />
 
-      <DataCard title="User Inventories Management">
-        <EmptyState
-          icon="fa-clipboard-list"
-          title="Coming Soon"
+      <Card bordered title="User Inventories Management">
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="User Inventories management interface will be implemented here."
         />
-      </DataCard>
+      </Card>
     </div>
   );
 }
