@@ -1,15 +1,19 @@
 import { Router, Request, Response } from 'express';
+import jwt from 'jsonwebtoken';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import logger from '../../infrastructure/logger/logger';
-import { authMiddleware } from '../auth/auth.middleware';
 import { AuthService } from '../../application/auth/auth.service';
 import { UserPrismaRepository } from '../../infrastructure/repositories/user-prisma.repository';
 import { ProfilePrismaRepository } from '../../infrastructure/repositories/profile-prisma.repository';
+import { UserAvatarPrismaRepository } from '../../infrastructure/repositories/user-avatar-prisma.repository';
+import { resolveMediaUrl } from '../../infrastructure/config/media.config';
+import { User } from '../../domain/user/user.entity';
 
 const router = Router();
 const authService = new AuthService();
 const userRepo = new UserPrismaRepository();
 const profileRepo = new ProfilePrismaRepository();
+const avatarRepo = new UserAvatarPrismaRepository();
 
 /**
  * Request header'larından dinamik base URL oluşturur (Auth0 callback için).
@@ -37,6 +41,56 @@ function getQueryParameterByName(name: string, query: any): string | null {
   const value = query[name];
   if (!value) return null;
   return decodeURIComponent(String(value));
+}
+
+/**
+ * Canny SSO token oluşturur.
+ * Canny dokümantasyonu: https://developers.canny.io/install/widget/sso
+ * Token Canny Private SSO Key ile HS256 ile imzalanmalıdır (backend JWT_SECRET değil!).
+ * Payload: id, email, name (zorunlu), avatarURL (opsiyonel ama tercih edilir).
+ */
+function generateCannySsoToken(user: User, avatarURL?: string | null): string {
+  const privateKey = process.env.CANNY_SSO_PRIVATE_KEY;
+  if (!privateKey) {
+    throw new Error('CANNY_SSO_PRIVATE_KEY environment variable is required for Canny SSO');
+  }
+
+  const userData: Record<string, unknown> = {
+    id: user.id,
+    email: user.email || '',
+    name: user.displayName || user.email || 'User',
+    exp: Math.floor(Date.now() / 1000) + 300, // 5 dakika geçerlilik (redirect tek seferlik)
+  };
+
+  if (avatarURL) userData.avatarURL = avatarURL;
+
+  return jwt.sign(userData, privateKey, { algorithm: 'HS256' });
+}
+
+/**
+ * Kullanıcı avatar URL'ini alır (Auth0 getUserProfileData ile aynı mantık).
+ * - Önce aktif avatar (DB), yoksa en son yüklenen avatar
+ * - Auth0 session varsa picture fallback
+ * - Path'leri resolveMediaUrl ile tam URL'ye çevirir
+ */
+async function getAvatarUrlForUser(userId: string, auth0Picture?: string | null): Promise<string | null> {
+  // 1) Aktif avatar
+  let activeAvatar = await avatarRepo.findActiveByUserId(userId);
+
+  // 2) Aktif yoksa en son yüklenen avatar (isActive bayrağı yanlış olabilir)
+  if (!activeAvatar) {
+    const avatars = await avatarRepo.findByUserId(userId);
+    activeAvatar = avatars[0] ?? null; // findByUserId zaten createdAt desc ile sıralı
+  }
+
+  let avatarUrl = resolveMediaUrl(activeAvatar?.imageUrl || null, false);
+
+  // 3) DB'de avatar yoksa Auth0 picture (Google vb.) kullan
+  if (!avatarUrl && auth0Picture) {
+    avatarUrl = resolveMediaUrl(auth0Picture, false) || auth0Picture;
+  }
+
+  return avatarUrl;
 }
 
 /**
@@ -187,6 +241,7 @@ router.get('/redirect', asyncHandler(async (req: Request, res: Response) => {
 
   try {
     let user = null;
+    let auth0Picture: string | null = null;
 
     // Önce Auth0 session kontrolü yap
     if (req.oidc?.isAuthenticated() && req.oidc?.user) {
@@ -213,6 +268,9 @@ router.get('/redirect', asyncHandler(async (req: Request, res: Response) => {
       }
 
       const config = getAuth0Config();
+
+      // Auth0 picture (Google vb.) - avatar fallback için
+      auth0Picture = auth0User.picture || null;
 
       // Kullanıcı oluştur/bul (Auth0)
       user = await findOrCreateUser(
@@ -305,8 +363,11 @@ router.get('/redirect', asyncHandler(async (req: Request, res: Response) => {
       });
     }
 
-    // SSO token oluştur (server tarafından)
-    const ssoToken = authService.generateToken(user);
+    // Avatar URL - Auth0 picture fallback ile (Auth0 session varsa)
+    const avatarURL = await getAvatarUrlForUser(user.id, auth0Picture || undefined);
+
+    // Canny SSO token oluştur (Canny Private Key ile - backend JWT değil!)
+    const ssoToken = generateCannySsoToken(user, avatarURL);
 
     // Canny redirect URL'i oluştur
     const cannyRedirectURL = getRedirectURL(ssoToken, redirectURL, companyID);
@@ -324,7 +385,8 @@ router.get('/redirect', asyncHandler(async (req: Request, res: Response) => {
       userId: user.id,
       email: user.email,
       companyID,
-      redirectURL
+      redirectURL,
+      hasAvatar: !!avatarURL
     });
 
     // Canny'ye yönlendir
