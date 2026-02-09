@@ -110,6 +110,7 @@ router.post('/auth/verify',
     
     // Thirdweb payload'ı { payload: "JSON_STRING" } formatında gönderiyor
     // veya direkt { userId, walletId, timestamp } olarak gelebilir
+    console.log("req.body", req.body);
     if (req.body.payload && typeof req.body.payload === 'string') {
       // payload JSON string olarak geldi - parse et
       try {

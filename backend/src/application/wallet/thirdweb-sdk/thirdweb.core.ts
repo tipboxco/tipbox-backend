@@ -266,6 +266,24 @@ export class ThirdwebCore {
   }
 
   /**
+   * Same as readContract, but when RPC/contract returns "0x" (empty data) viem throws
+   * AbiDecodingZeroDataError. This helper catches that and returns defaultValue instead,
+   * so callers can treat "no data" as zero balance / default decimals etc.
+   */
+  async readContractSafe<T>(params: {
+    contract: Parameters<typeof thirdwebReadContract>[0]["contract"];
+    method: Parameters<typeof thirdwebReadContract>[0]["method"];
+    params?: readonly unknown[] | unknown[];
+  }, defaultValue: T): Promise<T> {
+    try {
+      return await thirdwebReadContract(params as Parameters<typeof thirdwebReadContract>[0]) as T;
+    } catch (err) {
+      if (isZeroDataDecodeError(err)) return defaultValue;
+      throw err;
+    }
+  }
+
+  /**
    * Prepares a contract call (transaction payload). Does not send.
    */
   prepareContractCall(params: {
@@ -310,6 +328,12 @@ export class ThirdwebCore {
 // ============================================================================
 // UTILITIES (chain-agnostic, reusable)
 // ============================================================================
+
+/** viem/thirdweb throws when RPC returns "0x" and ABI decode is attempted. */
+function isZeroDataDecodeError(err: unknown): boolean {
+  const msg = err instanceof Error ? (err.message ?? err.name) : String(err);
+  return /AbiDecodingZeroDataError|Cannot decode zero data|zero data/i.test(msg);
+}
 
 /**
  * Decodes bytes32 hex (0x + 64 hex chars) to UTF-8 string, stripping null padding.

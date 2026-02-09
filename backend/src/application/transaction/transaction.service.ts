@@ -14,7 +14,10 @@ import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
 import { NFTTransactionType } from '../../domain/crypto/nft-transaction-type.enum';
 import { WalletService } from '../wallet/wallet.service';
+import { getThirdwebSdkService } from '../wallet/thirdweb-sdk/thirdweb-sdk.service';
 import logger from '../../infrastructure/logger/logger';
+
+const TIPS_DECIMALS = parseInt(process.env.TIPS_TOKEN_DECIMALS || '18', 10);
 
 export interface SendTipRequest {
   fromUserId: string;
@@ -96,11 +99,39 @@ export class TransactionService {
       this.profileRepo.findByUserId(request.toUserId),
     ]);
 
-    // Wallet'lar arası tip transferinde adres olarak smartAccountAddress kullan (yoksa publicAddress)
-    const fromAddress = fromWallet.smartAccountAddress ?? fromWallet.publicAddress;
+    // Alıcı adresi: smartAccountAddress (yoksa publicAddress) – SDK bu adrese gönderir
     const toAddress = toWallet.smartAccountAddress ?? toWallet.publicAddress;
 
-    // Create SEND transaction
+    // Thirdweb SDK ile on-chain tip gönderimi
+    const amountWei = BigInt(Math.round(request.amount * 10 ** TIPS_DECIMALS));
+    const sdk = getThirdwebSdkService();
+    if (!sdk.isConfigured()) {
+      throw new ValidationError('Thirdweb SDK is not configured. Cannot send tip on-chain.');
+    }
+    const sdkResult = await sdk.sendTip(request.fromUserId, amountWei, toAddress);
+    if (!sdkResult.success) {
+      logger.warn({
+        fromUserId: request.fromUserId,
+        toUserId: request.toUserId,
+        amount: request.amount,
+        error: sdkResult.error,
+        contractError: sdkResult.contractError,
+        message: 'Thirdweb sendTip failed',
+      });
+      throw new ValidationError(sdkResult.error ?? 'Tip send failed on-chain');
+    }
+
+    const fromAddress = fromWallet.smartAccountAddress ?? fromWallet.publicAddress;
+
+    const txHash =
+      sdkResult.receipt &&
+      typeof sdkResult.receipt === 'object' &&
+      'transactionHash' in sdkResult.receipt &&
+      typeof (sdkResult.receipt as { transactionHash?: string }).transactionHash === 'string'
+        ? (sdkResult.receipt as { transactionHash: string }).transactionHash
+        : undefined;
+
+    // Create SEND transaction (DB kaydı – SDK gönderimi başarılı olduktan sonra)
     const sendTransaction = await this.transactionRepo.create({
       walletId: fromWallet.id,
       actionType: TransactionActionType.TIP_SEND,
@@ -109,9 +140,11 @@ export class TransactionService {
       toAddress,
       metadata: {
         reason: request.reason || null,
-        recipientUserId: request.toUserId
+        recipientUserId: request.toUserId,
+        source: 'thirdweb_sdk',
+        txHash: txHash ?? undefined
       },
-      provider: 'backend'
+      provider: 'thirdweb'
     });
 
     // Create RECEIVE transaction
@@ -124,15 +157,17 @@ export class TransactionService {
       metadata: {
         reason: request.reason || null,
         senderUserId: request.fromUserId,
-        linkedTransactionId: sendTransaction.id
+        linkedTransactionId: sendTransaction.id,
+        source: 'thirdweb_sdk',
+        txHash: txHash ?? undefined
       },
-      provider: 'backend'
+      provider: 'thirdweb'
     });
 
-    // Confirm transactions immediately (update balances)
+    // Confirm transactions (bakiye güncelle) – on-chain zaten başarılı
     await Promise.all([
-      this.confirmTransaction(sendTransaction.id),
-      this.confirmTransaction(receiveTransaction.id)
+      this.confirmTransaction(sendTransaction.id, txHash),
+      this.confirmTransaction(receiveTransaction.id, txHash)
     ]);
 
     logger.info(`Tip sent: ${request.amount} TIPS from ${request.fromUserId} to ${request.toUserId}`);

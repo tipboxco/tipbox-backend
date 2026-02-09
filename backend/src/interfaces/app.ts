@@ -93,11 +93,17 @@ const baseURL = process.env.BASE_URL || 'http://localhost:3000';
 
 if (issuerBaseURL && clientID && secret && !issuerBaseURL.includes('{yourDomain}') && !clientID.includes('{yourClientId}') && secret !== 'LONG_RANDOM_STRING') {
   /**
-   * Request'ten dinamik base URL oluşturur (IP veya hostname bazlı)
+   * Request header'larından dinamik base URL oluşturur (Auth0 callback için).
+   * Cloudflared httpHostHeader ile orijinal host'u ilettiğinde Host doğru gelir.
+   * x-forwarded-proto yoksa, production domain'lerde https varsayılır.
    */
   function getDynamicBaseUrl(req: express.Request): string {
-    const protocol = req.protocol || (req.get('x-forwarded-proto') || 'http');
-    const host = req.get('host') || req.get('x-forwarded-host') || process.env.BASE_URL?.replace(/^https?:\/\//, '') || 'localhost:3000';
+    let protocol = req.get('x-forwarded-proto') || req.protocol || 'http';
+    const host = req.get('host') || req.get('x-forwarded-host') || `localhost:${process.env.PORT || 3000}`;
+    // Cloudflared bazen x-forwarded-proto iletmez; production domain'de https varsay
+    if (protocol === 'http' && host && !host.startsWith('localhost') && !host.match(/^\d+\.\d+\.\d+\.\d+/)) {
+      protocol = 'https';
+    }
     return `${protocol}://${host}`;
   }
 
@@ -110,6 +116,8 @@ if (issuerBaseURL && clientID && secret && !issuerBaseURL.includes('{yourDomain}
     clientID: clientID,
     issuerBaseURL: issuerBaseURL,
     secret: secret,
+    // Issuer discovery ve token istekleri için timeout (ms). Varsayılan 5000; yavaş ağ/VPN için artırılabilir.
+    httpTimeout: Number(process.env.AUTH0_HTTP_TIMEOUT_MS) || 15000,
     // Authorization Code Flow için clientSecret gerekli (id_token almak için)
     ...(clientSecret && { clientSecret: clientSecret }),
     // ID Token almak için gerekli parametreler
@@ -121,9 +129,8 @@ if (issuerBaseURL && clientID && secret && !issuerBaseURL.includes('{yourDomain}
       // code_challenge ve code_challenge_method gönderilmediği için PKCE kullanılmayacak
     } as any,
     routes: {
-      // Auth0 callback route'unu router mount path'ine sabitle
-      // Not: Auth0 Dashboard "Allowed Callback URLs" listesinde bu URL olmalı
-      callback: '/auth0/callback',
+      // Callback route'u custom handler ile handle edilecek (request header'ından dinamik redirectUri)
+      callback: false,
       postLogoutRedirect: '/auth0/token' // Callback sonrasında token endpoint'ine yönlendir
     },
     // Cookie ayarları - farklı domain'ler arasında çalışması için
@@ -168,7 +175,25 @@ if (issuerBaseURL && clientID && secret && !issuerBaseURL.includes('{yourDomain}
   };
   
   app.use(auth(auth0Config));
-  
+
+  // Custom callback handler: Cloudflared/nginx arkasında Host localhost olarak geldiği için
+  // redirectUri'yi request header'larından (x-forwarded-host, x-forwarded-proto) oluştur
+  app.get('/auth0/callback', express.urlencoded({ extended: false }), (req: express.Request, res: express.Response) => {
+    const redirectUri = getDynamicBaseUrl(req) + '/auth0/callback';
+    logger.info({
+      message: 'Auth0 callback - dinamik redirectUri kullanılıyor',
+      redirectUri,
+      host: req.get('host'),
+      xForwardedHost: req.get('x-forwarded-host'),
+      xForwardedProto: req.get('x-forwarded-proto')
+    });
+    (res as any).oidc.callback({ redirectUri });
+  });
+  app.post('/auth0/callback', express.urlencoded({ extended: false }), (req: express.Request, res: express.Response) => {
+    const redirectUri = getDynamicBaseUrl(req) + '/auth0/callback';
+    (res as any).oidc.callback({ redirectUri });
+  });
+
   // Callback URL'ini hesapla ve log'la
   logger.info({ 
     message: 'Auth0 middleware initialized',

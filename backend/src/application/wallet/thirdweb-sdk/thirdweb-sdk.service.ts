@@ -104,16 +104,14 @@ export class ThirdwebSdkService {
   ): Promise<boolean> {
     const tokenContract = this.core.getTokenContract();
     const [balanceWei, decimals] = await Promise.all([
-      this.core.readContract<bigint>({
-        contract: tokenContract,
-        method: "balanceOf",
-        params: [accountAddress],
-      }),
-      this.core.readContract<number>({
-        contract: tokenContract,
-        method: "decimals",
-        params: [],
-      }),
+      this.core.readContractSafe<bigint>(
+        { contract: tokenContract, method: "balanceOf", params: [accountAddress] },
+        0n
+      ),
+      this.core.readContractSafe<number>(
+        { contract: tokenContract, method: "decimals", params: [] },
+        18
+      ),
     ]);
 
     const hasSufficientBalance = balanceWei >= amountWei;
@@ -128,11 +126,14 @@ export class ThirdwebSdkService {
   ): Promise<void> {
     const tokenContract = this.core.getTokenContract();
     const tipboxAddress = this.core.getTipboxAddress();
-    const currentAllowance = await this.core.readContract<bigint>({
-      contract: tokenContract,
-      method: "allowance",
-      params: [ownerAddress, tipboxAddress],
-    });
+    const currentAllowance = await this.core.readContractSafe<bigint>(
+      {
+        contract: tokenContract,
+        method: "allowance",
+        params: [ownerAddress, tipboxAddress],
+      },
+      0n
+    );
 
     if (currentAllowance >= amountWei) return;
 
@@ -236,8 +237,8 @@ export class ThirdwebSdkService {
         amountWei: amountWei.toString(),
         targetAddress,
       };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
       const contractError = parseContractError(message);
       const userMessage = toUserMessage(contractError ?? message);
       return {
@@ -350,23 +351,26 @@ export class ThirdwebSdkService {
   private async readTokenNameOrSymbol(method: "name" | "symbol"): Promise<string> {
     const tokenContract = this.core.getTokenContract();
     try {
-      const value = await this.core.readContract<string>({
-        contract: tokenContract,
-        method,
-        params: [],
-      });
+      const value = await this.core.readContractSafe<string>(
+        { contract: tokenContract, method, params: [] },
+        ""
+      );
       return value ?? "";
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       const isDecodeError =
         message.includes("Position") && message.includes("out of bounds");
-      if (!isDecodeError) throw err;
+      const isZeroData = /AbiDecodingZeroDataError|Cannot decode zero data|zero data/i.test(message);
+      if (!isDecodeError && !isZeroData) throw err;
       try {
-        const hex = await this.core.readContract<`0x${string}`>({
-          contract: this.core.getTokenContractNameSymbolBytes32(),
-          method,
-          params: [],
-        });
+        const hex = await this.core.readContractSafe<`0x${string}`>(
+          {
+            contract: this.core.getTokenContractNameSymbolBytes32(),
+            method,
+            params: [],
+          },
+          "0x"
+        );
         return decodeBytes32ToString(hex);
       } catch {
         return "";
@@ -386,16 +390,18 @@ export class ThirdwebSdkService {
 
       const [nativeBalance, tokenBalanceWei, decimals] = await Promise.all([
         this.core.getNativeBalance(connected.smartAccountAddress),
-        this.core.readContract<bigint>({
-          contract: tokenContract,
-          method: "balanceOf",
-          params: [connected.smartAccountAddress as `0x${string}`],
-        }),
-        this.core.readContract<number>({
-          contract: tokenContract,
-          method: "decimals",
-          params: [],
-        }),
+        this.core.readContractSafe<bigint>(
+          {
+            contract: tokenContract,
+            method: "balanceOf",
+            params: [connected.smartAccountAddress as `0x${string}`],
+          },
+          0n
+        ),
+        this.core.readContractSafe<number>(
+          { contract: tokenContract, method: "decimals", params: [] },
+          18
+        ),
       ]);
 
       const tokenName = await this.readTokenNameOrSymbol("name");
@@ -500,27 +506,27 @@ export class ThirdwebSdkService {
    * TIPS token contract balanceOf(address) + decimals kullanır.
    */
   async getTokenBalanceForAddress(address: string): Promise<TokenBalanceForAddressResult> {
-    try {
       const tokenContract = this.core.getTokenContract();
-      const [balanceWei, decimals] = await Promise.all([
-        this.core.readContract<bigint>({
+      const balanceWei = await this.core.readContractSafe<bigint>(
+        {
           contract: tokenContract,
           method: "balanceOf",
           params: [address as `0x${string}`],
-        }),
-        this.core.readContract<number>({
-          contract: tokenContract,
-          method: "decimals",
-          params: [],
-        }),
-      ]);
+        },
+        0n
+      );
+      const decimals = await this.core.readContractSafe<number>(
+        { contract: tokenContract, method: "decimals", params: [] },
+        18
+      );
       const balanceFormatted = Number(balanceWei) / 10 ** decimals;
       return {
         success: true,
         balanceWei: balanceWei.toString(),
         balanceFormatted,
       };
-    } catch (error) {
+      try {
+      } catch (error) {
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
@@ -533,23 +539,24 @@ export class ThirdwebSdkService {
    */
   async getPendingTips(address: string): Promise<PendingTipsResult> {
     try {
-      const pendingWei = await this.core.readContract<bigint>({
-        contract: this.core.getTipboxContract(),
-        method: "pendingTips",
-        params: [address as `0x${string}`],
-      });
-      const decimals = await this.core.readContract<number>({
-        contract: this.core.getTokenContract(),
-        method: "decimals",
-        params: [],
-      });
+      const pendingWei = await this.core.readContractSafe<bigint>(
+        {
+          contract: this.core.getTipboxContract(),
+          method: "pendingTips",
+          params: [address as `0x${string}`],
+        },
+        0n
+      );
+      const decimals = await this.core.readContractSafe<number>(
+        { contract: this.core.getTokenContract(), method: "decimals", params: [] },
+        18
+      );
       const pendingFormatted = Number(pendingWei) / 10 ** decimals;
-      const result: PendingTipsResult = {
+      return {
         success: true,
         pendingWei: pendingWei.toString(),
         pendingFormatted,
       };
-      return result;
     } catch (error) {
       return {
         success: false,

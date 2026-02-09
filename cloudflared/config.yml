@@ -1,0 +1,28 @@
+# ============================================
+# Cloudflared Tunnel Konfigürasyonu (Tipbox)
+# ============================================
+# api-tipbox.exportergo.com -> backend:3000 (tek servis)
+#
+# Kullanım:
+# 1. Tunnel oluştur: cloudflared tunnel create tipbox-tunnel
+# 2. credentials dosyası .cloudflared/ dizinine kopyalanır
+# 3. Aşağıdaki tunnel ve credentials-file değerlerini güncelleyin
+# 4. cloudflared tunnel --config cloudflared/config.yml run
+#
+# Kurulum: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+
+# Named tunnel (Cloudflare Zero Trust dashboard veya CLI ile oluşturulmalı)
+tunnel: bf6b66c8-5cff-420c-8ea9-a1f67aed24ab
+credentials-file: .cloudflared/bf6b66c8-5cff-420c-8ea9-a1f67aed24ab.json
+
+ingress:
+  # api-tipbox.exportergo.com - Backend API (port 3000)
+  - hostname: api-tipbox.exportergo.com
+    service: http://localhost:3000
+    originRequest:
+      connectTimeout: 30s
+      # Auth0 callback için: Backend'e gönderilen Host header'ı orijinal hostname olsun
+      # (localhost yerine api-tipbox.exportergo.com)
+      httpHostHeader: api-tipbox.exportergo.com
+
+  - service: http_status:404

@@ -1,0 +1,25 @@
+# ============================================
+# Cloudflared Tunnel - Örnek Konfigürasyon (Tipbox)
+# ============================================
+# Bu dosyayı config.yml olarak kopyalayın ve değerleri güncelleyin:
+#   cp config.example.yml config.yml
+#
+# Tunnel oluşturma:
+#   cloudflared tunnel create tipbox-tunnel
+# Bu komut credentials dosyasını ~/.cloudflared/ oluşturur.
+#
+# api-tipbox.exportergo.com -> backend:3000 (tek servis)
+
+tunnel: <TUNNEL_UUID>
+credentials-file: .cloudflared/<TUNNEL_UUID>.json
+
+ingress:
+  # api-tipbox.exportergo.com - Backend API
+  - hostname: api-tipbox.exportergo.com
+    service: http://localhost:3000
+    originRequest:
+      connectTimeout: 30s
+      # Auth0 callback için: Backend'e Host header olarak orijinal hostname iletilir
+      httpHostHeader: api-tipbox.exportergo.com
+
+  - service: http_status:404

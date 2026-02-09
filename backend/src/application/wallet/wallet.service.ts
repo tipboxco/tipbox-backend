@@ -57,6 +57,14 @@ export class WalletService {
   }
 
   /**
+   * Balance sorgusu için tercih edilen wallet: önce smartAccountAddress olan, yoksa aktif wallet.
+   * Contract'tan balance/pending çekerken bu adres kullanılır.
+   */
+  async getPreferredWalletForBalance(userId: string): Promise<Wallet | null> {
+    return this.walletRepo.findPreferredForReceivingByUserId(userId);
+  }
+
+  /**
    * Wallet'ın balance'ını getir (DB'den)
    */
   async getBalance(walletId: string): Promise<{ balance: number; lockedBalance: number }> {
@@ -206,6 +214,7 @@ export class WalletService {
    */
   async syncWalletBalanceFromChain(walletId: string): Promise<{ success: boolean; error?: string }> {
     const wallet = await this.walletRepo.findById(walletId);
+    console.log("wallet", wallet);
     if (!wallet) {
       return { success: false, error: 'Wallet not found' };
     }
@@ -240,6 +249,13 @@ export class WalletService {
       logger.warn({ walletId, address, error: msg, message: 'syncWalletBalanceFromChain failed' });
       return { success: false, error: msg };
     }
+  }
+
+  /**
+   * Contract'tan alınan balance/lockedBalance değerlerini DB'ye yazar (sync sonrası veya /balance'dan).
+   */
+  async setBalanceFromContract(walletId: string, balance: number, lockedBalance: number): Promise<Wallet | null> {
+    return this.walletRepo.setBalance(walletId, balance, lockedBalance);
   }
 
   /**

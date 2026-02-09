@@ -12,11 +12,13 @@ const userRepo = new UserPrismaRepository();
 const profileRepo = new ProfilePrismaRepository();
 
 /**
- * Request'ten dinamik base URL oluşturur (IP veya hostname bazlı)
+ * Request header'larından dinamik base URL oluşturur (Auth0 callback için).
+ * Sabit URL kullanılmaz - her zaman gelen request'in host bilgisi kullanılır.
+ * Reverse proxy arkasında x-forwarded-* header'ları dikkate alınır.
  */
 function getBaseUrl(req: Request): string {
-  const protocol = req.protocol || 'http';
-  const host = req.get('host') || req.get('x-forwarded-host') || process.env.BASE_URL || 'localhost:3000';
+  const protocol = req.get('x-forwarded-proto') || req.protocol || 'http';
+  const host = req.get('host') || req.get('x-forwarded-host') || `localhost:${process.env.PORT || 3000}`;
   return `${protocol}://${host}`;
 }
 

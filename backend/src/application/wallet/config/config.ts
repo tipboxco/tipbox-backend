@@ -1,7 +1,7 @@
 // Contract addresses and configuration
 export const CONFIG = {
   chainId: 11155111, // Ethereum Sepolia
-  rpcUrl: "https://ethereum-sepolia.rpc.subquery.network/public",
+  rpcUrl: process.env.THIRDWEB_RPC_URL,
   contracts: {
     tipsToken: "0xa6352D525BeBFd87F3De30DB7D42D08f6Ca015C6",
     tipboxBadge: "0xB7b9dfdB0291510e4677aADD2b03a39B9d46d235",

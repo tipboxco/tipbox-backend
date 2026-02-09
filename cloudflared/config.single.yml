@@ -1,0 +1,15 @@
+# ============================================
+# Cloudflared - Tek Servis (Backend) - Tipbox
+# ============================================
+# Backend'i (localhost:3000) expose eder.
+#
+# Alternatif: Quick tunnel (config gerektirmez):
+#   cloudflared tunnel --url http://localhost:3000
+
+tunnel: <TUNNEL_UUID>
+credentials-file: .cloudflared/<TUNNEL_UUID>.json
+
+ingress:
+  - service: http://localhost:3000
+    originRequest:
+      connectTimeout: 30s

@@ -553,7 +553,7 @@ export class AuthService implements IAuthService {
         userId,
         deviceName,
         ipAddress,
-        deviceId: device.id,
+        deviceId: device?.id ?? null,
       });
     } catch (error) {
       // Device tracking hatası kritik değil, log'la ve devam et

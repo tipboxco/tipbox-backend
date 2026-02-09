@@ -628,21 +628,58 @@ router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
 
-  try {
-    const balanceInfo = await walletService.getUserBalance(String(userId));
-
-    return res.json({
-      balance: balanceInfo.balance,
+  await walletService.ensureWalletForUser(String(userId));
+  const wallet = await walletService.getPreferredWalletForBalance(String(userId));
+  if (!wallet) {
+    return res.status(404).json({
+      message: 'No wallet found',
+      balance: 0,
       currency: 'TIPS',
-      locked: balanceInfo.lockedBalance,
-      available: balanceInfo.available,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      message: 'Failed to get balance',
-      error: error instanceof Error ? error.message : String(error)
+      locked: 0,
+      available: 0,
     });
   }
+
+  const address = wallet.smartAccountAddress ?? wallet.publicAddress;
+  const sdk = getThirdwebSdkService();
+  console.log("sdk", sdk.isConfigured());
+  if (sdk.isConfigured()) {
+
+      const balanceResult = await sdk.getTokenBalanceForAddress(address);
+      const pendingResult = await sdk.getPendingTips(address);
+      console.log({balanceResult,pendingResult,address,smartAddress:wallet.smartAccountAddress});
+      if (balanceResult.success) {
+        const balance = balanceResult.balanceFormatted ?? 0;
+        const locked = pendingResult.success ? (pendingResult.pendingFormatted ?? 0) : (wallet.lockedBalance ?? 0);
+        const available = Math.max(0, balance - locked);
+
+        await walletService.setBalanceFromContract(wallet.id, balance, locked);
+
+        return res.json({
+          balance,
+          currency: 'TIPS',
+          locked,
+          available,
+        });
+      }
+      try {
+      } catch (error) {
+      logger.warn({
+        userId,
+        address,
+        error: error instanceof Error ? error.message : String(error),
+        message: 'Contract balance fetch failed, falling back to DB',
+      });
+    }
+  }
+
+  const balanceInfo = await walletService.getUserBalance(String(userId));
+  return res.json({
+    balance: balanceInfo.balance,
+    currency: 'TIPS',
+    locked: balanceInfo.lockedBalance,
+    available: balanceInfo.available,
+  });
 }));
 
 /**
