@@ -21,7 +21,7 @@ type SeedMediaKey = string
 const prisma = new PrismaClient()
 
 // Öne çıkan kullanıcı ID'leri
-const TEST_USER_ID = '480f5de9-b691-4d70-a6a8-2789226f4e07' // omer
+const TEST_USER_ID = "7719a43c-c705-4926-b11b-020398390ae3" // omer
 const TRUST_USER_IDS = [
   '11111111-1111-4111-a111-111111111111', // tuna
   '22222222-2222-4222-a222-222222222222', // mehmet

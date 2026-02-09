@@ -20,4 +20,4 @@ export type {
   WalletNFTsListResult,
   Web3NftConfig,
 } from "./types";
-export { createNFTMetadata } from "./types";
+export { createNFTMetadata, resolveNftImageUrl } from "./types";

@@ -25,7 +25,7 @@ import type {
   WalletNFTsResult,
 } from "./types";
 import { ThirdwebCore, type ThirdwebCoreContracts } from "./thirdweb.core";
-import { createWeb3NftService } from "../web3-nft-service";
+import { createWeb3NftService, resolveNftImageUrl } from "../web3-nft-service";
 
 // Re-export types for backward compatibility
 export type { ThirdwebSdkAuthResult, ThirdwebSdkConfig } from "./types"
@@ -348,11 +348,18 @@ export class ThirdwebSdkService {
         contractError: listResult.contractError,
       };
     }
+    const nfts = listResult.nfts.map((nft) => {
+      const resolvedImage = resolveNftImageUrl(nft.metadata);
+      const metadata = nft.metadata
+        ? { ...nft.metadata, image: resolvedImage ?? nft.metadata.image }
+        : nft.metadata;
+      return { ...nft, metadata };
+    });
     return {
       success: true,
       eoaAddress: connected.eoaAddress,
       smartAccountAddress: connected.smartAccountAddress,
-      nfts: listResult.nfts,
+      nfts,
     };
   }
 

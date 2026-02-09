@@ -44,7 +44,7 @@ router.get(
  *       - xSeedToken: []
  *     responses:
  *       200:
- *         description: Log stream (Content-Type: application/x-ndjson)
+ *         description: "Log stream (Content-Type: application/x-ndjson)"
  *       500:
  *         description: Sunucu hatası
  */

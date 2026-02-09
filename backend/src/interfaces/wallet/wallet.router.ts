@@ -5,8 +5,8 @@ import { TransactionService } from '../../application/transaction/transaction.se
 import { RewardClaimService } from '../../application/reward/reward-claim.service';
 import { getThirdwebSdkService } from '../../application/wallet/thirdweb-sdk/thirdweb-sdk.service';
 import { parseContractError } from '../../application/wallet/thirdweb-sdk/contract-errors';
-import { createWeb3NftService } from '../../application/wallet/web3-nft-service';
-import { ConnectWalletRequest,WalletResponse} from './wallet.dto';
+import { createWeb3NftService, resolveNftImageUrl } from '../../application/wallet/web3-nft-service';
+import { ConnectWalletRequest, WalletResponse, WalletNftsResponse, NftItemResponse } from './wallet.dto';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { WalletProvider } from '../../domain/wallet/wallet.entity';
 import { authMiddleware } from '../auth/auth.middleware';
@@ -456,6 +456,107 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * @openapi
+ * /wallets/nfts:
+ *   get:
+ *     summary: Kullanıcının Smart Account NFT'lerini getir
+ *     description: |
+ *       Sadece Smart Account adresindeki NFT'leri Tipbox badge contract'tan okur.
+ *       Smart Account yoksa 400 döner. tokenOfOwnerByIndex ve tokenURI ile metadata decode edilir.
+ *     tags: [Wallet]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: NFT listesi başarıyla getirildi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 nfts:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/NftItemResponse'
+ *                 totalCount:
+ *                   type: integer
+ *       401:
+ *         description: Unauthorized
+ *       400:
+ *         description: Smart Account bulunamadı (wallet bağlanıp Smart Account oluşturulmalı)
+ *       404:
+ *         description: Wallet bulunamadı
+ */
+router.get('/nfts', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  await walletService.ensureWalletForUser(String(userId));
+
+  const wallet = await walletService.getPreferredWalletForBalance(String(userId));
+  if (!wallet) {
+    return res.status(404).json({
+      success: false,
+      nfts: [],
+      totalCount: 0,
+      error: 'Wallet not found',
+    } as WalletNftsResponse);
+  }
+
+  const smartAccountAddress = wallet.smartAccountAddress;
+  if (!smartAccountAddress) {
+    return res.status(400).json({
+      success: false,
+      nfts: [],
+      totalCount: 0,
+      error: 'Smart Account required. Connect your Thirdweb wallet first to create a Smart Account.',
+    } as WalletNftsResponse);
+  }
+
+  const nftService = createWeb3NftService();
+  const listResult = await nftService.getWalletNFTs(smartAccountAddress);
+
+  if (!listResult.success) {
+    return res.status(200).json({
+      success: false,
+      nfts: [],
+      totalCount: 0,
+      error: listResult.error,
+    } as WalletNftsResponse);
+  }
+
+  const nfts: NftItemResponse[] = listResult.nfts.map((nft) => {
+    const resolvedImageUrl = resolveNftImageUrl(nft.metadata);
+    const metadataWithImage = nft.metadata
+      ? { ...nft.metadata, image: resolvedImageUrl ?? nft.metadata.image }
+      : undefined;
+    return {
+      contractAddress: nft.contractAddress,
+      tokenId: nft.tokenId,
+      name: nft.metadata?.name ?? nft.collectionName ?? 'Unknown',
+      description: nft.metadata?.description || undefined,
+      imageUrl: resolvedImageUrl,
+      metadata: metadataWithImage as Record<string, unknown> | undefined,
+      tokenType: 'ERC721' as const,
+    };
+  });
+
+  const response: WalletNftsResponse = {
+    success: true,
+    nfts,
+    totalCount: nfts.length,
+  };
+
+  return res.json(response);
+}));
+
+/**
+ * @openapi
  * /wallets/transactions:
  *   get:
  *     summary: Kullanıcının TIPS transaction geçmişini getir
@@ -530,7 +631,7 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
  *                       reason:
  *                         type: string
  *                         nullable: true
- *                         description: İşlem nedeni (örn: "Post beğenisi", "Expert sorusu", "TIPS gönderimi")
+ *                         description: "İşlem nedeni (örn. Post beğenisi, Expert sorusu, TIPS gönderimi)"
  *                       createdAt:
  *                         type: string
  *                         format: date-time

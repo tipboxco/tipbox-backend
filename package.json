@@ -6,12 +6,12 @@
   "scripts": {
     "backend": "npm run dev --prefix backend",
     "backend:start": "npm run start --prefix backend",
-    "tunnel:setup": "node cloudflared/setup-routes.js && cloudflared tunnel route dns bf6b66c8-5cff-420c-8ea9-a1f67aed24ab api-tipbox.exportergo.com",
-    "tunnel:no-setup": "cloudflared tunnel route dns bf6b66c8-5cff-420c-8ea9-a1f67aed24ab api-tipbox.exportergo.com && cloudflared tunnel --config cloudflared/config.yml run",
-    "tunnel:pre": "cloudflared tunnel route dns bf6b66c8-5cff-420c-8ea9-a1f67aed24ab api-tipbox.exportergo.com",
+    "tunnel:setup": "node cloudflared/setup-routes.js",
+    "tunnel:no-setup": "cloudflared tunnel route dns bf6b66c8-5cff-420c-8ea9-a1f67aed24ab api-tipbox.exportergo.com && cloudflared tunnel route dns bf6b66c8-5cff-420c-8ea9-a1f67aed24ab minio-tipbox.exportergo.com && cloudflared tunnel --config cloudflared/config.yml run",
+    "tunnel:pre": "cloudflared tunnel route dns bf6b66c8-5cff-420c-8ea9-a1f67aed24ab api-tipbox.exportergo.com && cloudflared tunnel route dns bf6b66c8-5cff-420c-8ea9-a1f67aed24ab minio-tipbox.exportergo.com",
     "tunnel": "node cloudflared/tunnel-run.js",
     "tunnel:quick": "cloudflared tunnel --url http://localhost:3000",
     "tunnel:stop": "node cloudflared/tunnel-stop.js",
-    "tunnel:route-dns": "npm run tunnel:pre"
+    "tunnel:route-dns": "node cloudflared/setup-routes.js"
   }
 }

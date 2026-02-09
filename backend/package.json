@@ -20,6 +20,8 @@
     "db:update-trust-user-1-avatar": "docker-compose exec backend npx ts-node scripts/update-trust-user-1-avatar.ts",
     "db:update-marketplace-banners": "docker-compose exec backend npx ts-node scripts/update-marketplace-banners.ts",
     "db:seed:explore-banners": "docker-compose exec backend npx ts-node scripts/seed-explore-banners.ts",
+    "db:seed:badges": "npx ts-node scripts/setup-badges.ts",
+    "db:seed:badges:docker": "docker-compose exec backend npx ts-node scripts/setup-badges.ts",
     "db:upload-news-banner": "docker-compose exec backend npx ts-node scripts/upload-news-banner.ts",
     "db:upload-app-assets": "docker-compose exec backend npx ts-node scripts/upload-app-assets.ts",
     "db:clear-marketplace-banners-cache": "docker-compose exec backend npx ts-node scripts/clear-marketplace-banners-cache.ts",
@@ -53,7 +55,9 @@
     "test:tuna-georgia": "docker-compose exec backend npx ts-node scripts/tuna-georgia-socket-test.ts",
     "test:support-flow": "docker-compose exec backend npx ts-node scripts/test-support-request-flow.ts",
     "clear:georgia": "docker-compose exec backend npx ts-node scripts/clear-georgia-all-data.ts",
-    "delete:georgia-threads": "docker-compose exec backend npx ts-node scripts/delete-georgia-threads-complete.ts"
+    "delete:georgia-threads": "docker-compose exec backend npx ts-node scripts/delete-georgia-threads-complete.ts",
+    "minio:set-cors": "npx ts-node scripts/set-minio-cors.ts",
+    "minio:set-cors:docker": "docker-compose exec backend npx ts-node scripts/set-minio-cors.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

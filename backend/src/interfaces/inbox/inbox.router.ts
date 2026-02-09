@@ -1660,7 +1660,7 @@ router.post(
  * @openapi
  * /inbox/{messageId}/read:
  *   post:
- *     summary: [DEPRECATED] Mesajı okundu olarak işaretle
+ *     summary: "[DEPRECATED] Mesajı okundu olarak işaretle"
  *     description: |
  *       **DEPRECATED:** Bu endpoint artık kullanılmamalıdır. Bunun yerine socket event'i kullanın: `mark_message_read`
  *       

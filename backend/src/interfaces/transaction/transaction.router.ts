@@ -293,7 +293,7 @@ router.get('/history', asyncHandler(async (req: Request, res: Response) => {
  * @openapi
  * /transactions/history/grouped:
  *   get:
- *     summary: Transaction geçmişi (grouped by date: today, yesterday, etc.)
+ *     summary: "Transaction geçmişi (grouped by date: today, yesterday, etc.)"
  *     tags: [Transactions]
  *     security:
  *       - bearerAuth: []

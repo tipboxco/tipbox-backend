@@ -9,6 +9,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 
 // Sadece cloudflared/.env yükle (backend-api Cloudflare hesabından ayrı)
 function loadEnv(filePath) {
@@ -44,8 +45,11 @@ if (!loaded) {
 const TUNNEL_ID = process.env.TUNNEL_ID || 'bf6b66c8-5cff-420c-8ea9-a1f67aed24ab';
 const TUNNEL_DOMAIN = process.env.TUNNEL_DOMAIN || 'exportergo.com';
 const TUNNEL_API_SUBDOMAIN = process.env.TUNNEL_API_SUBDOMAIN || 'api-tipbox';
+const TUNNEL_MINIO_SUBDOMAIN = process.env.TUNNEL_MINIO_SUBDOMAIN || 'minio-tipbox';
 const API_HOST = `${TUNNEL_API_SUBDOMAIN}.${TUNNEL_DOMAIN}`;
+const MINIO_HOST = `${TUNNEL_MINIO_SUBDOMAIN}.${TUNNEL_DOMAIN}`;
 const BACKEND_PORT = process.env.TUNNEL_BACKEND_PORT || '3000';
+const MINIO_PORT = process.env.TUNNEL_MINIO_PORT || '9000';
 
 const CREDENTIALS_PATH = path.join(__dirname, '..', '.cloudflared', `${TUNNEL_ID}.json`);
 
@@ -55,6 +59,11 @@ const CONFIG = {
       {
         hostname: API_HOST,
         service: `http://localhost:${BACKEND_PORT}`,
+        originRequest: { connectTimeout: 30 },
+      },
+      {
+        hostname: MINIO_HOST,
+        service: `http://localhost:${MINIO_PORT}`,
         originRequest: { connectTimeout: 30 },
       },
       { service: 'http_status:404' },
@@ -117,6 +126,19 @@ async function setupRoutes() {
 
   console.log('✅ Published application routes güncellendi.');
   console.log(`   - ${API_HOST} → localhost:${BACKEND_PORT}`);
+  console.log(`   - ${MINIO_HOST} → localhost:${MINIO_PORT} (MinIO)`);
+
+  // DNS route'ları oluştur (her subdomain için CNAME)
+  const hostnames = [API_HOST, MINIO_HOST];
+  for (const hostname of hostnames) {
+    const r = spawnSync('cloudflared', ['tunnel', 'route', 'dns', TUNNEL_ID, hostname], {
+      stdio: 'inherit',
+      shell: true,
+    });
+    if (r.status !== 0) {
+      console.warn(`⚠️ DNS route atlanıyor: ${hostname} (cloudflared bulunamadı veya hata)`);
+    }
+  }
 }
 
 setupRoutes().catch((err) => {

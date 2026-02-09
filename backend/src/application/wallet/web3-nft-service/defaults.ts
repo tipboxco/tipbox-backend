@@ -8,8 +8,8 @@ import { createNFTMetadata, type NFTMetadataInput } from "./types";
 /** Standard input for Tipbox badge (used with createNFTMetadata). */
 const DEFAULT_BADGE_METADATA_INPUT: NFTMetadataInput = {
   name: "Tipbox Badge",
-  description: "Badge required for Tipbox claim.",
-  imageUrl: undefined,
+  description: "Welcome to badge collection.",
+  imageUrl: process.env.NFT_BADGE_IMAGE_URL?.trim() || undefined,
   externalUrl: undefined,
   attributes: [
     { trait_type: "type", value: "badge" },

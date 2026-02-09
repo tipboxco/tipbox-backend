@@ -1133,29 +1133,92 @@ router.get('/:id/collections/bridges', asyncHandler(async (req: Request, res: Re
 
 /**
  * @openapi
- * /collections/achievements/{badgeId}/claim:
+ * /users/collections/achievements/claim:
  *   post:
- *     summary: Achievement badge claim et
- *     description: Badge DB'den okunur, kullanıcının Thirdweb wallet smartAccountAddress'ine NFT mint edilir, ardından claim kaydı güncellenir.
+ *     summary: Achievement badge claim et (query string ile)
+ *     description: badgeId query parametresi ile. Badge DB'den okunur, kullanıcının Thirdweb wallet smartAccountAddress'ine NFT mint edilir.
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: badgeId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Claim edilecek achievement badge ID (UUID)
+ *     responses:
+ *       201:
+ *         description: Badge başarıyla claim edildi
+ *       400:
+ *         description: Claim başarısız veya badgeId eksik
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Badge not found
+ *       502:
+ *         description: NFT mint failed
  */
-router.post('/collections/achievements/:badgeId/claim', asyncHandler(async (req: Request, res: Response) => {
+router.post('/collections/achievements/claim', asyncHandler(handleAchievementClaim));
+
+/**
+ * @openapi
+ * /users/collections/achievements/{badgeId}/claim:
+ *   post:
+ *     summary: Achievement badge claim et (path ile)
+ *     description: badgeId path parametresi ile. Badge DB'den okunur, kullanıcının Thirdweb wallet smartAccountAddress'ine NFT mint edilir.
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: badgeId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Claim edilecek achievement badge ID (UUID)
+ *     responses:
+ *       201:
+ *         description: Badge başarıyla claim edildi
+ *       400:
+ *         description: Claim başarısız
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Badge not found
+ *       502:
+ *         description: NFT mint failed
+ */
+router.post('/collections/achievements/:badgeId/claim', asyncHandler(handleAchievementClaim));
+
+async function handleAchievementClaim(req: Request, res: Response): Promise<void> {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
-  const badgeId = String(req.params.badgeId);
+  if (!userId) {
+    res.status(401).json({ message: 'Unauthorized' });
+    return;
+  }
+  const badgeId = String(req.params.badgeId || req.query.badgeId || '').trim();
+  if (!badgeId) {
+    res.status(400).json({ success: false, message: 'badgeId is required (path or query)' });
+    return;
+  }
 
   const badge = await prisma.badge.findUnique({ where: { id: badgeId } });
-  if (!badge) return res.status(404).json({ success: false, message: 'Badge not found' });
+  if (!badge) {
+    res.status(404).json({ success: false, message: 'Badge not found' });
+    return;
+  }
 
   const wallet = await walletService.getThirdwebWallet(String(userId));
   if (!wallet?.smartAccountAddress) {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       message: 'Thirdweb wallet with smart account required. Connect your wallet first.',
     });
+    return;
   }
 
   const metadata = createNFTMetadata({
@@ -1174,45 +1237,109 @@ router.post('/collections/achievements/:badgeId/claim', asyncHandler(async (req:
 
   if (!mintResult.success) {
     logger.warn({ userId, badgeId, error: mintResult.error, message: 'Achievement badge NFT mint failed' });
-    return res.status(502).json({
+    res.status(502).json({
       success: false,
       message: mintResult.error ?? 'NFT mint failed',
       contractError: mintResult.contractError,
     });
+    return;
   }
 
   const result = await userService.claimAchievementBadge(String(userId), badgeId);
-  return res.status(result.success ? 201 : 400).json({
+  res.status(result.success ? 201 : 400).json({
     ...result,
     transactionHash: mintResult.transactionHash,
   });
-}));
+}
 
 /**
  * @openapi
- * /collections/bridges/{badgeId}/claim:
+ * /users/collections/bridges/claim:
  *   post:
- *     summary: Bridge badge claim et
- *     description: Badge DB'den okunur, kullanıcının Thirdweb wallet smartAccountAddress'ine NFT mint edilir, ardından claim kaydı oluşturulur.
+ *     summary: Bridge badge claim et (query string ile)
+ *     description: badgeId query parametresi ile. Badge DB'den okunur, kullanıcının Thirdweb wallet smartAccountAddress'ine NFT mint edilir.
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: badgeId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Claim edilecek bridge badge ID (UUID)
+ *     responses:
+ *       201:
+ *         description: Badge başarıyla claim edildi
+ *       400:
+ *         description: Claim başarısız veya badgeId eksik
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Badge not found
+ *       502:
+ *         description: NFT mint failed
  */
-router.post('/collections/bridges/:badgeId/claim', asyncHandler(async (req: Request, res: Response) => {
+router.post('/collections/bridges/claim', asyncHandler(handleBridgeClaim));
+
+/**
+ * @openapi
+ * /users/collections/bridges/{badgeId}/claim:
+ *   post:
+ *     summary: Bridge badge claim et (path ile)
+ *     description: badgeId path parametresi ile. Badge DB'den okunur, kullanıcının Thirdweb wallet smartAccountAddress'ine NFT mint edilir.
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: badgeId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Claim edilecek bridge badge ID (UUID)
+ *     responses:
+ *       201:
+ *         description: Badge başarıyla claim edildi
+ *       400:
+ *         description: Claim başarısız
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Badge not found
+ *       502:
+ *         description: NFT mint failed
+ */
+router.post('/collections/bridges/:badgeId/claim', asyncHandler(handleBridgeClaim));
+
+async function handleBridgeClaim(req: Request, res: Response): Promise<void> {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  if (!userId) return res.status(401).json({ message: 'Unauthorized' });
-  const badgeId = String(req.params.badgeId);
+  if (!userId) {
+    res.status(401).json({ message: 'Unauthorized' });
+    return;
+  }
+  const badgeId = String(req.params.badgeId || req.query.badgeId || '').trim();
+  if (!badgeId) {
+    res.status(400).json({ success: false, message: 'badgeId is required (path or query)' });
+    return;
+  }
 
   const badge = await prisma.badge.findUnique({ where: { id: badgeId } });
-  if (!badge) return res.status(404).json({ success: false, message: 'Badge not found' });
+  if (!badge) {
+    res.status(404).json({ success: false, message: 'Badge not found' });
+    return;
+  }
 
   const wallet = await walletService.getThirdwebWallet(String(userId));
   if (!wallet?.smartAccountAddress) {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       message: 'Thirdweb wallet with smart account required. Connect your wallet first.',
     });
+    return;
   }
 
   const metadata = createNFTMetadata({
@@ -1231,19 +1358,20 @@ router.post('/collections/bridges/:badgeId/claim', asyncHandler(async (req: Requ
 
   if (!mintResult.success) {
     logger.warn({ userId, badgeId, error: mintResult.error, message: 'Bridge badge NFT mint failed' });
-    return res.status(502).json({
+    res.status(502).json({
       success: false,
       message: mintResult.error ?? 'NFT mint failed',
       contractError: mintResult.contractError,
     });
+    return;
   }
 
   const result = await userService.claimBridgeBadge(String(userId), badgeId);
-  return res.status(result.success ? 201 : 400).json({
+  res.status(result.success ? 201 : 400).json({
     ...result,
     transactionHash: mintResult.transactionHash,
   });
-}));
+}
 
 /**
  * @openapi

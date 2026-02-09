@@ -22,4 +22,11 @@ ingress:
       # Auth0 callback için: Backend'e Host header olarak orijinal hostname iletilir
       httpHostHeader: api-tipbox.exportergo.com
 
+  # minio-tipbox.exportergo.com - MinIO S3 API (port 9000)
+  - hostname: minio-tipbox.exportergo.com
+    service: http://localhost:9000
+    originRequest:
+      connectTimeout: 30s
+      httpHostHeader: minio-tipbox.exportergo.com
+
   - service: http_status:404
