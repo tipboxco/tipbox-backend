@@ -195,7 +195,6 @@ export interface BrandEventDetail {
 export interface BrandHistoryStats {
   surveys: number;
   shares: number;
-  events: number;
 }
 
 export interface BrandHistoryPointsItem {
@@ -1198,23 +1197,9 @@ export class BrandService {
       },
     });
 
-    // ✅ DÜZELTME: Events: kullanıcının bu marka için katıldığı event sayısı
-    // Brand'e ait event ID'lerini kullan (yukarıda zaten hesaplandı)
-    const eventIds = brandEventIds;
-
-    // Kullanıcının bu brand'e ait event'lere katılım sayısı
-    const userEvents = await this.prisma.wishboxStats.findMany({
-      where: {
-        userId,
-        eventId: { in: eventIds },
-      },
-      distinct: ['eventId'],
-    });
-
     const stats: BrandHistoryStats = {
       surveys: userSurveys,
       shares: userBridgePostsCount,
-      events: userEvents.length,
     };
 
     return {
@@ -1239,7 +1224,6 @@ export class BrandService {
   async getBrandStats(brandId: string, userId: string): Promise<{
     surveys: number;
     shares: number;
-    events: number;
     totalPoints: number;
   }> {
     try {
@@ -1333,19 +1317,9 @@ export class BrandService {
         },
       });
 
-      // ✅ DÜZELTME: Events: kullanıcının bu marka için katıldığı event sayısı
-      const userEvents = await this.prisma.wishboxStats.findMany({
-        where: {
-          userId,
-          eventId: { in: eventIds },
-        },
-        distinct: ['eventId'],
-      });
-
       return {
         surveys: userSurveys,
         shares: userBridgePostsCount,
-        events: userEvents.length,
         totalPoints,
       };
     } catch (error) {
@@ -1464,6 +1438,9 @@ export class BrandService {
     };
   }
 
+  /**
+   * Marka geçmişi - Anketler: Sadece kullanıcının tamamladığı anketler (progress === 100).
+   */
   async getBrandHistorySurveys(
     brandId: string,
     userId: string,
@@ -1472,86 +1449,49 @@ export class BrandService {
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
     const cursor = options?.cursor;
 
-    // İlgili brand'in varlığını doğrula
     const brand = await this.prisma.brand.findUnique({ where: { id: brandId } });
     if (!brand) {
       throw new NotFoundError(`Brand not found: ${brandId}`);
     }
 
-    // ✅ DÜZELTME: Brand'e ait survey'leri al (WishboxEvent yerine BrandSurvey)
     const brandSurveys = await this.prisma.brandSurvey.findMany({
-      where: {
-        brandId,
-      },
-      include: {
-        questions: true,
-      },
+      where: { brandId },
+      include: { questions: true },
       orderBy: { startsAt: 'desc' },
-      take: limit + 1,
-      ...(cursor && {
-        cursor: { id: cursor },
-        skip: 1,
-      }),
     });
 
-    const hasMoreSurveys = brandSurveys.length > limit;
-    const resultSurveys = hasMoreSurveys ? brandSurveys.slice(0, limit) : brandSurveys;
-    const nextCursorSurvey = hasMoreSurveys && resultSurveys.length > 0 
-      ? resultSurveys[resultSurveys.length - 1].id 
-      : undefined;
-
-    if (resultSurveys.length === 0) {
+    if (brandSurveys.length === 0) {
       return {
         surveyList: [],
-        pagination: {
-          cursor: undefined,
-          hasMore: false,
-          limit,
-        },
+        pagination: { cursor: undefined, hasMore: false, limit },
       };
     }
 
-    // ✅ DÜZELTME: Kullanıcının her survey için verdiği cevapları al
-    const surveyIds = resultSurveys.map((s) => s.id);
-    const questionIds = resultSurveys.flatMap((s) => s.questions.map((q) => q.id));
-
+    const questionIds = brandSurveys.flatMap((s) => s.questions.map((q) => q.id));
     const userAnswers = await this.prisma.brandSurveyAnswer.findMany({
-      where: {
-        userId,
-        questionId: { in: questionIds },
-      },
+      where: { userId, questionId: { in: questionIds } },
       select: {
         questionId: true,
-        question: {
-          select: {
-            surveyId: true,
-          },
-        },
+        question: { select: { surveyId: true } },
       },
     });
 
-    // Survey bazlı cevap sayılarını hesapla
     const answersBySurvey = new Map<string, number>();
     for (const answer of userAnswers) {
       const surveyId = answer.question.surveyId;
       answersBySurvey.set(surveyId, (answersBySurvey.get(surveyId) || 0) + 1);
     }
 
-    const surveyList: SurveyCard[] = resultSurveys.map((survey) => {
+    const allWithProgress: SurveyCard[] = brandSurveys.map((survey) => {
       const answeredCount = answersBySurvey.get(survey.id) || 0;
       const totalQuestions = survey.questions.length;
-      
-      // ✅ DÜZELTME: Tamamlama yüzdesi = (cevaplanan soru / toplam soru) * 100
-      const progress = totalQuestions > 0 
+      const progress = totalQuestions > 0
         ? Math.min(100, Math.round((answeredCount / totalQuestions) * 100))
         : 0;
 
       let status: SurveyStatusType = 'start';
-      if (progress === 100) {
-        status = 'viewresults';
-      } else if (progress > 0) {
-        status = 'continue';
-      }
+      if (progress === 100) status = 'viewresults';
+      else if (progress > 0) status = 'continue';
 
       return {
         id: survey.id,
@@ -1565,33 +1505,124 @@ export class BrandService {
       };
     });
 
+    const completedOnly = allWithProgress.filter((s) => s.progress === 100);
+
+    let fromIndex = 0;
+    if (cursor) {
+      const idx = completedOnly.findIndex((s) => s.id === cursor);
+      if (idx !== -1) fromIndex = idx + 1;
+    }
+
+    const hasMore = completedOnly.length - fromIndex > limit;
+    const surveyList = completedOnly.slice(fromIndex, fromIndex + limit);
+    const nextCursor = hasMore && surveyList.length > 0 ? surveyList[surveyList.length - 1].id : undefined;
+
     return {
       surveyList,
       pagination: {
-        cursor: nextCursorSurvey,
-        hasMore: hasMoreSurveys,
+        cursor: nextCursor,
+        hasMore,
         limit,
       },
     };
   }
 
+  /**
+   * Marka geçmişi - Paylaşımlar: Sadece kullanıcının kendi attığı post'lar (ContentPost).
+   * Brand'in ürünleriyle ilişkili ve current user'a ait post'lar döner.
+   */
   async getBrandHistoryPosts(
     brandId: string,
     userId: string,
     options?: { cursor?: string; limit?: number }
   ): Promise<FeedResponse> {
-    return this.getBrandTrends(brandId, userId, options);
-  }
+    const brand = await this.prisma.brand.findUnique({
+      where: { id: brandId },
+    });
 
-  async getBrandHistoryEvents(
-    brandId: string,
-    userId: string,
-    options?: { cursor?: string; limit?: number }
-  ): Promise<BrandHistoryEventsResponse> {
-    const result = await this.getBrandEvents(brandId, userId, options);
+    if (!brand) {
+      throw new NotFoundError(`Brand not found: ${brandId}`);
+    }
+
+    if (!brand.externalId) {
+      return {
+        items: [],
+        pagination: {
+          cursor: undefined,
+          hasMore: false,
+          limit: options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20,
+        },
+      };
+    }
+
+    const brandProducts = await this.prisma.product.findMany({
+      where: { brandId: brand.externalId },
+      select: { id: true },
+    });
+    const productIds = brandProducts.map((p) => p.id);
+
+    if (productIds.length === 0) {
+      return {
+        items: [],
+        pagination: {
+          cursor: undefined,
+          hasMore: false,
+          limit: options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20,
+        },
+      };
+    }
+
+    const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const cursor = options?.cursor;
+
+    const whereClause: any = {
+      userId,
+      productId: { in: productIds },
+    };
+
+    if (cursor) {
+      whereClause.id = { lt: cursor };
+    }
+
+    const postsWithStats = await this.prisma.contentPost.findMany({
+      where: whereClause,
+      include: {
+        user: {
+          include: {
+            profile: true,
+            titles: { orderBy: { earnedAt: 'desc' }, take: 1 },
+            avatars: { where: { isActive: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+          },
+        },
+        product: { include: { group: true } },
+        comparison: {
+          include: {
+            product1: { include: { group: true } },
+            product2: { include: { group: true } },
+            scores: true,
+          },
+        },
+        tip: true,
+        tags: true,
+        contentPostTags: true,
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+    });
+
+    const hasMore = postsWithStats.length > limit;
+    const resultPosts = hasMore ? postsWithStats.slice(0, limit) : postsWithStats;
+    const nextCursor = hasMore && resultPosts.length > 0 ? resultPosts[resultPosts.length - 1].id : undefined;
+
+    const feedItems = await this.mapPostsToFeedItems(resultPosts, userId);
+
     return {
-      items: result.items,
-      pagination: result.pagination,
+      items: feedItems,
+      pagination: {
+        cursor: nextCursor,
+        hasMore,
+        limit,
+      },
     };
   }
 
