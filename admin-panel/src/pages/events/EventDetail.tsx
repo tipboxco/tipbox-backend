@@ -50,6 +50,8 @@ import type {
   AdminEventBadgeListItem,
   AdminEventRewardListItem,
 } from '../../types/admin';
+import { FORM_LAYOUT_VERTICAL } from '../../constants/form-layout';
+import { BADGE_COLOR_PRIMARY, BADGE_COLOR_SECONDARY } from '../../constants/badge-colors';
 
 const { TextArea } = Input;
 const { Title, Text } = Typography;
@@ -66,9 +68,9 @@ function EventDetail() {
     try {
       const res = await fetchEvent(id);
       if (res.data) setEvent(res.data);
-      else setError('Event bulunamadı');
+      else setError('Event not found');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Yüklenemedi');
+      setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
       setLoading(false);
     }
@@ -82,9 +84,9 @@ function EventDetail() {
     return (
       <div>
         <Link to="/events">
-          <Button icon={<ArrowLeftOutlined />}>Listeye dön</Button>
+          <Button icon={<ArrowLeftOutlined />}>Back to list</Button>
         </Link>
-        <Text>Geçersiz event ID</Text>
+        <Text>Invalid event ID</Text>
       </div>
     );
   }
@@ -94,7 +96,7 @@ function EventDetail() {
       <div>
         <Link to="/events">
           <Button icon={<ArrowLeftOutlined />} style={{ marginBottom: 16 }}>
-            Listeye dön
+            Back to list
           </Button>
         </Link>
         {loading ? (
@@ -111,27 +113,27 @@ function EventDetail() {
   const tabItems = [
     {
       key: 'summary',
-      label: 'Özet',
+      label: 'Summary',
       children: <EventSummaryTab event={event} onUpdated={loadEvent} onDeleted={() => navigate('/events')} />,
     },
     {
       key: 'badges',
-      label: "Badge'ler",
+      label: 'Badges',
       children: <EventBadgesTab eventId={id} eventTitle={event.title} />,
     },
     {
       key: 'participants',
-      label: 'Katılımcılar',
+      label: 'Participants',
       children: <EventParticipantsTab eventId={id} />,
     },
     {
       key: 'analytics',
-      label: 'Analitik',
+      label: 'Analytics',
       children: <EventAnalyticsTab eventId={id} />,
     },
     {
       key: 'rewards',
-      label: 'Ödüller',
+      label: 'Rewards',
       children: <EventRewardsTab eventId={id} />,
     },
   ];
@@ -140,7 +142,7 @@ function EventDetail() {
     <div>
       <Link to="/events">
         <Button icon={<ArrowLeftOutlined />} style={{ marginBottom: 16 }}>
-          Listeye dön
+          Back to list
         </Button>
       </Link>
 
@@ -160,12 +162,16 @@ function EventDetail() {
             <Text type="secondary">ID: {event.id}</Text>
             <Tag
               color={
-                event.status === 'DRAFT' ? 'default' : event.status === 'PUBLISHED' ? 'success' : 'error'
+                event.status === 'DRAFT'
+                  ? 'default'
+                  : event.status === 'PUBLISHED'
+                    ? BADGE_COLOR_PRIMARY
+                    : BADGE_COLOR_SECONDARY
               }
             >
               {event.status}
             </Tag>
-            <Tag>{event.feedType}</Tag>
+            <Tag color={BADGE_COLOR_PRIMARY}>{event.feedType}</Tag>
           </Space>
         </Space>
       </Card>
@@ -209,10 +215,10 @@ function EventSummaryTab({
         imageUrl: form.imageUrl || null,
       });
       setEditing(false);
-      antdMessage.success('Event güncellendi');
+      antdMessage.success('Event updated');
       onUpdated();
     } catch (e) {
-      antdMessage.error(e instanceof Error ? e.message : 'Güncellenemedi');
+      antdMessage.error(e instanceof Error ? e.message : 'Failed to update');
     } finally {
       setSaving(false);
     }
@@ -220,18 +226,18 @@ function EventSummaryTab({
 
   const handleDelete = () => {
     Modal.confirm({
-      title: 'Event Sil',
-      content: 'Bu event silinecek. Emin misiniz?',
-      okText: 'Evet, sil',
-      cancelText: 'İptal',
+      title: 'Delete Event',
+      content: 'This event will be deleted. Are you sure?',
+      okText: 'Yes, delete',
+      cancelText: 'Cancel',
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
           await deleteEvent(event.id);
-          antdMessage.success('Event silindi');
+          antdMessage.success('Event deleted');
           onDeleted();
         } catch (e) {
-          antdMessage.error(e instanceof Error ? e.message : 'Silinemedi');
+          antdMessage.error(e instanceof Error ? e.message : 'Failed to delete');
         }
       },
     });
@@ -241,104 +247,108 @@ function EventSummaryTab({
     <Card bordered>
       {!editing ? (
         <>
-          <Descriptions title="Event bilgileri" bordered column={1}>
-            <Descriptions.Item label="Başlık">{event.title}</Descriptions.Item>
-            <Descriptions.Item label="Açıklama">{event.description || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Durum">
+          <Descriptions title="Event details" bordered column={1}>
+            <Descriptions.Item label="Title">{event.title}</Descriptions.Item>
+            <Descriptions.Item label="Description">{event.description || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Status">
               <Tag
                 color={
-                  event.status === 'DRAFT' ? 'default' : event.status === 'PUBLISHED' ? 'success' : 'error'
+                  event.status === 'DRAFT'
+                    ? 'default'
+                    : event.status === 'PUBLISHED'
+                      ? BADGE_COLOR_PRIMARY
+                      : BADGE_COLOR_SECONDARY
                 }
               >
                 {event.status}
               </Tag>
             </Descriptions.Item>
-            <Descriptions.Item label="Feed türü">{event.feedType}</Descriptions.Item>
-            <Descriptions.Item label="Başlangıç">
-              {new Date(event.startDate).toLocaleString('tr-TR')}
+            <Descriptions.Item label="Feed type">{event.feedType}</Descriptions.Item>
+            <Descriptions.Item label="Start">
+              {new Date(event.startDate).toLocaleString()}
             </Descriptions.Item>
-            <Descriptions.Item label="Bitiş">{new Date(event.endDate).toLocaleString('tr-TR')}</Descriptions.Item>
-            <Descriptions.Item label="Görsel">
+            <Descriptions.Item label="End">{new Date(event.endDate).toLocaleString()}</Descriptions.Item>
+            <Descriptions.Item label="Image">
               {event.imageUrl ? (
                 <a href={event.imageUrl} target="_blank" rel="noreferrer">
-                  Görüntüle
+                  View
                 </a>
               ) : (
                 '—'
               )}
             </Descriptions.Item>
             {event.product && (
-              <Descriptions.Item label="Ürün">{event.product.name ?? event.productId}</Descriptions.Item>
+              <Descriptions.Item label="Product">{event.product.name ?? event.productId}</Descriptions.Item>
             )}
             {event.brand && (
-              <Descriptions.Item label="Marka">{event.brand.name ?? event.brandId}</Descriptions.Item>
+              <Descriptions.Item label="Brand">{event.brand.name ?? event.brandId}</Descriptions.Item>
             )}
           </Descriptions>
 
           <Space style={{ marginTop: 24 }}>
             <Button type="primary" icon={<EditOutlined />} onClick={() => setEditing(true)}>
-              Düzenle
+              Edit
             </Button>
             <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>
-              Sil
+              Delete
             </Button>
           </Space>
         </>
       ) : (
         <>
-          <Space direction="vertical" size="large" style={{ width: '100%' }}>
-            <Form.Item label="Başlık">
+          <Form {...FORM_LAYOUT_VERTICAL} style={{ width: '100%' }}>
+            <Form.Item label="Title">
               <Input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
             </Form.Item>
-            <Form.Item label="Açıklama">
+            <Form.Item label="Description">
               <TextArea
                 value={form.description}
                 onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                 rows={3}
               />
             </Form.Item>
-            <Form.Item label="Başlangıç">
+            <Form.Item label="Start">
               <Input
                 type="datetime-local"
                 value={form.startDate}
                 onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))}
               />
             </Form.Item>
-            <Form.Item label="Bitiş">
+            <Form.Item label="End">
               <Input
                 type="datetime-local"
                 value={form.endDate}
                 onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))}
               />
             </Form.Item>
-            <Form.Item label="Durum">
+            <Form.Item label="Status">
               <Select value={form.status} onChange={(value) => setForm((f) => ({ ...f, status: value }))}>
                 <Select.Option value="DRAFT">DRAFT</Select.Option>
                 <Select.Option value="PUBLISHED">PUBLISHED</Select.Option>
                 <Select.Option value="CLOSED">CLOSED</Select.Option>
               </Select>
             </Form.Item>
-            <Form.Item label="Feed türü">
+            <Form.Item label="Feed type">
               <Select value={form.feedType} onChange={(value) => setForm((f) => ({ ...f, feedType: value }))}>
                 <Select.Option value="PICKS">PICKS</Select.Option>
                 <Select.Option value="ROASTS">ROASTS</Select.Option>
               </Select>
             </Form.Item>
-            <Form.Item label="Görsel URL">
+            <Form.Item label="Image URL">
               <Input
                 value={form.imageUrl}
                 onChange={(e) => setForm((f) => ({ ...f, imageUrl: e.target.value }))}
                 placeholder="https://..."
               />
             </Form.Item>
-          </Space>
 
-          <Space style={{ marginTop: 24 }}>
-            <Button type="primary" onClick={handleSave} loading={saving}>
-              {saving ? 'Kaydediliyor...' : 'Kaydet'}
-            </Button>
-            <Button onClick={() => setEditing(false)}>İptal</Button>
-          </Space>
+            <Space style={{ marginTop: 24 }}>
+              <Button type="primary" onClick={handleSave} loading={saving}>
+                {saving ? 'Saving...' : 'Save'}
+              </Button>
+              <Button onClick={() => setEditing(false)}>Cancel</Button>
+            </Space>
+          </Form>
         </>
       )}
     </Card>
@@ -384,10 +394,10 @@ function EventBadgesTab({ eventId, eventTitle }: { eventId: string; eventTitle: 
       setAddRank(list.length);
       setAddDisplayOrder(null);
       setShowAdd(false);
-      antdMessage.success('Badge eklendi');
+      antdMessage.success('Badge added');
       load();
     } catch (e) {
-      antdMessage.error(e instanceof Error ? e.message : 'Eklenemedi');
+      antdMessage.error(e instanceof Error ? e.message : 'Failed to add');
     } finally {
       setSubmitting(false);
     }
@@ -402,10 +412,10 @@ function EventBadgesTab({ eventId, eventTitle }: { eventId: string; eventTitle: 
         enabled: editEnabled,
       });
       setEditingId(null);
-      antdMessage.success('Badge güncellendi');
+      antdMessage.success('Badge updated');
       load();
     } catch (e) {
-      antdMessage.error(e instanceof Error ? e.message : 'Güncellenemedi');
+      antdMessage.error(e instanceof Error ? e.message : 'Failed to update');
     } finally {
       setSubmitting(false);
     }
@@ -413,18 +423,18 @@ function EventBadgesTab({ eventId, eventTitle }: { eventId: string; eventTitle: 
 
   const handleRemove = async (eventBadgeId: string) => {
     Modal.confirm({
-      title: 'Badge Kaldır',
-      content: "Bu badge event'ten kaldırılacak. Emin misiniz?",
-      okText: 'Evet, kaldır',
-      cancelText: 'İptal',
+      title: 'Remove Badge',
+      content: "This badge will be removed from the event. Are you sure?",
+      okText: 'Yes, remove',
+      cancelText: 'Cancel',
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
           await removeEventBadge(eventId, eventBadgeId);
-          antdMessage.success('Badge kaldırıldı');
+          antdMessage.success('Badge removed');
           load();
         } catch (e) {
-          antdMessage.error(e instanceof Error ? e.message : 'Kaldırılamadı');
+          antdMessage.error(e instanceof Error ? e.message : 'Failed to remove');
         }
       },
     });
@@ -491,30 +501,30 @@ function EventBadgesTab({ eventId, eventTitle }: { eventId: string; eventTitle: 
         editingId === record.id ? (
           <Checkbox checked={editEnabled} onChange={(e) => setEditEnabled(e.target.checked)} />
         ) : enabled ? (
-          'Evet'
+          'Yes'
         ) : (
-          'Hayır'
+          'No'
         ),
     },
     {
-      title: 'Oluşturulma',
+      title: 'Created',
       dataIndex: 'createdAt',
       key: 'createdAt',
       width: 130,
-      render: (date) => new Date(date).toLocaleDateString('tr-TR'),
+      render: (date) => new Date(date).toLocaleDateString(),
     },
     {
-      title: 'İşlemler',
+      title: 'Actions',
       key: 'actions',
       width: 150,
       render: (_, record) =>
         editingId === record.id ? (
           <Space>
             <Button type="primary" size="small" loading={submitting} onClick={() => handleUpdate(record.id)}>
-              Kaydet
+              Save
             </Button>
             <Button size="small" onClick={() => setEditingId(null)}>
-              İptal
+              Cancel
             </Button>
           </Space>
         ) : (
@@ -530,7 +540,7 @@ function EventBadgesTab({ eventId, eventTitle }: { eventId: string; eventTitle: 
                 setEditEnabled(record.enabled);
               }}
             >
-              Düzenle
+              Edit
             </Button>
             <Button
               type="link"
@@ -539,7 +549,7 @@ function EventBadgesTab({ eventId, eventTitle }: { eventId: string; eventTitle: 
               icon={<DeleteOutlined />}
               onClick={() => handleRemove(record.id)}
             >
-              Kaldır
+              Remove
             </Button>
           </Space>
         ),
@@ -548,14 +558,14 @@ function EventBadgesTab({ eventId, eventTitle }: { eventId: string; eventTitle: 
 
   return (
     <div>
-      <Card bordered title={`Event Badge'leri: ${eventTitle}`} style={{ marginBottom: 16 }}>
+      <Card bordered title={`Event Badges: ${eventTitle}`} style={{ marginBottom: 16 }}>
         <Button
           type="primary"
           icon={<PlusOutlined />}
           onClick={() => setShowAdd(!showAdd)}
           style={{ marginBottom: 16 }}
         >
-          {showAdd ? 'İptal' : "Event'e badge ekle"}
+          {showAdd ? 'Cancel' : 'Add badge to event'}
         </Button>
 
         {showAdd && (
@@ -592,7 +602,7 @@ function EventBadgesTab({ eventId, eventTitle }: { eventId: string; eventTitle: 
               </Col>
             </Row>
             <Button type="primary" loading={submitting} onClick={handleAdd}>
-              Ekle
+              Add
             </Button>
           </Card>
         )}
@@ -611,7 +621,7 @@ function EventBadgesTab({ eventId, eventTitle }: { eventId: string; eventTitle: 
               emptyText: (
                 <Empty
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="Bu event'e henüz badge eklenmemiş."
+                  description="No badges added to this event yet."
                 />
               ),
             }}
@@ -653,13 +663,14 @@ function EventParticipantsTab({ eventId }: { eventId: string }) {
 
   const columns: ColumnsType<AdminEventParticipantListItem> = [
     {
-      title: 'Kullanıcı',
+      title: 'User',
       key: 'user',
       render: (_, record) => (
-        <Link to={`/users/${record.userId}`}>
-          <Button type="link" size="small" style={{ padding: 0 }}>
-            {record.userDisplayName ?? record.userId.slice(0, 8) + '...'}
-          </Button>
+        <Link
+          to={`/users/${record.userId}`}
+          style={{ color: 'var(--tipbox-badge-outline)', textDecoration: 'underline' }}
+        >
+          {record.userDisplayName ?? record.userId.slice(0, 8) + '...'}
         </Link>
       ),
     },
@@ -677,21 +688,21 @@ function EventParticipantsTab({ eventId }: { eventId: string }) {
       align: 'right',
     },
     {
-      title: 'Beğeni',
+      title: 'Likes',
       dataIndex: 'eventLikesReceived',
       key: 'likes',
       width: 80,
       align: 'right',
     },
     {
-      title: 'Katılım',
+      title: 'Participation',
       dataIndex: 'totalParticipated',
       key: 'participated',
       width: 80,
       align: 'right',
     },
     {
-      title: 'Yorum',
+      title: 'Comments',
       dataIndex: 'totalComments',
       key: 'comments',
       width: 80,
@@ -707,7 +718,7 @@ function EventParticipantsTab({ eventId }: { eventId: string }) {
   const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
 
   return (
-    <Card bordered title="Katılımcılar">
+    <Card bordered title="Participants">
       <Table
         columns={columns}
         dataSource={list}
@@ -718,11 +729,11 @@ function EventParticipantsTab({ eventId }: { eventId: string }) {
           pageSize: 20,
           total: pagination.total,
           showSizeChanger: false,
-          showTotal: (total) => `Toplam ${total} kayıt`,
+          showTotal: (total) => `Total ${total} records`,
         }}
         onChange={handleTableChange}
         locale={{
-          emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Henüz katılımcı yok." />,
+          emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No participants yet." />,
         }}
       />
     </Card>
@@ -758,31 +769,31 @@ function EventAnalyticsTab({ eventId }: { eventId: string }) {
 
   if (!data) {
     return (
-      <Alert message="Hata" description="Analitik yüklenemedi." type="error" />
+      <Alert message="Error" description="Failed to load analytics." type="error" />
     );
   }
 
   return (
-    <Card bordered title="Analitik özet">
+    <Card bordered title="Analytics summary">
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} lg={6}>
           <Card bordered>
-            <Statistic title="Katılımcı sayısı" value={data.participantCount} valueStyle={{ fontWeight: 700 }} />
+            <Statistic title="Participant count" value={data.participantCount} valueStyle={{ fontWeight: 700 }} />
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
           <Card bordered>
-            <Statistic title="Toplam post" value={data.totalPosts} valueStyle={{ fontWeight: 600 }} />
+            <Statistic title="Total posts" value={data.totalPosts} valueStyle={{ fontWeight: 600 }} />
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
           <Card bordered>
-            <Statistic title="Verilen ödül" value={data.totalRewardsGranted} valueStyle={{ fontWeight: 600 }} />
+            <Statistic title="Rewards granted" value={data.totalRewardsGranted} valueStyle={{ fontWeight: 600 }} />
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
           <Card bordered>
-            <Statistic title="Badge sayısı" value={data.badgesCount} valueStyle={{ fontWeight: 600 }} />
+            <Statistic title="Badge count" value={data.badgesCount} valueStyle={{ fontWeight: 600 }} />
           </Card>
         </Col>
       </Row>
@@ -821,7 +832,7 @@ function EventRewardsTab({ eventId }: { eventId: string }) {
 
   const columns: ColumnsType<AdminEventRewardListItem> = [
     {
-      title: 'Kullanıcı',
+      title: 'User',
       key: 'user',
       render: (_, record) => record.userDisplayName ?? record.userId.slice(0, 8) + '...',
     },
@@ -832,7 +843,7 @@ function EventRewardsTab({ eventId }: { eventId: string }) {
       render: (email) => email ?? '—',
     },
     {
-      title: 'Tür',
+      title: 'Type',
       dataIndex: 'rewardType',
       key: 'type',
       width: 120,
@@ -857,11 +868,11 @@ function EventRewardsTab({ eventId }: { eventId: string }) {
       render: (amount) => amount ?? '—',
     },
     {
-      title: 'Verilme',
+      title: 'Awarded at',
       dataIndex: 'awardedAt',
       key: 'awardedAt',
       width: 150,
-      render: (date) => new Date(date).toLocaleString('tr-TR'),
+      render: (date) => new Date(date).toLocaleString(),
     },
   ];
 
@@ -873,7 +884,7 @@ function EventRewardsTab({ eventId }: { eventId: string }) {
   const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
 
   return (
-    <Card bordered title="Ödüller">
+    <Card bordered title="Rewards">
       <Table
         columns={columns}
         dataSource={list}
@@ -884,11 +895,11 @@ function EventRewardsTab({ eventId }: { eventId: string }) {
           pageSize: 20,
           total: pagination.total,
           showSizeChanger: false,
-          showTotal: (total) => `Toplam ${total} kayıt`,
+          showTotal: (total) => `Total ${total} records`,
         }}
         onChange={handleTableChange}
         locale={{
-          emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Henüz ödül kaydı yok." />,
+          emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No reward records yet." />,
         }}
       />
     </Card>

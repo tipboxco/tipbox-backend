@@ -1,15 +1,20 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Form, Input, Button, Card, Typography, Space, Alert } from 'antd';
+import { Form, Input, Button, Card, Typography, Space, Alert, theme } from 'antd';
 import { MailOutlined, LockOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
+import { FORM_LAYOUT_VERTICAL } from '../constants/form-layout';
 
 const { Title, Text } = Typography;
+const { useToken } = theme;
 
 function Login() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
+  const { theme: currentTheme } = useTheme();
+  const { token } = useToken();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? '/';
@@ -21,7 +26,7 @@ function Login() {
       await login(values.email.trim(), values.password);
       navigate(from, { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Giriş yapılamadı');
+      setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
       setLoading(false);
     }
@@ -35,12 +40,17 @@ function Login() {
         alignItems: 'center',
         justifyContent: 'center',
         padding: 24,
+        backgroundColor: token.colorBgLayout,
+        transition: 'background-color 0.3s',
       }}
     >
       <Card
         style={{
           width: '100%',
           maxWidth: 420,
+          boxShadow: currentTheme === 'dark'
+            ? '0 4px 16px rgba(0, 0, 0, 0.5)'
+            : '0 4px 16px rgba(0, 0, 0, 0.1)',
         }}
       >
         <Space direction="vertical" size={24} style={{ width: '100%' }}>
@@ -57,13 +67,13 @@ function Login() {
             <Title level={2} style={{ margin: 0, fontWeight: 700 }}>
               Admin Panel
             </Title>
-            <Text type="secondary">Yönetim paneline giriş yapın</Text>
+            <Text type="secondary">Sign in to the admin panel</Text>
           </div>
 
           {/* Error Alert */}
           {error && (
             <Alert
-              message="Giriş Hatası"
+              message="Login Error"
               description={error}
               type="error"
               closable
@@ -75,21 +85,21 @@ function Login() {
           <Form
             name="login"
             onFinish={handleSubmit}
-            layout="vertical"
+            {...FORM_LAYOUT_VERTICAL}
             requiredMark={false}
             autoComplete="off"
           >
             <Form.Item
-              label="E-posta"
+              label="Email"
               name="email"
               rules={[
                 {
                   required: true,
-                  message: 'Lütfen e-posta adresinizi girin',
+                  message: 'Please enter your email address',
                 },
                 {
                   type: 'email',
-                  message: 'Geçerli bir e-posta adresi girin',
+                  message: 'Enter a valid email address',
                 },
               ]}
             >
@@ -103,12 +113,12 @@ function Login() {
             </Form.Item>
 
             <Form.Item
-              label="Şifre"
+              label="Password"
               name="password"
               rules={[
                 {
                   required: true,
-                  message: 'Lütfen şifrenizi girin',
+                  message: 'Please enter your password',
                 },
               ]}
             >
@@ -129,7 +139,7 @@ function Login() {
                 loading={loading}
                 block
               >
-                {loading ? 'Giriş yapılıyor...' : 'Giriş yap'}
+                {loading ? 'Signing in...' : 'Sign in'}
               </Button>
             </Form.Item>
           </Form>

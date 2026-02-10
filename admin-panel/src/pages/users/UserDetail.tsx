@@ -1,9 +1,26 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import {
+  Card,
+  Tabs,
+  Button,
+  Input,
+  Select,
+  Checkbox,
+  Spin,
+  Alert,
+  Table,
+  Tag,
+  Space,
+  Typography,
+  Image,
+  Descriptions,
+  Modal,
+} from 'antd';
+import type { ColumnsType } from 'antd/es/table';
+import { UserOutlined, ExclamationCircleOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
-import DataCard from '../../components/DataCard';
-import Button from '../../components/Button';
-import LoadingSpinner from '../../components/LoadingSpinner';
+import ViewActionButton from '../../components/ViewActionButton';
 import {
   fetchUser,
   fetchUserModerationHistory,
@@ -24,6 +41,7 @@ import {
   unbanUser,
 } from '../../api/admin-users';
 import { fetchUserPosts } from '../../api/admin-content';
+import { BADGE_COLOR_PRIMARY, BADGE_COLOR_SECONDARY } from '../../constants/badge-colors';
 import type {
   AdminUserDetailResponse,
   AdminModerationHistoryItem,
@@ -37,7 +55,8 @@ import type {
   PaginationMeta,
   AdminContentPostListItem,
 } from '../../types/admin';
-import './users.css';
+
+const { Text } = Typography;
 
 type TabId = 'overview' | 'profile' | 'roles' | 'events' | 'badges' | 'posts' | 'wallet' | 'moderation' | 'login';
 
@@ -86,7 +105,7 @@ function UserDetail() {
           setEditRoles((res.data.roles ?? []).join(', '));
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Kullanıcı yüklenemedi');
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load user');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -241,9 +260,9 @@ function UserDetail() {
       });
       const res = await fetchUser(id);
       if (res.data) setUser(res.data);
-      setMessage('Kullanıcı güncellendi');
+      setMessage('User updated');
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : 'Güncelleme başarısız');
+      setMessage(e instanceof Error ? e.message : 'Update failed');
     } finally {
       setSaving(false);
     }
@@ -262,9 +281,9 @@ function UserDetail() {
       const res = await fetchUser(id);
       if (res.data) setUser(res.data);
       setEditRoles(res.data?.roles?.join(', ') ?? '');
-      setMessage('Roller güncellendi');
+      setMessage('Roles updated');
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : 'Güncelleme başarısız');
+      setMessage(e instanceof Error ? e.message : 'Update failed');
     } finally {
       setSaving(false);
     }
@@ -272,38 +291,50 @@ function UserDetail() {
 
   const handleBan = async () => {
     if (!id) return;
-    if (!window.confirm('Bu kullanıcıyı yasaklamak istediğinize emin misiniz?')) return;
-    setSaving(true);
-    setMessage(null);
-    try {
-      await banUser(id);
-      const res = await fetchUser(id);
-      if (res.data) setUser(res.data);
-      setEditStatus('BANNED');
-      setMessage('Kullanıcı yasaklandı');
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : 'İşlem başarısız');
-    } finally {
-      setSaving(false);
-    }
+    Modal.confirm({
+      title: 'Ban user',
+      icon: <ExclamationCircleOutlined />,
+      content: 'Are you sure you want to ban this user?',
+      onOk: async () => {
+        setSaving(true);
+        setMessage(null);
+        try {
+          await banUser(id);
+          const res = await fetchUser(id);
+          if (res.data) setUser(res.data);
+          setEditStatus('BANNED');
+          setMessage('User banned');
+        } catch (e) {
+          setMessage(e instanceof Error ? e.message : 'Operation failed');
+        } finally {
+          setSaving(false);
+        }
+      },
+    });
   };
 
   const handleUnban = async () => {
     if (!id) return;
-    if (!window.confirm('Yasağı kaldırmak istediğinize emin misiniz?')) return;
-    setSaving(true);
-    setMessage(null);
-    try {
-      await unbanUser(id);
-      const res = await fetchUser(id);
-      if (res.data) setUser(res.data);
-      setEditStatus('');
-      setMessage('Yasak kaldırıldı');
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : 'İşlem başarısız');
-    } finally {
-      setSaving(false);
-    }
+    Modal.confirm({
+      title: 'Unban user',
+      icon: <ExclamationCircleOutlined />,
+      content: 'Are you sure you want to unban this user?',
+      onOk: async () => {
+        setSaving(true);
+        setMessage(null);
+        try {
+          await unbanUser(id);
+          const res = await fetchUser(id);
+          if (res.data) setUser(res.data);
+          setEditStatus('');
+          setMessage('Ban removed');
+        } catch (e) {
+          setMessage(e instanceof Error ? e.message : 'Operation failed');
+        } finally {
+          setSaving(false);
+        }
+      },
+    });
   };
 
   const handleUpdateAvatar = async () => {
@@ -321,9 +352,9 @@ function UserDetail() {
         setAvatarImageUrl(res.data.imageUrl);
         setAvatarActiveId(res.data.isActive ? res.data.id : null);
       }
-      setMessage('Profil resmi güncellendi');
+      setMessage('Avatar updated');
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : 'Güncelleme başarısız');
+      setMessage(e instanceof Error ? e.message : 'Update failed');
     } finally {
       setSaving(false);
     }
@@ -341,9 +372,9 @@ function UserDetail() {
         setAvatarImageUrl(res.data.imageUrl);
         setAvatarActiveId(res.data.isActive ? res.data.id : null);
       }
-      setMessage('Profil resmi eklendi');
+      setMessage('Avatar added');
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : 'Ekleme başarısız');
+      setMessage(e instanceof Error ? e.message : 'Add failed');
     } finally {
       setSaving(false);
     }
@@ -358,797 +389,774 @@ function UserDetail() {
       const res = await fetchUserBadges(id, { limit: 50, offset: 0 });
       setUserBadges(res.data ?? []);
       setGrantBadgeId('');
-      setMessage('Rozet verildi');
+      setMessage('Badge granted');
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : 'Rozet verilemedi');
+      setMessage(e instanceof Error ? e.message : 'Failed to grant badge');
     } finally {
       setSaving(false);
     }
   };
 
   const handleRevokeBadge = async (userBadgeId: string) => {
-    if (!id || !window.confirm('Bu rozeti kullanıcıdan almak istediğinize emin misiniz?')) return;
-    setSaving(true);
-    setMessage(null);
-    try {
-      await revokeUserBadge(id, userBadgeId);
-      const res = await fetchUserBadges(id, { limit: 50, offset: 0 });
-      setUserBadges(res.data ?? []);
-      setMessage('Rozet alındı');
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : 'İşlem başarısız');
-    } finally {
-      setSaving(false);
-    }
+    if (!id) return;
+    Modal.confirm({
+      title: 'Revoke badge',
+      icon: <ExclamationCircleOutlined />,
+      content: 'Are you sure you want to revoke this badge from the user?',
+      onOk: async () => {
+        setSaving(true);
+        setMessage(null);
+        try {
+          await revokeUserBadge(id, userBadgeId);
+          const res = await fetchUserBadges(id, { limit: 50, offset: 0 });
+          setUserBadges(res.data ?? []);
+          setMessage('Badge revoked');
+        } catch (e) {
+          setMessage(e instanceof Error ? e.message : 'Operation failed');
+        } finally {
+          setSaving(false);
+        }
+      },
+    });
   };
 
   if (!id) {
-    return (
-      <div className="users-page">
-        <p>Geçersiz kullanıcı</p>
-      </div>
-    );
+    return <div><Alert message="Invalid user" type="error" showIcon /></div>;
   }
 
   if (loading || !user) {
     return (
-      <div className="users-page">
-        <LoadingSpinner fullScreen={false} />
+      <div style={{ padding: 24, textAlign: 'center' }}>
+        <Spin size="large" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="users-page">
+      <div>
         <PageHeader
-          title="Hata"
+          title="Error"
           description={error}
-          icon="fa-exclamation-triangle"
+          icon={<UserOutlined />}
           backTo="/users"
-          backLabel="Listeye dön"
+          backLabel="Back to list"
         />
       </div>
     );
   }
 
-  const tabs: { id: TabId; label: string }[] = [
-    { id: 'overview', label: 'Özet' },
-    { id: 'profile', label: 'Profil' },
-    { id: 'roles', label: 'Roller' },
-    { id: 'events', label: 'Etkinlikler' },
-    { id: 'badges', label: 'Rozetler' },
-    { id: 'posts', label: 'Postları' },
-    { id: 'wallet', label: 'Cüzdan & Tips' },
-    { id: 'moderation', label: 'Moderation geçmişi' },
-    { id: 'login', label: 'Giriş denemeleri' },
+  // Define table columns for each tab
+  const eventsColumns: ColumnsType<AdminUserEventListItem> = [
+    {
+      title: 'Event ID',
+      dataIndex: 'eventId',
+      key: 'eventId',
+      ellipsis: true,
+      width: 100,
+      render: (id: string) => <Text code style={{ fontSize: 12 }} copyable>{id}</Text>,
+    },
+    {
+      title: 'Event',
+      key: 'title',
+      render: (_, record) => (
+        <Link to={`/events?highlight=${record.eventId}`}>{record.eventTitle ?? record.eventId}</Link>
+      ),
+    },
+    { title: 'Status', dataIndex: 'eventStatus', key: 'status', width: 100 },
+    {
+      title: 'Start',
+      dataIndex: 'eventStartDate',
+      key: 'start',
+      width: 120,
+      render: (date: string) => date ? new Date(date).toLocaleDateString('en-US') : '—',
+    },
+    {
+      title: 'End',
+      dataIndex: 'eventEndDate',
+      key: 'end',
+      width: 120,
+      render: (date: string) => date ? new Date(date).toLocaleDateString('en-US') : '—',
+    },
+    { title: 'Posts', dataIndex: 'eventPostsCount', key: 'posts', width: 80 },
+    { title: 'Likes', dataIndex: 'eventLikesReceived', key: 'likes', width: 80 },
+    { title: 'Participation', dataIndex: 'totalParticipated', key: 'participated', width: 80 },
   ];
 
-  return (
-    <div className="users-page">
-      <PageHeader
-        title={user.displayName || user.userName || user.email || user.id}
-        description={user.email ?? undefined}
-        icon="fa-user"
-        backTo="/users"
-        backLabel="Listeye dön"
-        actions={
-          <div className="users-detail-header-actions">
-            {user.status === 'BANNED' ? (
-              <Button size="sm" variant="success" onClick={handleUnban} disabled={saving}>
-                Yasak kaldır
-              </Button>
-            ) : (
-              <Button size="sm" variant="danger" onClick={handleBan} disabled={saving}>
-                Yasakla
-              </Button>
-            )}
-          </div>
-        }
-      />
+  const postsColumns: ColumnsType<AdminContentPostListItem> = [
+    {
+      title: 'Title',
+      dataIndex: 'title',
+      key: 'title',
+      ellipsis: true,
+      render: (title: string) => title,
+    },
+    { title: 'Type', dataIndex: 'type', key: 'type', width: 100 },
+    { title: 'Likes', dataIndex: 'likesCount', key: 'likes', width: 80 },
+    { title: 'Comments', dataIndex: 'commentsCount', key: 'comments', width: 80 },
+    {
+      title: 'Created',
+      dataIndex: 'createdAt',
+      key: 'created',
+      width: 120,
+      render: (date: string) => date ? new Date(date).toLocaleDateString('en-US') : '—',
+    },
+    {
+      title: '',
+      key: 'action',
+      width: 100,
+      render: (_, record) => <ViewActionButton to={`/content/posts/${record.id}`} />,
+    },
+  ];
 
-      {message && (
-        <div className={`users-message ${message.includes('başarı') ? 'users-message-success' : 'users-message-error'}`}>
-          {message}
-        </div>
-      )}
+  const badgesColumns: ColumnsType<AdminUserBadgeListItem> = [
+    {
+      title: 'UserBadge ID',
+      dataIndex: 'id',
+      key: 'id',
+      width: 100,
+      ellipsis: true,
+      render: (id: string) => <Text code style={{ fontSize: 12 }} copyable>{id}</Text>,
+    },
+    {
+      title: 'Badge ID',
+      dataIndex: 'badgeId',
+      key: 'badgeId',
+      width: 100,
+      ellipsis: true,
+      render: (id: string) => <Text code style={{ fontSize: 12 }} copyable>{id}</Text>,
+    },
+    {
+      title: 'Badge',
+      key: 'badge',
+      render: (_, record) => (
+        <Space>
+          {record.badgeImageUrl && (
+            <Image src={record.badgeImageUrl} width={24} height={24} preview={false} />
+          )}
+          <span>{record.badgeName}</span>
+        </Space>
+      ),
+    },
+    { title: 'Category', dataIndex: 'badgeCategoryName', key: 'category', width: 120 },
+    {
+      title: 'Visible',
+      dataIndex: 'isVisible',
+      key: 'visible',
+      width: 80,
+      render: (visible: boolean) => <Tag color={visible ? BADGE_COLOR_PRIMARY : 'default'}>{visible ? 'Yes' : 'No'}</Tag>,
+    },
+    {
+      title: 'Claimed',
+      key: 'claimed',
+      width: 120,
+      render: (_, record) => record.claimed ? new Date(record.claimedAt!).toLocaleDateString('en-US') : '—',
+    },
+    {
+      title: 'Date',
+      dataIndex: 'createdAt',
+      key: 'created',
+      width: 120,
+      render: (date: string) => new Date(date).toLocaleDateString('en-US'),
+    },
+    {
+      title: '',
+      key: 'action',
+      width: 80,
+      render: (_, record) => (
+        <Button size="small" danger onClick={() => handleRevokeBadge(record.id)} disabled={saving}>
+          Revoke
+        </Button>
+      ),
+    },
+  ];
 
-      <div className="users-detail-tabs">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            className={`users-detail-tab ${activeTab === tab.id ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+  const walletColumns: ColumnsType<AdminWalletSummaryItem> = [
+    {
+      title: 'Wallet ID',
+      dataIndex: 'id',
+      key: 'id',
+      width: 100,
+      ellipsis: true,
+      render: (id: string) => <Text code style={{ fontSize: 12 }} copyable>{id}</Text>,
+    },
+    {
+      title: 'User ID',
+      dataIndex: 'userId',
+      key: 'userId',
+      width: 100,
+      ellipsis: true,
+      render: (id: string) => <Text code style={{ fontSize: 12 }} copyable>{id}</Text>,
+    },
+    { title: 'Provider', dataIndex: 'provider', key: 'provider', width: 100 },
+    {
+      title: 'Address',
+      dataIndex: 'publicAddress',
+      key: 'address',
+      ellipsis: true,
+    },
+    { title: 'Balance', dataIndex: 'balance', key: 'balance', width: 100 },
+    { title: 'Locked', dataIndex: 'lockedBalance', key: 'locked', width: 100 },
+    {
+      title: 'Connected',
+      dataIndex: 'isConnected',
+      key: 'connected',
+      width: 80,
+      render: (connected: boolean) => <Tag color={connected ? BADGE_COLOR_PRIMARY : 'default'}>{connected ? 'Yes' : 'No'}</Tag>,
+    },
+    {
+      title: 'Created',
+      dataIndex: 'createdAt',
+      key: 'created',
+      width: 150,
+      render: (date: string) => date ? new Date(date).toLocaleString('en-US') : '—',
+    },
+  ];
 
-      <div className="users-detail-panel">
-        {activeTab === 'overview' && (
-          <div className="users-detail-grid users-detail-grid--wide">
-            <DataCard title="Hesap">
-              <div className="users-detail-fields">
-                <div className="users-detail-field">
-                  <div className="users-detail-field-label">User ID</div>
-                  <div className="users-detail-field-value users-id-value" title={user.id}>
-                    {user.id}
-                  </div>
-                </div>
-                {user.auth0Id && (
-                  <div className="users-detail-field">
-                    <div className="users-detail-field-label">Auth0 ID</div>
-                    <div className="users-detail-field-value users-id-value" title={user.auth0Id}>
-                      {user.auth0Id}
-                    </div>
-                  </div>
+  const tipsColumns: ColumnsType<AdminTipsTransactionListItem> = [
+    {
+      title: 'Transaction ID',
+      dataIndex: 'id',
+      key: 'id',
+      width: 100,
+      ellipsis: true,
+      render: (id: string) => <Text code style={{ fontSize: 12 }} copyable>{id}</Text>,
+    },
+    {
+      title: 'Date',
+      dataIndex: 'createdAt',
+      key: 'created',
+      width: 150,
+      render: (date: string) => new Date(date).toLocaleString('en-US'),
+    },
+    {
+      title: 'From',
+      key: 'from',
+      render: (_, record) => record.fromUserDisplayName ?? record.fromUserEmail ?? record.fromUserId,
+    },
+    {
+      title: 'To',
+      key: 'to',
+      render: (_, record) => record.toUserDisplayName ?? record.toUserEmail ?? record.toUserId,
+    },
+    { title: 'Amount', dataIndex: 'amount', key: 'amount', width: 100 },
+    { title: 'Reason', dataIndex: 'reason', key: 'reason', render: (r) => r ?? '—' },
+  ];
+
+  const moderationColumns: ColumnsType<AdminModerationHistoryItem> = [
+    {
+      title: 'Record ID',
+      dataIndex: 'id',
+      key: 'id',
+      width: 100,
+      ellipsis: true,
+      render: (id: string) => <Text code style={{ fontSize: 12 }} copyable>{id}</Text>,
+    },
+    {
+      title: 'Date',
+      dataIndex: 'createdAt',
+      key: 'created',
+      width: 150,
+      render: (date: string) => new Date(date).toLocaleString('en-US'),
+    },
+    { title: 'Type', dataIndex: 'actionType', key: 'type', width: 100 },
+    {
+      title: 'Moderator ID',
+      dataIndex: 'moderatorId',
+      key: 'modId',
+      width: 100,
+      ellipsis: true,
+      render: (id: string) => <Text code style={{ fontSize: 12 }} copyable>{id}</Text>,
+    },
+    { title: 'Moderator', dataIndex: 'moderatorEmail', key: 'moderator', render: (e) => e ?? '—' },
+    { title: 'Reason', dataIndex: 'reason', key: 'reason', render: (r) => r ?? '—' },
+  ];
+
+  const loginColumns: ColumnsType<AdminLoginAttemptListItem> = [
+    {
+      title: 'Record ID',
+      dataIndex: 'id',
+      key: 'id',
+      width: 100,
+      ellipsis: true,
+      render: (id: string) => <Text code style={{ fontSize: 12 }} copyable>{id}</Text>,
+    },
+    {
+      title: 'Date',
+      dataIndex: 'attemptedAt',
+      key: 'attempted',
+      width: 150,
+      render: (date: string) => new Date(date).toLocaleString('en-US'),
+    },
+    { title: 'IP', dataIndex: 'ipAddress', key: 'ip', width: 120 },
+    {
+      title: 'Status',
+      dataIndex: 'status',
+      key: 'status',
+      width: 100,
+      render: (status: string) => (
+        <Tag color={status === 'SUCCESS' ? BADGE_COLOR_PRIMARY : 'default'}>{status}</Tag>
+      ),
+    },
+    {
+      title: 'User-Agent',
+      dataIndex: 'userAgent',
+      key: 'ua',
+      ellipsis: true,
+    },
+  ];
+
+  const tabItems = [
+    {
+      key: 'overview',
+      label: 'Overview',
+      children: (
+        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          <Card bordered title="Account">
+            <Descriptions column={2} bordered size="small">
+              <Descriptions.Item label="User ID" span={2}>
+                <Text code copyable style={{ fontSize: 12 }}>{user.id}</Text>
+              </Descriptions.Item>
+              {user.auth0Id && (
+                <Descriptions.Item label="Auth0 ID" span={2}>
+                  <Text code copyable style={{ fontSize: 12 }}>{user.auth0Id}</Text>
+                </Descriptions.Item>
+              )}
+              <Descriptions.Item label="Email">{user.email ?? '—'}</Descriptions.Item>
+              <Descriptions.Item label="Status">
+                <Tag color={user.status === 'BANNED' ? BADGE_COLOR_SECONDARY : 'default'}>{user.status ?? '—'}</Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="Email Verified">
+                {user.emailVerified ? (
+                  <CheckCircleOutlined style={{ color: 'var(--ant-color-success)', fontSize: 18 }} />
+                ) : (
+                  <CloseCircleOutlined style={{ color: 'var(--ant-color-text-tertiary)', fontSize: 18 }} />
                 )}
-                <div className="users-detail-field">
-                  <div className="users-detail-field-label">Email</div>
-                  <div className="users-detail-field-value">{user.email ?? '—'}</div>
-                </div>
-                <div className="users-detail-field">
-                  <div className="users-detail-field-label">Durum</div>
-                  <div className="users-detail-field-value">
-                    <span className={`users-badge users-badge-${user.status === 'BANNED' ? 'danger' : 'neutral'}`}>
-                      {user.status ?? '—'}
-                    </span>
-                  </div>
-                </div>
-                <div className="users-detail-field">
-                  <div className="users-detail-field-label">Email doğrulu</div>
-                  <div className="users-detail-field-value">{user.emailVerified ? 'Evet' : 'Hayır'}</div>
-                </div>
-                <div className="users-detail-field">
-                  <div className="users-detail-field-label">Roller</div>
-                  <div className="users-detail-field-value">{(user.roles ?? []).join(', ') || '—'}</div>
-                </div>
-                <div className="users-detail-field">
-                  <div className="users-detail-field-label">Kayıt</div>
-                  <div className="users-detail-field-value">
-                    {user.createdAt ? new Date(user.createdAt).toLocaleString('tr-TR') : '—'}
-                  </div>
-                </div>
+              </Descriptions.Item>
+              <Descriptions.Item label="Roles">
+                {(user.roles ?? []).join(', ') || '—'}
+              </Descriptions.Item>
+              <Descriptions.Item label="Created" span={2}>
+                {user.createdAt ? new Date(user.createdAt).toLocaleString('en-US') : '—'}
+              </Descriptions.Item>
+            </Descriptions>
+          </Card>
+
+          {user.lastBan && (
+            <Card bordered title="Last ban">
+              <Descriptions column={2} bordered size="small">
+                <Descriptions.Item label="Record ID" span={2}>
+                  <Text code copyable style={{ fontSize: 12 }}>{user.lastBan.id}</Text>
+                </Descriptions.Item>
+                <Descriptions.Item label="Moderator ID" span={2}>
+                  <Text code copyable style={{ fontSize: 12 }}>{user.lastBan.moderatorId}</Text>
+                </Descriptions.Item>
+                <Descriptions.Item label="Date">
+                  {new Date(user.lastBan.createdAt).toLocaleString('en-US')}
+                </Descriptions.Item>
+                <Descriptions.Item label="Moderator">
+                  {user.lastBan.moderatorEmail ?? '—'}
+                </Descriptions.Item>
+                <Descriptions.Item label="Reason" span={2}>
+                  {user.lastBan.reason ?? '—'}
+                </Descriptions.Item>
+              </Descriptions>
+            </Card>
+          )}
+
+          <Card bordered title="Edit account">
+            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+              <div>
+                <div style={{ marginBottom: 4, fontWeight: 500 }}>Email</div>
+                <Input
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                />
               </div>
-            </DataCard>
-            {user.lastBan ? (
-              <DataCard title="Son yasaklama">
-                <div className="users-detail-fields">
-                  <div className="users-detail-field">
-                    <div className="users-detail-field-label">Kayıt ID</div>
-                    <div className="users-detail-field-value users-id-value" title={user.lastBan.id}>
-                      {user.lastBan.id}
-                    </div>
-                  </div>
-                  <div className="users-detail-field">
-                    <div className="users-detail-field-label">Moderatör ID</div>
-                    <div className="users-detail-field-value users-id-value" title={user.lastBan.moderatorId}>
-                      {user.lastBan.moderatorId}
-                    </div>
-                  </div>
-                  <div className="users-detail-field">
-                    <div className="users-detail-field-label">Tarih</div>
-                    <div className="users-detail-field-value">
-                      {new Date(user.lastBan.createdAt).toLocaleString('tr-TR')}
-                    </div>
-                  </div>
-                  <div className="users-detail-field">
-                    <div className="users-detail-field-label">Moderatör</div>
-                    <div className="users-detail-field-value">{user.lastBan.moderatorEmail ?? '—'}</div>
-                  </div>
-                  <div className="users-detail-field">
-                    <div className="users-detail-field-label">Gerekçe</div>
-                    <div className="users-detail-field-value">{user.lastBan.reason ?? '—'}</div>
-                  </div>
+              <div>
+                <div style={{ marginBottom: 4, fontWeight: 500 }}>Status</div>
+                <Select
+                  style={{ width: '100%' }}
+                  value={editStatus}
+                  onChange={setEditStatus}
+                  options={[
+                    { value: '', label: '—' },
+                    { value: 'ACTIVE', label: 'ACTIVE' },
+                    { value: 'BANNED', label: 'BANNED' },
+                  ]}
+                />
+              </div>
+              <Checkbox
+                checked={editEmailVerified}
+                onChange={(e) => setEditEmailVerified(e.target.checked)}
+              >
+                Email Verified
+              </Checkbox>
+              <Button type="primary" onClick={handleSaveUser} loading={saving}>
+                Save
+              </Button>
+            </Space>
+          </Card>
+        </Space>
+      ),
+    },
+    {
+      key: 'profile',
+      label: 'Profile',
+      children: (
+        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          <Card bordered title="Profile details">
+            {user.profile ? (
+              <Descriptions column={2} bordered size="small">
+                <Descriptions.Item label="Profile ID" span={2}>
+                  <Text code copyable style={{ fontSize: 12 }}>{user.profile.id}</Text>
+                </Descriptions.Item>
+                <Descriptions.Item label="User ID" span={2}>
+                  <Text code copyable style={{ fontSize: 12 }}>{user.profile.userId}</Text>
+                </Descriptions.Item>
+                <Descriptions.Item label="Display name">
+                  {user.profile.displayName ?? '—'}
+                </Descriptions.Item>
+                <Descriptions.Item label="Username">
+                  {user.profile.userName ?? '—'}
+                </Descriptions.Item>
+                <Descriptions.Item label="Country">{user.profile.country ?? '—'}</Descriptions.Item>
+                <Descriptions.Item label="Birth date">
+                  {user.profile.birthDate ?? '—'}
+                </Descriptions.Item>
+                <Descriptions.Item label="Bio" span={2}>
+                  {user.profile.bio ?? '—'}
+                </Descriptions.Item>
+                <Descriptions.Item label="Posts count">
+                  {user.profile.postsCount}
+                </Descriptions.Item>
+                <Descriptions.Item label="Trust counts">
+                  {user.profile.trustCount} / {user.profile.trusterCount}
+                </Descriptions.Item>
+              </Descriptions>
+            ) : (
+              <Text type="secondary">No profile record.</Text>
+            )}
+          </Card>
+
+          <Card bordered title="Avatar" loading={loadingTab}>
+            {avatar === undefined ? (
+              <Text type="secondary">Loading…</Text>
+            ) : avatar ? (
+              <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                <div style={{ textAlign: 'center' }}>
+                  <Image src={avatar.imageUrl} alt="Avatar" width={120} />
                 </div>
-              </DataCard>
-            ) : null}
-            <DataCard title="Hesap düzenle">
-              <div className="users-form-group">
-                <label>Email</label>
-                <input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} />
-              </div>
-              <div className="users-form-group">
-                <label>Durum</label>
-                <select value={editStatus} onChange={(e) => setEditStatus(e.target.value)}>
-                  <option value="">—</option>
-                  <option value="ACTIVE">ACTIVE</option>
-                  <option value="BANNED">BANNED</option>
-                </select>
-              </div>
-              <div className="users-form-group">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={editEmailVerified}
-                    onChange={(e) => setEditEmailVerified(e.target.checked)}
-                  />{' '}
-                  Email doğrulu
-                </label>
-              </div>
-              <div className="users-form-actions">
-                <Button onClick={handleSaveUser} disabled={saving}>
-                  Kaydet
+                <Descriptions column={1} bordered size="small">
+                  <Descriptions.Item label="Avatar ID">
+                    <Text code copyable style={{ fontSize: 12 }}>{avatar.id}</Text>
+                  </Descriptions.Item>
+                  <Descriptions.Item label="Active">
+                    {avatar.isActive ? 'Yes' : 'No'}
+                  </Descriptions.Item>
+                </Descriptions>
+                <div>
+                  <div style={{ marginBottom: 4, fontWeight: 500 }}>Image URL</div>
+                  <Input
+                    type="url"
+                    value={avatarImageUrl}
+                    onChange={(e) => setAvatarImageUrl(e.target.value)}
+                    placeholder="https://…"
+                  />
+                </div>
+                <div>
+                  <div style={{ marginBottom: 4, fontWeight: 500 }}>Avatar ID to activate</div>
+                  <Input
+                    value={avatarActiveId ?? ''}
+                    onChange={(e) => setAvatarActiveId(e.target.value || null)}
+                    placeholder="Optional"
+                  />
+                </div>
+                <Button type="primary" onClick={handleUpdateAvatar} loading={saving}>
+                  Update
                 </Button>
-              </div>
-            </DataCard>
-          </div>
-        )}
-
-        {activeTab === 'profile' && (
-          <div className="users-detail-grid users-detail-grid--profile">
-            <DataCard title="Profil detayı">
-              {user.profile ? (
-                <div className="users-detail-fields">
-                  <div className="users-detail-field">
-                    <div className="users-detail-field-label">Profil ID</div>
-                    <div className="users-detail-field-value users-id-value" title={user.profile.id}>
-                      {user.profile.id}
-                    </div>
-                  </div>
-                  <div className="users-detail-field">
-                    <div className="users-detail-field-label">User ID</div>
-                    <div className="users-detail-field-value users-id-value" title={user.profile.userId}>
-                      {user.profile.userId}
-                    </div>
-                  </div>
-                  <div className="users-detail-field">
-                    <div className="users-detail-field-label">Görünen ad</div>
-                    <div className="users-detail-field-value">{user.profile.displayName ?? '—'}</div>
-                  </div>
-                  <div className="users-detail-field">
-                    <div className="users-detail-field-label">Kullanıcı adı</div>
-                    <div className="users-detail-field-value">{user.profile.userName ?? '—'}</div>
-                  </div>
-                  <div className="users-detail-field">
-                    <div className="users-detail-field-label">Ülke</div>
-                    <div className="users-detail-field-value">{user.profile.country ?? '—'}</div>
-                  </div>
-                  <div className="users-detail-field">
-                    <div className="users-detail-field-label">Doğum tarihi</div>
-                    <div className="users-detail-field-value">{user.profile.birthDate ?? '—'}</div>
-                  </div>
-                  <div className="users-detail-field">
-                    <div className="users-detail-field-label">Bio</div>
-                    <div className="users-detail-field-value">{user.profile.bio ?? '—'}</div>
-                  </div>
-                  <div className="users-detail-field">
-                    <div className="users-detail-field-label">Gönderi sayısı</div>
-                    <div className="users-detail-field-value tabular-nums">{user.profile.postsCount}</div>
-                  </div>
-                  <div className="users-detail-field">
-                    <div className="users-detail-field-label">Trust sayıları</div>
-                    <div className="users-detail-field-value tabular-nums">
-                      {user.profile.trustCount} / {user.profile.trusterCount}
-                    </div>
-                  </div>
+              </Space>
+            ) : (
+              <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                <Text type="secondary">No avatar.</Text>
+                <div>
+                  <div style={{ marginBottom: 4, fontWeight: 500 }}>Image URL</div>
+                  <Input
+                    type="url"
+                    value={avatarImageUrl}
+                    onChange={(e) => setAvatarImageUrl(e.target.value)}
+                    placeholder="https://…"
+                  />
                 </div>
-              ) : (
-                <p className="users-detail-field-value">Profil kaydı yok.</p>
-              )}
-            </DataCard>
-            <DataCard title="Profil resmi">
-              {loadingTab ? (
-                <LoadingSpinner fullScreen={false} />
-              ) : avatar === undefined ? (
-                <p className="users-detail-field-value">Yükleniyor…</p>
-              ) : avatar ? (
-                <div className="users-detail-fields">
-                  <div className="users-detail-avatar-preview">
-                    <img src={avatar.imageUrl} alt="Avatar" className="users-detail-avatar-img" />
-                  </div>
-                  <div className="users-detail-field">
-                    <div className="users-detail-field-label">Avatar ID</div>
-                    <div className="users-detail-field-value users-id-value" title={avatar.id}>
-                      {avatar.id}
-                    </div>
-                  </div>
-                  <div className="users-detail-field">
-                    <div className="users-detail-field-label">Aktif</div>
-                    <div className="users-detail-field-value">{avatar.isActive ? 'Evet' : 'Hayır'}</div>
-                  </div>
-                  <div className="users-form-group">
-                    <label>Resim URL</label>
-                    <input
-                      type="url"
-                      value={avatarImageUrl}
-                      onChange={(e) => setAvatarImageUrl(e.target.value)}
-                      placeholder="https://…"
-                    />
-                  </div>
-                  <div className="users-form-group">
-                    <label>Aktif yapılacak avatar ID</label>
-                    <input
-                      type="text"
-                      value={avatarActiveId ?? ''}
-                      onChange={(e) => setAvatarActiveId(e.target.value || null)}
-                      placeholder="Opsiyonel"
-                    />
-                  </div>
-                  <div className="users-form-actions">
-                    <Button onClick={handleUpdateAvatar} disabled={saving}>
-                      Güncelle
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="users-detail-fields">
-                  <p className="users-detail-field-value">Profil resmi yok.</p>
-                  <div className="users-form-group">
-                    <label>Resim URL</label>
-                    <input
-                      type="url"
-                      value={avatarImageUrl}
-                      onChange={(e) => setAvatarImageUrl(e.target.value)}
-                      placeholder="https://…"
-                    />
-                  </div>
-                  <div className="users-form-actions">
-                    <Button onClick={handleCreateAvatar} disabled={saving || !avatarImageUrl.trim()}>
-                      Ekle
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </DataCard>
-          </div>
-        )}
-
-        {activeTab === 'roles' && (
-          <DataCard title="Rolleri düzenle">
-            <div className="users-form-group">
-              <label>Roller (virgülle ayırın)</label>
-              <input
-                type="text"
+                <Button
+                  type="primary"
+                  onClick={handleCreateAvatar}
+                  loading={saving}
+                  disabled={!avatarImageUrl.trim()}
+                >
+                  Add
+                </Button>
+              </Space>
+            )}
+          </Card>
+        </Space>
+      ),
+    },
+    {
+      key: 'roles',
+      label: 'Roles',
+      children: (
+        <Card bordered title="Edit roles">
+          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            <div>
+              <div style={{ marginBottom: 4, fontWeight: 500 }}>Roles (comma separated)</div>
+              <Input
                 value={editRoles}
                 onChange={(e) => setEditRoles(e.target.value)}
                 placeholder="ADMIN, USER, MODERATOR"
               />
             </div>
-            <div className="users-form-actions">
-              <Button onClick={handleSaveRoles} disabled={saving}>
-                Rolleri güncelle
-              </Button>
-            </div>
-          </DataCard>
-        )}
-
-        {activeTab === 'events' && (
-          <DataCard
-            title="Katıldığı etkinlikler"
-            action={
-              <Link to="/events" className="users-link">
-                Tüm etkinlikler
-              </Link>
-            }
-          >
-            {loadingTab ? (
-              <LoadingSpinner fullScreen={false} />
-            ) : userEvents.length === 0 ? (
-              <p className="users-detail-field-value">Kayıt yok</p>
-            ) : (
-              <>
-                <div className="users-table-wrap">
-                  <table className="users-table">
-<thead>
-                    <tr>
-                        <th>Event ID</th>
-                        <th>Etkinlik</th>
-                        <th>Durum</th>
-                        <th>Başlangıç</th>
-                        <th>Bitiş</th>
-                        <th>Gönderi</th>
-                        <th>Beğeni</th>
-                        <th>Katılım</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {userEvents.map((e) => (
-                        <tr key={e.id}>
-                          <td className="users-id-cell" title={e.eventId}>
-                            {e.eventId}
-                          </td>
-                          <td>
-                            <Link to={`/events?highlight=${e.eventId}`} className="users-link">
-                              {e.eventTitle ?? e.eventId}
-                            </Link>
-                          </td>
-                          <td>{e.eventStatus ?? '—'}</td>
-                          <td>{e.eventStartDate ? new Date(e.eventStartDate).toLocaleDateString('tr-TR') : '—'}</td>
-                          <td>{e.eventEndDate ? new Date(e.eventEndDate).toLocaleDateString('tr-TR') : '—'}</td>
-                          <td className="tabular-nums">{e.eventPostsCount}</td>
-                          <td className="tabular-nums">{e.eventLikesReceived}</td>
-                          <td className="tabular-nums">{e.totalParticipated}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {eventsPagination && eventsPagination.total > eventsPagination.limit && (
-                  <p className="users-pagination-info">
-                    Toplam {eventsPagination.total} kayıt (gösterilen: {userEvents.length})
-                  </p>
-                )}
-              </>
-            )}
-          </DataCard>
-        )}
-
-        {activeTab === 'posts' && (
-          <DataCard
-            title="Kullanıcının postları"
-            action={
-              <Link to="/content/posts" className="users-link">
-                Tüm postlar
-              </Link>
-            }
-          >
-            {loadingTab ? (
-              <LoadingSpinner fullScreen={false} />
-            ) : userPosts.length === 0 ? (
-              <p className="users-detail-field-value">Kayıt yok</p>
-            ) : (
-              <>
-                <div className="users-table-wrap">
-                  <table className="users-table">
-                    <thead>
-                      <tr>
-                        <th>Başlık</th>
-                        <th>Tür</th>
-                        <th>Beğeni</th>
-                        <th>Yorum</th>
-                        <th>Oluşturulma</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {userPosts.map((p) => (
-                        <tr key={p.id}>
-                          <td title={p.title}>
-                            {p.title.length > 50 ? p.title.slice(0, 50) + '…' : p.title}
-                          </td>
-                          <td>{p.type}</td>
-                          <td className="tabular-nums">{p.likesCount}</td>
-                          <td className="tabular-nums">{p.commentsCount}</td>
-                          <td>{p.createdAt ? new Date(p.createdAt).toLocaleDateString('tr-TR') : '—'}</td>
-                          <td>
-                            <Link to={`/content/posts/${p.id}`} className="users-link">
-                              Post detay
-                            </Link>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {postsPagination && postsPagination.total > postsPagination.limit && (
-                  <p className="users-pagination-info">
-                    Toplam {postsPagination.total} kayıt (gösterilen: {userPosts.length})
-                  </p>
-                )}
-              </>
-            )}
-          </DataCard>
-        )}
-
-        {activeTab === 'badges' && (
-          <div className="users-detail-grid">
-            <DataCard title="Rozetler" className="users-detail-edit-card">
-              <div className="users-form-group">
-                <label>Yeni rozet ver (Badge ID)</label>
-                <input
-                  type="text"
+            <Button type="primary" onClick={handleSaveRoles} loading={saving}>
+              Update roles
+            </Button>
+          </Space>
+        </Card>
+      ),
+    },
+    {
+      key: 'events',
+      label: 'Events',
+      children: (
+        <Card
+          bordered
+          title="Participated events"
+          extra={<Link to="/events">All events</Link>}
+          loading={loadingTab}
+        >
+          <Table
+            columns={eventsColumns}
+            dataSource={userEvents}
+            rowKey="id"
+            pagination={false}
+            size="small"
+          />
+          {eventsPagination && eventsPagination.total > eventsPagination.limit && (
+            <Text type="secondary" style={{ marginTop: 8, display: 'block' }}>
+              Total {eventsPagination.total} records (showing: {userEvents.length})
+            </Text>
+          )}
+        </Card>
+      ),
+    },
+    {
+      key: 'badges',
+      label: 'Badges',
+      children: (
+        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          <Card bordered title="Grant new badge">
+            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+              <div>
+                <div style={{ marginBottom: 4, fontWeight: 500 }}>Badge ID</div>
+                <Input
                   value={grantBadgeId}
                   onChange={(e) => setGrantBadgeId(e.target.value)}
                   placeholder="UUID"
                 />
               </div>
-              <div className="users-form-actions">
-                <Button onClick={handleGrantBadge} disabled={saving || !grantBadgeId.trim()}>
-                  Rozet ver
-                </Button>
-              </div>
-            </DataCard>
-            <DataCard title="Kullanıcının rozetleri" className="users-detail-edit-card">
-              {loadingTab ? (
-                <LoadingSpinner fullScreen={false} />
-              ) : userBadges.length === 0 ? (
-                <p className="users-detail-field-value">Kayıt yok</p>
-              ) : (
-                <>
-                  <div className="users-table-wrap">
-                    <table className="users-table">
-                      <thead>
-                        <tr>
-                          <th>UserBadge ID</th>
-                          <th>Badge ID</th>
-                          <th>Rozet</th>
-                          <th>Kategori</th>
-                          <th>Görünür</th>
-                          <th>Claimed</th>
-                          <th>Tarih</th>
-                          <th></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {userBadges.map((b) => (
-                          <tr key={b.id}>
-                            <td className="users-id-cell" title={b.id}>
-                              {b.id}
-                            </td>
-                            <td className="users-id-cell" title={b.badgeId}>
-                              {b.badgeId}
-                            </td>
-                            <td>
-                              {b.badgeImageUrl ? (
-                                <img src={b.badgeImageUrl} alt="" className="users-badge-thumb" />
-                              ) : null}
-                              {b.badgeName}
-                            </td>
-                            <td>{b.badgeCategoryName ?? '—'}</td>
-                            <td>{b.isVisible ? 'Evet' : 'Hayır'}</td>
-                            <td>{b.claimed ? new Date(b.claimedAt!).toLocaleDateString('tr-TR') : '—'}</td>
-                            <td>{new Date(b.createdAt).toLocaleDateString('tr-TR')}</td>
-                            <td>
-                              <Button
-                                size="sm"
-                                variant="danger"
-                                onClick={() => handleRevokeBadge(b.id)}
-                                disabled={saving}
-                              >
-                                Al
-                              </Button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  {badgesPagination && badgesPagination.total > badgesPagination.limit && (
-                    <p className="users-pagination-info">
-                      Toplam {badgesPagination.total} kayıt
-                    </p>
-                  )}
-                </>
-              )}
-            </DataCard>
-          </div>
-        )}
+              <Button
+                type="primary"
+                onClick={handleGrantBadge}
+                loading={saving}
+                disabled={!grantBadgeId.trim()}
+              >
+                Grant badge
+              </Button>
+            </Space>
+          </Card>
 
-        {activeTab === 'wallet' && (
-          <div className="users-detail-grid users-detail-grid--wallet">
-            {/* Özet: GET /admin/users/:id/wallet response'undan türetilen toplamlar */}
-            {!loadingTab && wallet.length > 0 && (
-              <DataCard title="Cüzdan özeti (response’tan)">
-                <div className="users-detail-fields">
-                  <div className="users-detail-field">
-                    <div className="users-detail-field-label">Cüzdan sayısı</div>
-                    <div className="users-detail-field-value tabular-nums">{wallet.length}</div>
-                  </div>
-                  <div className="users-detail-field">
-                    <div className="users-detail-field-label">Toplam bakiye</div>
-                    <div className="users-detail-field-value tabular-nums">
-                      {wallet.reduce((s, w) => s + (w.balance ?? 0), 0)}
-                    </div>
-                  </div>
-                  <div className="users-detail-field">
-                    <div className="users-detail-field-label">Toplam kilitli</div>
-                    <div className="users-detail-field-value tabular-nums">
-                      {wallet.reduce((s, w) => s + (w.lockedBalance ?? 0), 0)}
-                    </div>
-                  </div>
-                </div>
-              </DataCard>
+          <Card bordered title="User badges" loading={loadingTab}>
+            <Table
+              columns={badgesColumns}
+              dataSource={userBadges}
+              rowKey="id"
+              pagination={false}
+              size="small"
+            />
+            {badgesPagination && badgesPagination.total > badgesPagination.limit && (
+              <Text type="secondary" style={{ marginTop: 8, display: 'block' }}>
+                Total {badgesPagination.total} records
+              </Text>
             )}
-            <DataCard
-              title="Cüzdanlar"
-              action={
-                <Link to="/crypto/wallets" className="users-link">
-                  Tüm cüzdanlar
-                </Link>
-              }
-            >
-              {loadingTab ? (
-                <LoadingSpinner fullScreen={false} />
-              ) : wallet.length === 0 ? (
-                <p className="users-detail-field-value">Kayıt yok</p>
-              ) : (
-                <div className="users-table-wrap">
-                  <table className="users-table">
-                    <thead>
-                      <tr>
-                        <th>Wallet ID</th>
-                        <th>User ID</th>
-                        <th>Provider</th>
-                        <th>Adres</th>
-                        <th>Bakiye</th>
-                        <th>Kilitli</th>
-                        <th>Bağlı</th>
-                        <th>Oluşturulma</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {wallet.map((w) => (
-                        <tr key={w.id}>
-                          <td className="users-id-cell" title={w.id}>
-                            {w.id}
-                          </td>
-                          <td className="users-id-cell" title={w.userId}>
-                            {w.userId}
-                          </td>
-                          <td>{w.provider}</td>
-                          <td className="users-cell-truncate" title={w.publicAddress}>
-                            {w.publicAddress}
-                          </td>
-                          <td className="tabular-nums">{w.balance}</td>
-                          <td className="tabular-nums">{w.lockedBalance}</td>
-                          <td>{w.isConnected ? 'Evet' : 'Hayır'}</td>
-                          <td>{w.createdAt ? new Date(w.createdAt).toLocaleString('tr-TR') : '—'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </DataCard>
-            <DataCard title="Tips özeti">
-              {loadingTab ? (
-                <LoadingSpinner fullScreen={false} />
-              ) : tipsSummary ? (
-                <div className="users-detail-fields">
-                  <div className="users-detail-field">
-                    <div className="users-detail-field-label">Toplam gönderilen</div>
-                    <div className="users-detail-field-value tabular-nums">{tipsSummary.totalSent}</div>
-                  </div>
-                  <div className="users-detail-field">
-                    <div className="users-detail-field-label">Toplam alınan</div>
-                    <div className="users-detail-field-value tabular-nums">{tipsSummary.totalReceived}</div>
-                  </div>
-                  <div className="users-detail-field">
-                    <div className="users-detail-field-label">Gönderi sayısı</div>
-                    <div className="users-detail-field-value tabular-nums">{tipsSummary.sentCount}</div>
-                  </div>
-                  <div className="users-detail-field">
-                    <div className="users-detail-field-label">Alım sayısı</div>
-                    <div className="users-detail-field-value tabular-nums">{tipsSummary.receivedCount}</div>
-                  </div>
-                </div>
-              ) : (
-                <p className="users-detail-field-value">Veri yok</p>
-              )}
-            </DataCard>
-            <DataCard title="Tips işlemleri" className="users-detail-edit-card">
-              {loadingTab ? (
-                <LoadingSpinner fullScreen={false} />
-              ) : tipsTransactions.length === 0 ? (
-                <p className="users-detail-field-value">Kayıt yok</p>
-              ) : (
-                <>
-                  <div className="users-table-wrap">
-                    <table className="users-table">
-<thead>
-                      <tr>
-                          <th>İşlem ID</th>
-                          <th>Tarih</th>
-                          <th>Gönderen</th>
-                          <th>Alan</th>
-                          <th>Tutar</th>
-                          <th>Sebep</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {tipsTransactions.map((t) => (
-                          <tr key={t.id}>
-                            <td className="users-id-cell" title={t.id}>
-                              {t.id}
-                            </td>
-                            <td>{new Date(t.createdAt).toLocaleString('tr-TR')}</td>
-                            <td>{t.fromUserDisplayName ?? t.fromUserEmail ?? t.fromUserId}</td>
-                            <td>{t.toUserDisplayName ?? t.toUserEmail ?? t.toUserId}</td>
-                            <td className="tabular-nums">{t.amount}</td>
-                            <td>{t.reason ?? '—'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  {tipsPagination && tipsPagination.total > tipsPagination.limit && (
-                    <p className="users-pagination-info">
-                      Toplam {tipsPagination.total} kayıt (gösterilen: {tipsTransactions.length})
-                    </p>
-                  )}
-                </>
-              )}
-            </DataCard>
-          </div>
-        )}
+          </Card>
+        </Space>
+      ),
+    },
+    {
+      key: 'posts',
+      label: 'Posts',
+      children: (
+        <Card
+          bordered
+          title="User posts"
+          extra={<Link to="/content/posts">All posts</Link>}
+          loading={loadingTab}
+        >
+          <Table
+            columns={postsColumns}
+            dataSource={userPosts}
+            rowKey="id"
+            pagination={false}
+            size="small"
+          />
+          {postsPagination && postsPagination.total > postsPagination.limit && (
+            <Text type="secondary" style={{ marginTop: 8, display: 'block' }}>
+              Total {postsPagination.total} records (showing: {userPosts.length})
+            </Text>
+          )}
+        </Card>
+      ),
+    },
+    {
+      key: 'wallet',
+      label: 'Wallet & Tips',
+      children: (
+        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          {!loadingTab && wallet.length > 0 && (
+            <Card bordered title="Wallet summary">
+              <Descriptions column={3} bordered size="small">
+                <Descriptions.Item label="Wallet count">{wallet.length}</Descriptions.Item>
+                <Descriptions.Item label="Total balance">
+                  {wallet.reduce((s, w) => s + (w.balance ?? 0), 0)}
+                </Descriptions.Item>
+                <Descriptions.Item label="Total locked">
+                  {wallet.reduce((s, w) => s + (w.lockedBalance ?? 0), 0)}
+                </Descriptions.Item>
+              </Descriptions>
+            </Card>
+          )}
 
-        {activeTab === 'moderation' && (
-          <DataCard title="Moderation geçmişi">
-            {loadingTab ? (
-              <LoadingSpinner fullScreen={false} />
-            ) : moderation.length === 0 ? (
-              <p className="users-detail-field-value">Kayıt yok</p>
+          <Card
+            bordered
+            title="Wallets"
+            extra={<Link to="/crypto/wallets">All wallets</Link>}
+            loading={loadingTab}
+          >
+            <Table
+              columns={walletColumns}
+              dataSource={wallet}
+              rowKey="id"
+              pagination={false}
+              size="small"
+              scroll={{ x: true }}
+            />
+          </Card>
+
+          <Card bordered title="Tips summary" loading={loadingTab}>
+            {tipsSummary ? (
+              <Descriptions column={2} bordered size="small">
+                <Descriptions.Item label="Total sent">
+                  {tipsSummary.totalSent}
+                </Descriptions.Item>
+                <Descriptions.Item label="Total received">
+                  {tipsSummary.totalReceived}
+                </Descriptions.Item>
+                <Descriptions.Item label="Sent count">
+                  {tipsSummary.sentCount}
+                </Descriptions.Item>
+                <Descriptions.Item label="Received count">
+                  {tipsSummary.receivedCount}
+                </Descriptions.Item>
+              </Descriptions>
             ) : (
-              <div className="users-table-wrap">
-                <table className="users-table">
-                  <thead>
-                    <tr>
-                      <th>Kayıt ID</th>
-                      <th>Tarih</th>
-                      <th>Tür</th>
-                      <th>Moderatör ID</th>
-                      <th>Moderatör</th>
-                      <th>Gerekçe</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {moderation.map((m) => (
-                      <tr key={m.id}>
-                        <td className="users-id-cell" title={m.id}>
-                          {m.id}
-                        </td>
-                        <td>{new Date(m.createdAt).toLocaleString('tr-TR')}</td>
-                        <td>{m.actionType}</td>
-                        <td className="users-id-cell" title={m.moderatorId}>
-                          {m.moderatorId}
-                        </td>
-                        <td>{m.moderatorEmail ?? '—'}</td>
-                        <td>{m.reason ?? '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <Text type="secondary">No data</Text>
             )}
-          </DataCard>
-        )}
+          </Card>
 
-        {activeTab === 'login' && (
-          <DataCard title="Giriş denemeleri">
-            {loadingTab ? (
-              <LoadingSpinner fullScreen={false} />
-            ) : loginAttempts.length === 0 ? (
-              <p className="users-detail-field-value">Kayıt yok</p>
-            ) : (
-              <div className="users-table-wrap">
-                <table className="users-table">
-                  <thead>
-                    <tr>
-                      <th>Kayıt ID</th>
-                      <th>Tarih</th>
-                      <th>IP</th>
-                      <th>Durum</th>
-                      <th>User-Agent</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loginAttempts.map((a) => (
-                      <tr key={a.id}>
-                        <td className="users-id-cell" title={a.id}>
-                          {a.id}
-                        </td>
-                        <td>{new Date(a.attemptedAt).toLocaleString('tr-TR')}</td>
-                        <td>{a.ipAddress}</td>
-                        <td>
-                          <span className={`users-badge users-badge-${a.status === 'SUCCESS' ? 'success' : 'neutral'}`}>
-                            {a.status}
-                          </span>
-                        </td>
-                        <td className="users-cell-truncate" title={a.userAgent}>
-                          {a.userAgent?.slice(0, 50)}…
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+          <Card bordered title="Tips transactions" loading={loadingTab}>
+            <Table
+              columns={tipsColumns}
+              dataSource={tipsTransactions}
+              rowKey="id"
+              pagination={false}
+              size="small"
+              scroll={{ x: true }}
+            />
+            {tipsPagination && tipsPagination.total > tipsPagination.limit && (
+              <Text type="secondary" style={{ marginTop: 8, display: 'block' }}>
+                Total {tipsPagination.total} records (showing: {tipsTransactions.length})
+              </Text>
             )}
-          </DataCard>
-        )}
-      </div>
+          </Card>
+        </Space>
+      ),
+    },
+    {
+      key: 'moderation',
+      label: 'Moderation history',
+      children: (
+        <Card bordered title="Moderation history" loading={loadingTab}>
+          <Table
+            columns={moderationColumns}
+            dataSource={moderation}
+            rowKey="id"
+            pagination={false}
+            size="small"
+          />
+        </Card>
+      ),
+    },
+    {
+      key: 'login',
+      label: 'Login attempts',
+      children: (
+        <Card bordered title="Login attempts" loading={loadingTab}>
+          <Table
+            columns={loginColumns}
+            dataSource={loginAttempts}
+            rowKey="id"
+            pagination={false}
+            size="small"
+            scroll={{ x: true }}
+          />
+        </Card>
+      ),
+    },
+  ];
+
+  return (
+    <div>
+      <PageHeader
+        title={user.displayName || user.userName || user.email || user.id}
+        description={user.email ?? undefined}
+        icon={<UserOutlined />}
+        backTo="/users"
+        backLabel="Back to list"
+        actions={
+          user.status === 'BANNED' ? (
+            <Button onClick={handleUnban} loading={saving}>
+              Unban
+            </Button>
+          ) : (
+            <Button danger onClick={handleBan} loading={saving}>
+              Ban
+            </Button>
+          )
+        }
+      />
+
+      {message && (
+        <Alert
+          message={message}
+          type={message.includes('success') || message.includes('updated') || message.includes('granted') || message.includes('removed') || message.includes('revoked') || message.includes('added') || message.includes('banned') ? 'success' : 'error'}
+          showIcon
+          closable
+          onClose={() => setMessage(null)}
+          style={{ marginBottom: 16 }}
+        />
+      )}
+
+      <Tabs activeKey={activeTab} onChange={(key) => setActiveTab(key as TabId)} items={tabItems} />
     </div>
   );
 }

@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import {
   Row,
   Col,
@@ -17,6 +16,8 @@ import {
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import { FolderOpenOutlined, SearchOutlined, PlusOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
+import ViewActionButton from '../../components/ViewActionButton';
+import CreateCollectionModal from './CreateCollectionModal';
 import {
   fetchCollectionsStats,
   fetchCollections,
@@ -35,6 +36,8 @@ function BadgeCollections() {
   const [sort, setSort] = useState<'createdAt' | 'name'>('createdAt');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const [error, setError] = useState<string | null>(null);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,7 +46,7 @@ function BadgeCollections() {
         const res = await fetchCollectionsStats();
         if (!cancelled && res.data) setStats(res.data);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'İstatistikler yüklenemedi');
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load statistics');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -51,7 +54,7 @@ function BadgeCollections() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshTrigger]);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,7 +73,7 @@ function BadgeCollections() {
           if (res.pagination) setPagination((prev) => ({ ...prev, ...res.pagination }));
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Liste yüklenemedi');
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load list');
       } finally {
         if (!cancelled) setLoadingList(false);
       }
@@ -78,52 +81,53 @@ function BadgeCollections() {
     return () => {
       cancelled = true;
     };
-  }, [pagination.offset, search, sort, order]);
+  }, [pagination.offset, search, sort, order, refreshTrigger]);
 
   const columns: ColumnsType<AdminCollectionListItem> = [
     {
-      title: 'Ad',
+      title: 'Name',
       dataIndex: 'name',
       key: 'name',
+      ellipsis: true,
+      render: (name) => name ?? '—',
     },
     {
-      title: 'Kategori',
+      title: 'Category',
       key: 'category',
-      render: (_, record) => record.categoryName ?? record.categoryId,
+      width: 140,
+      ellipsis: true,
+      render: (_, record) => record.categoryName ?? record.categoryId ?? '—',
     },
     {
-      title: 'Badge sayısı',
+      title: 'Badge count',
       dataIndex: 'badgesCount',
       key: 'badgesCount',
-      width: 120,
+      width: 100,
       align: 'right',
+      ellipsis: true,
     },
     {
-      title: 'Hedef sayısı',
+      title: 'Goal count',
       dataIndex: 'goalsCount',
       key: 'goalsCount',
-      width: 120,
+      width: 100,
       align: 'right',
+      ellipsis: true,
       render: (count) => count ?? 0,
     },
     {
-      title: 'Oluşturulma',
+      title: 'Created',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      width: 150,
-      render: (date) => new Date(date).toLocaleString('tr-TR'),
+      width: 140,
+      ellipsis: true,
+      render: (date) => new Date(date).toLocaleString('en-US'),
     },
     {
       title: '',
       key: 'action',
       width: 80,
-      render: (_, record) => (
-        <Link to={`/gamification/collections/${record.id}`}>
-          <Button type="link" size="small">
-            Detay
-          </Button>
-        </Link>
-      ),
+      render: (_, record) => <ViewActionButton to={`/gamification/collections/${record.id}`} />,
     },
   ];
 
@@ -138,13 +142,13 @@ function BadgeCollections() {
     <div>
       <PageHeader
         title="Collections"
-        description="Koleksiyon listesi, filtreleme ve yönetim (achievement badge'ler koleksiyon içinde yönetilir)"
+        description="Collection list, filtering and management (achievement badges are managed within collections)"
         icon={<FolderOpenOutlined />}
       />
 
       {error && (
         <Alert
-          message="Hata"
+          message="Error"
           description={error}
           type="error"
           closable
@@ -164,7 +168,7 @@ function BadgeCollections() {
             <Col xs={24} sm={12} lg={6}>
               <Card bordered>
                 <Statistic
-                  title="Toplam koleksiyon"
+                  title="Total collections"
                   value={stats.total}
                   prefix={<FolderOpenOutlined />}
                   valueStyle={{ fontWeight: 700 }}
@@ -178,16 +182,18 @@ function BadgeCollections() {
       {/* Collection List */}
       <Card
         bordered
-        title="Koleksiyon listesi"
+        title="Collection list"
         extra={
           <Space wrap>
-            <Link to="/gamification/collections/new">
-              <Button type="primary" icon={<PlusOutlined />}>
-                Yeni koleksiyon
-              </Button>
-            </Link>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => setCreateModalOpen(true)}
+            >
+              New collection
+            </Button>
             <Input
-              placeholder="Ara (ad)"
+              placeholder="Search (name)"
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -205,8 +211,8 @@ function BadgeCollections() {
               }}
               style={{ width: 120 }}
             >
-              <Select.Option value="createdAt">Oluşturulma</Select.Option>
-              <Select.Option value="name">Ad</Select.Option>
+              <Select.Option value="createdAt">Created</Select.Option>
+              <Select.Option value="name">Name</Select.Option>
             </Select>
             <Select
               value={order}
@@ -216,8 +222,8 @@ function BadgeCollections() {
               }}
               style={{ width: 100 }}
             >
-              <Select.Option value="desc">Azalan</Select.Option>
-              <Select.Option value="asc">Artan</Select.Option>
+              <Select.Option value="desc">Descending</Select.Option>
+              <Select.Option value="asc">Ascending</Select.Option>
             </Select>
           </Space>
         }
@@ -232,19 +238,25 @@ function BadgeCollections() {
             pageSize: PAGE_SIZE,
             total: pagination.total,
             showSizeChanger: false,
-            showTotal: (total) => `Toplam ${total} kayıt`,
+            showTotal: (total) => `Total ${total} records`,
           }}
           onChange={handleTableChange}
           locale={{
             emptyText: (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description="Koleksiyon bulunamadı. Filtreleri değiştirin veya yeni koleksiyon oluşturun."
+                description="No collections found. Change filters or create a new collection."
               />
             ),
           }}
         />
       </Card>
+
+      <CreateCollectionModal
+        open={createModalOpen}
+        onClose={() => setCreateModalOpen(false)}
+        onSuccess={() => setRefreshTrigger((t) => t + 1)}
+      />
     </div>
   );
 }

@@ -13,7 +13,7 @@ function BrandBadgesList() {
         badgeType={'BRAND' as BadgeTypeSlug}
         listPath="/gamification/brand-badges"
         title="Brand Badges"
-        description="Marka badge'leri listesi ve yönetimi"
+        description="Brand badges list and management"
         icon={<TagOutlined />}
         onOpenCreate={() => setCreateOpen(true)}
       />

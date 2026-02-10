@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import {
   Card,
   Table,
@@ -56,7 +55,7 @@ function FeedHighlights() {
       setRows(res.data ?? []);
       if (res.pagination) setPagination((p) => ({ ...p, ...res.pagination }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Liste yüklenemedi');
+      setError(e instanceof Error ? e.message : 'Failed to load list');
     } finally {
       setLoading(false);
     }
@@ -68,7 +67,7 @@ function FeedHighlights() {
 
   const handleAdd = async () => {
     if (!newPostId.trim()) {
-      antdMessage.warning('Lütfen Post ID girin');
+      antdMessage.warning('Please enter Post ID');
       return;
     }
     setActionLoading('add');
@@ -79,10 +78,10 @@ function FeedHighlights() {
       });
       setShowAdd(false);
       setNewPostId('');
-      antdMessage.success('Highlight eklendi');
+      antdMessage.success('Highlight added');
       load();
     } catch (e) {
-      antdMessage.error(e instanceof Error ? e.message : 'Eklenemedi');
+      antdMessage.error(e instanceof Error ? e.message : 'Failed to add');
     } finally {
       setActionLoading(null);
     }
@@ -90,19 +89,19 @@ function FeedHighlights() {
 
   const handleDelete = async (id: string) => {
     Modal.confirm({
-      title: 'Highlight Kaldır',
-      content: 'Bu highlight kaldırılsın mı?',
-      okText: 'Kaldır',
-      cancelText: 'İptal',
+      title: 'Remove Highlight',
+      content: 'Are you sure you want to remove this highlight?',
+      okText: 'Remove',
+      cancelText: 'Cancel',
       okButtonProps: { danger: true },
       onOk: async () => {
         setActionLoading(id);
         try {
           await deleteFeedHighlight(id);
-          antdMessage.success('Highlight kaldırıldı');
+          antdMessage.success('Highlight removed');
           load();
         } catch (e) {
-          antdMessage.error(e instanceof Error ? e.message : 'Kaldırılamadı');
+          antdMessage.error(e instanceof Error ? e.message : 'Failed to remove');
         } finally {
           setActionLoading(null);
         }
@@ -114,34 +113,37 @@ function FeedHighlights() {
     {
       title: 'Post',
       key: 'post',
-      render: (_, record) => (
-        <Link to={`/content/posts/${record.postId}`}>
-          <Button type="link" size="small" style={{ padding: 0 }}>
-            {record.postTitle
-              ? record.postTitle.length > 40
-                ? record.postTitle.slice(0, 40) + '…'
-                : record.postTitle
-              : record.postId}
-          </Button>
-        </Link>
-      ),
+      width: 240,
+      ellipsis: true,
+      render: (_, record) =>
+        record.postTitle
+          ? record.postTitle.length > 50
+            ? record.postTitle.slice(0, 50) + '…'
+            : record.postTitle
+          : record.postId,
     },
     {
-      title: 'Yazar',
+      title: 'Author',
       dataIndex: 'userDisplayName',
       key: 'userDisplayName',
+      width: 140,
+      ellipsis: true,
       render: (text) => text ?? '—',
     },
     {
-      title: 'Sebep',
+      title: 'Reason',
       dataIndex: 'reason',
       key: 'reason',
+      width: 120,
+      ellipsis: true,
     },
     {
-      title: 'Öne çıkarılma',
+      title: 'Highlighted',
       dataIndex: 'highlightedAt',
       key: 'highlightedAt',
-      render: (date) => new Date(date).toLocaleString('tr-TR'),
+      width: 160,
+      ellipsis: true,
+      render: (date) => new Date(date).toLocaleString('en-US'),
     },
     {
       title: '',
@@ -154,7 +156,7 @@ function FeedHighlights() {
           loading={actionLoading === record.id}
           onClick={() => handleDelete(record.id)}
         >
-          Kaldır
+          Remove
         </Button>
       ),
     },
@@ -177,7 +179,7 @@ function FeedHighlights() {
 
       {error && (
         <Alert
-          message="Hata"
+          message="Error"
           description={error}
           type="error"
           closable
@@ -188,7 +190,7 @@ function FeedHighlights() {
 
       <Card
         bordered
-        title="Feed highlight listesi"
+        title="Feed highlight list"
         extra={
           <Space>
             <Select
@@ -198,9 +200,9 @@ function FeedHighlights() {
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
               style={{ width: 140 }}
-              placeholder="Tüm sebepler"
+              placeholder="All reasons"
             >
-              <Select.Option value="">Tüm sebepler</Select.Option>
+              <Select.Option value="">All reasons</Select.Option>
               {REASONS.map((r) => (
                 <Select.Option key={r.value} value={r.value}>
                   {r.label}
@@ -208,7 +210,7 @@ function FeedHighlights() {
               ))}
             </Select>
             <Button type="primary" onClick={() => setShowAdd(!showAdd)}>
-              {showAdd ? 'İptal' : 'Highlight ekle'}
+              {showAdd ? 'Cancel' : 'Add highlight'}
             </Button>
           </Space>
         }
@@ -237,7 +239,7 @@ function FeedHighlights() {
               loading={actionLoading === 'add'}
               onClick={handleAdd}
             >
-              Ekle
+              Add
             </Button>
           </Space>
         )}
@@ -252,14 +254,14 @@ function FeedHighlights() {
             pageSize: PAGE_SIZE,
             total: pagination.total,
             showSizeChanger: false,
-            showTotal: (total) => `Toplam ${total} kayıt`,
+            showTotal: (total) => `Total ${total} records`,
           }}
           onChange={handleTableChange}
           locale={{
             emptyText: (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description="Highlight yok. Filtreleri değiştirin veya yeni ekleyin."
+                description="No highlights. Adjust filters or add new ones."
               />
             ),
           }}

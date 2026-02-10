@@ -94,7 +94,7 @@ function Dashboard() {
         if (!cancelled && res.data) setStats(res.data);
       } catch (e) {
         if (!cancelled)
-          setError(e instanceof Error ? e.message : 'İstatistikler yüklenemedi');
+          setError(e instanceof Error ? e.message : 'Failed to load statistics');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -185,59 +185,59 @@ function Dashboard() {
         stats && (
           <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
             <Col xs={24} sm={12} lg={6}>
-              <Card bordered>
+              <Card bordered hoverable>
                 <Statistic
-                  title="Kullanıcılar"
+                  title="Users"
                   value={stats.users}
                   prefix={<UserOutlined />}
                   valueStyle={{ fontWeight: 700 }}
-                  suffix={<Text type="secondary">Toplam kayıtlı</Text>}
                 />
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  Total registered
+                </Text>
               </Card>
             </Col>
             <Col xs={24} sm={12} lg={6}>
-              <Card bordered>
+              <Card bordered hoverable>
                 <Statistic
-                  title="Gönderiler"
+                  title="Posts"
                   value={stats.posts}
                   prefix={<FileTextOutlined />}
                   valueStyle={{ fontWeight: 700 }}
-                  suffix={
-                    stats.users ? (
-                      <Text type="secondary">
-                        ~{(stats.posts / Math.max(stats.users, 1)).toFixed(1)} / kullanıcı
-                      </Text>
-                    ) : undefined
-                  }
                 />
+                {stats.users > 0 && (
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    ~{(stats.posts / stats.users).toFixed(1)} posts per user
+                  </Text>
+                )}
               </Card>
             </Col>
             <Col xs={24} sm={12} lg={6}>
-              <Card bordered>
+              <Card bordered hoverable>
                 <Statistic
-                  title="Yasaklı"
+                  title="Banned"
                   value={stats.bannedUsers}
                   prefix={<UserDeleteOutlined />}
-                  valueStyle={{ fontWeight: 700, color: '#ff4d4f' }}
-                  suffix={
-                    stats.users ? (
-                      <Text type="secondary">
-                        %{((stats.bannedUsers / stats.users) * 100).toFixed(1)} kullanıcı
-                      </Text>
-                    ) : undefined
-                  }
+                  valueStyle={{ fontWeight: 700, color: '#D8365D' }}
                 />
+                {stats.users > 0 && (
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    {((stats.bannedUsers / stats.users) * 100).toFixed(1)}% ratio
+                  </Text>
+                )}
               </Card>
             </Col>
             <Col xs={24} sm={12} lg={6}>
-              <Card bordered>
+              <Card bordered hoverable>
                 <Statistic
                   title="Admin Log"
                   value={stats.adminLogs}
                   prefix={<ClockCircleOutlined />}
                   valueStyle={{ fontWeight: 700 }}
-                  suffix={<Text type="secondary">Kayıt sayısı</Text>}
                 />
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  Total records
+                </Text>
               </Card>
             </Col>
           </Row>
@@ -246,46 +246,16 @@ function Dashboard() {
 
       {/* Main Content Grid */}
       <Row gutter={[16, 16]}>
-        {/* Recent Activity */}
-        <Col xs={24} lg={12}>
-          <Card
-            bordered
-            title="Recent Activity"
-            extra={
-              <Button
-                type="default"
-                size="small"
-                onClick={() => navigate('/system/logs')}
-              >
-                Admin Loglar
-              </Button>
-            }
-            style={{ height: '100%' }}
-          >
-            <List
-              dataSource={recentActivity}
-              renderItem={(activity) => (
-                <List.Item>
-                  <List.Item.Meta
-                    avatar={activity.icon}
-                    title={activity.message}
-                    description={activity.time}
-                  />
-                </List.Item>
-              )}
-            />
-          </Card>
-        </Col>
-
         {/* Quick Actions */}
-        <Col xs={24} lg={12}>
-          <Card bordered title="Quick Actions" style={{ marginBottom: 16 }}>
-            <Space size={[8, 8]} wrap>
+        <Col xs={24}>
+          <Card bordered title="Quick Access" hoverable>
+            <Space size={[12, 12]} wrap>
               {quickActions.map((action) => (
                 <Button
                   key={action.title}
                   type={action.type}
                   icon={action.icon}
+                  size="large"
                   onClick={() => action.path && navigate(action.path)}
                 >
                   {action.title}
@@ -293,15 +263,74 @@ function Dashboard() {
               ))}
             </Space>
           </Card>
+        </Col>
 
-          {/* System Status */}
+        {/* Recent Activity */}
+        <Col xs={24} lg={14}>
           <Card
             bordered
-            title="System Status"
+            hoverable
+            title={
+              <Space>
+                <ClockCircleOutlined />
+                <span>Recent Activities</span>
+              </Space>
+            }
             extra={
-              <Space align="center">
+              <Button
+                type="link"
+                size="small"
+                onClick={() => navigate('/system/logs')}
+              >
+                View All
+              </Button>
+            }
+          >
+            <List
+              dataSource={recentActivity}
+              renderItem={(activity) => (
+                <List.Item>
+                  <List.Item.Meta
+                    avatar={
+                      <div
+                        style={{
+                          fontSize: 18,
+                          color: 'var(--ant-color-primary)',
+                        }}
+                      >
+                        {activity.icon}
+                      </div>
+                    }
+                    title={<Text>{activity.message}</Text>}
+                    description={
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        {activity.time}
+                      </Text>
+                    }
+                  />
+                </List.Item>
+              )}
+            />
+          </Card>
+        </Col>
+
+        {/* System Status */}
+        <Col xs={24} lg={10}>
+          <Card
+            bordered
+            hoverable
+            title={
+              <Space>
+                <SettingOutlined />
+                <span>System Status</span>
+              </Space>
+            }
+            extra={
+              <Space align="center" size={4}>
                 <Badge status="success" />
-                <Text type="secondary">All Systems Operational</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  All Systems Operational
+                </Text>
               </Space>
             }
           >
@@ -317,8 +346,17 @@ function Dashboard() {
                   }
                 >
                   <List.Item.Meta
-                    title={system.name}
-                    description={`${system.uptime} · ${system.latency}`}
+                    title={<Text strong>{system.name}</Text>}
+                    description={
+                      <Space size={4} split="|">
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          Uptime: {system.uptime}
+                        </Text>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          Latency: {system.latency}
+                        </Text>
+                      </Space>
+                    }
                   />
                 </List.Item>
               )}

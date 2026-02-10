@@ -10,7 +10,6 @@ import {
   Select,
   Space,
   Tag,
-  Button,
   Spin,
   Empty,
   Alert,
@@ -25,6 +24,7 @@ import {
   SearchOutlined,
 } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
+import ViewActionButton from '../../components/ViewActionButton';
 import {
   fetchContentPostsStats,
   fetchContentPosts,
@@ -33,11 +33,12 @@ import type {
   AdminContentPostsStatsResponse,
   AdminContentPostListItem,
 } from '../../types/admin';
+import { BADGE_COLOR_PRIMARY } from '../../constants/badge-colors';
 
 const PAGE_SIZE = 20;
 
 const POST_TYPES = [
-  { value: '', label: 'Tüm türler' },
+  { value: '', label: 'All types' },
   { value: 'FREE', label: 'FREE' },
   { value: 'TIPS', label: 'TIPS' },
   { value: 'COMPARE', label: 'COMPARE' },
@@ -72,7 +73,7 @@ function ContentPosts() {
         if (!cancelled && res.data) setStats(res.data);
       } catch (e) {
         if (!cancelled)
-          setError(e instanceof Error ? e.message : 'İstatistikler yüklenemedi');
+          setError(e instanceof Error ? e.message : 'Failed to load statistics');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -101,7 +102,7 @@ function ContentPosts() {
         }
       } catch (e) {
         if (!cancelled)
-          setError(e instanceof Error ? e.message : 'Liste yüklenemedi');
+          setError(e instanceof Error ? e.message : 'Failed to load list');
       } finally {
         if (!cancelled) setLoadingList(false);
       }
@@ -111,18 +112,6 @@ function ContentPosts() {
     };
   }, [pagination.offset, search, type, sort, order]);
 
-  const getTypeColor = (t: string) => {
-    const map: Record<string, string> = {
-      FREE: 'default',
-      TIPS: 'gold',
-      EXPERIENCE: 'blue',
-      QUESTION: 'purple',
-      COMPARE: 'cyan',
-      UPDATE: 'green',
-    };
-    return map[t] ?? 'default';
-  };
-
   const userDisplay = (p: AdminContentPostListItem) =>
     p.userDisplayName || p.userName || p.userId?.slice(0, 8) || '—';
 
@@ -131,10 +120,11 @@ function ContentPosts() {
 
   const columns: ColumnsType<AdminContentPostListItem> = [
     {
-      title: 'Görsel',
+      title: 'Image',
       dataIndex: 'thumbnailUrl',
       key: 'thumbnail',
       width: 80,
+      ellipsis: false,
       render: (url) =>
         url ? (
           <Image
@@ -162,69 +152,70 @@ function ContentPosts() {
         ),
     },
     {
-      title: 'Başlık',
+      title: 'Title',
       key: 'title',
       ellipsis: true,
       render: (_, record) => titleDisplay(record),
     },
     {
-      title: 'Tür',
+      title: 'Type',
       dataIndex: 'type',
       key: 'type',
-      width: 120,
-      render: (type) => <Tag color={getTypeColor(type)}>{type}</Tag>,
+      width: 100,
+      ellipsis: true,
+      render: (type) => <Tag color={BADGE_COLOR_PRIMARY}>{type}</Tag>,
     },
     {
-      title: 'Yazar',
+      title: 'Author',
       key: 'user',
-      width: 150,
+      width: 140,
+      ellipsis: true,
       render: (_, record) => (
-        <Link to={`/users/${record.userId}`}>
-          <Button type="link" size="small" style={{ padding: 0 }}>
-            {userDisplay(record)}
-          </Button>
+        <Link
+          to={`/users/${record.userId}`}
+          style={{ color: 'var(--tipbox-badge-outline)', textDecoration: 'underline' }}
+        >
+          {userDisplay(record)}
         </Link>
       ),
     },
     {
-      title: 'Beğeni',
+      title: 'Likes',
       dataIndex: 'likesCount',
       key: 'likesCount',
-      width: 80,
+      width: 72,
       align: 'right',
+      ellipsis: true,
     },
     {
-      title: 'Yorum',
+      title: 'Comments',
       dataIndex: 'commentsCount',
       key: 'commentsCount',
-      width: 80,
+      width: 88,
       align: 'right',
+      ellipsis: true,
     },
     {
       title: 'Boosted',
       dataIndex: 'isBoosted',
       key: 'isBoosted',
-      width: 90,
-      render: (boosted) => (boosted ? 'Evet' : '—'),
+      width: 80,
+      ellipsis: true,
+      render: (boosted) => (boosted ? 'Yes' : '—'),
     },
     {
-      title: 'Oluşturulma',
+      title: 'Created',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      width: 120,
-      render: (date) => (date ? new Date(date).toLocaleDateString('tr-TR') : '—'),
+      width: 110,
+      ellipsis: true,
+      render: (date) => (date ? new Date(date).toLocaleDateString('en-US') : '—'),
     },
     {
       title: '',
       key: 'action',
       width: 80,
-      render: (_, record) => (
-        <Link to={`/content/posts/${record.id}`}>
-          <Button type="link" size="small">
-            Detay
-          </Button>
-        </Link>
-      ),
+      render: (_, record) => <ViewActionButton to={`/content/posts/${record.id}`} />,
     },
   ];
 
@@ -245,7 +236,7 @@ function ContentPosts() {
 
       {error && (
         <Alert
-          message="Hata"
+          message="Error"
           description={error}
           type="error"
           closable
@@ -265,7 +256,7 @@ function ContentPosts() {
             <Col xs={24} sm={12} lg={6}>
               <Card bordered>
                 <Statistic
-                  title="Toplam"
+                  title="Total"
                   value={stats.total}
                   prefix={<FileTextOutlined />}
                   valueStyle={{ fontWeight: 700 }}
@@ -278,14 +269,14 @@ function ContentPosts() {
                   title="Boosted"
                   value={stats.boostedCount}
                   prefix={<FireOutlined />}
-                  valueStyle={{ fontWeight: 700, color: '#52c41a' }}
+                  valueStyle={{ fontWeight: 700, color: '#8B9D2D' }}
                 />
               </Card>
             </Col>
             <Col xs={24} sm={12} lg={6}>
               <Card bordered>
                 <Statistic
-                  title="Event'e bağlı"
+                  title="With Event"
                   value={stats.withEventCount}
                   prefix={<CalendarOutlined />}
                   valueStyle={{ fontWeight: 700 }}
@@ -295,7 +286,7 @@ function ContentPosts() {
             <Col xs={24} sm={12} lg={6}>
               <Card bordered>
                 <Statistic
-                  title="Türe göre"
+                  title="By Type"
                   value={Object.keys(stats.byType).length}
                   prefix={<TagsOutlined />}
                   valueStyle={{ fontWeight: 700 }}
@@ -309,11 +300,11 @@ function ContentPosts() {
       {/* Post List Table */}
       <Card
         bordered
-        title="Post listesi"
+        title="Post list"
         extra={
           <Space wrap>
             <Input
-              placeholder="Ara (başlık, içerik)"
+              placeholder="Search (title, content)"
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -330,7 +321,7 @@ function ContentPosts() {
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
               style={{ width: 140 }}
-              placeholder="Tüm türler"
+              placeholder="All types"
             >
               {POST_TYPES.map((opt) => (
                 <Select.Option key={opt.value || 'all'} value={opt.value}>
@@ -346,11 +337,11 @@ function ContentPosts() {
               }}
               style={{ width: 130 }}
             >
-              <Select.Option value="createdAt">Oluşturulma</Select.Option>
-              <Select.Option value="likesCount">Beğeni</Select.Option>
-              <Select.Option value="commentsCount">Yorum</Select.Option>
-              <Select.Option value="viewsCount">Görüntülenme</Select.Option>
-              <Select.Option value="title">Başlık</Select.Option>
+              <Select.Option value="createdAt">Created</Select.Option>
+              <Select.Option value="likesCount">Likes</Select.Option>
+              <Select.Option value="commentsCount">Comments</Select.Option>
+              <Select.Option value="viewsCount">Views</Select.Option>
+              <Select.Option value="title">Title</Select.Option>
             </Select>
             <Select
               value={order}
@@ -360,8 +351,8 @@ function ContentPosts() {
               }}
               style={{ width: 100 }}
             >
-              <Select.Option value="desc">Azalan</Select.Option>
-              <Select.Option value="asc">Artan</Select.Option>
+              <Select.Option value="desc">Descending</Select.Option>
+              <Select.Option value="asc">Ascending</Select.Option>
             </Select>
           </Space>
         }
@@ -376,14 +367,14 @@ function ContentPosts() {
             pageSize: PAGE_SIZE,
             total: pagination.total,
             showSizeChanger: false,
-            showTotal: (total) => `Toplam ${total} kayıt`,
+            showTotal: (total) => `Total ${total} records`,
           }}
           onChange={handleTableChange}
           locale={{
             emptyText: (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description="Post bulunamadı"
+                description="No posts found"
               />
             ),
           }}

@@ -25,6 +25,7 @@ import {
   EditOutlined,
   DeleteOutlined,
   PlusOutlined,
+  TrophyOutlined,
 } from '@ant-design/icons';
 import {
   fetchCollection,
@@ -46,6 +47,7 @@ import type {
   AdminActionTypeListItem,
   AdminBadgeDetailResponse,
 } from '../../types/admin';
+import { FORM_LAYOUT_VERTICAL } from '../../constants/form-layout';
 
 const { Title, Text } = Typography;
 
@@ -61,9 +63,9 @@ function CollectionDetail() {
     try {
       const res = await fetchCollection(id);
       if (res.data) setCollection(res.data);
-      else setError('Koleksiyon bulunamadı');
+      else setError('Collection not found');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Yüklenemedi');
+      setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
       setLoading(false);
     }
@@ -77,9 +79,9 @@ function CollectionDetail() {
     return (
       <div>
         <Link to="/gamification/collections">
-          <Button icon={<ArrowLeftOutlined />}>Listeye dön</Button>
+          <Button icon={<ArrowLeftOutlined />}>Back to list</Button>
         </Link>
-        <Text>Geçersiz koleksiyon ID</Text>
+        <Text>Invalid collection ID</Text>
       </div>
     );
   }
@@ -89,7 +91,7 @@ function CollectionDetail() {
       <div>
         <Link to="/gamification/collections">
           <Button icon={<ArrowLeftOutlined />} style={{ marginBottom: 16 }}>
-            Listeye dön
+            Back to list
           </Button>
         </Link>
         {loading ? (
@@ -106,7 +108,7 @@ function CollectionDetail() {
   const tabItems = [
     {
       key: 'summary',
-      label: 'Özet',
+      label: 'Summary',
       children: (
         <CollectionSummaryTab
           collection={collection}
@@ -117,12 +119,12 @@ function CollectionDetail() {
     },
     {
       key: 'badges',
-      label: "Badge'ler",
+      label: "Badges",
       children: (
         <CollectionBadgesTab
           collectionId={id}
           collectionName={collection.name}
-          collectionCategoryId={collection.categoryId}
+          collectionCategoryId={collection.categoryId ?? null}
           onUpdated={loadCollection}
         />
       ),
@@ -133,7 +135,7 @@ function CollectionDetail() {
     <div>
       <Link to="/gamification/collections">
         <Button icon={<ArrowLeftOutlined />} style={{ marginBottom: 16 }}>
-          Listeye dön
+          Back to list
         </Button>
       </Link>
 
@@ -150,8 +152,12 @@ function CollectionDetail() {
         </Title>
         <Space wrap>
           <Text type="secondary">ID: {collection.id}</Text>
-          <Text type="secondary">•</Text>
-          <Text>{collection.categoryName ?? collection.categoryId}</Text>
+          {(collection.categoryName ?? collection.categoryId) && (
+            <>
+              <Text type="secondary">•</Text>
+              <Text>{collection.categoryName ?? collection.categoryId}</Text>
+            </>
+          )}
           {collection.owner && (
             <>
               <Text type="secondary">•</Text>
@@ -163,7 +169,7 @@ function CollectionDetail() {
           <Col span={12}>
             <Card bordered>
               <Text type="secondary" style={{ fontSize: 12 }}>
-                Badge sayısı
+                Badge count
               </Text>
               <Title level={3} style={{ margin: 0 }}>
                 {collection.badgesCount}
@@ -173,7 +179,7 @@ function CollectionDetail() {
           <Col span={12}>
             <Card bordered>
               <Text type="secondary" style={{ fontSize: 12 }}>
-                Hedef sayısı
+                Goal count
               </Text>
               <Title level={3} style={{ margin: 0 }}>
                 {collection.goalsCount ?? 0}
@@ -203,23 +209,13 @@ function CollectionSummaryTab({
     name: collection.name,
     bannerUrl: collection.bannerUrl ?? '',
     owner: collection.owner ?? '',
-    collectionObjective: collection.collectionObjective ?? '',
-    targetVertical: collection.targetVertical ?? '',
-    productScope: collection.productScope ?? '',
-    collectionType: collection.collectionType ?? '',
-    hookPitch: collection.hookPitch ?? '',
-    visualTheme: collection.visualTheme ?? '',
-    completionBonus: collection.completionBonus ?? '',
-    primaryKpi: collection.primaryKpi ?? '',
-    secondaryKpi: collection.secondaryKpi ?? '',
-    targetAudience: collection.targetAudience ?? '',
-    campaignContext: collection.campaignContext ?? '',
-    successMetric: collection.successMetric ?? '',
-    sponsorship: collection.sponsorship ?? '',
+    focusSector: collection.focusSector ?? '',
+    targetGroup: collection.targetGroup ?? '',
+    shortDescription: collection.shortDescription ?? '',
+    longDescription: collection.longDescription ?? '',
     unlockCondition: collection.unlockCondition ?? '',
-    scheduleLaunchDate: collection.scheduleLaunchDate?.slice(0, 16) ?? '',
-    timeStockLimit: collection.timeStockLimit ?? '',
-    categoryId: collection.categoryId,
+    completionBonus: collection.completionBonus ?? '',
+    categoryId: collection.categoryId ?? '',
   });
 
   const handleSave = async () => {
@@ -229,29 +225,19 @@ function CollectionSummaryTab({
         name: form.name,
         bannerUrl: form.bannerUrl || null,
         owner: form.owner || null,
-        collectionObjective: form.collectionObjective || null,
-        targetVertical: form.targetVertical || null,
-        productScope: form.productScope || null,
-        collectionType: form.collectionType || null,
-        hookPitch: form.hookPitch || null,
-        visualTheme: form.visualTheme || null,
-        completionBonus: form.completionBonus || null,
-        primaryKpi: form.primaryKpi || null,
-        secondaryKpi: form.secondaryKpi || null,
-        targetAudience: form.targetAudience || null,
-        campaignContext: form.campaignContext || null,
-        successMetric: form.successMetric || null,
-        sponsorship: form.sponsorship || null,
+        focusSector: form.focusSector || null,
+        targetGroup: form.targetGroup || null,
+        shortDescription: form.shortDescription || null,
+        longDescription: form.longDescription || null,
         unlockCondition: form.unlockCondition || null,
-        scheduleLaunchDate: form.scheduleLaunchDate ? new Date(form.scheduleLaunchDate).toISOString() : null,
-        timeStockLimit: form.timeStockLimit || null,
-        categoryId: form.categoryId,
+        completionBonus: form.completionBonus || null,
+        categoryId: form.categoryId || null,
       });
       setEditing(false);
-      antdMessage.success('Koleksiyon güncellendi');
+      antdMessage.success('Collection updated');
       onUpdated();
     } catch (e) {
-      antdMessage.error(e instanceof Error ? e.message : 'Güncellenemedi');
+      antdMessage.error(e instanceof Error ? e.message : 'Failed to update');
     } finally {
       setSaving(false);
     }
@@ -259,18 +245,18 @@ function CollectionSummaryTab({
 
   const handleDelete = () => {
     Modal.confirm({
-      title: 'Koleksiyon Sil',
-      content: 'Bu koleksiyon silinecek. İçindeki badge\'ler koleksiyondan çıkarılacak. Emin misiniz?',
-      okText: 'Evet, sil',
-      cancelText: 'İptal',
+      title: 'Delete Collection',
+      content: 'This collection will be deleted. Badges in it will be removed from the collection. Are you sure?',
+      okText: 'Yes, delete',
+      cancelText: 'Cancel',
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
           await deleteCollection(collection.id);
-          antdMessage.success('Koleksiyon silindi');
+          antdMessage.success('Collection deleted');
           onDeleted();
         } catch (e) {
-          antdMessage.error(e instanceof Error ? e.message : 'Silinemedi');
+          antdMessage.error(e instanceof Error ? e.message : 'Failed to delete');
         }
       },
     });
@@ -280,174 +266,105 @@ function CollectionSummaryTab({
     <Card bordered>
       {!editing ? (
         <>
-          <Descriptions title="Tüm bilgiler" bordered column={1}>
-            <Descriptions.Item label="Ad">{collection.name}</Descriptions.Item>
-            <Descriptions.Item label="Kategori">
-              {collection.categoryName ?? collection.categoryId}
-            </Descriptions.Item>
-            <Descriptions.Item label="Banner">
+          <Descriptions title="COLLECTION METADATA" bordered column={1}>
+            <Descriptions.Item label="Collection Name">{collection.name}</Descriptions.Item>
+            <Descriptions.Item label="Owner">{collection.owner || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Focus Sector">{collection.focusSector || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Target Group">{collection.targetGroup || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Short Description">{collection.shortDescription || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Long Description">{collection.longDescription || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Cover Image">
               {collection.bannerUrl ? (
                 <a href={collection.bannerUrl} target="_blank" rel="noreferrer">
-                  Görüntüle
+                  View
                 </a>
               ) : (
                 '—'
               )}
             </Descriptions.Item>
-            <Descriptions.Item label="Owner">{collection.owner || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Oluşturulma">
-              {new Date(collection.createdAt).toLocaleString('tr-TR')}
+            <Descriptions.Item label="Prerequisite">{collection.unlockCondition || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Completion Reward">{collection.completionBonus || '—'}</Descriptions.Item>
+            <Descriptions.Item label="Category">
+              {collection.categoryName ?? collection.categoryId ?? '—'}
             </Descriptions.Item>
-            <Descriptions.Item label="Güncellenme">
-              {new Date(collection.updatedAt).toLocaleString('tr-TR')}
+            <Descriptions.Item label="Created">
+              {new Date(collection.createdAt).toLocaleString('en-US')}
             </Descriptions.Item>
-            <Descriptions.Item label="Collection objective">
-              {collection.collectionObjective || '—'}
+            <Descriptions.Item label="Updated">
+              {new Date(collection.updatedAt).toLocaleString('en-US')}
             </Descriptions.Item>
-            <Descriptions.Item label="Target vertical">{collection.targetVertical || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Product scope">{collection.productScope || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Collection type">{collection.collectionType || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Hook pitch">{collection.hookPitch || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Visual theme">{collection.visualTheme || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Completion bonus">{collection.completionBonus || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Primary KPI">{collection.primaryKpi || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Secondary KPI">{collection.secondaryKpi || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Target audience">{collection.targetAudience || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Campaign context">{collection.campaignContext || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Success metric">{collection.successMetric || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Sponsorship">{collection.sponsorship || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Unlock condition">{collection.unlockCondition || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Schedule launch date">
-              {collection.scheduleLaunchDate
-                ? new Date(collection.scheduleLaunchDate).toLocaleString('tr-TR')
-                : '—'}
-            </Descriptions.Item>
-            <Descriptions.Item label="Time/stock limit">{collection.timeStockLimit || '—'}</Descriptions.Item>
           </Descriptions>
 
           <Space style={{ marginTop: 24 }}>
             <Button type="primary" icon={<EditOutlined />} onClick={() => setEditing(true)}>
-              Düzenle
+              Edit
             </Button>
             <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>
-              Sil
+              Delete
             </Button>
           </Space>
         </>
       ) : (
         <>
-          <Space direction="vertical" size="large" style={{ width: '100%' }}>
-            <Form.Item label="Ad">
+          <Form {...FORM_LAYOUT_VERTICAL} style={{ width: '100%' }}>
+            <Form.Item label="Collection Name">
               <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
-            </Form.Item>
-            <Form.Item label="Banner URL">
-              <Input value={form.bannerUrl} onChange={(e) => setForm((f) => ({ ...f, bannerUrl: e.target.value }))} />
             </Form.Item>
             <Form.Item label="Owner">
               <Input value={form.owner} onChange={(e) => setForm((f) => ({ ...f, owner: e.target.value }))} />
             </Form.Item>
-            <Form.Item label="Kategori ID">
-              <Input value={form.categoryId} onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))} />
-            </Form.Item>
-            <Form.Item label="Collection objective">
+            <Form.Item label="Focus Sector">
               <Input
-                value={form.collectionObjective}
-                onChange={(e) => setForm((f) => ({ ...f, collectionObjective: e.target.value }))}
+                value={form.focusSector}
+                onChange={(e) => setForm((f) => ({ ...f, focusSector: e.target.value }))}
               />
             </Form.Item>
-            <Form.Item label="Target vertical">
+            <Form.Item label="Target Group">
               <Input
-                value={form.targetVertical}
-                onChange={(e) => setForm((f) => ({ ...f, targetVertical: e.target.value }))}
+                value={form.targetGroup}
+                onChange={(e) => setForm((f) => ({ ...f, targetGroup: e.target.value }))}
               />
             </Form.Item>
-            <Form.Item label="Product scope">
-              <Input
-                value={form.productScope}
-                onChange={(e) => setForm((f) => ({ ...f, productScope: e.target.value }))}
+            <Form.Item label="Short Description">
+              <Input.TextArea
+                value={form.shortDescription}
+                onChange={(e) => setForm((f) => ({ ...f, shortDescription: e.target.value }))}
+                rows={2}
               />
             </Form.Item>
-            <Form.Item label="Collection type">
-              <Input
-                value={form.collectionType}
-                onChange={(e) => setForm((f) => ({ ...f, collectionType: e.target.value }))}
+            <Form.Item label="Long Description">
+              <Input.TextArea
+                value={form.longDescription}
+                onChange={(e) => setForm((f) => ({ ...f, longDescription: e.target.value }))}
+                rows={4}
               />
             </Form.Item>
-            <Form.Item label="Hook pitch">
-              <Input value={form.hookPitch} onChange={(e) => setForm((f) => ({ ...f, hookPitch: e.target.value }))} />
+            <Form.Item label="Cover Image (URL)">
+              <Input value={form.bannerUrl} onChange={(e) => setForm((f) => ({ ...f, bannerUrl: e.target.value }))} />
             </Form.Item>
-            <Form.Item label="Visual theme">
-              <Input
-                value={form.visualTheme}
-                onChange={(e) => setForm((f) => ({ ...f, visualTheme: e.target.value }))}
-              />
-            </Form.Item>
-            <Form.Item label="Completion bonus">
-              <Input
-                value={form.completionBonus}
-                onChange={(e) => setForm((f) => ({ ...f, completionBonus: e.target.value }))}
-              />
-            </Form.Item>
-            <Form.Item label="Primary KPI">
-              <Input value={form.primaryKpi} onChange={(e) => setForm((f) => ({ ...f, primaryKpi: e.target.value }))} />
-            </Form.Item>
-            <Form.Item label="Secondary KPI">
-              <Input
-                value={form.secondaryKpi}
-                onChange={(e) => setForm((f) => ({ ...f, secondaryKpi: e.target.value }))}
-              />
-            </Form.Item>
-            <Form.Item label="Target audience">
-              <Input
-                value={form.targetAudience}
-                onChange={(e) => setForm((f) => ({ ...f, targetAudience: e.target.value }))}
-              />
-            </Form.Item>
-            <Form.Item label="Campaign context">
-              <Input
-                value={form.campaignContext}
-                onChange={(e) => setForm((f) => ({ ...f, campaignContext: e.target.value }))}
-              />
-            </Form.Item>
-            <Form.Item label="Success metric">
-              <Input
-                value={form.successMetric}
-                onChange={(e) => setForm((f) => ({ ...f, successMetric: e.target.value }))}
-              />
-            </Form.Item>
-            <Form.Item label="Sponsorship">
-              <Input
-                value={form.sponsorship}
-                onChange={(e) => setForm((f) => ({ ...f, sponsorship: e.target.value }))}
-              />
-            </Form.Item>
-            <Form.Item label="Unlock condition">
+            <Form.Item label="Prerequisite">
               <Input
                 value={form.unlockCondition}
                 onChange={(e) => setForm((f) => ({ ...f, unlockCondition: e.target.value }))}
               />
             </Form.Item>
-            <Form.Item label="Schedule launch date">
+            <Form.Item label="Completion Reward">
               <Input
-                type="datetime-local"
-                value={form.scheduleLaunchDate}
-                onChange={(e) => setForm((f) => ({ ...f, scheduleLaunchDate: e.target.value }))}
+                value={form.completionBonus}
+                onChange={(e) => setForm((f) => ({ ...f, completionBonus: e.target.value }))}
               />
             </Form.Item>
-            <Form.Item label="Time/stock limit">
-              <Input
-                value={form.timeStockLimit}
-                onChange={(e) => setForm((f) => ({ ...f, timeStockLimit: e.target.value }))}
-              />
+            <Form.Item label="Category ID (optional)">
+              <Input value={form.categoryId} onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))} />
             </Form.Item>
-          </Space>
 
-          <Space style={{ marginTop: 24 }}>
+            <Space style={{ marginTop: 24 }}>
             <Button type="primary" onClick={handleSave} loading={saving}>
-              {saving ? 'Kaydediliyor...' : 'Kaydet'}
+              {saving ? 'Saving...' : 'Save'}
             </Button>
-            <Button onClick={() => setEditing(false)}>İptal</Button>
-          </Space>
+            <Button onClick={() => setEditing(false)}>Cancel</Button>
+            </Space>
+          </Form>
         </>
       )}
     </Card>
@@ -462,6 +379,7 @@ const INIT_ADD_FORM = {
   actionTypeId: '',
   pointsRequired: 1,
   difficulty: 'MEDIUM' as 'EASY' | 'MEDIUM' | 'HARD',
+  categoryId: '',
 };
 
 function CollectionBadgesTab({
@@ -472,13 +390,15 @@ function CollectionBadgesTab({
 }: {
   collectionId: string;
   collectionName: string;
-  collectionCategoryId: string;
+  collectionCategoryId: string | null;
   onUpdated: () => void;
 }) {
   const [badges, setBadges] = useState<AdminCollectionBadgeListItem[]>([]);
+  const [badgeCategories, setBadgeCategories] = useState<AdminBadgeCategoryListItem[]>([]);
   const [actionTypes, setActionTypes] = useState<AdminActionTypeListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingActionTypes, setLoadingActionTypes] = useState(true);
+  const [loadingCategories, setLoadingCategories] = useState(false);
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
   const [editingBadgeId, setEditingBadgeId] = useState<string | null>(null);
@@ -521,18 +441,46 @@ function CollectionBadgesTab({
     };
   }, []);
 
+  useEffect(() => {
+    if (collectionCategoryId !== null) return;
+    let cancelled = false;
+    setLoadingCategories(true);
+    (async () => {
+      try {
+        const res = await fetchBadgeCategories();
+        if (!cancelled && res.data?.length) {
+          setBadgeCategories(res.data);
+          setAddForm((f) => (f.categoryId ? f : { ...f, categoryId: res.data![0].id }));
+        }
+      } catch (e) {
+        if (!cancelled) console.error(e);
+      } finally {
+        if (!cancelled) setLoadingCategories(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [collectionCategoryId]);
+
+  const effectiveCategoryId = collectionCategoryId ?? addForm.categoryId;
+
   const handleAddBadge = async () => {
     setAddError(null);
     if (!addForm.name.trim()) {
-      setAddError('Badge adı zorunludur.');
+      setAddError('Badge name is required.');
+      return;
+    }
+    if (!effectiveCategoryId) {
+      setAddError('Select badge category.');
       return;
     }
     if (!addForm.actionTypeId) {
-      setAddError('Aktivasyon tipi seçin.');
+      setAddError('Select activation type.');
       return;
     }
     if (addForm.pointsRequired < 1) {
-      setAddError('Hedef sayı en az 1 olmalıdır.');
+      setAddError('Target count must be at least 1.');
       return;
     }
     setAdding(true);
@@ -543,7 +491,7 @@ function CollectionBadgesTab({
         imageUrl: addForm.imageUrl.trim() || null,
         type: 'COLLECTION',
         rarity: addForm.rarity,
-        categoryId: collectionCategoryId,
+        categoryId: effectiveCategoryId,
         collectionId,
       });
       const newBadgeId = badgeRes.data?.id;
@@ -556,12 +504,16 @@ function CollectionBadgesTab({
           difficulty: addForm.difficulty,
         });
       }
-      setAddForm({ ...INIT_ADD_FORM, actionTypeId: actionTypes[0]?.id ?? '' });
-      antdMessage.success('Badge eklendi');
+      setAddForm({
+        ...INIT_ADD_FORM,
+        actionTypeId: actionTypes[0]?.id ?? '',
+        categoryId: collectionCategoryId ?? badgeCategories[0]?.id ?? '',
+      });
+      antdMessage.success('Badge added');
       loadBadges();
       onUpdated();
     } catch (err) {
-      setAddError(err instanceof Error ? err.message : 'Badge eklenemedi');
+      setAddError(err instanceof Error ? err.message : 'Failed to add badge');
     } finally {
       setAdding(false);
     }
@@ -569,20 +521,20 @@ function CollectionBadgesTab({
 
   const handleRemove = async (badgeId: string) => {
     Modal.confirm({
-      title: 'Badge Çıkar',
-      content: 'Bu badge koleksiyondan çıkarılacak. Emin misiniz?',
-      okText: 'Evet, çıkar',
-      cancelText: 'İptal',
+      title: 'Remove Badge',
+      content: 'This badge will be removed from the collection. Are you sure?',
+      okText: 'Yes, remove',
+      cancelText: 'Cancel',
       okButtonProps: { danger: true },
       onOk: async () => {
         setRemoving(badgeId);
         try {
           await removeCollectionBadge(collectionId, badgeId);
-          antdMessage.success('Badge çıkarıldı');
+          antdMessage.success('Badge removed');
           loadBadges();
           onUpdated();
         } catch (e) {
-          antdMessage.error(e instanceof Error ? e.message : 'Çıkarılamadı');
+          antdMessage.error(e instanceof Error ? e.message : 'Failed to remove');
         } finally {
           setRemoving(null);
         }
@@ -592,31 +544,31 @@ function CollectionBadgesTab({
 
   return (
     <div>
-      <Card bordered title="Badge ekle" style={{ marginBottom: 24 }}>
+      <Card bordered title="Add badge" style={{ marginBottom: 24 }}>
         {addError && (
-          <Alert message="Hata" description={addError} type="error" closable onClose={() => setAddError(null)} style={{ marginBottom: 16 }} />
+          <Alert message="Error" description={addError} type="error" closable onClose={() => setAddError(null)} style={{ marginBottom: 16 }} />
         )}
         <Row gutter={16}>
           <Col xs={24} md={12} lg={6}>
-            <Form.Item label="Ad">
+            <Form.Item label="Name">
               <Input
                 value={addForm.name}
                 onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="Badge adı"
+                placeholder="Badge name"
               />
             </Form.Item>
           </Col>
           <Col xs={24} md={12} lg={6}>
-            <Form.Item label="Açıklama">
+            <Form.Item label="Description">
               <Input
                 value={addForm.description}
                 onChange={(e) => setAddForm((f) => ({ ...f, description: e.target.value }))}
-                placeholder="İsteğe bağlı"
+                placeholder="Optional"
               />
             </Form.Item>
           </Col>
           <Col xs={24} md={12} lg={6}>
-            <Form.Item label="Görsel URL">
+            <Form.Item label="Image URL">
               <Input
                 value={addForm.imageUrl}
                 onChange={(e) => setAddForm((f) => ({ ...f, imageUrl: e.target.value }))}
@@ -636,15 +588,33 @@ function CollectionBadgesTab({
               </Select>
             </Form.Item>
           </Col>
+          {collectionCategoryId === null && (
+            <Col xs={24} md={12} lg={6}>
+              <Form.Item label="Badge category" required>
+                <Select
+                  value={addForm.categoryId || undefined}
+                  onChange={(value) => setAddForm((f) => ({ ...f, categoryId: value }))}
+                  loading={loadingCategories}
+                  placeholder={loadingCategories ? 'Loading...' : 'Select category'}
+                >
+                  {badgeCategories.map((c) => (
+                    <Select.Option key={c.id} value={c.id}>
+                      {c.name}
+                    </Select.Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+          )}
         </Row>
         <Row gutter={16}>
           <Col xs={24} md={12} lg={8}>
-            <Form.Item label="Aktivasyon tipi">
+            <Form.Item label="Activation Type">
               <Select
                 value={addForm.actionTypeId}
                 onChange={(value) => setAddForm((f) => ({ ...f, actionTypeId: value }))}
                 loading={loadingActionTypes}
-                placeholder={loadingActionTypes ? 'Yükleniyor...' : 'Seçin'}
+                placeholder={loadingActionTypes ? 'Loading...' : 'Select'}
               >
                 {actionTypes.map((a) => (
                   <Select.Option key={a.id} value={a.id}>
@@ -655,7 +625,7 @@ function CollectionBadgesTab({
             </Form.Item>
           </Col>
           <Col xs={24} md={12} lg={8}>
-            <Form.Item label="Hedef sayı">
+            <Form.Item label="Target Count">
               <InputNumber
                 min={1}
                 value={addForm.pointsRequired}
@@ -665,14 +635,14 @@ function CollectionBadgesTab({
             </Form.Item>
           </Col>
           <Col xs={24} md={12} lg={8}>
-            <Form.Item label="Zorluk">
+            <Form.Item label="Difficulty">
               <Select
                 value={addForm.difficulty}
                 onChange={(value) => setAddForm((f) => ({ ...f, difficulty: value }))}
               >
-                <Select.Option value="EASY">Kolay</Select.Option>
-                <Select.Option value="MEDIUM">Orta</Select.Option>
-                <Select.Option value="HARD">Zor</Select.Option>
+                <Select.Option value="EASY">Easy</Select.Option>
+                <Select.Option value="MEDIUM">Medium</Select.Option>
+                <Select.Option value="HARD">Hard</Select.Option>
               </Select>
             </Form.Item>
           </Col>
@@ -682,13 +652,13 @@ function CollectionBadgesTab({
           icon={<PlusOutlined />}
           onClick={handleAddBadge}
           loading={adding}
-          disabled={loadingActionTypes || !addForm.actionTypeId}
+          disabled={loadingActionTypes || !addForm.actionTypeId || !effectiveCategoryId}
         >
-          {adding ? 'Ekleniyor...' : 'Badge ekle'}
+          {adding ? 'Adding...' : 'Add badge'}
         </Button>
       </Card>
 
-      <Card bordered title={`Koleksiyon badge'leri (${collectionName})`}>
+      <Card bordered title={`Collection badges (${collectionName})`}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: 48 }}>
             <Spin size="large" />
@@ -698,8 +668,8 @@ function CollectionBadgesTab({
             image={Empty.PRESENTED_IMAGE_SIMPLE}
             description={
               <Space direction="vertical">
-                <Text>Bu koleksiyonda henüz badge yok.</Text>
-                <Text type="secondary">Yukarıdaki form ile yeni badge ekleyebilirsiniz.</Text>
+                <Text>No badges in this collection yet.</Text>
+                <Text type="secondary">You can add new badges using the form above.</Text>
               </Space>
             }
           />
@@ -739,7 +709,7 @@ function CollectionBadgesTab({
                       icon={<EditOutlined />}
                       onClick={() => setEditingBadgeId(b.id)}
                     >
-                      Düzenle
+                      Edit
                     </Button>,
                     <Button
                       type="link"
@@ -749,7 +719,7 @@ function CollectionBadgesTab({
                       loading={removing === b.id}
                       onClick={() => handleRemove(b.id)}
                     >
-                      Sil
+                      Delete
                     </Button>,
                   ]}
                 >
@@ -767,7 +737,7 @@ function CollectionBadgesTab({
                           {b.categoryName && <Text type="secondary" style={{ fontSize: 11 }}>• {b.categoryName}</Text>}
                         </Space>
                         <Text type="secondary" style={{ fontSize: 11 }}>
-                          {new Date(b.createdAt).toLocaleString('tr-TR')}
+                          {new Date(b.createdAt).toLocaleString('en-US')}
                         </Text>
                       </Space>
                     }
@@ -837,7 +807,7 @@ function EditBadgeInCollectionModal({
         }
         if (catRes.data) setCategories(catRes.data);
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Yüklenemedi');
+        setError(e instanceof Error ? e.message : 'Failed to load');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -858,10 +828,10 @@ function EditBadgeInCollectionModal({
         rarity: form.rarity,
         categoryId: form.categoryId,
       });
-      antdMessage.success('Badge güncellendi');
+      antdMessage.success('Badge updated');
       onSuccess();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Güncellenemedi');
+      setError(e instanceof Error ? e.message : 'Failed to update');
     } finally {
       setSaving(false);
     }
@@ -869,15 +839,15 @@ function EditBadgeInCollectionModal({
 
   return (
     <Modal
-      title="Badge düzenle"
+      title="Edit badge"
       open={open}
       onCancel={onClose}
       footer={[
         <Button key="cancel" onClick={onClose}>
-          İptal
+          Cancel
         </Button>,
         <Button key="submit" type="primary" loading={saving} onClick={handleSubmit}>
-          {saving ? 'Kaydediliyor...' : 'Kaydet'}
+          {saving ? 'Saving...' : 'Save'}
         </Button>,
       ]}
     >
@@ -886,23 +856,23 @@ function EditBadgeInCollectionModal({
           <Spin size="large" />
         </div>
       ) : !badge ? (
-        <Alert message="Hata" description="Badge bulunamadı." type="error" />
+        <Alert message="Error" description="Badge not found." type="error" />
       ) : (
         <>
           {error && (
-            <Alert message="Hata" description={error} type="error" closable onClose={() => setError(null)} style={{ marginBottom: 16 }} />
+            <Alert message="Error" description={error} type="error" closable onClose={() => setError(null)} style={{ marginBottom: 16 }} />
           )}
           <Space direction="vertical" size="large" style={{ width: '100%' }}>
-            <Form.Item label="Ad">
+            <Form.Item label="Name">
               <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
             </Form.Item>
-            <Form.Item label="Açıklama">
+            <Form.Item label="Description">
               <Input
                 value={form.description}
                 onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
               />
             </Form.Item>
-            <Form.Item label="Görsel URL">
+            <Form.Item label="Image URL">
               <Input
                 value={form.imageUrl}
                 onChange={(e) => setForm((f) => ({ ...f, imageUrl: e.target.value }))}
@@ -915,7 +885,7 @@ function EditBadgeInCollectionModal({
                 <Select.Option value="EPIC">EPIC</Select.Option>
               </Select>
             </Form.Item>
-            <Form.Item label="Kategori">
+            <Form.Item label="Category">
               <Select
                 value={form.categoryId}
                 onChange={(value) => setForm((f) => ({ ...f, categoryId: value }))}

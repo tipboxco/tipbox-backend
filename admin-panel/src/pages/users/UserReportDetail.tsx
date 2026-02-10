@@ -18,6 +18,7 @@ import { FlagOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
 import { fetchUserReport, resolveUserReport } from '../../api/admin-reports';
 import type { AdminUserReportDetailResponse } from '../../types/admin';
+import { BADGE_COLOR_PRIMARY } from '../../constants/badge-colors';
 
 const { Text, Paragraph } = Typography;
 
@@ -44,7 +45,7 @@ function UserReportDetail() {
         }
       } catch (e) {
         if (!cancelled)
-          setError(e instanceof Error ? e.message : 'Rapor yüklenemedi');
+          setError(e instanceof Error ? e.message : 'Failed to load report');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -62,10 +63,10 @@ function UserReportDetail() {
       const res = await fetchUserReport(id);
       if (res.data) setReport(res.data);
       antdMessage.success(
-        resolved ? 'Rapor çözüldü olarak işaretlendi' : 'Rapor güncellendi'
+        resolved ? 'Report marked as resolved' : 'Report updated'
       );
     } catch (e) {
-      antdMessage.error(e instanceof Error ? e.message : 'İşlem başarısız');
+      antdMessage.error(e instanceof Error ? e.message : 'Operation failed');
     } finally {
       setSaving(false);
     }
@@ -74,7 +75,7 @@ function UserReportDetail() {
   if (!id) {
     return (
       <div>
-        <Alert message="Geçersiz rapor" type="error" />
+        <Alert message="Invalid report" type="error" />
       </div>
     );
   }
@@ -91,11 +92,11 @@ function UserReportDetail() {
     return (
       <div>
         <PageHeader
-          title="Hata"
+          title="Error"
           description={error}
           icon={<ExclamationCircleOutlined />}
         />
-        <Button onClick={() => navigate('/users/reports')}>Listeye dön</Button>
+        <Button onClick={() => navigate('/users/reports')}>Back to list</Button>
       </div>
     );
   }
@@ -107,31 +108,30 @@ function UserReportDetail() {
         description={report.category}
         icon={<FlagOutlined />}
         backTo="/users/reports"
-        backLabel="Listeye dön"
+        backLabel="Back to list"
       />
 
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={24} md={12}>
-          <Card bordered title="Şikayet edilen kullanıcı">
+          <Card bordered title="Reported user">
             <Space direction="vertical" style={{ width: '100%' }}>
               <div>
                 <Text type="secondary">ID</Text>
                 <div>
-                  <Link to={`/users/${report.reportedUserId}`}>
-                    <Button type="link" size="small" style={{ padding: 0 }}>
-                      {report.reportedUserId}
-                    </Button>
-                  </Link>
+                  <Text>{report.reportedUserId}</Text>
                 </div>
               </div>
               <div>
-                <Text type="secondary">Görünen ad / Email</Text>
+                <Text type="secondary">Display name / Email</Text>
                 <div>
-                  <Text>
+                  <Link
+                    to={`/users/${report.reportedUserId}`}
+                    style={{ color: 'var(--tipbox-badge-outline)', textDecoration: 'underline' }}
+                  >
                     {report.reportedUserDisplayName ??
                       report.reportedUserEmail ??
-                      '—'}
-                  </Text>
+                      report.reportedUserId}
+                  </Link>
                 </div>
               </div>
             </Space>
@@ -139,26 +139,25 @@ function UserReportDetail() {
         </Col>
 
         <Col xs={24} md={12}>
-          <Card bordered title="Şikayet eden">
+          <Card bordered title="Reporter">
             <Space direction="vertical" style={{ width: '100%' }}>
               <div>
                 <Text type="secondary">ID</Text>
                 <div>
-                  <Link to={`/users/${report.reporterId}`}>
-                    <Button type="link" size="small" style={{ padding: 0 }}>
-                      {report.reporterId}
-                    </Button>
-                  </Link>
+                  <Text>{report.reporterId}</Text>
                 </div>
               </div>
               <div>
-                <Text type="secondary">Görünen ad / Email</Text>
+                <Text type="secondary">Display name / Email</Text>
                 <div>
-                  <Text>
+                  <Link
+                    to={`/users/${report.reporterId}`}
+                    style={{ color: 'var(--tipbox-badge-outline)', textDecoration: 'underline' }}
+                  >
                     {report.reporterDisplayName ??
                       report.reporterEmail ??
-                      '—'}
-                  </Text>
+                      report.reporterId}
+                  </Link>
                 </div>
               </div>
             </Space>
@@ -166,24 +165,24 @@ function UserReportDetail() {
         </Col>
       </Row>
 
-      <Card bordered title="Açıklama" style={{ marginBottom: 16 }}>
+      <Card bordered title="Description" style={{ marginBottom: 16 }}>
         <Space direction="vertical" style={{ width: '100%' }} size={16}>
           <Paragraph>{report.description ?? '—'}</Paragraph>
           <div>
-            <Text type="secondary">Tarih</Text>
+            <Text type="secondary">Date</Text>
             <div>
-              <Text>{new Date(report.createdAt).toLocaleString('tr-TR')}</Text>
+              <Text>{new Date(report.createdAt).toLocaleString('en-US')}</Text>
             </div>
           </div>
           <div>
-            <Text type="secondary">Durum</Text>
+            <Text type="secondary">Status</Text>
             <div>
-              <Tag color={report.resolved ? 'success' : 'default'}>
-                {report.resolved ? 'Çözüldü' : 'Bekliyor'}
+              <Tag color={report.resolved ? BADGE_COLOR_PRIMARY : 'default'}>
+                {report.resolved ? 'Resolved' : 'Pending'}
               </Tag>
               {report.resolvedAt && (
                 <Text type="secondary" style={{ marginLeft: 8 }}>
-                  {new Date(report.resolvedAt).toLocaleString('tr-TR')}
+                  {new Date(report.resolvedAt).toLocaleString('en-US')}
                 </Text>
               )}
             </div>
@@ -191,23 +190,23 @@ function UserReportDetail() {
         </Space>
       </Card>
 
-      <Card bordered title="Çözümle">
+      <Card bordered title="Resolve">
         <Space direction="vertical" style={{ width: '100%' }} size={16}>
           <Checkbox
             checked={resolved}
             onChange={(e) => setResolved(e.target.checked)}
           >
-            Çözüldü
+            Resolved
           </Checkbox>
 
           <div style={{ width: '100%' }}>
             <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-              Admin notu
+              Admin note
             </Text>
             <Input
               value={adminNote}
               onChange={(e) => setAdminNote(e.target.value)}
-              placeholder="İsteğe bağlı not"
+              placeholder="Optional note"
             />
           </div>
 
@@ -216,7 +215,7 @@ function UserReportDetail() {
             onClick={handleResolve}
             loading={saving}
           >
-            Kaydet
+            Save
           </Button>
         </Space>
       </Card>

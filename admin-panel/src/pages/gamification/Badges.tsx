@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import {
   Row,
   Col,
@@ -18,6 +17,7 @@ import {
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import { TrophyOutlined, SearchOutlined, TagOutlined, StarOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
+import ViewActionButton from '../../components/ViewActionButton';
 import {
   fetchBadgesStats,
   fetchBadges,
@@ -46,7 +46,7 @@ function Badges() {
         const res = await fetchBadgesStats();
         if (!cancelled && res.data) setStats(res.data);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'İstatistikler yüklenemedi');
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load statistics');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -75,7 +75,7 @@ function Badges() {
           if (res.pagination) setPagination((prev) => ({ ...prev, ...res.pagination }));
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Liste yüklenemedi');
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load list');
       } finally {
         if (!cancelled) setLoadingList(false);
       }
@@ -87,7 +87,7 @@ function Badges() {
 
   const columns: ColumnsType<AdminBadgeListItem> = [
     {
-      title: 'Görsel',
+      title: 'Image',
       dataIndex: 'imageUrl',
       key: 'image',
       width: 80,
@@ -118,52 +118,53 @@ function Badges() {
         ),
     },
     {
-      title: 'Ad',
+      title: 'Name',
       dataIndex: 'name',
       key: 'name',
+      ellipsis: true,
+      render: (name) => name ?? '—',
     },
     {
-      title: 'Tip',
+      title: 'Type',
       dataIndex: 'type',
       key: 'type',
-      width: 120,
+      width: 100,
+      ellipsis: true,
     },
     {
       title: 'Rarity',
       dataIndex: 'rarity',
       key: 'rarity',
-      width: 100,
+      width: 88,
+      ellipsis: true,
     },
     {
-      title: 'Kategori',
+      title: 'Category',
       key: 'category',
       width: 120,
+      ellipsis: true,
       render: (_, record) => record.categoryName ?? record.categoryId,
     },
     {
-      title: 'Koleksiyon',
+      title: 'Collection',
       key: 'collection',
-      width: 150,
+      width: 140,
+      ellipsis: true,
       render: (_, record) => record.collectionName ?? (record.collectionId ? '—' : '—'),
     },
     {
-      title: 'Oluşturulma',
+      title: 'Created',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      width: 150,
-      render: (date) => new Date(date).toLocaleString('tr-TR'),
+      width: 140,
+      ellipsis: true,
+      render: (date) => new Date(date).toLocaleString('en-US'),
     },
     {
       title: '',
       key: 'action',
       width: 80,
-      render: (_, record) => (
-        <Link to={`/gamification/badges/${record.id}`}>
-          <Button type="link" size="small">
-            Detay
-          </Button>
-        </Link>
-      ),
+      render: (_, record) => <ViewActionButton to={`/gamification/badges/${record.id}`} />,
     },
   ];
 
@@ -178,13 +179,13 @@ function Badges() {
     <div>
       <PageHeader
         title="Badges"
-        description="Badge listesi, filtreleme ve yönetim"
+        description="Badge list, filtering and management"
         icon={<TrophyOutlined />}
       />
 
       {error && (
         <Alert
-          message="Hata"
+          message="Error"
           description={error}
           type="error"
           closable
@@ -204,7 +205,7 @@ function Badges() {
             <Col xs={24} sm={12} lg={6}>
               <Card bordered>
                 <Statistic
-                  title="Toplam"
+                  title="Total"
                   value={stats.total}
                   prefix={<TrophyOutlined />}
                   valueStyle={{ fontWeight: 700 }}
@@ -242,11 +243,11 @@ function Badges() {
       {/* Badge List */}
       <Card
         bordered
-        title="Badge listesi"
+        title="Badge list"
         extra={
           <Space wrap>
             <Input
-              placeholder="Ara (ad, açıklama)"
+              placeholder="Search (name, description)"
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -263,9 +264,9 @@ function Badges() {
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
               style={{ width: 130 }}
-              placeholder="Tüm tipler"
+              placeholder="All types"
             >
-              <Select.Option value="">Tüm tipler</Select.Option>
+              <Select.Option value="">All types</Select.Option>
               <Select.Option value="COLLECTION">COLLECTION</Select.Option>
               <Select.Option value="EVENT">EVENT</Select.Option>
               <Select.Option value="COSMETIC">COSMETIC</Select.Option>
@@ -278,9 +279,9 @@ function Badges() {
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
               style={{ width: 120 }}
-              placeholder="Tüm rarity"
+              placeholder="All rarity"
             >
-              <Select.Option value="">Tüm rarity</Select.Option>
+              <Select.Option value="">All rarity</Select.Option>
               <Select.Option value="COMMON">COMMON</Select.Option>
               <Select.Option value="RARE">RARE</Select.Option>
               <Select.Option value="EPIC">EPIC</Select.Option>
@@ -293,8 +294,8 @@ function Badges() {
               }}
               style={{ width: 120 }}
             >
-              <Select.Option value="createdAt">Oluşturulma</Select.Option>
-              <Select.Option value="name">Ad</Select.Option>
+              <Select.Option value="createdAt">Created</Select.Option>
+              <Select.Option value="name">Name</Select.Option>
             </Select>
             <Select
               value={order}
@@ -304,8 +305,8 @@ function Badges() {
               }}
               style={{ width: 100 }}
             >
-              <Select.Option value="desc">Azalan</Select.Option>
-              <Select.Option value="asc">Artan</Select.Option>
+              <Select.Option value="desc">Descending</Select.Option>
+              <Select.Option value="asc">Ascending</Select.Option>
             </Select>
           </Space>
         }
@@ -320,14 +321,14 @@ function Badges() {
             pageSize: PAGE_SIZE,
             total: pagination.total,
             showSizeChanger: false,
-            showTotal: (total) => `Toplam ${total} kayıt`,
+            showTotal: (total) => `Total ${total} records`,
           }}
           onChange={handleTableChange}
           locale={{
             emptyText: (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description="Badge bulunamadı. Filtreleri değiştirin veya yeni badge oluşturun."
+                description="No badges found. Change filters or create a new badge."
               />
             ),
           }}

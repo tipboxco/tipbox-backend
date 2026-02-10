@@ -9,7 +9,6 @@ import {
   Input,
   Select,
   Space,
-  Button,
   Spin,
   Empty,
   Alert,
@@ -52,7 +51,7 @@ function ContentComments() {
         if (!cancelled && res.data) setStats(res.data);
       } catch (e) {
         if (!cancelled)
-          setError(e instanceof Error ? e.message : 'İstatistikler yüklenemedi');
+          setError(e instanceof Error ? e.message : 'Failed to load statistics');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -81,7 +80,7 @@ function ContentComments() {
         }
       } catch (e) {
         if (!cancelled)
-          setError(e instanceof Error ? e.message : 'Liste yüklenemedi');
+          setError(e instanceof Error ? e.message : 'Failed to load list');
       } finally {
         if (!cancelled) setLoadingList(false);
       }
@@ -96,7 +95,7 @@ function ContentComments() {
 
   const columns: ColumnsType<AdminContentCommentListItem> = [
     {
-      title: 'Yorum (özet)',
+      title: 'Comment (excerpt)',
       key: 'comment',
       ellipsis: true,
       render: (_, record) => (
@@ -111,63 +110,52 @@ function ContentComments() {
     {
       title: 'Post',
       key: 'post',
-      width: 200,
-      render: (_, record) => (
-        <Link to={`/content/posts/${record.postId}`}>
-          <Button type="link" size="small" style={{ padding: 0 }}>
-            {record.postTitle
-              ? record.postTitle.length > 30
-                ? record.postTitle.slice(0, 30) + '…'
-                : record.postTitle
-              : record.postId}
-          </Button>
-        </Link>
-      ),
+      width: 220,
+      ellipsis: true,
+      render: (_, record) =>
+        record.postTitle
+          ? record.postTitle.length > 50
+            ? record.postTitle.slice(0, 50) + '…'
+            : record.postTitle
+          : record.postId,
     },
     {
-      title: 'Yazar',
+      title: 'Author',
       key: 'user',
-      width: 150,
+      width: 140,
+      ellipsis: true,
       render: (_, record) => (
-        <Link to={`/users/${record.userId}`}>
-          <Button type="link" size="small" style={{ padding: 0 }}>
-            {userDisplay(record)}
-          </Button>
+        <Link
+          to={`/users/${record.userId}`}
+          style={{ color: 'var(--tipbox-badge-outline)', textDecoration: 'underline' }}
+        >
+          {userDisplay(record)}
         </Link>
       ),
     },
     {
-      title: 'Cevap mı',
+      title: 'Is Answer',
       dataIndex: 'isAnswer',
       key: 'isAnswer',
-      width: 90,
-      render: (isAnswer) => (isAnswer ? 'Evet' : '—'),
+      width: 88,
+      ellipsis: true,
+      render: (isAnswer) => (isAnswer ? 'Yes' : '—'),
     },
     {
-      title: 'Beğeni',
+      title: 'Likes',
       dataIndex: 'likesCount',
       key: 'likesCount',
-      width: 80,
+      width: 72,
       align: 'right',
+      ellipsis: true,
     },
     {
-      title: 'Oluşturulma',
+      title: 'Created',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      width: 120,
-      render: (date) => (date ? new Date(date).toLocaleDateString('tr-TR') : '—'),
-    },
-    {
-      title: '',
-      key: 'action',
-      width: 100,
-      render: (_, record) => (
-        <Link to={`/content/posts/${record.postId}`}>
-          <Button type="link" size="small">
-            Post detay
-          </Button>
-        </Link>
-      ),
+      width: 110,
+      ellipsis: true,
+      render: (date) => (date ? new Date(date).toLocaleDateString('en-US') : '—'),
     },
   ];
 
@@ -188,7 +176,7 @@ function ContentComments() {
 
       {error && (
         <Alert
-          message="Hata"
+          message="Error"
           description={error}
           type="error"
           closable
@@ -208,7 +196,7 @@ function ContentComments() {
             <Col xs={24} sm={12} lg={6}>
               <Card bordered>
                 <Statistic
-                  title="Toplam yorum"
+                  title="Total comments"
                   value={stats.total}
                   prefix={<CommentOutlined />}
                   valueStyle={{ fontWeight: 700 }}
@@ -222,7 +210,7 @@ function ContentComments() {
       {/* Comment List */}
       <Card
         bordered
-        title="Yorum listesi"
+        title="Comment list"
         extra={
           <Space wrap>
             <Input
@@ -253,8 +241,8 @@ function ContentComments() {
               }}
               style={{ width: 120 }}
             >
-              <Select.Option value="createdAt">Oluşturulma</Select.Option>
-              <Select.Option value="likesCount">Beğeni</Select.Option>
+              <Select.Option value="createdAt">Created</Select.Option>
+              <Select.Option value="likesCount">Likes</Select.Option>
             </Select>
             <Select
               value={order}
@@ -264,8 +252,8 @@ function ContentComments() {
               }}
               style={{ width: 100 }}
             >
-              <Select.Option value="desc">Azalan</Select.Option>
-              <Select.Option value="asc">Artan</Select.Option>
+              <Select.Option value="desc">Descending</Select.Option>
+              <Select.Option value="asc">Ascending</Select.Option>
             </Select>
           </Space>
         }
@@ -280,14 +268,14 @@ function ContentComments() {
             pageSize: PAGE_SIZE,
             total: pagination.total,
             showSizeChanger: false,
-            showTotal: (total) => `Toplam ${total} kayıt`,
+            showTotal: (total) => `Total ${total} records`,
           }}
           onChange={handleTableChange}
           locale={{
             emptyText: (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description="Yorum bulunamadı. Filtreleri değiştirerek tekrar deneyin."
+                description="No comments found. Try adjusting the filters."
               />
             ),
           }}

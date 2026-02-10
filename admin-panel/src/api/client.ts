@@ -1,6 +1,6 @@
 /**
  * Admin API client — base URL ve Bearer token ile fetch.
- * Token: localStorage.getItem('admin_token') (login sonrası set edilmeli)
+ * Token: localStorage.getItem('admin_token') (set after login)
  */
 
 const getBaseUrl = (): string => {
@@ -81,7 +81,7 @@ export async function del<T>(path: string): Promise<ApiResponse<T>> {
   return request<T>(path, { method: 'DELETE' });
 }
 
-/** FormData ile POST (Content-Type set edilmez; boundary browser tarafından eklenir). */
+/** POST with FormData (Content-Type not set; boundary added by browser). */
 export async function postFormData<T>(
   path: string,
   formData: FormData,

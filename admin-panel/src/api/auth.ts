@@ -44,7 +44,7 @@ export async function adminLogin(
   if (!res.ok) {
     const msg =
       (json as AdminLoginError).message ||
-      (res.status === 401 ? 'Geçersiz email veya şifre' : 'Giriş başarısız');
+      (res.status === 401 ? 'Invalid email or password' : 'Login failed');
     throw new Error(msg);
   }
 

@@ -11,6 +11,9 @@
   --font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'Monaco', 'Courier New', monospace;
 
+  /* Badge/Tag: outline only, tek renk (Tipbox sarısı) */
+  --tipbox-badge-outline: #DAF94D;
+
   /* Motion */
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -36,12 +39,12 @@ body {
   min-height: 100vh;
 }
 
-/* Subtle background gradient for dark theme */
+/* Subtle background gradient for dark theme (Tipbox lime accent) */
 [data-theme="dark"] body::before {
   content: '';
   position: fixed;
   inset: 0;
-  background: radial-gradient(ellipse 100% 70% at 90% 5%, rgba(64, 150, 255, 0.03) 0%, transparent 50%);
+  background: radial-gradient(ellipse 100% 70% at 90% 5%, rgba(218, 249, 77, 0.03) 0%, transparent 50%);
   pointer-events: none;
   z-index: -2;
 }
@@ -156,9 +159,17 @@ code {
   animation: slideInLeft 0.3s var(--ease-out-expo) forwards;
 }
 
-/* Tipbox brand accent - minimal usage */
+/* Tipbox brand accent - minimal usage (Button Fill Lime) */
 .tipbox-accent {
-  color: #d8ff08;
+  color: #DAF94D;
+}
+
+/* Primary buton: sarı arka planda okunabilirlik — yazı ve ikon siyah */
+.ant-btn-primary:not(.ant-btn-danger):not(.ant-btn-link) {
+  color: #000000 !important;
+}
+.ant-btn-primary:not(.ant-btn-danger):not(.ant-btn-link) .anticon {
+  color: #000000 !important;
 }
 
 /* Override Ant Design focus outlines for accessibility */
@@ -167,4 +178,48 @@ code {
 .ant-select:focus-visible {
   outline: 2px solid currentColor;
   outline-offset: 2px;
+}
+
+/* Descriptions: consistent label column width across pages */
+.ant-descriptions-item-label {
+  min-width: 140px;
+}
+
+/* Tablo: taşan hücreler ellipsis, sadece başlık/içerik sütunları gerekirse alt satıra geçebilir */
+.ant-table-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ant-table-cell.ant-table-cell-ellipsis {
+  white-space: nowrap;
+}
+
+/* Tag/Badge: arka plansız, sadece border — tek renk (--tipbox-badge-outline) */
+.ant-tag:not(.ant-tag-default) {
+  background: transparent !important;
+  border: 1px solid var(--tipbox-badge-outline) !important;
+  color: var(--tipbox-badge-outline) !important;
+}
+
+/* View/Detail yönlendirme: arka plansız badge, ikon + metin */
+.view-action-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  font-size: 12px;
+  line-height: 20px;
+  border-radius: 6px;
+  border: 1px solid var(--tipbox-badge-outline);
+  background: transparent;
+  color: var(--tipbox-badge-outline);
+  text-decoration: none;
+  transition: opacity 0.2s;
+}
+.view-action-badge:hover {
+  opacity: 0.85;
+  color: var(--tipbox-badge-outline);
+}
+.view-action-badge .anticon {
+  font-size: 12px;
 }

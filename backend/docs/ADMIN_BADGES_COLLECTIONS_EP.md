@@ -52,19 +52,19 @@ Bu doküman, admin-panel **Badges** ve **Badge Collections** bölümleri için y
 
 **Query:** `limit`, `offset`, `search` (name contains), `categoryId`, `sort` (createdAt | name), `order` (asc | desc).
 
-**Response:** `{ success, data: AdminCollectionListItem[], pagination }`. Her öğe: id, name, bannerUrl, owner, categoryId, categoryName, badgesCount, goalsCount, createdAt.
+**Response:** `{ success, data: AdminCollectionListItem[], pagination }`. Her öğe: id, name, bannerUrl, owner, categoryId? (opsiyonel), categoryName?, badgesCount, goalsCount, createdAt.
 
 ---
 
 ### GET /admin/collections/:id
 
-**Response:** Tüm BadgeCollection alanları + category özeti + badgesCount, goalsCount. AdminCollectionDetailResponse.
+**Response:** AdminCollectionDetailResponse: id, name, bannerUrl, owner, categoryId?, categoryName?, badgesCount, goalsCount, createdAt, focusSector?, targetGroup?, shortDescription?, longDescription?, unlockCondition?, completionBonus?, updatedAt, category?.
 
 ---
 
 ### POST /admin/collections
 
-**Body:** name (required), bannerUrl?, owner?, collectionObjective?, targetVertical?, productScope?, collectionType?, hookPitch?, visualTheme?, completionBonus?, primaryKpi?, secondaryKpi?, targetAudience?, campaignContext?, successMetric?, sponsorship?, unlockCondition?, scheduleLaunchDate? (ISO), timeStockLimit?, categoryId (required).
+**Body (COLLECTION METADATA):** name (required), bannerUrl? (Cover Image), owner?, focusSector?, targetGroup?, shortDescription?, longDescription?, unlockCondition? (Prerequisite), completionBonus? (Completion Reward), categoryId? (opsiyonel).
 
 **Response:** `{ success, data: AdminCollectionDetailResponse }`. AdminLog: COLLECTION_CREATE.
 
@@ -72,7 +72,7 @@ Bu doküman, admin-panel **Badges** ve **Badge Collections** bölümleri için y
 
 ### PATCH /admin/collections/:id
 
-**Body:** Yukarıdaki alanların hepsi opsiyonel.
+**Body:** Yukarıdaki alanların hepsi opsiyonel (name, bannerUrl, owner, focusSector, targetGroup, shortDescription, longDescription, unlockCondition, completionBonus, categoryId).
 
 **Response:** Güncellenmiş koleksiyon. AdminLog: COLLECTION_UPDATE.
 

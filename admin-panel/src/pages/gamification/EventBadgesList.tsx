@@ -13,7 +13,7 @@ function EventBadgesList() {
         badgeType={'EVENT' as BadgeTypeSlug}
         listPath="/gamification/event-badges"
         title="Event Badges"
-        description="Event / topluluk badge'leri listesi ve yönetimi"
+        description="Event / community badges list and management"
         icon={<TrophyOutlined />}
         onOpenCreate={() => setCreateOpen(true)}
       />

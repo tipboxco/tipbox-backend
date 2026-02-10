@@ -46,7 +46,7 @@ function UserKycDetail() {
         }
       } catch (e) {
         if (!cancelled)
-          setError(e instanceof Error ? e.message : 'KYC kaydı yüklenemedi');
+          setError(e instanceof Error ? e.message : 'Failed to load KYC record');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -67,9 +67,9 @@ function UserKycDetail() {
       });
       const res = await fetchUserKycByUserId(userId!);
       if (res.data) setRecord(res.data);
-      antdMessage.success('KYC inceleme sonucu güncellendi');
+      antdMessage.success('KYC review result updated');
     } catch (e) {
-      antdMessage.error(e instanceof Error ? e.message : 'Güncelleme başarısız');
+      antdMessage.error(e instanceof Error ? e.message : 'Update failed');
     } finally {
       setSaving(false);
     }
@@ -78,7 +78,7 @@ function UserKycDetail() {
   if (!userId) {
     return (
       <div>
-        <Alert message="Geçersiz kullanıcı" type="error" />
+        <Alert message="Invalid user" type="error" />
       </div>
     );
   }
@@ -95,11 +95,11 @@ function UserKycDetail() {
     return (
       <div>
         <PageHeader
-          title="Hata"
+          title="Error"
           description={error}
           icon={<ExclamationCircleOutlined />}
         />
-        <Button onClick={() => navigate('/users/kyc')}>Listeye dön</Button>
+        <Button onClick={() => navigate('/users/kyc')}>Back to list</Button>
       </div>
     );
   }
@@ -108,31 +108,32 @@ function UserKycDetail() {
     <div>
       <PageHeader
         title={`KYC — ${record.userEmail ?? userId}`}
-        description={`Kayıt: ${record.id.slice(0, 8)}…`}
+        description={`Record: ${record.id.slice(0, 8)}…`}
         icon={<IdcardOutlined />}
         actions={
           <Space>
             <Button onClick={() => navigate('/users/kyc')}>
-              Listeye dön
+              Back to list
             </Button>
             <Button onClick={() => navigate(`/users/${userId}`)}>
-              Kullanıcı detayı
+              User details
             </Button>
           </Space>
         }
       />
 
-      <Card bordered title="KYC bilgileri" style={{ marginBottom: 16 }}>
+      <Card bordered title="KYC information" style={{ marginBottom: 16 }}>
         <Row gutter={[16, 16]}>
           <Col xs={24} sm={12}>
             <Space direction="vertical" style={{ width: '100%' }}>
               <div>
-                <Text type="secondary">Kullanıcı ID</Text>
+                <Text type="secondary">User ID</Text>
                 <div>
-                  <Link to={`/users/${record.userId}`}>
-                    <Button type="link" size="small" style={{ padding: 0 }}>
-                      {record.userId}
-                    </Button>
+                  <Link
+                    to={`/users/${record.userId}`}
+                    style={{ color: 'var(--tipbox-badge-outline)', textDecoration: 'underline' }}
+                  >
+                    {record.userId}
                   </Link>
                 </div>
               </div>
@@ -143,13 +144,13 @@ function UserKycDetail() {
                 </div>
               </div>
               <div>
-                <Text type="secondary">İnceleme durumu</Text>
+                <Text type="secondary">Review status</Text>
                 <div>
                   <Text>{record.reviewStatus}</Text>
                 </div>
               </div>
               <div>
-                <Text type="secondary">Sonuç</Text>
+                <Text type="secondary">Result</Text>
                 <div>
                   <Text>{record.reviewResult}</Text>
                 </div>
@@ -159,24 +160,24 @@ function UserKycDetail() {
           <Col xs={24} sm={12}>
             <Space direction="vertical" style={{ width: '100%' }}>
               <div>
-                <Text type="secondary">KYC seviye</Text>
+                <Text type="secondary">KYC level</Text>
                 <div>
                   <Text>{record.kycLevel ?? '—'}</Text>
                 </div>
               </div>
               <div>
-                <Text type="secondary">Oluşturulma</Text>
+                <Text type="secondary">Created</Text>
                 <div>
                   <Text>
-                    {new Date(record.createdAt).toLocaleString('tr-TR')}
+                    {new Date(record.createdAt).toLocaleString('en-US')}
                   </Text>
                 </div>
               </div>
               <div>
-                <Text type="secondary">Son güncelleme</Text>
+                <Text type="secondary">Last updated</Text>
                 <div>
                   <Text>
-                    {new Date(record.updatedAt).toLocaleString('tr-TR')}
+                    {new Date(record.updatedAt).toLocaleString('en-US')}
                   </Text>
                 </div>
               </div>
@@ -185,11 +186,11 @@ function UserKycDetail() {
         </Row>
       </Card>
 
-      <Card bordered title="İnceleme güncelle">
+      <Card bordered title="Update review">
         <Space direction="vertical" style={{ width: '100%' }} size={16}>
           <div style={{ width: '100%' }}>
             <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-              İnceleme durumu
+              Review status
             </Text>
             <Select
               value={reviewStatus}
@@ -206,7 +207,7 @@ function UserKycDetail() {
 
           <div style={{ width: '100%' }}>
             <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-              Sonuç
+              Result
             </Text>
             <Select
               value={reviewResult}
@@ -222,17 +223,17 @@ function UserKycDetail() {
 
           <div style={{ width: '100%' }}>
             <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-              Gerekçe
+              Reason
             </Text>
             <Input
               value={reviewReason}
               onChange={(e) => setReviewReason(e.target.value)}
-              placeholder="İsteğe bağlı"
+              placeholder="Optional"
             />
           </div>
 
           <Button type="primary" onClick={handleSave} loading={saving}>
-            Kaydet
+            Save
           </Button>
         </Space>
       </Card>

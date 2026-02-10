@@ -1,21 +1,45 @@
 import type { ThemeConfig } from 'antd';
 
-// Tipbox brand color - minimal usage
-const tipboxYellow = '#d8ff08';
+// Tipbox Official Brand Colors
+// Yellow/Lime Palette
+const buttonFillYellow = '#DAF94D'; // Button fill with black text
+const strokeYellow = '#C3D534'; // Stroke color
+const badgeFillYellow = '#8B9D2D'; // Main badge fill with white text
+
+// Pink/Red Palette
+const strokePink = '#E5507E'; // Badge stroke
+const fillPink = '#D8365D'; // Badge fill
+
+// Purple/Blue Palette
+const strokePurple = '#806CFF'; // Badge stroke
+const fillPurple = '#4F1FE3'; // Badge fill
+
+/** Tipbox palette for use in components (Tag, custom styles, etc.) */
+export const tipboxPalette = {
+  buttonFillYellow,
+  strokeYellow,
+  badgeFillYellow,
+  strokePink,
+  fillPink,
+  strokePurple,
+  fillPurple,
+};
 
 /**
  * Dark theme configuration
- * Deep blacks with professional blue primary color
+ * Deep blacks with Tipbox brand colors
  */
 export const darkTheme: ThemeConfig = {
   algorithm: undefined, // We'll use darkAlgorithm in ConfigProvider
   token: {
-    // Color Palette
-    colorPrimary: '#4096ff', // Professional blue for main actions
-    colorSuccess: '#52c41a',
-    colorWarning: '#faad14',
-    colorError: '#ff4d4f',
-    colorInfo: '#1890ff',
+    // Color Palette - Tipbox Brand Colors
+    colorPrimary: buttonFillYellow,
+    colorSuccess: badgeFillYellow,
+    colorWarning: strokePink,
+    colorError: fillPink,
+    colorInfo: buttonFillYellow,
+    // Sarı/açık primary arka planda okunabilirlik: buton yazısı siyah
+    colorTextLightSolid: '#000000',
 
     // Background Colors
     colorBgBase: '#0a0a0a', // Deep black base
@@ -87,8 +111,8 @@ export const darkTheme: ThemeConfig = {
     },
     Menu: {
       itemBg: 'transparent',
-      itemSelectedBg: 'rgba(64, 150, 255, 0.15)',
-      itemSelectedColor: '#4096ff',
+      itemSelectedBg: 'rgba(218, 249, 77, 0.15)',
+      itemSelectedColor: buttonFillYellow,
       itemHoverBg: 'rgba(255, 255, 255, 0.08)',
       itemHoverColor: '#ffffff',
       itemColor: 'rgba(255, 255, 255, 0.65)',
@@ -110,11 +134,11 @@ export const darkTheme: ThemeConfig = {
       dangerShadow: 'none',
     },
     Input: {
-      activeBorderColor: '#4096ff',
+      activeBorderColor: buttonFillYellow,
       hoverBorderColor: 'rgba(255, 255, 255, 0.2)',
     },
     Select: {
-      optionSelectedBg: 'rgba(64, 150, 255, 0.15)',
+      optionSelectedBg: 'rgba(218, 249, 77, 0.15)',
     },
     Modal: {
       contentBg: '#242424',
@@ -125,17 +149,19 @@ export const darkTheme: ThemeConfig = {
 
 /**
  * Light theme configuration
- * Clean whites with professional blue primary color
+ * Clean whites with Tipbox yellow primary color
  */
 export const lightTheme: ThemeConfig = {
   algorithm: undefined, // We'll use defaultAlgorithm in ConfigProvider
   token: {
-    // Color Palette
-    colorPrimary: '#1890ff', // Professional blue
-    colorSuccess: '#52c41a',
-    colorWarning: '#faad14',
-    colorError: '#ff4d4f',
-    colorInfo: '#1890ff',
+    // Color Palette - Tipbox Brand (same as dark)
+    colorPrimary: buttonFillYellow,
+    colorSuccess: badgeFillYellow,
+    colorWarning: strokePink,
+    colorError: fillPink,
+    colorInfo: buttonFillYellow,
+    // Sarı/açık primary arka planda okunabilirlik: buton yazısı siyah
+    colorTextLightSolid: '#000000',
 
     // Background Colors
     colorBgBase: '#ffffff', // Pure white base
@@ -207,8 +233,8 @@ export const lightTheme: ThemeConfig = {
     },
     Menu: {
       itemBg: 'transparent',
-      itemSelectedBg: 'rgba(24, 144, 255, 0.1)',
-      itemSelectedColor: '#1890ff',
+      itemSelectedBg: 'rgba(218, 249, 77, 0.15)',
+      itemSelectedColor: buttonFillYellow,
       itemHoverBg: 'rgba(0, 0, 0, 0.04)',
       itemHoverColor: '#000000',
       itemColor: 'rgba(0, 0, 0, 0.65)',
@@ -230,11 +256,11 @@ export const lightTheme: ThemeConfig = {
       dangerShadow: 'none',
     },
     Input: {
-      activeBorderColor: '#1890ff',
+      activeBorderColor: buttonFillYellow,
       hoverBorderColor: '#bfbfbf',
     },
     Select: {
-      optionSelectedBg: 'rgba(24, 144, 255, 0.1)',
+      optionSelectedBg: 'rgba(218, 249, 77, 0.15)',
     },
     Modal: {
       contentBg: '#ffffff',
@@ -244,4 +270,4 @@ export const lightTheme: ThemeConfig = {
 };
 
 // Export Tipbox accent color for minimal usage
-export const tipboxAccent = tipboxYellow;
+export const tipboxAccent = buttonFillYellow;

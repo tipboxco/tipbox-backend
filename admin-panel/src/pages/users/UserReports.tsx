@@ -4,8 +4,10 @@ import { Card, Table, Select, Space, Tag, Button, Empty, Alert } from 'antd';
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import { FlagOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
+import ViewActionButton from '../../components/ViewActionButton';
 import { fetchUserReports } from '../../api/admin-reports';
 import type { AdminUserReportListItem } from '../../types/admin';
+import { BADGE_COLOR_PRIMARY } from '../../constants/badge-colors';
 
 const PAGE_SIZE = 20;
 
@@ -39,7 +41,7 @@ function UserReports() {
         }
       } catch (e) {
         if (!cancelled)
-          setError(e instanceof Error ? e.message : 'Liste yüklenemedi');
+          setError(e instanceof Error ? e.message : 'Failed to load list');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -58,52 +60,71 @@ function UserReports() {
 
   const columns: ColumnsType<AdminUserReportListItem> = [
     {
-      title: 'Tarih',
+      title: 'Date',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      render: (date) => new Date(date).toLocaleString('tr-TR'),
+      width: 140,
+      ellipsis: true,
+      render: (date) => new Date(date).toLocaleString('en-US'),
     },
     {
-      title: 'Kategori',
+      title: 'Category',
       dataIndex: 'category',
       key: 'category',
+      width: 120,
+      ellipsis: true,
     },
     {
-      title: 'Şikayet edilen',
+      title: 'Reported user',
       key: 'reported',
-      render: (_, record) =>
-        record.reportedUserDisplayName ??
-        record.reportedUserEmail ??
-        record.reportedUserId,
+      width: 160,
+      ellipsis: true,
+      render: (_, record) => (
+        <Link
+          to={`/users/${record.reportedUserId}`}
+          style={{ color: 'var(--tipbox-badge-outline)', textDecoration: 'underline' }}
+          title={record.reportedUserDisplayName ?? record.reportedUserEmail ?? record.reportedUserId}
+        >
+          {record.reportedUserDisplayName ??
+            record.reportedUserEmail ??
+            record.reportedUserId}
+        </Link>
+      ),
     },
     {
-      title: 'Şikayet eden',
+      title: 'Reporter',
       key: 'reporter',
-      render: (_, record) =>
-        record.reporterDisplayName ??
-        record.reporterEmail ??
-        record.reporterId,
+      width: 160,
+      ellipsis: true,
+      render: (_, record) => (
+        <Link
+          to={`/users/${record.reporterId}`}
+          style={{ color: 'var(--tipbox-badge-outline)', textDecoration: 'underline' }}
+          title={record.reporterDisplayName ?? record.reporterEmail ?? record.reporterId}
+        >
+          {record.reporterDisplayName ??
+            record.reporterEmail ??
+            record.reporterId}
+        </Link>
+      ),
     },
     {
-      title: 'Durum',
+      title: 'Status',
       dataIndex: 'resolved',
       key: 'resolved',
+      width: 100,
+      ellipsis: true,
       render: (resolved) => (
-        <Tag color={resolved ? 'success' : 'default'}>
-          {resolved ? 'Çözüldü' : 'Bekliyor'}
+        <Tag color={resolved ? BADGE_COLOR_PRIMARY : 'default'}>
+          {resolved ? 'Resolved' : 'Pending'}
         </Tag>
       ),
     },
     {
       title: '',
       key: 'action',
-      render: (_, record) => (
-        <Link to={`/users/reports/${record.id}`}>
-          <Button type="link" size="small">
-            Detay
-          </Button>
-        </Link>
-      ),
+      width: 80,
+      render: (_, record) => <ViewActionButton to={`/users/reports/${record.id}`} />,
     },
   ];
 
@@ -117,14 +138,14 @@ function UserReports() {
   return (
     <div>
       <PageHeader
-        title="Kullanıcı şikayetleri"
-        description="Kullanıcı raporlarını inceleyin ve çözümleyin"
+        title="User reports"
+        description="Review and resolve user reports"
         icon={<FlagOutlined />}
       />
 
       {error && (
         <Alert
-          message="Hata"
+          message="Error"
           description={error}
           type="error"
           closable
@@ -135,7 +156,7 @@ function UserReports() {
 
       <Card
         bordered
-        title="Rapor listesi"
+        title="Report list"
         extra={
           <Space>
             <Select
@@ -145,9 +166,9 @@ function UserReports() {
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
               style={{ width: 160 }}
-              placeholder="Tüm kategoriler"
+              placeholder="All categories"
             >
-              <Select.Option value="">Tüm kategoriler</Select.Option>
+              <Select.Option value="">All categories</Select.Option>
               <Select.Option value="SPAM">SPAM</Select.Option>
               <Select.Option value="ABUSE">ABUSE</Select.Option>
               <Select.Option value="OTHER">OTHER</Select.Option>
@@ -156,11 +177,11 @@ function UserReports() {
               value={resolved}
               onChange={setResolved}
               style={{ width: 120 }}
-              placeholder="Tümü"
+              placeholder="All"
             >
-              <Select.Option value="">Tümü</Select.Option>
-              <Select.Option value="true">Çözüldü</Select.Option>
-              <Select.Option value="false">Bekleyen</Select.Option>
+              <Select.Option value="">All</Select.Option>
+              <Select.Option value="true">Resolved</Select.Option>
+              <Select.Option value="false">Pending</Select.Option>
             </Select>
           </Space>
         }
@@ -175,14 +196,14 @@ function UserReports() {
             pageSize: PAGE_SIZE,
             total: pagination.total,
             showSizeChanger: false,
-            showTotal: (total) => `Toplam ${total} kayıt`,
+            showTotal: (total) => `Total ${total} records`,
           }}
           onChange={handleTableChange}
           locale={{
             emptyText: (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description="Rapor bulunamadı"
+                description="No reports found"
               />
             ),
           }}

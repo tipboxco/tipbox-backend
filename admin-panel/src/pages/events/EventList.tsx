@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import {
   Row,
   Col,
@@ -25,8 +24,10 @@ import {
   SearchOutlined,
 } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
+import ViewActionButton from '../../components/ViewActionButton';
 import { fetchEventsStats, fetchEvents } from '../../api/admin-events';
 import type { AdminEventListItem, AdminEventStatsResponse } from '../../types/admin';
+import { BADGE_COLOR_PRIMARY, BADGE_COLOR_SECONDARY } from '../../constants/badge-colors';
 
 const PAGE_SIZE = 20;
 
@@ -50,7 +51,7 @@ function EventList() {
         const res = await fetchEventsStats();
         if (!cancelled && res.data) setStats(res.data);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'İstatistikler yüklenemedi');
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load statistics');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -79,7 +80,7 @@ function EventList() {
           if (res.pagination) setPagination(res.pagination);
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Liste yüklenemedi');
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load list');
       } finally {
         if (!cancelled) setLoadingList(false);
       }
@@ -91,7 +92,7 @@ function EventList() {
 
   const columns: ColumnsType<AdminEventListItem> = [
     {
-      title: 'Görsel',
+      title: 'Image',
       dataIndex: 'imageUrl',
       key: 'image',
       width: 80,
@@ -122,20 +123,23 @@ function EventList() {
         ),
     },
     {
-      title: 'Başlık',
+      title: 'Title',
       dataIndex: 'title',
       key: 'title',
+      ellipsis: true,
+      render: (title) => title ?? '—',
     },
     {
-      title: 'Durum',
+      title: 'Status',
       dataIndex: 'status',
       key: 'status',
       width: 100,
+      ellipsis: true,
       render: (status) => {
         const colorMap: Record<string, string> = {
           DRAFT: 'default',
-          PUBLISHED: 'success',
-          CLOSED: 'error',
+          PUBLISHED: BADGE_COLOR_PRIMARY,
+          CLOSED: BADGE_COLOR_SECONDARY,
         };
         return <Tag color={colorMap[status] || 'default'}>{status}</Tag>;
       },
@@ -145,47 +149,46 @@ function EventList() {
       dataIndex: 'feedType',
       key: 'feedType',
       width: 100,
+      ellipsis: true,
     },
     {
-      title: 'Başlangıç',
+      title: 'Start',
       dataIndex: 'startDate',
       key: 'startDate',
-      width: 120,
-      render: (date) => (date ? new Date(date).toLocaleDateString('tr-TR') : '—'),
+      width: 110,
+      ellipsis: true,
+      render: (date) => (date ? new Date(date).toLocaleDateString() : '—'),
     },
     {
-      title: 'Bitiş',
+      title: 'End',
       dataIndex: 'endDate',
       key: 'endDate',
-      width: 120,
-      render: (date) => (date ? new Date(date).toLocaleDateString('tr-TR') : '—'),
+      width: 110,
+      ellipsis: true,
+      render: (date) => (date ? new Date(date).toLocaleDateString() : '—'),
     },
     {
-      title: 'Katılımcı',
+      title: 'Participants',
       dataIndex: 'participantsCount',
       key: 'participantsCount',
       width: 100,
       align: 'right',
+      ellipsis: true,
       render: (count) => count ?? 0,
     },
     {
-      title: 'Oluşturulma',
+      title: 'Created',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      width: 120,
-      render: (date) => (date ? new Date(date).toLocaleDateString('tr-TR') : '—'),
+      width: 110,
+      ellipsis: true,
+      render: (date) => (date ? new Date(date).toLocaleDateString() : '—'),
     },
     {
       title: '',
       key: 'action',
       width: 80,
-      render: (_, record) => (
-        <Link to={`/events/${record.id}`}>
-          <Button type="link" size="small">
-            Detay
-          </Button>
-        </Link>
-      ),
+      render: (_, record) => <ViewActionButton to={`/events/${record.id}`} />,
     },
   ];
 
@@ -200,13 +203,13 @@ function EventList() {
     <div>
       <PageHeader
         title="Events"
-        description="Event listesi, filtreleme ve yönetim"
+        description="Event list, filtering and management"
         icon={<CalendarOutlined />}
       />
 
       {error && (
         <Alert
-          message="Hata"
+          message="Error"
           description={error}
           type="error"
           closable
@@ -226,7 +229,7 @@ function EventList() {
             <Col xs={24} sm={12} lg={6}>
               <Card bordered>
                 <Statistic
-                  title="Toplam"
+                  title="Total"
                   value={stats.total}
                   prefix={<CalendarOutlined />}
                   valueStyle={{ fontWeight: 700 }}
@@ -236,7 +239,7 @@ function EventList() {
             <Col xs={24} sm={12} lg={6}>
               <Card bordered>
                 <Statistic
-                  title="Taslak"
+                  title="Draft"
                   value={stats.draft}
                   prefix={<FileOutlined />}
                   valueStyle={{ fontWeight: 600 }}
@@ -246,7 +249,7 @@ function EventList() {
             <Col xs={24} sm={12} lg={6}>
               <Card bordered>
                 <Statistic
-                  title="Yayında"
+                  title="Published"
                   value={stats.published}
                   prefix={<SignalFilled />}
                   valueStyle={{ fontWeight: 600 }}
@@ -256,7 +259,7 @@ function EventList() {
             <Col xs={24} sm={12} lg={6}>
               <Card bordered>
                 <Statistic
-                  title="Kapalı"
+                  title="Closed"
                   value={stats.closed}
                   prefix={<InboxOutlined />}
                   valueStyle={{ fontWeight: 600 }}
@@ -270,11 +273,11 @@ function EventList() {
       {/* Event List */}
       <Card
         bordered
-        title="Event listesi"
+        title="Event list"
         extra={
           <Space wrap>
             <Input
-              placeholder="Ara (başlık, açıklama)"
+              placeholder="Search (title, description)"
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -291,12 +294,12 @@ function EventList() {
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
               style={{ width: 130 }}
-              placeholder="Tüm durumlar"
+              placeholder="All statuses"
             >
-              <Select.Option value="">Tüm durumlar</Select.Option>
-              <Select.Option value="DRAFT">Taslak</Select.Option>
-              <Select.Option value="PUBLISHED">Yayında</Select.Option>
-              <Select.Option value="CLOSED">Kapalı</Select.Option>
+              <Select.Option value="">All statuses</Select.Option>
+              <Select.Option value="DRAFT">Draft</Select.Option>
+              <Select.Option value="PUBLISHED">Published</Select.Option>
+              <Select.Option value="CLOSED">Closed</Select.Option>
             </Select>
             <Select
               value={feedType}
@@ -305,9 +308,9 @@ function EventList() {
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
               style={{ width: 150 }}
-              placeholder="Tüm feed türleri"
+              placeholder="All feed types"
             >
-              <Select.Option value="">Tüm feed türleri</Select.Option>
+              <Select.Option value="">All feed types</Select.Option>
               <Select.Option value="PICKS">PICKS</Select.Option>
               <Select.Option value="ROASTS">ROASTS</Select.Option>
             </Select>
@@ -319,10 +322,10 @@ function EventList() {
               }}
               style={{ width: 130 }}
             >
-              <Select.Option value="createdAt">Oluşturulma</Select.Option>
-              <Select.Option value="startDate">Başlangıç</Select.Option>
-              <Select.Option value="endDate">Bitiş</Select.Option>
-              <Select.Option value="title">Başlık</Select.Option>
+              <Select.Option value="createdAt">Created</Select.Option>
+              <Select.Option value="startDate">Start</Select.Option>
+              <Select.Option value="endDate">End</Select.Option>
+              <Select.Option value="title">Title</Select.Option>
             </Select>
             <Select
               value={order}
@@ -332,8 +335,8 @@ function EventList() {
               }}
               style={{ width: 100 }}
             >
-              <Select.Option value="desc">Azalan</Select.Option>
-              <Select.Option value="asc">Artan</Select.Option>
+              <Select.Option value="desc">Descending</Select.Option>
+              <Select.Option value="asc">Ascending</Select.Option>
             </Select>
           </Space>
         }
@@ -348,14 +351,14 @@ function EventList() {
             pageSize: PAGE_SIZE,
             total: pagination.total,
             showSizeChanger: false,
-            showTotal: (total) => `Toplam ${total} kayıt`,
+            showTotal: (total) => `Total ${total} records`,
           }}
           onChange={handleTableChange}
           locale={{
             emptyText: (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description="Event bulunamadı. Filtreleri değiştirerek tekrar deneyin."
+                description="No events found. Try changing the filters."
               />
             ),
           }}

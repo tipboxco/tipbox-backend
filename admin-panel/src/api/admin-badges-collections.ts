@@ -67,23 +67,13 @@ export async function createCollection(body: {
   name: string;
   bannerUrl?: string | null;
   owner?: string | null;
-  collectionObjective?: string | null;
-  targetVertical?: string | null;
-  productScope?: string | null;
-  collectionType?: string | null;
-  hookPitch?: string | null;
-  visualTheme?: string | null;
-  completionBonus?: string | null;
-  primaryKpi?: string | null;
-  secondaryKpi?: string | null;
-  targetAudience?: string | null;
-  campaignContext?: string | null;
-  successMetric?: string | null;
-  sponsorship?: string | null;
+  focusSector?: string | null;
+  targetGroup?: string | null;
+  shortDescription?: string | null;
+  longDescription?: string | null;
   unlockCondition?: string | null;
-  scheduleLaunchDate?: string | null;
-  timeStockLimit?: string | null;
-  categoryId: string;
+  completionBonus?: string | null;
+  categoryId?: string | null;
 }) {
   return post<AdminCollectionDetailResponse>(`${prefix}/collections`, body);
 }
@@ -94,23 +84,13 @@ export async function updateCollection(
     name: string;
     bannerUrl: string | null;
     owner: string | null;
-    collectionObjective: string | null;
-    targetVertical: string | null;
-    productScope: string | null;
-    collectionType: string | null;
-    hookPitch: string | null;
-    visualTheme: string | null;
-    completionBonus: string | null;
-    primaryKpi: string | null;
-    secondaryKpi: string | null;
-    targetAudience: string | null;
-    campaignContext: string | null;
-    successMetric: string | null;
-    sponsorship: string | null;
+    focusSector: string | null;
+    targetGroup: string | null;
+    shortDescription: string | null;
+    longDescription: string | null;
     unlockCondition: string | null;
-    scheduleLaunchDate: string | null;
-    timeStockLimit: string | null;
-    categoryId: string;
+    completionBonus: string | null;
+    categoryId: string | null;
   }>
 ) {
   return patch<AdminCollectionDetailResponse>(`${prefix}/collections/${id}`, body);

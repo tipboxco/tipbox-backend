@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import {
   Row,
   Col,
@@ -22,10 +22,14 @@ import {
   SafetyCertificateOutlined,
   UserAddOutlined,
   SearchOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
 } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
+import ViewActionButton from '../../components/ViewActionButton';
 import { fetchUsersStats, fetchUsers } from '../../api/admin-users';
 import type { AdminUserListItem, AdminUsersStatsResponse } from '../../types/admin';
+import { BADGE_COLOR_SECONDARY } from '../../constants/badge-colors';
 
 const PAGE_SIZE = 20;
 
@@ -61,7 +65,7 @@ function UserList() {
         if (!cancelled && res.data) setStats(res.data);
       } catch (e) {
         if (!cancelled)
-          setError(e instanceof Error ? e.message : 'İstatistikler yüklenemedi');
+          setError(e instanceof Error ? e.message : 'Failed to load statistics');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -96,7 +100,7 @@ function UserList() {
         }
       } catch (e) {
         if (!cancelled)
-          setError(e instanceof Error ? e.message : 'Liste yüklenemedi');
+          setError(e instanceof Error ? e.message : 'Failed to load list');
       } finally {
         if (!cancelled) setLoadingList(false);
       }
@@ -108,60 +112,69 @@ function UserList() {
 
   const columns: ColumnsType<AdminUserListItem> = [
     {
-      title: 'Görünen ad',
+      title: 'Display Name',
       dataIndex: 'displayName',
       key: 'displayName',
+      width: 160,
+      ellipsis: true,
       render: (text) => text ?? '—',
     },
     {
-      title: 'Kullanıcı adı',
+      title: 'Username',
       dataIndex: 'userName',
       key: 'userName',
+      width: 140,
+      ellipsis: true,
       render: (text) => text ?? '—',
     },
     {
       title: 'Email',
       dataIndex: 'email',
       key: 'email',
+      width: 200,
+      ellipsis: true,
       render: (text) => text ?? '—',
     },
     {
-      title: 'Durum',
+      title: 'Status',
       dataIndex: 'status',
       key: 'status',
+      width: 100,
+      ellipsis: true,
       render: (status) => (
-        <Tag color={status === 'BANNED' ? 'red' : 'default'}>
+        <Tag color={status === 'BANNED' ? BADGE_COLOR_SECONDARY : 'default'}>
           {status ?? '—'}
         </Tag>
       ),
     },
     {
-      title: 'Email doğru',
+      title: 'Email Verification',
       dataIndex: 'emailVerified',
       key: 'emailVerified',
-      render: (verified) => (
-        <Tag color={verified ? 'success' : 'default'}>
-          {verified ? 'Evet' : 'Hayır'}
-        </Tag>
-      ),
+      width: 100,
+      align: 'center',
+      ellipsis: true,
+      render: (verified) =>
+        verified ? (
+          <CheckCircleOutlined style={{ color: 'var(--ant-color-success)', fontSize: 18 }} />
+        ) : (
+          <CloseCircleOutlined style={{ color: 'var(--ant-color-text-tertiary)', fontSize: 18 }} />
+        ),
     },
     {
-      title: 'Kayıt',
+      title: 'Registration',
       dataIndex: 'createdAt',
       key: 'createdAt',
+      width: 110,
+      ellipsis: true,
       render: (date) =>
-        date ? new Date(date).toLocaleDateString('tr-TR') : '—',
+        date ? new Date(date).toLocaleDateString('en-US') : '—',
     },
     {
       title: '',
       key: 'action',
-      render: (_, record) => (
-        <Link to={`/users/${record.id}`}>
-          <Button type="link" size="small">
-            Detay
-          </Button>
-        </Link>
-      ),
+      width: 80,
+      render: (_, record) => <ViewActionButton to={`/users/${record.id}`} />,
     },
   ];
 
@@ -175,14 +188,14 @@ function UserList() {
   return (
     <div>
       <PageHeader
-        title="Kullanıcılar"
-        description="Platform kullanıcılarını listele, filtrele ve yönet"
+        title="Users"
+        description="List, filter, and manage platform users"
         icon={<UserOutlined />}
       />
 
       {error && (
         <Alert
-          message="Hata"
+          message="Error"
           description={error}
           type="error"
           closable
@@ -202,7 +215,7 @@ function UserList() {
             <Col xs={24} sm={12} lg={6}>
               <Card bordered>
                 <Statistic
-                  title="Toplam"
+                  title="Total"
                   value={stats.total}
                   prefix={<UserOutlined />}
                   valueStyle={{ fontWeight: 700 }}
@@ -212,27 +225,27 @@ function UserList() {
             <Col xs={24} sm={12} lg={6}>
               <Card bordered>
                 <Statistic
-                  title="Yasaklı"
+                  title="Banned"
                   value={stats.bannedCount}
                   prefix={<UserDeleteOutlined />}
-                  valueStyle={{ fontWeight: 700, color: '#ff4d4f' }}
+                  valueStyle={{ fontWeight: 700, color: '#D8365D' }}
                 />
               </Card>
             </Col>
             <Col xs={24} sm={12} lg={6}>
               <Card bordered>
                 <Statistic
-                  title="Email Doğrulu"
+                  title="Email Verified"
                   value={stats.emailVerifiedCount}
                   prefix={<SafetyCertificateOutlined />}
-                  valueStyle={{ fontWeight: 700, color: '#52c41a' }}
+                  valueStyle={{ fontWeight: 700, color: '#8B9D2D' }}
                 />
               </Card>
             </Col>
             <Col xs={24} sm={12} lg={6}>
               <Card bordered>
                 <Statistic
-                  title="Bu Hafta Yeni"
+                  title="New This Week"
                   value={stats.newThisWeek}
                   prefix={<UserAddOutlined />}
                   valueStyle={{ fontWeight: 700 }}
@@ -246,11 +259,11 @@ function UserList() {
       {/* User List Table */}
       <Card
         bordered
-        title="Kullanıcı listesi"
+        title="User List"
         extra={
           <Space wrap>
             <Input
-              placeholder="Ara (email, displayName, userName)"
+              placeholder="Search (email, displayName, userName)"
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -267,11 +280,11 @@ function UserList() {
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
               style={{ width: 140 }}
-              placeholder="Tüm durumlar"
+              placeholder="All statuses"
             >
-              <Select.Option value="">Tüm durumlar</Select.Option>
-              <Select.Option value="ACTIVE">Aktif</Select.Option>
-              <Select.Option value="BANNED">Yasaklı</Select.Option>
+              <Select.Option value="">All statuses</Select.Option>
+              <Select.Option value="ACTIVE">Active</Select.Option>
+              <Select.Option value="BANNED">Banned</Select.Option>
             </Select>
             <Select
               value={emailVerified}
@@ -280,11 +293,11 @@ function UserList() {
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
               style={{ width: 160 }}
-              placeholder="Email doğrulama"
+              placeholder="Email verification"
             >
-              <Select.Option value="">Email doğrulama</Select.Option>
-              <Select.Option value="true">Doğrulanmış</Select.Option>
-              <Select.Option value="false">Doğrulanmamış</Select.Option>
+              <Select.Option value="">Email verification</Select.Option>
+              <Select.Option value="true">Verified</Select.Option>
+              <Select.Option value="false">Not verified</Select.Option>
             </Select>
             <Select
               value={sort}
@@ -294,7 +307,7 @@ function UserList() {
               }}
               style={{ width: 100 }}
             >
-              <Select.Option value="createdAt">Tarih</Select.Option>
+              <Select.Option value="createdAt">Date</Select.Option>
               <Select.Option value="email">Email</Select.Option>
             </Select>
             <Select
@@ -305,8 +318,8 @@ function UserList() {
               }}
               style={{ width: 100 }}
             >
-              <Select.Option value="desc">Azalan</Select.Option>
-              <Select.Option value="asc">Artan</Select.Option>
+              <Select.Option value="desc">Descending</Select.Option>
+              <Select.Option value="asc">Ascending</Select.Option>
             </Select>
           </Space>
         }
@@ -321,14 +334,14 @@ function UserList() {
             pageSize: PAGE_SIZE,
             total: pagination.total,
             showSizeChanger: false,
-            showTotal: (total) => `Toplam ${total} kayıt`,
+            showTotal: (total) => `Total ${total} records`,
           }}
           onChange={handleTableChange}
           locale={{
             emptyText: (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description="Kullanıcı bulunamadı"
+                description="No users found"
               />
             ),
           }}

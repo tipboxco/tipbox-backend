@@ -13,7 +13,7 @@ function CosmeticBadgesList() {
         badgeType={'COSMETIC' as BadgeTypeSlug}
         listPath="/gamification/cosmetic-badges"
         title="Cosmetic Badges"
-        description="Kozmetik badge'leri listesi ve yönetimi"
+        description="Cosmetic badges list and management"
         icon={<BgColorsOutlined />}
         onOpenCreate={() => setCreateOpen(true)}
       />

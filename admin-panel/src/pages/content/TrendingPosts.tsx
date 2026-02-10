@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import {
   Card,
   Table,
@@ -52,7 +51,7 @@ function TrendingPosts() {
       setRows(res.data ?? []);
       if (res.pagination) setPagination((p) => ({ ...p, ...res.pagination }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Liste yüklenemedi');
+      setError(e instanceof Error ? e.message : 'Failed to load list');
     } finally {
       setLoading(false);
     }
@@ -64,7 +63,7 @@ function TrendingPosts() {
 
   const handleAdd = async () => {
     if (!newPostId.trim()) {
-      antdMessage.warning('Lütfen Post ID girin');
+      antdMessage.warning('Please enter Post ID');
       return;
     }
     setActionLoading('add');
@@ -77,10 +76,10 @@ function TrendingPosts() {
       setShowAdd(false);
       setNewPostId('');
       setNewScore(null);
-      antdMessage.success('Trending\'e eklendi');
+      antdMessage.success('Added to trending');
       load();
     } catch (e) {
-      antdMessage.error(e instanceof Error ? e.message : 'Eklenemedi');
+      antdMessage.error(e instanceof Error ? e.message : 'Failed to add');
     } finally {
       setActionLoading(null);
     }
@@ -88,19 +87,19 @@ function TrendingPosts() {
 
   const handleDelete = async (id: string) => {
     Modal.confirm({
-      title: 'Trending\'den Kaldır',
-      content: 'Trending\'den kaldırmak istediğinize emin misiniz?',
-      okText: 'Kaldır',
-      cancelText: 'İptal',
+      title: 'Remove from Trending',
+      content: 'Are you sure you want to remove this from trending?',
+      okText: 'Remove',
+      cancelText: 'Cancel',
       okButtonProps: { danger: true },
       onOk: async () => {
         setActionLoading(id);
         try {
           await deleteTrending(id);
-          antdMessage.success('Trending\'den kaldırıldı');
+          antdMessage.success('Removed from trending');
           load();
         } catch (e) {
-          antdMessage.error(e instanceof Error ? e.message : 'Kaldırılamadı');
+          antdMessage.error(e instanceof Error ? e.message : 'Failed to remove');
         } finally {
           setActionLoading(null);
         }
@@ -112,41 +111,46 @@ function TrendingPosts() {
     {
       title: 'Post',
       key: 'post',
-      render: (_, record) => (
-        <Link to={`/content/posts/${record.postId}`}>
-          <Button type="link" size="small" style={{ padding: 0 }}>
-            {record.postTitle
-              ? record.postTitle.length > 40
-                ? record.postTitle.slice(0, 40) + '…'
-                : record.postTitle
-              : record.postId}
-          </Button>
-        </Link>
-      ),
+      width: 240,
+      ellipsis: true,
+      render: (_, record) =>
+        record.postTitle
+          ? record.postTitle.length > 50
+            ? record.postTitle.slice(0, 50) + '…'
+            : record.postTitle
+          : record.postId,
     },
     {
-      title: 'Yazar',
+      title: 'Author',
       dataIndex: 'userDisplayName',
       key: 'userDisplayName',
+      width: 140,
+      ellipsis: true,
       render: (text) => text ?? '—',
     },
     {
       title: 'Score',
       dataIndex: 'score',
       key: 'score',
+      width: 88,
       align: 'right',
+      ellipsis: true,
       render: (score) => <span style={{ fontVariantNumeric: 'tabular-nums' }}>{score}</span>,
     },
     {
-      title: 'Periyot',
+      title: 'Period',
       dataIndex: 'trendPeriod',
       key: 'trendPeriod',
+      width: 100,
+      ellipsis: true,
     },
     {
-      title: 'Hesaplanma',
+      title: 'Calculated',
       dataIndex: 'calculatedAt',
       key: 'calculatedAt',
-      render: (date) => (date ? new Date(date).toLocaleString('tr-TR') : '—'),
+      width: 140,
+      ellipsis: true,
+      render: (date) => (date ? new Date(date).toLocaleString('en-US') : '—'),
     },
     {
       title: '',
@@ -159,7 +163,7 @@ function TrendingPosts() {
           loading={actionLoading === record.id}
           onClick={() => handleDelete(record.id)}
         >
-          Kaldır
+          Remove
         </Button>
       ),
     },
@@ -182,7 +186,7 @@ function TrendingPosts() {
 
       {error && (
         <Alert
-          message="Hata"
+          message="Error"
           description={error}
           type="error"
           closable
@@ -193,7 +197,7 @@ function TrendingPosts() {
 
       <Card
         bordered
-        title="Trending listesi"
+        title="Trending list"
         extra={
           <Space>
             <Select
@@ -203,14 +207,14 @@ function TrendingPosts() {
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
               style={{ width: 140 }}
-              placeholder="Tüm periyotlar"
+              placeholder="All periods"
             >
-              <Select.Option value="">Tüm periyotlar</Select.Option>
-              <Select.Option value="DAILY">Günlük</Select.Option>
-              <Select.Option value="WEEKLY">Haftalık</Select.Option>
+              <Select.Option value="">All periods</Select.Option>
+              <Select.Option value="DAILY">Daily</Select.Option>
+              <Select.Option value="WEEKLY">Weekly</Select.Option>
             </Select>
             <Button type="primary" onClick={() => setShowAdd(!showAdd)}>
-              {showAdd ? 'İptal' : "Trending'e ekle"}
+              {showAdd ? 'Cancel' : 'Add to trending'}
             </Button>
           </Space>
         }
@@ -232,7 +236,7 @@ function TrendingPosts() {
               <Select.Option value="WEEKLY">WEEKLY</Select.Option>
             </Select>
             <InputNumber
-              placeholder="Score (opsiyonel)"
+              placeholder="Score (optional)"
               value={newScore}
               onChange={setNewScore}
               style={{ width: 150 }}
@@ -242,7 +246,7 @@ function TrendingPosts() {
               loading={actionLoading === 'add'}
               onClick={handleAdd}
             >
-              Ekle
+              Add
             </Button>
           </Space>
         )}
@@ -257,14 +261,14 @@ function TrendingPosts() {
             pageSize: PAGE_SIZE,
             total: pagination.total,
             showSizeChanger: false,
-            showTotal: (total) => `Toplam ${total} kayıt`,
+            showTotal: (total) => `Total ${total} records`,
           }}
           onChange={handleTableChange}
           locale={{
             emptyText: (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description="Trending post yok. Filtreleri değiştirin veya yeni ekleyin."
+                description="No trending posts. Adjust filters or add new ones."
               />
             ),
           }}

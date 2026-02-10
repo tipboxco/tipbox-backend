@@ -177,6 +177,7 @@ services:
       - backend
     volumes:
       - ./admin-panel:/app
+      - /app/node_modules
     working_dir: /app
     command: npm run dev
     networks:

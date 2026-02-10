@@ -104,7 +104,7 @@ import { Table, Image } from 'antd';
 
 const columns: ColumnsType<Item> = [
   {
-    title: 'Görsel',
+    title: 'Image',
     render: (url) => url ? (
       <Image src={url} width={60} height={60}
         style={{ objectFit: 'cover', borderRadius: 4 }}
@@ -219,7 +219,7 @@ Post types have consistent color mapping across pages:
 const getTypeColor = (type: string) => {
   const map: Record<string, string> = {
     FREE: 'default',      // Gray
-    TIPS: 'gold',         // Gold/Yellow
+    TIPS: '#DAF94D',      // Tipbox lime (button fill)
     EXPERIENCE: 'blue',   // Blue
     QUESTION: 'purple',   // Purple
     COMPARE: 'cyan',      // Cyan

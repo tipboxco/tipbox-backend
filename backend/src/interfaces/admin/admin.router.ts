@@ -3445,27 +3445,17 @@ router.get(
       name: collection.name,
       bannerUrl: collection.bannerUrl,
       owner: collection.owner,
-      categoryId: collection.categoryId,
+      categoryId: collection.categoryId ?? undefined,
       categoryName: collection.category?.name ?? null,
       badgesCount: collection._count.badges,
       goalsCount: collection._count.achievementGoals,
       createdAt: collection.createdAt.toISOString(),
-      collectionObjective: collection.collectionObjective,
-      targetVertical: collection.targetVertical,
-      productScope: collection.productScope,
-      collectionType: collection.collectionType,
-      hookPitch: collection.hookPitch,
-      visualTheme: collection.visualTheme,
-      completionBonus: collection.completionBonus,
-      primaryKpi: collection.primaryKpi,
-      secondaryKpi: collection.secondaryKpi,
-      targetAudience: collection.targetAudience,
-      campaignContext: collection.campaignContext,
-      successMetric: collection.successMetric,
-      sponsorship: collection.sponsorship,
+      focusSector: collection.focusSector,
+      targetGroup: collection.targetGroup,
+      shortDescription: collection.shortDescription,
+      longDescription: collection.longDescription,
       unlockCondition: collection.unlockCondition,
-      scheduleLaunchDate: collection.scheduleLaunchDate?.toISOString() ?? null,
-      timeStockLimit: collection.timeStockLimit,
+      completionBonus: collection.completionBonus,
       updatedAt: collection.updatedAt.toISOString(),
       category: collection.category ? { id: collection.category.id, name: collection.category.name } : null,
     };
@@ -3487,23 +3477,13 @@ router.post(
         name: body.name,
         bannerUrl: body.bannerUrl ?? undefined,
         owner: body.owner ?? undefined,
-        collectionObjective: body.collectionObjective ?? undefined,
-        targetVertical: body.targetVertical ?? undefined,
-        productScope: body.productScope ?? undefined,
-        collectionType: body.collectionType ?? undefined,
-        hookPitch: body.hookPitch ?? undefined,
-        visualTheme: body.visualTheme ?? undefined,
-        completionBonus: body.completionBonus ?? undefined,
-        primaryKpi: body.primaryKpi ?? undefined,
-        secondaryKpi: body.secondaryKpi ?? undefined,
-        targetAudience: body.targetAudience ?? undefined,
-        campaignContext: body.campaignContext ?? undefined,
-        successMetric: body.successMetric ?? undefined,
-        sponsorship: body.sponsorship ?? undefined,
+        focusSector: body.focusSector ?? undefined,
+        targetGroup: body.targetGroup ?? undefined,
+        shortDescription: body.shortDescription ?? undefined,
+        longDescription: body.longDescription ?? undefined,
         unlockCondition: body.unlockCondition ?? undefined,
-        scheduleLaunchDate: body.scheduleLaunchDate ?? undefined,
-        timeStockLimit: body.timeStockLimit ?? undefined,
-        categoryId: body.categoryId,
+        completionBonus: body.completionBonus ?? undefined,
+        categoryId: body.categoryId ?? undefined,
       },
       include: { category: { select: { id: true, name: true } } },
     });
@@ -3521,27 +3501,17 @@ router.post(
       name: collection.name,
       bannerUrl: collection.bannerUrl,
       owner: collection.owner,
-      categoryId: collection.categoryId,
+      categoryId: collection.categoryId ?? undefined,
       categoryName: collection.category?.name ?? null,
       badgesCount: 0,
       goalsCount: 0,
       createdAt: collection.createdAt.toISOString(),
-      collectionObjective: collection.collectionObjective,
-      targetVertical: collection.targetVertical,
-      productScope: collection.productScope,
-      collectionType: collection.collectionType,
-      hookPitch: collection.hookPitch,
-      visualTheme: collection.visualTheme,
-      completionBonus: collection.completionBonus,
-      primaryKpi: collection.primaryKpi,
-      secondaryKpi: collection.secondaryKpi,
-      targetAudience: collection.targetAudience,
-      campaignContext: collection.campaignContext,
-      successMetric: collection.successMetric,
-      sponsorship: collection.sponsorship,
+      focusSector: collection.focusSector,
+      targetGroup: collection.targetGroup,
+      shortDescription: collection.shortDescription,
+      longDescription: collection.longDescription,
       unlockCondition: collection.unlockCondition,
-      scheduleLaunchDate: collection.scheduleLaunchDate?.toISOString() ?? null,
-      timeStockLimit: collection.timeStockLimit,
+      completionBonus: collection.completionBonus,
       updatedAt: collection.updatedAt.toISOString(),
       category: collection.category ? { id: collection.category.id, name: collection.category.name } : null,
     };
@@ -3565,22 +3535,12 @@ router.patch(
     if (body.name !== undefined) updateData.name = body.name;
     if (body.bannerUrl !== undefined) updateData.bannerUrl = body.bannerUrl;
     if (body.owner !== undefined) updateData.owner = body.owner;
-    if (body.collectionObjective !== undefined) updateData.collectionObjective = body.collectionObjective;
-    if (body.targetVertical !== undefined) updateData.targetVertical = body.targetVertical;
-    if (body.productScope !== undefined) updateData.productScope = body.productScope;
-    if (body.collectionType !== undefined) updateData.collectionType = body.collectionType;
-    if (body.hookPitch !== undefined) updateData.hookPitch = body.hookPitch;
-    if (body.visualTheme !== undefined) updateData.visualTheme = body.visualTheme;
+    if (body.focusSector !== undefined) updateData.focusSector = body.focusSector;
+    if (body.targetGroup !== undefined) updateData.targetGroup = body.targetGroup;
+    if (body.shortDescription !== undefined) updateData.shortDescription = body.shortDescription;
+    if (body.longDescription !== undefined) updateData.longDescription = body.longDescription;
     if (body.completionBonus !== undefined) updateData.completionBonus = body.completionBonus;
-    if (body.primaryKpi !== undefined) updateData.primaryKpi = body.primaryKpi;
-    if (body.secondaryKpi !== undefined) updateData.secondaryKpi = body.secondaryKpi;
-    if (body.targetAudience !== undefined) updateData.targetAudience = body.targetAudience;
-    if (body.campaignContext !== undefined) updateData.campaignContext = body.campaignContext;
-    if (body.successMetric !== undefined) updateData.successMetric = body.successMetric;
-    if (body.sponsorship !== undefined) updateData.sponsorship = body.sponsorship;
     if (body.unlockCondition !== undefined) updateData.unlockCondition = body.unlockCondition;
-    if (body.scheduleLaunchDate !== undefined) updateData.scheduleLaunchDate = body.scheduleLaunchDate;
-    if (body.timeStockLimit !== undefined) updateData.timeStockLimit = body.timeStockLimit;
     if (body.categoryId !== undefined) updateData.categoryId = body.categoryId;
     const updated = await prisma.badgeCollection.update({
       where: { id },
@@ -3601,27 +3561,17 @@ router.patch(
       name: updated.name,
       bannerUrl: updated.bannerUrl,
       owner: updated.owner,
-      categoryId: updated.categoryId,
+      categoryId: updated.categoryId ?? undefined,
       categoryName: updated.category?.name ?? null,
       badgesCount: updated._count.badges,
       goalsCount: updated._count.achievementGoals,
       createdAt: updated.createdAt.toISOString(),
-      collectionObjective: updated.collectionObjective,
-      targetVertical: updated.targetVertical,
-      productScope: updated.productScope,
-      collectionType: updated.collectionType,
-      hookPitch: updated.hookPitch,
-      visualTheme: updated.visualTheme,
-      completionBonus: updated.completionBonus,
-      primaryKpi: updated.primaryKpi,
-      secondaryKpi: updated.secondaryKpi,
-      targetAudience: updated.targetAudience,
-      campaignContext: updated.campaignContext,
-      successMetric: updated.successMetric,
-      sponsorship: updated.sponsorship,
+      focusSector: updated.focusSector,
+      targetGroup: updated.targetGroup,
+      shortDescription: updated.shortDescription,
+      longDescription: updated.longDescription,
       unlockCondition: updated.unlockCondition,
-      scheduleLaunchDate: updated.scheduleLaunchDate?.toISOString() ?? null,
-      timeStockLimit: updated.timeStockLimit,
+      completionBonus: updated.completionBonus,
       updatedAt: updated.updatedAt.toISOString(),
       category: updated.category ? { id: updated.category.id, name: updated.category.name } : null,
     };

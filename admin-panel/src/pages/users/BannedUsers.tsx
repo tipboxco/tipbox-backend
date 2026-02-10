@@ -1,8 +1,8 @@
 import { Navigate, useSearchParams } from 'react-router-dom';
 
 /**
- * Yasaklı kullanıcılar — Kullanıcı listesine status=BANNED filtresi ile yönlendirir.
- * Böylece tek bir liste ekranı üzerinden yönetim sağlanır.
+ * Banned users — Redirects to user list with status=BANNED filter.
+ * This allows management through a single list screen.
  */
 function BannedUsers() {
   const [searchParams] = useSearchParams();

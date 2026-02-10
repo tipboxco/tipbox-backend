@@ -29,7 +29,7 @@ function TagsCategories() {
         if (!cancelled) setTags(res.data ?? []);
       } catch (e) {
         if (!cancelled)
-          setError(e instanceof Error ? e.message : 'Tag listesi yüklenemedi');
+          setError(e instanceof Error ? e.message : 'Failed to load tag list');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -46,7 +46,7 @@ function TagsCategories() {
       key: 'tag',
     },
     {
-      title: 'Kullanım sayısı',
+      title: 'Usage count',
       dataIndex: 'count',
       key: 'count',
       align: 'right',
@@ -64,7 +64,7 @@ function TagsCategories() {
 
       {error && (
         <Alert
-          message="Hata"
+          message="Error"
           description={error}
           type="error"
           closable
@@ -75,10 +75,10 @@ function TagsCategories() {
 
       <Card
         bordered
-        title="Kullanılan tag'ler"
+        title="Used tags"
         extra={
           <Input
-            placeholder="Tag ara"
+            placeholder="Search tags"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             prefix={<SearchOutlined />}
@@ -98,20 +98,20 @@ function TagsCategories() {
             emptyText: (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description="Tag bulunamadı. İçeriklerde kullanılan tag'ler burada listelenir."
+                description="No tags found. Tags used in content are listed here."
               />
             ),
           }}
         />
       </Card>
 
-      <Card bordered title="Kategoriler">
+      <Card bordered title="Categories">
         <Text type="secondary">
-          Kategori, ana kategori ve alt kategori yönetimi için{' '}
+          For category, main category, and subcategory management, use the{' '}
           <Link to="/products/categories" style={{ color: 'inherit', textDecoration: 'underline' }}>
-            Ürün Kategorileri
+            Product Categories
           </Link>{' '}
-          sayfasını kullanın.
+          page.
         </Text>
       </Card>
     </div>

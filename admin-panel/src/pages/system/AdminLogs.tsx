@@ -25,7 +25,7 @@ function AdminLogs() {
           if (res.pagination) setPagination(res.pagination);
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Loglar yüklenemedi');
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load logs');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -35,7 +35,7 @@ function AdminLogs() {
 
   const columns: ColumnsType<AdminLogListItem> = [
     {
-      title: 'Kayıt ID',
+      title: 'Record ID',
       dataIndex: 'id',
       key: 'id',
       ellipsis: true,
@@ -47,11 +47,11 @@ function AdminLogs() {
       ),
     },
     {
-      title: 'Tarih',
+      title: 'Date',
       dataIndex: 'createdAt',
       key: 'createdAt',
       width: 180,
-      render: (date: string) => new Date(date).toLocaleString('tr-TR'),
+      render: (date: string) => new Date(date).toLocaleString(),
     },
     {
       title: 'Admin ID',
@@ -66,13 +66,13 @@ function AdminLogs() {
       ),
     },
     {
-      title: 'İşlem',
+      title: 'Action',
       dataIndex: 'action',
       key: 'action',
       width: 150,
     },
     {
-      title: 'Açıklama',
+      title: 'Description',
       dataIndex: 'description',
       key: 'description',
       render: (desc: string | null) => desc ?? '—',
@@ -94,7 +94,7 @@ function AdminLogs() {
     pageSize: pagination.limit,
     total: pagination.total,
     showSizeChanger: false,
-    showTotal: (total, range) => `${range[0]}-${range[1]} / ${total} kayıt`,
+    showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} records`,
     onChange: (page) => {
       setPagination((p) => ({ ...p, offset: (page - 1) * p.limit }));
     },
@@ -104,13 +104,13 @@ function AdminLogs() {
     <div>
       <PageHeader
         title="Admin Logs"
-        description="Admin işlem geçmişi"
+        description="Admin action history"
         icon={<HistoryOutlined />}
       />
 
       {error && <Alert message={error} type="error" showIcon closable style={{ marginBottom: 16 }} />}
 
-      <Card bordered title="Admin işlem logları">
+      <Card bordered title="Admin action logs">
         <Table<AdminLogListItem>
           columns={columns}
           dataSource={logs}
@@ -121,7 +121,7 @@ function AdminLogs() {
             emptyText: (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description="Henüz admin log kaydı bulunmuyor."
+                description="No admin log records yet."
               />
             ),
           }}

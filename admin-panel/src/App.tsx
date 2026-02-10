@@ -44,7 +44,6 @@ import BrandRewards from './pages/brands/BrandRewards';
 // Gamification pages
 import BadgeDetail from './pages/gamification/BadgeDetail';
 import BadgeCollections from './pages/gamification/BadgeCollections';
-import CreateCollectionPage from './pages/gamification/CreateCollectionPage';
 import CollectionDetail from './pages/gamification/CollectionDetail';
 import EventBadgesList from './pages/gamification/EventBadgesList';
 import BrandBadgesList from './pages/gamification/BrandBadgesList';
@@ -82,7 +81,7 @@ import AdminLogs from './pages/system/AdminLogs';
 import SystemSettings from './pages/system/SystemSettings';
 import ModerationActions from './pages/system/ModerationActions';
 
-/** Giriş yapmış kullanıcı /login'e gelirse ana sayfaya yönlendir */
+/** Redirect logged-in user to home if they visit /login */
 function LoginRedirect() {
   const { isAuthenticated, isReady } = useAuth();
   if (!isReady) return null;
@@ -119,7 +118,7 @@ function App() {
             <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route index element={<Dashboard />} />
 
-          {/* Users — statik yollar önce, users/:id en sonda */}
+          {/* Users — static routes first, users/:id last */}
           <Route path="users" element={<UserList />} />
           <Route path="users/kyc" element={<UserKYC />} />
           <Route path="users/kyc/:userId" element={<UserKycDetail />} />
@@ -154,7 +153,6 @@ function App() {
           {/* Gamification */}
           <Route path="gamification/badges" element={<Navigate to="/gamification/event-badges" replace />} />
           <Route path="gamification/collections" element={<BadgeCollections />} />
-          <Route path="gamification/collections/new" element={<CreateCollectionPage />} />
           <Route path="gamification/collections/:id/badges/:badgeId" element={<BadgeDetail />} />
           <Route path="gamification/collections/:id" element={<CollectionDetail />} />
           <Route path="gamification/event-badges" element={<EventBadgesList />} />
@@ -165,7 +163,7 @@ function App() {
           <Route path="gamification/cosmetic-badges/:id" element={<BadgeDetail />} />
           <Route path="gamification/progress" element={<UserProgress />} />
 
-          {/* Events — statik yollar önce, :id en sonda */}
+          {/* Events — static routes first, :id last */}
           <Route path="events" element={<EventList />} />
           <Route path="events/badges" element={<EventBadges />} />
           <Route path="events/rewards" element={<EventRewards />} />

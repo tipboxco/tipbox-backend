@@ -12,7 +12,7 @@
    - `/src/theme/antd-theme.ts` created
    - Dark theme: Professional blue (#4096ff)
    - Light theme: Professional blue (#1890ff)
-   - Tipbox yellow (#d8ff08) exported for minimal usage
+   - Tipbox accent (#DAF94D) and palette exported for minimal usage
    - Complete token system
 
 3. **App Integration** ✅
@@ -98,9 +98,8 @@
 
 **📄 See:** `CONTENT_MODULE_COMPLETE.md` for details
 
-### Gamification Module (8 remaining)
-- [ ] BadgeCollections.tsx
-- [ ] CreateCollectionPage.tsx
+### Gamification Module (7 remaining)
+- [ ] BadgeCollections.tsx (collection creation is now done via CreateCollectionModal)
 - [ ] CollectionDetail.tsx
 - [ ] BadgeDetail.tsx
 - [ ] EventBadgesList.tsx

@@ -31,20 +31,9 @@ import {
   createTrending,
 } from '../../api/admin-content';
 import type { AdminContentPostDetailResponse } from '../../types/admin';
+import { BADGE_COLOR_PRIMARY, BADGE_COLOR_SECONDARY } from '../../constants/badge-colors';
 
 const { Text, Paragraph } = Typography;
-
-const getTypeColor = (type: string) => {
-  const map: Record<string, string> = {
-    FREE: 'default',
-    TIPS: 'gold',
-    EXPERIENCE: 'blue',
-    QUESTION: 'purple',
-    COMPARE: 'cyan',
-    UPDATE: 'green',
-  };
-  return map[type] ?? 'default';
-};
 
 function ContentPostDetail() {
   const { id } = useParams<{ id: string }>();
@@ -64,7 +53,7 @@ function ContentPostDetail() {
         if (!cancelled && res.data) setPost(res.data);
       } catch (e) {
         if (!cancelled)
-          setError(e instanceof Error ? e.message : 'Post yüklenemedi');
+          setError(e instanceof Error ? e.message : 'Failed to load post');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -77,19 +66,19 @@ function ContentPostDetail() {
   const handleDelete = async () => {
     if (!id) return;
     Modal.confirm({
-      title: 'Postu Sil',
-      content: 'Bu postu silmek istediğinize emin misiniz? Bu işlem geri alınamaz.',
-      okText: 'Sil',
-      cancelText: 'İptal',
+      title: 'Delete Post',
+      content: 'Are you sure you want to delete this post? This action cannot be undone.',
+      okText: 'Delete',
+      cancelText: 'Cancel',
       okButtonProps: { danger: true },
       onOk: async () => {
         setActionLoading(true);
         try {
           await deleteContentPost(id);
-          antdMessage.success('Post silindi');
+          antdMessage.success('Post deleted');
           setTimeout(() => navigate('/content/posts'), 1000);
         } catch (e) {
-          antdMessage.error(e instanceof Error ? e.message : 'Silinemedi');
+          antdMessage.error(e instanceof Error ? e.message : 'Failed to delete');
         } finally {
           setActionLoading(false);
         }
@@ -102,11 +91,11 @@ function ContentPostDetail() {
     setActionLoading(true);
     try {
       await createFeedHighlight({ postId: id, reason });
-      antdMessage.success('Feed highlight eklendi');
+      antdMessage.success('Feed highlight added');
       const res = await fetchContentPost(id);
       if (res.data) setPost(res.data);
     } catch (e) {
-      antdMessage.error(e instanceof Error ? e.message : 'Eklenemedi');
+      antdMessage.error(e instanceof Error ? e.message : 'Failed to add');
     } finally {
       setActionLoading(false);
     }
@@ -117,9 +106,9 @@ function ContentPostDetail() {
     setActionLoading(true);
     try {
       await createTrending({ postId: id, trendPeriod });
-      antdMessage.success("Trending'e eklendi");
+      antdMessage.success('Added to trending');
     } catch (e) {
-      antdMessage.error(e instanceof Error ? e.message : 'Eklenemedi');
+      antdMessage.error(e instanceof Error ? e.message : 'Failed to add');
     } finally {
       setActionLoading(false);
     }
@@ -128,9 +117,9 @@ function ContentPostDetail() {
   if (!id) {
     return (
       <div>
-        <Alert message="Geçersiz post ID" type="error" />
+        <Alert message="Invalid post ID" type="error" />
         <Link to="/content/posts">
-          <Button style={{ marginTop: 16 }}>Listeye dön</Button>
+          <Button style={{ marginTop: 16 }}>Back to list</Button>
         </Link>
       </div>
     );
@@ -148,13 +137,13 @@ function ContentPostDetail() {
     return (
       <div>
         <Alert
-          message="Hata"
-          description={error || 'Post bulunamadı'}
+          message="Error"
+          description={error || 'Post not found'}
           type="error"
           style={{ marginBottom: 16 }}
         />
         <Link to="/content/posts">
-          <Button>Listeye dön</Button>
+          <Button>Back to list</Button>
         </Link>
       </div>
     );
@@ -167,47 +156,48 @@ function ContentPostDetail() {
   return (
     <div>
       <PageHeader
-        title={post.title || 'Başlıksız Post'}
+        title={post.title || 'Untitled Post'}
         description={`ID: ${post.id}`}
         icon={<FileTextOutlined />}
         backTo="/content/posts"
-        backLabel="Listeye dön"
+        backLabel="Back to list"
       />
 
       {/* Header with badges */}
       <Card bordered style={{ marginBottom: 16 }}>
         <Space size="middle" wrap>
-          <Tag color={getTypeColor(post.type)}>{post.type}</Tag>
-          {post.isBoosted && <Tag color="gold">Boosted</Tag>}
+          <Tag color={BADGE_COLOR_PRIMARY}>{post.type}</Tag>
+          {post.isBoosted && <Tag color={BADGE_COLOR_SECONDARY}>Boosted</Tag>}
         </Space>
       </Card>
 
       {/* Summary */}
-      <Card bordered title="Özet" style={{ marginBottom: 16 }}>
+      <Card bordered title="Summary" style={{ marginBottom: 16 }}>
         <Row gutter={[16, 16]}>
           <Col xs={24} md={12}>
             <Space direction="vertical" style={{ width: '100%' }} size={12}>
               <div>
-                <Text type="secondary">Yazar</Text>
+                <Text type="secondary">Author</Text>
                 <div>
-                  <Link to={`/users/${post.userId}`}>
-                    <Button type="link" size="small" style={{ padding: 0 }}>
-                      {userDisplay}
-                    </Button>
+                  <Link
+                    to={`/users/${post.userId}`}
+                    style={{ color: 'var(--tipbox-badge-outline)', textDecoration: 'underline' }}
+                  >
+                    {userDisplay}
                   </Link>
                 </div>
               </div>
               <div>
-                <Text type="secondary">Oluşturulma</Text>
+                <Text type="secondary">Created</Text>
                 <div>
                   <Text>
-                    {post.createdAt ? new Date(post.createdAt).toLocaleString('tr-TR') : '—'}
+                    {post.createdAt ? new Date(post.createdAt).toLocaleString('en-US') : '—'}
                   </Text>
                 </div>
               </div>
               {(post.mainCategory || post.subCategory) && (
                 <div>
-                  <Text type="secondary">Kategori</Text>
+                  <Text type="secondary">Category</Text>
                   <div>
                     <Text>
                       {[post.mainCategory?.name, post.subCategory?.name]
@@ -237,7 +227,7 @@ function ContentPostDetail() {
               </Space>
               {post.product && (
                 <div>
-                  <Text type="secondary">Ürün</Text>
+                  <Text type="secondary">Product</Text>
                   <div>
                     <Text>{post.product.name}</Text>
                   </div>
@@ -261,11 +251,11 @@ function ContentPostDetail() {
         {post.tags && post.tags.length > 0 && (
           <div style={{ marginTop: 16 }}>
             <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-              Tag'ler
+              Tags
             </Text>
             <Space size={[8, 8]} wrap>
               {post.tags.map((tag) => (
-                <Tag key={tag}>{tag}</Tag>
+                <Tag key={tag} color={BADGE_COLOR_PRIMARY}>{tag}</Tag>
               ))}
             </Space>
           </div>
@@ -274,21 +264,21 @@ function ContentPostDetail() {
 
       {/* Body Content */}
       {post.body && (
-        <Card bordered title="İçerik" style={{ marginBottom: 16 }}>
+        <Card bordered title="Content" style={{ marginBottom: 16 }}>
           <Paragraph style={{ whiteSpace: 'pre-wrap' }}>{post.body}</Paragraph>
         </Card>
       )}
 
       {/* Media */}
       {post.media && post.media.length > 0 && (
-        <Card bordered title="Medya" style={{ marginBottom: 16 }}>
+        <Card bordered title="Media" style={{ marginBottom: 16 }}>
           <Row gutter={[16, 16]}>
             {post.media.map((m) => (
               <Col xs={24} sm={12} md={8} lg={6} key={m.id}>
                 {isImageUrl(m.mediaUrl) ? (
                   <Image
                     src={m.mediaUrl}
-                    alt={`Medya ${m.orderIndex + 1}`}
+                    alt={`Media ${m.orderIndex + 1}`}
                     style={{
                       width: '100%',
                       height: 200,
@@ -313,9 +303,9 @@ function ContentPostDetail() {
                   >
                     <Space direction="vertical" align="center">
                       <FileTextOutlined style={{ fontSize: 32 }} />
-                      <Text>Medya {m.orderIndex + 1}</Text>
+                      <Text>Media {m.orderIndex + 1}</Text>
                       <Text type="secondary" style={{ fontSize: 12 }}>
-                        Aç
+                        Open
                       </Text>
                     </Space>
                   </a>
@@ -327,11 +317,11 @@ function ContentPostDetail() {
       )}
 
       {/* Actions */}
-      <Card bordered title="İşlemler">
+      <Card bordered title="Actions">
         <Space direction="vertical" style={{ width: '100%' }} size={16}>
           <div>
             <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-              Öne Çıkarma
+              Highlight
             </Text>
             <Space wrap>
               <Button
@@ -346,21 +336,21 @@ function ContentPostDetail() {
                 disabled={actionLoading}
                 onClick={() => handleAddTrending('DAILY')}
               >
-                Günlük Trending
+                Daily Trending
               </Button>
               <Button
                 icon={<LineChartOutlined />}
                 disabled={actionLoading}
                 onClick={() => handleAddTrending('WEEKLY')}
               >
-                Haftalık Trending
+                Weekly Trending
               </Button>
             </Space>
           </div>
 
           <div>
             <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-              Tehlikeli İşlemler
+              Danger Zone
             </Text>
             <Button
               danger
@@ -368,7 +358,7 @@ function ContentPostDetail() {
               loading={actionLoading}
               onClick={handleDelete}
             >
-              Postu Sil
+              Delete Post
             </Button>
           </div>
         </Space>

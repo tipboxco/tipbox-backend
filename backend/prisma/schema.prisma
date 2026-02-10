@@ -909,32 +909,22 @@ model UserBadge {
 }
 
 model BadgeCollection {
-  id                  String            @id @default(uuid()) @db.Uuid
-  name                String
-  bannerUrl           String?           @map("banner_url")
-  owner               String?
-  collectionObjective String?           @map("collection_objective")
-  targetVertical      String?           @map("target_vertical")
-  productScope        String?           @map("product_scope")
-  collectionType      String?           @map("collection_type")
-  hookPitch           String?           @map("hook_pitch")
-  visualTheme         String?           @map("visual_theme")
-  completionBonus     String?           @map("completion_bonus")
-  primaryKpi          String?           @map("primary_kpi")
-  secondaryKpi        String?           @map("secondary_kpi")
-  targetAudience      String?           @map("target_audience")
-  campaignContext     String?           @map("campaign_context")
-  successMetric       String?           @map("success_metric")
-  sponsorship         String?
-  unlockCondition     String?           @map("unlock_condition")
-  scheduleLaunchDate  DateTime?         @map("schedule_launch_date")
-  timeStockLimit      String?           @map("time_stock_limit")
-  categoryId          String            @map("category_id")
-  createdAt           DateTime          @default(now()) @map("created_at")
-  updatedAt           DateTime          @updatedAt @map("updated_at")
-  category            Category          @relation(fields: [categoryId], references: [id])
-  badges              Badge[]           @relation("BadgeToCollection")
-  achievementGoals    AchievementGoal[]
+  id                String              @id @default(uuid()) @db.Uuid
+  name              String
+  bannerUrl         String?             @map("banner_url")
+  owner             String?
+  focusSector       String?             @map("focus_sector")
+  targetGroup       String?             @map("target_group")
+  shortDescription  String?             @map("short_description")
+  longDescription   String?             @map("long_description")
+  unlockCondition   String?             @map("unlock_condition")
+  completionBonus   String?             @map("completion_bonus")
+  categoryId        String?             @map("category_id")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  category          Category?           @relation(fields: [categoryId], references: [id])
+  badges            Badge[]             @relation("BadgeToCollection")
+  achievementGoals  AchievementGoal[]
 
   @@map("badge_collections")
 }

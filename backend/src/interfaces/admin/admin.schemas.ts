@@ -175,27 +175,13 @@ export const AdminCreateCollectionSchema = z.object({
   name: z.string().min(1).max(500),
   bannerUrl: z.string().url().optional().nullable(),
   owner: z.string().max(500).optional().nullable(),
-  collectionObjective: z.string().max(2000).optional().nullable(),
-  targetVertical: z.string().max(500).optional().nullable(),
-  productScope: z.string().max(500).optional().nullable(),
-  collectionType: z.string().max(200).optional().nullable(),
-  hookPitch: z.string().max(1000).optional().nullable(),
-  visualTheme: z.string().max(500).optional().nullable(),
-  completionBonus: z.string().max(500).optional().nullable(),
-  primaryKpi: z.string().max(500).optional().nullable(),
-  secondaryKpi: z.string().max(500).optional().nullable(),
-  targetAudience: z.string().max(1000).optional().nullable(),
-  campaignContext: z.string().max(1000).optional().nullable(),
-  successMetric: z.string().max(500).optional().nullable(),
-  sponsorship: z.string().max(500).optional().nullable(),
+  focusSector: z.string().max(500).optional().nullable(),
+  targetGroup: z.string().max(500).optional().nullable(),
+  shortDescription: z.string().max(2000).optional().nullable(),
+  longDescription: z.string().max(5000).optional().nullable(),
   unlockCondition: z.string().max(1000).optional().nullable(),
-  scheduleLaunchDate: z
-    .string()
-    .optional()
-    .nullable()
-    .transform((v) => (v == null || v === '' ? null : new Date(v))),
-  timeStockLimit: z.string().max(200).optional().nullable(),
-  categoryId: z.string().min(1),
+  completionBonus: z.string().max(500).optional().nullable(),
+  categoryId: z.string().optional().nullable(),
 });
 
 export const AdminUpdateCollectionSchema = AdminCreateCollectionSchema.partial();

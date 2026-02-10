@@ -44,12 +44,11 @@ Cards, tables, borders, and secondary UI use grey tokens (`--border`, `--text-se
 
 ## Form Controls
 
-Shared classes in `index.css`:
-
-- `.form-label` — label above input
-- `.form-input`, `.form-select`, `.form-textarea` — themed border, focus ring (`--accent`, `--accent-dim`)
-
-Use these in modals and pages for consistency.
+- **Always use a `<Form>` wrapper** — never use `Form.Item` alone; without a parent Form, label widths vary and inputs do not align.
+- **Default layout: vertical** — label above input, controls full width so all inputs start at the same horizontal position. Use the shared constant from `src/constants/form-layout.ts`:
+  - `FORM_LAYOUT_VERTICAL` for standard forms (modals and pages).
+  - If you need horizontal layout, use `FORM_LAYOUT_HORIZONTAL` so label column is fixed and inputs align.
+- **Shared classes** in `index.css` (when not using Ant Design Form): `.form-label`, `.form-input`, `.form-select`, `.form-textarea` — themed border, focus ring (`--accent`, `--accent-dim`).
 
 ---
 

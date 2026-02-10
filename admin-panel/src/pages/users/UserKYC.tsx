@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import { Card, Table, Select, Space, Button, Empty, Alert } from 'antd';
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import { IdcardOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
+import ViewActionButton from '../../components/ViewActionButton';
 import { fetchUserKycList } from '../../api/admin-kyc';
 import type { AdminKycListItem } from '../../types/admin';
 
@@ -38,7 +38,7 @@ function UserKYC() {
         }
       } catch (e) {
         if (!cancelled)
-          setError(e instanceof Error ? e.message : 'Liste yüklenemedi');
+          setError(e instanceof Error ? e.message : 'Failed to load list');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -50,7 +50,7 @@ function UserKYC() {
 
   const columns: ColumnsType<AdminKycListItem> = [
     {
-      title: 'Kullanıcı',
+      title: 'User',
       key: 'user',
       render: (_, record) => record.userEmail ?? record.userId,
     },
@@ -62,36 +62,33 @@ function UserKYC() {
       render: (text) => text?.slice(0, 12) + '…',
     },
     {
-      title: 'İnceleme durumu',
+      title: 'Review status',
       dataIndex: 'reviewStatus',
       key: 'reviewStatus',
     },
     {
-      title: 'Sonuç',
+      title: 'Result',
       dataIndex: 'reviewResult',
       key: 'reviewResult',
     },
     {
-      title: 'KYC seviye',
+      title: 'KYC level',
       dataIndex: 'kycLevel',
       key: 'kycLevel',
       render: (text) => text ?? '—',
     },
     {
-      title: 'Tarih',
+      title: 'Date',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      render: (date) => new Date(date).toLocaleString('tr-TR'),
+      render: (date) => new Date(date).toLocaleString('en-US'),
     },
     {
       title: '',
       key: 'action',
+      width: 100,
       render: (_, record) => (
-        <Link to={`/users/kyc/${record.userId}`}>
-          <Button type="link" size="small">
-            İncele
-          </Button>
-        </Link>
+        <ViewActionButton to={`/users/kyc/${record.userId}`} label="Review" />
       ),
     },
   ];
@@ -106,14 +103,14 @@ function UserKYC() {
   return (
     <div>
       <PageHeader
-        title="KYC doğrulama"
-        description="Kullanıcı KYC kayıtlarını inceleyin ve onaylayın"
+        title="KYC verification"
+        description="Review and approve user KYC records"
         icon={<IdcardOutlined />}
       />
 
       {error && (
         <Alert
-          message="Hata"
+          message="Error"
           description={error}
           type="error"
           closable
@@ -124,7 +121,7 @@ function UserKYC() {
 
       <Card
         bordered
-        title="KYC kayıtları"
+        title="KYC records"
         extra={
           <Space>
             <Select
@@ -134,9 +131,9 @@ function UserKYC() {
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
               style={{ width: 140 }}
-              placeholder="Tüm durumlar"
+              placeholder="All statuses"
             >
-              <Select.Option value="">Tüm durumlar</Select.Option>
+              <Select.Option value="">All statuses</Select.Option>
               <Select.Option value="INIT">INIT</Select.Option>
               <Select.Option value="PENDING">PENDING</Select.Option>
               <Select.Option value="COMPLETED">COMPLETED</Select.Option>
@@ -150,9 +147,9 @@ function UserKYC() {
                 setPagination((p) => ({ ...p, offset: 0 }));
               }}
               style={{ width: 140 }}
-              placeholder="Tüm sonuçlar"
+              placeholder="All results"
             >
-              <Select.Option value="">Tüm sonuçlar</Select.Option>
+              <Select.Option value="">All results</Select.Option>
               <Select.Option value="GREEN">GREEN</Select.Option>
               <Select.Option value="YELLOW">YELLOW</Select.Option>
               <Select.Option value="RED">RED</Select.Option>
@@ -170,14 +167,14 @@ function UserKYC() {
             pageSize: PAGE_SIZE,
             total: pagination.total,
             showSizeChanger: false,
-            showTotal: (total) => `Toplam ${total} kayıt`,
+            showTotal: (total) => `Total ${total} records`,
           }}
           onChange={handleTableChange}
           locale={{
             emptyText: (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description="KYC kaydı bulunamadı"
+                description="No KYC records found"
               />
             ),
           }}

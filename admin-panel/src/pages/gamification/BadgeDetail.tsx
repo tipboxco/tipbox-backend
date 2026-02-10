@@ -32,6 +32,7 @@ import {
   fetchBadgeOwners,
 } from '../../api/admin-badges-collections';
 import type { AdminBadgeDetailResponse, AdminBadgeOwnerListItem } from '../../types/admin';
+import { BADGE_COLOR_PRIMARY, BADGE_COLOR_SECONDARY } from '../../constants/badge-colors';
 
 const { Text, Title, Paragraph } = Typography;
 
@@ -64,9 +65,9 @@ function BadgeDetail() {
     try {
       const res = await fetchBadge(badgeIdToFetch);
       if (res.data) setBadge(res.data);
-      else setError('Badge bulunamadı');
+      else setError('Badge not found');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Yüklenemedi');
+      setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
       setLoading(false);
     }
@@ -82,9 +83,9 @@ function BadgeDetail() {
     return (
       <div>
         <Link to={listPath}>
-          <Button icon={<ArrowLeftOutlined />}>Listeye dön</Button>
+          <Button icon={<ArrowLeftOutlined />}>Back to list</Button>
         </Link>
-        <Text>Geçersiz badge ID</Text>
+        <Text>Invalid badge ID</Text>
       </div>
     );
   }
@@ -94,7 +95,7 @@ function BadgeDetail() {
       <div>
         <Link to={listPath}>
           <Button icon={<ArrowLeftOutlined />} style={{ marginBottom: 16 }}>
-            Listeye dön
+            Back to list
           </Button>
         </Link>
         {loading ? (
@@ -113,12 +114,12 @@ function BadgeDetail() {
   const tabItems = [
     {
       key: 'summary',
-      label: 'Özet',
+      label: 'Summary',
       children: <BadgeSummaryTab badge={badge} onUpdated={loadBadge} onDeleted={() => navigate(backPath)} />,
     },
     {
       key: 'owners',
-      label: 'Sahipler',
+      label: 'Owners',
       children: <BadgeOwnersTab badgeId={badgeIdToFetch!} />,
     },
   ];
@@ -127,7 +128,7 @@ function BadgeDetail() {
     <div>
       <Link to={backPath}>
         <Button icon={<ArrowLeftOutlined />} style={{ marginBottom: 16 }}>
-          Listeye dön
+          Back to list
         </Button>
       </Link>
 
@@ -149,8 +150,8 @@ function BadgeDetail() {
             </Title>
             <Space size="small" wrap>
               <Text type="secondary">ID: {badge.id}</Text>
-              <Tag color="blue">{badge.type}</Tag>
-              <Tag color="gold">{badge.rarity}</Tag>
+              <Tag color={BADGE_COLOR_PRIMARY}>{badge.type}</Tag>
+              <Tag color={BADGE_COLOR_SECONDARY}>{badge.rarity}</Tag>
             </Space>
           </div>
         </Space>
@@ -199,10 +200,10 @@ function BadgeSummaryTab({
         collectionId: form.collectionId || null,
       });
       setEditing(false);
-      antdMessage.success('Badge güncellendi');
+      antdMessage.success('Badge updated');
       onUpdated();
     } catch (e) {
-      antdMessage.error(e instanceof Error ? e.message : 'Güncellenemedi');
+      antdMessage.error(e instanceof Error ? e.message : 'Failed to update');
     } finally {
       setSaving(false);
     }
@@ -210,18 +211,18 @@ function BadgeSummaryTab({
 
   const handleDelete = () => {
     Modal.confirm({
-      title: 'Badge Sil',
-      content: 'Bu badge silinecek. Emin misiniz?',
-      okText: 'Evet, sil',
-      cancelText: 'İptal',
+      title: 'Delete Badge',
+      content: 'This badge will be deleted. Are you sure?',
+      okText: 'Yes, delete',
+      cancelText: 'Cancel',
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
           await deleteBadge(badge.id);
-          antdMessage.success('Badge silindi');
+          antdMessage.success('Badge deleted');
           onDeleted();
         } catch (e) {
-          antdMessage.error(e instanceof Error ? e.message : 'Silinemedi');
+          antdMessage.error(e instanceof Error ? e.message : 'Failed to delete');
         }
       },
     });
@@ -243,13 +244,13 @@ function BadgeSummaryTab({
             <div>
               <Title level={3}>{badge.name}</Title>
               <Space wrap>
-                <Tag color="blue">{badge.type}</Tag>
-                <Tag color="gold">{badge.rarity}</Tag>
-                {badge.categoryName && <Tag>{badge.categoryName}</Tag>}
+                <Tag color={BADGE_COLOR_PRIMARY}>{badge.type}</Tag>
+                <Tag color={BADGE_COLOR_SECONDARY}>{badge.rarity}</Tag>
+                {badge.categoryName && <Tag color={BADGE_COLOR_PRIMARY}>{badge.categoryName}</Tag>}
                 {badge.collectionId && (
                   <Link to={`/gamification/collections/${badge.collectionId}`}>
-                    <Tag icon={<LinkOutlined />} color="cyan">
-                      {badge.collectionName ?? 'Koleksiyon'}
+                    <Tag icon={<LinkOutlined />} color={BADGE_COLOR_PRIMARY}>
+                      {badge.collectionName ?? 'Collection'}
                     </Tag>
                   </Link>
                 )}
@@ -268,7 +269,7 @@ function BadgeSummaryTab({
                 {badge.rewardMultiplier != null && (
                   <Space>
                     <GiftOutlined />
-                    <Text strong>Ödül:</Text>
+                    <Text strong>Reward:</Text>
                     <Text>{badge.rewardMultiplier}×</Text>
                   </Space>
                 )}
@@ -280,17 +281,17 @@ function BadgeSummaryTab({
             {badge.createdAt && (
               <Space>
                 <CalendarOutlined />
-                <Text type="secondary">{new Date(badge.createdAt).toLocaleString('tr-TR')}</Text>
+                <Text type="secondary">{new Date(badge.createdAt).toLocaleString('en-US')}</Text>
               </Space>
             )}
           </Space>
 
           <Space style={{ marginTop: 24 }}>
             <Button type="primary" onClick={() => setEditing(true)}>
-              Düzenle
+              Edit
             </Button>
             <Button danger onClick={handleDelete}>
-              Sil
+              Delete
             </Button>
           </Space>
         </>
@@ -298,19 +299,19 @@ function BadgeSummaryTab({
         <>
           <Space direction="vertical" size="large" style={{ width: '100%' }}>
             <div>
-              <Text strong>Ad</Text>
+              <Text strong>Name</Text>
               <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
             </div>
             <div>
-              <Text strong>Açıklama</Text>
+              <Text strong>Description</Text>
               <Input value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
             </div>
             <div>
-              <Text strong>Görsel URL</Text>
+              <Text strong>Image URL</Text>
               <Input value={form.imageUrl} onChange={(e) => setForm((f) => ({ ...f, imageUrl: e.target.value }))} />
             </div>
             <div>
-              <Text strong>Tip</Text>
+              <Text strong>Type</Text>
               <Select
                 value={form.type}
                 onChange={(value) => setForm((f) => ({ ...f, type: value }))}
@@ -335,7 +336,7 @@ function BadgeSummaryTab({
               </Select>
             </div>
             <div>
-              <Text strong>Boost çarpanı</Text>
+              <Text strong>Boost multiplier</Text>
               <InputNumber
                 value={form.boostMultiplier}
                 onChange={(value) => setForm((f) => ({ ...f, boostMultiplier: value }))}
@@ -343,7 +344,7 @@ function BadgeSummaryTab({
               />
             </div>
             <div>
-              <Text strong>Ödül çarpanı</Text>
+              <Text strong>Reward multiplier</Text>
               <InputNumber
                 value={form.rewardMultiplier}
                 onChange={(value) => setForm((f) => ({ ...f, rewardMultiplier: value }))}
@@ -351,24 +352,24 @@ function BadgeSummaryTab({
               />
             </div>
             <div>
-              <Text strong>Kategori ID</Text>
+              <Text strong>Category ID</Text>
               <Input value={form.categoryId} onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))} />
             </div>
             <div>
-              <Text strong>Koleksiyon ID</Text>
+              <Text strong>Collection ID</Text>
               <Input
                 value={form.collectionId}
                 onChange={(e) => setForm((f) => ({ ...f, collectionId: e.target.value }))}
-                placeholder="Boş bırakılabilir"
+                placeholder="Can be left empty"
               />
             </div>
           </Space>
 
           <Space style={{ marginTop: 24 }}>
             <Button type="primary" onClick={handleSave} loading={saving}>
-              {saving ? 'Kaydediliyor...' : 'Kaydet'}
+              {saving ? 'Saving...' : 'Save'}
             </Button>
-            <Button onClick={() => setEditing(false)}>İptal</Button>
+            <Button onClick={() => setEditing(false)}>Cancel</Button>
           </Space>
         </>
       )}
@@ -402,13 +403,14 @@ function BadgeOwnersTab({ badgeId }: { badgeId: string }) {
 
   const columns: ColumnsType<AdminBadgeOwnerListItem> = [
     {
-      title: 'Kullanıcı',
+      title: 'User',
       key: 'user',
       render: (_, record) => (
-        <Link to={`/users/${record.userId}`}>
-          <Button type="link" size="small" style={{ padding: 0 }}>
-            {record.userDisplayName ?? record.userId}
-          </Button>
+        <Link
+          to={`/users/${record.userId}`}
+          style={{ color: 'var(--tipbox-badge-outline)', textDecoration: 'underline' }}
+        >
+          {record.userDisplayName ?? record.userId}
         </Link>
       ),
     },
@@ -422,31 +424,19 @@ function BadgeOwnersTab({ badgeId }: { badgeId: string }) {
       title: 'Claimed',
       dataIndex: 'claimed',
       key: 'claimed',
-      render: (claimed) => (claimed ? 'Evet' : 'Hayır'),
+      render: (claimed) => (claimed ? 'Yes' : 'No'),
     },
     {
       title: 'Claimed at',
       dataIndex: 'claimedAt',
       key: 'claimedAt',
-      render: (date) => (date ? new Date(date).toLocaleString('tr-TR') : '—'),
+      render: (date) => (date ? new Date(date).toLocaleString('en-US') : '—'),
     },
     {
-      title: 'Oluşturulma',
+      title: 'Created',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      render: (date) => (date ? new Date(date).toLocaleString('tr-TR') : '—'),
-    },
-    {
-      title: '',
-      key: 'action',
-      width: 100,
-      render: (_, record) => (
-        <Link to={`/users/${record.userId}`}>
-          <Button type="link" size="small">
-            Kullanıcı
-          </Button>
-        </Link>
-      ),
+      render: (date) => (date ? new Date(date).toLocaleString('en-US') : '—'),
     },
   ];
 
@@ -458,7 +448,7 @@ function BadgeOwnersTab({ badgeId }: { badgeId: string }) {
   const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
 
   return (
-    <Card bordered title="Bu badge'e sahip kullanıcılar">
+    <Card bordered title="Users who own this badge">
       <Table
         columns={columns}
         dataSource={owners}
@@ -469,12 +459,12 @@ function BadgeOwnersTab({ badgeId }: { badgeId: string }) {
           pageSize: OWNERS_PAGE_SIZE,
           total: pagination.total,
           showSizeChanger: false,
-          showTotal: (total) => `Toplam ${total} sahip`,
+          showTotal: (total) => `Total ${total} owners`,
         }}
         onChange={handleTableChange}
         locale={{
           emptyText: (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Henüz bu badge'e sahip kullanıcı yok" />
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No users own this badge yet" />
           ),
         }}
       />

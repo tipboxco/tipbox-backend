@@ -1,63 +1,38 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Modal,
   Steps,
   Form,
   Input,
-  Select,
   Upload,
   Button,
   Alert,
-  Spin,
   Space,
   message as antdMessage,
 } from 'antd';
-import {
-  InfoCircleOutlined,
-  AimOutlined,
-  LineChartOutlined,
-  SettingOutlined,
-  CloudUploadOutlined,
-} from '@ant-design/icons';
-import {
-  createCollection,
-  fetchCollectionCategories,
-  uploadMedia,
-} from '../../api/admin-badges-collections';
-import type { AdminCollectionCategoryMain } from '../../api/admin-badges-collections';
+import { CloudUploadOutlined, InfoCircleOutlined, FileImageOutlined } from '@ant-design/icons';
+import { createCollection, uploadMedia } from '../../api/admin-badges-collections';
+import { FORM_LAYOUT_VERTICAL } from '../../constants/form-layout';
 
 const { TextArea } = Input;
 
-const STEPS = [
-  { id: 1, title: 'Temel bilgiler', icon: <InfoCircleOutlined /> },
-  { id: 2, title: 'Amaç ve kapsam', icon: <AimOutlined /> },
-  { id: 3, title: 'Metrikler ve hedefler', icon: <LineChartOutlined /> },
-  { id: 4, title: 'Ek bilgiler', icon: <SettingOutlined /> },
-] as const;
-
 const INITIAL_FORM = {
   name: '',
-  categoryId: '',
   owner: '',
+  focusSector: '',
+  targetGroup: '',
+  shortDescription: '',
+  longDescription: '',
   bannerUrl: '',
-  collectionObjective: '',
-  targetVertical: '',
-  productScope: '',
-  collectionType: '',
-  hookPitch: '',
-  visualTheme: '',
-  completionBonus: '',
-  primaryKpi: '',
-  secondaryKpi: '',
-  targetAudience: '',
-  campaignContext: '',
-  successMetric: '',
-  sponsorship: '',
   unlockCondition: '',
-  scheduleLaunchDate: '',
-  timeStockLimit: '',
+  completionBonus: '',
 };
+
+const STEPS = [
+  { key: 0, title: 'Basic information', icon: <InfoCircleOutlined /> },
+  { key: 1, title: 'Details and image', icon: <FileImageOutlined /> },
+];
 
 interface CreateCollectionModalProps {
   open: boolean;
@@ -68,34 +43,18 @@ interface CreateCollectionModalProps {
 function CreateCollectionModal({ open, onClose, onSuccess }: CreateCollectionModalProps) {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
-  const [categories, setCategories] = useState<AdminCollectionCategoryMain[]>([]);
-  const [loadingCategories, setLoadingCategories] = useState(true);
   const [uploadingBanner, setUploadingBanner] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState(INITIAL_FORM);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetchCollectionCategories();
-        if (!cancelled && res.data?.length) {
-          setCategories(res.data);
-          if (!form.categoryId) {
-            setForm((f) => ({ ...f, categoryId: res.data![0].id }));
-          }
-        }
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Kategoriler yüklenemedi');
-      } finally {
-        if (!cancelled) setLoadingCategories(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (!open) {
+      setForm(INITIAL_FORM);
+      setError(null);
+      setStep(0);
+    }
+  }, [open]);
 
   const update = useCallback((key: keyof typeof form, value: string) => {
     setForm((f) => ({ ...f, [key]: value }));
@@ -109,19 +68,28 @@ function CreateCollectionModal({ open, onClose, onSuccess }: CreateCollectionMod
       const res = await uploadMedia(file);
       if (res.data?.url) {
         setForm((f) => ({ ...f, bannerUrl: res.data!.url }));
-        antdMessage.success('Banner yüklendi');
+        antdMessage.success('Cover image uploaded');
       }
     } catch (err) {
-      antdMessage.error(err instanceof Error ? err.message : 'Banner yüklenemedi');
+      antdMessage.error(err instanceof Error ? err.message : 'Failed to upload image');
     } finally {
       setUploadingBanner(false);
     }
-    return false; // Prevent default upload
+    return false;
+  };
+
+  const handleNext = () => {
+    if (step === 0 && !form.name.trim()) {
+      setError('Collection name is required.');
+      return;
+    }
+    setError(null);
+    setStep(1);
   };
 
   const handleSubmit = async () => {
-    if (!form.name.trim() || !form.categoryId.trim()) {
-      setError('Ad ve kategori zorunludur.');
+    if (!form.name.trim()) {
+      setError('Collection name is required.');
       return;
     }
     setSaving(true);
@@ -129,297 +97,174 @@ function CreateCollectionModal({ open, onClose, onSuccess }: CreateCollectionMod
     try {
       const res = await createCollection({
         name: form.name.trim(),
-        categoryId: form.categoryId.trim(),
         bannerUrl: form.bannerUrl.trim() || null,
         owner: form.owner.trim() || null,
-        collectionObjective: form.collectionObjective.trim() || null,
-        targetVertical: form.targetVertical.trim() || null,
-        productScope: form.productScope.trim() || null,
-        collectionType: form.collectionType.trim() || null,
-        hookPitch: form.hookPitch.trim() || null,
-        visualTheme: form.visualTheme.trim() || null,
-        completionBonus: form.completionBonus.trim() || null,
-        primaryKpi: form.primaryKpi.trim() || null,
-        secondaryKpi: form.secondaryKpi.trim() || null,
-        targetAudience: form.targetAudience.trim() || null,
-        campaignContext: form.campaignContext.trim() || null,
-        successMetric: form.successMetric.trim() || null,
-        sponsorship: form.sponsorship.trim() || null,
+        focusSector: form.focusSector.trim() || null,
+        targetGroup: form.targetGroup.trim() || null,
+        shortDescription: form.shortDescription.trim() || null,
+        longDescription: form.longDescription.trim() || null,
         unlockCondition: form.unlockCondition.trim() || null,
-        scheduleLaunchDate: form.scheduleLaunchDate.trim() || null,
-        timeStockLimit: form.timeStockLimit.trim() || null,
+        completionBonus: form.completionBonus.trim() || null,
       });
-      antdMessage.success('Koleksiyon oluşturuldu');
+      antdMessage.success('Collection created');
       onSuccess();
       if (res.data?.id) {
         navigate(`/gamification/collections/${res.data.id}`);
       }
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Koleksiyon oluşturulamadı');
+      setError(err instanceof Error ? err.message : 'Failed to create collection');
     } finally {
       setSaving(false);
     }
   };
 
-  const canNext = step === 0 ? form.name.trim() && form.categoryId : true;
-  const isLastStep = step === STEPS.length - 1;
+  const stepItems = STEPS.map((s) => ({ title: s.title, icon: s.icon }));
 
   return (
     <Modal
-      title="Yeni koleksiyon"
+      title="New collection"
       open={open}
       onCancel={onClose}
-      width={800}
+      width={560}
       footer={null}
+      destroyOnClose
+      styles={{ body: { maxHeight: '70vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' } }}
     >
-      <Steps current={step} items={STEPS.map((s) => ({ title: s.title, icon: s.icon }))} style={{ marginBottom: 32 }} />
+      <Steps current={step} items={stepItems} size="small" style={{ marginBottom: 20 }} />
 
       {error && (
-        <Alert message="Hata" description={error} type="error" closable onClose={() => setError(null)} style={{ marginBottom: 24 }} />
+        <Alert
+          message="Error"
+          description={error}
+          type="error"
+          closable
+          onClose={() => setError(null)}
+          style={{ marginBottom: 16 }}
+        />
       )}
 
-      {loadingCategories && step === 0 ? (
-        <div style={{ textAlign: 'center', padding: 48 }}>
-          <Spin size="large" />
-        </div>
-      ) : (
-        <div>
-          {/* Step 1: Basic Info */}
+      <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+        <Form {...FORM_LAYOUT_VERTICAL} style={{ width: '100%' }}>
           {step === 0 && (
-            <Space direction="vertical" size="large" style={{ width: '100%' }}>
-              <Form.Item label="Koleksiyon adı" required>
-                <Input
-                  value={form.name}
-                  onChange={(e) => update('name', e.target.value)}
-                  placeholder="Örn. Yaz Sezonu Rozetleri"
-                  size="large"
-                />
-              </Form.Item>
-
-              <Form.Item label="Kategori" required>
-                <Select
-                  value={form.categoryId}
-                  onChange={(value) => update('categoryId', value)}
-                  placeholder="Kategori seçin"
-                  size="large"
-                >
-                  {categories.map((c) => (
-                    <Select.Option key={c.id} value={c.id}>
-                      {c.name}
-                    </Select.Option>
-                  ))}
-                </Select>
-              </Form.Item>
-
-              <Form.Item label="Sahip / Owner">
-                <Input
-                  value={form.owner}
-                  onChange={(e) => update('owner', e.target.value)}
-                  placeholder="Opsiyonel"
-                  size="large"
-                />
-              </Form.Item>
-
-              <Form.Item label="Banner görseli">
-                <Space direction="vertical" style={{ width: '100%' }}>
-                  <Upload
-                    beforeUpload={handleBannerUpload}
-                    showUploadList={false}
-                    accept="image/jpeg,image/png,image/gif,image/webp"
-                    disabled={uploadingBanner}
-                  >
-                    <Button icon={<CloudUploadOutlined />} loading={uploadingBanner}>
-                      {uploadingBanner ? 'Yükleniyor...' : 'Görsel yükle (JPG, PNG, WebP)'}
-                    </Button>
-                  </Upload>
-                  {form.bannerUrl && (
-                    <div>
-                      <img src={form.bannerUrl} alt="Banner" style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 4 }} />
-                      <Button size="small" danger onClick={() => update('bannerUrl', '')} style={{ marginTop: 8 }}>
-                        Kaldır
-                      </Button>
-                    </div>
-                  )}
-                  <Input
-                    value={form.bannerUrl}
-                    onChange={(e) => update('bannerUrl', e.target.value)}
-                    placeholder="veya banner URL"
-                  />
-                </Space>
+            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+              <Form.Item label="Collection name" required style={{ marginBottom: 8 }}>
+              <Input
+                value={form.name}
+                onChange={(e) => update('name', e.target.value)}
+                placeholder="e.g. Summer Season Badges"
+              />
+            </Form.Item>
+            <Form.Item label="Owner (optional)" style={{ marginBottom: 8 }}>
+              <Input
+                value={form.owner}
+                onChange={(e) => update('owner', e.target.value)}
+                placeholder="Optional"
+              />
+            </Form.Item>
+            <Form.Item label="Focus sector" style={{ marginBottom: 8 }}>
+              <Input
+                value={form.focusSector}
+                onChange={(e) => update('focusSector', e.target.value)}
+                placeholder="e.g. E-commerce, Gaming"
+              />
+            </Form.Item>
+            <Form.Item label="Target group" style={{ marginBottom: 8 }}>
+              <Input
+                value={form.targetGroup}
+                onChange={(e) => update('targetGroup', e.target.value)}
+                placeholder="Target audience"
+              />
+            </Form.Item>
+            <Form.Item label="Short description" style={{ marginBottom: 0 }}>
+              <TextArea
+                value={form.shortDescription}
+                onChange={(e) => update('shortDescription', e.target.value)}
+                rows={2}
+                placeholder="Short description"
+              />
               </Form.Item>
             </Space>
           )}
 
-          {/* Step 2: Purpose */}
           {step === 1 && (
-            <Space direction="vertical" size="large" style={{ width: '100%' }}>
-              <Form.Item label="Koleksiyon amacı">
-                <TextArea
-                  value={form.collectionObjective}
-                  onChange={(e) => update('collectionObjective', e.target.value)}
-                  rows={3}
-                  placeholder="Bu koleksiyonun amacı"
-                />
-              </Form.Item>
-
-              <Form.Item label="Hedef dikey">
+            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            <Form.Item label="Long description" style={{ marginBottom: 8 }}>
+              <TextArea
+                value={form.longDescription}
+                onChange={(e) => update('longDescription', e.target.value)}
+                rows={2}
+                placeholder="Detailed description"
+              />
+            </Form.Item>
+            <Form.Item label="Cover image" style={{ marginBottom: 8 }}>
+              <Space direction="vertical" style={{ width: '100%' }} size="small">
+                <Upload
+                  beforeUpload={handleBannerUpload}
+                  showUploadList={false}
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  disabled={uploadingBanner}
+                >
+                  <Button icon={<CloudUploadOutlined />} loading={uploadingBanner} size="small">
+                    {uploadingBanner ? 'Uploading...' : 'Upload image'}
+                  </Button>
+                </Upload>
+                {form.bannerUrl && (
+                  <div>
+                    <img
+                      src={form.bannerUrl}
+                      alt="Cover"
+                      style={{ maxWidth: '100%', maxHeight: 100, borderRadius: 4 }}
+                    />
+                    <Button size="small" danger onClick={() => update('bannerUrl', '')} style={{ marginTop: 4 }}>
+                      Remove
+                    </Button>
+                  </div>
+                )}
                 <Input
-                  value={form.targetVertical}
-                  onChange={(e) => update('targetVertical', e.target.value)}
-                  placeholder="Örn. E-ticaret, Oyun"
+                  value={form.bannerUrl}
+                  onChange={(e) => update('bannerUrl', e.target.value)}
+                  placeholder="or cover image URL"
+                  size="small"
                 />
-              </Form.Item>
-
-              <Form.Item label="Ürün kapsamı">
-                <Input
-                  value={form.productScope}
-                  onChange={(e) => update('productScope', e.target.value)}
-                  placeholder="Hangi ürünler dahil"
-                />
-              </Form.Item>
-
-              <Form.Item label="Koleksiyon tipi">
-                <Input
-                  value={form.collectionType}
-                  onChange={(e) => update('collectionType', e.target.value)}
-                  placeholder="Örn. Sezonluk"
-                />
-              </Form.Item>
-
-              <Form.Item label="Hook / Pitch">
-                <TextArea
-                  value={form.hookPitch}
-                  onChange={(e) => update('hookPitch', e.target.value)}
-                  rows={3}
-                  placeholder="Kullanıcıyı çeken kısa açıklama"
-                />
+              </Space>
+            </Form.Item>
+            <Form.Item label="Unlock condition" style={{ marginBottom: 8 }}>
+              <Input
+                value={form.unlockCondition}
+                onChange={(e) => update('unlockCondition', e.target.value)}
+                placeholder="Unlock condition"
+              />
+            </Form.Item>
+            <Form.Item label="Completion reward" style={{ marginBottom: 0 }}>
+              <Input
+                value={form.completionBonus}
+                onChange={(e) => update('completionBonus', e.target.value)}
+                placeholder="Reward for completion"
+              />
               </Form.Item>
             </Space>
           )}
+        </Form>
+      </div>
 
-          {/* Step 3: Metrics */}
-          {step === 2 && (
-            <Space direction="vertical" size="large" style={{ width: '100%' }}>
-              <Form.Item label="Görsel tema">
-                <Input
-                  value={form.visualTheme}
-                  onChange={(e) => update('visualTheme', e.target.value)}
-                  placeholder="Örn. Yaz, Kış"
-                />
-              </Form.Item>
-
-              <Form.Item label="Tamamlama bonusu">
-                <Input
-                  value={form.completionBonus}
-                  onChange={(e) => update('completionBonus', e.target.value)}
-                  placeholder="Koleksiyonu tamamlayanlara ne verilir"
-                />
-              </Form.Item>
-
-              <Form.Item label="Birincil KPI">
-                <Input
-                  value={form.primaryKpi}
-                  onChange={(e) => update('primaryKpi', e.target.value)}
-                  placeholder="Ana başarı göstergesi"
-                />
-              </Form.Item>
-
-              <Form.Item label="İkincil KPI">
-                <Input
-                  value={form.secondaryKpi}
-                  onChange={(e) => update('secondaryKpi', e.target.value)}
-                  placeholder="İkincil metrik"
-                />
-              </Form.Item>
-
-              <Form.Item label="Hedef kitle">
-                <TextArea
-                  value={form.targetAudience}
-                  onChange={(e) => update('targetAudience', e.target.value)}
-                  rows={3}
-                  placeholder="Kime yönelik"
-                />
-              </Form.Item>
-
-              <Form.Item label="Kampanya bağlamı">
-                <Input
-                  value={form.campaignContext}
-                  onChange={(e) => update('campaignContext', e.target.value)}
-                  placeholder="Hangi kampanya ile ilişkili"
-                />
-              </Form.Item>
-
-              <Form.Item label="Başarı metriği">
-                <Input
-                  value={form.successMetric}
-                  onChange={(e) => update('successMetric', e.target.value)}
-                  placeholder="Nasıl ölçülecek"
-                />
-              </Form.Item>
-            </Space>
+      <div style={{ marginTop: 20, display: 'flex', justifyContent: 'space-between', flexShrink: 0 }}>
+        <Button onClick={onClose}>Cancel</Button>
+        <Space>
+          {step === 1 && (
+            <Button onClick={() => setStep(0)}>Back</Button>
           )}
-
-          {/* Step 4: Additional */}
-          {step === 3 && (
-            <Space direction="vertical" size="large" style={{ width: '100%' }}>
-              <Form.Item label="Sponsorluk">
-                <Input
-                  value={form.sponsorship}
-                  onChange={(e) => update('sponsorship', e.target.value)}
-                  placeholder="Varsa sponsor bilgisi"
-                />
-              </Form.Item>
-
-              <Form.Item label="Zaman / stok limiti">
-                <Input
-                  value={form.timeStockLimit}
-                  onChange={(e) => update('timeStockLimit', e.target.value)}
-                  placeholder="Örn. 30 gün, 100 adet"
-                />
-              </Form.Item>
-
-              <Form.Item label="Açılma koşulu">
-                <TextArea
-                  value={form.unlockCondition}
-                  onChange={(e) => update('unlockCondition', e.target.value)}
-                  rows={3}
-                  placeholder="Koleksiyon ne zaman açılır"
-                />
-              </Form.Item>
-
-              <Form.Item label="Planlanan lansman">
-                <Input
-                  type="datetime-local"
-                  value={form.scheduleLaunchDate}
-                  onChange={(e) => update('scheduleLaunchDate', e.target.value)}
-                />
-              </Form.Item>
-            </Space>
+          {step === 0 ? (
+            <Button type="primary" onClick={handleNext} disabled={!form.name.trim()}>
+              Next
+            </Button>
+          ) : (
+            <Button type="primary" loading={saving} onClick={handleSubmit}>
+              {saving ? 'Creating...' : 'Create collection'}
+            </Button>
           )}
-
-          {/* Navigation */}
-          <div style={{ marginTop: 32, display: 'flex', justifyContent: 'space-between' }}>
-            {step > 0 ? (
-              <Button onClick={() => setStep(step - 1)}>Geri</Button>
-            ) : (
-              <Button onClick={onClose}>İptal</Button>
-            )}
-
-            <div>
-              {isLastStep ? (
-                <Button type="primary" loading={saving} onClick={handleSubmit}>
-                  {saving ? 'Oluşturuluyor...' : 'Koleksiyonu oluştur'}
-                </Button>
-              ) : (
-                <Button type="primary" disabled={!canNext} onClick={() => setStep(step + 1)}>
-                  İleri
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+        </Space>
+      </div>
     </Modal>
   );
 }

@@ -6,7 +6,7 @@ interface ProtectedRouteProps {
 }
 
 /**
- * Token yoksa /login'e yönlendirir. AuthProvider isReady olana kadar null döner (flash önlemek için isteğe bağlı loading eklenebilir).
+ * Redirects to /login if no token. Returns null until AuthProvider isReady (optional loading can be added to prevent flash).
  */
 function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { isAuthenticated, isReady } = useAuth();
@@ -16,7 +16,7 @@ function ProtectedRoute({ children }: ProtectedRouteProps) {
     return (
       <div className="auth-loading">
         <div className="auth-loading-spinner" aria-hidden />
-        <span>Yükleniyor...</span>
+        <span>Loading...</span>
       </div>
     );
   }

@@ -19,7 +19,7 @@ function PageHeader({
   description,
   icon,
   backTo,
-  backLabel = 'Listeye dön',
+  backLabel = 'Back to list',
   actions
 }: PageHeaderProps) {
   return (

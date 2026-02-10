@@ -9,6 +9,7 @@ import {
   createCollectionGoal,
 } from '../../api/admin-badges-collections';
 import type { AdminBadgeCategoryListItem, AdminActionTypeListItem } from '../../types/admin';
+import { FORM_LAYOUT_VERTICAL } from '../../constants/form-layout';
 
 export type CreateBadgeModalType = 'EVENT' | 'BRAND' | 'COSMETIC' | 'COLLECTION';
 
@@ -67,7 +68,7 @@ function CreateBadgeModal({
         }
       } catch (e) {
         if (!cancelled)
-          setError(e instanceof Error ? e.message : 'Kategoriler yüklenemedi');
+          setError(e instanceof Error ? e.message : 'Failed to load categories');
       } finally {
         if (!cancelled) setLoadingCategories(false);
       }
@@ -90,7 +91,7 @@ function CreateBadgeModal({
         }
       } catch (e) {
         if (!cancelled)
-          setError(e instanceof Error ? e.message : 'Koleksiyon bilgisi alınamadı');
+          setError(e instanceof Error ? e.message : 'Failed to load collection info');
       } finally {
         if (!cancelled) setLoadingCollection(false);
       }
@@ -114,7 +115,7 @@ function CreateBadgeModal({
         }
       } catch (e) {
         if (!cancelled)
-          setError(e instanceof Error ? e.message : 'Aktivasyon tipleri yüklenemedi');
+          setError(e instanceof Error ? e.message : 'Failed to load activation types');
       } finally {
         if (!cancelled) setLoadingActionTypes(false);
       }
@@ -154,7 +155,7 @@ function CreateBadgeModal({
         navigate(listPath);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Badge oluşturulamadı');
+      setError(e instanceof Error ? e.message : 'Failed to create badge');
     } finally {
       setSaving(false);
     }
@@ -167,7 +168,7 @@ function CreateBadgeModal({
 
   return (
     <Modal
-      title={inCollection ? 'Badge ekle' : `Yeni badge (${badgeType})`}
+      title={inCollection ? 'Add badge' : `New badge (${badgeType})`}
       open
       onCancel={onClose}
       footer={null}
@@ -180,7 +181,7 @@ function CreateBadgeModal({
       ) : (
         <Form
           form={form}
-          layout="vertical"
+          {...FORM_LAYOUT_VERTICAL}
           onFinish={handleSubmit}
           initialValues={{
             rarity: 'COMMON',
@@ -190,7 +191,7 @@ function CreateBadgeModal({
         >
           {error && (
             <Alert
-              message="Hata"
+              message="Error"
               description={error}
               type="error"
               closable
@@ -200,25 +201,25 @@ function CreateBadgeModal({
           )}
 
           <Form.Item
-            label="Ad"
+            label="Name"
             name="name"
-            rules={[{ required: true, message: 'Ad zorunludur' }]}
+            rules={[{ required: true, message: 'Name is required' }]}
           >
-            <Input placeholder="Badge adı" />
+            <Input placeholder="Badge name" />
           </Form.Item>
 
-          <Form.Item label="Açıklama" name="description">
-            <Input placeholder="İsteğe bağlı" />
+          <Form.Item label="Description" name="description">
+            <Input placeholder="Optional" />
           </Form.Item>
 
-          <Form.Item label="Görsel URL" name="imageUrl">
+          <Form.Item label="Image URL" name="imageUrl">
             <Input type="url" placeholder="https://..." />
           </Form.Item>
 
           <Form.Item
             label="Rarity"
             name="rarity"
-            rules={[{ required: true, message: 'Rarity seçin' }]}
+            rules={[{ required: true, message: 'Rarity is required' }]}
           >
             <Select>
               <Select.Option value="COMMON">COMMON</Select.Option>
@@ -229,11 +230,11 @@ function CreateBadgeModal({
 
           {!inCollection && (
             <Form.Item
-              label="Kategori"
+              label="Category"
               name="categoryId"
-              rules={[{ required: true, message: 'Kategori seçin' }]}
+              rules={[{ required: true, message: 'Category is required' }]}
             >
-              <Select placeholder="Seçin">
+              <Select placeholder="Select">
                 {categories.map((c) => (
                   <Select.Option key={c.id} value={c.id}>
                     {c.name}
@@ -246,12 +247,12 @@ function CreateBadgeModal({
           {inCollection && (
             <>
               <Form.Item
-                label="Aktivasyon tipi"
+                label="Activation Type"
                 name="actionTypeId"
-                rules={[{ required: true, message: 'Aktivasyon tipi seçin' }]}
+                rules={[{ required: true, message: 'Activation type is required' }]}
               >
                 <Select
-                  placeholder={loadingActionTypes ? 'Yükleniyor…' : 'Seçin'}
+                  placeholder={loadingActionTypes ? 'Loading…' : 'Select'}
                   disabled={loadingActionTypes}
                 >
                   {actionTypes.map((a) => (
@@ -263,25 +264,25 @@ function CreateBadgeModal({
               </Form.Item>
 
               <Form.Item
-                label="Hedef sayı"
+                label="Target Count"
                 name="pointsRequired"
                 rules={[
-                  { required: true, message: 'Hedef sayı girin' },
-                  { type: 'number', min: 1, message: 'En az 1 olmalıdır' },
+                  { required: true, message: 'Target count is required' },
+                  { type: 'number', min: 1, message: 'Must be at least 1' },
                 ]}
               >
                 <InputNumber min={1} style={{ width: '100%' }} />
               </Form.Item>
 
               <Form.Item
-                label="Zorluk"
+                label="Difficulty"
                 name="difficulty"
-                rules={[{ required: true, message: 'Zorluk seçin' }]}
+                rules={[{ required: true, message: 'Difficulty is required' }]}
               >
                 <Select>
-                  <Select.Option value="EASY">Kolay</Select.Option>
-                  <Select.Option value="MEDIUM">Orta</Select.Option>
-                  <Select.Option value="HARD">Zor</Select.Option>
+                  <Select.Option value="EASY">Easy</Select.Option>
+                  <Select.Option value="MEDIUM">Medium</Select.Option>
+                  <Select.Option value="HARD">Hard</Select.Option>
                 </Select>
               </Form.Item>
             </>
@@ -290,9 +291,9 @@ function CreateBadgeModal({
           <Form.Item style={{ marginBottom: 0, marginTop: 24 }}>
             <Space>
               <Button type="primary" htmlType="submit" loading={saving}>
-                {saving ? 'Oluşturuluyor…' : 'Badge ekle'}
+                {saving ? 'Creating…' : 'Add badge'}
               </Button>
-              <Button onClick={onClose}>İptal</Button>
+              <Button onClick={onClose}>Cancel</Button>
             </Space>
           </Form.Item>
         </Form>
