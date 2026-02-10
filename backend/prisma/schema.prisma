@@ -72,6 +72,7 @@ model User {
   userAchievements        UserAchievement[]
   avatars                 UserAvatar[]
   userBadges              UserBadge[]
+  badgeReminders           BadgeReminder[]
   userBlocksAsBlocked     UserBlock[]             @relation("BlockedUserRelation")
   userBlocksAsBlocker     UserBlock[]             @relation("BlockerRelation")
   collections             UserCollection[]
@@ -520,6 +521,7 @@ model ContentPost {
   inventoryRequired    Boolean                   @map("inventory_required")
   isBoosted            Boolean                   @map("is_boosted")
   boostedUntil         DateTime?                 @map("boosted_until")
+  boostPrice           Float?                    @map("boost_price")
   createdAt            DateTime                  @default(now()) @map("created_at")
   updatedAt            DateTime                  @updatedAt @map("updated_at")
   commentsCount        Int                       @default(0) @map("comments_count")
@@ -874,6 +876,7 @@ model Badge {
   cosmeticProfiles Profile[]         @relation("ProfileCosmeticBadge")
   userBadges       UserBadge[]
   eventBadges      EventBadge[] // ✅ YENİ
+  badgeReminders   BadgeReminder[]
 
   @@map("badges")
 }
@@ -903,6 +906,21 @@ model UserBadge {
   @@index([userId])
   @@index([badgeId, claimed])
   @@map("user_badges")
+}
+
+model BadgeReminder {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  badgeId   String   @map("badge_id") @db.Uuid
+  remindAt  DateTime @map("remind_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge     Badge    @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([badgeId])
+  @@index([remindAt])
+  @@map("badge_reminders")
 }
 
 model AchievementChain {
@@ -1637,6 +1655,9 @@ model DMMessage {
   // Reply/Threading
   replyToMessageId String? @map("reply_to_message_id") @db.Uuid
 
+  // Shared post (message type: shared post card + text below)
+  sharedPostId String?   @map("shared_post_id") @db.VarChar(26)
+
   // Status Tracking
   status      String    @default("sent") // 'sending', 'sent', 'delivered', 'read'
   deliveredAt DateTime? @map("delivered_at")
@@ -2243,6 +2264,7 @@ enum TransactionActionType {
   SWAP_SOL_TO_TIP
   AIRDROP
   FEE
+  BOOST_POST
 
   @@map("transaction_action_type")
 }

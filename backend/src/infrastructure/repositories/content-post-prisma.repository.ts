@@ -123,7 +123,8 @@ export class ContentPostPrismaRepository {
     isBoosted: boolean = false,
     eventId?: string,
     productStatus?: 'own' | 'tried',
-    categoryId?: string
+    categoryId?: string,
+    boostPrice?: number
   ): Promise<ContentPost> {
     const post = await this.prisma.contentPost.create({
       data: {
@@ -140,7 +141,8 @@ export class ContentPostPrismaRepository {
         productStatus: productStatus || null,
         inventoryRequired,
         isBoosted,
-        eventId: eventId || null
+        eventId: eventId || null,
+        boostPrice: boostPrice ?? null
       },
       include: {
         user: true,
@@ -174,6 +176,7 @@ export class ContentPostPrismaRepository {
     body?: string;
     isBoosted?: boolean;
     boostedUntil?: Date;
+    boostPrice?: number;
   }): Promise<ContentPost | null> {
     const post = await this.prisma.contentPost.update({
       where: { id },

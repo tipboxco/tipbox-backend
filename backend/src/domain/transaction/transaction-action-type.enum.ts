@@ -8,6 +8,7 @@ export enum TransactionActionType {
   SWAP_TIP_TO_SOL = 'SWAP_TIP_TO_SOL',
   SWAP_SOL_TO_TIP = 'SWAP_SOL_TO_TIP',
   AIRDROP = 'AIRDROP',
-  FEE = 'FEE'
+  FEE = 'FEE',
+  BOOST_POST = 'BOOST_POST'
 }
 

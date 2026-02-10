@@ -3,11 +3,13 @@ import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { authMiddleware } from '../auth/auth.middleware';
 import { InteractionService } from '../../application/interaction/interaction.service';
 import { PostService } from '../../application/post/post.service';
+import { MessagingService } from '../../application/messaging/messaging.service';
 import { ShareType } from '../../domain/interaction/share-type.enum';
 
 const router = Router();
 const interactionService = new InteractionService();
 const postService = new PostService();
+const messagingService = new MessagingService();
 
 router.use(authMiddleware);
 
@@ -544,6 +546,88 @@ router.post(
       success: true,
       data: share,
     });
+  })
+);
+
+/**
+ * @openapi
+ * /interactions/posts/{postId}/share-to-dm:
+ *   post:
+ *     summary: Post'u trust listesindeki bir kullanıcıya DM ile paylaş
+ *     description: Trust listesinden seçilen kullanıcıya post kartı + altında metin olarak mesaj gönderir. Thread yoksa oluşturulur.
+ *     tags: [Interactions]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: postId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - toUserId
+ *             properties:
+ *               toUserId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Paylaşılacak kullanıcının ID'si (trust listesinde olmalı)
+ *               message:
+ *                 type: string
+ *                 description: Shared post kartının altında görüntülenecek metin
+ *     responses:
+ *       201:
+ *         description: Post DM ile paylaşıldı
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 threadId: { type: string }
+ *                 messageId: { type: string }
+ *       400:
+ *         description: toUserId eksik veya trust listesinde değil
+ *       404:
+ *         description: Post veya kullanıcı bulunamadı
+ */
+router.post(
+  '/posts/:postId/share-to-dm',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user?.id;
+    const rawPostId = req.params.postId?.trim();
+    if (!rawPostId) return res.status(400).json({ message: 'Post ID is required' });
+    const postId = await postService.resolvePostId(rawPostId);
+    if (!postId) return res.status(404).json({ message: 'Post not found' });
+
+    const { toUserId, message } = req.body;
+    if (!toUserId || typeof toUserId !== 'string') {
+      return res.status(400).json({ message: 'toUserId is required' });
+    }
+
+    try {
+      const result = await messagingService.sendSharedPostMessage(
+        userId,
+        toUserId.trim(),
+        postId,
+        typeof message === 'string' ? message : ''
+      );
+      return res.status(201).json({
+        success: true,
+        threadId: result.threadId,
+        messageId: result.messageId,
+      });
+    } catch (err: any) {
+      const msg = err?.message ?? '';
+      if (msg.includes('trust list')) return res.status(400).json({ message: msg });
+      if (msg.includes('not found') || msg.includes('Post not found')) return res.status(404).json({ message: msg });
+      throw err;
+    }
   })
 );
 

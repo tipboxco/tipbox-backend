@@ -5,6 +5,7 @@ import { DMThreadPrismaRepository } from '../../infrastructure/repositories/dm-t
 import { UserPrismaRepository } from '../../infrastructure/repositories/user-prisma.repository';
 import { MessageReactionPrismaRepository } from '../../infrastructure/repositories/message-reaction-prisma.repository';
 import { MessageReadReceiptPrismaRepository } from '../../infrastructure/repositories/message-read-receipt-prisma.repository';
+import { TrustRelationPrismaRepository } from '../../infrastructure/repositories/trust-relation-prisma.repository';
 import SocketManager from '../../infrastructure/realtime/socket-manager';
 import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
@@ -55,6 +56,7 @@ export class MessagingService {
   private userRepo = new UserPrismaRepository();
   private messageReactionRepo = new MessageReactionPrismaRepository();
   private messageReadReceiptRepo = new MessageReadReceiptPrismaRepository();
+  private trustRelationRepo = new TrustRelationPrismaRepository();
   private supportRequestService = new SupportRequestService();
   private notificationService = new NotificationService();
   private walletService = new WalletService();
@@ -161,6 +163,72 @@ export class MessagingService {
     // Sadece önemli durumlar için bildirim gönderilecek (DM_REQUEST_ACCEPTED, SUPPORT_REQUEST_ACCEPTED)
 
     logger.info(`Direct message sent from ${senderId} to ${recipientId}, socket events emitted`);
+  }
+
+  /**
+   * Post'u trust listesindeki bir kullanıcıya DM ile paylaşır.
+   * Trust kontrolü: sadece göndericinin trust ettiği kullanıcıya paylaşılabilir.
+   * Thread yoksa oluşturulur; mesaj tipi shared_post (kart + altında kullanıcı metni).
+   */
+  async sendSharedPostMessage(
+    senderId: string,
+    recipientId: string,
+    postId: string,
+    message: string = ''
+  ): Promise<{ threadId: string; messageId: string }> {
+    const senderIdStr = String(senderId).trim();
+    const recipientIdStr = String(recipientId).trim();
+
+    const trustRelation = await this.trustRelationRepo.findByUsers(senderIdStr, recipientIdStr);
+    if (!trustRelation) {
+      throw new Error('Share is only allowed to users in your trust list');
+    }
+
+    const post = await this.prisma.contentPost.findUnique({ where: { id: postId } });
+    if (!post) {
+      throw new Error('Post not found');
+    }
+
+    const sender = await this.userRepo.findById(senderIdStr);
+    const recipient = await this.userRepo.findById(recipientIdStr);
+    if (!sender || !recipient) throw new Error('User not found');
+
+    const thread = await this.createThreadIfNotExists(senderIdStr, recipientIdStr);
+
+    const createdMessage = await this.dmMessageRepo.create({
+      threadId: thread.id,
+      senderId: senderIdStr,
+      message,
+      sharedPostId: postId,
+      isRead: false,
+      context: 'DM',
+      sentAt: new Date(),
+    } as any);
+
+    await this.prisma.dMThread.update({
+      where: { id: thread.id },
+      data: { updatedAt: new Date() },
+    });
+
+    const socketHandler = SocketManager.getInstance().getSocketHandler();
+    const newMessageEvent = {
+      messageId: createdMessage.id,
+      threadId: thread.id,
+      senderId: senderIdStr,
+      recipientId: recipientIdStr,
+      message,
+      messageType: 'shared_post' as const,
+      sharedPostId: postId,
+      context: 'DM',
+      timestamp: createdMessage.sentAt.toISOString(),
+    };
+
+    socketHandler.sendMessageToUser(recipientIdStr, 'new_message', newMessageEvent);
+    socketHandler.sendToRoom(`thread:${thread.id}`, 'new_message', newMessageEvent);
+    socketHandler.sendMessageToUser(senderIdStr, 'message_sent', newMessageEvent);
+
+    logger.info(`Shared post ${postId} sent from ${senderIdStr} to ${recipientIdStr}`);
+    return { threadId: thread.id, messageId: createdMessage.id };
   }
 
   /**
@@ -578,12 +646,23 @@ export class MessagingService {
 
         const threadItems: MessageFeedItem[] = [];
         for (const message of supportMessages) {
-          // Support thread'de de image kontrolü yap
-        const messageWithMedia = message as typeof message & { mediaUrl?: string | null; mediaType?: string | null; thumbnailUrl?: string | null; caption?: string | null };
+          // Support thread'de de image ve shared_post kontrolü yap
+        const messageWithMedia = message as typeof message & { mediaUrl?: string | null; mediaType?: string | null; thumbnailUrl?: string | null; caption?: string | null; sharedPostId?: string | null };
         const hasMedia = !!messageWithMedia.mediaUrl;
         const isImage = hasMedia && messageWithMedia.mediaType === 'image';
+        const sharedPostId = messageWithMedia.sharedPostId ?? null;
 
-        if (isImage) {
+        if (sharedPostId) {
+          const messageData: Message = {
+            id: message.id,
+            senderId: message.senderId,
+            message: message.message || undefined,
+            sharedPostId,
+            timestamp: message.sentAt.toISOString(),
+            isUnread: !message.isRead,
+          };
+          threadItems.push({ id: message.id, type: 'shared_post' as MessageType, data: messageData });
+        } else if (isImage) {
           // Image mesajı - sadece senderId gönder (participants'tan alınacak)
           const messageData: Message = {
             id: message.id,
@@ -780,11 +859,27 @@ export class MessagingService {
         if (isTipsMessage) continue;
 
         // Eğer mesajda media varsa ve image ise, type: "image" olarak döndür
-        const messageWithMedia = message as typeof message & { mediaUrl?: string | null; mediaType?: string | null; thumbnailUrl?: string | null; caption?: string | null };
+        const messageWithMedia = message as typeof message & { mediaUrl?: string | null; mediaType?: string | null; thumbnailUrl?: string | null; caption?: string | null; sharedPostId?: string | null };
         const hasMedia = !!messageWithMedia.mediaUrl;
         const isImage = hasMedia && messageWithMedia.mediaType === 'image';
+        const sharedPostId = messageWithMedia.sharedPostId ?? null;
 
-        if (isImage) {
+        if (sharedPostId) {
+          // Shared post mesajı: kart (sharedPostId) + altında metin (message)
+          const messageData: Message = {
+            id: message.id,
+            senderId: message.senderId,
+            message: message.message || undefined,
+            sharedPostId,
+            timestamp: message.sentAt.toISOString(),
+            isUnread: !message.isRead,
+          };
+          threadItems.push({
+            id: message.id,
+            type: 'shared_post' as MessageType,
+            data: messageData,
+          });
+        } else if (isImage) {
           // Image mesajı - sadece senderId gönder (participants'tan alınacak)
           const messageData: Message = {
             id: message.id,
@@ -1023,7 +1118,7 @@ export class MessagingService {
    * MessageFeedItem'dan timestamp çıkar
    */
   private getTimestampFromFeedItem(item: MessageFeedItem): string {
-    if (item.type === 'message') {
+    if (item.type === 'message' || item.type === 'image' || item.type === 'shared_post') {
       return (item.data as Message).timestamp;
     } else if (item.type === 'send-tips') {
       return (item.data as TipsInfo).timestamp;

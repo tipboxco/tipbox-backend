@@ -10,7 +10,7 @@
  *       enum: [pending, accepted, rejected, canceled, awaiting_completion, completed, reported]
  *     MessageType:
  *       type: string
- *       enum: [message, support-request, send-tips]
+ *       enum: [message, image, support-request, send-tips, shared_post]
  *     SenderUser:
  *       type: object
  *       properties:
@@ -168,7 +168,7 @@ export type SupportType = 'GENERAL' | 'TECHNICAL' | 'PRODUCT';
 
 export type SupportRequestStatus = 'pending' | 'accepted' | 'rejected' | 'canceled' | 'awaiting_completion' | 'completed' | 'reported';
 
-export type MessageType = 'message' | 'image' | 'support-request' | 'send-tips';
+export type MessageType = 'message' | 'image' | 'support-request' | 'send-tips' | 'shared_post';
 
 export interface SenderUser {
   id: string;
@@ -189,6 +189,8 @@ export interface Message {
   mediaUrl?: string | null;
   thumbnailUrl?: string | null;
   caption?: string | null;
+  // Shared post: kartın altındaki metin message; post kartı için sharedPostId
+  sharedPostId?: string | null;
   // Gruplanmış mesajlar (DEPRECATED - artık kullanılmıyor, her mesaj tek tek gelir)
   groupedMessages?: Array<{
     id: string;
