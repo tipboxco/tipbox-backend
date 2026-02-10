@@ -2,14 +2,19 @@ import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import logger from '../../infrastructure/logger/logger';
 import { GamificationService } from './gamification.service';
 import { MainAction } from '../../domain/gamification/main-action.enum';
+import { NotificationService } from '../notification/notification.service';
+import { NotificationType } from '../../domain/notification/notification-type.enum';
+import { getErrorMessage } from '../../infrastructure/errors/error-helper';
 
 export class AchievementProgressService {
   private readonly prisma: ReturnType<typeof getPrisma>;
   private readonly gamificationService: GamificationService;
+  private readonly notificationService: NotificationService;
 
   constructor() {
     this.prisma = getPrisma();
     this.gamificationService = new GamificationService();
+    this.notificationService = new NotificationService();
   }
 
   /**
@@ -46,7 +51,7 @@ export class AchievementProgressService {
           });
 
           if (existing?.completed) {
-            return { completedNow: false, rewardBadgeId: null as string | null };
+            return { completedNow: false, rewardBadgeId: null as string | null, prev: 0, next: 0 };
           }
 
           const prev = existing?.progress ?? 0;
@@ -75,8 +80,46 @@ export class AchievementProgressService {
             });
           }
 
-          return { completedNow, rewardBadgeId: goal.rewardBadgeId ?? null };
+          return { completedNow, rewardBadgeId: goal.rewardBadgeId ?? null, prev, next };
         });
+
+        // Milestone detection (if not completed yet)
+        if (!result.completedNow && result.next < goal.pointsRequired) {
+          const prevPercentage = (result.prev / goal.pointsRequired) * 100;
+          const newPercentage = (result.next / goal.pointsRequired) * 100;
+          const milestones = [25, 50, 75, 90];
+
+          for (const milestone of milestones) {
+            if (prevPercentage < milestone && newPercentage >= milestone) {
+              // Send milestone notification
+              this.notificationService.sendNotification(
+                userId,
+                NotificationType.ACHIEVEMENT_PROGRESS,
+                {
+                  goalTitle: goal.title || goal.requirement || 'Achievement',
+                  progress: result.next,
+                  pointsRequired: goal.pointsRequired,
+                  percentage: milestone,
+                  remaining: goal.pointsRequired - result.next,
+                }
+              ).catch((err) => {
+                logger.warn('Failed to send milestone notification', {
+                  error: getErrorMessage(err),
+                  userId,
+                  goalId: goal.id,
+                  milestone,
+                });
+              });
+
+              logger.info('Milestone reached', {
+                userId,
+                goalId: goal.id,
+                milestone,
+                progress: result.next,
+              });
+            }
+          }
+        }
 
         if (result.completedNow && result.rewardBadgeId) {
           // Idempotent: won't create duplicate if already exists
@@ -331,6 +374,68 @@ export class AchievementProgressService {
       return;
     }
     await this.incrementProgress(userId, mainAction, actionTypeId, amount);
+  }
+
+  /**
+   * Get goals near completion (80%+ progress by default)
+   * @param userId - User ID
+   * @param threshold - Completion threshold (default: 0.8 = 80%)
+   * @returns Array of near-completion goals
+   */
+  async getNearCompletionGoals(
+    userId: string,
+    threshold: number = 0.8
+  ) {
+    try {
+      const userAchievements = await this.prisma.userAchievement.findMany({
+        where: {
+          userId,
+          completed: false, // Only incomplete goals
+        },
+        include: {
+          goal: {
+            include: {
+              collection: true,
+              rewardBadge: {
+                select: {
+                  id: true,
+                  name: true,
+                  imageUrl: true,
+                  rarity: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      const nearCompletion = userAchievements
+        .filter((ua) => (ua.progress / ua.goal.pointsRequired) >= threshold)
+        .map((ua) => ({
+          goalId: ua.goalId,
+          title: ua.goal.title || ua.goal.requirement || 'Achievement',
+          progress: ua.progress,
+          pointsRequired: ua.goal.pointsRequired,
+          percentage: (ua.progress / ua.goal.pointsRequired) * 100,
+          remaining: ua.goal.pointsRequired - ua.progress,
+          estimatedActionsNeeded: ua.goal.pointsRequired - ua.progress,
+          rewardBadge: ua.goal.rewardBadge,
+          collection: {
+            id: ua.goal.collection.id,
+            name: ua.goal.collection.name,
+          },
+        }))
+        .sort((a, b) => b.percentage - a.percentage); // Highest percentage first
+
+      return nearCompletion;
+    } catch (error) {
+      logger.error('Failed to get near completion goals', {
+        userId,
+        threshold,
+        error: getErrorMessage(error),
+      });
+      return [];
+    }
   }
 }
 

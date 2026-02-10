@@ -36,8 +36,10 @@ import { invalidateCatalogPostsCache } from '../../infrastructure/cache/cache-in
 import { EventMetricsService } from '../event/event-metrics.service';
 import { BadgeEligibilityService } from '../gamification/badge-eligibility.service';
 import { AchievementProgressService } from '../gamification/achievement-progress.service';
+import { ActionLogService } from '../gamification/action-log.service';
 import { MainAction } from '../../domain/gamification/main-action.enum';
 import { IdResolverService } from '../../infrastructure/ids/id-resolver.service';
+import { getErrorMessage } from '../../infrastructure/errors/error-helper';
 
 export class PostService {
   private postRepo: ContentPostPrismaRepository;
@@ -53,6 +55,7 @@ export class PostService {
   private eventMetricsService: EventMetricsService;
   private badgeEligibilityService: BadgeEligibilityService;
   private achievementProgressService: AchievementProgressService;
+  private actionLogService: ActionLogService;
   private idResolver: IdResolverService;
 
   /**
@@ -109,6 +112,7 @@ export class PostService {
     this.eventMetricsService = new EventMetricsService();
     this.badgeEligibilityService = new BadgeEligibilityService();
     this.achievementProgressService = new AchievementProgressService();
+    this.actionLogService = new ActionLogService();
     this.idResolver = idResolver ?? new IdResolverService();
   }
 
@@ -1308,6 +1312,27 @@ export class PostService {
       logger.info(`Experience post created: ${post.id} by user ${userId}`, {
         experienceSnippetId: request.experienceSnippetId || null
       });
+
+      // Log action (fire-and-forget)
+      this.actionLogService
+        .logAction({
+          userId,
+          mainAction: MainAction.POST,
+          actionTypeCode: 'EXPERIENCE',
+          entityType: 'post',
+          entityId: post.id,
+          metadata: {
+            postType: ContentPostType.EXPERIENCE,
+            categoryId: contextIds.categoryId,
+            productId: contextIds.productId,
+            hasMedia: (request.images && request.images.length > 0) || false,
+            mediaCount: request.images?.length || 0,
+            status: request.status,
+          },
+        })
+        .catch((err) => {
+          logger.warn('Failed to log action', { error: getErrorMessage(err) });
+        });
 
       // Collection badge progress (POST + EXPERIENCE) - async
       this.achievementProgressService

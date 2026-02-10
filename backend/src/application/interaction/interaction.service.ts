@@ -17,8 +17,10 @@ import { NotificationType } from '../../domain/notification/notification-type.en
 import { EventMetricsService } from '../event/event-metrics.service';
 import { BadgeEligibilityService } from '../gamification/badge-eligibility.service';
 import { AchievementProgressService } from '../gamification/achievement-progress.service';
+import { ActionLogService } from '../gamification/action-log.service';
 import { MainAction } from '../../domain/gamification/main-action.enum';
 import logger from '../../infrastructure/logger/logger';
+import { getErrorMessage } from '../../infrastructure/errors/error-helper';
 
 export class InteractionService {
   private contentLikeRepo = new ContentLikePrismaRepository();
@@ -32,6 +34,7 @@ export class InteractionService {
   private eventMetricsService = new EventMetricsService();
   private badgeEligibilityService = new BadgeEligibilityService();
   private achievementProgressService = new AchievementProgressService();
+  private actionLogService = new ActionLogService();
 
   constructor() {}
 
@@ -73,6 +76,23 @@ export class InteractionService {
         where: { id: postId },
         select: { eventId: true, userId: true },
       });
+
+      // Log action (fire-and-forget)
+      this.actionLogService
+        .logAction({
+          userId,
+          mainAction: MainAction.LIKE,
+          actionTypeCode: 'ALL',
+          entityType: 'post',
+          entityId: postId,
+          metadata: {
+            postType: post.type,
+            authorId: post.userId,
+          },
+        })
+        .catch((err) => {
+          logger.warn('Failed to log like action', { error: getErrorMessage(err) });
+        });
 
       // Collection badge progress (async)
       this.achievementProgressService
@@ -199,7 +219,24 @@ export class InteractionService {
 
       // Favori sayısını güncelle
       await this.contentPostRepo.incrementFavoriteCount(postId);
-      
+
+      // Log action (fire-and-forget)
+      this.actionLogService
+        .logAction({
+          userId,
+          mainAction: MainAction.BOOKMARK,
+          actionTypeCode: 'ALL',
+          entityType: 'post',
+          entityId: postId,
+          metadata: {
+            postType: post.type,
+            authorId: post.userId,
+          },
+        })
+        .catch((err) => {
+          logger.warn('Failed to log bookmark action', { error: getErrorMessage(err) });
+        });
+
       // Post sahibine bildirim gönder
       if (post.userId !== userId) {
         const user = await this.userRepo.findById(userId);
@@ -333,6 +370,26 @@ export class InteractionService {
 
       // Post'un comment count'unu artır
       await this.contentPostRepo.incrementCommentCount(postId);
+
+      // Log action (fire-and-forget)
+      this.actionLogService
+        .logAction({
+          userId,
+          mainAction: MainAction.COMMENT,
+          actionTypeCode: 'ALL',
+          entityType: 'comment',
+          entityId: comment.id,
+          metadata: {
+            postId,
+            postType: post.type,
+            postAuthorId: post.userId,
+            isReply: !!parentId,
+            parentId: parentId || null,
+          },
+        })
+        .catch((err) => {
+          logger.warn('Failed to log comment action', { error: getErrorMessage(err) });
+        });
 
       // Post sahibine bildirim (kendi yorumu değilse)
       if (post.userId !== userId && !parentId) {
