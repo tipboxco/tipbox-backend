@@ -5,14 +5,11 @@ import {
   Tabs,
   Button,
   Input,
-  Select,
   InputNumber,
-  Form,
   Space,
   Spin,
   Empty,
   Modal,
-  Alert,
   Row,
   Col,
   Typography,
@@ -33,12 +30,10 @@ import {
 } from '@ant-design/icons';
 import {
   fetchEvent,
-  updateEvent,
   deleteEvent,
   fetchEventParticipants,
   fetchEventAnalytics,
   fetchEventBadges,
-  addEventBadge,
   updateEventBadge,
   removeEventBadge,
   fetchEventRewards,
@@ -50,8 +45,9 @@ import type {
   AdminEventBadgeListItem,
   AdminEventRewardListItem,
 } from '../../types/admin';
-import { FORM_LAYOUT_VERTICAL } from '../../constants/form-layout';
 import { BADGE_COLOR_PRIMARY, BADGE_COLOR_SECONDARY } from '../../constants/badge-colors';
+import EditEventModal from './modals/EditEventModal';
+import AddBadgeToEventModal from './modals/AddBadgeToEventModal';
 
 const { TextArea } = Input;
 const { Title, Text } = Typography;
@@ -190,39 +186,7 @@ function EventSummaryTab({
   onUpdated: () => void;
   onDeleted: () => void;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    title: event.title,
-    description: event.description ?? '',
-    startDate: event.startDate.slice(0, 16),
-    endDate: event.endDate.slice(0, 16),
-    status: event.status,
-    feedType: event.feedType,
-    imageUrl: event.imageUrl ?? '',
-  });
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await updateEvent(event.id, {
-        title: form.title,
-        description: form.description || null,
-        startDate: new Date(form.startDate).toISOString(),
-        endDate: new Date(form.endDate).toISOString(),
-        status: form.status,
-        feedType: form.feedType,
-        imageUrl: form.imageUrl || null,
-      });
-      setEditing(false);
-      antdMessage.success('Event updated');
-      onUpdated();
-    } catch (e) {
-      antdMessage.error(e instanceof Error ? e.message : 'Failed to update');
-    } finally {
-      setSaving(false);
-    }
-  };
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
   const handleDelete = () => {
     Modal.confirm({
@@ -245,111 +209,63 @@ function EventSummaryTab({
 
   return (
     <Card bordered>
-      {!editing ? (
-        <>
-          <Descriptions title="Event details" bordered column={1}>
-            <Descriptions.Item label="Title">{event.title}</Descriptions.Item>
-            <Descriptions.Item label="Description">{event.description || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Status">
-              <Tag
-                color={
-                  event.status === 'DRAFT'
-                    ? 'default'
-                    : event.status === 'PUBLISHED'
-                      ? BADGE_COLOR_PRIMARY
-                      : BADGE_COLOR_SECONDARY
-                }
-              >
-                {event.status}
-              </Tag>
-            </Descriptions.Item>
-            <Descriptions.Item label="Feed type">{event.feedType}</Descriptions.Item>
-            <Descriptions.Item label="Start">
-              {new Date(event.startDate).toLocaleString()}
-            </Descriptions.Item>
-            <Descriptions.Item label="End">{new Date(event.endDate).toLocaleString()}</Descriptions.Item>
-            <Descriptions.Item label="Image">
-              {event.imageUrl ? (
-                <a href={event.imageUrl} target="_blank" rel="noreferrer">
-                  View
-                </a>
-              ) : (
-                '—'
-              )}
-            </Descriptions.Item>
-            {event.product && (
-              <Descriptions.Item label="Product">{event.product.name ?? event.productId}</Descriptions.Item>
-            )}
-            {event.brand && (
-              <Descriptions.Item label="Brand">{event.brand.name ?? event.brandId}</Descriptions.Item>
-            )}
-          </Descriptions>
+      <Descriptions title="Event details" bordered column={1}>
+        <Descriptions.Item label="Title">{event.title}</Descriptions.Item>
+        <Descriptions.Item label="Description">{event.description || '—'}</Descriptions.Item>
+        <Descriptions.Item label="Status">
+          <Tag
+            color={
+              event.status === 'DRAFT'
+                ? 'default'
+                : event.status === 'PUBLISHED'
+                  ? BADGE_COLOR_PRIMARY
+                  : BADGE_COLOR_SECONDARY
+            }
+          >
+            {event.status}
+          </Tag>
+        </Descriptions.Item>
+        <Descriptions.Item label="Feed type">{event.feedType}</Descriptions.Item>
+        <Descriptions.Item label="Start">
+          {new Date(event.startDate).toLocaleString()}
+        </Descriptions.Item>
+        <Descriptions.Item label="End">{new Date(event.endDate).toLocaleString()}</Descriptions.Item>
+        <Descriptions.Item label="Image">
+          {event.imageUrl ? (
+            <a href={event.imageUrl} target="_blank" rel="noreferrer">
+              View
+            </a>
+          ) : (
+            '—'
+          )}
+        </Descriptions.Item>
+        {event.product && (
+          <Descriptions.Item label="Product">{event.product.name ?? event.productId}</Descriptions.Item>
+        )}
+        {event.brand && (
+          <Descriptions.Item label="Brand">{event.brand.name ?? event.brandId}</Descriptions.Item>
+        )}
+      </Descriptions>
 
-          <Space style={{ marginTop: 24 }}>
-            <Button type="primary" icon={<EditOutlined />} onClick={() => setEditing(true)}>
-              Edit
-            </Button>
-            <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>
-              Delete
-            </Button>
-          </Space>
-        </>
-      ) : (
-        <>
-          <Form {...FORM_LAYOUT_VERTICAL} style={{ width: '100%' }}>
-            <Form.Item label="Title">
-              <Input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
-            </Form.Item>
-            <Form.Item label="Description">
-              <TextArea
-                value={form.description}
-                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                rows={3}
-              />
-            </Form.Item>
-            <Form.Item label="Start">
-              <Input
-                type="datetime-local"
-                value={form.startDate}
-                onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))}
-              />
-            </Form.Item>
-            <Form.Item label="End">
-              <Input
-                type="datetime-local"
-                value={form.endDate}
-                onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))}
-              />
-            </Form.Item>
-            <Form.Item label="Status">
-              <Select value={form.status} onChange={(value) => setForm((f) => ({ ...f, status: value }))}>
-                <Select.Option value="DRAFT">DRAFT</Select.Option>
-                <Select.Option value="PUBLISHED">PUBLISHED</Select.Option>
-                <Select.Option value="CLOSED">CLOSED</Select.Option>
-              </Select>
-            </Form.Item>
-            <Form.Item label="Feed type">
-              <Select value={form.feedType} onChange={(value) => setForm((f) => ({ ...f, feedType: value }))}>
-                <Select.Option value="PICKS">PICKS</Select.Option>
-                <Select.Option value="ROASTS">ROASTS</Select.Option>
-              </Select>
-            </Form.Item>
-            <Form.Item label="Image URL">
-              <Input
-                value={form.imageUrl}
-                onChange={(e) => setForm((f) => ({ ...f, imageUrl: e.target.value }))}
-                placeholder="https://..."
-              />
-            </Form.Item>
+      <Space style={{ marginTop: 24 }}>
+        <Button type="primary" icon={<EditOutlined />} onClick={() => setEditModalOpen(true)}>
+          Edit
+        </Button>
+        <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>
+          Delete
+        </Button>
+      </Space>
 
-            <Space style={{ marginTop: 24 }}>
-              <Button type="primary" onClick={handleSave} loading={saving}>
-                {saving ? 'Saving...' : 'Save'}
-              </Button>
-              <Button onClick={() => setEditing(false)}>Cancel</Button>
-            </Space>
-          </Form>
-        </>
+      {editModalOpen && (
+        <EditEventModal
+          open={editModalOpen}
+          eventId={event.id}
+          onClose={() => setEditModalOpen(false)}
+          onSuccess={() => {
+            onUpdated();
+            setEditModalOpen(false);
+          }}
+        />
       )}
     </Card>
   );
@@ -358,10 +274,7 @@ function EventSummaryTab({
 function EventBadgesTab({ eventId, eventTitle }: { eventId: string; eventTitle: string }) {
   const [list, setList] = useState<AdminEventBadgeListItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAdd, setShowAdd] = useState(false);
-  const [addBadgeId, setAddBadgeId] = useState('');
-  const [addRank, setAddRank] = useState(0);
-  const [addDisplayOrder, setAddDisplayOrder] = useState<number | null>(null);
+  const [addModalOpen, setAddModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editRank, setEditRank] = useState(0);
@@ -380,28 +293,6 @@ function EventBadgesTab({ eventId, eventTitle }: { eventId: string; eventTitle: 
   useEffect(() => {
     load();
   }, [load]);
-
-  const handleAdd = async () => {
-    if (!addBadgeId.trim()) return;
-    setSubmitting(true);
-    try {
-      await addEventBadge(eventId, {
-        badgeId: addBadgeId.trim(),
-        rank: addRank,
-        displayOrder: addDisplayOrder ?? undefined,
-      });
-      setAddBadgeId('');
-      setAddRank(list.length);
-      setAddDisplayOrder(null);
-      setShowAdd(false);
-      antdMessage.success('Badge added');
-      load();
-    } catch (e) {
-      antdMessage.error(e instanceof Error ? e.message : 'Failed to add');
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   const handleUpdate = async (eventBadgeId: string) => {
     setSubmitting(true);
@@ -562,50 +453,11 @@ function EventBadgesTab({ eventId, eventTitle }: { eventId: string; eventTitle: 
         <Button
           type="primary"
           icon={<PlusOutlined />}
-          onClick={() => setShowAdd(!showAdd)}
+          onClick={() => setAddModalOpen(true)}
           style={{ marginBottom: 16 }}
         >
-          {showAdd ? 'Cancel' : 'Add badge to event'}
+          Add Badge to Event
         </Button>
-
-        {showAdd && (
-          <Card bordered style={{ marginBottom: 16, background: '#fafafa' }}>
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item label="Badge ID (UUID)">
-                  <Input
-                    value={addBadgeId}
-                    onChange={(e) => setAddBadgeId(e.target.value)}
-                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                  />
-                </Form.Item>
-              </Col>
-              <Col span={6}>
-                <Form.Item label="Rank">
-                  <InputNumber
-                    min={0}
-                    value={addRank}
-                    onChange={(value) => setAddRank(value || 0)}
-                    style={{ width: '100%' }}
-                  />
-                </Form.Item>
-              </Col>
-              <Col span={6}>
-                <Form.Item label="Display order">
-                  <InputNumber
-                    value={addDisplayOrder}
-                    onChange={(value) => setAddDisplayOrder(value)}
-                    style={{ width: '100%' }}
-                    placeholder="Opsiyonel"
-                  />
-                </Form.Item>
-              </Col>
-            </Row>
-            <Button type="primary" loading={submitting} onClick={handleAdd}>
-              Add
-            </Button>
-          </Card>
-        )}
 
         {loading ? (
           <div style={{ textAlign: 'center', padding: 48 }}>
@@ -628,6 +480,18 @@ function EventBadgesTab({ eventId, eventTitle }: { eventId: string; eventTitle: 
           />
         )}
       </Card>
+
+      {addModalOpen && (
+        <AddBadgeToEventModal
+          open={addModalOpen}
+          eventId={eventId}
+          onClose={() => setAddModalOpen(false)}
+          onSuccess={() => {
+            load();
+            setAddModalOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

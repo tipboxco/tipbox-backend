@@ -7,9 +7,6 @@ import {
   Space,
   Tag,
   Typography,
-  Input,
-  Select,
-  InputNumber,
   Table,
   Spin,
   Empty,
@@ -27,12 +24,12 @@ import {
 } from '@ant-design/icons';
 import {
   fetchBadge,
-  updateBadge,
   deleteBadge,
   fetchBadgeOwners,
 } from '../../api/admin-badges-collections';
 import type { AdminBadgeDetailResponse, AdminBadgeOwnerListItem } from '../../types/admin';
 import { BADGE_COLOR_PRIMARY, BADGE_COLOR_SECONDARY } from '../../constants/badge-colors';
+import EditBadgeModal from './modals/EditBadgeModal';
 
 const { Text, Title, Paragraph } = Typography;
 
@@ -171,43 +168,7 @@ function BadgeSummaryTab({
   onUpdated: () => void;
   onDeleted: () => void;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    name: badge.name,
-    description: badge.description ?? '',
-    imageUrl: badge.imageUrl ?? '',
-    type: badge.type,
-    rarity: badge.rarity,
-    boostMultiplier: badge.boostMultiplier ?? null,
-    rewardMultiplier: badge.rewardMultiplier ?? null,
-    categoryId: badge.categoryId,
-    collectionId: badge.collectionId ?? '',
-  });
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await updateBadge(badge.id, {
-        name: form.name,
-        description: form.description || null,
-        imageUrl: form.imageUrl || null,
-        type: form.type,
-        rarity: form.rarity,
-        boostMultiplier: form.boostMultiplier,
-        rewardMultiplier: form.rewardMultiplier,
-        categoryId: form.categoryId,
-        collectionId: form.collectionId || null,
-      });
-      setEditing(false);
-      antdMessage.success('Badge updated');
-      onUpdated();
-    } catch (e) {
-      antdMessage.error(e instanceof Error ? e.message : 'Failed to update');
-    } finally {
-      setSaving(false);
-    }
-  };
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
   const handleDelete = () => {
     Modal.confirm({
@@ -230,148 +191,79 @@ function BadgeSummaryTab({
 
   return (
     <Card bordered>
-      {!editing ? (
-        <>
-          <Space direction="vertical" size="large" style={{ width: '100%' }}>
-            {badge.imageUrl && (
-              <Image
-                src={badge.imageUrl}
-                alt={badge.name}
-                style={{ maxWidth: 300, borderRadius: 8 }}
-              />
+      <Space direction="vertical" size="large" style={{ width: '100%' }}>
+        {badge.imageUrl && (
+          <Image
+            src={badge.imageUrl}
+            alt={badge.name}
+            style={{ maxWidth: 300, borderRadius: 8 }}
+          />
+        )}
+
+        <div>
+          <Title level={3}>{badge.name}</Title>
+          <Space wrap>
+            <Tag color={BADGE_COLOR_PRIMARY}>{badge.type}</Tag>
+            <Tag color={BADGE_COLOR_SECONDARY}>{badge.rarity}</Tag>
+            {badge.categoryName && <Tag color={BADGE_COLOR_PRIMARY}>{badge.categoryName}</Tag>}
+            {badge.collectionId && (
+              <Link to={`/gamification/collections/${badge.collectionId}`}>
+                <Tag icon={<LinkOutlined />} color={BADGE_COLOR_PRIMARY}>
+                  {badge.collectionName ?? 'Collection'}
+                </Tag>
+              </Link>
             )}
+          </Space>
+        </div>
 
-            <div>
-              <Title level={3}>{badge.name}</Title>
-              <Space wrap>
-                <Tag color={BADGE_COLOR_PRIMARY}>{badge.type}</Tag>
-                <Tag color={BADGE_COLOR_SECONDARY}>{badge.rarity}</Tag>
-                {badge.categoryName && <Tag color={BADGE_COLOR_PRIMARY}>{badge.categoryName}</Tag>}
-                {badge.collectionId && (
-                  <Link to={`/gamification/collections/${badge.collectionId}`}>
-                    <Tag icon={<LinkOutlined />} color={BADGE_COLOR_PRIMARY}>
-                      {badge.collectionName ?? 'Collection'}
-                    </Tag>
-                  </Link>
-                )}
-              </Space>
-            </div>
-
-            {(badge.boostMultiplier != null || badge.rewardMultiplier != null) && (
-              <Space size="large">
-                {badge.boostMultiplier != null && (
-                  <Space>
-                    <ArrowUpOutlined />
-                    <Text strong>Boost:</Text>
-                    <Text>{badge.boostMultiplier}×</Text>
-                  </Space>
-                )}
-                {badge.rewardMultiplier != null && (
-                  <Space>
-                    <GiftOutlined />
-                    <Text strong>Reward:</Text>
-                    <Text>{badge.rewardMultiplier}×</Text>
-                  </Space>
-                )}
-              </Space>
-            )}
-
-            {badge.description && <Paragraph>{badge.description}</Paragraph>}
-
-            {badge.createdAt && (
+        {(badge.boostMultiplier != null || badge.rewardMultiplier != null) && (
+          <Space size="large">
+            {badge.boostMultiplier != null && (
               <Space>
-                <CalendarOutlined />
-                <Text type="secondary">{new Date(badge.createdAt).toLocaleString('en-US')}</Text>
+                <ArrowUpOutlined />
+                <Text strong>Boost:</Text>
+                <Text>{badge.boostMultiplier}×</Text>
+              </Space>
+            )}
+            {badge.rewardMultiplier != null && (
+              <Space>
+                <GiftOutlined />
+                <Text strong>Reward:</Text>
+                <Text>{badge.rewardMultiplier}×</Text>
               </Space>
             )}
           </Space>
+        )}
 
-          <Space style={{ marginTop: 24 }}>
-            <Button type="primary" onClick={() => setEditing(true)}>
-              Edit
-            </Button>
-            <Button danger onClick={handleDelete}>
-              Delete
-            </Button>
-          </Space>
-        </>
-      ) : (
-        <>
-          <Space direction="vertical" size="large" style={{ width: '100%' }}>
-            <div>
-              <Text strong>Name</Text>
-              <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
-            </div>
-            <div>
-              <Text strong>Description</Text>
-              <Input value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
-            </div>
-            <div>
-              <Text strong>Image URL</Text>
-              <Input value={form.imageUrl} onChange={(e) => setForm((f) => ({ ...f, imageUrl: e.target.value }))} />
-            </div>
-            <div>
-              <Text strong>Type</Text>
-              <Select
-                value={form.type}
-                onChange={(value) => setForm((f) => ({ ...f, type: value }))}
-                style={{ width: '100%' }}
-              >
-                <Select.Option value="COLLECTION">COLLECTION</Select.Option>
-                <Select.Option value="EVENT">EVENT</Select.Option>
-                <Select.Option value="COSMETIC">COSMETIC</Select.Option>
-                <Select.Option value="BRAND">BRAND</Select.Option>
-              </Select>
-            </div>
-            <div>
-              <Text strong>Rarity</Text>
-              <Select
-                value={form.rarity}
-                onChange={(value) => setForm((f) => ({ ...f, rarity: value }))}
-                style={{ width: '100%' }}
-              >
-                <Select.Option value="COMMON">COMMON</Select.Option>
-                <Select.Option value="RARE">RARE</Select.Option>
-                <Select.Option value="EPIC">EPIC</Select.Option>
-              </Select>
-            </div>
-            <div>
-              <Text strong>Boost multiplier</Text>
-              <InputNumber
-                value={form.boostMultiplier}
-                onChange={(value) => setForm((f) => ({ ...f, boostMultiplier: value }))}
-                style={{ width: '100%' }}
-              />
-            </div>
-            <div>
-              <Text strong>Reward multiplier</Text>
-              <InputNumber
-                value={form.rewardMultiplier}
-                onChange={(value) => setForm((f) => ({ ...f, rewardMultiplier: value }))}
-                style={{ width: '100%' }}
-              />
-            </div>
-            <div>
-              <Text strong>Category ID</Text>
-              <Input value={form.categoryId} onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))} />
-            </div>
-            <div>
-              <Text strong>Collection ID</Text>
-              <Input
-                value={form.collectionId}
-                onChange={(e) => setForm((f) => ({ ...f, collectionId: e.target.value }))}
-                placeholder="Can be left empty"
-              />
-            </div>
-          </Space>
+        {badge.description && <Paragraph>{badge.description}</Paragraph>}
 
-          <Space style={{ marginTop: 24 }}>
-            <Button type="primary" onClick={handleSave} loading={saving}>
-              {saving ? 'Saving...' : 'Save'}
-            </Button>
-            <Button onClick={() => setEditing(false)}>Cancel</Button>
+        {badge.createdAt && (
+          <Space>
+            <CalendarOutlined />
+            <Text type="secondary">{new Date(badge.createdAt).toLocaleString('en-US')}</Text>
           </Space>
-        </>
+        )}
+      </Space>
+
+      <Space style={{ marginTop: 24 }}>
+        <Button type="primary" onClick={() => setEditModalOpen(true)}>
+          Edit
+        </Button>
+        <Button danger onClick={handleDelete}>
+          Delete
+        </Button>
+      </Space>
+
+      {editModalOpen && (
+        <EditBadgeModal
+          open={editModalOpen}
+          badgeId={badge.id}
+          onClose={() => setEditModalOpen(false)}
+          onSuccess={() => {
+            onUpdated();
+            setEditModalOpen(false);
+          }}
+        />
       )}
     </Card>
   );

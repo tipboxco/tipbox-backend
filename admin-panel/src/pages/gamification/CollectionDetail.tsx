@@ -6,8 +6,6 @@ import {
   Button,
   Input,
   Select,
-  InputNumber,
-  Form,
   Space,
   Spin,
   Empty,
@@ -29,25 +27,21 @@ import {
 } from '@ant-design/icons';
 import {
   fetchCollection,
-  updateCollection,
   deleteCollection,
   fetchCollectionBadges,
   removeCollectionBadge,
   fetchBadgeCategories,
-  createBadge,
   updateBadge,
   fetchBadge,
-  fetchActionTypes,
-  createCollectionGoal,
 } from '../../api/admin-badges-collections';
 import type {
   AdminCollectionDetailResponse,
   AdminCollectionBadgeListItem,
   AdminBadgeCategoryListItem,
-  AdminActionTypeListItem,
   AdminBadgeDetailResponse,
 } from '../../types/admin';
-import { FORM_LAYOUT_VERTICAL } from '../../constants/form-layout';
+import EditCollectionModal from './modals/EditCollectionModal';
+import AddBadgeToCollectionModal from './modals/AddBadgeToCollectionModal';
 
 const { Title, Text } = Typography;
 
@@ -203,45 +197,7 @@ function CollectionSummaryTab({
   onUpdated: () => void;
   onDeleted: () => void;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    name: collection.name,
-    bannerUrl: collection.bannerUrl ?? '',
-    owner: collection.owner ?? '',
-    focusSector: collection.focusSector ?? '',
-    targetGroup: collection.targetGroup ?? '',
-    shortDescription: collection.shortDescription ?? '',
-    longDescription: collection.longDescription ?? '',
-    unlockCondition: collection.unlockCondition ?? '',
-    completionBonus: collection.completionBonus ?? '',
-    categoryId: collection.categoryId ?? '',
-  });
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await updateCollection(collection.id, {
-        name: form.name,
-        bannerUrl: form.bannerUrl || null,
-        owner: form.owner || null,
-        focusSector: form.focusSector || null,
-        targetGroup: form.targetGroup || null,
-        shortDescription: form.shortDescription || null,
-        longDescription: form.longDescription || null,
-        unlockCondition: form.unlockCondition || null,
-        completionBonus: form.completionBonus || null,
-        categoryId: form.categoryId || null,
-      });
-      setEditing(false);
-      antdMessage.success('Collection updated');
-      onUpdated();
-    } catch (e) {
-      antdMessage.error(e instanceof Error ? e.message : 'Failed to update');
-    } finally {
-      setSaving(false);
-    }
-  };
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
   const handleDelete = () => {
     Modal.confirm({
@@ -264,123 +220,58 @@ function CollectionSummaryTab({
 
   return (
     <Card bordered>
-      {!editing ? (
-        <>
-          <Descriptions title="COLLECTION METADATA" bordered column={1}>
-            <Descriptions.Item label="Collection Name">{collection.name}</Descriptions.Item>
-            <Descriptions.Item label="Owner">{collection.owner || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Focus Sector">{collection.focusSector || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Target Group">{collection.targetGroup || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Short Description">{collection.shortDescription || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Long Description">{collection.longDescription || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Cover Image">
-              {collection.bannerUrl ? (
-                <a href={collection.bannerUrl} target="_blank" rel="noreferrer">
-                  View
-                </a>
-              ) : (
-                '—'
-              )}
-            </Descriptions.Item>
-            <Descriptions.Item label="Prerequisite">{collection.unlockCondition || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Completion Reward">{collection.completionBonus || '—'}</Descriptions.Item>
-            <Descriptions.Item label="Category">
-              {collection.categoryName ?? collection.categoryId ?? '—'}
-            </Descriptions.Item>
-            <Descriptions.Item label="Created">
-              {new Date(collection.createdAt).toLocaleString('en-US')}
-            </Descriptions.Item>
-            <Descriptions.Item label="Updated">
-              {new Date(collection.updatedAt).toLocaleString('en-US')}
-            </Descriptions.Item>
-          </Descriptions>
+      <Descriptions title="COLLECTION METADATA" bordered column={1}>
+        <Descriptions.Item label="Collection Name">{collection.name}</Descriptions.Item>
+        <Descriptions.Item label="Owner">{collection.owner || '—'}</Descriptions.Item>
+        <Descriptions.Item label="Focus Sector">{collection.focusSector || '—'}</Descriptions.Item>
+        <Descriptions.Item label="Target Group">{collection.targetGroup || '—'}</Descriptions.Item>
+        <Descriptions.Item label="Short Description">{collection.shortDescription || '—'}</Descriptions.Item>
+        <Descriptions.Item label="Long Description">{collection.longDescription || '—'}</Descriptions.Item>
+        <Descriptions.Item label="Cover Image">
+          {collection.bannerUrl ? (
+            <a href={collection.bannerUrl} target="_blank" rel="noreferrer">
+              View
+            </a>
+          ) : (
+            '—'
+          )}
+        </Descriptions.Item>
+        <Descriptions.Item label="Prerequisite">{collection.unlockCondition || '—'}</Descriptions.Item>
+        <Descriptions.Item label="Completion Reward">{collection.completionBonus || '—'}</Descriptions.Item>
+        <Descriptions.Item label="Category">
+          {collection.categoryName ?? collection.categoryId ?? '—'}
+        </Descriptions.Item>
+        <Descriptions.Item label="Created">
+          {new Date(collection.createdAt).toLocaleString('en-US')}
+        </Descriptions.Item>
+        <Descriptions.Item label="Updated">
+          {new Date(collection.updatedAt).toLocaleString('en-US')}
+        </Descriptions.Item>
+      </Descriptions>
 
-          <Space style={{ marginTop: 24 }}>
-            <Button type="primary" icon={<EditOutlined />} onClick={() => setEditing(true)}>
-              Edit
-            </Button>
-            <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>
-              Delete
-            </Button>
-          </Space>
-        </>
-      ) : (
-        <>
-          <Form {...FORM_LAYOUT_VERTICAL} style={{ width: '100%' }}>
-            <Form.Item label="Collection Name">
-              <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
-            </Form.Item>
-            <Form.Item label="Owner">
-              <Input value={form.owner} onChange={(e) => setForm((f) => ({ ...f, owner: e.target.value }))} />
-            </Form.Item>
-            <Form.Item label="Focus Sector">
-              <Input
-                value={form.focusSector}
-                onChange={(e) => setForm((f) => ({ ...f, focusSector: e.target.value }))}
-              />
-            </Form.Item>
-            <Form.Item label="Target Group">
-              <Input
-                value={form.targetGroup}
-                onChange={(e) => setForm((f) => ({ ...f, targetGroup: e.target.value }))}
-              />
-            </Form.Item>
-            <Form.Item label="Short Description">
-              <Input.TextArea
-                value={form.shortDescription}
-                onChange={(e) => setForm((f) => ({ ...f, shortDescription: e.target.value }))}
-                rows={2}
-              />
-            </Form.Item>
-            <Form.Item label="Long Description">
-              <Input.TextArea
-                value={form.longDescription}
-                onChange={(e) => setForm((f) => ({ ...f, longDescription: e.target.value }))}
-                rows={4}
-              />
-            </Form.Item>
-            <Form.Item label="Cover Image (URL)">
-              <Input value={form.bannerUrl} onChange={(e) => setForm((f) => ({ ...f, bannerUrl: e.target.value }))} />
-            </Form.Item>
-            <Form.Item label="Prerequisite">
-              <Input
-                value={form.unlockCondition}
-                onChange={(e) => setForm((f) => ({ ...f, unlockCondition: e.target.value }))}
-              />
-            </Form.Item>
-            <Form.Item label="Completion Reward">
-              <Input
-                value={form.completionBonus}
-                onChange={(e) => setForm((f) => ({ ...f, completionBonus: e.target.value }))}
-              />
-            </Form.Item>
-            <Form.Item label="Category ID (optional)">
-              <Input value={form.categoryId} onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value }))} />
-            </Form.Item>
+      <Space style={{ marginTop: 24 }}>
+        <Button type="primary" icon={<EditOutlined />} onClick={() => setEditModalOpen(true)}>
+          Edit
+        </Button>
+        <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>
+          Delete
+        </Button>
+      </Space>
 
-            <Space style={{ marginTop: 24 }}>
-            <Button type="primary" onClick={handleSave} loading={saving}>
-              {saving ? 'Saving...' : 'Save'}
-            </Button>
-            <Button onClick={() => setEditing(false)}>Cancel</Button>
-            </Space>
-          </Form>
-        </>
+      {editModalOpen && (
+        <EditCollectionModal
+          open={editModalOpen}
+          collectionId={collection.id}
+          onClose={() => setEditModalOpen(false)}
+          onSuccess={() => {
+            onUpdated();
+            setEditModalOpen(false);
+          }}
+        />
       )}
     </Card>
   );
 }
-
-const INIT_ADD_FORM = {
-  name: '',
-  description: '',
-  imageUrl: '',
-  rarity: 'COMMON' as 'COMMON' | 'RARE' | 'EPIC',
-  actionTypeId: '',
-  pointsRequired: 1,
-  difficulty: 'MEDIUM' as 'EASY' | 'MEDIUM' | 'HARD',
-  categoryId: '',
-};
 
 function CollectionBadgesTab({
   collectionId,
@@ -394,16 +285,10 @@ function CollectionBadgesTab({
   onUpdated: () => void;
 }) {
   const [badges, setBadges] = useState<AdminCollectionBadgeListItem[]>([]);
-  const [badgeCategories, setBadgeCategories] = useState<AdminBadgeCategoryListItem[]>([]);
-  const [actionTypes, setActionTypes] = useState<AdminActionTypeListItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingActionTypes, setLoadingActionTypes] = useState(true);
-  const [loadingCategories, setLoadingCategories] = useState(false);
-  const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
   const [editingBadgeId, setEditingBadgeId] = useState<string | null>(null);
-  const [addForm, setAddForm] = useState(INIT_ADD_FORM);
-  const [addError, setAddError] = useState<string | null>(null);
+  const [addModalOpen, setAddModalOpen] = useState(false);
 
   const loadBadges = useCallback(async () => {
     try {
@@ -419,105 +304,6 @@ function CollectionBadgesTab({
   useEffect(() => {
     loadBadges();
   }, [loadBadges]);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetchActionTypes();
-        const data = res.data;
-        if (!cancelled && data?.length) {
-          setActionTypes(data);
-          setAddForm((f) => (f.actionTypeId ? f : { ...f, actionTypeId: data[0].id }));
-        }
-      } catch (e) {
-        if (!cancelled) console.error(e);
-      } finally {
-        if (!cancelled) setLoadingActionTypes(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (collectionCategoryId !== null) return;
-    let cancelled = false;
-    setLoadingCategories(true);
-    (async () => {
-      try {
-        const res = await fetchBadgeCategories();
-        if (!cancelled && res.data?.length) {
-          setBadgeCategories(res.data);
-          setAddForm((f) => (f.categoryId ? f : { ...f, categoryId: res.data![0].id }));
-        }
-      } catch (e) {
-        if (!cancelled) console.error(e);
-      } finally {
-        if (!cancelled) setLoadingCategories(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [collectionCategoryId]);
-
-  const effectiveCategoryId = collectionCategoryId ?? addForm.categoryId;
-
-  const handleAddBadge = async () => {
-    setAddError(null);
-    if (!addForm.name.trim()) {
-      setAddError('Badge name is required.');
-      return;
-    }
-    if (!effectiveCategoryId) {
-      setAddError('Select badge category.');
-      return;
-    }
-    if (!addForm.actionTypeId) {
-      setAddError('Select activation type.');
-      return;
-    }
-    if (addForm.pointsRequired < 1) {
-      setAddError('Target count must be at least 1.');
-      return;
-    }
-    setAdding(true);
-    try {
-      const badgeRes = await createBadge({
-        name: addForm.name.trim(),
-        description: addForm.description.trim() || null,
-        imageUrl: addForm.imageUrl.trim() || null,
-        type: 'COLLECTION',
-        rarity: addForm.rarity,
-        categoryId: effectiveCategoryId,
-        collectionId,
-      });
-      const newBadgeId = badgeRes.data?.id;
-      if (newBadgeId) {
-        await createCollectionGoal(collectionId, {
-          actionTypeId: addForm.actionTypeId,
-          rewardBadgeId: newBadgeId,
-          pointsRequired: addForm.pointsRequired,
-          title: addForm.name.trim(),
-          difficulty: addForm.difficulty,
-        });
-      }
-      setAddForm({
-        ...INIT_ADD_FORM,
-        actionTypeId: actionTypes[0]?.id ?? '',
-        categoryId: collectionCategoryId ?? badgeCategories[0]?.id ?? '',
-      });
-      antdMessage.success('Badge added');
-      loadBadges();
-      onUpdated();
-    } catch (err) {
-      setAddError(err instanceof Error ? err.message : 'Failed to add badge');
-    } finally {
-      setAdding(false);
-    }
-  };
 
   const handleRemove = async (badgeId: string) => {
     Modal.confirm({
@@ -544,117 +330,13 @@ function CollectionBadgesTab({
 
   return (
     <div>
-      <Card bordered title="Add badge" style={{ marginBottom: 24 }}>
-        {addError && (
-          <Alert message="Error" description={addError} type="error" closable onClose={() => setAddError(null)} style={{ marginBottom: 16 }} />
-        )}
-        <Row gutter={16}>
-          <Col xs={24} md={12} lg={6}>
-            <Form.Item label="Name">
-              <Input
-                value={addForm.name}
-                onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="Badge name"
-              />
-            </Form.Item>
-          </Col>
-          <Col xs={24} md={12} lg={6}>
-            <Form.Item label="Description">
-              <Input
-                value={addForm.description}
-                onChange={(e) => setAddForm((f) => ({ ...f, description: e.target.value }))}
-                placeholder="Optional"
-              />
-            </Form.Item>
-          </Col>
-          <Col xs={24} md={12} lg={6}>
-            <Form.Item label="Image URL">
-              <Input
-                value={addForm.imageUrl}
-                onChange={(e) => setAddForm((f) => ({ ...f, imageUrl: e.target.value }))}
-                placeholder="https://..."
-              />
-            </Form.Item>
-          </Col>
-          <Col xs={24} md={12} lg={6}>
-            <Form.Item label="Rarity">
-              <Select
-                value={addForm.rarity}
-                onChange={(value) => setAddForm((f) => ({ ...f, rarity: value }))}
-              >
-                <Select.Option value="COMMON">COMMON</Select.Option>
-                <Select.Option value="RARE">RARE</Select.Option>
-                <Select.Option value="EPIC">EPIC</Select.Option>
-              </Select>
-            </Form.Item>
-          </Col>
-          {collectionCategoryId === null && (
-            <Col xs={24} md={12} lg={6}>
-              <Form.Item label="Badge category" required>
-                <Select
-                  value={addForm.categoryId || undefined}
-                  onChange={(value) => setAddForm((f) => ({ ...f, categoryId: value }))}
-                  loading={loadingCategories}
-                  placeholder={loadingCategories ? 'Loading...' : 'Select category'}
-                >
-                  {badgeCategories.map((c) => (
-                    <Select.Option key={c.id} value={c.id}>
-                      {c.name}
-                    </Select.Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
-          )}
-        </Row>
-        <Row gutter={16}>
-          <Col xs={24} md={12} lg={8}>
-            <Form.Item label="Activation Type">
-              <Select
-                value={addForm.actionTypeId}
-                onChange={(value) => setAddForm((f) => ({ ...f, actionTypeId: value }))}
-                loading={loadingActionTypes}
-                placeholder={loadingActionTypes ? 'Loading...' : 'Select'}
-              >
-                {actionTypes.map((a) => (
-                  <Select.Option key={a.id} value={a.id}>
-                    {a.label} ({a.mainAction} / {a.code})
-                  </Select.Option>
-                ))}
-              </Select>
-            </Form.Item>
-          </Col>
-          <Col xs={24} md={12} lg={8}>
-            <Form.Item label="Target Count">
-              <InputNumber
-                min={1}
-                value={addForm.pointsRequired}
-                onChange={(value) => setAddForm((f) => ({ ...f, pointsRequired: Math.max(1, value || 1) }))}
-                style={{ width: '100%' }}
-              />
-            </Form.Item>
-          </Col>
-          <Col xs={24} md={12} lg={8}>
-            <Form.Item label="Difficulty">
-              <Select
-                value={addForm.difficulty}
-                onChange={(value) => setAddForm((f) => ({ ...f, difficulty: value }))}
-              >
-                <Select.Option value="EASY">Easy</Select.Option>
-                <Select.Option value="MEDIUM">Medium</Select.Option>
-                <Select.Option value="HARD">Hard</Select.Option>
-              </Select>
-            </Form.Item>
-          </Col>
-        </Row>
+      <Card bordered style={{ marginBottom: 24 }}>
         <Button
           type="primary"
           icon={<PlusOutlined />}
-          onClick={handleAddBadge}
-          loading={adding}
-          disabled={loadingActionTypes || !addForm.actionTypeId || !effectiveCategoryId}
+          onClick={() => setAddModalOpen(true)}
         >
-          {adding ? 'Adding...' : 'Add badge'}
+          Add Badge
         </Button>
       </Card>
 
@@ -758,6 +440,20 @@ function CollectionBadgesTab({
             setEditingBadgeId(null);
             loadBadges();
             onUpdated();
+          }}
+        />
+      )}
+
+      {addModalOpen && (
+        <AddBadgeToCollectionModal
+          open={addModalOpen}
+          collectionId={collectionId}
+          collectionCategoryId={collectionCategoryId}
+          onClose={() => setAddModalOpen(false)}
+          onSuccess={() => {
+            loadBadges();
+            onUpdated();
+            setAddModalOpen(false);
           }}
         />
       )}

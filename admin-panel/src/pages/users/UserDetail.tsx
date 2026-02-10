@@ -4,9 +4,6 @@ import {
   Card,
   Tabs,
   Button,
-  Input,
-  Select,
-  Checkbox,
   Spin,
   Alert,
   Table,
@@ -26,17 +23,12 @@ import {
   fetchUserModerationHistory,
   fetchUserLoginAttempts,
   fetchUserAvatar,
-  updateUserAvatar,
-  createUserAvatar,
   fetchUserEvents,
   fetchUserBadges,
-  grantUserBadge,
   revokeUserBadge,
   fetchUserWallet,
   fetchUserTipsSummary,
   fetchUserTipsTransactions,
-  updateUser,
-  updateUserRoles,
   banUser,
   unbanUser,
 } from '../../api/admin-users';
@@ -55,6 +47,10 @@ import type {
   PaginationMeta,
   AdminContentPostListItem,
 } from '../../types/admin';
+import EditUserAccountModal from './modals/EditUserAccountModal';
+import EditUserRolesModal from './modals/EditUserRolesModal';
+import EditUserAvatarModal from './modals/EditUserAvatarModal';
+import GrantBadgeModal from './modals/GrantBadgeModal';
 
 const { Text } = Typography;
 
@@ -80,15 +76,12 @@ function UserDetail() {
   const [loadingTab, setLoadingTab] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>('overview');
   const [error, setError] = useState<string | null>(null);
-  const [editEmail, setEditEmail] = useState('');
-  const [editStatus, setEditStatus] = useState<string>('');
-  const [editEmailVerified, setEditEmailVerified] = useState(false);
-  const [editRoles, setEditRoles] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [avatarImageUrl, setAvatarImageUrl] = useState('');
-  const [avatarActiveId, setAvatarActiveId] = useState<string | null>(null);
-  const [grantBadgeId, setGrantBadgeId] = useState('');
+  const [editAccountModalOpen, setEditAccountModalOpen] = useState(false);
+  const [editRolesModalOpen, setEditRolesModalOpen] = useState(false);
+  const [editAvatarModalOpen, setEditAvatarModalOpen] = useState(false);
+  const [grantBadgeModalOpen, setGrantBadgeModalOpen] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -248,44 +241,33 @@ function UserDetail() {
     return () => { cancelled = true; };
   }, [id, activeTab]);
 
-  const handleSaveUser = async () => {
-    if (!id || !user) return;
-    setSaving(true);
-    setMessage(null);
+  const refreshUser = async () => {
+    if (!id) return;
     try {
-      await updateUser(id, {
-        email: editEmail || undefined,
-        status: editStatus || null,
-        emailVerified: editEmailVerified,
-      });
       const res = await fetchUser(id);
       if (res.data) setUser(res.data);
-      setMessage('User updated');
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : 'Update failed');
-    } finally {
-      setSaving(false);
+      console.error('Failed to refresh user:', e);
     }
   };
 
-  const handleSaveRoles = async () => {
+  const refreshAvatar = async () => {
     if (!id) return;
-    const roles = editRoles
-      .split(',')
-      .map((r) => r.trim())
-      .filter(Boolean);
-    setSaving(true);
-    setMessage(null);
     try {
-      await updateUserRoles(id, roles);
-      const res = await fetchUser(id);
-      if (res.data) setUser(res.data);
-      setEditRoles(res.data?.roles?.join(', ') ?? '');
-      setMessage('Roles updated');
+      const res = await fetchUserAvatar(id);
+      setAvatar(res.data ?? null);
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : 'Update failed');
-    } finally {
-      setSaving(false);
+      console.error('Failed to refresh avatar:', e);
+    }
+  };
+
+  const refreshBadges = async () => {
+    if (!id) return;
+    try {
+      const res = await fetchUserBadges(id, { limit: 50, offset: 0 });
+      setUserBadges(res.data ?? []);
+    } catch (e) {
+      console.error('Failed to refresh badges:', e);
     }
   };
 
@@ -337,65 +319,6 @@ function UserDetail() {
     });
   };
 
-  const handleUpdateAvatar = async () => {
-    if (!id) return;
-    setSaving(true);
-    setMessage(null);
-    try {
-      const body: { imageUrl?: string; avatarId?: string; isActive?: boolean } = {};
-      if (avatarImageUrl.trim()) body.imageUrl = avatarImageUrl.trim();
-      if (avatarActiveId) body.avatarId = avatarActiveId;
-      await updateUserAvatar(id, body);
-      const res = await fetchUserAvatar(id);
-      setAvatar(res.data ?? null);
-      if (res.data) {
-        setAvatarImageUrl(res.data.imageUrl);
-        setAvatarActiveId(res.data.isActive ? res.data.id : null);
-      }
-      setMessage('Avatar updated');
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : 'Update failed');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleCreateAvatar = async () => {
-    if (!id || !avatarImageUrl.trim()) return;
-    setSaving(true);
-    setMessage(null);
-    try {
-      await createUserAvatar(id, { imageUrl: avatarImageUrl.trim() });
-      const res = await fetchUserAvatar(id);
-      setAvatar(res.data ?? null);
-      if (res.data) {
-        setAvatarImageUrl(res.data.imageUrl);
-        setAvatarActiveId(res.data.isActive ? res.data.id : null);
-      }
-      setMessage('Avatar added');
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : 'Add failed');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleGrantBadge = async () => {
-    if (!id || !grantBadgeId.trim()) return;
-    setSaving(true);
-    setMessage(null);
-    try {
-      await grantUserBadge(id, { badgeId: grantBadgeId.trim() });
-      const res = await fetchUserBadges(id, { limit: 50, offset: 0 });
-      setUserBadges(res.data ?? []);
-      setGrantBadgeId('');
-      setMessage('Badge granted');
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : 'Failed to grant badge');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const handleRevokeBadge = async (userBadgeId: string) => {
     if (!id) return;
@@ -764,39 +687,10 @@ function UserDetail() {
             </Card>
           )}
 
-          <Card bordered title="Edit account">
-            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-              <div>
-                <div style={{ marginBottom: 4, fontWeight: 500 }}>Email</div>
-                <Input
-                  type="email"
-                  value={editEmail}
-                  onChange={(e) => setEditEmail(e.target.value)}
-                />
-              </div>
-              <div>
-                <div style={{ marginBottom: 4, fontWeight: 500 }}>Status</div>
-                <Select
-                  style={{ width: '100%' }}
-                  value={editStatus}
-                  onChange={setEditStatus}
-                  options={[
-                    { value: '', label: '—' },
-                    { value: 'ACTIVE', label: 'ACTIVE' },
-                    { value: 'BANNED', label: 'BANNED' },
-                  ]}
-                />
-              </div>
-              <Checkbox
-                checked={editEmailVerified}
-                onChange={(e) => setEditEmailVerified(e.target.checked)}
-              >
-                Email Verified
-              </Checkbox>
-              <Button type="primary" onClick={handleSaveUser} loading={saving}>
-                Save
-              </Button>
-            </Space>
+          <Card bordered title="Account actions">
+            <Button type="primary" onClick={() => setEditAccountModalOpen(true)}>
+              Edit Account
+            </Button>
           </Card>
         </Space>
       ),
@@ -856,46 +750,15 @@ function UserDetail() {
                     {avatar.isActive ? 'Yes' : 'No'}
                   </Descriptions.Item>
                 </Descriptions>
-                <div>
-                  <div style={{ marginBottom: 4, fontWeight: 500 }}>Image URL</div>
-                  <Input
-                    type="url"
-                    value={avatarImageUrl}
-                    onChange={(e) => setAvatarImageUrl(e.target.value)}
-                    placeholder="https://…"
-                  />
-                </div>
-                <div>
-                  <div style={{ marginBottom: 4, fontWeight: 500 }}>Avatar ID to activate</div>
-                  <Input
-                    value={avatarActiveId ?? ''}
-                    onChange={(e) => setAvatarActiveId(e.target.value || null)}
-                    placeholder="Optional"
-                  />
-                </div>
-                <Button type="primary" onClick={handleUpdateAvatar} loading={saving}>
-                  Update
+                <Button type="primary" onClick={() => setEditAvatarModalOpen(true)}>
+                  Edit Avatar
                 </Button>
               </Space>
             ) : (
               <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                <Text type="secondary">No avatar.</Text>
-                <div>
-                  <div style={{ marginBottom: 4, fontWeight: 500 }}>Image URL</div>
-                  <Input
-                    type="url"
-                    value={avatarImageUrl}
-                    onChange={(e) => setAvatarImageUrl(e.target.value)}
-                    placeholder="https://…"
-                  />
-                </div>
-                <Button
-                  type="primary"
-                  onClick={handleCreateAvatar}
-                  loading={saving}
-                  disabled={!avatarImageUrl.trim()}
-                >
-                  Add
+                <Text type="secondary">No avatar yet.</Text>
+                <Button type="primary" onClick={() => setEditAvatarModalOpen(true)}>
+                  Create Avatar
                 </Button>
               </Space>
             )}
@@ -907,18 +770,15 @@ function UserDetail() {
       key: 'roles',
       label: 'Roles',
       children: (
-        <Card bordered title="Edit roles">
+        <Card bordered title="User roles">
           <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-            <div>
-              <div style={{ marginBottom: 4, fontWeight: 500 }}>Roles (comma separated)</div>
-              <Input
-                value={editRoles}
-                onChange={(e) => setEditRoles(e.target.value)}
-                placeholder="ADMIN, USER, MODERATOR"
-              />
-            </div>
-            <Button type="primary" onClick={handleSaveRoles} loading={saving}>
-              Update roles
+            <Descriptions column={1} bordered size="small">
+              <Descriptions.Item label="Current roles">
+                {(user.roles ?? []).join(', ') || '—'}
+              </Descriptions.Item>
+            </Descriptions>
+            <Button type="primary" onClick={() => setEditRolesModalOpen(true)}>
+              Edit Roles
             </Button>
           </Space>
         </Card>
@@ -954,25 +814,10 @@ function UserDetail() {
       label: 'Badges',
       children: (
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-          <Card bordered title="Grant new badge">
-            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-              <div>
-                <div style={{ marginBottom: 4, fontWeight: 500 }}>Badge ID</div>
-                <Input
-                  value={grantBadgeId}
-                  onChange={(e) => setGrantBadgeId(e.target.value)}
-                  placeholder="UUID"
-                />
-              </div>
-              <Button
-                type="primary"
-                onClick={handleGrantBadge}
-                loading={saving}
-                disabled={!grantBadgeId.trim()}
-              >
-                Grant badge
-              </Button>
-            </Space>
+          <Card bordered title="Badge actions">
+            <Button type="primary" onClick={() => setGrantBadgeModalOpen(true)}>
+              Grant Badge
+            </Button>
           </Card>
 
           <Card bordered title="User badges" loading={loadingTab}>
@@ -1157,6 +1002,54 @@ function UserDetail() {
       )}
 
       <Tabs activeKey={activeTab} onChange={(key) => setActiveTab(key as TabId)} items={tabItems} />
+
+      {editAccountModalOpen && (
+        <EditUserAccountModal
+          open={editAccountModalOpen}
+          userId={id}
+          onClose={() => setEditAccountModalOpen(false)}
+          onSuccess={() => {
+            refreshUser();
+            setEditAccountModalOpen(false);
+          }}
+        />
+      )}
+
+      {editRolesModalOpen && (
+        <EditUserRolesModal
+          open={editRolesModalOpen}
+          userId={id}
+          onClose={() => setEditRolesModalOpen(false)}
+          onSuccess={() => {
+            refreshUser();
+            setEditRolesModalOpen(false);
+          }}
+        />
+      )}
+
+      {editAvatarModalOpen && (
+        <EditUserAvatarModal
+          open={editAvatarModalOpen}
+          userId={id}
+          onClose={() => setEditAvatarModalOpen(false)}
+          onSuccess={() => {
+            refreshAvatar();
+            setEditAvatarModalOpen(false);
+          }}
+        />
+      )}
+
+      {grantBadgeModalOpen && (
+        <GrantBadgeModal
+          open={grantBadgeModalOpen}
+          userId={id}
+          onClose={() => setGrantBadgeModalOpen(false)}
+          onSuccess={() => {
+            refreshBadges();
+            setGrantBadgeModalOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }
