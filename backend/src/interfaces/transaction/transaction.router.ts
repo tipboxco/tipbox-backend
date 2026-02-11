@@ -201,7 +201,7 @@ router.post('/nft-transfer', asyncHandler(async (req: Request, res: Response) =>
 router.get('/history', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
+
   if (!userId) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
@@ -245,7 +245,7 @@ router.get('/history', asyncHandler(async (req: Request, res: Response) => {
         }
       }
 
-      if (tx.metadata?.recipientUserId) {
+      if (tx.metadata?.recipientUserId && !tx.metadata?.recipientUserId?.startsWith('0x')) {
         const recipient = await prisma.user.findUnique({
           where: { id: tx.metadata.recipientUserId as string },
           include: {
@@ -301,7 +301,7 @@ router.get('/history', asyncHandler(async (req: Request, res: Response) => {
 router.get('/history/grouped', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-  
+
   if (!userId) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
@@ -344,9 +344,9 @@ router.get('/history/grouped', asyncHandler(async (req: Request, res: Response) 
  */
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  
+
   const transaction = await transactionService.getTransactionById(id);
-  
+
   return res.json({
     id: transaction.id,
     actionType: transaction.actionType,

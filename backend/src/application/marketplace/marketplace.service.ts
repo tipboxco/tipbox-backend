@@ -9,6 +9,9 @@ import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
 import { NotFoundError, ValidationError } from '../../infrastructure/errors/custom-errors';
 import { NFTRarity } from '../../domain/crypto/nft-rarity.enum';
+import { NFTType } from '../../domain/crypto/nft-type.enum';
+import { createWeb3NftService, resolveNftImageUrl } from '../wallet/web3-nft-service';
+import type { WalletNFTItem } from '../wallet/web3-nft-service/types';
 import {
   MarketplaceNFTResponse,
   UserNFTResponse,
@@ -29,7 +32,8 @@ import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import logger from '../../infrastructure/logger/logger';
 import { 
   invalidateNFTListingCache, 
-  invalidateNFTTransactionCache 
+  invalidateNFTTransactionCache,
+  invalidateUserNFTCache,
 } from '../../infrastructure/cache/cache-invalidation';
 
 export class MarketplaceService {
@@ -49,6 +53,94 @@ export class MarketplaceService {
     this.avatarRepo = new UserAvatarPrismaRepository();
     this.transactionService = new TransactionService();
     this.notificationService = new NotificationService();
+  }
+
+  /**
+   * Contract metadata attributes'tan NFT type ve rarity çıkarır
+   */
+  private parseTypeAndRarityFromMetadata(metadata?: WalletNFTItem['metadata']): { type: NFTType; rarity: NFTRarity } {
+    const attrs = metadata?.attributes ?? [];
+    const getAttr = (key: string) => {
+      const a = attrs.find((x) => String(x.trait_type).toLowerCase() === key);
+      return a != null ? String(a.value).toLowerCase() : '';
+    };
+    const typeVal = getAttr('type');
+    const rarityVal = getAttr('rarity');
+
+    let type: NFTType = NFTType.BADGE;
+    if (typeVal === 'cosmetic') type = NFTType.COSMETIC;
+    else if (typeVal === 'lootbox') type = NFTType.LOOTBOX;
+
+    let rarity: NFTRarity = NFTRarity.COMMON;
+    if (rarityVal === 'rare') rarity = NFTRarity.RARE;
+    else if (rarityVal === 'epic') rarity = NFTRarity.EPIC;
+
+    return { type, rarity };
+  }
+
+  /**
+   * Kullanıcının smartAccountWallet adresindeki contract NFT'lerini çekip DB ile senkronize eder.
+   * /my-nfts çağrılmadan önce çağrılırsa listede contract'taki güncel sahiplik yansır.
+   */
+  async syncUserNFTsFromContract(userId: string, smartAccountAddress: string): Promise<{ synced: number; created: number }> {
+    const nftService = createWeb3NftService();
+    const result = await nftService.getWalletNFTs(smartAccountAddress);
+    if (!result.success || !result.nfts.length) {
+      return { synced: 0, created: 0 };
+    }
+
+    let created = 0;
+    const normalizedContract = result.nfts[0]?.contractAddress?.toLowerCase() ?? '';
+
+    for (const item of result.nfts) {
+      const tokenId = item.tokenId;
+      const contractAddress = item.contractAddress?.toLowerCase() ?? normalizedContract;
+      const meta = item.metadata;
+      const { type, rarity } = this.parseTypeAndRarityFromMetadata(meta);
+      const name = meta?.name?.trim() || `NFT #${tokenId}`;
+      const description = meta?.description?.trim() || null;
+      const imageUrl = (resolveNftImageUrl(meta) || meta?.image || process.env.NFT_BADGE_IMAGE_URL || '').replace(':9000', '')
+      .replace(process.env.TUNNEL_URL || '',process.env.NFT_BADGE_IMAGE_URL || '');
+
+      const existing = await this.nftRepo.findByTokenIdAndContract(tokenId, contractAddress);
+      if (existing) {
+        await this.nftRepo.update(existing.id, {
+          name,
+          description,
+          imageUrl,
+          type,
+          rarity,
+          currentOwnerId: userId,
+        });
+        continue;
+      }
+
+      await this.nftRepo.create({
+        name,
+        description,
+        imageUrl,
+        type,
+        rarity,
+        isTransferable: true,
+        currentOwnerId: userId,
+        tokenId,
+        contractAddress,
+      });
+      created++;
+    }
+
+    const synced = result.nfts.length;
+    if (synced > 0) {
+      await invalidateUserNFTCache(userId);
+    }
+    logger.info({
+      message: 'Contract NFT sync completed',
+      userId,
+      smartAccountAddress,
+      synced,
+      created,
+    });
+    return { synced, created };
   }
 
   /**
@@ -175,12 +267,12 @@ export class MarketplaceService {
 
       const results: UserNFTResponse[] = paginated.map(nft => {
         const listing = listingMap.get(nft.id);
-        
+        console.log({nft})
         return {
           id: nft.id,
           title: nft.name,
           username,
-          image: resolveMediaUrl(nft.imageUrl) || nft.imageUrl,
+          image: nft.imageUrl,
           description: nft.description || undefined,
           type: nft.type,
           rarity: nft.rarity,

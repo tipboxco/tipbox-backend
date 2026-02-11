@@ -1,3 +1,4 @@
+import { validate as uuidValidate } from 'uuid';
 import { Wallet, WalletProvider } from '../../domain/wallet/wallet.entity';
 import { getPrisma } from './prisma.client';
 
@@ -33,14 +34,16 @@ export class WalletPrismaRepository {
    * Alıcı tarafında tip'in Smart Account adresine gitmesi için kullanılır.
    */
   async findPreferredForReceivingByUserId(userId: string): Promise<Wallet | null> {
-    const withSmart = await this.prisma.wallet.findFirst({
-      where: {
-        userId,
-        smartAccountAddress: { not: null }
-      },
+    const isUuid = uuidValidate(userId);
+    const where = isUuid
+      ? { userId, smartAccountAddress: { not: null } }
+      : { smartAccountAddress: { equals: userId, mode: 'insensitive' as const } };
+
+    const wallet = await this.prisma.wallet.findFirst({
+      where,
       orderBy: { updatedAt: 'desc' }
     });
-    if (withSmart) return this.toDomain(withSmart);
+    if (wallet) return this.toDomain(wallet);
     return this.findActiveByUserId(userId);
   }
 

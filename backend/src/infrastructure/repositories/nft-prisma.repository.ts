@@ -208,6 +208,76 @@ export class NFTPrismaRepository {
     return result[0]?.view_count ?? 0;
   }
 
+  /**
+   * Contract'taki tokenId + contractAddress ile NFT bulur (sync için)
+   */
+  async findByTokenIdAndContract(tokenId: string, contractAddress: string): Promise<NFT | null> {
+    const nft = await this.prisma.nFT.findUnique({
+      where: {
+        tokenId_contractAddress: {
+          tokenId,
+          contractAddress: contractAddress.toLowerCase(),
+        },
+      },
+    });
+    return nft ? this.toDomain(nft) : null;
+  }
+
+  /**
+   * NFT kaydını günceller (contract sync: metadata + owner)
+   */
+  async update(id: string, data: {
+    name?: string;
+    description?: string | null;
+    imageUrl?: string;
+    type?: NFTType;
+    rarity?: NFTRarity;
+    currentOwnerId?: string | null;
+  }): Promise<NFT | null> {
+    const nft = await this.prisma.nFT.update({
+      where: { id },
+      data: {
+        ...(data.name != null && { name: data.name }),
+        ...(data.description !== undefined && { description: data.description }),
+        ...(data.imageUrl != null && { imageUrl: data.imageUrl }),
+        ...(data.type != null && { type: data.type }),
+        ...(data.rarity != null && { rarity: data.rarity }),
+        ...(data.currentOwnerId !== undefined && { currentOwnerId: data.currentOwnerId }),
+      },
+    });
+    return this.toDomain(nft);
+  }
+
+  /**
+   * Yeni NFT kaydı oluşturur (contract sync veya uygulama içi mint için)
+   */
+  async create(data: {
+    name: string;
+    description?: string | null;
+    imageUrl: string;
+    type: NFTType;
+    rarity: NFTRarity;
+    isTransferable?: boolean;
+    currentOwnerId?: string | null;
+    tokenId?: string | null;
+    contractAddress?: string | null;
+  }): Promise<NFT> {
+    const nft = await this.prisma.nFT.create({
+      data: {
+        name: data.name,
+        description: data.description ?? null,
+        imageUrl: data.imageUrl,
+        type: data.type,
+        rarity: data.rarity,
+        isTransferable: data.isTransferable ?? true,
+        currentOwnerId: data.currentOwnerId ?? null,
+        tokenId: data.tokenId ?? null,
+        contractAddress: data.contractAddress?.toLowerCase() ?? null,
+      },
+    });
+    return this.toDomain(nft);
+  }
+
   private toDomain(prismaNFT: any): NFT {
     return new NFT(
       prismaNFT.id,
@@ -219,7 +289,9 @@ export class NFTPrismaRepository {
       prismaNFT.isTransferable,
       prismaNFT.currentOwnerId,
       prismaNFT.createdAt,
-      prismaNFT.updatedAt
+      prismaNFT.updatedAt,
+      prismaNFT.tokenId ?? prismaNFT.token_id ?? null,
+      prismaNFT.contractAddress ?? prismaNFT.contract_address ?? null
     );
   }
 }

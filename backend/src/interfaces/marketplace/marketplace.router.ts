@@ -8,10 +8,12 @@ import {
 } from './marketplace.dto';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { authMiddleware } from '../auth/auth.middleware';
+import { WalletPrismaRepository } from '../../infrastructure/repositories/wallet-prisma.repository';
 import logger from '../../infrastructure/logger/logger';
 
 const router = Router();
 const marketplaceService = new MarketplaceService();
+const walletRepo = new WalletPrismaRepository();
 
 /**
  * @openapi
@@ -207,27 +209,40 @@ router.get('/listings', asyncHandler(async (req: Request, res: Response) => {
 router.get('/my-nfts', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
   const user = req.user;
   const userId = user?.sub || user?.userId || user?.id;
-  
-  // Debug logging
-  logger.info({
-    message: 'my-nfts endpoint called',
-    user: user,
-    userId: userId,
-    headers: {
-      authorization: req.headers.authorization ? 'Present' : 'Missing'
-    }
-  });
-  
+
   if (!userId) {
     logger.warn({
       message: 'my-nfts: User ID not found in token',
       user: user
     });
-    return res.status(401).json({ 
-      message: 'Unauthorized', 
+    return res.status(401).json({
+      message: 'Unauthorized',
       debug: 'User ID not found in token',
-      userObject: user 
+      userObject: user
     });
+  }
+
+  // Kullanıcının smart account wallet'ını al; contract'taki NFT'leri DB ile sync et
+  const wallet = await walletRepo.findPreferredForReceivingByUserId(userId);
+  const smartAccountAddress = wallet?.smartAccountAddress ?? null;
+  if (smartAccountAddress) {
+    try {
+      const syncResult = await marketplaceService.syncUserNFTsFromContract(userId, smartAccountAddress);
+      if (syncResult.synced > 0) {
+        logger.info({
+          message: 'my-nfts: contract sync before list',
+          userId,
+          synced: syncResult.synced,
+          created: syncResult.created
+        });
+      }
+    } catch (syncError) {
+      logger.warn({
+        message: 'my-nfts: contract sync failed, listing DB only',
+        userId,
+        error: syncError instanceof Error ? syncError.message : String(syncError)
+      });
+    }
   }
 
   const query = {
@@ -236,13 +251,13 @@ router.get('/my-nfts', authMiddleware, asyncHandler(async (req: Request, res: Re
   };
 
   const nfts = await marketplaceService.listUserNFTs(userId, query);
-  
+
   logger.info({
     message: 'my-nfts response',
     userId,
     itemCount: nfts.items.length
   });
-  
+
   res.json(nfts);
 }));
 

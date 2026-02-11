@@ -12,7 +12,9 @@ export class NFT {
     public readonly isTransferable: boolean,
     public readonly currentOwnerId: string | null,
     public readonly createdAt: Date,
-    public readonly updatedAt: Date
+    public readonly updatedAt: Date,
+    public readonly tokenId?: string | null,
+    public readonly contractAddress?: string | null
   ) {}
 
   // Essential business methods only

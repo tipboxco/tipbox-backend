@@ -190,7 +190,8 @@ export class UserPrismaRepository {
     const wallets = prismaUser.wallets?.map((w: any) => new Wallet(
       w.id,
       w.userId,
-      w.publicAddress,
+      w.smartAccountAddress,
+      w.smartAccountAddress,
       w.provider as WalletProvider,
       w.isConnected,
       w.balance || 0,

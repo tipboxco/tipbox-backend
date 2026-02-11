@@ -90,7 +90,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const response: WalletResponse[] = wallets.map(wallet => ({
     id: wallet.id,
     userId: wallet.userId,
-    publicAddress: wallet.publicAddress,
+    publicAddress: wallet.smartAccountAddress,
     smartAccountAddress: wallet.smartAccountAddress ?? undefined,
     provider: wallet.provider,
     isConnected: wallet.isConnected,
@@ -262,7 +262,7 @@ router.post('/connect', asyncHandler(async (req: Request, res: Response) => {
   const response: WalletResponse = {
     id: wallet.id,
     userId: wallet.userId,
-    publicAddress: wallet.publicAddress,
+    publicAddress: wallet.smartAccountAddress,
     provider: wallet.provider,
     isConnected: wallet.isConnected,
     shortAddress: wallet.getShortAddress(),
@@ -335,7 +335,7 @@ router.patch('/:id/disconnect', asyncHandler(async (req: Request, res: Response)
   const response: WalletResponse = {
     id: wallet.id,
     userId: wallet.userId,
-    publicAddress: wallet.publicAddress,
+    publicAddress: wallet.smartAccountAddress,
     provider: wallet.provider,
     isConnected: wallet.isConnected,
     shortAddress: wallet.getShortAddress(),
@@ -408,7 +408,7 @@ router.patch('/:id/activate', asyncHandler(async (req: Request, res: Response) =
   const response: WalletResponse = {
     id: wallet.id,
     userId: wallet.userId,
-    publicAddress: wallet.publicAddress,
+    publicAddress: wallet.smartAccountAddress,
     provider: wallet.provider,
     isConnected: wallet.isConnected,
     shortAddress: wallet.getShortAddress(),
@@ -763,17 +763,69 @@ router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
     });
   }
 
-  const address = wallet.smartAccountAddress ?? wallet.publicAddress;
-  const [balanceResult, pendingResult] = await Promise.all([
-    sdk.getTokenBalanceForAddress(address),
-    sdk.getPendingTips(address),
-  ]);
+  const address = wallet.smartAccountAddress;
+  if (!address) {
+    return res.status(400).json({
+      message: 'Smart Account required. Connect your Thirdweb wallet first to create a Smart Account.',
+      code: 'SMART_ACCOUNT_REQUIRED',
+    });
+  }
 
-  const balance = balanceResult.balanceFormatted ?? 0;
-  const pendingTips = pendingResult.pendingFormatted ?? 0; // Tipbox contract pendingTips(address)
-  const locked = pendingTips;
+  const userIdStr = String(userId);
+
+  const fetchBalanceAndPending = async () => {
+    const [balanceRes, pendingRes] = await Promise.all([
+      sdk.getTokenBalanceForAddress(address),
+      sdk.getPendingTips(address),
+    ]);
+    const bal = balanceRes.balanceFormatted ?? 0;
+    const pending = pendingRes.pendingFormatted ?? 0;
+    return { balance: bal, pendingTips: pending };
+  };
+
+  let { balance, pendingTips } = await fetchBalanceAndPending();
+  let locked = pendingTips;
+
+  // Locked (claim bekleyen) tutar varsa contract üzerinden claim dene
+  if (locked > 0) {
+    const tryClaim = async (): Promise<{ success: true } | { success: false; error: unknown }> => {
+      try {
+        await sdk.claim(userIdStr);
+        return { success: true };
+      } catch (err) {
+        return { success: false, error: err };
+      }
+    };
+
+    let attempt = await tryClaim();
+
+    if (!attempt.success) {
+      const errMsg = attempt.error instanceof Error ? attempt.error.message : String(attempt.error);
+      const contractError = parseContractError(errMsg);
+
+      if (contractError === CONTRACT_ERROR_NO_BADGE_OWNED) {
+        const auth = await sdk.authenticateAndGetAddresses(userIdStr);
+        const smartAccountAddress = auth.success ? auth.smartAccountAddress : undefined;
+        if (smartAccountAddress) {
+          const nftService = createWeb3NftService();
+          const mintResult = await nftService.mintDefaultBadge(smartAccountAddress);
+          if (mintResult.success) attempt = await tryClaim();
+        }
+      }
+    }
+
+    if (attempt.success) {
+      walletService.syncWalletBalanceFromChain(wallet.id).catch((err) => {
+        logger.warn({ walletId: wallet.id, error: String(err), message: 'syncWalletBalanceFromChain after balance claim failed' });
+      });
+      const after = await fetchBalanceAndPending();
+      balance = after.balance;
+      pendingTips = after.pendingTips;
+      locked = pendingTips;
+    }
+  }
+
   const available = Math.max(0, balance - locked);
-
   await walletService.setBalanceFromContract(wallet.id, balance, locked);
 
   return res.json({
@@ -839,7 +891,7 @@ router.post('/create', asyncHandler(async (req: Request, res: Response) => {
 
   return res.status(201).json({
     walletId: wallet.id,
-    walletIdentifier: wallet.publicAddress,
+    walletIdentifier: wallet.smartAccountAddress,
     balance: 0
   });
 }));
@@ -941,7 +993,7 @@ router.get('/info', asyncHandler(async (req: Request, res: Response) => {
 
   return res.json({
     walletId: wallet.id,
-    walletIdentifier: wallet.publicAddress,
+    walletIdentifier: wallet.smartAccountAddress,
     provider: wallet.provider,
     isConnected: wallet.isConnected,
     balance: balanceInfo.balance,

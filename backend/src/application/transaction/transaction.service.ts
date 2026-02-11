@@ -96,7 +96,7 @@ export class TransactionService {
     // Get user profiles for notifications
     const [fromProfile, toProfile] = await Promise.all([
       this.profileRepo.findByUserId(request.fromUserId),
-      this.profileRepo.findByUserId(request.toUserId),
+      this.profileRepo.findByUserId(toWallet.userId),
     ]);
 
     // Alıcı adresi: smartAccountAddress (yoksa publicAddress) – SDK bu adrese gönderir

@@ -1407,27 +1407,31 @@ model TipsTokenTransfer {
 }
 
 model NFT {
-  id             String             @id @default(uuid()) @db.Uuid
-  name           String
-  description    String?
-  imageUrl       String             @map("image_url")
-  type           NFTType
-  rarity         NFTRarity
-  isTransferable Boolean            @map("is_transferable")
-  currentOwnerId String?            @map("current_owner_id") @db.Uuid
-  createdAt      DateTime           @default(now()) @map("created_at")
-  updatedAt      DateTime           @updatedAt @map("updated_at")
-  viewCount      Int                @default(0) @map("view_count")
-  attributes     NFTAttribute[]
-  claims         NFTClaim[]
-  marketListings NFTMarketListing[]
-  transactions   NFTTransaction[]
-  currentOwner   User?              @relation("NFTOwner", fields: [currentOwnerId], references: [id])
+  id               String             @id @default(uuid()) @db.Uuid
+  name             String
+  description      String?
+  imageUrl         String             @map("image_url")
+  type             NFTType
+  rarity           NFTRarity
+  isTransferable   Boolean            @map("is_transferable")
+  currentOwnerId   String?            @map("current_owner_id") @db.Uuid
+  tokenId          String?            @map("token_id")
+  contractAddress  String?            @map("contract_address")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+  viewCount        Int                @default(0) @map("view_count")
+  attributes       NFTAttribute[]
+  claims           NFTClaim[]
+  marketListings   NFTMarketListing[]
+  transactions     NFTTransaction[]
+  currentOwner     User?              @relation("NFTOwner", fields: [currentOwnerId], references: [id])
 
+  @@unique([tokenId, contractAddress])
   @@index([currentOwnerId])
   @@index([name])
   @@index([type, rarity])
   @@index([viewCount])
+  @@index([tokenId, contractAddress])
   @@map("nfts")
 }
 
