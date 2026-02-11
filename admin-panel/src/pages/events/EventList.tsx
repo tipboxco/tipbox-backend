@@ -1,19 +1,14 @@
 import { useState, useEffect } from 'react';
 import {
-  Row,
-  Col,
   Card,
-  Statistic,
   Table,
   Input,
   Select,
   Space,
-  Spin,
   Empty,
   Alert,
   Image,
   Tag,
-  Button,
 } from 'antd';
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import {
@@ -24,10 +19,12 @@ import {
   SearchOutlined,
 } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
+import type { StatItemData } from '../../components/StatItem';
 import ViewActionButton from '../../components/ViewActionButton';
 import { fetchEventsStats, fetchEvents } from '../../api/admin-events';
 import type { AdminEventListItem, AdminEventStatsResponse } from '../../types/admin';
 import { BADGE_COLOR_PRIMARY, BADGE_COLOR_SECONDARY } from '../../constants/badge-colors';
+import { TABLE_COLUMN_WIDTHS, TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
 
 const PAGE_SIZE = 20;
 
@@ -95,7 +92,7 @@ function EventList() {
       title: 'Image',
       dataIndex: 'imageUrl',
       key: 'image',
-      width: 80,
+      width: TABLE_COLUMN_WIDTHS.IMAGE_SMALL,
       render: (url) =>
         url ? (
           <Image
@@ -126,6 +123,7 @@ function EventList() {
       title: 'Title',
       dataIndex: 'title',
       key: 'title',
+      width: TABLE_COLUMN_WIDTHS.LONG_TEXT_FLEXIBLE - 50,
       ellipsis: true,
       render: (title) => title ?? '—',
     },
@@ -133,7 +131,7 @@ function EventList() {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
-      width: 100,
+      width: TABLE_COLUMN_WIDTHS.SHORT_TEXT,
       ellipsis: true,
       render: (status) => {
         const colorMap: Record<string, string> = {
@@ -148,14 +146,14 @@ function EventList() {
       title: 'Feed',
       dataIndex: 'feedType',
       key: 'feedType',
-      width: 100,
+      width: TABLE_COLUMN_WIDTHS.SHORT_TEXT,
       ellipsis: true,
     },
     {
       title: 'Start',
       dataIndex: 'startDate',
       key: 'startDate',
-      width: 110,
+      width: TABLE_COLUMN_WIDTHS.DATE_SHORT,
       ellipsis: true,
       render: (date) => (date ? new Date(date).toLocaleDateString() : '—'),
     },
@@ -163,7 +161,7 @@ function EventList() {
       title: 'End',
       dataIndex: 'endDate',
       key: 'endDate',
-      width: 110,
+      width: TABLE_COLUMN_WIDTHS.DATE_SHORT,
       ellipsis: true,
       render: (date) => (date ? new Date(date).toLocaleDateString() : '—'),
     },
@@ -171,7 +169,7 @@ function EventList() {
       title: 'Participants',
       dataIndex: 'participantsCount',
       key: 'participantsCount',
-      width: 100,
+      width: TABLE_COLUMN_WIDTHS.SHORT_TEXT,
       align: 'right',
       ellipsis: true,
       render: (count) => count ?? 0,
@@ -180,14 +178,14 @@ function EventList() {
       title: 'Created',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      width: 110,
+      width: TABLE_COLUMN_WIDTHS.DATE_SHORT,
       ellipsis: true,
       render: (date) => (date ? new Date(date).toLocaleDateString() : '—'),
     },
     {
       title: '',
       key: 'action',
-      width: 80,
+      width: TABLE_COLUMN_WIDTHS.ACTION_BUTTON,
       render: (_, record) => <ViewActionButton to={`/events/${record.id}`} />,
     },
   ];
@@ -199,12 +197,39 @@ function EventList() {
 
   const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
 
+  const statsData: StatItemData[] | undefined = stats
+    ? [
+        {
+          label: 'Total',
+          value: stats.total,
+          icon: <CalendarOutlined />,
+        },
+        {
+          label: 'Draft',
+          value: stats.draft,
+          icon: <FileOutlined />,
+        },
+        {
+          label: 'Published',
+          value: stats.published,
+          icon: <SignalFilled />,
+        },
+        {
+          label: 'Closed',
+          value: stats.closed,
+          icon: <InboxOutlined />,
+        },
+      ]
+    : undefined;
+
   return (
     <div>
       <PageHeader
         title="Events"
         description="Event list, filtering and management"
         icon={<CalendarOutlined />}
+        stats={statsData}
+        statsLoading={loading}
       />
 
       {error && (
@@ -216,58 +241,6 @@ function EventList() {
           onClose={() => setError(null)}
           style={{ marginBottom: 24 }}
         />
-      )}
-
-      {/* Stats */}
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: 48 }}>
-          <Spin size="large" />
-        </div>
-      ) : (
-        stats && (
-          <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-            <Col xs={24} sm={12} lg={6}>
-              <Card bordered>
-                <Statistic
-                  title="Total"
-                  value={stats.total}
-                  prefix={<CalendarOutlined />}
-                  valueStyle={{ fontWeight: 700 }}
-                />
-              </Card>
-            </Col>
-            <Col xs={24} sm={12} lg={6}>
-              <Card bordered>
-                <Statistic
-                  title="Draft"
-                  value={stats.draft}
-                  prefix={<FileOutlined />}
-                  valueStyle={{ fontWeight: 600 }}
-                />
-              </Card>
-            </Col>
-            <Col xs={24} sm={12} lg={6}>
-              <Card bordered>
-                <Statistic
-                  title="Published"
-                  value={stats.published}
-                  prefix={<SignalFilled />}
-                  valueStyle={{ fontWeight: 600 }}
-                />
-              </Card>
-            </Col>
-            <Col xs={24} sm={12} lg={6}>
-              <Card bordered>
-                <Statistic
-                  title="Closed"
-                  value={stats.closed}
-                  prefix={<InboxOutlined />}
-                  valueStyle={{ fontWeight: 600 }}
-                />
-              </Card>
-            </Col>
-          </Row>
-        )
       )}
 
       {/* Event List */}
@@ -346,6 +319,7 @@ function EventList() {
           dataSource={events}
           rowKey="id"
           loading={loadingList}
+          scroll={TABLE_SCROLL_CONFIGS.AUTO}
           pagination={{
             current: currentPage,
             pageSize: PAGE_SIZE,

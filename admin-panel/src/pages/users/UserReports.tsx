@@ -8,6 +8,7 @@ import ViewActionButton from '../../components/ViewActionButton';
 import { fetchUserReports } from '../../api/admin-reports';
 import type { AdminUserReportListItem } from '../../types/admin';
 import { BADGE_COLOR_PRIMARY } from '../../constants/badge-colors';
+import { TABLE_COLUMN_WIDTHS, TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
 
 const PAGE_SIZE = 20;
 
@@ -63,7 +64,7 @@ function UserReports() {
       title: 'Date',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      width: 140,
+      width: TABLE_COLUMN_WIDTHS.DATETIME_FULL,
       ellipsis: true,
       render: (date) => new Date(date).toLocaleString('en-US'),
     },
@@ -77,7 +78,7 @@ function UserReports() {
     {
       title: 'Reported user',
       key: 'reported',
-      width: 160,
+      width: TABLE_COLUMN_WIDTHS.DATETIME_FULL,
       ellipsis: true,
       render: (_, record) => (
         <Link
@@ -94,7 +95,7 @@ function UserReports() {
     {
       title: 'Reporter',
       key: 'reporter',
-      width: 160,
+      width: TABLE_COLUMN_WIDTHS.DATETIME_FULL,
       ellipsis: true,
       render: (_, record) => (
         <Link
@@ -112,7 +113,7 @@ function UserReports() {
       title: 'Status',
       dataIndex: 'resolved',
       key: 'resolved',
-      width: 100,
+      width: TABLE_COLUMN_WIDTHS.SHORT_TEXT,
       ellipsis: true,
       render: (resolved) => (
         <Tag color={resolved ? BADGE_COLOR_PRIMARY : 'default'}>
@@ -123,7 +124,7 @@ function UserReports() {
     {
       title: '',
       key: 'action',
-      width: 80,
+      width: TABLE_COLUMN_WIDTHS.ACTION_BUTTON,
       render: (_, record) => <ViewActionButton to={`/users/reports/${record.id}`} />,
     },
   ];
@@ -191,6 +192,7 @@ function UserReports() {
           dataSource={filteredReports}
           rowKey="id"
           loading={loading}
+          scroll={TABLE_SCROLL_CONFIGS.AUTO}
           pagination={{
             current: currentPage,
             pageSize: PAGE_SIZE,

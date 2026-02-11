@@ -21,6 +21,7 @@ import {
   deleteTrending,
 } from '../../api/admin-content';
 import type { AdminTrendingPostListItem } from '../../types/admin';
+import { TABLE_COLUMN_WIDTHS, TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
 
 const PAGE_SIZE = 20;
 
@@ -111,7 +112,7 @@ function TrendingPosts() {
     {
       title: 'Post',
       key: 'post',
-      width: 240,
+      width: TABLE_COLUMN_WIDTHS.LONG_TEXT_FLEXIBLE - 50,
       ellipsis: true,
       render: (_, record) =>
         record.postTitle
@@ -124,7 +125,7 @@ function TrendingPosts() {
       title: 'Author',
       dataIndex: 'userDisplayName',
       key: 'userDisplayName',
-      width: 140,
+      width: TABLE_COLUMN_WIDTHS.MEDIUM_TEXT,
       ellipsis: true,
       render: (text) => text ?? '—',
     },
@@ -132,7 +133,7 @@ function TrendingPosts() {
       title: 'Score',
       dataIndex: 'score',
       key: 'score',
-      width: 88,
+      width: TABLE_COLUMN_WIDTHS.NUMBER_MEDIUM,
       align: 'right',
       ellipsis: true,
       render: (score) => <span style={{ fontVariantNumeric: 'tabular-nums' }}>{score}</span>,
@@ -141,21 +142,21 @@ function TrendingPosts() {
       title: 'Period',
       dataIndex: 'trendPeriod',
       key: 'trendPeriod',
-      width: 100,
+      width: TABLE_COLUMN_WIDTHS.SHORT_TEXT,
       ellipsis: true,
     },
     {
       title: 'Calculated',
       dataIndex: 'calculatedAt',
       key: 'calculatedAt',
-      width: 140,
+      width: TABLE_COLUMN_WIDTHS.DATETIME_FULL,
       ellipsis: true,
       render: (date) => (date ? new Date(date).toLocaleString('en-US') : '—'),
     },
     {
       title: '',
       key: 'action',
-      width: 100,
+      width: TABLE_COLUMN_WIDTHS.ACTION_BUTTONS,
       render: (_, record) => (
         <Button
           danger
@@ -256,6 +257,7 @@ function TrendingPosts() {
           dataSource={rows}
           rowKey="id"
           loading={loading}
+          scroll={TABLE_SCROLL_CONFIGS.AUTO}
           pagination={{
             current: currentPage,
             pageSize: PAGE_SIZE,

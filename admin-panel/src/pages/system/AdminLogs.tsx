@@ -5,6 +5,7 @@ import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import PageHeader from '../../components/PageHeader';
 import { fetchAdminLogs } from '../../api/admin-logs';
 import type { AdminLogListItem } from '../../types/admin';
+import { TABLE_COLUMN_WIDTHS, TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
 
 const PAGE_SIZE = 50;
 
@@ -50,7 +51,7 @@ function AdminLogs() {
       title: 'Date',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      width: 180,
+      width: TABLE_COLUMN_WIDTHS.DATETIME_FULL,
       render: (date: string) => new Date(date).toLocaleString(),
     },
     {
@@ -75,12 +76,15 @@ function AdminLogs() {
       title: 'Description',
       dataIndex: 'description',
       key: 'description',
+      width: TABLE_COLUMN_WIDTHS.VERY_LONG_TEXT - 50,
+      ellipsis: true,
       render: (desc: string | null) => desc ?? '—',
     },
     {
       title: 'Entity',
       key: 'entity',
       width: 150,
+      ellipsis: true,
       render: (_, record) => (
         <>
           {record.entityType} {record.entityId ? `#${record.entityId}` : ''}
@@ -116,6 +120,7 @@ function AdminLogs() {
           dataSource={logs}
           rowKey="id"
           loading={loading}
+          scroll={TABLE_SCROLL_CONFIGS.AUTO}
           pagination={tablePagination}
           locale={{
             emptyText: (

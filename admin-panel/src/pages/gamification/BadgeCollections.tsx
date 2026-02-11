@@ -1,21 +1,18 @@
 import { useState, useEffect } from 'react';
 import {
-  Row,
-  Col,
   Card,
-  Statistic,
   Table,
   Input,
   Select,
   Button,
   Space,
-  Spin,
   Empty,
   Alert,
 } from 'antd';
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import { FolderOpenOutlined, SearchOutlined, PlusOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
+import type { StatItemData } from '../../components/StatItem';
 import ViewActionButton from '../../components/ViewActionButton';
 import CreateCollectionModal from './CreateCollectionModal';
 import {
@@ -23,6 +20,7 @@ import {
   fetchCollections,
 } from '../../api/admin-badges-collections';
 import type { AdminCollectionListItem, AdminCollectionStatsResponse } from '../../types/admin';
+import { TABLE_COLUMN_WIDTHS, TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
 
 const PAGE_SIZE = 20;
 
@@ -88,13 +86,14 @@ function BadgeCollections() {
       title: 'Name',
       dataIndex: 'name',
       key: 'name',
+      width: TABLE_COLUMN_WIDTHS.LONG_TEXT_FLEXIBLE - 50,
       ellipsis: true,
       render: (name) => name ?? '—',
     },
     {
       title: 'Category',
       key: 'category',
-      width: 140,
+      width: TABLE_COLUMN_WIDTHS.MEDIUM_TEXT,
       ellipsis: true,
       render: (_, record) => record.categoryName ?? record.categoryId ?? '—',
     },
@@ -102,7 +101,7 @@ function BadgeCollections() {
       title: 'Badge count',
       dataIndex: 'badgesCount',
       key: 'badgesCount',
-      width: 100,
+      width: TABLE_COLUMN_WIDTHS.SHORT_TEXT,
       align: 'right',
       ellipsis: true,
     },
@@ -110,7 +109,7 @@ function BadgeCollections() {
       title: 'Goal count',
       dataIndex: 'goalsCount',
       key: 'goalsCount',
-      width: 100,
+      width: TABLE_COLUMN_WIDTHS.SHORT_TEXT,
       align: 'right',
       ellipsis: true,
       render: (count) => count ?? 0,
@@ -119,14 +118,14 @@ function BadgeCollections() {
       title: 'Created',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      width: 140,
+      width: TABLE_COLUMN_WIDTHS.DATETIME_FULL,
       ellipsis: true,
       render: (date) => new Date(date).toLocaleString('en-US'),
     },
     {
       title: '',
       key: 'action',
-      width: 80,
+      width: TABLE_COLUMN_WIDTHS.ACTION_BUTTON,
       render: (_, record) => <ViewActionButton to={`/gamification/collections/${record.id}`} />,
     },
   ];
@@ -138,12 +137,24 @@ function BadgeCollections() {
 
   const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
 
+  const statsData: StatItemData[] | undefined = stats
+    ? [
+        {
+          label: 'Total Collections',
+          value: stats.total,
+          icon: <FolderOpenOutlined />,
+        },
+      ]
+    : undefined;
+
   return (
     <div>
       <PageHeader
         title="Collections"
         description="Collection list, filtering and management (achievement badges are managed within collections)"
         icon={<FolderOpenOutlined />}
+        stats={statsData}
+        statsLoading={loading}
       />
 
       {error && (
@@ -155,28 +166,6 @@ function BadgeCollections() {
           onClose={() => setError(null)}
           style={{ marginBottom: 24 }}
         />
-      )}
-
-      {/* Stats */}
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: 48 }}>
-          <Spin size="large" />
-        </div>
-      ) : (
-        stats && (
-          <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-            <Col xs={24} sm={12} lg={6}>
-              <Card bordered>
-                <Statistic
-                  title="Total collections"
-                  value={stats.total}
-                  prefix={<FolderOpenOutlined />}
-                  valueStyle={{ fontWeight: 700 }}
-                />
-              </Card>
-            </Col>
-          </Row>
-        )
       )}
 
       {/* Collection List */}
@@ -233,6 +222,7 @@ function BadgeCollections() {
           dataSource={collections}
           rowKey="id"
           loading={loadingList}
+          scroll={TABLE_SCROLL_CONFIGS.AUTO}
           pagination={{
             current: currentPage,
             pageSize: PAGE_SIZE,

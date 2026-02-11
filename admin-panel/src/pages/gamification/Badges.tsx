@@ -1,28 +1,25 @@
 import { useState, useEffect } from 'react';
 import {
-  Row,
-  Col,
   Card,
-  Statistic,
   Table,
   Input,
   Select,
   Space,
-  Spin,
   Empty,
   Alert,
   Image,
-  Button,
 } from 'antd';
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import { TrophyOutlined, SearchOutlined, TagOutlined, StarOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
+import type { StatItemData } from '../../components/StatItem';
 import ViewActionButton from '../../components/ViewActionButton';
 import {
   fetchBadgesStats,
   fetchBadges,
 } from '../../api/admin-badges-collections';
 import type { AdminBadgeListItem, AdminBadgeStatsResponse } from '../../types/admin';
+import { TABLE_COLUMN_WIDTHS, TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
 
 const PAGE_SIZE = 20;
 
@@ -90,7 +87,7 @@ function Badges() {
       title: 'Image',
       dataIndex: 'imageUrl',
       key: 'image',
-      width: 80,
+      width: TABLE_COLUMN_WIDTHS.IMAGE_SMALL,
       render: (url) =>
         url ? (
           <Image
@@ -121,6 +118,7 @@ function Badges() {
       title: 'Name',
       dataIndex: 'name',
       key: 'name',
+      width: TABLE_COLUMN_WIDTHS.LONG_TEXT_FLEXIBLE - 50,
       ellipsis: true,
       render: (name) => name ?? '—',
     },
@@ -128,14 +126,14 @@ function Badges() {
       title: 'Type',
       dataIndex: 'type',
       key: 'type',
-      width: 100,
+      width: TABLE_COLUMN_WIDTHS.SHORT_TEXT,
       ellipsis: true,
     },
     {
       title: 'Rarity',
       dataIndex: 'rarity',
       key: 'rarity',
-      width: 88,
+      width: TABLE_COLUMN_WIDTHS.NUMBER_MEDIUM,
       ellipsis: true,
     },
     {
@@ -148,7 +146,7 @@ function Badges() {
     {
       title: 'Collection',
       key: 'collection',
-      width: 140,
+      width: TABLE_COLUMN_WIDTHS.MEDIUM_TEXT,
       ellipsis: true,
       render: (_, record) => record.collectionName ?? (record.collectionId ? '—' : '—'),
     },
@@ -156,14 +154,14 @@ function Badges() {
       title: 'Created',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      width: 140,
+      width: TABLE_COLUMN_WIDTHS.DATETIME_FULL,
       ellipsis: true,
       render: (date) => new Date(date).toLocaleString('en-US'),
     },
     {
       title: '',
       key: 'action',
-      width: 80,
+      width: TABLE_COLUMN_WIDTHS.ACTION_BUTTON,
       render: (_, record) => <ViewActionButton to={`/gamification/badges/${record.id}`} />,
     },
   ];
@@ -175,12 +173,38 @@ function Badges() {
 
   const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
 
+  const statsData: StatItemData[] | undefined = stats
+    ? [
+        {
+          label: 'Total',
+          value: stats.total,
+          icon: <TrophyOutlined />,
+        },
+        ...Object.entries(stats.byType || {})
+          .slice(0, 3)
+          .map(([type, count]) => ({
+            label: type,
+            value: count,
+            icon: <TagOutlined />,
+          })),
+        ...Object.entries(stats.byRarity || {})
+          .slice(0, 2)
+          .map(([rarity, count]) => ({
+            label: rarity,
+            value: count,
+            icon: <StarOutlined />,
+          })),
+      ]
+    : undefined;
+
   return (
     <div>
       <PageHeader
         title="Badges"
         description="Badge list, filtering and management"
         icon={<TrophyOutlined />}
+        stats={statsData}
+        statsLoading={loading}
       />
 
       {error && (
@@ -192,52 +216,6 @@ function Badges() {
           onClose={() => setError(null)}
           style={{ marginBottom: 24 }}
         />
-      )}
-
-      {/* Stats */}
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: 48 }}>
-          <Spin size="large" />
-        </div>
-      ) : (
-        stats && (
-          <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-            <Col xs={24} sm={12} lg={6}>
-              <Card bordered>
-                <Statistic
-                  title="Total"
-                  value={stats.total}
-                  prefix={<TrophyOutlined />}
-                  valueStyle={{ fontWeight: 700 }}
-                />
-              </Card>
-            </Col>
-            {Object.entries(stats.byType || {}).map(([t, count]) => (
-              <Col xs={24} sm={12} lg={6} key={t}>
-                <Card bordered>
-                  <Statistic
-                    title={t}
-                    value={count}
-                    prefix={<TagOutlined />}
-                    valueStyle={{ fontWeight: 600 }}
-                  />
-                </Card>
-              </Col>
-            ))}
-            {Object.entries(stats.byRarity || {}).map(([r, count]) => (
-              <Col xs={24} sm={12} lg={6} key={r}>
-                <Card bordered>
-                  <Statistic
-                    title={r}
-                    value={count}
-                    prefix={<StarOutlined />}
-                    valueStyle={{ fontWeight: 600 }}
-                  />
-                </Card>
-              </Col>
-            ))}
-          </Row>
-        )
       )}
 
       {/* Badge List */}
@@ -316,6 +294,7 @@ function Badges() {
           dataSource={badges}
           rowKey="id"
           loading={loadingList}
+          scroll={TABLE_SCROLL_CONFIGS.AUTO}
           pagination={{
             current: currentPage,
             pageSize: PAGE_SIZE,

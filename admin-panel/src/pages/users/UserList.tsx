@@ -1,17 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  Row,
-  Col,
   Card,
-  Statistic,
   Table,
   Input,
   Select,
   Space,
   Tag,
-  Button,
-  Spin,
   Empty,
   Alert,
 } from 'antd';
@@ -26,10 +21,12 @@ import {
   CloseCircleOutlined,
 } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
+import type { StatItemData } from '../../components/StatItem';
 import ViewActionButton from '../../components/ViewActionButton';
 import { fetchUsersStats, fetchUsers } from '../../api/admin-users';
 import type { AdminUserListItem, AdminUsersStatsResponse } from '../../types/admin';
 import { BADGE_COLOR_SECONDARY } from '../../constants/badge-colors';
+import { TABLE_COLUMN_WIDTHS, TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
 
 const PAGE_SIZE = 20;
 
@@ -115,7 +112,7 @@ function UserList() {
       title: 'Display Name',
       dataIndex: 'displayName',
       key: 'displayName',
-      width: 160,
+      width: TABLE_COLUMN_WIDTHS.DATETIME_FULL,
       ellipsis: true,
       render: (text) => text ?? '—',
     },
@@ -123,7 +120,7 @@ function UserList() {
       title: 'Username',
       dataIndex: 'userName',
       key: 'userName',
-      width: 140,
+      width: TABLE_COLUMN_WIDTHS.MEDIUM_TEXT,
       ellipsis: true,
       render: (text) => text ?? '—',
     },
@@ -131,7 +128,7 @@ function UserList() {
       title: 'Email',
       dataIndex: 'email',
       key: 'email',
-      width: 200,
+      width: TABLE_COLUMN_WIDTHS.LONG_TEXT_FIXED,
       ellipsis: true,
       render: (text) => text ?? '—',
     },
@@ -139,7 +136,7 @@ function UserList() {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
-      width: 100,
+      width: TABLE_COLUMN_WIDTHS.SHORT_TEXT,
       ellipsis: true,
       render: (status) => (
         <Tag color={status === 'BANNED' ? BADGE_COLOR_SECONDARY : 'default'}>
@@ -151,7 +148,7 @@ function UserList() {
       title: 'Email Verification',
       dataIndex: 'emailVerified',
       key: 'emailVerified',
-      width: 100,
+      width: TABLE_COLUMN_WIDTHS.SHORT_TEXT,
       align: 'center',
       ellipsis: true,
       render: (verified) =>
@@ -165,7 +162,7 @@ function UserList() {
       title: 'Registration',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      width: 110,
+      width: TABLE_COLUMN_WIDTHS.DATE_SHORT,
       ellipsis: true,
       render: (date) =>
         date ? new Date(date).toLocaleDateString('en-US') : '—',
@@ -173,7 +170,7 @@ function UserList() {
     {
       title: '',
       key: 'action',
-      width: 80,
+      width: TABLE_COLUMN_WIDTHS.ACTION_BUTTON,
       render: (_, record) => <ViewActionButton to={`/users/${record.id}`} />,
     },
   ];
@@ -185,12 +182,41 @@ function UserList() {
 
   const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
 
+  const statsData: StatItemData[] | undefined = stats
+    ? [
+        {
+          label: 'Total',
+          value: stats.total,
+          icon: <UserOutlined />,
+        },
+        {
+          label: 'Banned',
+          value: stats.bannedCount,
+          icon: <UserDeleteOutlined />,
+          valueColor: '#D8365D',
+        },
+        {
+          label: 'Email Verified',
+          value: stats.emailVerifiedCount,
+          icon: <SafetyCertificateOutlined />,
+          valueColor: '#8B9D2D',
+        },
+        {
+          label: 'New This Week',
+          value: stats.newThisWeek,
+          icon: <UserAddOutlined />,
+        },
+      ]
+    : undefined;
+
   return (
     <div>
       <PageHeader
         title="Users"
         description="List, filter, and manage platform users"
         icon={<UserOutlined />}
+        stats={statsData}
+        statsLoading={loading}
       />
 
       {error && (
@@ -202,58 +228,6 @@ function UserList() {
           onClose={() => setError(null)}
           style={{ marginBottom: 24 }}
         />
-      )}
-
-      {/* Stats Grid */}
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: 48 }}>
-          <Spin size="large" />
-        </div>
-      ) : (
-        stats && (
-          <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-            <Col xs={24} sm={12} lg={6}>
-              <Card bordered>
-                <Statistic
-                  title="Total"
-                  value={stats.total}
-                  prefix={<UserOutlined />}
-                  valueStyle={{ fontWeight: 700 }}
-                />
-              </Card>
-            </Col>
-            <Col xs={24} sm={12} lg={6}>
-              <Card bordered>
-                <Statistic
-                  title="Banned"
-                  value={stats.bannedCount}
-                  prefix={<UserDeleteOutlined />}
-                  valueStyle={{ fontWeight: 700, color: '#D8365D' }}
-                />
-              </Card>
-            </Col>
-            <Col xs={24} sm={12} lg={6}>
-              <Card bordered>
-                <Statistic
-                  title="Email Verified"
-                  value={stats.emailVerifiedCount}
-                  prefix={<SafetyCertificateOutlined />}
-                  valueStyle={{ fontWeight: 700, color: '#8B9D2D' }}
-                />
-              </Card>
-            </Col>
-            <Col xs={24} sm={12} lg={6}>
-              <Card bordered>
-                <Statistic
-                  title="New This Week"
-                  value={stats.newThisWeek}
-                  prefix={<UserAddOutlined />}
-                  valueStyle={{ fontWeight: 700 }}
-                />
-              </Card>
-            </Col>
-          </Row>
-        )
       )}
 
       {/* User List Table */}
@@ -329,6 +303,7 @@ function UserList() {
           dataSource={users}
           rowKey="id"
           loading={loadingList}
+          scroll={TABLE_SCROLL_CONFIGS.AUTO}
           pagination={{
             current: currentPage,
             pageSize: PAGE_SIZE,

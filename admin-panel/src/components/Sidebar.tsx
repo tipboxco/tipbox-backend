@@ -250,7 +250,16 @@ function Sidebar() {
   };
 
   const handleOpenChange = (keys: string[]) => {
-    setOpenMenus(keys);
+    // Accordion behavior: only one parent menu open at a time
+    // If opening a new menu, keep only the latest one
+    if (keys.length > openMenus.length) {
+      // User is opening a new menu, keep only the new one
+      const latestKey = keys.find((key) => !openMenus.includes(key));
+      setOpenMenus(latestKey ? [latestKey] : keys);
+    } else {
+      // User is closing a menu, update normally
+      setOpenMenus(keys);
+    }
   };
 
   // User dropdown menu

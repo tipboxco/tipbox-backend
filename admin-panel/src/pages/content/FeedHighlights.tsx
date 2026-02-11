@@ -20,6 +20,7 @@ import {
   deleteFeedHighlight,
 } from '../../api/admin-content';
 import type { AdminFeedHighlightListItem } from '../../types/admin';
+import { TABLE_COLUMN_WIDTHS, TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
 
 const PAGE_SIZE = 20;
 
@@ -113,7 +114,7 @@ function FeedHighlights() {
     {
       title: 'Post',
       key: 'post',
-      width: 240,
+      width: TABLE_COLUMN_WIDTHS.LONG_TEXT_FLEXIBLE - 50,
       ellipsis: true,
       render: (_, record) =>
         record.postTitle
@@ -126,7 +127,7 @@ function FeedHighlights() {
       title: 'Author',
       dataIndex: 'userDisplayName',
       key: 'userDisplayName',
-      width: 140,
+      width: TABLE_COLUMN_WIDTHS.MEDIUM_TEXT,
       ellipsis: true,
       render: (text) => text ?? '—',
     },
@@ -141,14 +142,14 @@ function FeedHighlights() {
       title: 'Highlighted',
       dataIndex: 'highlightedAt',
       key: 'highlightedAt',
-      width: 160,
+      width: TABLE_COLUMN_WIDTHS.DATETIME_FULL,
       ellipsis: true,
       render: (date) => new Date(date).toLocaleString('en-US'),
     },
     {
       title: '',
       key: 'action',
-      width: 100,
+      width: TABLE_COLUMN_WIDTHS.ACTION_BUTTONS,
       render: (_, record) => (
         <Button
           danger
@@ -249,6 +250,7 @@ function FeedHighlights() {
           dataSource={rows}
           rowKey="id"
           loading={loading}
+          scroll={TABLE_SCROLL_CONFIGS.AUTO}
           pagination={{
             current: currentPage,
             pageSize: PAGE_SIZE,

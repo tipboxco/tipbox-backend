@@ -21,6 +21,7 @@ import adminContentRouter from './routers/admin-content.router';
 import adminGamificationRouter from './routers/admin-gamification.router';
 import adminPaymentsRouter from './routers/admin-payments.router';
 import adminWalletsRouter from './routers/admin-wallets.router';
+import adminProductsRouter from './routers/admin-products.router';
 
 const router = Router();
 const prisma = getPrisma();
@@ -216,5 +217,6 @@ router.use('/gamification', authMiddleware, requireAdmin, adminGamificationRoute
 router.use('/action-logs', authMiddleware, requireAdmin, adminGamificationRouter); // Action logs in gamification
 router.use('/payments', authMiddleware, requireAdmin, adminPaymentsRouter);
 router.use('/wallets', authMiddleware, requireAdmin, adminWalletsRouter);
+router.use('/products', authMiddleware, requireAdmin, adminProductsRouter);
 
 export default router;

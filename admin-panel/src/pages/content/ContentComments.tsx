@@ -1,21 +1,18 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Row,
-  Col,
   Card,
-  Statistic,
   Table,
   Input,
   Select,
   Space,
-  Spin,
   Empty,
   Alert,
 } from 'antd';
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import { CommentOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
+import type { StatItemData } from '../../components/StatItem';
 import {
   fetchContentCommentsStats,
   fetchContentComments,
@@ -24,6 +21,7 @@ import type {
   AdminContentCommentStatsResponse,
   AdminContentCommentListItem,
 } from '../../types/admin';
+import { TABLE_COLUMN_WIDTHS, TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
 
 const PAGE_SIZE = 20;
 
@@ -97,6 +95,7 @@ function ContentComments() {
     {
       title: 'Comment (excerpt)',
       key: 'comment',
+      width: TABLE_COLUMN_WIDTHS.VERY_LONG_TEXT,
       ellipsis: true,
       render: (_, record) => (
         <span title={record.comment}>
@@ -110,7 +109,7 @@ function ContentComments() {
     {
       title: 'Post',
       key: 'post',
-      width: 220,
+      width: TABLE_COLUMN_WIDTHS.LONG_TEXT_FIXED,
       ellipsis: true,
       render: (_, record) =>
         record.postTitle
@@ -122,7 +121,7 @@ function ContentComments() {
     {
       title: 'Author',
       key: 'user',
-      width: 140,
+      width: TABLE_COLUMN_WIDTHS.MEDIUM_TEXT,
       ellipsis: true,
       render: (_, record) => (
         <Link
@@ -137,7 +136,7 @@ function ContentComments() {
       title: 'Is Answer',
       dataIndex: 'isAnswer',
       key: 'isAnswer',
-      width: 88,
+      width: TABLE_COLUMN_WIDTHS.NUMBER_MEDIUM,
       ellipsis: true,
       render: (isAnswer) => (isAnswer ? 'Yes' : '—'),
     },
@@ -145,7 +144,7 @@ function ContentComments() {
       title: 'Likes',
       dataIndex: 'likesCount',
       key: 'likesCount',
-      width: 72,
+      width: TABLE_COLUMN_WIDTHS.NUMBER_SMALL,
       align: 'right',
       ellipsis: true,
     },
@@ -153,7 +152,7 @@ function ContentComments() {
       title: 'Created',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      width: 110,
+      width: TABLE_COLUMN_WIDTHS.DATE_SHORT,
       ellipsis: true,
       render: (date) => (date ? new Date(date).toLocaleDateString('en-US') : '—'),
     },
@@ -166,12 +165,24 @@ function ContentComments() {
 
   const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
 
+  const statsData: StatItemData[] | undefined = stats
+    ? [
+        {
+          label: 'Total Comments',
+          value: stats.total,
+          icon: <CommentOutlined />,
+        },
+      ]
+    : undefined;
+
   return (
     <div>
       <PageHeader
         title="Comments"
         description="Moderate user comments"
         icon={<CommentOutlined />}
+        stats={statsData}
+        statsLoading={loading}
       />
 
       {error && (
@@ -183,28 +194,6 @@ function ContentComments() {
           onClose={() => setError(null)}
           style={{ marginBottom: 24 }}
         />
-      )}
-
-      {/* Stats */}
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: 48 }}>
-          <Spin size="large" />
-        </div>
-      ) : (
-        stats && (
-          <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-            <Col xs={24} sm={12} lg={6}>
-              <Card bordered>
-                <Statistic
-                  title="Total comments"
-                  value={stats.total}
-                  prefix={<CommentOutlined />}
-                  valueStyle={{ fontWeight: 700 }}
-                />
-              </Card>
-            </Col>
-          </Row>
-        )
       )}
 
       {/* Comment List */}
@@ -263,6 +252,7 @@ function ContentComments() {
           dataSource={comments}
           rowKey="id"
           loading={loadingList}
+          scroll={TABLE_SCROLL_CONFIGS.AUTO}
           pagination={{
             current: currentPage,
             pageSize: PAGE_SIZE,

@@ -1,16 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Row,
-  Col,
   Card,
-  Statistic,
   Table,
   Input,
   Select,
   Space,
   Tag,
-  Spin,
   Empty,
   Alert,
   Image,
@@ -24,6 +20,7 @@ import {
   SearchOutlined,
 } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
+import type { StatItemData } from '../../components/StatItem';
 import ViewActionButton from '../../components/ViewActionButton';
 import {
   fetchContentPostsStats,
@@ -34,6 +31,7 @@ import type {
   AdminContentPostListItem,
 } from '../../types/admin';
 import { BADGE_COLOR_PRIMARY } from '../../constants/badge-colors';
+import { TABLE_COLUMN_WIDTHS, TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
 
 const PAGE_SIZE = 20;
 
@@ -123,7 +121,7 @@ function ContentPosts() {
       title: 'Image',
       dataIndex: 'thumbnailUrl',
       key: 'thumbnail',
-      width: 80,
+      width: TABLE_COLUMN_WIDTHS.IMAGE_SMALL,
       ellipsis: false,
       render: (url) =>
         url ? (
@@ -154,6 +152,7 @@ function ContentPosts() {
     {
       title: 'Title',
       key: 'title',
+      width: TABLE_COLUMN_WIDTHS.LONG_TEXT_FLEXIBLE,
       ellipsis: true,
       render: (_, record) => titleDisplay(record),
     },
@@ -161,14 +160,14 @@ function ContentPosts() {
       title: 'Type',
       dataIndex: 'type',
       key: 'type',
-      width: 100,
+      width: TABLE_COLUMN_WIDTHS.SHORT_TEXT,
       ellipsis: true,
       render: (type) => <Tag color={BADGE_COLOR_PRIMARY}>{type}</Tag>,
     },
     {
       title: 'Author',
       key: 'user',
-      width: 140,
+      width: TABLE_COLUMN_WIDTHS.MEDIUM_TEXT,
       ellipsis: true,
       render: (_, record) => (
         <Link
@@ -183,7 +182,7 @@ function ContentPosts() {
       title: 'Likes',
       dataIndex: 'likesCount',
       key: 'likesCount',
-      width: 72,
+      width: TABLE_COLUMN_WIDTHS.NUMBER_SMALL,
       align: 'right',
       ellipsis: true,
     },
@@ -191,7 +190,7 @@ function ContentPosts() {
       title: 'Comments',
       dataIndex: 'commentsCount',
       key: 'commentsCount',
-      width: 88,
+      width: TABLE_COLUMN_WIDTHS.NUMBER_MEDIUM,
       align: 'right',
       ellipsis: true,
     },
@@ -199,7 +198,7 @@ function ContentPosts() {
       title: 'Boosted',
       dataIndex: 'isBoosted',
       key: 'isBoosted',
-      width: 80,
+      width: TABLE_COLUMN_WIDTHS.NUMBER_SMALL,
       ellipsis: true,
       render: (boosted) => (boosted ? 'Yes' : '—'),
     },
@@ -207,14 +206,14 @@ function ContentPosts() {
       title: 'Created',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      width: 110,
+      width: TABLE_COLUMN_WIDTHS.DATE_SHORT,
       ellipsis: true,
       render: (date) => (date ? new Date(date).toLocaleDateString('en-US') : '—'),
     },
     {
       title: '',
       key: 'action',
-      width: 80,
+      width: TABLE_COLUMN_WIDTHS.ACTION_BUTTON,
       render: (_, record) => <ViewActionButton to={`/content/posts/${record.id}`} />,
     },
   ];
@@ -226,12 +225,40 @@ function ContentPosts() {
 
   const currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
 
+  const statsData: StatItemData[] | undefined = stats
+    ? [
+        {
+          label: 'Total',
+          value: stats.total,
+          icon: <FileTextOutlined />,
+        },
+        {
+          label: 'Boosted',
+          value: stats.boostedCount,
+          icon: <FireOutlined />,
+          valueColor: '#8B9D2D',
+        },
+        {
+          label: 'With Event',
+          value: stats.withEventCount,
+          icon: <CalendarOutlined />,
+        },
+        {
+          label: 'By Type',
+          value: Object.keys(stats.byType).length,
+          icon: <TagsOutlined />,
+        },
+      ]
+    : undefined;
+
   return (
     <div>
       <PageHeader
         title="All Posts"
         description="Manage user-generated content posts"
         icon={<FileTextOutlined />}
+        stats={statsData}
+        statsLoading={loading}
       />
 
       {error && (
@@ -243,58 +270,6 @@ function ContentPosts() {
           onClose={() => setError(null)}
           style={{ marginBottom: 24 }}
         />
-      )}
-
-      {/* Stats Grid */}
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: 48 }}>
-          <Spin size="large" />
-        </div>
-      ) : (
-        stats && (
-          <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-            <Col xs={24} sm={12} lg={6}>
-              <Card bordered>
-                <Statistic
-                  title="Total"
-                  value={stats.total}
-                  prefix={<FileTextOutlined />}
-                  valueStyle={{ fontWeight: 700 }}
-                />
-              </Card>
-            </Col>
-            <Col xs={24} sm={12} lg={6}>
-              <Card bordered>
-                <Statistic
-                  title="Boosted"
-                  value={stats.boostedCount}
-                  prefix={<FireOutlined />}
-                  valueStyle={{ fontWeight: 700, color: '#8B9D2D' }}
-                />
-              </Card>
-            </Col>
-            <Col xs={24} sm={12} lg={6}>
-              <Card bordered>
-                <Statistic
-                  title="With Event"
-                  value={stats.withEventCount}
-                  prefix={<CalendarOutlined />}
-                  valueStyle={{ fontWeight: 700 }}
-                />
-              </Card>
-            </Col>
-            <Col xs={24} sm={12} lg={6}>
-              <Card bordered>
-                <Statistic
-                  title="By Type"
-                  value={Object.keys(stats.byType).length}
-                  prefix={<TagsOutlined />}
-                  valueStyle={{ fontWeight: 700 }}
-                />
-              </Card>
-            </Col>
-          </Row>
-        )
       )}
 
       {/* Post List Table */}
@@ -362,6 +337,7 @@ function ContentPosts() {
           dataSource={posts}
           rowKey="id"
           loading={loadingList}
+          scroll={TABLE_SCROLL_CONFIGS.AUTO}
           pagination={{
             current: currentPage,
             pageSize: PAGE_SIZE,

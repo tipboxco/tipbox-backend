@@ -16,6 +16,7 @@ import PageHeader from '../../components/PageHeader';
 import ViewActionButton from '../../components/ViewActionButton';
 import { fetchBadges } from '../../api/admin-badges-collections';
 import type { AdminBadgeListItem } from '../../types/admin';
+import { TABLE_COLUMN_WIDTHS, TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
 
 const PAGE_SIZE = 20;
 
@@ -81,7 +82,7 @@ function BadgeListByType({
       title: 'Image',
       dataIndex: 'imageUrl',
       key: 'image',
-      width: 80,
+      width: TABLE_COLUMN_WIDTHS.IMAGE_SMALL,
       render: (url) =>
         url ? (
           <Image
@@ -112,6 +113,7 @@ function BadgeListByType({
       title: 'Name',
       dataIndex: 'name',
       key: 'name',
+      width: TABLE_COLUMN_WIDTHS.LONG_TEXT_FLEXIBLE - 50,
       ellipsis: true,
       render: (name) => name ?? '—',
     },
@@ -119,13 +121,13 @@ function BadgeListByType({
       title: 'Rarity',
       dataIndex: 'rarity',
       key: 'rarity',
-      width: 88,
+      width: TABLE_COLUMN_WIDTHS.NUMBER_MEDIUM,
       ellipsis: true,
     },
     {
       title: 'Category',
       key: 'category',
-      width: 140,
+      width: TABLE_COLUMN_WIDTHS.MEDIUM_TEXT,
       ellipsis: true,
       render: (_, record) => record.categoryName ?? record.categoryId,
     },
@@ -133,14 +135,14 @@ function BadgeListByType({
       title: 'Created',
       dataIndex: 'createdAt',
       key: 'createdAt',
-      width: 140,
+      width: TABLE_COLUMN_WIDTHS.DATETIME_FULL,
       ellipsis: true,
       render: (date) => new Date(date).toLocaleString('en-US'),
     },
     {
       title: '',
       key: 'action',
-      width: 80,
+      width: TABLE_COLUMN_WIDTHS.ACTION_BUTTON,
       render: (_, record) => <ViewActionButton to={`${listPath}/${record.id}`} />,
     },
   ];
@@ -232,6 +234,7 @@ function BadgeListByType({
           dataSource={badges}
           rowKey="id"
           loading={loadingList}
+          scroll={TABLE_SCROLL_CONFIGS.AUTO}
           pagination={{
             current: currentPage,
             pageSize: PAGE_SIZE,
