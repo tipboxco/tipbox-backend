@@ -1,16 +1,5 @@
 import { useState, useEffect } from 'react';
-import {
-  Modal,
-  Form,
-  Input,
-  Select,
-  InputNumber,
-  Button,
-  Alert,
-  Spin,
-  Space,
-  message as antdMessage,
-} from 'antd';
+import { message as antdMessage } from 'antd';
 import {
   fetchBadgeCategories,
   createBadge,
@@ -18,7 +7,8 @@ import {
   createCollectionGoal,
 } from '../../../api/admin-badges-collections';
 import type { AdminBadgeCategoryListItem, AdminActionTypeListItem } from '../../../types/admin';
-import { FORM_LAYOUT_VERTICAL } from '../../../constants/form-layout';
+import { CreatableFormDrawer } from '../../../components/form';
+import type { FieldConfig } from '../../../components/form';
 
 interface AddBadgeToCollectionModalProps {
   open: boolean;
@@ -28,17 +18,6 @@ interface AddBadgeToCollectionModalProps {
   onSuccess: () => void;
 }
 
-interface FormValues {
-  name: string;
-  description?: string;
-  imageUrl?: string;
-  rarity: 'COMMON' | 'RARE' | 'EPIC';
-  categoryId: string;
-  actionTypeId: string;
-  pointsRequired: number;
-  difficulty: 'EASY' | 'MEDIUM' | 'HARD';
-}
-
 function AddBadgeToCollectionModal({
   open,
   collectionId,
@@ -46,46 +25,47 @@ function AddBadgeToCollectionModal({
   onClose,
   onSuccess,
 }: AddBadgeToCollectionModalProps) {
-  const [form] = Form.useForm<FormValues>();
   const [categories, setCategories] = useState<AdminBadgeCategoryListItem[]>([]);
   const [actionTypes, setActionTypes] = useState<AdminActionTypeListItem[]>([]);
-  const [loadingData, setLoadingData] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
+  const needsCategoryField = collectionCategoryId === null;
+
+  // Load required data when modal opens
   useEffect(() => {
     if (!open) return;
+
     let cancelled = false;
 
     (async () => {
-      setLoadingData(true);
-      setError(null);
+      setLoading(true);
       try {
+        // Load categories only if collection doesn't have one
+        const categoriesPromise = needsCategoryField
+          ? fetchBadgeCategories()
+          : Promise.resolve({ data: [] as AdminBadgeCategoryListItem[] });
+
+        // Always load action types
+        const actionTypesPromise = fetchActionTypes();
+
         const [categoriesRes, actionTypesRes] = await Promise.all([
-          collectionCategoryId === null ? fetchBadgeCategories() : Promise.resolve({ data: [] }),
-          fetchActionTypes(),
+          categoriesPromise,
+          actionTypesPromise,
         ]);
 
         if (!cancelled) {
-          if (categoriesRes.data && categoriesRes.data.length > 0) {
+          if (categoriesRes.data) {
             setCategories(categoriesRes.data);
-            form.setFieldValue('categoryId', categoriesRes.data[0].id);
-          } else if (collectionCategoryId) {
-            form.setFieldValue('categoryId', collectionCategoryId);
           }
-
-          if (actionTypesRes.data && actionTypesRes.data.length > 0) {
+          if (actionTypesRes.data) {
             setActionTypes(actionTypesRes.data);
-            form.setFieldValue('actionTypeId', actionTypesRes.data[0].id);
           }
         }
-      } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : 'Failed to load form data');
-        }
+      } catch (err) {
+        console.error('Failed to load data:', err);
       } finally {
         if (!cancelled) {
-          setLoadingData(false);
+          setLoading(false);
         }
       }
     })();
@@ -93,176 +73,149 @@ function AddBadgeToCollectionModal({
     return () => {
       cancelled = true;
     };
-  }, [open, collectionCategoryId, form]);
+  }, [open, needsCategoryField]);
 
-  const handleSubmit = async (values: FormValues) => {
-    setSaving(true);
-    setError(null);
+  const badgeFields: FieldConfig[] = [
+    {
+      name: 'name',
+      label: 'Badge name',
+      type: 'text',
+      required: true,
+      maxLength: 500,
+      placeholder: 'Enter badge name',
+    },
+    {
+      name: 'description',
+      label: 'Description',
+      type: 'textarea',
+      rows: 2,
+      maxLength: 2000,
+      placeholder: 'Optional badge description',
+    },
+    {
+      name: 'imageUrl',
+      label: 'Image URL',
+      type: 'text',
+      maxLength: 1000,
+      placeholder: 'https://...',
+    },
+    {
+      name: 'rarity',
+      label: 'Rarity',
+      type: 'select',
+      required: true,
+      options: [
+        { label: 'Common', value: 'COMMON' },
+        { label: 'Rare', value: 'RARE' },
+        { label: 'Epic', value: 'EPIC' },
+      ],
+    },
+    {
+      name: 'categoryId',
+      label: 'Badge Category',
+      type: 'select',
+      required: true,
+      options: categories.map((c) => ({ label: c.name, value: c.id })),
+      placeholder: 'Select category',
+      // Only show if collection doesn't have a category
+      conditional: () => needsCategoryField,
+    },
+    {
+      name: 'actionTypeId',
+      label: 'Activation Type',
+      type: 'select',
+      required: true,
+      options: actionTypes.map((a) => ({
+        label: `${a.label} (${a.mainAction} / ${a.code})`,
+        value: a.id,
+      })),
+      placeholder: 'Select activation type',
+    },
+    {
+      name: 'pointsRequired',
+      label: 'Target Count (Points Required)',
+      type: 'number',
+      required: true,
+      placeholder: 'e.g. 10',
+      rules: [
+        {
+          validator: async (_rule, value: unknown) => {
+            const numValue = typeof value === 'number' ? value : Number(value);
+            if (!numValue || numValue < 1) {
+              throw new Error('Target count must be at least 1');
+            }
+          },
+        },
+      ],
+    },
+    {
+      name: 'difficulty',
+      label: 'Difficulty',
+      type: 'select',
+      required: true,
+      options: [
+        { label: 'Easy', value: 'EASY' },
+        { label: 'Medium', value: 'MEDIUM' },
+        { label: 'Hard', value: 'HARD' },
+      ],
+    },
+  ];
+
+  const handleSubmit = async (values: Record<string, unknown>) => {
     try {
-      const effectiveCategoryId = collectionCategoryId ?? values.categoryId;
+      // Use collection's category if available, otherwise use form value
+      const effectiveCategoryId = collectionCategoryId ?? (values.categoryId as string);
 
       // Create badge
       const badgeRes = await createBadge({
-        name: values.name.trim(),
-        description: values.description?.trim() || null,
-        imageUrl: values.imageUrl?.trim() || null,
+        name: (values.name as string).trim(),
+        description: (values.description as string)?.trim() || null,
+        imageUrl: (values.imageUrl as string)?.trim() || null,
         type: 'COLLECTION',
-        rarity: values.rarity,
+        rarity: values.rarity as 'COMMON' | 'RARE' | 'EPIC',
         categoryId: effectiveCategoryId,
         collectionId,
       });
 
       const newBadgeId = badgeRes.data?.id;
       if (!newBadgeId) {
-        throw new Error('Failed to create badge');
+        throw new Error('Failed to create badge - no ID returned');
       }
 
       // Create collection goal
       await createCollectionGoal(collectionId, {
-        actionTypeId: values.actionTypeId,
+        actionTypeId: values.actionTypeId as string,
         rewardBadgeId: newBadgeId,
-        pointsRequired: values.pointsRequired,
-        title: values.name.trim(),
-        difficulty: values.difficulty,
+        pointsRequired: Number(values.pointsRequired) || 1,
+        title: (values.name as string).trim(),
+        difficulty: (values.difficulty as 'EASY' | 'MEDIUM' | 'HARD') || 'MEDIUM',
       });
 
       antdMessage.success('Badge added to collection successfully');
       onSuccess();
       onClose();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to add badge to collection');
-    } finally {
-      setSaving(false);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to add badge to collection';
+      antdMessage.error(errorMsg);
+      throw err; // Re-throw to show error in drawer
     }
   };
 
   return (
-    <Modal
-      title="Add Badge to Collection"
+    <CreatableFormDrawer
       open={open}
-      onCancel={onClose}
-      footer={null}
+      title="Add Badge to Collection"
+      fields={badgeFields}
+      onSubmit={handleSubmit}
+      onClose={onClose}
+      loading={loading}
+      initialValues={{
+        rarity: 'COMMON',
+        difficulty: 'MEDIUM',
+        pointsRequired: 1,
+      }}
       width={600}
-      destroyOnClose
-    >
-      {loadingData ? (
-        <div style={{ textAlign: 'center', padding: 48 }}>
-          <Spin size="large" />
-        </div>
-      ) : (
-        <Form
-          form={form}
-          {...FORM_LAYOUT_VERTICAL}
-          onFinish={handleSubmit}
-          initialValues={{
-            rarity: 'COMMON',
-            difficulty: 'MEDIUM',
-            pointsRequired: 1,
-          }}
-        >
-          {error && (
-            <Alert
-              message="Error"
-              description={error}
-              type="error"
-              closable
-              onClose={() => setError(null)}
-              style={{ marginBottom: 16 }}
-            />
-          )}
-
-          <Form.Item
-            label="Badge Name"
-            name="name"
-            rules={[{ required: true, message: 'Badge name is required' }]}
-          >
-            <Input placeholder="Badge name" />
-          </Form.Item>
-
-          <Form.Item label="Description" name="description">
-            <Input.TextArea rows={2} placeholder="Optional badge description" />
-          </Form.Item>
-
-          <Form.Item label="Image URL" name="imageUrl">
-            <Input type="url" placeholder="https://..." />
-          </Form.Item>
-
-          <Form.Item
-            label="Rarity"
-            name="rarity"
-            rules={[{ required: true, message: 'Rarity is required' }]}
-          >
-            <Select>
-              <Select.Option value="COMMON">COMMON</Select.Option>
-              <Select.Option value="RARE">RARE</Select.Option>
-              <Select.Option value="EPIC">EPIC</Select.Option>
-            </Select>
-          </Form.Item>
-
-          {collectionCategoryId === null && (
-            <Form.Item
-              label="Badge Category"
-              name="categoryId"
-              rules={[{ required: true, message: 'Category is required' }]}
-            >
-              <Select placeholder="Select category">
-                {categories.map((c) => (
-                  <Select.Option key={c.id} value={c.id}>
-                    {c.name}
-                  </Select.Option>
-                ))}
-              </Select>
-            </Form.Item>
-          )}
-
-          <Form.Item
-            label="Activation Type"
-            name="actionTypeId"
-            rules={[{ required: true, message: 'Activation type is required' }]}
-          >
-            <Select placeholder="Select activation type">
-              {actionTypes.map((a) => (
-                <Select.Option key={a.id} value={a.id}>
-                  {a.label} ({a.mainAction} / {a.code})
-                </Select.Option>
-              ))}
-            </Select>
-          </Form.Item>
-
-          <Form.Item
-            label="Target Count (Points Required)"
-            name="pointsRequired"
-            rules={[
-              { required: true, message: 'Target count is required' },
-              { type: 'number', min: 1, message: 'Must be at least 1' },
-            ]}
-          >
-            <InputNumber min={1} style={{ width: '100%' }} placeholder="e.g. 10" />
-          </Form.Item>
-
-          <Form.Item
-            label="Difficulty"
-            name="difficulty"
-            rules={[{ required: true, message: 'Difficulty is required' }]}
-          >
-            <Select>
-              <Select.Option value="EASY">Easy</Select.Option>
-              <Select.Option value="MEDIUM">Medium</Select.Option>
-              <Select.Option value="HARD">Hard</Select.Option>
-            </Select>
-          </Form.Item>
-
-          <Form.Item style={{ marginBottom: 0, marginTop: 24 }}>
-            <Space>
-              <Button type="primary" htmlType="submit" loading={saving}>
-                Add Badge
-              </Button>
-              <Button onClick={onClose}>Cancel</Button>
-            </Space>
-          </Form.Item>
-        </Form>
-      )}
-    </Modal>
+    />
   );
 }
 

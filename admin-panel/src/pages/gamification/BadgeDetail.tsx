@@ -12,6 +12,8 @@ import {
   Empty,
   Modal,
   Image,
+  Row,
+  Col,
   message as antdMessage,
 } from 'antd';
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
@@ -21,6 +23,10 @@ import {
   LinkOutlined,
   ArrowUpOutlined,
   GiftOutlined,
+  TrophyOutlined,
+  UserOutlined,
+  FolderOpenOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 import {
   fetchBadge,
@@ -30,6 +36,11 @@ import {
 import type { AdminBadgeDetailResponse, AdminBadgeOwnerListItem } from '../../types/admin';
 import { BADGE_COLOR_PRIMARY, BADGE_COLOR_SECONDARY } from '../../constants/badge-colors';
 import EditBadgeModal from './modals/EditBadgeModal';
+import PageHeader from '../../components/PageHeader';
+import type { StatItemData } from '../../components/StatItem';
+import EditableFormSection from '../../components/form/EditableFormSection';
+import IdDisplay from '../../components/IdDisplay';
+import type { FieldConfig } from '../../components/form/types';
 
 const { Text, Title, Paragraph } = Typography;
 
@@ -56,6 +67,8 @@ function BadgeDetail() {
   const [badge, setBadge] = useState<AdminBadgeDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('summary');
+  const [ownersCount, setOwnersCount] = useState(0);
 
   const loadBadge = useCallback(async () => {
     if (!badgeIdToFetch) return;
@@ -70,19 +83,35 @@ function BadgeDetail() {
     }
   }, [badgeIdToFetch]);
 
+  const loadOwnersCount = useCallback(async () => {
+    if (!badgeIdToFetch) return;
+    try {
+      const res = await fetchBadgeOwners(badgeIdToFetch, { limit: 1, offset: 0 });
+      if (res.pagination?.total !== undefined) {
+        setOwnersCount(res.pagination.total);
+      }
+    } catch (e) {
+      console.error('Failed to load owners count:', e);
+    }
+  }, [badgeIdToFetch]);
+
   useEffect(() => {
     loadBadge();
-  }, [loadBadge]);
+    loadOwnersCount();
+  }, [loadBadge, loadOwnersCount]);
 
   const listPath = getListPathFromPathname(location.pathname, badge?.type);
 
   if (!badgeIdToFetch) {
     return (
       <div>
-        <Link to={listPath}>
-          <Button icon={<ArrowLeftOutlined />}>Back to list</Button>
-        </Link>
-        <Text>Invalid badge ID</Text>
+        <PageHeader
+          title="Error"
+          description="Invalid badge ID"
+          icon={<TrophyOutlined />}
+          backTo={listPath}
+          backLabel="Back to list"
+        />
       </div>
     );
   }
@@ -90,17 +119,17 @@ function BadgeDetail() {
   if (loading || !badge) {
     return (
       <div>
-        <Link to={listPath}>
-          <Button icon={<ArrowLeftOutlined />} style={{ marginBottom: 16 }}>
-            Back to list
-          </Button>
-        </Link>
-        {loading ? (
+        <PageHeader
+          title={loading ? 'Loading...' : 'Error'}
+          description={loading ? undefined : error ?? 'Badge not found'}
+          icon={<TrophyOutlined />}
+          backTo={listPath}
+          backLabel="Back to list"
+        />
+        {loading && (
           <div style={{ textAlign: 'center', padding: 48 }}>
             <Spin size="large" />
           </div>
-        ) : (
-          <Text type="danger">{error}</Text>
         )}
       </div>
     );
@@ -121,40 +150,65 @@ function BadgeDetail() {
     },
   ];
 
+  // Prepare stats data
+  const statsData: StatItemData[] = [
+    {
+      label: 'Rarity',
+      value: badge.rarity,
+      icon: <GiftOutlined />,
+      valueColor: badge.rarity === 'EPIC' ? '#722ed1' : badge.rarity === 'RARE' ? '#1890ff' : undefined,
+    },
+  ];
+
+  if (badge.collectionName) {
+    statsData.push({
+      label: 'Collection',
+      value: badge.collectionName,
+      icon: <FolderOpenOutlined />,
+    });
+  }
+
+  if (badge.rewardMultiplier != null && badge.rewardMultiplier !== 1) {
+    statsData.push({
+      label: 'Reward',
+      value: `${badge.rewardMultiplier}×`,
+      icon: <GiftOutlined />,
+    });
+  }
+
+  statsData.push({
+    label: 'Owners',
+    value: ownersCount,
+    icon: <UserOutlined />,
+  });
+
+  // Build description with category
+  let description = '';
+  if (badge.categoryName) {
+    description = badge.categoryName;
+  }
+
   return (
     <div>
-      <Link to={backPath}>
-        <Button icon={<ArrowLeftOutlined />} style={{ marginBottom: 16 }}>
-          Back to list
-        </Button>
-      </Link>
+      <PageHeader
+        title={badge.name}
+        description={description}
+        icon={<TrophyOutlined />}
+        backTo={backPath}
+        backLabel="Back to list"
+        stats={statsData}
+        statsLoading={loading}
+      />
 
-      <Card bordered style={{ marginBottom: 16 }}>
-        <Space size="large">
-          {badge.imageUrl && (
-            <Image
-              src={badge.imageUrl}
-              alt={badge.name}
-              width={100}
-              height={100}
-              style={{ objectFit: 'cover', borderRadius: 8 }}
-              preview={false}
-            />
-          )}
-          <div>
-            <Title level={2} style={{ marginBottom: 8 }}>
-              {badge.name}
-            </Title>
-            <Space size="small" wrap>
-              <Text type="secondary">ID: {badge.id}</Text>
-              <Tag color={BADGE_COLOR_PRIMARY}>{badge.type}</Tag>
-              <Tag color={BADGE_COLOR_SECONDARY}>{badge.rarity}</Tag>
-            </Space>
-          </div>
-        </Space>
-      </Card>
+      <div style={{ marginBottom: 16, marginTop: -8 }}>
+        <IdDisplay id={badge.id} variant="inline" label="Badge ID:" />
+      </div>
 
-      <Tabs items={tabItems} />
+      <Tabs
+        activeKey={activeTab}
+        onChange={setActiveTab}
+        items={tabItems}
+      />
     </div>
   );
 }
@@ -168,8 +222,6 @@ function BadgeSummaryTab({
   onUpdated: () => void;
   onDeleted: () => void;
 }) {
-  const [editModalOpen, setEditModalOpen] = useState(false);
-
   const handleDelete = () => {
     Modal.confirm({
       title: 'Delete Badge',
@@ -189,83 +241,139 @@ function BadgeSummaryTab({
     });
   };
 
+  const handleUpdateBadge = async (values: Record<string, unknown>) => {
+    try {
+      const { updateBadge } = await import('../../api/admin-badges-collections');
+      await updateBadge(badge.id, {
+        name: values.name as string,
+        description: (values.description as string) || null,
+        imageUrl: (values.imageUrl as string) || null,
+        boostMultiplier: values.boostMultiplier != null ? Number(values.boostMultiplier) : null,
+        rewardMultiplier: values.rewardMultiplier != null ? Number(values.rewardMultiplier) : null,
+      });
+      antdMessage.success('Badge updated successfully');
+      await onUpdated();
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to update');
+    }
+  };
+
+  // Field configuration for editable form
+  const badgeFields: FieldConfig[] = [
+    {
+      name: 'name',
+      label: 'Badge Name',
+      type: 'text',
+      required: true,
+      maxLength: 500,
+    },
+    {
+      name: 'description',
+      label: 'Description',
+      type: 'textarea',
+      rows: 3,
+      maxLength: 2000,
+    },
+    {
+      name: 'imageUrl',
+      label: 'Image URL',
+      type: 'text',
+      maxLength: 1000,
+    },
+    {
+      name: 'type',
+      label: 'Type',
+      type: 'text',
+      editable: false,
+    },
+    {
+      name: 'rarity',
+      label: 'Rarity',
+      type: 'text',
+      editable: false,
+    },
+    {
+      name: 'categoryName',
+      label: 'Category',
+      type: 'text',
+      editable: false,
+      render: () => badge.categoryName ?? '—',
+    },
+    {
+      name: 'collectionName',
+      label: 'Collection',
+      type: 'text',
+      editable: false,
+      render: () =>
+        badge.collectionId ? (
+          <Link to={`/gamification/collections/${badge.collectionId}`}>{badge.collectionName}</Link>
+        ) : (
+          '—'
+        ),
+    },
+    {
+      name: 'boostMultiplier',
+      label: 'Boost Multiplier',
+      type: 'number',
+      render: (v) => (v != null ? `${v}×` : '—'),
+    },
+    {
+      name: 'rewardMultiplier',
+      label: 'Reward Multiplier',
+      type: 'number',
+      render: (v) => (v != null ? `${v}×` : '—'),
+    },
+    {
+      name: 'createdAt',
+      label: 'Created',
+      type: 'text',
+      editable: false,
+      render: (v) => new Date(v as string).toLocaleString('en-US'),
+    },
+    {
+      name: 'updatedAt',
+      label: 'Updated',
+      type: 'text',
+      editable: false,
+      render: (v) => (v ? new Date(v as string).toLocaleString('en-US') : '—'),
+    },
+  ];
+
   return (
-    <Card bordered>
-      <Space direction="vertical" size="large" style={{ width: '100%' }}>
+    <div>
+      <Row gutter={16}>
         {badge.imageUrl && (
-          <Image
-            src={badge.imageUrl}
-            alt={badge.name}
-            style={{ maxWidth: 300, borderRadius: 8 }}
+          <Col xs={24} lg={8}>
+            <Card bordered style={{ marginBottom: 16 }}>
+              <Image
+                src={badge.imageUrl}
+                alt={badge.name}
+                style={{ width: '100%', borderRadius: 8 }}
+                preview
+              />
+            </Card>
+          </Col>
+        )}
+        <Col xs={24} lg={badge.imageUrl ? 16 : 24}>
+          <EditableFormSection
+            title="BADGE METADATA"
+            data={badge}
+            fields={badgeFields}
+            onSave={handleUpdateBadge}
+            bordered
+            columns={2}
           />
-        )}
 
-        <div>
-          <Title level={3}>{badge.name}</Title>
-          <Space wrap>
-            <Tag color={BADGE_COLOR_PRIMARY}>{badge.type}</Tag>
-            <Tag color={BADGE_COLOR_SECONDARY}>{badge.rarity}</Tag>
-            {badge.categoryName && <Tag color={BADGE_COLOR_PRIMARY}>{badge.categoryName}</Tag>}
-            {badge.collectionId && (
-              <Link to={`/gamification/collections/${badge.collectionId}`}>
-                <Tag icon={<LinkOutlined />} color={BADGE_COLOR_PRIMARY}>
-                  {badge.collectionName ?? 'Collection'}
-                </Tag>
-              </Link>
-            )}
-          </Space>
-        </div>
-
-        {(badge.boostMultiplier != null || badge.rewardMultiplier != null) && (
-          <Space size="large">
-            {badge.boostMultiplier != null && (
-              <Space>
-                <ArrowUpOutlined />
-                <Text strong>Boost:</Text>
-                <Text>{badge.boostMultiplier}×</Text>
-              </Space>
-            )}
-            {badge.rewardMultiplier != null && (
-              <Space>
-                <GiftOutlined />
-                <Text strong>Reward:</Text>
-                <Text>{badge.rewardMultiplier}×</Text>
-              </Space>
-            )}
-          </Space>
-        )}
-
-        {badge.description && <Paragraph>{badge.description}</Paragraph>}
-
-        {badge.createdAt && (
-          <Space>
-            <CalendarOutlined />
-            <Text type="secondary">{new Date(badge.createdAt).toLocaleString('en-US')}</Text>
-          </Space>
-        )}
-      </Space>
-
-      <Space style={{ marginTop: 24 }}>
-        <Button type="primary" onClick={() => setEditModalOpen(true)}>
-          Edit
-        </Button>
-        <Button danger onClick={handleDelete}>
-          Delete
-        </Button>
-      </Space>
-
-      {editModalOpen && (
-        <EditBadgeModal
-          open={editModalOpen}
-          badgeId={badge.id}
-          onClose={() => setEditModalOpen(false)}
-          onSuccess={() => {
-            onUpdated();
-            setEditModalOpen(false);
-          }}
-        />
-      )}
-    </Card>
+          <Card bordered style={{ marginTop: 16 }}>
+            <Space>
+              <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>
+                Delete Badge
+              </Button>
+            </Space>
+          </Card>
+        </Col>
+      </Row>
+    </div>
   );
 }
 

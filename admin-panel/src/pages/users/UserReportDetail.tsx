@@ -16,6 +16,7 @@ import {
 } from 'antd';
 import { FlagOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
+import IdDisplay from '../../components/IdDisplay';
 import { fetchUserReport, resolveUserReport } from '../../api/admin-reports';
 import type { AdminUserReportDetailResponse } from '../../types/admin';
 import { BADGE_COLOR_PRIMARY } from '../../constants/badge-colors';
@@ -104,12 +105,16 @@ function UserReportDetail() {
   return (
     <div>
       <PageHeader
-        title={`Rapor #${report.id.slice(0, 8)}`}
+        title="User Report"
         description={report.category}
         icon={<FlagOutlined />}
         backTo="/users/reports"
         backLabel="Back to list"
       />
+
+      <div style={{ marginBottom: 16, marginTop: -8 }}>
+        <IdDisplay id={report.id} variant="inline" label="Report ID:" />
+      </div>
 
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={24} md={12}>

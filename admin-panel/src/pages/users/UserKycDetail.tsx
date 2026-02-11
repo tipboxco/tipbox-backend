@@ -15,6 +15,7 @@ import {
 } from 'antd';
 import { IdcardOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
+import IdDisplay from '../../components/IdDisplay';
 import { fetchUserKycByUserId, updateKycReview } from '../../api/admin-kyc';
 import type { AdminKycDetailResponse } from '../../types/admin';
 
@@ -108,7 +109,7 @@ function UserKycDetail() {
     <div>
       <PageHeader
         title={`KYC — ${record.userEmail ?? userId}`}
-        description={`Record: ${record.id.slice(0, 8)}…`}
+        description="KYC verification record"
         icon={<IdcardOutlined />}
         actions={
           <Space>
@@ -121,6 +122,10 @@ function UserKycDetail() {
           </Space>
         }
       />
+
+      <div style={{ marginBottom: 16, marginTop: -8 }}>
+        <IdDisplay id={record.id} variant="inline" label="Record ID:" />
+      </div>
 
       <Card bordered title="KYC information" style={{ marginBottom: 16 }}>
         <Row gutter={[16, 16]}>

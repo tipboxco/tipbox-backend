@@ -3,6 +3,7 @@ import { Card, Table, Empty, Alert } from 'antd';
 import { HistoryOutlined } from '@ant-design/icons';
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import PageHeader from '../../components/PageHeader';
+import IdDisplay from '../../components/IdDisplay';
 import { fetchAdminLogs } from '../../api/admin-logs';
 import type { AdminLogListItem } from '../../types/admin';
 import { TABLE_COLUMN_WIDTHS, TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
@@ -41,11 +42,7 @@ function AdminLogs() {
       key: 'id',
       ellipsis: true,
       width: 120,
-      render: (id: string) => (
-        <span title={id} style={{ fontFamily: 'monospace', fontSize: '12px' }}>
-          {id}
-        </span>
-      ),
+      render: (id: string) => <IdDisplay id={id} variant="compact" />,
     },
     {
       title: 'Date',
@@ -60,11 +57,7 @@ function AdminLogs() {
       key: 'adminId',
       ellipsis: true,
       width: 120,
-      render: (id: string) => (
-        <span title={id} style={{ fontFamily: 'monospace', fontSize: '12px' }}>
-          {id}
-        </span>
-      ),
+      render: (id: string) => <IdDisplay id={id} variant="compact" />,
     },
     {
       title: 'Action',

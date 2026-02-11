@@ -48,6 +48,7 @@ import type {
 import { BADGE_COLOR_PRIMARY, BADGE_COLOR_SECONDARY } from '../../constants/badge-colors';
 import EditEventModal from './modals/EditEventModal';
 import AddBadgeToEventModal from './modals/AddBadgeToEventModal';
+import IdDisplay from '../../components/IdDisplay';
 
 const { TextArea } = Input;
 const { Title, Text } = Typography;
@@ -342,9 +343,7 @@ function EventBadgesTab({ eventId, eventTitle }: { eventId: string; eventTitle: 
           )}
           <div>
             <div>{record.badgeName}</div>
-            <Text type="secondary" style={{ fontSize: 11 }}>
-              {record.badgeId.slice(0, 8)}...
-            </Text>
+            <IdDisplay id={record.badgeId} variant="compact" />
           </div>
         </Space>
       ),
@@ -534,7 +533,7 @@ function EventParticipantsTab({ eventId }: { eventId: string }) {
           to={`/users/${record.userId}`}
           style={{ color: 'var(--tipbox-badge-outline)', textDecoration: 'underline' }}
         >
-          {record.userDisplayName ?? record.userId.slice(0, 8) + '...'}
+          {record.userDisplayName ?? <IdDisplay id={record.userId} variant="compact" copyable={false} />}
         </Link>
       ),
     },
@@ -698,7 +697,7 @@ function EventRewardsTab({ eventId }: { eventId: string }) {
     {
       title: 'User',
       key: 'user',
-      render: (_, record) => record.userDisplayName ?? record.userId.slice(0, 8) + '...',
+      render: (_, record) => record.userDisplayName ?? <IdDisplay id={record.userId} variant="compact" />,
     },
     {
       title: 'Email',

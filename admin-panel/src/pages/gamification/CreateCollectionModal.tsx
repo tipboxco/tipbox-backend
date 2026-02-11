@@ -1,38 +1,15 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { message as antdMessage } from 'antd';
+import { InfoCircleOutlined, FileImageOutlined } from '@ant-design/icons';
 import {
-  Modal,
-  Steps,
-  Form,
-  Input,
-  Upload,
-  Button,
-  Alert,
-  Space,
-  message as antdMessage,
-} from 'antd';
-import { CloudUploadOutlined, InfoCircleOutlined, FileImageOutlined } from '@ant-design/icons';
-import { createCollection, uploadMedia } from '../../api/admin-badges-collections';
-import { FORM_LAYOUT_VERTICAL } from '../../constants/form-layout';
-
-const { TextArea } = Input;
-
-const INITIAL_FORM = {
-  name: '',
-  owner: '',
-  focusSector: '',
-  targetGroup: '',
-  shortDescription: '',
-  longDescription: '',
-  bannerUrl: '',
-  unlockCondition: '',
-  completionBonus: '',
-};
-
-const STEPS = [
-  { key: 0, title: 'Basic information', icon: <InfoCircleOutlined /> },
-  { key: 1, title: 'Details and image', icon: <FileImageOutlined /> },
-];
+  createCollection,
+  uploadMedia,
+  fetchCollectionCategories,
+  type AdminCollectionCategoryMain,
+} from '../../api/admin-badges-collections';
+import { CreatableFormDrawer } from '../../components/form';
+import type { FieldConfig, StepConfig } from '../../components/form';
 
 interface CreateCollectionModalProps {
   open: boolean;
@@ -42,230 +19,185 @@ interface CreateCollectionModalProps {
 
 function CreateCollectionModal({ open, onClose, onSuccess }: CreateCollectionModalProps) {
   const navigate = useNavigate();
-  const [step, setStep] = useState(0);
-  const [uploadingBanner, setUploadingBanner] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState(INITIAL_FORM);
+  const [categories, setCategories] = useState<AdminCollectionCategoryMain[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
 
+  // Load categories when modal opens
   useEffect(() => {
-    if (!open) {
-      setForm(INITIAL_FORM);
-      setError(null);
-      setStep(0);
-    }
+    if (!open) return;
+
+    let cancelled = false;
+    (async () => {
+      setLoadingCategories(true);
+      try {
+        const res = await fetchCollectionCategories();
+        if (!cancelled && res.data) {
+          setCategories(res.data);
+        }
+      } catch (err) {
+        console.error('Failed to load categories:', err);
+      } finally {
+        if (!cancelled) {
+          setLoadingCategories(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [open]);
 
-  const update = useCallback((key: keyof typeof form, value: string) => {
-    setForm((f) => ({ ...f, [key]: value }));
-    setError(null);
-  }, []);
+  // Convert nested categories to nested options format
+  const categoryOptions = categories.map((main) => ({
+    label: main.name,
+    value: main.id,
+    children: main.children.map((sub) => ({
+      label: sub.name,
+      value: sub.id,
+    })),
+  }));
 
-  const handleBannerUpload = async (file: File) => {
-    setUploadingBanner(true);
-    setError(null);
-    try {
-      const res = await uploadMedia(file);
-      if (res.data?.url) {
-        setForm((f) => ({ ...f, bannerUrl: res.data!.url }));
-        antdMessage.success('Cover image uploaded');
-      }
-    } catch (err) {
-      antdMessage.error(err instanceof Error ? err.message : 'Failed to upload image');
-    } finally {
-      setUploadingBanner(false);
-    }
-    return false;
-  };
+  const collectionFields: FieldConfig[] = [
+    {
+      name: 'name',
+      label: 'Collection name',
+      type: 'text',
+      required: true,
+      maxLength: 500,
+      placeholder: 'e.g. Summer Season Badges',
+    },
+    {
+      name: 'owner',
+      label: 'Owner',
+      type: 'text',
+      maxLength: 200,
+      placeholder: 'Optional',
+    },
+    {
+      name: 'focusSector',
+      label: 'Focus sector',
+      type: 'text',
+      maxLength: 200,
+      placeholder: 'e.g. E-commerce, Gaming',
+    },
+    {
+      name: 'targetGroup',
+      label: 'Target group',
+      type: 'text',
+      maxLength: 200,
+      placeholder: 'Target audience',
+    },
+    {
+      name: 'shortDescription',
+      label: 'Short description',
+      type: 'textarea',
+      rows: 2,
+      maxLength: 2000,
+      placeholder: 'Short description',
+    },
+    {
+      name: 'categoryId',
+      label: 'Category',
+      type: 'nested-select',
+      nestedOptions: categoryOptions,
+      placeholder: 'Select category (optional)',
+    },
+    {
+      name: 'longDescription',
+      label: 'Long description',
+      type: 'textarea',
+      rows: 3,
+      maxLength: 5000,
+      placeholder: 'Detailed description',
+    },
+    {
+      name: 'bannerUrl',
+      label: 'Cover image',
+      type: 'upload',
+      uploadConfig: {
+        accept: 'image/jpeg,image/png,image/gif,image/webp',
+        maxSize: 5 * 1024 * 1024, // 5MB
+        onUpload: async (file: File) => {
+          const res = await uploadMedia(file);
+          if (!res.data?.url) {
+            throw new Error('Upload failed - no URL returned');
+          }
+          return res.data.url;
+        },
+      },
+    },
+    {
+      name: 'unlockCondition',
+      label: 'Unlock condition',
+      type: 'text',
+      maxLength: 200,
+      placeholder: 'Unlock condition',
+    },
+    {
+      name: 'completionBonus',
+      label: 'Completion reward',
+      type: 'text',
+      maxLength: 200,
+      placeholder: 'Reward for completion',
+    },
+  ];
 
-  const handleNext = () => {
-    if (step === 0 && !form.name.trim()) {
-      setError('Collection name is required.');
-      return;
-    }
-    setError(null);
-    setStep(1);
-  };
+  const steps: StepConfig[] = [
+    {
+      title: 'Basic information',
+      icon: <InfoCircleOutlined />,
+      fields: ['name', 'owner', 'focusSector', 'targetGroup', 'shortDescription', 'categoryId'],
+    },
+    {
+      title: 'Details and image',
+      icon: <FileImageOutlined />,
+      fields: ['longDescription', 'bannerUrl', 'unlockCondition', 'completionBonus'],
+    },
+  ];
 
-  const handleSubmit = async () => {
-    if (!form.name.trim()) {
-      setError('Collection name is required.');
-      return;
-    }
-    setSaving(true);
-    setError(null);
+  const handleSubmit = async (values: Record<string, unknown>) => {
     try {
       const res = await createCollection({
-        name: form.name.trim(),
-        bannerUrl: form.bannerUrl.trim() || null,
-        owner: form.owner.trim() || null,
-        focusSector: form.focusSector.trim() || null,
-        targetGroup: form.targetGroup.trim() || null,
-        shortDescription: form.shortDescription.trim() || null,
-        longDescription: form.longDescription.trim() || null,
-        unlockCondition: form.unlockCondition.trim() || null,
-        completionBonus: form.completionBonus.trim() || null,
+        name: (values.name as string).trim(),
+        owner: (values.owner as string)?.trim() || null,
+        focusSector: (values.focusSector as string)?.trim() || null,
+        targetGroup: (values.targetGroup as string)?.trim() || null,
+        shortDescription: (values.shortDescription as string)?.trim() || null,
+        longDescription: (values.longDescription as string)?.trim() || null,
+        bannerUrl: (values.bannerUrl as string)?.trim() || null,
+        unlockCondition: (values.unlockCondition as string)?.trim() || null,
+        completionBonus: (values.completionBonus as string)?.trim() || null,
+        categoryId: (values.categoryId as string)?.trim() || null,
       });
-      antdMessage.success('Collection created');
+
+      antdMessage.success('Collection created successfully');
       onSuccess();
+
+      // Navigate to collection detail page
       if (res.data?.id) {
         navigate(`/gamification/collections/${res.data.id}`);
       }
+
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create collection');
-    } finally {
-      setSaving(false);
+      const errorMsg = err instanceof Error ? err.message : 'Failed to create collection';
+      antdMessage.error(errorMsg);
+      throw err; // Re-throw to show error in drawer
     }
   };
 
-  const stepItems = STEPS.map((s) => ({ title: s.title, icon: s.icon }));
-
   return (
-    <Modal
-      title="New collection"
+    <CreatableFormDrawer
       open={open}
-      onCancel={onClose}
+      title="New collection"
+      fields={collectionFields}
+      steps={steps}
+      onSubmit={handleSubmit}
+      onClose={onClose}
+      loading={loadingCategories}
       width={560}
-      footer={null}
-      destroyOnClose
-      styles={{ body: { maxHeight: '70vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' } }}
-    >
-      <Steps current={step} items={stepItems} size="small" style={{ marginBottom: 20 }} />
-
-      {error && (
-        <Alert
-          message="Error"
-          description={error}
-          type="error"
-          closable
-          onClose={() => setError(null)}
-          style={{ marginBottom: 16 }}
-        />
-      )}
-
-      <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-        <Form {...FORM_LAYOUT_VERTICAL} style={{ width: '100%' }}>
-          {step === 0 && (
-            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-              <Form.Item label="Collection name" required style={{ marginBottom: 8 }}>
-              <Input
-                value={form.name}
-                onChange={(e) => update('name', e.target.value)}
-                placeholder="e.g. Summer Season Badges"
-              />
-            </Form.Item>
-            <Form.Item label="Owner (optional)" style={{ marginBottom: 8 }}>
-              <Input
-                value={form.owner}
-                onChange={(e) => update('owner', e.target.value)}
-                placeholder="Optional"
-              />
-            </Form.Item>
-            <Form.Item label="Focus sector" style={{ marginBottom: 8 }}>
-              <Input
-                value={form.focusSector}
-                onChange={(e) => update('focusSector', e.target.value)}
-                placeholder="e.g. E-commerce, Gaming"
-              />
-            </Form.Item>
-            <Form.Item label="Target group" style={{ marginBottom: 8 }}>
-              <Input
-                value={form.targetGroup}
-                onChange={(e) => update('targetGroup', e.target.value)}
-                placeholder="Target audience"
-              />
-            </Form.Item>
-            <Form.Item label="Short description" style={{ marginBottom: 0 }}>
-              <TextArea
-                value={form.shortDescription}
-                onChange={(e) => update('shortDescription', e.target.value)}
-                rows={2}
-                placeholder="Short description"
-              />
-              </Form.Item>
-            </Space>
-          )}
-
-          {step === 1 && (
-            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-            <Form.Item label="Long description" style={{ marginBottom: 8 }}>
-              <TextArea
-                value={form.longDescription}
-                onChange={(e) => update('longDescription', e.target.value)}
-                rows={2}
-                placeholder="Detailed description"
-              />
-            </Form.Item>
-            <Form.Item label="Cover image" style={{ marginBottom: 8 }}>
-              <Space direction="vertical" style={{ width: '100%' }} size="small">
-                <Upload
-                  beforeUpload={handleBannerUpload}
-                  showUploadList={false}
-                  accept="image/jpeg,image/png,image/gif,image/webp"
-                  disabled={uploadingBanner}
-                >
-                  <Button icon={<CloudUploadOutlined />} loading={uploadingBanner} size="small">
-                    {uploadingBanner ? 'Uploading...' : 'Upload image'}
-                  </Button>
-                </Upload>
-                {form.bannerUrl && (
-                  <div>
-                    <img
-                      src={form.bannerUrl}
-                      alt="Cover"
-                      style={{ maxWidth: '100%', maxHeight: 100, borderRadius: 4 }}
-                    />
-                    <Button size="small" danger onClick={() => update('bannerUrl', '')} style={{ marginTop: 4 }}>
-                      Remove
-                    </Button>
-                  </div>
-                )}
-                <Input
-                  value={form.bannerUrl}
-                  onChange={(e) => update('bannerUrl', e.target.value)}
-                  placeholder="or cover image URL"
-                  size="small"
-                />
-              </Space>
-            </Form.Item>
-            <Form.Item label="Unlock condition" style={{ marginBottom: 8 }}>
-              <Input
-                value={form.unlockCondition}
-                onChange={(e) => update('unlockCondition', e.target.value)}
-                placeholder="Unlock condition"
-              />
-            </Form.Item>
-            <Form.Item label="Completion reward" style={{ marginBottom: 0 }}>
-              <Input
-                value={form.completionBonus}
-                onChange={(e) => update('completionBonus', e.target.value)}
-                placeholder="Reward for completion"
-              />
-              </Form.Item>
-            </Space>
-          )}
-        </Form>
-      </div>
-
-      <div style={{ marginTop: 20, display: 'flex', justifyContent: 'space-between', flexShrink: 0 }}>
-        <Button onClick={onClose}>Cancel</Button>
-        <Space>
-          {step === 1 && (
-            <Button onClick={() => setStep(0)}>Back</Button>
-          )}
-          {step === 0 ? (
-            <Button type="primary" onClick={handleNext} disabled={!form.name.trim()}>
-              Next
-            </Button>
-          ) : (
-            <Button type="primary" loading={saving} onClick={handleSubmit}>
-              {saving ? 'Creating...' : 'Create collection'}
-            </Button>
-          )}
-        </Space>
-      </div>
-    </Modal>
+    />
   );
 }
 

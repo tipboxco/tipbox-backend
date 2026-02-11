@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Modal, Form, Input, Select, InputNumber, Button, Alert, Spin, Space } from 'antd';
 import {
   fetchBadgeCategories,
   createBadge,
@@ -9,7 +8,8 @@ import {
   createCollectionGoal,
 } from '../../api/admin-badges-collections';
 import type { AdminBadgeCategoryListItem, AdminActionTypeListItem } from '../../types/admin';
-import { FORM_LAYOUT_VERTICAL } from '../../constants/form-layout';
+import { CreatableFormDrawer } from '../../components/form';
+import type { FieldConfig } from '../../components/form';
 
 export type CreateBadgeModalType = 'EVENT' | 'BRAND' | 'COSMETIC' | 'COLLECTION';
 
@@ -19,17 +19,6 @@ interface CreateBadgeModalProps {
   collectionId?: string | null;
   onClose: () => void;
   onSuccess: () => void;
-}
-
-interface FormValues {
-  name: string;
-  description?: string;
-  imageUrl?: string;
-  rarity: 'COMMON' | 'RARE' | 'EPIC';
-  categoryId: string;
-  actionTypeId?: string;
-  pointsRequired?: number;
-  difficulty?: 'EASY' | 'MEDIUM' | 'HARD';
 }
 
 const isCollectionContext = (type: CreateBadgeModalType, cId?: string | null) =>
@@ -43,262 +32,208 @@ function CreateBadgeModal({
   onSuccess,
 }: CreateBadgeModalProps) {
   const navigate = useNavigate();
-  const [form] = Form.useForm<FormValues>();
   const [categories, setCategories] = useState<AdminBadgeCategoryListItem[]>([]);
   const [actionTypes, setActionTypes] = useState<AdminActionTypeListItem[]>([]);
-  const [loadingCategories, setLoadingCategories] = useState(true);
-  const [loadingCollection, setLoadingCollection] = useState(false);
-  const [loadingActionTypes, setLoadingActionTypes] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [collectionCategoryId, setCollectionCategoryId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const inCollection = isCollectionContext(badgeType, collectionId);
+  const inCollection = !!isCollectionContext(badgeType, collectionId);
 
+  // Load required data when modal opens
   useEffect(() => {
     let cancelled = false;
+
     (async () => {
+      setLoading(true);
       try {
-        const res = await fetchBadgeCategories();
-        const data = res.data;
-        if (!cancelled && data) {
-          setCategories(data);
-          if (data.length > 0 && !inCollection) {
-            form.setFieldValue('categoryId', data[0].id);
+        // Always load categories
+        const categoriesRes = await fetchBadgeCategories();
+        if (!cancelled && categoriesRes.data) {
+          setCategories(categoriesRes.data);
+        }
+
+        // Load collection info if in collection context to get its categoryId
+        if (inCollection && collectionId) {
+          const collectionRes = await fetchCollection(collectionId);
+          if (!cancelled && collectionRes.data?.categoryId) {
+            setCollectionCategoryId(collectionRes.data.categoryId);
           }
         }
-      } catch (e) {
-        if (!cancelled)
-          setError(e instanceof Error ? e.message : 'Failed to load categories');
-      } finally {
-        if (!cancelled) setLoadingCategories(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [inCollection, form]);
 
-  useEffect(() => {
-    if (!inCollection || !collectionId) return;
-    let cancelled = false;
-    setLoadingCollection(true);
-    (async () => {
-      try {
-        const res = await fetchCollection(collectionId);
-        const data = res.data;
-        if (!cancelled && data?.categoryId) {
-          form.setFieldValue('categoryId', data.categoryId);
+        // Load action types if in collection context
+        if (inCollection) {
+          const actionTypesRes = await fetchActionTypes();
+          if (!cancelled && actionTypesRes.data) {
+            setActionTypes(actionTypesRes.data);
+          }
         }
-      } catch (e) {
-        if (!cancelled)
-          setError(e instanceof Error ? e.message : 'Failed to load collection info');
+      } catch (err) {
+        console.error('Failed to load data:', err);
       } finally {
-        if (!cancelled) setLoadingCollection(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [collectionId, inCollection, form]);
-
-  useEffect(() => {
-    if (!inCollection) return;
-    let cancelled = false;
-    setLoadingActionTypes(true);
-    (async () => {
-      try {
-        const res = await fetchActionTypes();
-        const data = res.data;
-        if (!cancelled && data?.length) {
-          setActionTypes(data);
-          form.setFieldValue('actionTypeId', data[0].id);
+        if (!cancelled) {
+          setLoading(false);
         }
-      } catch (e) {
-        if (!cancelled)
-          setError(e instanceof Error ? e.message : 'Failed to load activation types');
-      } finally {
-        if (!cancelled) setLoadingActionTypes(false);
       }
     })();
+
     return () => {
       cancelled = true;
     };
-  }, [inCollection, form]);
+  }, [inCollection, collectionId]);
 
-  const handleSubmit = async (values: FormValues) => {
-    setSaving(true);
-    setError(null);
+  const badgeFields: FieldConfig[] = [
+    {
+      name: 'name',
+      label: 'Badge name',
+      type: 'text',
+      required: true,
+      maxLength: 500,
+      placeholder: 'Enter badge name',
+    },
+    {
+      name: 'description',
+      label: 'Description',
+      type: 'textarea',
+      rows: 2,
+      maxLength: 2000,
+      placeholder: 'Optional description',
+    },
+    {
+      name: 'imageUrl',
+      label: 'Image URL',
+      type: 'text',
+      maxLength: 1000,
+      placeholder: 'https://...',
+    },
+    {
+      name: 'rarity',
+      label: 'Rarity',
+      type: 'select',
+      required: true,
+      options: [
+        { label: 'Common', value: 'COMMON' },
+        { label: 'Rare', value: 'RARE' },
+        { label: 'Epic', value: 'EPIC' },
+      ],
+    },
+    {
+      name: 'categoryId',
+      label: 'Category',
+      type: 'select',
+      required: true,
+      options: categories.map((c) => ({ label: c.name, value: c.id })),
+      placeholder: 'Select category',
+      // Only show if NOT in collection context
+      conditional: () => !inCollection,
+    },
+    {
+      name: 'actionTypeId',
+      label: 'Activation Type',
+      type: 'select',
+      required: true,
+      options: actionTypes.map((a) => ({
+        label: `${a.label} (${a.mainAction} / ${a.code})`,
+        value: a.id,
+      })),
+      placeholder: 'Select activation type',
+      // Only show if IN collection context
+      conditional: () => inCollection,
+    },
+    {
+      name: 'pointsRequired',
+      label: 'Target Count',
+      type: 'number',
+      required: true,
+      placeholder: 'Enter target count',
+      rules: [
+        {
+          validator: async (_rule, value: unknown) => {
+            const numValue = typeof value === 'number' ? value : Number(value);
+            if (inCollection && (!numValue || numValue < 1)) {
+              throw new Error('Target count must be at least 1');
+            }
+          },
+        },
+      ],
+      // Only show if IN collection context
+      conditional: () => inCollection,
+    },
+    {
+      name: 'difficulty',
+      label: 'Difficulty',
+      type: 'select',
+      required: true,
+      options: [
+        { label: 'Easy', value: 'EASY' },
+        { label: 'Medium', value: 'MEDIUM' },
+        { label: 'Hard', value: 'HARD' },
+      ],
+      placeholder: 'Select difficulty',
+      // Only show if IN collection context
+      conditional: () => inCollection,
+    },
+  ];
+
+  const handleSubmit = async (values: Record<string, unknown>) => {
     try {
-      const res = await createBadge({
-        name: values.name.trim(),
-        description: values.description?.trim() || null,
-        imageUrl: values.imageUrl?.trim() || null,
+      // Determine categoryId: use collection's category if in collection context, otherwise use form value
+      const effectiveCategoryId = inCollection && collectionCategoryId
+        ? collectionCategoryId
+        : (values.categoryId as string);
+
+      // Create badge
+      const badgeRes = await createBadge({
+        name: (values.name as string).trim(),
+        description: (values.description as string)?.trim() || null,
+        imageUrl: (values.imageUrl as string)?.trim() || null,
         type: badgeType,
-        rarity: values.rarity,
-        categoryId: values.categoryId,
-        collectionId:
-          badgeType === 'COLLECTION' && collectionId ? collectionId : null,
+        rarity: values.rarity as 'COMMON' | 'RARE' | 'EPIC',
+        categoryId: effectiveCategoryId,
+        collectionId: badgeType === 'COLLECTION' && collectionId ? collectionId : null,
       });
-      if (inCollection && collectionId && res.data?.id && values.actionTypeId) {
+
+      // If in collection context, create collection goal
+      if (inCollection && collectionId && badgeRes.data?.id && values.actionTypeId) {
         await createCollectionGoal(collectionId, {
-          actionTypeId: values.actionTypeId,
-          rewardBadgeId: res.data.id,
-          pointsRequired: values.pointsRequired ?? 1,
-          title: values.name.trim(),
-          difficulty: values.difficulty ?? 'MEDIUM',
+          actionTypeId: values.actionTypeId as string,
+          rewardBadgeId: badgeRes.data.id,
+          pointsRequired: Number(values.pointsRequired) || 1,
+          title: (values.name as string).trim(),
+          difficulty: (values.difficulty as 'EASY' | 'MEDIUM' | 'HARD') || 'MEDIUM',
         });
       }
+
       onSuccess();
-      if (res.data?.id && badgeType !== 'COLLECTION') {
-        navigate(`${listPath}/${res.data.id}`);
+
+      // Navigate based on context
+      if (badgeRes.data?.id && badgeType !== 'COLLECTION') {
+        navigate(`${listPath}/${badgeRes.data.id}`);
       } else if (badgeType === 'COLLECTION') {
         navigate(listPath);
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create badge');
-    } finally {
-      setSaving(false);
+
+      onClose();
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to create badge';
+      throw new Error(errorMsg);
     }
   };
 
-  const loading =
-    loadingCategories ||
-    (inCollection && loadingCollection) ||
-    (inCollection && loadingActionTypes);
-
   return (
-    <Modal
-      title={inCollection ? 'Add badge' : `New badge (${badgeType})`}
-      open
-      onCancel={onClose}
-      footer={null}
+    <CreatableFormDrawer
+      open={true}
+      title={inCollection ? 'Add badge to collection' : `New badge (${badgeType})`}
+      fields={badgeFields}
+      onSubmit={handleSubmit}
+      onClose={onClose}
+      loading={loading}
+      initialValues={{
+        rarity: 'COMMON',
+        difficulty: 'MEDIUM',
+        pointsRequired: 1,
+      }}
       width={600}
-    >
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: 48 }}>
-          <Spin size="large" />
-        </div>
-      ) : (
-        <Form
-          form={form}
-          {...FORM_LAYOUT_VERTICAL}
-          onFinish={handleSubmit}
-          initialValues={{
-            rarity: 'COMMON',
-            difficulty: 'MEDIUM',
-            pointsRequired: 1,
-          }}
-        >
-          {error && (
-            <Alert
-              message="Error"
-              description={error}
-              type="error"
-              closable
-              onClose={() => setError(null)}
-              style={{ marginBottom: 16 }}
-            />
-          )}
-
-          <Form.Item
-            label="Name"
-            name="name"
-            rules={[{ required: true, message: 'Name is required' }]}
-          >
-            <Input placeholder="Badge name" />
-          </Form.Item>
-
-          <Form.Item label="Description" name="description">
-            <Input placeholder="Optional" />
-          </Form.Item>
-
-          <Form.Item label="Image URL" name="imageUrl">
-            <Input type="url" placeholder="https://..." />
-          </Form.Item>
-
-          <Form.Item
-            label="Rarity"
-            name="rarity"
-            rules={[{ required: true, message: 'Rarity is required' }]}
-          >
-            <Select>
-              <Select.Option value="COMMON">COMMON</Select.Option>
-              <Select.Option value="RARE">RARE</Select.Option>
-              <Select.Option value="EPIC">EPIC</Select.Option>
-            </Select>
-          </Form.Item>
-
-          {!inCollection && (
-            <Form.Item
-              label="Category"
-              name="categoryId"
-              rules={[{ required: true, message: 'Category is required' }]}
-            >
-              <Select placeholder="Select">
-                {categories.map((c) => (
-                  <Select.Option key={c.id} value={c.id}>
-                    {c.name}
-                  </Select.Option>
-                ))}
-              </Select>
-            </Form.Item>
-          )}
-
-          {inCollection && (
-            <>
-              <Form.Item
-                label="Activation Type"
-                name="actionTypeId"
-                rules={[{ required: true, message: 'Activation type is required' }]}
-              >
-                <Select
-                  placeholder={loadingActionTypes ? 'Loading…' : 'Select'}
-                  disabled={loadingActionTypes}
-                >
-                  {actionTypes.map((a) => (
-                    <Select.Option key={a.id} value={a.id}>
-                      {a.label} ({a.mainAction} / {a.code})
-                    </Select.Option>
-                  ))}
-                </Select>
-              </Form.Item>
-
-              <Form.Item
-                label="Target Count"
-                name="pointsRequired"
-                rules={[
-                  { required: true, message: 'Target count is required' },
-                  { type: 'number', min: 1, message: 'Must be at least 1' },
-                ]}
-              >
-                <InputNumber min={1} style={{ width: '100%' }} />
-              </Form.Item>
-
-              <Form.Item
-                label="Difficulty"
-                name="difficulty"
-                rules={[{ required: true, message: 'Difficulty is required' }]}
-              >
-                <Select>
-                  <Select.Option value="EASY">Easy</Select.Option>
-                  <Select.Option value="MEDIUM">Medium</Select.Option>
-                  <Select.Option value="HARD">Hard</Select.Option>
-                </Select>
-              </Form.Item>
-            </>
-          )}
-
-          <Form.Item style={{ marginBottom: 0, marginTop: 24 }}>
-            <Space>
-              <Button type="primary" htmlType="submit" loading={saving}>
-                {saving ? 'Creating…' : 'Add badge'}
-              </Button>
-              <Button onClick={onClose}>Cancel</Button>
-            </Space>
-          </Form.Item>
-        </Form>
-      )}
-    </Modal>
+    />
   );
 }
 

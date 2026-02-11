@@ -18,6 +18,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { UserOutlined, ExclamationCircleOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
 import ViewActionButton from '../../components/ViewActionButton';
+import IdDisplay from '../../components/IdDisplay';
 import {
   fetchUser,
   fetchUserModerationHistory,
@@ -377,7 +378,7 @@ function UserDetail() {
       key: 'eventId',
       ellipsis: true,
       width: 100,
-      render: (id: string) => <Text code style={{ fontSize: 12 }} copyable>{id}</Text>,
+      render: (id: string) => <IdDisplay id={id} variant="compact" />,
     },
     {
       title: 'Event',
@@ -439,7 +440,7 @@ function UserDetail() {
       key: 'id',
       width: 100,
       ellipsis: true,
-      render: (id: string) => <Text code style={{ fontSize: 12 }} copyable>{id}</Text>,
+      render: (id: string) => <IdDisplay id={id} variant="compact" />,
     },
     {
       title: 'Badge ID',
@@ -447,7 +448,7 @@ function UserDetail() {
       key: 'badgeId',
       width: 100,
       ellipsis: true,
-      render: (id: string) => <Text code style={{ fontSize: 12 }} copyable>{id}</Text>,
+      render: (id: string) => <IdDisplay id={id} variant="compact" />,
     },
     {
       title: 'Badge',
@@ -501,7 +502,7 @@ function UserDetail() {
       key: 'id',
       width: 100,
       ellipsis: true,
-      render: (id: string) => <Text code style={{ fontSize: 12 }} copyable>{id}</Text>,
+      render: (id: string) => <IdDisplay id={id} variant="compact" />,
     },
     {
       title: 'User ID',
@@ -509,7 +510,7 @@ function UserDetail() {
       key: 'userId',
       width: 100,
       ellipsis: true,
-      render: (id: string) => <Text code style={{ fontSize: 12 }} copyable>{id}</Text>,
+      render: (id: string) => <IdDisplay id={id} variant="compact" />,
     },
     { title: 'Provider', dataIndex: 'provider', key: 'provider', width: 100 },
     {
@@ -543,7 +544,7 @@ function UserDetail() {
       key: 'id',
       width: 100,
       ellipsis: true,
-      render: (id: string) => <Text code style={{ fontSize: 12 }} copyable>{id}</Text>,
+      render: (id: string) => <IdDisplay id={id} variant="compact" />,
     },
     {
       title: 'Date',
@@ -573,7 +574,7 @@ function UserDetail() {
       key: 'id',
       width: 100,
       ellipsis: true,
-      render: (id: string) => <Text code style={{ fontSize: 12 }} copyable>{id}</Text>,
+      render: (id: string) => <IdDisplay id={id} variant="compact" />,
     },
     {
       title: 'Date',
@@ -589,7 +590,7 @@ function UserDetail() {
       key: 'modId',
       width: 100,
       ellipsis: true,
-      render: (id: string) => <Text code style={{ fontSize: 12 }} copyable>{id}</Text>,
+      render: (id: string) => <IdDisplay id={id} variant="compact" />,
     },
     { title: 'Moderator', dataIndex: 'moderatorEmail', key: 'moderator', render: (e) => e ?? '—' },
     { title: 'Reason', dataIndex: 'reason', key: 'reason', render: (r) => r ?? '—' },
@@ -602,7 +603,7 @@ function UserDetail() {
       key: 'id',
       width: 100,
       ellipsis: true,
-      render: (id: string) => <Text code style={{ fontSize: 12 }} copyable>{id}</Text>,
+      render: (id: string) => <IdDisplay id={id} variant="compact" />,
     },
     {
       title: 'Date',
@@ -638,11 +639,11 @@ function UserDetail() {
           <Card bordered title="Account">
             <Descriptions column={2} bordered size="small">
               <Descriptions.Item label="User ID" span={2}>
-                <Text code copyable style={{ fontSize: 12 }}>{user.id}</Text>
+                <IdDisplay id={user.id} variant="default" />
               </Descriptions.Item>
               {user.auth0Id && (
                 <Descriptions.Item label="Auth0 ID" span={2}>
-                  <Text code copyable style={{ fontSize: 12 }}>{user.auth0Id}</Text>
+                  <IdDisplay id={user.auth0Id} variant="default" />
                 </Descriptions.Item>
               )}
               <Descriptions.Item label="Email">{user.email ?? '—'}</Descriptions.Item>
@@ -669,10 +670,10 @@ function UserDetail() {
             <Card bordered title="Last ban">
               <Descriptions column={2} bordered size="small">
                 <Descriptions.Item label="Record ID" span={2}>
-                  <Text code copyable style={{ fontSize: 12 }}>{user.lastBan.id}</Text>
+                  <IdDisplay id={user.lastBan.id} variant="default" />
                 </Descriptions.Item>
                 <Descriptions.Item label="Moderator ID" span={2}>
-                  <Text code copyable style={{ fontSize: 12 }}>{user.lastBan.moderatorId}</Text>
+                  <IdDisplay id={user.lastBan.moderatorId} variant="default" />
                 </Descriptions.Item>
                 <Descriptions.Item label="Date">
                   {new Date(user.lastBan.createdAt).toLocaleString('en-US')}
@@ -704,10 +705,10 @@ function UserDetail() {
             {user.profile ? (
               <Descriptions column={2} bordered size="small">
                 <Descriptions.Item label="Profile ID" span={2}>
-                  <Text code copyable style={{ fontSize: 12 }}>{user.profile.id}</Text>
+                  <IdDisplay id={user.profile.id} variant="default" />
                 </Descriptions.Item>
                 <Descriptions.Item label="User ID" span={2}>
-                  <Text code copyable style={{ fontSize: 12 }}>{user.profile.userId}</Text>
+                  <IdDisplay id={user.profile.userId} variant="default" />
                 </Descriptions.Item>
                 <Descriptions.Item label="Display name">
                   {user.profile.displayName ?? '—'}
@@ -744,7 +745,7 @@ function UserDetail() {
                 </div>
                 <Descriptions column={1} bordered size="small">
                   <Descriptions.Item label="Avatar ID">
-                    <Text code copyable style={{ fontSize: 12 }}>{avatar.id}</Text>
+                    <IdDisplay id={avatar.id} variant="default" />
                   </Descriptions.Item>
                   <Descriptions.Item label="Active">
                     {avatar.isActive ? 'Yes' : 'No'}

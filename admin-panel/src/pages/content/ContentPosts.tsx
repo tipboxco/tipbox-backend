@@ -22,6 +22,7 @@ import {
 import PageHeader from '../../components/PageHeader';
 import type { StatItemData } from '../../components/StatItem';
 import ViewActionButton from '../../components/ViewActionButton';
+import IdDisplay from '../../components/IdDisplay';
 import {
   fetchContentPostsStats,
   fetchContentPosts,
@@ -111,7 +112,7 @@ function ContentPosts() {
   }, [pagination.offset, search, type, sort, order]);
 
   const userDisplay = (p: AdminContentPostListItem) =>
-    p.userDisplayName || p.userName || p.userId?.slice(0, 8) || '—';
+    p.userDisplayName || p.userName || (p.userId ? <IdDisplay id={p.userId} variant="compact" copyable={false} /> : '—');
 
   const titleDisplay = (p: AdminContentPostListItem) =>
     (p.title && p.title.trim()) || (p.bodyExcerpt && p.bodyExcerpt.trim().slice(0, 80)) || '—';

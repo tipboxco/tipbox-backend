@@ -13,6 +13,7 @@ import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import { CommentOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
 import type { StatItemData } from '../../components/StatItem';
+import IdDisplay from '../../components/IdDisplay';
 import {
   fetchContentCommentsStats,
   fetchContentComments,
@@ -89,7 +90,7 @@ function ContentComments() {
   }, [pagination.offset, postId, userId, sort, order]);
 
   const userDisplay = (c: AdminContentCommentListItem) =>
-    c.userDisplayName || c.userName || c.userId?.slice(0, 8) || '—';
+    c.userDisplayName || c.userName || (c.userId ? <IdDisplay id={c.userId} variant="compact" copyable={false} /> : '—');
 
   const columns: ColumnsType<AdminContentCommentListItem> = [
     {

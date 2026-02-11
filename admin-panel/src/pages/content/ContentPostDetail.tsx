@@ -24,6 +24,7 @@ import {
   DeleteOutlined,
 } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
+import IdDisplay from '../../components/IdDisplay';
 import {
   fetchContentPost,
   deleteContentPost,
@@ -149,7 +150,7 @@ function ContentPostDetail() {
     );
   }
 
-  const userDisplay = post.userDisplayName || post.userName || post.userId?.slice(0, 8) || '—';
+  const userDisplay = post.userDisplayName || post.userName || (post.userId ? <IdDisplay id={post.userId} variant="compact" copyable={false} /> : '—');
   const isImageUrl = (url: string) =>
     /\.(jpe?g|png|gif|webp|avif)(\?|$)/i.test(url) || /\/image\//i.test(url);
 
