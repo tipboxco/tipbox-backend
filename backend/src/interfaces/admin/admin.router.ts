@@ -26,6 +26,8 @@ import adminNewsRouter from './routers/admin-news.router';
 import adminBrandsRouter from './routers/admin-brands.router';
 import adminNFTRouter from './routers/admin-nft.router';
 import adminMessagingRouter from './routers/admin-messaging.router';
+import adminSystemRouter from './routers/admin-system.router';
+import adminAnalyticsRouter from './routers/admin-analytics.router';
 
 const router = Router();
 const prisma = getPrisma();
@@ -226,5 +228,7 @@ router.use('/news', authMiddleware, requireAdmin, adminNewsRouter);
 router.use('/brands', authMiddleware, requireAdmin, adminBrandsRouter);
 router.use('/nft', authMiddleware, requireAdmin, adminNFTRouter);
 router.use('/messaging', authMiddleware, requireAdmin, adminMessagingRouter);
+router.use('/system', authMiddleware, requireAdmin, adminSystemRouter);
+router.use('/analytics', authMiddleware, requireAdmin, adminAnalyticsRouter);
 
 export default router;
