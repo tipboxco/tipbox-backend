@@ -20,6 +20,7 @@ import { seedTipsTransfers } from './seed/steps/tips-transfer.seed'
 import { seedExpert } from './seed/steps/expert.seed'
 import { seedNotification } from './seed/steps/notification.seed'
 import { ensureAdminUser } from './seed/steps/admin-user.seed'
+import { seedGamificationCollections } from './seed/steps/gamification-collections.seed'
 import { GeminiService } from '../src/infrastructure/ai/gemini.service'
 import { brandToWebsite } from '../src/data/brandToWebsite'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -7887,6 +7888,23 @@ async function main() {
       console.error('   Stack:', error.stack)
     }
     console.log('⚠️  Seed devam ediyor ama event/marketplace badges oluşturulamadı')
+  }
+
+  // ===== GAMIFICATION COLLECTIONS SEEDING =====
+  console.log('\n🎮 Gamification Collections seeding başlatılıyor...')
+  progress.increment('Gamification Collections oluşturuluyor...')
+
+  try {
+    await seedGamificationCollections(prisma)
+    progress.increment('Gamification Collections tamamlandı')
+    console.log('✅ Gamification Collections seeding completed')
+  } catch (error) {
+    console.error('❌ Gamification Collections seeding hatası:', error)
+    if (error instanceof Error) {
+      console.error('   Message:', error.message)
+      console.error('   Stack:', error.stack)
+    }
+    console.log('⚠️  Seed devam ediyor ama Gamification Collections oluşturulamadı')
   }
 
   // ===== BRAND CATALOG DATA SEEDING =====

@@ -4,7 +4,7 @@ import { validateBody, validateQuery } from '../../../infrastructure/middleware/
 import { getPrisma } from '../../../infrastructure/repositories/prisma.client';
 import { NotFoundError, ValidationError } from '../../../infrastructure/errors/custom-errors';
 import logger from '../../../infrastructure/logger/logger';
-import { getRedisClient } from '../../../infrastructure/cache/redis-client';
+import { CacheService } from '../../../infrastructure/cache/cache.service';
 
 // Import schemas
 import {
@@ -325,9 +325,9 @@ router.get(
     let redisStatus: 'connected' | 'disconnected' = 'connected';
     let redisResponseTime = 0;
     try {
-      const redis = getRedisClient();
+      const cacheService = CacheService.getInstance();
       const redisStart = Date.now();
-      await redis.ping();
+      await cacheService.ping();
       redisResponseTime = Date.now() - redisStart;
     } catch (error) {
       redisStatus = 'disconnected';

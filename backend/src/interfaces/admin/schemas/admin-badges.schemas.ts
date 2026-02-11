@@ -42,6 +42,8 @@ export const AdminCreateCollectionGoalSchema = z.object({
   difficulty: AchievementDifficultyEnum.default('MEDIUM'),
 });
 
+export const AdminUpdateCollectionGoalSchema = AdminCreateCollectionGoalSchema.partial();
+
 /* ========== Admin Badges ========== */
 
 const BadgeTypeEnum = z.enum(['COLLECTION', 'EVENT', 'COSMETIC', 'BRAND']);

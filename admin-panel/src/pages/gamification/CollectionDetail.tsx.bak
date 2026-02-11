@@ -4,14 +4,18 @@ import {
   Card,
   Tabs,
   Button,
+  Input,
+  Select,
   Space,
   Spin,
   Empty,
   Modal,
+  Alert,
   Row,
   Col,
   Typography,
   Image,
+  Form,
   message as antdMessage,
 } from 'antd';
 import {
@@ -31,11 +35,16 @@ import {
   deleteCollection,
   fetchCollectionBadges,
   removeCollectionBadge,
+  fetchBadgeCategories,
+  updateBadge,
+  fetchBadge,
   updateCollection,
 } from '../../api/admin-badges-collections';
 import type {
   AdminCollectionDetailResponse,
   AdminCollectionBadgeListItem,
+  AdminBadgeCategoryListItem,
+  AdminBadgeDetailResponse,
 } from '../../types/admin';
 import AddBadgeToCollectionModal from './modals/AddBadgeToCollectionModal';
 
@@ -119,6 +128,7 @@ function CollectionDetail() {
         <CollectionBadgesTab
           collectionId={id}
           collectionName={collection.name}
+          collectionCategoryId={collection.categoryId ?? null}
           onUpdated={loadCollection}
         />
       ),
@@ -233,27 +243,19 @@ function CollectionSummaryTab({
   };
 
   // Field configuration for editable form
-  // Optimized layout: short fields in 2 columns, long fields span full width
   const collectionFields: FieldConfig[] = [
     {
       name: 'name',
       label: 'Collection Name',
       type: 'text',
       required: true,
-      maxLength: 500,
-      span: 2, // Full width for important field
+      maxLength: 500
     },
     {
       name: 'owner',
       label: 'Owner',
       type: 'text',
       maxLength: 200
-    },
-    {
-      name: 'categoryId',
-      label: 'Category',
-      type: 'text',
-      render: () => collection.categoryName ?? collection.categoryId ?? '—'
     },
     {
       name: 'focusSector',
@@ -272,16 +274,14 @@ function CollectionSummaryTab({
       label: 'Short Description',
       type: 'textarea',
       rows: 2,
-      maxLength: 2000,
-      span: 2, // Full width for better readability
+      maxLength: 2000
     },
     {
       name: 'longDescription',
       label: 'Long Description',
       type: 'textarea',
       rows: 3,
-      maxLength: 5000,
-      span: 2, // Full width for better readability
+      maxLength: 5000
     },
     {
       name: 'unlockCondition',
@@ -296,11 +296,16 @@ function CollectionSummaryTab({
       maxLength: 500
     },
     {
+      name: 'categoryId',
+      label: 'Category',
+      type: 'text',
+      render: () => collection.categoryName ?? collection.categoryId ?? '—'
+    },
+    {
       name: 'bannerUrl',
       label: 'Cover Image URL',
       type: 'text',
-      maxLength: 1000,
-      span: 2, // Full width for long URLs
+      maxLength: 1000
     },
     {
       name: 'createdAt',
@@ -340,7 +345,7 @@ function CollectionSummaryTab({
             fields={collectionFields}
             onSave={handleUpdateCollection}
             bordered
-            columns={2}
+            columns={1}
           />
 
           <Card bordered style={{ marginTop: 16 }}>

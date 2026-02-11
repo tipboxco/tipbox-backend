@@ -4,6 +4,7 @@ export type AdminProductStatsResponse = {
   total: number;
   addedThisMonth: number;
   byCategory: Record<string, number>;
+  byCategoryCount: number;
   topByInventory: {
     productId: string;
     productName: string;
@@ -45,6 +46,12 @@ export type AdminProductDetailResponse = AdminProductListItem & {
 };
 
 /* ========== Categories ========== */
+
+export type AdminCategoryStatsResponse = {
+  total: number;
+  active: number;
+  inactive: number;
+};
 
 export type AdminCategoryListItem = {
   id: string;
@@ -106,6 +113,7 @@ export type AdminProductSuggestionStatsResponse = {
   approved: number;
   rejected: number;
   approvedThisMonth: number;
+  thisWeek: number;
   topSuggesters: {
     userId: string;
     username: string | null;
@@ -188,6 +196,13 @@ export type AdminProductAnalyticsResponse = {
     categoryName: string;
     productCount: number;
   }[];
+};
+
+/* ========== Product Comparisons ========== */
+
+export type AdminProductComparisonStatsResponse = {
+  total: number;
+  thisMonth: number;
 };
 
 /* ========== Input Types (inferred from schemas) ========== */

@@ -17,6 +17,7 @@ import {
   AdminUpdateCollectionSchema,
   AdminAddCollectionBadgeSchema,
   AdminCreateCollectionGoalSchema,
+  AdminUpdateCollectionGoalSchema,
   AdminBadgesQuerySchema,
   AdminCreateBadgeSchema,
   AdminUpdateBadgeSchema,
@@ -295,6 +296,93 @@ router.post(
       },
     });
     return res.status(201).json({ success: true, data: { id: goal.id } });
+  })
+);
+
+router.patch(
+  '/collections/:collectionId/goals/:goalId',
+  validateBody(AdminUpdateCollectionGoalSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const adminId = req.user?.id;
+    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+
+    const { collectionId, goalId } = req.params;
+    const body = req.body as Partial<AdminCreateCollectionGoalInput>;
+
+    const goal = await prisma.achievementGoal.findUnique({ where: { id: goalId } });
+    if (!goal) throw new NotFoundError('Achievement goal not found');
+    if (goal.collectionId !== collectionId) {
+      throw new ValidationError('Goal does not belong to this collection');
+    }
+
+    const updateData: Record<string, unknown> = {};
+    if (body.title !== undefined) updateData.title = body.title;
+    if (body.requirement !== undefined) updateData.requirement = body.requirement;
+    if (body.pointsRequired !== undefined) updateData.pointsRequired = body.pointsRequired;
+    if (body.difficulty !== undefined) updateData.difficulty = body.difficulty;
+
+    if (body.actionTypeId !== undefined) {
+      const actionType = await prisma.actionType.findUnique({ where: { id: body.actionTypeId } });
+      if (!actionType) throw new NotFoundError('ActionType not found');
+      updateData.actionTypeId = body.actionTypeId;
+      updateData.mainAction = actionType.mainAction;
+    }
+
+    if (body.rewardBadgeId !== undefined) {
+      const badge = await prisma.badge.findUnique({ where: { id: body.rewardBadgeId } });
+      if (!badge) throw new NotFoundError('Badge not found');
+      if (badge.collectionId !== collectionId) {
+        throw new ValidationError('Badge does not belong to this collection');
+      }
+      updateData.rewardBadgeId = body.rewardBadgeId;
+    }
+
+    const updated = await prisma.achievementGoal.update({
+      where: { id: goalId },
+      data: updateData,
+    });
+
+    await prisma.adminLog.create({
+      data: {
+        adminId,
+        action: 'COLLECTION_GOAL_UPDATE',
+        description: `goalId: ${goalId}, collectionId: ${collectionId}`,
+        entityType: 'achievement_goal',
+        entityId: 0,
+      },
+    });
+
+    return res.json({ success: true, data: { id: updated.id } });
+  })
+);
+
+router.delete(
+  '/collections/:collectionId/goals/:goalId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const adminId = req.user?.id;
+    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+
+    const { collectionId, goalId } = req.params;
+
+    const goal = await prisma.achievementGoal.findUnique({ where: { id: goalId } });
+    if (!goal) throw new NotFoundError('Achievement goal not found');
+    if (goal.collectionId !== collectionId) {
+      throw new ValidationError('Goal does not belong to this collection');
+    }
+
+    await prisma.achievementGoal.delete({ where: { id: goalId } });
+
+    await prisma.adminLog.create({
+      data: {
+        adminId,
+        action: 'COLLECTION_GOAL_DELETE',
+        description: `goalId: ${goalId}, collectionId: ${collectionId}`,
+        entityType: 'achievement_goal',
+        entityId: 0,
+      },
+    });
+
+    return res.json({ success: true, message: 'Achievement goal deleted' });
   })
 );
 

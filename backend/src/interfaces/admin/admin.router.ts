@@ -217,7 +217,6 @@ router.get(
 router.use('/users', authMiddleware, requireAdmin, adminUsersRouter);
 router.use('/events', authMiddleware, requireAdmin, adminEventsRouter);
 router.use('/badges', authMiddleware, requireAdmin, adminBadgesRouter);
-router.use('/collections', authMiddleware, requireAdmin, adminBadgesRouter); // Collections use badges router
 router.use('/content', authMiddleware, requireAdmin, adminContentRouter);
 router.use('/gamification', authMiddleware, requireAdmin, adminGamificationRouter);
 router.use('/action-logs', authMiddleware, requireAdmin, adminGamificationRouter); // Action logs in gamification

@@ -12,12 +12,12 @@ import type {
   AdminBadgeOwnerListItem,
 } from '../types/admin';
 
-const prefix = '/admin';
+const prefix = '/admin/badges';
 
 /* ========== Badge Categories ========== */
 
 export async function fetchBadgeCategories() {
-  return get<AdminBadgeCategoryListItem[]>(`${prefix}/badge-categories`);
+  return get<AdminBadgeCategoryListItem[]>(`/admin/badge-categories`);
 }
 
 /* ========== Collections ========== */
@@ -30,10 +30,37 @@ export async function fetchCollectionCategories() {
 }
 
 export async function uploadMedia(file: File) {
+  if (!file) {
+    throw new Error('No file selected');
+  }
+
+  // Validate file type
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+  if (!allowedTypes.includes(file.type)) {
+    throw new Error('Invalid file type. Only JPG, PNG, GIF, and WebP are supported.');
+  }
+
+  // Validate file size (5MB)
+  const maxSize = 5 * 1024 * 1024;
+  if (file.size > maxSize) {
+    throw new Error('File too large. Maximum size is 5MB.');
+  }
+
   const formData = new FormData();
   formData.append('file', file);
-  const res = await postFormData<{ url: string }>(`${prefix}/media/upload`, formData);
-  return res;
+
+  try {
+    const res = await postFormData<{ url: string }>(`${prefix}/media/upload`, formData);
+    if (!res.data?.url) {
+      throw new Error('Upload succeeded but no URL returned');
+    }
+    return res;
+  } catch (err) {
+    if (err instanceof Error) {
+      throw err;
+    }
+    throw new Error('Failed to upload image. Please try again.');
+  }
 }
 
 export async function fetchCollectionsStats() {
@@ -113,7 +140,7 @@ export async function removeCollectionBadge(collectionId: string, badgeId: strin
 }
 
 export async function fetchActionTypes() {
-  return get<AdminActionTypeListItem[]>(`${prefix}/action-types`);
+  return get<AdminActionTypeListItem[]>(`/admin/action-types`);
 }
 
 export async function createCollectionGoal(
@@ -133,7 +160,7 @@ export async function createCollectionGoal(
 /* ========== Badges ========== */
 
 export async function fetchBadgesStats() {
-  return get<AdminBadgeStatsResponse>(`${prefix}/badges/stats`);
+  return get<AdminBadgeStatsResponse>(`${prefix}/stats`);
 }
 
 export async function fetchBadges(params?: {
@@ -158,11 +185,11 @@ export async function fetchBadges(params?: {
   if (params?.categoryId) query.categoryId = params.categoryId;
   if (params?.collectionId) query.collectionId = params.collectionId;
   if (params?.search) query.search = params.search;
-  return get<AdminBadgeListItem[]>(`${prefix}/badges`, query);
+  return get<AdminBadgeListItem[]>(`${prefix}`, query);
 }
 
 export async function fetchBadge(id: string) {
-  return get<AdminBadgeDetailResponse>(`${prefix}/badges/${id}`);
+  return get<AdminBadgeDetailResponse>(`${prefix}/${id}`);
 }
 
 export async function createBadge(body: {
@@ -176,7 +203,7 @@ export async function createBadge(body: {
   categoryId: string;
   collectionId?: string | null;
 }) {
-  return post<AdminBadgeDetailResponse>(`${prefix}/badges`, body);
+  return post<AdminBadgeDetailResponse>(`${prefix}`, body);
 }
 
 export async function updateBadge(
@@ -193,11 +220,11 @@ export async function updateBadge(
     collectionId: string | null;
   }>
 ) {
-  return patch<AdminBadgeDetailResponse>(`${prefix}/badges/${id}`, body);
+  return patch<AdminBadgeDetailResponse>(`${prefix}/${id}`, body);
 }
 
 export async function deleteBadge(id: string) {
-  return del<{ message: string }>(`${prefix}/badges/${id}`);
+  return del<{ message: string }>(`${prefix}/${id}`);
 }
 
 export async function fetchBadgeOwners(
@@ -217,5 +244,5 @@ export async function fetchBadgeOwners(
     order: params?.order ?? 'desc',
   };
   if (params?.claimed !== undefined) query.claimed = params.claimed;
-  return get<AdminBadgeOwnerListItem[]>(`${prefix}/badges/${badgeId}/owners`, query);
+  return get<AdminBadgeOwnerListItem[]>(`${prefix}/${badgeId}/owners`, query);
 }

@@ -53,6 +53,16 @@ export type AdminEventAnalyticsResponse = {
   badgesCount: number;
 };
 
+export type AdminEventBadgeStatsResponse = {
+  total: number;
+  byEventCount: number;
+};
+
+export type AdminEventRewardStatsResponse = {
+  total: number;
+  byType: Record<string, number>;
+};
+
 export type AdminEventBadgeListItem = {
   id: string;
   eventId: string;

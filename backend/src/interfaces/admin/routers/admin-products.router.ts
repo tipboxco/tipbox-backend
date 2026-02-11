@@ -29,6 +29,7 @@ import type {
   AdminProductStatsResponse,
   AdminProductListItem,
   AdminProductDetailResponse,
+  AdminCategoryStatsResponse,
   AdminCategoryListItem,
   AdminCategoryDetailResponse,
   AdminProductGroupStatsResponse,
@@ -41,6 +42,7 @@ import type {
   AdminInventoryListItem,
   AdminInventoryDetailResponse,
   AdminProductAnalyticsResponse,
+  AdminProductComparisonStatsResponse,
   AdminCreateProductInput,
   AdminUpdateProductInput,
   AdminMergeProductsInput,
@@ -93,6 +95,9 @@ router.get(
       }
     });
 
+    // Count unique categories that have products
+    const byCategoryCount = Object.keys(byCategory).length;
+
     // Top products by inventory count
     const topByInventoryRaw = await prisma.inventory.groupBy({
       by: ['productId'],
@@ -119,6 +124,7 @@ router.get(
       total,
       addedThisMonth,
       byCategory,
+      byCategoryCount,
       topByInventory,
     };
 
@@ -609,6 +615,47 @@ router.get(
 );
 
 // ==================== Categories ====================
+
+/**
+ * @swagger
+ * /admin/products/categories/stats:
+ *   get:
+ *     tags: [Admin - Products]
+ *     summary: Get product categories statistics
+ *     responses:
+ *       200:
+ *         description: Categories stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 total:
+ *                   type: number
+ *                 active:
+ *                   type: number
+ *                 inactive:
+ *                   type: number
+ */
+router.get(
+  '/categories/stats',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const [total, active] = await Promise.all([
+      prisma.category.count(),
+      prisma.category.count({ where: { isActive: true } }),
+    ]);
+
+    const inactive = total - active;
+
+    const data: AdminCategoryStatsResponse = {
+      total,
+      active,
+      inactive,
+    };
+
+    return res.json({ success: true, data });
+  })
+);
 
 /**
  * GET /admin/products/categories
@@ -1220,6 +1267,14 @@ router.get(
       },
     });
 
+    // Suggestions created this week
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay()); // Start of week (Sunday)
+    startOfWeek.setHours(0, 0, 0, 0);
+    const thisWeek = await prisma.productSuggestion.count({
+      where: { createdAt: { gte: startOfWeek } },
+    });
+
     // Top suggesters
     const suggestionsRaw = await prisma.productSuggestion.groupBy({
       by: ['userId'],
@@ -1251,6 +1306,7 @@ router.get(
       approved,
       rejected,
       approvedThisMonth,
+      thisWeek,
       topSuggesters,
     };
 
@@ -1676,6 +1732,48 @@ router.get(
         mediaUrl: m.mediaUrl,
         uploadedAt: m.uploadedAt.toISOString(),
       })),
+    };
+
+    return res.json({ success: true, data });
+  })
+);
+
+// ==================== Product Comparisons ====================
+
+/**
+ * @swagger
+ * /admin/products/comparisons/stats:
+ *   get:
+ *     tags: [Admin - Products]
+ *     summary: Get product comparisons statistics
+ *     responses:
+ *       200:
+ *         description: Comparisons stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 total:
+ *                   type: number
+ *                 thisMonth:
+ *                   type: number
+ */
+router.get(
+  '/comparisons/stats',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const total = await prisma.postComparison.count();
+
+    // Comparisons created this month
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const thisMonth = await prisma.postComparison.count({
+      where: { createdAt: { gte: startOfMonth } },
+    });
+
+    const data: AdminProductComparisonStatsResponse = {
+      total,
+      thisMonth,
     };
 
     return res.json({ success: true, data });

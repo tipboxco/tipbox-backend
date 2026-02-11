@@ -91,6 +91,11 @@ export type AdminFeedHighlightListItem = {
   userDisplayName: string | null;
 };
 
+export type AdminFeedHighlightStatsResponse = {
+  total: number;
+  active: number;
+};
+
 export type AdminTrendingPostListItem = {
   id: string;
   postId: string;
@@ -100,6 +105,16 @@ export type AdminTrendingPostListItem = {
   createdAt: string;
   postTitle: string | null;
   userDisplayName: string | null;
+};
+
+export type AdminTrendingPostStatsResponse = {
+  total: number;
+  thisWeek: number;
+};
+
+export type AdminContentTagsCategoriesStatsResponse = {
+  totalTags: number;
+  totalCategories: number;
 };
 
 export type AdminTopCommunityChoiceListItem = {

@@ -134,6 +134,7 @@ export const darkTheme: ThemeConfig = {
       dangerShadow: 'none',
     },
     Input: {
+      colorBgContainer: 'transparent',
       activeBorderColor: buttonFillYellow,
       hoverBorderColor: 'rgba(255, 255, 255, 0.2)',
     },
@@ -256,6 +257,7 @@ export const lightTheme: ThemeConfig = {
       dangerShadow: 'none',
     },
     Input: {
+      colorBgContainer: 'transparent',
       activeBorderColor: buttonFillYellow,
       hoverBorderColor: '#bfbfbf',
     },

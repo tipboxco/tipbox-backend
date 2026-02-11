@@ -36,11 +36,14 @@ import type {
   AdminModerationHistoryItem,
   AdminUserReportListItem,
   AdminUserReportDetailResponse,
+  AdminUserReportStatsResponse,
   AdminKycListItem,
   AdminKycDetailResponse,
+  AdminUserKycStatsResponse,
   AdminTrustScoreListItem,
   AdminLoginAttemptListItem,
   AdminUsersStatsResponse,
+  AdminUserBannedStatsResponse,
   AdminAvatarResponse,
   AdminUserEventListItem,
   AdminUserBadgeListItem,
@@ -1722,6 +1725,91 @@ router.patch(
 );
 
 /**
+ * @swagger
+ * /admin/users/banned/stats:
+ *   get:
+ *     tags: [Admin - Users]
+ *     summary: Get banned users statistics
+ *     responses:
+ *       200:
+ *         description: Banned users stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 total:
+ *                   type: number
+ *                 thisMonth:
+ *                   type: number
+ */
+router.get(
+  '/banned/stats',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const total = await prisma.user.count({
+      where: { status: 'BANNED' },
+    });
+
+    // Banned this month (via ModerationAction)
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const thisMonth = await prisma.moderationAction.count({
+      where: {
+        actionType: 'BAN',
+        createdAt: { gte: startOfMonth },
+      },
+    });
+
+    const data: AdminUserBannedStatsResponse = {
+      total,
+      thisMonth,
+    };
+
+    return res.json({ success: true, data });
+  })
+);
+
+/**
+ * @swagger
+ * /admin/users/reports/stats:
+ *   get:
+ *     tags: [Admin - Reports & KYC]
+ *     summary: Get user reports statistics
+ *     responses:
+ *       200:
+ *         description: Reports stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 total:
+ *                   type: number
+ *                 open:
+ *                   type: number
+ *                 resolved:
+ *                   type: number
+ */
+router.get(
+  '/reports/stats',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const [total, open, resolved] = await Promise.all([
+      prisma.userReport.count(),
+      prisma.userReport.count({ where: { resolved: false } }),
+      prisma.userReport.count({ where: { resolved: true } }),
+    ]);
+
+    const data: AdminUserReportStatsResponse = {
+      total,
+      open,
+      resolved,
+    };
+
+    return res.json({ success: true, data });
+  })
+);
+
+/**
  * @openapi
  * /admin/user-reports:
  *   get:
@@ -1943,6 +2031,50 @@ router.patch(
       message: resolved ? 'Şikayet çözüldü olarak işaretlendi' : 'Şikayet güncellendi',
       data: { reportId: id, resolved },
     });
+  })
+);
+
+/**
+ * @swagger
+ * /admin/users/kyc/stats:
+ *   get:
+ *     tags: [Admin - Reports & KYC]
+ *     summary: Get KYC statistics
+ *     responses:
+ *       200:
+ *         description: KYC stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 total:
+ *                   type: number
+ *                 pending:
+ *                   type: number
+ *                 approved:
+ *                   type: number
+ *                 rejected:
+ *                   type: number
+ */
+router.get(
+  '/kyc/stats',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const [total, pending, approved, rejected] = await Promise.all([
+      prisma.userKycRecord.count(),
+      prisma.userKycRecord.count({ where: { reviewStatus: 'PENDING' } }),
+      prisma.userKycRecord.count({ where: { reviewResult: 'GREEN' } }),
+      prisma.userKycRecord.count({ where: { reviewResult: 'RED' } }),
+    ]);
+
+    const data: AdminUserKycStatsResponse = {
+      total,
+      pending,
+      approved,
+      rejected,
+    };
+
+    return res.json({ success: true, data });
   })
 );
 

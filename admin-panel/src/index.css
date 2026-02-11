@@ -180,9 +180,117 @@ code {
   outline-offset: 2px;
 }
 
-/* Descriptions: consistent label column width across pages */
+/* Tarayıcı kayıtlı şifre/email (autofill) beyaz arka planı kaldır — tema ile uyumlu yap */
+[data-theme="dark"] .ant-input:-webkit-autofill,
+[data-theme="dark"] .ant-input:-webkit-autofill:hover,
+[data-theme="dark"] .ant-input:-webkit-autofill:focus,
+[data-theme="dark"] .ant-input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 30px #1a1a1a inset !important;
+  box-shadow: 0 0 0 30px #1a1a1a inset !important;
+  -webkit-text-fill-color: #ffffff;
+  caret-color: #ffffff;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+[data-theme="light"] .ant-input:-webkit-autofill,
+[data-theme="light"] .ant-input:-webkit-autofill:hover,
+[data-theme="light"] .ant-input:-webkit-autofill:focus,
+[data-theme="light"] .ant-input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 30px #ffffff inset !important;
+  box-shadow: 0 0 0 30px #ffffff inset !important;
+  -webkit-text-fill-color: #000000;
+  caret-color: #000000;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Descriptions: consistent label column width across pages (deprecated - use EditableFormSection) */
 .ant-descriptions-item-label {
   min-width: 140px;
+}
+
+/* ============================================
+   EDITABLE FORM SECTION
+   ============================================ */
+/* View Mode - Descriptions component styling */
+.editable-form-section.view-mode {
+  transition: all var(--transition-fast);
+}
+
+/* Compact Descriptions layout */
+.editable-form-section .ant-descriptions {
+  margin-bottom: 0;
+}
+
+.editable-form-section .ant-descriptions-item-label {
+  min-width: 140px;
+  font-weight: 500;
+  padding: 8px 12px !important;
+}
+
+.editable-form-section .ant-descriptions-item-content {
+  padding: 8px 12px !important;
+}
+
+/* Dark theme adjustments */
+[data-theme="dark"] .editable-form-section .ant-descriptions-item-label {
+  background-color: rgba(255, 255, 255, 0.02) !important;
+}
+
+[data-theme="dark"] .editable-form-section .ant-descriptions-item-content {
+  background-color: rgba(255, 255, 255, 0.01) !important;
+}
+
+/* Hover effect on description rows */
+[data-theme="dark"] .editable-form-section .ant-descriptions-row:hover {
+  background-color: rgba(218, 249, 77, 0.03);
+  transition: background-color var(--transition-fast);
+}
+
+/* Light theme adjustments */
+[data-theme="light"] .editable-form-section .ant-descriptions-item-label {
+  background-color: #fafafa !important;
+}
+
+[data-theme="light"] .editable-form-section .ant-descriptions-item-content {
+  background-color: #ffffff !important;
+}
+
+[data-theme="light"] .editable-form-section .ant-descriptions-row:hover {
+  background-color: rgba(218, 249, 77, 0.1);
+}
+
+/* Edit Mode */
+.editable-form-section.edit-mode {
+  padding: 16px;
+  background-color: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+}
+
+/* Form labels - consistent across all forms */
+.ant-form-item-label > label {
+  font-weight: 500;
+  font-size: 14px;
+}
+
+/* TextAreas - consistent height */
+.ant-input-textarea.short {
+  min-height: 64px; /* 2 rows */
+}
+
+.ant-input-textarea.medium {
+  min-height: 96px; /* 3 rows */
+}
+
+.ant-input-textarea.long {
+  min-height: 128px; /* 4 rows */
+}
+
+/* Responsive: Reduce padding on mobile */
+@media (max-width: 768px) {
+  .editable-form-section .ant-descriptions-item-label,
+  .editable-form-section .ant-descriptions-item-content {
+    padding: 6px 10px !important;
+  }
 }
 
 /* Tablo: taşan hücreler ellipsis, sadece başlık/içerik sütunları gerekirse alt satıra geçebilir */

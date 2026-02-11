@@ -14,3 +14,11 @@ export const FORM_LAYOUT_HORIZONTAL = {
   labelCol: { span: 6 },
   wrapperCol: { span: 18 },
 } as const;
+
+/** For inline editable forms - vertical layout with no colon after labels */
+export const EDITABLE_FORM_LAYOUT = {
+  layout: 'vertical' as const,
+  labelCol: { span: 24 },
+  wrapperCol: { span: 24 },
+  colon: false,
+} as const;

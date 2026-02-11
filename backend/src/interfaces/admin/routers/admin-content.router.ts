@@ -37,13 +37,16 @@ import type {
   AdminContentCommentDetailResponse,
   AdminContentCommentStatsResponse,
   AdminFeedHighlightListItem,
+  AdminFeedHighlightStatsResponse,
   AdminTrendingPostListItem,
+  AdminTrendingPostStatsResponse,
   AdminTopCommunityChoiceListItem,
   AdminManualReviewFlagListItem,
   AdminManualReviewFlagDetailResponse,
   AdminModerationActionListItem,
   AdminModerationActionDetailResponse,
   AdminContentTagListItem,
+  AdminContentTagsCategoriesStatsResponse,
 } from '../dtos/admin-content.dto';
 
 import type { PaginationMeta } from '../dtos/admin-common.dto';
@@ -768,6 +771,47 @@ router.delete(
  *       403:
  *         description: Forbidden
  */
+
+/**
+ * @swagger
+ * /admin/content/feed-highlights/stats:
+ *   get:
+ *     tags: [Admin - Content]
+ *     summary: Get feed highlights statistics
+ *     responses:
+ *       200:
+ *         description: Feed highlights stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 total:
+ *                   type: number
+ *                 active:
+ *                   type: number
+ */
+router.get(
+  '/feed-highlights/stats',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const total = await prisma.feedHighlight.count();
+
+    // Active highlights (highlighted within last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const active = await prisma.feedHighlight.count({
+      where: { highlightedAt: { gte: thirtyDaysAgo } },
+    });
+
+    const data: AdminFeedHighlightStatsResponse = {
+      total,
+      active,
+    };
+
+    return res.json({ success: true, data });
+  })
+);
+
 router.get(
   '/feed-highlights',
   validateQuery(AdminFeedHighlightsQuerySchema),
@@ -947,6 +991,48 @@ router.delete(
       data: { adminId, action: 'FEED_HIGHLIGHT_DELETE', description: `id: ${id}`, entityType: 'feed_highlight', entityId: 0 },
     });
     return res.json({ success: true, message: 'Feed highlight kaldırıldı' });
+  })
+);
+
+/**
+ * @swagger
+ * /admin/content/trending/stats:
+ *   get:
+ *     tags: [Admin - Content]
+ *     summary: Get trending posts statistics
+ *     responses:
+ *       200:
+ *         description: Trending posts stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 total:
+ *                   type: number
+ *                 thisWeek:
+ *                   type: number
+ */
+router.get(
+  '/trending/stats',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const total = await prisma.trendingPost.count();
+
+    // Trending posts calculated this week
+    const now = new Date();
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay()); // Start of week (Sunday)
+    startOfWeek.setHours(0, 0, 0, 0);
+    const thisWeek = await prisma.trendingPost.count({
+      where: { calculatedAt: { gte: startOfWeek } },
+    });
+
+    const data: AdminTrendingPostStatsResponse = {
+      total,
+      thisWeek,
+    };
+
+    return res.json({ success: true, data });
   })
 );
 
@@ -1714,6 +1800,48 @@ router.get(
  *       403:
  *         description: Forbidden
  */
+
+/**
+ * @swagger
+ * /admin/content/tags-categories/stats:
+ *   get:
+ *     tags: [Admin - Content]
+ *     summary: Get tags and categories statistics
+ *     responses:
+ *       200:
+ *         description: Tags and categories stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 totalTags:
+ *                   type: number
+ *                 totalCategories:
+ *                   type: number
+ */
+router.get(
+  '/tags-categories/stats',
+  asyncHandler(async (_req: Request, res: Response) => {
+    // Count unique tags
+    const uniqueTags = await prisma.contentPostTag.groupBy({
+      by: ['tag'],
+      _count: { tag: true },
+    });
+    const totalTags = uniqueTags.length;
+
+    // Count categories
+    const totalCategories = await prisma.category.count();
+
+    const data: AdminContentTagsCategoriesStatsResponse = {
+      totalTags,
+      totalCategories,
+    };
+
+    return res.json({ success: true, data });
+  })
+);
+
 router.get(
   '/tags',
   validateQuery(AdminContentTagsQuerySchema),

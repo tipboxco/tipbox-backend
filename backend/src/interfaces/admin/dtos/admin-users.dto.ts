@@ -70,6 +70,12 @@ export type AdminUserReportDetailResponse = AdminUserReportListItem & {
   reporter: { id: string; email: string | null; displayName?: string | null };
 };
 
+export type AdminUserReportStatsResponse = {
+  total: number;
+  open: number;
+  resolved: number;
+};
+
 export type AdminKycListItem = {
   id: string;
   userId: string;
@@ -86,6 +92,13 @@ export type AdminKycListItem = {
 export type AdminKycDetailResponse = AdminKycListItem & {
   updatedAt: string;
   lastUpdatedAt: string;
+};
+
+export type AdminUserKycStatsResponse = {
+  total: number;
+  pending: number;
+  approved: number;
+  rejected: number;
 };
 
 export type AdminTrustScoreListItem = {
@@ -112,6 +125,11 @@ export type AdminUsersStatsResponse = {
   bannedCount: number;
   emailVerifiedCount: number;
   newThisWeek: number;
+};
+
+export type AdminUserBannedStatsResponse = {
+  total: number;
+  thisMonth: number;
 };
 
 /** User avatar (admin) */

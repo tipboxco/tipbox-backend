@@ -25,6 +25,8 @@ import type {
   AdminEventDetailResponse,
   AdminEventParticipantListItem,
   AdminEventAnalyticsResponse,
+  AdminEventBadgeStatsResponse,
+  AdminEventRewardStatsResponse,
   AdminEventBadgeListItem,
   AdminEventRewardListItem,
 } from '../dtos/admin-events.dto';
@@ -52,6 +54,90 @@ router.get(
       prisma.event.count({ where: { status: 'CLOSED' } }),
     ]);
     const data: AdminEventStatsResponse = { total, draft, published, closed };
+    return res.json({ success: true, data });
+  })
+);
+
+/**
+ * @swagger
+ * /admin/events/badges/stats:
+ *   get:
+ *     tags: [Admin - Events]
+ *     summary: Get event badges statistics
+ *     responses:
+ *       200:
+ *         description: Event badges stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 total:
+ *                   type: number
+ *                 byEventCount:
+ *                   type: number
+ */
+router.get(
+  '/badges/stats',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const total = await prisma.eventBadge.count();
+
+    // Count unique events that have badges
+    const eventsWithBadges = await prisma.eventBadge.groupBy({
+      by: ['eventId'],
+      _count: { id: true },
+    });
+    const byEventCount = eventsWithBadges.length;
+
+    const data: AdminEventBadgeStatsResponse = {
+      total,
+      byEventCount,
+    };
+
+    return res.json({ success: true, data });
+  })
+);
+
+/**
+ * @swagger
+ * /admin/events/rewards/stats:
+ *   get:
+ *     tags: [Admin - Events]
+ *     summary: Get event rewards statistics
+ *     responses:
+ *       200:
+ *         description: Event rewards stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 total:
+ *                   type: number
+ *                 byType:
+ *                   type: object
+ */
+router.get(
+  '/rewards/stats',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const total = await prisma.eventReward.count();
+
+    // Count by reward type
+    const byTypeRaw = await prisma.eventReward.groupBy({
+      by: ['rewardType'],
+      _count: { id: true },
+    });
+
+    const byType: Record<string, number> = {};
+    byTypeRaw.forEach((item) => {
+      byType[item.rewardType] = item._count.id;
+    });
+
+    const data: AdminEventRewardStatsResponse = {
+      total,
+      byType,
+    };
+
     return res.json({ success: true, data });
   })
 );
