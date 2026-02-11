@@ -24,6 +24,7 @@ import adminWalletsRouter from './routers/admin-wallets.router';
 import adminProductsRouter from './routers/admin-products.router';
 import adminNewsRouter from './routers/admin-news.router';
 import adminBrandsRouter from './routers/admin-brands.router';
+import adminNFTRouter from './routers/admin-nft.router';
 
 const router = Router();
 const prisma = getPrisma();
@@ -222,5 +223,6 @@ router.use('/wallets', authMiddleware, requireAdmin, adminWalletsRouter);
 router.use('/products', authMiddleware, requireAdmin, adminProductsRouter);
 router.use('/news', authMiddleware, requireAdmin, adminNewsRouter);
 router.use('/brands', authMiddleware, requireAdmin, adminBrandsRouter);
+router.use('/nft', authMiddleware, requireAdmin, adminNFTRouter);
 
 export default router;
