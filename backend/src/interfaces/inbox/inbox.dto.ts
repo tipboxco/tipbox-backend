@@ -306,6 +306,28 @@ export interface SendTipsCreate {
   timestamp: string;
 }
 
+export interface SendSharedPostToDmRequest {
+  /** Mesajın gideceği thread (veya tek alıcı için recipientUserId) */
+  threadId?: string;
+  /** Tek alıcıya gönderim için; threadId yoksa thread oluşturulur/getirilir */
+  recipientUserId?: string;
+  messageType: 'shared-post';
+  sharedPost: {
+    postId: string;
+    /** Backend postId ile çekebilir; gönderilirse UI anında dolu gelir */
+    authorName?: string;
+    authorTitle?: string | null;
+    authorAvatar?: string | null;
+    authorId?: string;
+    productName?: string;
+    productImageUrl?: string | null;
+    productDescription?: string | null;
+    status?: string;
+  };
+  /** Opsiyonel metin (kartın üstünde gösterilebilir) */
+  message?: string;
+}
+
 export interface UpdateMessageRequest {
   message: string;
 }
