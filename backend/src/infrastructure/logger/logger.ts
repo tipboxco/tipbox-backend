@@ -30,6 +30,31 @@ const enumerateErrorFormat = format((info) => {
   return info;
 });
 
+const MESSAGE = Symbol.for('message');
+
+/** Döngüsel referans ve çok derin nesnelerde JSON.stringify stack overflow önler; dosya yazımında çökme olmaz */
+const safeJsonFormat = format((info) => {
+  try {
+    const seen = new WeakSet();
+    const replacer = (_key: string, value: unknown): unknown => {
+      if (value !== null && typeof value === 'object') {
+        if (seen.has(value as object)) return '[Circular]';
+        seen.add(value as object);
+      }
+      return value;
+    };
+    (info as Record<symbol, string>)[MESSAGE] = JSON.stringify(info, replacer as (key: string, value: unknown) => unknown);
+  } catch (_e) {
+    (info as Record<symbol, string>)[MESSAGE] = JSON.stringify({
+      level: info.level,
+      message: info.message,
+      timestamp: (info as Record<string, unknown>).timestamp,
+      meta: '[Log meta stringify failed: circular or too deep]',
+    });
+  }
+  return info;
+});
+
 // Ortam bazlı console log level
 // Development: debug, Test: info, Production: warn (console'da sadece warn ve error)
 const consoleLogLevel = env === 'production' ? 'warn' : logLevel;
@@ -88,7 +113,7 @@ const logger: Logger = createLogger({
     format.timestamp(),
     format.errors({ stack: true }),
     format.splat(),
-    format.json()
+    safeJsonFormat
   ),
   transports: [
     new transports.Console({
@@ -96,32 +121,22 @@ const logger: Logger = createLogger({
       format: format.combine(
         format.colorize(),
         format.printf(({ timestamp, level, message, ...meta }) => {
-          // Circular reference'ları handle et
-          const getCircularReplacer = () => {
-            const seen = new WeakSet();
-            return (key: string, value: any) => {
-              if (typeof value === 'object' && value !== null) {
-                if (seen.has(value)) {
-                  return '[Circular]';
-                }
-                seen.add(value);
-                // Socket, Stream gibi özel objeleri basitleştir
-                if (value.constructor && value.constructor.name) {
-                  if (['Socket', 'IncomingMessage', 'ClientRequest'].includes(value.constructor.name)) {
-                    return `[${value.constructor.name}]`;
-                  }
-                }
-              }
-              return value;
-            };
-          };
-          
           let metaStr = '';
           if (Object.keys(meta).length) {
             try {
-              metaStr = JSON.stringify(meta, getCircularReplacer(), 2);
+              const seen = new WeakSet();
+              const replacer = (key: string, value: unknown): unknown => {
+                if (typeof value === 'object' && value !== null) {
+                  if (seen.has(value)) return '[Circular]';
+                  seen.add(value);
+                  if (value.constructor?.name && ['Socket', 'IncomingMessage', 'ClientRequest'].includes(value.constructor.name)) {
+                    return `[${value.constructor.name}]`;
+                  }
+                }
+                return value;
+              };
+              metaStr = JSON.stringify(meta, replacer as (key: string, value: unknown) => unknown, 2);
             } catch (error) {
-              // JSON.stringify başarısız olursa, sadece error message'ı göster
               metaStr = `{ "error": "Failed to stringify meta: ${error instanceof Error ? error.message : String(error)}" }`;
             }
           }
