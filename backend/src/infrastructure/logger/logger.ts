@@ -1,6 +1,7 @@
 import { createLogger, format, transports, Logger } from 'winston';
 import DailyRotateFile from 'winston-daily-rotate-file';
 import path from 'path';
+import fs from 'fs';
 import config from '../config';
 
 const env = config.nodeEnv;
@@ -8,6 +9,16 @@ const logLevel = config.logLevel;
 const logRetentionDays = config.logRetentionDays;
 
 const logDir = path.resolve(process.cwd(), 'logs');
+
+// Log dizini yoksa oluştur (Docker/read-only ortamda yazılamazsa file transport eklenmez)
+function ensureLogDir(): boolean {
+  try {
+    fs.mkdirSync(logDir, { recursive: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 const enumerateErrorFormat = format((info) => {
   if (info instanceof Error) {
@@ -26,6 +37,40 @@ const consoleLogLevel = env === 'production' ? 'warn' : logLevel;
 // Ortam bazlı file log level
 // Tüm ortamlarda file'a info ve üzeri yazılır
 const fileLogLevel = 'info';
+
+// File transport'ları sadece log dizini yazılabilirse ekle (Docker/read-only ortamda çökme önlenir)
+const fileTransports: InstanceType<typeof DailyRotateFile>[] = [];
+if (ensureLogDir()) {
+  try {
+    const mainFile = new DailyRotateFile({
+      dirname: logDir,
+      filename: `%DATE%.log`,
+      datePattern: 'YYYY-MM-DD',
+      zippedArchive: true,
+      maxSize: '20m',
+      maxFiles: `${logRetentionDays}d`,
+      level: fileLogLevel,
+    });
+    const errorFile = new DailyRotateFile({
+      dirname: logDir,
+      filename: `%DATE%-error.log`,
+      datePattern: 'YYYY-MM-DD',
+      zippedArchive: true,
+      maxSize: '20m',
+      maxFiles: `${Math.ceil(logRetentionDays * 1.5)}d`,
+      level: 'error',
+    });
+    [mainFile, errorFile].forEach((t) => {
+      t.on('error', (err) => {
+        // Yazma hatası (disk dolu, permission vb.) uygulamayı çökertmesin
+        console.error('[logger] File transport error:', err.message);
+      });
+    });
+    fileTransports.push(mainFile, errorFile);
+  } catch (_) {
+    // Transport oluşturulamazsa sadece console kullan
+  }
+}
 
 const logger: Logger = createLogger({
   level: logLevel,
@@ -84,25 +129,7 @@ const logger: Logger = createLogger({
         })
       ),
     }),
-    new DailyRotateFile({
-      dirname: logDir,
-      filename: `%DATE%.log`,
-      datePattern: 'YYYY-MM-DD',
-      zippedArchive: true,
-      maxSize: '20m',
-      maxFiles: `${logRetentionDays}d`,
-      level: fileLogLevel,
-    }),
-    new DailyRotateFile({
-      dirname: logDir,
-      filename: `%DATE%-error.log`,
-      datePattern: 'YYYY-MM-DD',
-      zippedArchive: true,
-      maxSize: '20m',
-      // Error loglar daha uzun süre saklanır (production'da 90 gün, diğerlerinde retention * 1.5)
-      maxFiles: `${Math.ceil(logRetentionDays * 1.5)}d`,
-      level: 'error',
-    }),
+    ...fileTransports,
   ],
   exitOnError: false,
 });

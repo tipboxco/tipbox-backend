@@ -689,6 +689,31 @@ export class InventoryService {
   }
 
   /**
+   * Kullanıcının envanterinde belirli bir ürün var mı kontrol et
+   */
+  async hasProductInInventory(userId: string, productId: string): Promise<boolean> {
+    try {
+      const inventory = await this.prisma.inventory.findFirst({
+        where: {
+          userId,
+          productId,
+        },
+        select: { id: true },
+      });
+
+      return !!inventory;
+    } catch (error) {
+      logger.error({
+        message: 'Error checking product in inventory',
+        userId,
+        productId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return false;
+    }
+  }
+
+  /**
    * Inventory cache'ini temizle
    */
   async clearInventoryCache(userId: string, clearAll: boolean = false): Promise<{ message: string; cleared: number }> {
