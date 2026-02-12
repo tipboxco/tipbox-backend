@@ -577,6 +577,75 @@ router.post(
   })
 );
 
+/**
+ * @openapi
+ * /admin/badges/upload-image:
+ *   post:
+ *     summary: Badge image yükle (MinIO'ya admin/badges/ klasörüne)
+ *     tags: [Admin - Badges]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: Badge image (JPG, PNG, GIF, WebP - max 5MB)
+ *     responses:
+ *       200:
+ *         description: Image başarıyla yüklendi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     url:
+ *                       type: string
+ *                       description: Yüklenen dosyanın tam URL'i
+ *       400:
+ *         description: Dosya gerekli veya desteklenmeyen format
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden (Admin required)
+ */
+router.post(
+  '/upload-image',
+  adminUpload.single('file'),
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Dosya gerekli (field: file)' });
+    }
+    const ext = req.file.originalname?.split('.').pop()?.toLowerCase() || 'jpg';
+    const allowedExt = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    if (!allowedExt.includes(ext)) {
+      return res.status(400).json({ success: false, message: 'Sadece JPG, PNG, GIF ve WebP desteklenir' });
+    }
+    const fileName = `admin/badges/${uuidv4()}.${ext}`;
+    const path = await s3Service.uploadFile(fileName, req.file.buffer, req.file.mimetype);
+    const url = resolveMediaUrl(path);
+    logger.info({
+      message: 'Badge image yüklendi',
+      fileName,
+      url,
+      adminId: req.user?.id,
+    });
+    return res.json({ success: true, data: { url: url ?? path } });
+  })
+);
+
 /* ========== Admin Badge Categories ========== */
 
 router.get(

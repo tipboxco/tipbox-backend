@@ -28,7 +28,7 @@ const enumerateErrorFormat = format((info) => {
     });
   }
   return info;
-});
+})();
 
 const MESSAGE = Symbol.for('message');
 
@@ -53,7 +53,7 @@ const safeJsonFormat = format((info) => {
     });
   }
   return info;
-});
+})();
 
 // Ortam bazlı console log level
 // Development: debug, Test: info, Production: warn (console'da sadece warn ve error)
@@ -109,7 +109,7 @@ const logger: Logger = createLogger({
     silly: 6,
   },
   format: format.combine(
-    enumerateErrorFormat(),
+    enumerateErrorFormat,
     format.timestamp(),
     format.errors({ stack: true }),
     format.splat(),
