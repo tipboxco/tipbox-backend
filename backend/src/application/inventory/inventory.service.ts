@@ -28,7 +28,7 @@ export class InventoryService {
   private readonly geminiService: GeminiService;
   private readonly experienceSnippetRepo: AiExperienceSplitPrismaRepository;
   private readonly achievementProgressService: AchievementProgressService;
-  private readonly postService: PostService;
+  private _postService?: PostService;
 
   constructor() {
     this.prisma = getPrisma();
@@ -38,7 +38,15 @@ export class InventoryService {
     this.geminiService = GeminiService.getInstance();
     this.experienceSnippetRepo = new AiExperienceSplitPrismaRepository();
     this.achievementProgressService = new AchievementProgressService();
-    this.postService = new PostService();
+    // PostService lazy initialization to break circular dependency
+  }
+
+  // Lazy initialization for PostService to break circular dependency
+  private get postService(): PostService {
+    if (!this._postService) {
+      this._postService = new PostService();
+    }
+    return this._postService;
   }
 
   /**

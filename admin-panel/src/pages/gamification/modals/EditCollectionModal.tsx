@@ -8,6 +8,7 @@ import {
   Alert,
   Spin,
   Space,
+  Cascader,
   message as antdMessage,
 } from 'antd';
 import { CloudUploadOutlined } from '@ant-design/icons';
@@ -15,6 +16,8 @@ import {
   fetchCollection,
   updateCollection,
   uploadMedia,
+  fetchCollectionCategories,
+  type AdminCollectionCategoryMain,
 } from '../../../api/admin-badges-collections';
 import { FORM_LAYOUT_VERTICAL } from '../../../constants/form-layout';
 
@@ -47,6 +50,7 @@ function EditCollectionModal({ open, collectionId, onClose, onSuccess }: EditCol
   const [uploadingBanner, setUploadingBanner] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [bannerUrl, setBannerUrl] = useState<string>('');
+  const [categories, setCategories] = useState<AdminCollectionCategoryMain[]>([]);
 
   useEffect(() => {
     if (!open) return;
@@ -56,22 +60,36 @@ function EditCollectionModal({ open, collectionId, onClose, onSuccess }: EditCol
       setLoading(true);
       setError(null);
       try {
-        const res = await fetchCollection(collectionId);
-        if (!cancelled && res.data) {
-          const data = res.data;
-          form.setFieldsValue({
-            name: data.name,
-            bannerUrl: data.bannerUrl ?? '',
-            owner: data.owner ?? '',
-            focusSector: data.focusSector ?? '',
-            targetGroup: data.targetGroup ?? '',
-            shortDescription: data.shortDescription ?? '',
-            longDescription: data.longDescription ?? '',
-            unlockCondition: data.unlockCondition ?? '',
-            completionBonus: data.completionBonus ?? '',
-            categoryId: data.categoryId ?? '',
-          });
-          setBannerUrl(data.bannerUrl ?? '');
+        // Load categories and collection in parallel
+        const [categoriesRes, collectionRes] = await Promise.all([
+          fetchCollectionCategories(),
+          fetchCollection(collectionId),
+        ]);
+
+        if (!cancelled) {
+          if (categoriesRes.data) {
+            setCategories(categoriesRes.data);
+          }
+
+          if (collectionRes.data) {
+            const data = collectionRes.data;
+            // Convert null categoryId to __CUSTOM__ for the form
+            const formCategoryId = data.categoryId ?? '__CUSTOM__';
+
+            form.setFieldsValue({
+              name: data.name,
+              bannerUrl: data.bannerUrl ?? '',
+              owner: data.owner ?? '',
+              focusSector: data.focusSector ?? '',
+              targetGroup: data.targetGroup ?? '',
+              shortDescription: data.shortDescription ?? '',
+              longDescription: data.longDescription ?? '',
+              unlockCondition: data.unlockCondition ?? '',
+              completionBonus: data.completionBonus ?? '',
+              categoryId: formCategoryId,
+            });
+            setBannerUrl(data.bannerUrl ?? '');
+          }
         }
       } catch (e) {
         if (!cancelled) {
@@ -125,6 +143,12 @@ function EditCollectionModal({ open, collectionId, onClose, onSuccess }: EditCol
         return;
       }
 
+      // Convert __CUSTOM__ to null (no category)
+      let categoryId = trimString(values.categoryId);
+      if (categoryId === '__CUSTOM__') {
+        categoryId = null;
+      }
+
       await updateCollection(collectionId, {
         name: values.name.trim(),
         bannerUrl: trimString(values.bannerUrl),
@@ -135,7 +159,7 @@ function EditCollectionModal({ open, collectionId, onClose, onSuccess }: EditCol
         longDescription: trimString(values.longDescription),
         unlockCondition: trimString(values.unlockCondition),
         completionBonus: trimString(values.completionBonus),
-        categoryId: trimString(values.categoryId),
+        categoryId: categoryId,
       });
       antdMessage.success('Collection updated successfully');
       onSuccess();
@@ -253,8 +277,29 @@ function EditCollectionModal({ open, collectionId, onClose, onSuccess }: EditCol
             <Input placeholder="Reward for completing this collection" />
           </Form.Item>
 
-          <Form.Item label="Category ID" name="categoryId">
-            <Input placeholder="Optional category UUID" />
+          <Form.Item label="Category" name="categoryId">
+            <Cascader
+              options={[
+                // Add "Custom" option first
+                {
+                  label: 'Custom',
+                  value: '__CUSTOM__',
+                  children: undefined,
+                },
+                // Then add real categories from API
+                ...categories.map((main) => ({
+                  label: main.name,
+                  value: main.id,
+                  children: main.children.map((sub) => ({
+                    label: sub.name,
+                    value: sub.id,
+                  })),
+                })),
+              ]}
+              placeholder="Select category (optional)"
+              changeOnSelect
+              showSearch
+            />
           </Form.Item>
 
           <Form.Item style={{ marginBottom: 0, marginTop: 24 }}>

@@ -49,14 +49,23 @@ function CreateCollectionModal({ open, onClose, onSuccess }: CreateCollectionMod
   }, [open]);
 
   // Convert nested categories to nested options format
-  const categoryOptions = categories.map((main) => ({
-    label: main.name,
-    value: main.id,
-    children: main.children.map((sub) => ({
-      label: sub.name,
-      value: sub.id,
+  const categoryOptions = [
+    // Add "Custom" option first (will be converted to null in handleSubmit)
+    {
+      label: 'Custom',
+      value: '__CUSTOM__', // Special value to indicate no category
+      children: [],
+    },
+    // Then add real categories from API
+    ...categories.map((main) => ({
+      label: main.name,
+      value: main.id,
+      children: main.children.map((sub) => ({
+        label: sub.name,
+        value: sub.id,
+      })),
     })),
-  }));
+  ];
 
   const collectionFields: FieldConfig[] = [
     {
@@ -170,6 +179,12 @@ function CreateCollectionModal({ open, onClose, onSuccess }: CreateCollectionMod
         throw new Error('Collection name is required');
       }
 
+      // Convert __CUSTOM__ to null (no category)
+      let categoryId = trimString(values.categoryId);
+      if (categoryId === '__CUSTOM__') {
+        categoryId = null;
+      }
+
       const res = await createCollection({
         name: values.name.trim(),
         owner: trimString(values.owner),
@@ -180,7 +195,7 @@ function CreateCollectionModal({ open, onClose, onSuccess }: CreateCollectionMod
         bannerUrl: trimString(values.bannerUrl),
         unlockCondition: trimString(values.unlockCondition),
         completionBonus: trimString(values.completionBonus),
-        categoryId: trimString(values.categoryId),
+        categoryId: categoryId,
       });
 
       antdMessage.success('Collection created successfully');

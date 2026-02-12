@@ -106,7 +106,7 @@ services:
       - minio
     volumes:
       - ./backend:/app
-      - backend_node_modules:/app/node_modules
+      - backend_node_modules_v2:/app/node_modules
       - ./backend/tipboxbackend-3e2c3d3c0b31.json:/app/tipboxbackend-3e2c3d3c0b31.json:ro
       # Docker daemon'a erişim için host docker.sock'u container'a bağla
       - /var/run/docker.sock:/var/run/docker.sock
@@ -160,7 +160,7 @@ services:
       - postgres
     volumes:
       - ./backend:/app
-      - backend_node_modules:/app/node_modules
+      - backend_prisma_node_modules:/app/node_modules
     working_dir: /app
     command: npx prisma studio --port 5555 --browser none
     networks:
@@ -247,7 +247,8 @@ volumes:
   pgadmin_data:
   minio_data:
   redis_data:
-  backend_node_modules:
+  backend_node_modules_v2:
+  backend_prisma_node_modules:
   catalog_service_node_modules:
 
 networks:

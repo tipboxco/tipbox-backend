@@ -994,6 +994,7 @@ model ActionLog {
 
 model AchievementGoal {
   id               String                @id @default(uuid()) @db.Uuid
+  chainId          String?               @map("chain_id") @db.Uuid
   collectionId     String                @map("collection_id") @db.Uuid
   title            String
   requirement      String
@@ -1002,11 +1003,13 @@ model AchievementGoal {
   rewardBadgeId    String?               @map("reward_badge_id") @db.Uuid
   pointsRequired   Int                   @map("points_required")
   difficulty       AchievementDifficulty
+  chain            AchievementChain?    @relation(fields: [chainId], references: [id], onDelete: SetNull)
   collection       BadgeCollection       @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   actionType       ActionType            @relation(fields: [actionTypeId], references: [id])
   rewardBadge      Badge?                @relation(fields: [rewardBadgeId], references: [id])
   userAchievements UserAchievement[]
 
+  @@index([chainId])
   @@index([mainAction, actionTypeId])
   @@map("achievement_goals")
 }
