@@ -259,26 +259,15 @@ function BadgeSummaryTab({
   };
 
   // Field configuration for editable form
+  // Logical order: Basic info → Classification → Associations → Visual → Description → Multipliers → Metadata
   const badgeFields: FieldConfig[] = [
+    // 1. Basic Information
     {
       name: 'name',
       label: 'Badge Name',
       type: 'text',
       required: true,
       maxLength: 500,
-    },
-    {
-      name: 'description',
-      label: 'Description',
-      type: 'textarea',
-      rows: 3,
-      maxLength: 2000,
-    },
-    {
-      name: 'imageUrl',
-      label: 'Image URL',
-      type: 'text',
-      maxLength: 1000,
     },
     {
       name: 'type',
@@ -299,6 +288,8 @@ function BadgeSummaryTab({
       editable: false,
       render: () => badge.categoryName ?? '—',
     },
+
+    // 2. Associations
     {
       name: 'collectionName',
       label: 'Collection',
@@ -311,6 +302,25 @@ function BadgeSummaryTab({
           '—'
         ),
     },
+
+    // 3. Visual
+    {
+      name: 'imageUrl',
+      label: 'Badge Image URL',
+      type: 'text',
+      maxLength: 1000,
+    },
+
+    // 4. Description
+    {
+      name: 'description',
+      label: 'Description',
+      type: 'textarea',
+      rows: 3,
+      maxLength: 2000,
+    },
+
+    // 5. Multipliers (Optional)
     {
       name: 'boostMultiplier',
       label: 'Boost Multiplier',
@@ -323,6 +333,8 @@ function BadgeSummaryTab({
       type: 'number',
       render: (v) => (v != null ? `${v}×` : '—'),
     },
+
+    // 6. Metadata (Read-only)
     {
       name: 'createdAt',
       label: 'Created',

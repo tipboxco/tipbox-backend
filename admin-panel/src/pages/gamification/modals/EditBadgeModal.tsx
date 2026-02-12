@@ -144,32 +144,25 @@ function EditBadgeModal({ open, badgeId, onClose, onSuccess }: EditBadgeModalPro
             />
           )}
 
+          {/* 1. Basic Information */}
           <Form.Item
-            label="Name"
+            label="Badge Name"
             name="name"
-            rules={[{ required: true, message: 'Name is required' }]}
+            rules={[{ required: true, message: 'Badge name is required' }]}
           >
-            <Input placeholder="Badge name" />
-          </Form.Item>
-
-          <Form.Item label="Description" name="description">
-            <Input.TextArea rows={3} placeholder="Optional badge description" />
-          </Form.Item>
-
-          <Form.Item label="Image URL" name="imageUrl">
-            <Input type="url" placeholder="https://..." />
+            <Input placeholder="e.g., First Post Creator" />
           </Form.Item>
 
           <Form.Item
             label="Type"
             name="type"
-            rules={[{ required: true, message: 'Type is required' }]}
+            rules={[{ required: true, message: 'Badge type is required' }]}
           >
-            <Select>
-              <Select.Option value="COLLECTION">COLLECTION</Select.Option>
-              <Select.Option value="EVENT">EVENT</Select.Option>
-              <Select.Option value="COSMETIC">COSMETIC</Select.Option>
-              <Select.Option value="BRAND">BRAND</Select.Option>
+            <Select placeholder="Select badge type">
+              <Select.Option value="COLLECTION">Collection Badge</Select.Option>
+              <Select.Option value="EVENT">Event Badge</Select.Option>
+              <Select.Option value="COSMETIC">Cosmetic Badge</Select.Option>
+              <Select.Option value="BRAND">Brand Badge</Select.Option>
             </Select>
           </Form.Item>
 
@@ -178,29 +171,11 @@ function EditBadgeModal({ open, badgeId, onClose, onSuccess }: EditBadgeModalPro
             name="rarity"
             rules={[{ required: true, message: 'Rarity is required' }]}
           >
-            <Select>
-              <Select.Option value="COMMON">COMMON</Select.Option>
-              <Select.Option value="RARE">RARE</Select.Option>
-              <Select.Option value="EPIC">EPIC</Select.Option>
+            <Select placeholder="Select rarity level">
+              <Select.Option value="COMMON">Common</Select.Option>
+              <Select.Option value="RARE">Rare</Select.Option>
+              <Select.Option value="EPIC">Epic</Select.Option>
             </Select>
-          </Form.Item>
-
-          <Form.Item label="Boost Multiplier" name="boostMultiplier">
-            <InputNumber
-              min={0}
-              step={0.1}
-              style={{ width: '100%' }}
-              placeholder="Optional boost multiplier"
-            />
-          </Form.Item>
-
-          <Form.Item label="Reward Multiplier" name="rewardMultiplier">
-            <InputNumber
-              min={0}
-              step={0.1}
-              style={{ width: '100%' }}
-              placeholder="Optional reward multiplier"
-            />
           </Form.Item>
 
           <Form.Item
@@ -217,8 +192,38 @@ function EditBadgeModal({ open, badgeId, onClose, onSuccess }: EditBadgeModalPro
             </Select>
           </Form.Item>
 
+          {/* 2. Visual */}
+          <Form.Item label="Badge Image URL" name="imageUrl">
+            <Input type="url" placeholder="https://example.com/badge.png" />
+          </Form.Item>
+
+          {/* 3. Description */}
+          <Form.Item label="Description" name="description">
+            <Input.TextArea rows={3} placeholder="Describe what this badge represents" />
+          </Form.Item>
+
+          {/* 4. Associations */}
           <Form.Item label="Collection ID" name="collectionId">
-            <Input placeholder="Optional collection UUID" />
+            <Input placeholder="Optional: Link to a specific collection" />
+          </Form.Item>
+
+          {/* 5. Multipliers (Optional) */}
+          <Form.Item label="Boost Multiplier" name="boostMultiplier">
+            <InputNumber
+              min={0}
+              step={0.1}
+              style={{ width: '100%' }}
+              placeholder="Optional: e.g., 1.5"
+            />
+          </Form.Item>
+
+          <Form.Item label="Reward Multiplier" name="rewardMultiplier">
+            <InputNumber
+              min={0}
+              step={0.1}
+              style={{ width: '100%' }}
+              placeholder="Optional: e.g., 2.0"
+            />
           </Form.Item>
 
           <Form.Item style={{ marginBottom: 0, marginTop: 24 }}>

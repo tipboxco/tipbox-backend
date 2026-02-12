@@ -81,29 +81,20 @@ function CreateBadgeModal({
     };
   }, [inCollection, collectionId]);
 
+  // Badge fields in logical order:
+  // 1. Basic info (name, rarity, category)
+  // 2. Visual (image)
+  // 3. Description
+  // 4. Activation rules (if collection context)
   const badgeFields: FieldConfig[] = [
+    // 1. Basic Information
     {
       name: 'name',
-      label: 'Badge name',
+      label: 'Badge Name',
       type: 'text',
       required: true,
       maxLength: 500,
-      placeholder: 'Enter badge name',
-    },
-    {
-      name: 'description',
-      label: 'Description',
-      type: 'textarea',
-      rows: 2,
-      maxLength: 2000,
-      placeholder: 'Optional description',
-    },
-    {
-      name: 'imageUrl',
-      label: 'Image URL',
-      type: 'text',
-      maxLength: 1000,
-      placeholder: 'https://...',
+      placeholder: 'e.g., First Post Creator',
     },
     {
       name: 'rarity',
@@ -115,6 +106,7 @@ function CreateBadgeModal({
         { label: 'Rare', value: 'RARE' },
         { label: 'Epic', value: 'EPIC' },
       ],
+      placeholder: 'Select rarity level',
     },
     {
       name: 'categoryId',
@@ -126,6 +118,27 @@ function CreateBadgeModal({
       // Only show if NOT in collection context
       conditional: () => !inCollection,
     },
+
+    // 2. Visual
+    {
+      name: 'imageUrl',
+      label: 'Badge Image URL',
+      type: 'text',
+      maxLength: 1000,
+      placeholder: 'https://example.com/badge.png',
+    },
+
+    // 3. Description
+    {
+      name: 'description',
+      label: 'Description',
+      type: 'textarea',
+      rows: 2,
+      maxLength: 2000,
+      placeholder: 'Describe what this badge represents',
+    },
+
+    // 4. Activation Rules (Collection context only)
     {
       name: 'actionTypeId',
       label: 'Activation Type',
@@ -135,7 +148,7 @@ function CreateBadgeModal({
         label: `${a.label} (${a.mainAction} / ${a.code})`,
         value: a.id,
       })),
-      placeholder: 'Select activation type',
+      placeholder: 'How is this badge earned?',
       // Only show if IN collection context
       conditional: () => inCollection,
     },
@@ -144,7 +157,7 @@ function CreateBadgeModal({
       label: 'Target Count',
       type: 'number',
       required: true,
-      placeholder: 'Enter target count',
+      placeholder: 'e.g., 10',
       rules: [
         {
           validator: async (_rule, value: unknown) => {
