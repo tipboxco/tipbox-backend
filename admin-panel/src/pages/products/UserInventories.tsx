@@ -25,22 +25,22 @@ import PageHeader from '../../components/PageHeader';
 import { type StatItemData } from '../../components/StatItem';
 import ViewActionButton from '../../components/ViewActionButton';
 import {
-  fetchUserInventoryStats,
-  fetchUserInventories,
-  fetchUserInventory,
+  fetchInventoryStats,
+  fetchInventories,
+  fetchInventory,
 } from '../../api/admin-products';
 import type {
-  AdminUserInventoryStatsResponse,
-  AdminUserInventoryListItem,
-  AdminUserInventoryDetailResponse,
+  AdminInventoryStatsResponse,
+  AdminInventoryListItem,
+  AdminInventoryDetailResponse,
 } from '../../api/admin-products';
 import { TABLE_COLUMN_WIDTHS, TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
 
 const PAGE_SIZE = 20;
 
 function UserInventories() {
-  const [stats, setStats] = useState<AdminUserInventoryStatsResponse | null>(null);
-  const [inventories, setInventories] = useState<AdminUserInventoryListItem[]>([]);
+  const [stats, setStats] = useState<AdminInventoryStatsResponse | null>(null);
+  const [inventories, setInventories] = useState<AdminInventoryListItem[]>([]);
   const [pagination, setPagination] = useState({
     total: 0,
     limit: PAGE_SIZE,
@@ -52,14 +52,14 @@ function UserInventories() {
   const [experienceType, setExperienceType] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
-  const [selectedInventory, setSelectedInventory] = useState<AdminUserInventoryDetailResponse | null>(null);
+  const [selectedInventory, setSelectedInventory] = useState<AdminInventoryDetailResponse | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetchUserInventoryStats();
+        const res = await fetchInventoryStats();
         if (!cancelled && res.data) setStats(res.data);
       } catch (e) {
         if (!cancelled)
@@ -76,7 +76,7 @@ function UserInventories() {
   const loadInventories = async () => {
     setLoadingList(true);
     try {
-      const res = await fetchUserInventories({
+      const res = await fetchInventories({
         limit: PAGE_SIZE,
         offset: pagination.offset,
         search: search || undefined,
@@ -100,7 +100,7 @@ function UserInventories() {
     setLoadingDetail(true);
     setDetailModalOpen(true);
     try {
-      const res = await fetchUserInventory(id);
+      const res = await fetchInventory(id);
       setSelectedInventory(res.data);
     } catch (e) {
       Alert.error({
@@ -128,7 +128,7 @@ function UserInventories() {
     }
   };
 
-  const columns: ColumnsType<AdminUserInventoryListItem> = [
+  const columns: ColumnsType<AdminInventoryListItem> = [
     {
       title: 'User',
       dataIndex: 'username',

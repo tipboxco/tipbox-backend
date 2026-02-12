@@ -29,7 +29,7 @@ import {
   createProductGroup,
   updateProductGroup,
   deleteProductGroup,
-  fetchProductCategories,
+  fetchCategories,
 } from '../../api/admin-products';
 import type {
   AdminProductGroupStatsResponse,
@@ -81,7 +81,7 @@ function ProductGroups() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetchProductCategories();
+        const res = await fetchCategories();
         if (!cancelled && res.data) {
           setCategories(res.data.map(cat => ({ id: cat.id, name: cat.name })));
         }
@@ -265,7 +265,7 @@ function ProductGroups() {
         title="Product Groups"
         description="Organize products into groups"
         icon={<FolderOpenOutlined />}
-        statsData={statsData}
+        stats={statsData}
         statsLoading={loading}
       />
 

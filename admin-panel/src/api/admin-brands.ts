@@ -67,6 +67,18 @@ export type CreateBrandInput = {
 
 export type UpdateBrandInput = Partial<Omit<CreateBrandInput, 'id'>>;
 
+export type AdminBrandImageListItem = {
+  id: string;
+  imageUrl: string | null;
+  caption: string | null;
+  createdAt?: string;
+};
+
+export type UploadBrandImageInput = {
+  imageUrl: string;
+  caption?: string | null;
+};
+
 /* ========== Brand Categories ========== */
 
 export type AdminBrandCategoryListItem = {
@@ -148,6 +160,15 @@ export type AdminBrandSurveyResponsesResponse = {
   }[];
 };
 
+export type AdminBrandSurveyResponseListItem = {
+  id: string;
+  userId: string;
+  username: string | null;
+  userEmail: string | null;
+  answers: Record<string, string>;
+  createdAt: string;
+};
+
 export type CreateBrandSurveyInput = {
   brandId: string;
   title: string;
@@ -175,11 +196,68 @@ export type AdminBridgeProgramStatsResponse = {
   activeBrands: number;
 };
 
+export type AdminBridgeStatsResponse = AdminBridgeProgramStatsResponse & {
+  avgFollowersPerBrand?: number;
+};
+
+export type AdminBridgePostListItem = {
+  id: string;
+  brandName?: string | null;
+  username?: string | null;
+  userEmail?: string | null;
+  title?: string | null;
+  followerOnly?: boolean;
+  likeCount?: number;
+  commentCount?: number;
+  viewCount?: number;
+  createdAt?: string;
+};
+
+export type BridgePostsQueryParams = {
+  limit?: number;
+  offset?: number;
+  search?: string;
+};
+
 /* ========== Brand Leaderboards ========== */
 
 export type AdminBrandLeaderboardStatsResponse = {
   total: number;
   active: number;
+};
+
+export type AdminBrandLeaderboardListItem = {
+  brandId: string;
+  brandName: string;
+  userId: string;
+  username: string | null;
+  userEmail: string | null;
+  rank: number;
+  score: number;
+  period: string;
+  createdAt: string;
+};
+
+/* ========== Brand Rewards ========== */
+
+export type AdminBrandRewardHistoryListItem = {
+  id: string;
+  userId: string;
+  username: string | null;
+  userEmail: string | null;
+  badgeId: string;
+  badgeName: string;
+  reason: string | null;
+  awardedBy: string | null;
+  awardedByEmail: string | null;
+  awardedAt: string;
+};
+
+export type AwardBrandBadgeInput = {
+  brandId: string;
+  userId: string;
+  badgeId: string;
+  reason: string;
 };
 
 /* ========== Query Parameters ========== */
@@ -206,6 +284,21 @@ export type BrandSurveysQueryParams = {
   search?: string;
   sort?: string;
   order?: 'asc' | 'desc';
+};
+
+export type BrandSurveyResponsesQueryParams = {
+  limit?: number;
+  offset?: number;
+};
+
+export type BrandLeaderboardsQueryParams = {
+  brandId: string;
+  period?: 'WEEKLY' | 'MONTHLY';
+};
+
+export type BrandRewardHistoryQueryParams = {
+  limit?: number;
+  offset?: number;
 };
 
 // ==================== API Functions ====================
@@ -250,6 +343,26 @@ export async function updateBrand(
 
 export async function deleteBrand(id: string): Promise<ApiResponse<void>> {
   return del<void>(`/admin/brands/${id}`);
+}
+
+export async function fetchBrandImages(
+  brandId: string
+): Promise<ApiResponse<AdminBrandImageListItem[]>> {
+  return get<AdminBrandImageListItem[]>(`/admin/brands/${brandId}/images`);
+}
+
+export async function uploadBrandImage(
+  brandId: string,
+  data: UploadBrandImageInput
+): Promise<ApiResponse<AdminBrandImageListItem>> {
+  return post<AdminBrandImageListItem>(`/admin/brands/${brandId}/images`, data);
+}
+
+export async function deleteBrandImage(
+  brandId: string,
+  imageId: string
+): Promise<ApiResponse<void>> {
+  return del<void>(`/admin/brands/${brandId}/images/${imageId}`);
 }
 
 /* ========== Brand Categories ========== */
@@ -310,9 +423,14 @@ export async function fetchBrandSurvey(
 }
 
 export async function fetchBrandSurveyResponses(
-  id: string
-): Promise<ApiResponse<AdminBrandSurveyResponsesResponse>> {
-  return get<AdminBrandSurveyResponsesResponse>(`/admin/brands/surveys/${id}/responses`);
+  id: string,
+  params: BrandSurveyResponsesQueryParams = {}
+): Promise<ApiResponse<AdminBrandSurveyResponseListItem[]>> {
+  const query = {
+    limit: params.limit ?? 50,
+    offset: params.offset ?? 0,
+  };
+  return get<AdminBrandSurveyResponseListItem[]>(`/admin/brands/surveys/${id}/responses`, query);
 }
 
 export async function createBrandSurvey(
@@ -332,6 +450,10 @@ export async function deleteBrandSurvey(id: string): Promise<ApiResponse<void>> 
   return del<void>(`/admin/brands/surveys/${id}`);
 }
 
+export async function closeBrandSurvey(id: string): Promise<ApiResponse<void>> {
+  return patch<void>(`/admin/brands/surveys/${id}/close`, {});
+}
+
 /* ========== Bridge Program ========== */
 
 export async function fetchBridgeProgramStats(): Promise<
@@ -340,10 +462,61 @@ export async function fetchBridgeProgramStats(): Promise<
   return get<AdminBridgeProgramStatsResponse>('/admin/brands/bridge-program/stats');
 }
 
+export async function fetchBridgeStats(): Promise<ApiResponse<AdminBridgeStatsResponse>> {
+  return get<AdminBridgeStatsResponse>('/admin/brands/bridge-program/stats');
+}
+
+export async function fetchBridgePosts(
+  params: BridgePostsQueryParams = {}
+): Promise<ApiResponse<AdminBridgePostListItem[]>> {
+  const query = {
+    limit: params.limit ?? 50,
+    offset: params.offset ?? 0,
+    search: params.search,
+  };
+  return get<AdminBridgePostListItem[]>('/admin/brands/bridge-program/posts', query);
+}
+
 /* ========== Brand Leaderboards ========== */
 
 export async function fetchBrandLeaderboardStats(): Promise<
   ApiResponse<AdminBrandLeaderboardStatsResponse>
 > {
   return get<AdminBrandLeaderboardStatsResponse>('/admin/brands/leaderboards/stats');
+}
+
+export async function fetchBrandLeaderboards(
+  params: BrandLeaderboardsQueryParams
+): Promise<ApiResponse<AdminBrandLeaderboardListItem[]>> {
+  const query = {
+    brandId: params.brandId,
+    period: params.period ?? 'WEEKLY',
+  };
+  return get<AdminBrandLeaderboardListItem[]>('/admin/brands/leaderboards', query);
+}
+
+export async function recalculateBrandLeaderboard(
+  brandId: string,
+  period: 'WEEKLY' | 'MONTHLY'
+): Promise<ApiResponse<void>> {
+  return post<void>('/admin/brands/leaderboards/recalculate', { brandId, period });
+}
+
+/* ========== Brand Rewards ========== */
+
+export async function fetchBrandRewardHistory(
+  brandId: string,
+  params: BrandRewardHistoryQueryParams = {}
+): Promise<ApiResponse<AdminBrandRewardHistoryListItem[]>> {
+  const query = {
+    limit: params.limit ?? 50,
+    offset: params.offset ?? 0,
+  };
+  return get<AdminBrandRewardHistoryListItem[]>(`/admin/brands/${brandId}/rewards`, query);
+}
+
+export async function awardBrandBadge(
+  data: AwardBrandBadgeInput
+): Promise<ApiResponse<void>> {
+  return post<void>('/admin/brands/rewards/award', data);
 }

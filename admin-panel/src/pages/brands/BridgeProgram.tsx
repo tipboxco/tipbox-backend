@@ -107,7 +107,7 @@ function BridgeProgram() {
       title: 'Title',
       dataIndex: 'title',
       key: 'title',
-      width: TABLE_COLUMN_WIDTHS.LONG_TEXT,
+      width: TABLE_COLUMN_WIDTHS.LONG_TEXT_FLEXIBLE,
       ellipsis: true,
     },
     {
@@ -162,7 +162,7 @@ function BridgeProgram() {
     {
       title: '',
       key: 'action',
-      width: TABLE_COLUMN_WIDTHS.ACTION_BUTTON_SINGLE,
+      width: TABLE_COLUMN_WIDTHS.ACTION_BUTTON,
       render: (_, record) => <ViewActionButton to={`/content/posts/${record.id}`} />,
     },
   ];
@@ -205,7 +205,7 @@ function BridgeProgram() {
         title="Bridge Program"
         description="Manage brand community engagement"
         icon={<LinkOutlined />}
-        statsData={statsData}
+        stats={statsData}
         statsLoading={loading}
       />
 
@@ -246,7 +246,7 @@ function BridgeProgram() {
               showTotal: (total) => `Total ${total} posts`,
             }}
             onChange={handleTableChange}
-            scroll={TABLE_SCROLL_CONFIGS.DEFAULT}
+            scroll={TABLE_SCROLL_CONFIGS.AUTO}
             locale={{
               emptyText: <Empty description="No bridge posts found" />,
             }}

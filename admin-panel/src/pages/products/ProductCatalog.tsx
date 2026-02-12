@@ -253,7 +253,7 @@ function ProductCatalog() {
         title="Product Catalog"
         description="Manage product database"
         icon={<ShoppingOutlined />}
-        statsData={statsData}
+        stats={statsData}
         statsLoading={loading}
       />
 

@@ -406,3 +406,9 @@ export async function closeExpertRequest(
 ): Promise<ApiResponse<{ message: string }>> {
   return post<{ message: string }>(`/admin/messaging/experts/${id}/close`, {});
 }
+
+// ==================== Aliases for Backward Compatibility ====================
+
+/* Direct Messages Aliases */
+export type AdminDMThreadStatsResponse = AdminDirectMessageStatsResponse;
+export const fetchDMThreadStats = fetchDMStats;

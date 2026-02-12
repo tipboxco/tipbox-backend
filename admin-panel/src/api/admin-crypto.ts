@@ -643,3 +643,44 @@ export async function unlockLootbox(
 ): Promise<ApiResponse<{ message: string }>> {
   return post<{ message: string }>(`/admin/nft/lootbox/${id}/unlock`, data);
 }
+
+// ==================== Aliases for Backward Compatibility ====================
+
+/* NFT Marketplace Aliases */
+export type AdminMarketplaceStatsResponse = AdminNFTMarketplaceStatsResponse;
+export type AdminMarketplaceListingItem = AdminNFTMarketListingListItem;
+export type AdminMarketplaceListingDetailResponse = AdminNFTMarketListingDetailResponse;
+
+export const fetchMarketplaceStats = fetchNFTMarketplaceStats;
+export const fetchMarketplaceListings = fetchNFTMarketListings;
+export const fetchMarketplaceListing = fetchNFTMarketListing;
+
+export async function delistNFT(listingId: string): Promise<ApiResponse<void>> {
+  return patch<void>(`/admin/nft/marketplace/${listingId}/moderate`, {
+    status: 'CANCELLED',
+    reason: 'Delisted by admin',
+  });
+}
+
+/* Token Transfers Aliases (Tips Transfers) */
+export type AdminTokenTransferStatsResponse = AdminTipsStatsResponse;
+export type AdminTokenTransferListItem = AdminTipsListItem;
+export type AdminTokenTransferDetailResponse = AdminTipsListItem; // Tips doesn't have a detail response
+export type CreateTokenTransferInput = {
+  fromUserId: string;
+  toUserId: string;
+  amount: number;
+  reason?: string | null;
+};
+
+export const fetchTokenTransferStats = fetchTipsStats;
+export const fetchTokenTransfers = fetchTipsTransfers;
+export const fetchTokenTransfer = async (id: string): Promise<ApiResponse<AdminTipsListItem>> => {
+  // Tips doesn't have a single fetch endpoint, so this is a placeholder
+  // In reality, you'd need to implement this on the backend
+  return get<AdminTipsListItem>(`/admin/wallets/tips/${id}`);
+};
+export const createTokenTransfer = createTipsTransfer;
+
+/* Lootbox Aliases */
+export const openLootbox = unlockLootbox;

@@ -474,3 +474,15 @@ export async function claimReward(
 ): Promise<ApiResponse<{ message: string }>> {
   return post<{ message: string }>(`/admin/payments/rewards/${id}/claim`, {});
 }
+
+// ==================== Aliases for Subscriptions ====================
+// These aliases are for backward compatibility with components expecting shorter names
+
+export type AdminSubscriptionStatsResponse = AdminUserSubscriptionStatsResponse;
+export type AdminSubscriptionListItem = AdminUserSubscriptionListItem;
+export type AdminSubscriptionDetailResponse = AdminUserSubscriptionDetailResponse;
+
+export const fetchSubscriptionStats = fetchUserSubscriptionStats;
+export const fetchSubscriptions = fetchUserSubscriptions;
+export const fetchSubscription = fetchUserSubscription;
+export const extendSubscription = extendUserSubscription;

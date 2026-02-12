@@ -34,7 +34,7 @@ import {
 import type {
   AdminProductSuggestionStatsResponse,
   AdminProductSuggestionListItem,
-  ApproveProductSuggestionInput,
+  ApproveSuggestionInput,
 } from '../../api/admin-products';
 import { TABLE_COLUMN_WIDTHS, TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
 
@@ -108,7 +108,7 @@ function ProductSuggestions() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.offset, search, statusFilter]);
 
-  const handleApprove = async (values: ApproveProductSuggestionInput) => {
+  const handleApprove = async (values: ApproveSuggestionInput) => {
     if (!selectedSuggestion) return;
 
     try {
@@ -291,7 +291,7 @@ function ProductSuggestions() {
         title="Product Suggestions"
         description="Review user-submitted products"
         icon={<BulbOutlined />}
-        statsData={statsData}
+        stats={statsData}
         statsLoading={loading}
       />
 

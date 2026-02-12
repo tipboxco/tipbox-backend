@@ -269,6 +269,27 @@ export type AdminProductComparisonStatsResponse = {
   thisMonth: number;
 };
 
+export type AdminProductComparisonListItem = {
+  id: string;
+  title?: string | null;
+  username?: string | null;
+  userEmail?: string | null;
+  productCount?: number;
+  categoryName?: string | null;
+  viewCount?: number;
+  likeCount?: number;
+  commentCount?: number;
+  createdAt?: string;
+};
+
+export type AdminProductComparisonDetailResponse = AdminProductComparisonListItem & Record<string, unknown>;
+
+export type ComparisonsQueryParams = {
+  limit?: number;
+  offset?: number;
+  search?: string;
+};
+
 /* ========== Query Parameters ========== */
 
 export type ProductsQueryParams = {
@@ -541,4 +562,21 @@ export async function fetchProductComparisonStats(): Promise<
   ApiResponse<AdminProductComparisonStatsResponse>
 > {
   return get<AdminProductComparisonStatsResponse>('/admin/products/comparisons/stats');
+}
+
+export async function fetchProductComparisons(
+  params: ComparisonsQueryParams = {}
+): Promise<ApiResponse<AdminProductComparisonListItem[]>> {
+  const query = {
+    limit: params.limit ?? 50,
+    offset: params.offset ?? 0,
+    search: params.search,
+  };
+  return get<AdminProductComparisonListItem[]>('/admin/products/comparisons', query);
+}
+
+export async function fetchProductComparison(
+  id: string
+): Promise<ApiResponse<AdminProductComparisonDetailResponse>> {
+  return get<AdminProductComparisonDetailResponse>(`/admin/products/comparisons/${id}`);
 }

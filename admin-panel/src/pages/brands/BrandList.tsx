@@ -269,7 +269,7 @@ function BrandList() {
       title: 'Name',
       dataIndex: 'name',
       key: 'name',
-      width: TABLE_COLUMN_WIDTHS.LONG_TEXT,
+      width: TABLE_COLUMN_WIDTHS.LONG_TEXT_FLEXIBLE,
       ellipsis: true,
     },
     {
@@ -379,7 +379,7 @@ function BrandList() {
         title="Brands"
         description="Manage brand partnerships"
         icon={<ShopOutlined />}
-        statsData={statsData}
+        stats={statsData}
         statsLoading={loading}
       />
 
@@ -440,7 +440,7 @@ function BrandList() {
               showTotal: (total) => `Total ${total} brands`,
             }}
             onChange={handleTableChange}
-            scroll={TABLE_SCROLL_CONFIGS.DEFAULT}
+            scroll={TABLE_SCROLL_CONFIGS.AUTO}
             locale={{
               emptyText: <Empty description="No brands found" />,
             }}

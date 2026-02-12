@@ -26,31 +26,30 @@ import {
 import PageHeader from '../../components/PageHeader';
 import { type StatItemData } from '../../components/StatItem';
 import {
-  fetchProductCategoryStats,
-  fetchProductCategories,
-  createProductCategory,
-  updateProductCategory,
-  deleteProductCategory,
-  reorderProductCategories,
+  fetchCategoryStats,
+  fetchCategories,
+  createCategory,
+  updateCategory,
+  deleteCategory,
+  reorderCategory,
 } from '../../api/admin-products';
 import type {
-  AdminProductCategoryStatsResponse,
-  AdminProductCategoryListItem,
-  CreateProductCategoryInput,
-  UpdateProductCategoryInput,
+  AdminCategoryStatsResponse,
+  AdminCategoryListItem,
+  UpdateCategoryInput,
 } from '../../api/admin-products';
 import { TABLE_COLUMN_WIDTHS, TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
 
 function ProductCategories() {
-  const [stats, setStats] = useState<AdminProductCategoryStatsResponse | null>(null);
-  const [categories, setCategories] = useState<AdminProductCategoryListItem[]>([]);
+  const [stats, setStats] = useState<AdminCategoryStatsResponse | null>(null);
+  const [categories, setCategories] = useState<AdminCategoryListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingList, setLoadingList] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [reorderModalOpen, setReorderModalOpen] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<AdminProductCategoryListItem | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<AdminCategoryListItem | null>(null);
   const [form] = Form.useForm();
   const [reorderForm] = Form.useForm();
 
@@ -58,7 +57,7 @@ function ProductCategories() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetchProductCategoryStats();
+        const res = await fetchCategoryStats();
         if (!cancelled && res.data) setStats(res.data);
       } catch (e) {
         if (!cancelled)
@@ -75,7 +74,7 @@ function ProductCategories() {
   const loadCategories = async () => {
     setLoadingList(true);
     try {
-      const res = await fetchProductCategories();
+      const res = await fetchCategories();
       setCategories(res.data ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load categories');
@@ -88,11 +87,14 @@ function ProductCategories() {
     loadCategories();
   }, []);
 
-  const handleCreate = async (values: CreateProductCategoryInput) => {
+  const handleCreate = async (values: Record<string, unknown>) => {
     try {
-      await createProductCategory({
-        ...values,
-        parentId: values.parentId || null,
+      await createCategory({
+        id: crypto.randomUUID(),
+        name: values.name as string,
+        parentId: (values.parentId as string) || null,
+        rank: (values.rank as number) ?? null,
+        isActive: values.isActive as boolean,
       });
       message.success('Category created successfully');
       setCreateModalOpen(false);
@@ -103,13 +105,15 @@ function ProductCategories() {
     }
   };
 
-  const handleEdit = async (values: UpdateProductCategoryInput) => {
+  const handleEdit = async (values: UpdateCategoryInput) => {
     if (!selectedCategory) return;
 
     try {
-      await updateProductCategory(selectedCategory.id, {
-        ...values,
-        parentId: values.parentId || null,
+      await updateCategory(selectedCategory.id, {
+        name: values.name,
+        parentId: values.parentId ?? null,
+        rank: values.rank ?? null,
+        isActive: values.isActive,
       });
       message.success('Category updated successfully');
       setEditModalOpen(false);
@@ -129,7 +133,7 @@ function ProductCategories() {
       okType: 'danger',
       onOk: async () => {
         try {
-          await deleteProductCategory(id);
+          await deleteCategory(id);
           message.success('Category deleted successfully');
           loadCategories();
         } catch (e) {
@@ -139,10 +143,10 @@ function ProductCategories() {
     });
   };
 
-  const handleToggleActive = async (category: AdminProductCategoryListItem) => {
+  const handleToggleActive = async (category: AdminCategoryListItem) => {
     try {
-      await updateProductCategory(category.id, {
-        isActive: !category.isActive,
+      await updateCategory(category.id, {
+        isActive: !(category.isActive ?? true),
       });
       message.success(`Category ${category.isActive ? 'deactivated' : 'activated'}`);
       loadCategories();
@@ -151,20 +155,22 @@ function ProductCategories() {
     }
   };
 
-  const openEditModal = (category: AdminProductCategoryListItem) => {
+  const openEditModal = (category: AdminCategoryListItem) => {
     setSelectedCategory(category);
     form.setFieldsValue({
       name: category.name,
-      parentId: category.parentId || undefined,
-      displayOrder: category.displayOrder,
-      isActive: category.isActive,
+      parentId: category.parentId ?? undefined,
+      rank: category.rank ?? 0,
+      isActive: category.isActive ?? true,
     });
     setEditModalOpen(true);
   };
 
   const handleReorder = async (values: { categoryOrders: { categoryId: string; displayOrder: number }[] }) => {
     try {
-      await reorderProductCategories({ categoryOrders: values.categoryOrders });
+      for (const order of values.categoryOrders) {
+        await reorderCategory(order.categoryId, { rank: order.displayOrder });
+      }
       message.success('Categories reordered successfully');
       setReorderModalOpen(false);
       reorderForm.resetFields();
@@ -177,7 +183,7 @@ function ProductCategories() {
   const openReorderModal = () => {
     const initialOrders = categories.map(cat => ({
       categoryId: cat.id,
-      displayOrder: cat.displayOrder,
+      displayOrder: cat.rank ?? 0,
     }));
     reorderForm.setFieldsValue({ categoryOrders: initialOrders });
     setReorderModalOpen(true);
@@ -185,8 +191,8 @@ function ProductCategories() {
 
   // Build hierarchical data for display
   const buildHierarchy = () => {
-    const categoryMap = new Map<string, AdminProductCategoryListItem & { children?: AdminProductCategoryListItem[] }>();
-    const rootCategories: (AdminProductCategoryListItem & { children?: AdminProductCategoryListItem[] })[] = [];
+    const categoryMap = new Map<string, AdminCategoryListItem & { children?: AdminCategoryListItem[] }>();
+    const rootCategories: (AdminCategoryListItem & { children?: AdminCategoryListItem[] })[] = [];
 
     // First pass: create map
     categories.forEach(cat => {
@@ -214,12 +220,12 @@ function ProductCategories() {
 
   // Flatten hierarchy for table display with indentation
   const flattenHierarchy = (
-    nodes: (AdminProductCategoryListItem & { children?: AdminProductCategoryListItem[] })[],
+    nodes: (AdminCategoryListItem & { children?: AdminCategoryListItem[] })[],
     level = 0
-  ): (AdminProductCategoryListItem & { level: number })[] => {
-    let result: (AdminProductCategoryListItem & { level: number })[] = [];
+  ): (AdminCategoryListItem & { level: number; displayOrder?: number })[] => {
+    let result: (AdminCategoryListItem & { level: number; displayOrder?: number })[] = [];
     nodes.forEach(node => {
-      result.push({ ...node, level });
+      result.push({ ...node, level, displayOrder: node.rank ?? 0 });
       if (node.children && node.children.length > 0) {
         result = result.concat(flattenHierarchy(node.children, level + 1));
       }
@@ -229,12 +235,12 @@ function ProductCategories() {
 
   const hierarchicalData = flattenHierarchy(buildHierarchy());
 
-  const columns: ColumnsType<AdminProductCategoryListItem & { level: number }> = [
+  const columns: ColumnsType<AdminCategoryListItem & { level: number; displayOrder?: number }> = [
     {
       title: 'Name',
       dataIndex: 'name',
       key: 'name',
-      width: TABLE_COLUMN_WIDTHS.LONG_TEXT,
+      width: TABLE_COLUMN_WIDTHS.LONG_TEXT_FLEXIBLE,
       render: (text, record) => (
         <span style={{ paddingLeft: `${record.level * 24}px` }}>
           {record.level > 0 && '└ '}
@@ -244,11 +250,12 @@ function ProductCategories() {
     },
     {
       title: 'Parent',
-      dataIndex: 'parentName',
+      dataIndex: 'parentId',
       key: 'parentName',
       width: TABLE_COLUMN_WIDTHS.MEDIUM_TEXT,
       ellipsis: true,
-      render: (text) => text ?? '—',
+      render: (_: unknown, record: AdminCategoryListItem) =>
+        categories.find(c => c.id === record.parentId)?.name ?? '—',
     },
     {
       title: 'Order',
@@ -280,15 +287,17 @@ function ProductCategories() {
     },
     {
       title: 'Subcategories',
-      dataIndex: 'subcategoryCount',
+      dataIndex: 'children',
       key: 'subcategoryCount',
       width: TABLE_COLUMN_WIDTHS.SHORT_TEXT,
       align: 'right',
+      render: (_: unknown, record: AdminCategoryListItem & { children?: AdminCategoryListItem[] }) =>
+        record.children?.length ?? 0,
     },
     {
       title: '',
       key: 'action',
-      width: TABLE_COLUMN_WIDTHS.ACTION_BUTTON_DOUBLE,
+      width: TABLE_COLUMN_WIDTHS.ACTION_BUTTONS,
       render: (_, record) => (
         <Space size="small">
           <Button
@@ -309,6 +318,10 @@ function ProductCategories() {
     },
   ];
 
+  const topLevelCount = categories.filter(c => !c.parentId).length;
+  const withSubcategoriesCount = categories.filter(
+    c => c.children && c.children.length > 0
+  ).length;
   const statsData: StatItemData[] | undefined = stats
     ? [
         {
@@ -323,12 +336,12 @@ function ProductCategories() {
         },
         {
           label: 'Top Level',
-          value: stats.topLevel,
+          value: topLevelCount,
           icon: <AppstoreOutlined />,
         },
         {
           label: 'With Subcategories',
-          value: stats.withSubcategories,
+          value: withSubcategoriesCount,
           icon: <AppstoreOutlined />,
         },
       ]
@@ -347,7 +360,7 @@ function ProductCategories() {
         title="Categories"
         description="Manage product categories"
         icon={<AppstoreOutlined />}
-        statsData={statsData}
+        stats={statsData}
         statsLoading={loading}
       />
 
@@ -381,7 +394,7 @@ function ProductCategories() {
             loading={loadingList}
             rowKey="id"
             pagination={false}
-            scroll={TABLE_SCROLL_CONFIGS.DEFAULT}
+            scroll={TABLE_SCROLL_CONFIGS.AUTO}
             locale={{
               emptyText: <Empty description="No categories found" />,
             }}
@@ -415,7 +428,7 @@ function ProductCategories() {
               options={parentOptions}
             />
           </Form.Item>
-          <Form.Item name="displayOrder" label="Display Order" initialValue={0}>
+          <Form.Item name="rank" label="Display Order" initialValue={0}>
             <InputNumber min={0} style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item name="isActive" label="Active" valuePropName="checked" initialValue={true}>
@@ -451,7 +464,7 @@ function ProductCategories() {
               options={parentOptions}
             />
           </Form.Item>
-          <Form.Item name="displayOrder" label="Display Order">
+          <Form.Item name="rank" label="Display Order">
             <InputNumber min={0} style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item name="isActive" label="Active" valuePropName="checked">
