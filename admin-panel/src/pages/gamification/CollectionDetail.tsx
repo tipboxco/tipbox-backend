@@ -144,7 +144,7 @@ function CollectionDetail() {
     <div>
       <PageHeader
         title={collection.name}
-        description={collection.categoryName ?? collection.categoryId ?? undefined}
+        description={collection.categoryName ?? collection.categoryId ?? 'Custom'}
         icon={<FolderOpenOutlined />}
         backTo="/gamification/collections"
         backLabel="Back to list"
@@ -257,7 +257,7 @@ function CollectionSummaryTab({
       name: 'categoryId',
       label: 'Category',
       type: 'text',
-      render: () => collection.categoryName ?? collection.categoryId ?? '—'
+      render: () => collection.categoryName ?? collection.categoryId ?? 'Custom'
     },
     {
       name: 'focusSector',
