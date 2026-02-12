@@ -152,3 +152,35 @@ export async function fetchUserTipsTransactions(
     : undefined;
   return get<AdminTipsTransactionListItem[]>(`${prefix}/users/${userId}/tips-transactions`, query);
 }
+
+// ==================== Additional Stats Functions ====================
+
+export interface BannedUsersStatsResponse {
+  total: number;
+  thisMonth: number;
+}
+
+export interface UserReportsStatsResponse {
+  total: number;
+  open: number;
+  resolved: number;
+}
+
+export interface UserKYCStatsResponse {
+  total: number;
+  pending: number;
+  approved: number;
+  rejected: number;
+}
+
+export async function fetchBannedUsersStats() {
+  return get<BannedUsersStatsResponse>(`${prefix}/users/banned/stats`);
+}
+
+export async function fetchUserReportsStats() {
+  return get<UserReportsStatsResponse>(`${prefix}/users/reports/stats`);
+}
+
+export async function fetchUserKYCStats() {
+  return get<UserKYCStatsResponse>(`${prefix}/users/kyc/stats`);
+}

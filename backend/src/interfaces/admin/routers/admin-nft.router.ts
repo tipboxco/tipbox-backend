@@ -961,4 +961,55 @@ router.delete(
   })
 );
 
+// ==================== Stats Endpoints ====================
+
+/**
+ * @swagger
+ * /admin/nft/marketplace/stats:
+ *   get:
+ *     tags: [Admin - NFT]
+ *     summary: Get NFT marketplace statistics
+ *     responses:
+ *       200:
+ *         description: NFT marketplace stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     totalListings:
+ *                       type: number
+ *                     active:
+ *                       type: number
+ *                     sold:
+ *                       type: number
+ */
+router.get(
+  '/marketplace/stats',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const [totalListings, active, sold] = await Promise.all([
+      prisma.nFTMarketListing.count(),
+      prisma.nFTMarketListing.count({
+        where: { status: 'ACTIVE' },
+      }),
+      prisma.nFTMarketListing.count({
+        where: { status: 'SOLD' },
+      }),
+    ]);
+
+    const data = {
+      totalListings,
+      active,
+      sold,
+    };
+
+    return res.json({ success: true, data });
+  })
+);
+
 export default router;

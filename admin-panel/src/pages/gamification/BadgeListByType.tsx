@@ -13,6 +13,7 @@ import {
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import { TrophyOutlined, SearchOutlined } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
+import type { StatItemData } from '../../components/StatItem';
 import ViewActionButton from '../../components/ViewActionButton';
 import { fetchBadges } from '../../api/admin-badges-collections';
 import type { AdminBadgeListItem } from '../../types/admin';
@@ -29,6 +30,8 @@ export interface BadgeListByTypeProps {
   description: string;
   icon?: React.ReactNode;
   onOpenCreate?: () => void;
+  stats?: StatItemData[];
+  statsLoading?: boolean;
 }
 
 function BadgeListByType({
@@ -38,6 +41,8 @@ function BadgeListByType({
   description,
   icon = <TrophyOutlined />,
   onOpenCreate,
+  stats,
+  statsLoading,
 }: BadgeListByTypeProps) {
   const [badges, setBadges] = useState<AdminBadgeListItem[]>([]);
   const [pagination, setPagination] = useState({ total: 0, limit: PAGE_SIZE, offset: 0 });
@@ -156,7 +161,13 @@ function BadgeListByType({
 
   return (
     <div>
-      <PageHeader title={title} description={description} icon={icon} />
+      <PageHeader
+        title={title}
+        description={description}
+        icon={icon}
+        stats={stats}
+        statsLoading={statsLoading}
+      />
 
       {error && (
         <Alert

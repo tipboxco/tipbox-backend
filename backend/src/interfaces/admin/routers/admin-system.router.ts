@@ -444,4 +444,102 @@ router.get(
   })
 );
 
+// ==================== Stats Endpoints ====================
+
+/**
+ * @swagger
+ * /admin/system/moderation-actions/stats:
+ *   get:
+ *     tags: [Admin - System]
+ *     summary: Get moderation actions statistics
+ *     responses:
+ *       200:
+ *         description: Moderation actions stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: number
+ *                     thisWeek:
+ *                       type: number
+ */
+router.get(
+  '/moderation-actions/stats',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const now = new Date();
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const [total, thisWeek] = await Promise.all([
+      prisma.moderationAction.count(),
+      prisma.moderationAction.count({
+        where: {
+          createdAt: { gte: oneWeekAgo },
+        },
+      }),
+    ]);
+
+    const data = {
+      total,
+      thisWeek,
+    };
+
+    return res.json({ success: true, data });
+  })
+);
+
+/**
+ * @swagger
+ * /admin/system/admin-logs/stats:
+ *   get:
+ *     tags: [Admin - System]
+ *     summary: Get admin logs statistics
+ *     responses:
+ *       200:
+ *         description: Admin logs stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: number
+ *                     thisWeek:
+ *                       type: number
+ */
+router.get(
+  '/admin-logs/stats',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const now = new Date();
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const [total, thisWeek] = await Promise.all([
+      prisma.adminLog.count(),
+      prisma.adminLog.count({
+        where: {
+          timestamp: { gte: oneWeekAgo },
+        },
+      }),
+    ]);
+
+    const data = {
+      total,
+      thisWeek,
+    };
+
+    return res.json({ success: true, data });
+  })
+);
+
 export default router;

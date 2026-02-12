@@ -995,4 +995,55 @@ router.post(
   })
 );
 
+// ==================== Stats Endpoints ====================
+
+/**
+ * @swagger
+ * /admin/payments/rewards/stats:
+ *   get:
+ *     tags: [Admin - Payments]
+ *     summary: Get rewards statistics
+ *     responses:
+ *       200:
+ *         description: Rewards stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: number
+ *                     distributed:
+ *                       type: number
+ *                     pending:
+ *                       type: number
+ */
+router.get(
+  '/rewards/stats',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const [total, distributed, pending] = await Promise.all([
+      prisma.rewardClaim.count(),
+      prisma.rewardClaim.count({
+        where: { status: 'DISTRIBUTED' },
+      }),
+      prisma.rewardClaim.count({
+        where: { status: 'PENDING' },
+      }),
+    ]);
+
+    const data = {
+      total,
+      distributed,
+      pending,
+    };
+
+    return res.json({ success: true, data });
+  })
+);
+
 export default router;

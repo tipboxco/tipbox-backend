@@ -1057,4 +1057,105 @@ router.delete(
   })
 );
 
+// ==================== Stats Endpoints ====================
+
+/**
+ * @swagger
+ * /admin/brands/bridge-program/stats:
+ *   get:
+ *     tags: [Admin - Brands]
+ *     summary: Get bridge program statistics
+ *     responses:
+ *       200:
+ *         description: Bridge program stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     totalFollowers:
+ *                       type: number
+ *                     totalPosts:
+ *                       type: number
+ *                     activeBrands:
+ *                       type: number
+ */
+router.get(
+  '/bridge-program/stats',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const [totalFollowers, totalPosts, activeBrands] = await Promise.all([
+      prisma.bridgeFollower.count(),
+      prisma.bridgePost.count(),
+      prisma.brand.count({
+        where: {
+          followers: {
+            some: {},
+          },
+        },
+      }),
+    ]);
+
+    const data = {
+      totalFollowers,
+      totalPosts,
+      activeBrands,
+    };
+
+    return res.json({ success: true, data });
+  })
+);
+
+/**
+ * @swagger
+ * /admin/brands/leaderboards/stats:
+ *   get:
+ *     tags: [Admin - Brands]
+ *     summary: Get brand leaderboards statistics
+ *     responses:
+ *       200:
+ *         description: Brand leaderboards stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: number
+ *                     active:
+ *                       type: number
+ */
+router.get(
+  '/leaderboards/stats',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const now = new Date();
+
+    const [total, active] = await Promise.all([
+      prisma.bridgeLeaderboard.count(),
+      prisma.bridgeLeaderboard.count({
+        where: {
+          startDate: { lte: now },
+          endDate: { gte: now },
+        },
+      }),
+    ]);
+
+    const data = {
+      total,
+      active,
+    };
+
+    return res.json({ success: true, data });
+  })
+);
+
 export default router;

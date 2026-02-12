@@ -810,4 +810,104 @@ router.post(
   })
 );
 
+// ==================== Stats Endpoints ====================
+
+/**
+ * @swagger
+ * /admin/messaging/notifications/stats:
+ *   get:
+ *     tags: [Admin - Messaging]
+ *     summary: Get notifications statistics
+ *     responses:
+ *       200:
+ *         description: Notifications stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: number
+ *                     sent:
+ *                       type: number
+ *                     delivered:
+ *                       type: number
+ */
+router.get(
+  '/notifications/stats',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const [total, sent, delivered] = await Promise.all([
+      prisma.notification.count(),
+      prisma.notification.count({
+        where: { sentAt: { not: null } },
+      }),
+      prisma.notification.count({
+        where: { read: true },
+      }),
+    ]);
+
+    const data = {
+      total,
+      sent,
+      delivered,
+    };
+
+    return res.json({ success: true, data });
+  })
+);
+
+/**
+ * @swagger
+ * /admin/messaging/direct-messages/stats:
+ *   get:
+ *     tags: [Admin - Messaging]
+ *     summary: Get direct messages statistics
+ *     responses:
+ *       200:
+ *         description: Direct messages stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: number
+ *                     thisWeek:
+ *                       type: number
+ */
+router.get(
+  '/direct-messages/stats',
+  asyncHandler(async (_req: Request, res: Response) => {
+    // Count this week's messages
+    const now = new Date();
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const [total, thisWeek] = await Promise.all([
+      prisma.dMMessage.count(),
+      prisma.dMMessage.count({
+        where: {
+          createdAt: { gte: oneWeekAgo },
+        },
+      }),
+    ]);
+
+    const data = {
+      total,
+      thisWeek,
+    };
+
+    return res.json({ success: true, data });
+  })
+);
+
 export default router;

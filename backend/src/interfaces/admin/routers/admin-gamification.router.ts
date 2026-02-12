@@ -355,4 +355,215 @@ router.delete(
   })
 );
 
+// ==================== Stats Endpoints ====================
+
+/**
+ * @swagger
+ * /admin/gamification/user-progress/stats:
+ *   get:
+ *     tags: [Admin - Gamification]
+ *     summary: Get user progress statistics
+ *     responses:
+ *       200:
+ *         description: User progress stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     totalUsers:
+ *                       type: number
+ *                       description: Total users with achievement progress
+ *                     activeUsers:
+ *                       type: number
+ *                       description: Users with progress updated in last 30 days
+ */
+router.get(
+  '/user-progress/stats',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const prisma = getPrisma();
+
+    // Count users with at least one achievement
+    const totalUsers = await prisma.userAchievement
+      .groupBy({
+        by: ['userId'],
+      })
+      .then((results) => results.length);
+
+    // Count users with progress in last 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const activeUsers = await prisma.userAchievement
+      .groupBy({
+        by: ['userId'],
+        where: {
+          updatedAt: {
+            gte: thirtyDaysAgo,
+          },
+        },
+      })
+      .then((results) => results.length);
+
+    const data = {
+      totalUsers,
+      activeUsers,
+    };
+
+    return res.json({ success: true, data });
+  })
+);
+
+/**
+ * @swagger
+ * /admin/gamification/brand-badges/stats:
+ *   get:
+ *     tags: [Admin - Gamification]
+ *     summary: Get brand badges statistics
+ *     responses:
+ *       200:
+ *         description: Brand badges stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     totalBadges:
+ *                       type: number
+ *                     totalAwarded:
+ *                       type: number
+ */
+router.get(
+  '/brand-badges/stats',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const prisma = getPrisma();
+
+    const [totalBadges, totalAwarded] = await Promise.all([
+      prisma.badge.count({
+        where: { type: 'BRAND' },
+      }),
+      prisma.userBadge.count({
+        where: {
+          badge: { type: 'BRAND' },
+        },
+      }),
+    ]);
+
+    const data = {
+      totalBadges,
+      totalAwarded,
+    };
+
+    return res.json({ success: true, data });
+  })
+);
+
+/**
+ * @swagger
+ * /admin/gamification/event-badges/stats:
+ *   get:
+ *     tags: [Admin - Gamification]
+ *     summary: Get event badges statistics
+ *     responses:
+ *       200:
+ *         description: Event badges stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     totalBadges:
+ *                       type: number
+ *                     totalAwarded:
+ *                       type: number
+ */
+router.get(
+  '/event-badges/stats',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const prisma = getPrisma();
+
+    const [totalBadges, totalAwarded] = await Promise.all([
+      prisma.badge.count({
+        where: { type: 'EVENT' },
+      }),
+      prisma.userBadge.count({
+        where: {
+          badge: { type: 'EVENT' },
+        },
+      }),
+    ]);
+
+    const data = {
+      totalBadges,
+      totalAwarded,
+    };
+
+    return res.json({ success: true, data });
+  })
+);
+
+/**
+ * @swagger
+ * /admin/gamification/cosmetic-badges/stats:
+ *   get:
+ *     tags: [Admin - Gamification]
+ *     summary: Get cosmetic badges statistics
+ *     responses:
+ *       200:
+ *         description: Cosmetic badges stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     totalBadges:
+ *                       type: number
+ *                     totalOwned:
+ *                       type: number
+ */
+router.get(
+  '/cosmetic-badges/stats',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const prisma = getPrisma();
+
+    const [totalBadges, totalOwned] = await Promise.all([
+      prisma.badge.count({
+        where: { type: 'COSMETIC' },
+      }),
+      prisma.userBadge.count({
+        where: {
+          badge: { type: 'COSMETIC' },
+        },
+      }),
+    ]);
+
+    const data = {
+      totalBadges,
+      totalOwned,
+    };
+
+    return res.json({ success: true, data });
+  })
+);
+
 export default router;

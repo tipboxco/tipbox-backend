@@ -303,3 +303,32 @@ export async function fetchUserPosts(
   if (params?.type) query.type = params.type;
   return get<AdminContentPostListItem[]>(`${prefix}/users/${userId}/posts`, query);
 }
+
+// ==================== Additional Stats Functions ====================
+
+export interface FeedHighlightsStatsResponse {
+  total: number;
+  active: number;
+}
+
+export interface TrendingPostsStatsResponse {
+  total: number;
+  thisWeek: number;
+}
+
+export interface TagsCategoriesStatsResponse {
+  totalTags: number;
+  totalCategories: number;
+}
+
+export async function fetchFeedHighlightsStats() {
+  return get<FeedHighlightsStatsResponse>(`${prefix}/content/feed-highlights/stats`);
+}
+
+export async function fetchTrendingPostsStats() {
+  return get<TrendingPostsStatsResponse>(`${prefix}/content/trending/stats`);
+}
+
+export async function fetchTagsCategoriesStats() {
+  return get<TagsCategoriesStatsResponse>(`${prefix}/content/tags-categories/stats`);
+}

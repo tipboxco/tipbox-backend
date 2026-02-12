@@ -145,3 +145,23 @@ export async function fetchEventRewards(
     : undefined;
   return get<AdminEventRewardListItem[]>(`${prefix}/events/${eventId}/rewards`, query);
 }
+
+// ==================== Additional Stats Functions ====================
+
+export interface EventBadgesStatsResponse {
+  total: number;
+  byEventCount: number;
+}
+
+export interface EventRewardsStatsResponse {
+  total: number;
+  byTypeCount: number;
+}
+
+export async function fetchEventBadgesStats() {
+  return get<EventBadgesStatsResponse>(`${prefix}/events/badges/stats`);
+}
+
+export async function fetchEventRewardsStats() {
+  return get<EventRewardsStatsResponse>(`${prefix}/events/rewards/stats`);
+}
