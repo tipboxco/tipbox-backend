@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import {
   Card,
@@ -12,6 +12,7 @@ import {
   Col,
   Typography,
   Image,
+  Cascader,
   message as antdMessage,
 } from 'antd';
 import {
@@ -32,6 +33,8 @@ import {
   fetchCollectionBadges,
   removeCollectionBadge,
   updateCollection,
+  fetchCollectionCategories,
+  type AdminCollectionCategoryMain,
 } from '../../api/admin-badges-collections';
 import type {
   AdminCollectionDetailResponse,
@@ -196,6 +199,26 @@ function CollectionSummaryTab({
   onUpdated: () => void;
   onDeleted: () => void;
 }) {
+  const [categories, setCategories] = useState<AdminCollectionCategoryMain[]>([]);
+
+  // Load categories on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetchCollectionCategories();
+        if (!cancelled && res.data) {
+          setCategories(res.data);
+        }
+      } catch (err) {
+        console.error('Failed to load categories:', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleDelete = () => {
     Modal.confirm({
       title: 'Delete Collection',
@@ -217,6 +240,12 @@ function CollectionSummaryTab({
 
   const handleUpdateCollection = async (values: Record<string, unknown>) => {
     try {
+      // Convert __CUSTOM__ to null (no category)
+      let categoryId = (values.categoryId as string) || null;
+      if (categoryId === '__CUSTOM__') {
+        categoryId = null;
+      }
+
       await updateCollection(collection.id, {
         name: values.name as string,
         owner: (values.owner as string) || null,
@@ -226,7 +255,7 @@ function CollectionSummaryTab({
         longDescription: (values.longDescription as string) || null,
         unlockCondition: (values.unlockCondition as string) || null,
         completionBonus: (values.completionBonus as string) || null,
-        categoryId: (values.categoryId as string) || null,
+        categoryId: categoryId,
         bannerUrl: (values.bannerUrl as string) || null,
       });
       antdMessage.success('Collection updated successfully');
@@ -236,9 +265,26 @@ function CollectionSummaryTab({
     }
   };
 
+  // Prepare category options (flat list with Custom first)
+  const categoryOptions = [
+    { label: 'Custom', value: '__CUSTOM__' },
+    ...categories.flatMap((main) => [
+      { label: main.name, value: main.id },
+      ...main.children.map((sub) => ({ label: `  ├─ ${sub.name}`, value: sub.id })),
+    ]),
+  ];
+
+  // Transform collection data: null categoryId → __CUSTOM__
+  const collectionData = useMemo(() => ({
+    ...collection,
+    categoryId: collection.categoryId ?? '__CUSTOM__',
+  }), [collection]);
+
   // Field configuration for editable form
   // Optimized layout: short fields in 2 columns, long fields span full width
+  // Logical order: Basic info → Classification → Descriptions → Images → Rewards → Metadata
   const collectionFields: FieldConfig[] = [
+    // 1. Basic Information
     {
       name: 'name',
       label: 'Collection Name',
@@ -248,36 +294,44 @@ function CollectionSummaryTab({
       span: 2, // Full width for important field
     },
     {
+      name: 'categoryId',
+      label: 'Category',
+      type: 'select',
+      options: categoryOptions,
+      render: () => collection.categoryName ?? collection.categoryId ?? 'Custom'
+    },
+    {
       name: 'owner',
       label: 'Owner',
       type: 'text',
       maxLength: 200
     },
-    {
-      name: 'categoryId',
-      label: 'Category',
-      type: 'text',
-      render: () => collection.categoryName ?? collection.categoryId ?? 'Custom'
-    },
+
+    // 2. Classification & Targeting
     {
       name: 'focusSector',
       label: 'Focus Sector',
       type: 'text',
-      maxLength: 200
+      maxLength: 200,
+      placeholder: 'e.g., Electronics, Beauty, Gaming'
     },
     {
       name: 'targetGroup',
       label: 'Target Group',
       type: 'text',
-      maxLength: 200
+      maxLength: 200,
+      placeholder: 'e.g., Beginners, Professionals'
     },
+
+    // 3. Descriptions
     {
       name: 'shortDescription',
       label: 'Short Description',
       type: 'textarea',
       rows: 2,
       maxLength: 2000,
-      span: 2, // Full width for better readability
+      span: 2,
+      placeholder: 'Brief summary of this collection'
     },
     {
       name: 'longDescription',
@@ -285,27 +339,37 @@ function CollectionSummaryTab({
       type: 'textarea',
       rows: 3,
       maxLength: 5000,
-      span: 2, // Full width for better readability
+      span: 2,
+      placeholder: 'Detailed description of this collection'
     },
-    {
-      name: 'unlockCondition',
-      label: 'Prerequisite',
-      type: 'text',
-      maxLength: 500
-    },
-    {
-      name: 'completionBonus',
-      label: 'Completion Reward',
-      type: 'text',
-      maxLength: 500
-    },
+
+    // 4. Cover Image
     {
       name: 'bannerUrl',
       label: 'Cover Image URL',
       type: 'text',
       maxLength: 1000,
-      span: 2, // Full width for long URLs
+      span: 2,
+      placeholder: 'https://...'
     },
+
+    // 5. Rewards & Conditions
+    {
+      name: 'unlockCondition',
+      label: 'Unlock Condition',
+      type: 'text',
+      maxLength: 500,
+      placeholder: 'Requirement to unlock this collection'
+    },
+    {
+      name: 'completionBonus',
+      label: 'Completion Reward',
+      type: 'text',
+      maxLength: 500,
+      placeholder: 'Reward for completing this collection'
+    },
+
+    // 6. Metadata (Read-only)
     {
       name: 'createdAt',
       label: 'Created',
@@ -340,7 +404,7 @@ function CollectionSummaryTab({
         <Col xs={24} lg={collection.bannerUrl ? 16 : 24}>
           <EditableFormSection
             title="COLLECTION METADATA"
-            data={collection}
+            data={collectionData}
             fields={collectionFields}
             onSave={handleUpdateCollection}
             bordered
