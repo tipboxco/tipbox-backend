@@ -19,6 +19,19 @@ export const AdminContentPostsQuerySchema = z.object({
   order: z.enum(['asc', 'desc']).default('desc'),
 });
 
+export const AdminContentPostCreateSchema = z.object({
+  userId: z.string().uuid(),
+  type: ContentPostTypeEnum,
+  title: z.string().min(1).max(1000),
+  body: z.string().min(1).max(100000),
+  mainCategoryId: z.string().uuid().optional().nullable(),
+  subCategoryId: z.string().uuid().optional().nullable(),
+  categoryId: z.string().optional().nullable(),
+  productId: z.string().optional().nullable(),
+  productGroupId: z.string().uuid().optional().nullable(),
+  eventId: z.string().optional().nullable(),
+});
+
 export const AdminContentPostUpdateSchema = z.object({
   title: z.string().min(1).max(1000).optional(),
   body: z.string().max(100000).optional(),
@@ -133,6 +146,7 @@ export const AdminContentTagsQuerySchema = z.object({
 /* ========== Type Exports ========== */
 
 export type AdminContentPostsQuery = z.infer<typeof AdminContentPostsQuerySchema>;
+export type AdminContentPostCreateInput = z.infer<typeof AdminContentPostCreateSchema>;
 export type AdminContentPostUpdateInput = z.infer<typeof AdminContentPostUpdateSchema>;
 export type AdminContentCommentsQuery = z.infer<typeof AdminContentCommentsQuerySchema>;
 export type AdminContentCommentUpdateInput = z.infer<typeof AdminContentCommentUpdateSchema>;

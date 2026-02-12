@@ -10,6 +10,7 @@ import logger from '../../../infrastructure/logger/logger';
 // Import schemas
 import {
   AdminContentPostsQuerySchema,
+  AdminContentPostCreateSchema,
   AdminContentPostUpdateSchema,
   AdminContentCommentsQuerySchema,
   AdminContentCommentUpdateSchema,
@@ -26,6 +27,7 @@ import {
   AdminManualReviewFlagUpdateSchema,
   AdminModerationActionsQuerySchema,
   AdminContentTagsQuerySchema,
+  type AdminContentPostCreateInput,
 } from '../schemas/admin-content.schemas';
 
 // Import DTOs
@@ -304,6 +306,156 @@ router.get(
       experienceSnippetId: post.experienceSnippetId,
     };
     return res.json({ success: true, data });
+  })
+);
+
+/**
+ * @openapi
+ * /admin/content/posts:
+ *   post:
+ *     summary: Yeni post oluştur (admin announcement/duyuru için)
+ *     tags: [Admin - Content]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userId, type, title, body]
+ *             properties:
+ *               userId: { type: string, format: uuid }
+ *               type: { type: string, enum: [FREE, TIPS, COMPARE, QUESTION, EXPERIENCE, UPDATE] }
+ *               title: { type: string, minLength: 1, maxLength: 1000 }
+ *               body: { type: string, minLength: 1, maxLength: 100000 }
+ *               mainCategoryId: { type: string, format: uuid, nullable: true }
+ *               subCategoryId: { type: string, format: uuid, nullable: true }
+ *               categoryId: { type: string, nullable: true }
+ *               productId: { type: string, nullable: true }
+ *               productGroupId: { type: string, format: uuid, nullable: true }
+ *               eventId: { type: string, nullable: true }
+ *     responses:
+ *       201:
+ *         description: Post oluşturuldu
+ *       400:
+ *         description: Invalid input
+ *       404:
+ *         description: User bulunamadı
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden
+ */
+router.post(
+  '/posts',
+  validateBody(AdminContentPostCreateSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const adminId = req.user?.id;
+    if (!adminId) return res.status(401).json({ message: 'Unauthorized' });
+
+    const body = req.body as AdminContentPostCreateInput;
+
+    // Validate user exists
+    const user = await prisma.user.findUnique({ where: { id: body.userId } });
+    if (!user) throw new NotFoundError('User bulunamadı');
+
+    const postId = generateIdForModel('ContentPost');
+
+    const post = await prisma.contentPost.create({
+      data: {
+        id: postId,
+        userId: body.userId,
+        type: body.type,
+        title: body.title,
+        body: body.body,
+        mainCategoryId: body.mainCategoryId ?? null,
+        subCategoryId: body.subCategoryId ?? null,
+        categoryId: body.categoryId ?? null,
+        productId: body.productId ?? null,
+        productGroupId: body.productGroupId ?? null,
+        eventId: body.eventId ?? null,
+      },
+      include: {
+        user: { include: { profile: { select: { displayName: true, userName: true } } } },
+        mainCategory: { select: { id: true, name: true } },
+        subCategory: { select: { id: true, name: true } },
+        category: { select: { id: true, name: true } },
+        product: { select: { id: true, name: true } },
+        productGroup: { select: { id: true, name: true } },
+        event: { select: { id: true, title: true, status: true } },
+        media: { select: { id: true, mediaUrl: true, orderIndex: true }, orderBy: { orderIndex: 'asc' } },
+      },
+    });
+
+    await prisma.adminLog.create({
+      data: {
+        adminId,
+        action: 'CONTENT_POST_CREATE',
+        description: `postId: ${post.id}, title: ${post.title}`,
+        entityType: 'content_post',
+        entityId: 0,
+      },
+    });
+
+    logger.info('Admin created content post', {
+      adminId,
+      postId: post.id,
+      userId: body.userId,
+      type: body.type,
+      title: body.title,
+    });
+
+    const media = post.media?.map((m) => ({ id: m.id, mediaUrl: resolveMediaUrl(m.mediaUrl, true), orderIndex: m.orderIndex })) ?? [];
+
+    const data: AdminContentPostDetailResponse = {
+      id: post.id,
+      userId: post.userId,
+      type: post.type,
+      title: post.title,
+      body: post.body,
+      bodyExcerpt: post.body.length > 200 ? post.body.slice(0, 200) + '...' : post.body,
+      createdAt: post.createdAt.toISOString(),
+      updatedAt: post.updatedAt.toISOString(),
+      likesCount: post.likesCount,
+      commentsCount: post.commentsCount,
+      favoritesCount: post.favoritesCount,
+      viewsCount: post.viewsCount,
+      sharesCount: post.sharesCount,
+      isBoosted: post.isBoosted,
+      boostedUntil: post.boostedUntil?.toISOString() ?? null,
+      eventId: post.eventId,
+      mainCategoryId: post.mainCategoryId,
+      subCategoryId: post.subCategoryId,
+      categoryId: post.categoryId,
+      productGroupId: post.productGroupId,
+      productId: post.productId,
+      productStatus: post.productStatus,
+      inventoryRequired: post.inventoryRequired,
+      thumbnailUrl: null,
+      userDisplayName: post.user.profile?.displayName ?? null,
+      userName: post.user.profile?.userName ?? null,
+      user: {
+        id: post.user.id,
+        email: post.user.email,
+        displayName: post.user.profile?.displayName ?? null,
+        userName: post.user.profile?.userName ?? null,
+      },
+      mainCategory: post.mainCategory ?? undefined,
+      subCategory: post.subCategory ?? undefined,
+      category: post.category ?? undefined,
+      product: post.product ?? undefined,
+      productGroup: post.productGroup ?? undefined,
+      event: post.event ?? undefined,
+      media,
+      tags: [],
+      experienceDurationId: post.experienceDurationId,
+      experienceLocationId: post.experienceLocationId,
+      experiencePurposeId: post.experiencePurposeId,
+      experienceSnippetId: post.experienceSnippetId,
+    };
+
+    return res.status(201).json({ success: true, data });
   })
 );
 
