@@ -156,19 +156,31 @@ function CreateCollectionModal({ open, onClose, onSuccess }: CreateCollectionMod
     },
   ];
 
+  // Helper to safely trim string values
+  const trimString = (value: unknown): string | null => {
+    if (!value || typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    return trimmed === '' ? null : trimmed;
+  };
+
   const handleSubmit = async (values: Record<string, unknown>) => {
     try {
+      // Validate required fields
+      if (!values.name || typeof values.name !== 'string' || !values.name.trim()) {
+        throw new Error('Collection name is required');
+      }
+
       const res = await createCollection({
-        name: (values.name as string).trim(),
-        owner: (values.owner as string)?.trim() || null,
-        focusSector: (values.focusSector as string)?.trim() || null,
-        targetGroup: (values.targetGroup as string)?.trim() || null,
-        shortDescription: (values.shortDescription as string)?.trim() || null,
-        longDescription: (values.longDescription as string)?.trim() || null,
-        bannerUrl: (values.bannerUrl as string)?.trim() || null,
-        unlockCondition: (values.unlockCondition as string)?.trim() || null,
-        completionBonus: (values.completionBonus as string)?.trim() || null,
-        categoryId: (values.categoryId as string)?.trim() || null,
+        name: values.name.trim(),
+        owner: trimString(values.owner),
+        focusSector: trimString(values.focusSector),
+        targetGroup: trimString(values.targetGroup),
+        shortDescription: trimString(values.shortDescription),
+        longDescription: trimString(values.longDescription),
+        bannerUrl: trimString(values.bannerUrl),
+        unlockCondition: trimString(values.unlockCondition),
+        completionBonus: trimString(values.completionBonus),
+        categoryId: trimString(values.categoryId),
       });
 
       antdMessage.success('Collection created successfully');

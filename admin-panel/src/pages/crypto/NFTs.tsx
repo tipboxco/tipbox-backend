@@ -385,8 +385,8 @@ function NFTs() {
         />
       )}
 
-      <Card bordered={false}>
-        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      <Card>
+        <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
           <Row justify="space-between" align="middle">
             <Space wrap>
               <Input
@@ -471,7 +471,7 @@ function NFTs() {
           <div style={{ textAlign: 'center', padding: '20px' }}>Loading...</div>
         ) : (
           selectedNFT && (
-            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
               {selectedNFT.imageUrl && (
                 <div style={{ textAlign: 'center' }}>
                   <img

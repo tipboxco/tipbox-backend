@@ -153,9 +153,9 @@ function UserList() {
       ellipsis: true,
       render: (verified) =>
         verified ? (
-          <CheckCircleOutlined style={{ color: 'var(--ant-color-success)', fontSize: 18 }} />
+          <CheckCircleOutlined style={{ color: 'var(--ant-color-success)', fontSize: 21 }} />
         ) : (
-          <CloseCircleOutlined style={{ color: 'var(--ant-color-text-tertiary)', fontSize: 18 }} />
+          <CloseCircleOutlined style={{ color: 'var(--ant-color-text-tertiary)', fontSize: 21 }} />
         ),
     },
     {

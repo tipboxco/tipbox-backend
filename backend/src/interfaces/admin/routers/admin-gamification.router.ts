@@ -6,6 +6,8 @@ import { NotFoundError } from '../../../infrastructure/errors/custom-errors';
 import logger from '../../../infrastructure/logger/logger';
 
 import type { PaginationMeta } from '../dtos/admin-common.dto';
+import type { AdminUserProgressListItem } from '../dtos/admin-badges.dto';
+import { AdminUserProgressQuerySchema } from '../schemas/admin-badges.schemas';
 
 const router = Router();
 const prisma = getPrisma();
@@ -403,19 +405,166 @@ router.get(
       .groupBy({
         by: ['userId'],
         where: {
-          updatedAt: {
+          completedAt: {
             gte: thirtyDaysAgo,
           },
         },
       })
       .then((results) => results.length);
 
+    // Count users with badges
+    const totalUsersWithBadges = await prisma.userBadge
+      .groupBy({ by: ['userId'] })
+      .then((results) => results.length);
+
+    // Calculate average badges per user
+    const totalBadges = await prisma.userBadge.count();
+    const averageBadgesPerUser =
+      totalUsersWithBadges > 0 ? Math.round(totalBadges / totalUsersWithBadges) : 0;
+
     const data = {
       totalUsers,
       activeUsers,
+      totalUsersWithBadges,
+      averageBadgesPerUser,
     };
 
     return res.json({ success: true, data });
+  })
+);
+
+/**
+ * GET /admin/gamification/user-progress
+ * List all users with badge ownership and achievement progress
+ */
+router.get(
+  '/user-progress',
+  validateQuery(AdminUserProgressQuerySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const prisma = getPrisma();
+    const q = req.query as unknown as {
+      limit: number;
+      offset: number;
+      search?: string;
+      claimStatus: 'all' | 'claimed' | 'unclaimed';
+      sort: string;
+      order: 'asc' | 'desc';
+    };
+
+    // Build search filter
+    const userWhere: { OR?: unknown[] } = {};
+    if (q.search && q.search.length > 0) {
+      userWhere.OR = [
+        { email: { contains: q.search, mode: 'insensitive' as const } },
+        { profile: { userName: { contains: q.search, mode: 'insensitive' as const } } },
+        { profile: { displayName: { contains: q.search, mode: 'insensitive' as const } } },
+      ];
+    }
+
+    // Fetch users with badge and achievement data
+    const users = await prisma.user.findMany({
+      where: userWhere,
+      select: {
+        id: true,
+        email: true,
+        profile: {
+          select: {
+            userName: true,
+            displayName: true,
+          },
+        },
+        userBadges: {
+          select: {
+            id: true,
+            claimed: true,
+            claimedAt: true,
+            createdAt: true,
+          },
+        },
+        userAchievements: {
+          select: {
+            id: true,
+            completed: true,
+            completedAt: true,
+          },
+        },
+      },
+      take: q.limit,
+      skip: q.offset,
+    });
+
+    // Calculate aggregates for each user
+    let data: AdminUserProgressListItem[] = users.map((user) => {
+      const totalBadges = user.userBadges.length;
+      const claimedBadges = user.userBadges.filter((ub) => ub.claimed).length;
+      const unclaimedBadges = totalBadges - claimedBadges;
+
+      const totalAchievements = user.userAchievements.length;
+      const completedAchievements = user.userAchievements.filter((ua) => ua.completed).length;
+      const progressPercent =
+        totalAchievements > 0 ? Math.round((completedAchievements / totalAchievements) * 100) : 0;
+
+      // Find most recent activity
+      const badgeActivities = user.userBadges
+        .filter((ub) => ub.claimedAt)
+        .map((ub) => ub.claimedAt!);
+      const achievementActivities = user.userAchievements
+        .filter((ua) => ua.completedAt)
+        .map((ua) => ua.completedAt!);
+      const allActivities = [...badgeActivities, ...achievementActivities];
+      const lastActivity =
+        allActivities.length > 0
+          ? new Date(Math.max(...allActivities.map((d) => d.getTime())))
+          : null;
+
+      return {
+        userId: user.id,
+        email: user.email,
+        userName: user.profile?.userName ?? null,
+        displayName: user.profile?.displayName ?? null,
+        totalBadges,
+        claimedBadges,
+        unclaimedBadges,
+        totalAchievements,
+        completedAchievements,
+        progressPercent,
+        lastActivity: lastActivity?.toISOString() ?? null,
+      };
+    });
+
+    // Apply claim status filter
+    if (q.claimStatus === 'claimed') {
+      data = data.filter((u) => u.claimedBadges > 0);
+    } else if (q.claimStatus === 'unclaimed') {
+      data = data.filter((u) => u.unclaimedBadges > 0);
+    }
+
+    // Apply sorting
+    data.sort((a, b) => {
+      let comparison = 0;
+      switch (q.sort) {
+        case 'username':
+          comparison = (a.userName ?? '').localeCompare(b.userName ?? '');
+          break;
+        case 'totalBadges':
+          comparison = a.totalBadges - b.totalBadges;
+          break;
+        case 'progressPercent':
+          comparison = a.progressPercent - b.progressPercent;
+          break;
+        case 'lastActivity':
+          const aTime = a.lastActivity ? new Date(a.lastActivity).getTime() : 0;
+          const bTime = b.lastActivity ? new Date(b.lastActivity).getTime() : 0;
+          comparison = aTime - bTime;
+          break;
+      }
+      return q.order === 'asc' ? comparison : -comparison;
+    });
+
+    const total = await prisma.user.count({ where: userWhere });
+    const pagination: PaginationMeta = { total, limit: q.limit, offset: q.offset };
+
+    return res.json({ success: true, data, pagination });
   })
 );
 

@@ -40,6 +40,14 @@ export async function request<T>(
   }
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
+    // Check for validation error with details
+    if (json.error && json.error.details && Array.isArray(json.error.details)) {
+      const details = json.error.details
+        .map((d: { field: string; message: string }) => `${d.field}: ${d.message}`)
+        .join(', ');
+      throw new Error(`${json.error.message || 'Validation failed'}: ${details}`);
+    }
+
     const raw = json.message ?? json.error;
     const msg =
       typeof raw === 'string'

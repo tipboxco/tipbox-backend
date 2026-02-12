@@ -44,9 +44,18 @@ export default function CreatableFormDrawer({
   steps,
   initialValues = {},
   width = 600,
+  onFieldChange,
+  formRef,
 }: CreatableFormDrawerProps) {
   const { form, loading, error, currentStep, nextStep, prevStep, submitForm, resetForm, setError } =
     useCreatableForm();
+
+  // Expose form instance via ref
+  useEffect(() => {
+    if (formRef && formRef.current !== form) {
+      (formRef as React.MutableRefObject<FormInstance>).current = form;
+    }
+  }, [form, formRef]);
   const [fileList, setFileList] = useState<Record<string, UploadFile[]>>({});
 
   const hasSteps = steps && steps.length > 0;
@@ -61,7 +70,8 @@ export default function CreatableFormDrawer({
       resetForm();
       setFileList({});
     }
-  }, [open, initialValues, form, resetForm]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   /**
    * Get fields for current step (or all fields if no steps)
@@ -118,12 +128,27 @@ export default function CreatableFormDrawer({
    */
   const handleSubmit = async () => {
     try {
+      // Validate all fields (including hidden ones from previous steps)
       const values = await form.validateFields();
       const transformedValues = transformValues(values);
       await submitForm(() => onSubmit(transformedValues));
       handleClose();
     } catch (err) {
-      // Validation failed or submission error
+      // Validation failed
+      if (err && typeof err === 'object' && 'errorFields' in err) {
+        // Check which step has errors
+        const errorFields = (err as { errorFields: { name: string[] }[] }).errorFields;
+        if (errorFields.length > 0 && hasSteps) {
+          const errorFieldName = errorFields[0].name[0];
+          // Find which step contains this field
+          const errorStepIndex = steps.findIndex((step) =>
+            step.fields.includes(errorFieldName)
+          );
+          if (errorStepIndex !== -1 && errorStepIndex !== currentStep) {
+            message.error(`Please check ${steps[errorStepIndex].title} for errors`);
+          }
+        }
+      }
       console.error('Form submission failed:', err);
     }
   };
@@ -283,6 +308,11 @@ export default function CreatableFormDrawer({
             placeholder={field.placeholder ?? `Select ${field.label.toLowerCase()}`}
             options={field.options}
             allowClear
+            onChange={(value) => {
+              if (onFieldChange) {
+                onFieldChange(field.name, value);
+              }
+            }}
           />
         );
 
@@ -373,10 +403,16 @@ export default function CreatableFormDrawer({
   };
 
   return (
-    <Drawer title={title} open={open} onClose={handleClose} width={width} footer={renderFooter()}>
+    <Drawer
+      title={title}
+      open={open}
+      onClose={handleClose}
+      width={width}
+      footer={renderFooter()}
+    >
       {error && (
         <Alert
-          message="Error"
+          title="Error"
           description={error}
           type="error"
           closable
@@ -398,15 +434,21 @@ export default function CreatableFormDrawer({
 
       <Form form={form} {...FORM_LAYOUT_VERTICAL} onFinish={handleSubmit}>
         <Row gutter={16}>
-          {getCurrentStepFields()
-            .filter((field) => isFieldVisible(field))
-            .map((field) => (
-              <Col span={24} key={field.name}>
+          {fields.map((field) => {
+            // Only show fields for current step, but keep all fields in DOM (hidden)
+            const isCurrentStepField = hasSteps
+              ? steps[currentStep].fields.includes(field.name)
+              : true;
+            const shouldShow = isCurrentStepField && isFieldVisible(field);
+
+            return (
+              <Col span={24} key={field.name} style={{ display: shouldShow ? 'block' : 'none' }}>
                 <Form.Item name={field.name} label={field.label} rules={getFieldRules(field)}>
                   {renderField(field)}
                 </Form.Item>
               </Col>
-            ))}
+            );
+          })}
         </Row>
       </Form>
     </Drawer>

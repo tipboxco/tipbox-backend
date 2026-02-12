@@ -255,8 +255,8 @@ function ExpertRequests() {
         />
       )}
 
-      <Card bordered={false}>
-        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      <Card>
+        <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
           <Row justify="space-between" align="middle">
             <Space wrap>
               <Input
@@ -323,7 +323,7 @@ function ExpertRequests() {
           <div style={{ textAlign: 'center', padding: '20px' }}>Loading...</div>
         ) : (
           selectedRequest && (
-            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
               <Descriptions bordered column={2} size="small">
                 <Descriptions.Item label="User">
                   {selectedRequest.username ?? selectedRequest.userEmail ?? '—'}
@@ -364,7 +364,7 @@ function ExpertRequests() {
                             </Space>
                           }
                           description={
-                            <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                            <Space orientation="vertical" size="small" style={{ width: '100%' }}>
                               <div>{answer.answer}</div>
                               <div style={{ fontSize: '12px', color: '#888' }}>
                                 {new Date(answer.createdAt).toLocaleString('en-US')}

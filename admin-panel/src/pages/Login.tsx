@@ -53,7 +53,7 @@ function Login() {
             : '0 4px 16px rgba(0, 0, 0, 0.1)',
         }}
       >
-        <Space direction="vertical" size={24} style={{ width: '100%' }}>
+        <Space orientation="vertical" size={24} style={{ width: '100%' }}>
           {/* Logo and Header */}
           <div style={{ textAlign: 'center' }}>
             <img

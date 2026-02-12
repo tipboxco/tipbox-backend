@@ -176,7 +176,7 @@ function ContentPostDetail() {
       <Card bordered title="Summary" style={{ marginBottom: 16 }}>
         <Row gutter={[16, 16]}>
           <Col xs={24} md={12}>
-            <Space direction="vertical" style={{ width: '100%' }} size={12}>
+            <Space orientation="vertical" style={{ width: '100%' }} size={12}>
               <div>
                 <Text type="secondary">Author</Text>
                 <div>
@@ -211,7 +211,7 @@ function ContentPostDetail() {
             </Space>
           </Col>
           <Col xs={24} md={12}>
-            <Space direction="vertical" style={{ width: '100%' }} size={12}>
+            <Space orientation="vertical" style={{ width: '100%' }} size={12}>
               <Space size="large">
                 <Space>
                   <HeartOutlined />
@@ -302,10 +302,10 @@ function ContentPostDetail() {
                       textDecoration: 'none',
                     }}
                   >
-                    <Space direction="vertical" align="center">
-                      <FileTextOutlined style={{ fontSize: 32 }} />
+                    <Space orientation="vertical" align="center">
+                      <FileTextOutlined style={{ fontSize: 37 }} />
                       <Text>Media {m.orderIndex + 1}</Text>
-                      <Text type="secondary" style={{ fontSize: 12 }}>
+                      <Text type="secondary" style={{ fontSize: 14 }}>
                         Open
                       </Text>
                     </Space>
@@ -319,7 +319,7 @@ function ContentPostDetail() {
 
       {/* Actions */}
       <Card bordered title="Actions">
-        <Space direction="vertical" style={{ width: '100%' }} size={16}>
+        <Space orientation="vertical" style={{ width: '100%' }} size={16}>
           <div>
             <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
               Highlight

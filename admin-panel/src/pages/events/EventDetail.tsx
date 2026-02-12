@@ -151,7 +151,7 @@ function EventDetail() {
             style={{ width: '100%', maxHeight: 300, objectFit: 'cover', borderRadius: 8, marginBottom: 16 }}
           />
         )}
-        <Space direction="vertical" style={{ width: '100%' }}>
+        <Space orientation="vertical" style={{ width: '100%' }}>
           <Title level={2} style={{ marginBottom: 0 }}>
             {event.title}
           </Title>
@@ -717,7 +717,7 @@ function EventRewardsTab({ eventId }: { eventId: string }) {
       key: 'rewardId',
       width: 150,
       render: (id) => (
-        <Text style={{ fontSize: 12 }} type="secondary">
+        <Text style={{ fontSize: 14 }} type="secondary">
           {id}
         </Text>
       ),

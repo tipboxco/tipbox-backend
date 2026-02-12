@@ -288,8 +288,8 @@ function Notifications() {
         />
       )}
 
-      <Card bordered={false}>
-        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      <Card>
+        <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
           <Row justify="space-between" align="middle">
             <Space wrap>
               <Input
@@ -377,7 +377,7 @@ function Notifications() {
           <div style={{ textAlign: 'center', padding: '20px' }}>Loading...</div>
         ) : (
           selectedNotification && (
-            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
               <Descriptions bordered column={2} size="small">
                 <Descriptions.Item label="User">
                   {selectedNotification.username ?? selectedNotification.userEmail ?? '—'}

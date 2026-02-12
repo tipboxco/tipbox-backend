@@ -246,7 +246,7 @@ function UserInventories() {
         title="User Inventories"
         description="View user product ownership"
         icon={<UnorderedListOutlined />}
-        statsData={statsData}
+        stats={statsData}
         statsLoading={loading}
       />
 
@@ -261,8 +261,8 @@ function UserInventories() {
         />
       )}
 
-      <Card bordered={false}>
-        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      <Card>
+        <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
           <Row justify="space-between" align="middle">
             <Space wrap>
               <Input
@@ -328,7 +328,7 @@ function UserInventories() {
           <div style={{ textAlign: 'center', padding: '20px' }}>Loading...</div>
         ) : (
           selectedInventory && (
-            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
               <div>
                 <strong>User:</strong>{' '}
                 {selectedInventory.username ?? selectedInventory.userEmail ?? '—'}

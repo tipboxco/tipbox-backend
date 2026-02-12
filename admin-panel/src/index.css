@@ -8,7 +8,7 @@
 /* ----- Typography & Spacing (kept for consistency) ----- */
 :root {
   /* Typography */
-  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-family: 'Blinker', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'Monaco', 'Courier New', monospace;
 
   /* Badge/Tag: outline only, tek renk (Tipbox sarısı) */
@@ -71,7 +71,7 @@ table,
 
 code {
   font-family: var(--font-mono);
-  font-size: 0.875em;
+  font-size: 1em;
 }
 
 /* ============================================
@@ -269,7 +269,7 @@ code {
 /* Form labels - consistent across all forms */
 .ant-form-item-label > label {
   font-weight: 500;
-  font-size: 14px;
+  font-size: 16px;
 }
 
 /* TextAreas - consistent height */
@@ -315,8 +315,8 @@ code {
   align-items: center;
   gap: 6px;
   padding: 2px 10px;
-  font-size: 12px;
-  line-height: 20px;
+  font-size: 14px;
+  line-height: 23px;
   border-radius: 6px;
   border: 1px solid var(--tipbox-badge-outline);
   background: transparent;
@@ -329,5 +329,5 @@ code {
   color: var(--tipbox-badge-outline);
 }
 .view-action-badge .anticon {
-  font-size: 12px;
+  font-size: 14px;
 }

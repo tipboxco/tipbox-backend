@@ -107,21 +107,35 @@ function EditCollectionModal({ open, collectionId, onClose, onSuccess }: EditCol
     return false;
   };
 
+  // Helper to safely trim string values
+  const trimString = (value: string | undefined | null): string | null => {
+    if (!value) return null;
+    const trimmed = value.trim();
+    return trimmed === '' ? null : trimmed;
+  };
+
   const handleSubmit = async (values: FormValues) => {
     setSaving(true);
     setError(null);
     try {
+      // Validate required field
+      if (!values.name || !values.name.trim()) {
+        setError('Collection name is required');
+        setSaving(false);
+        return;
+      }
+
       await updateCollection(collectionId, {
         name: values.name.trim(),
-        bannerUrl: values.bannerUrl?.trim() || null,
-        owner: values.owner?.trim() || null,
-        focusSector: values.focusSector?.trim() || null,
-        targetGroup: values.targetGroup?.trim() || null,
-        shortDescription: values.shortDescription?.trim() || null,
-        longDescription: values.longDescription?.trim() || null,
-        unlockCondition: values.unlockCondition?.trim() || null,
-        completionBonus: values.completionBonus?.trim() || null,
-        categoryId: values.categoryId?.trim() || null,
+        bannerUrl: trimString(values.bannerUrl),
+        owner: trimString(values.owner),
+        focusSector: trimString(values.focusSector),
+        targetGroup: trimString(values.targetGroup),
+        shortDescription: trimString(values.shortDescription),
+        longDescription: trimString(values.longDescription),
+        unlockCondition: trimString(values.unlockCondition),
+        completionBonus: trimString(values.completionBonus),
+        categoryId: trimString(values.categoryId),
       });
       antdMessage.success('Collection updated successfully');
       onSuccess();
@@ -168,7 +182,7 @@ function EditCollectionModal({ open, collectionId, onClose, onSuccess }: EditCol
           </Form.Item>
 
           <Form.Item label="Cover Image" name="bannerUrl">
-            <Space direction="vertical" style={{ width: '100%' }} size="small">
+            <Space orientation="vertical" style={{ width: '100%' }} size="small">
               <Upload
                 beforeUpload={handleBannerUpload}
                 showUploadList={false}

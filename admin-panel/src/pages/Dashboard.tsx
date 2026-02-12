@@ -135,7 +135,7 @@ function Dashboard() {
     <div>
       {/* Welcome Header */}
       <div style={{ marginBottom: 32 }}>
-        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+        <Space orientation="vertical" size={8} style={{ width: '100%' }}>
           <div
             style={{
               display: 'flex',
@@ -192,7 +192,7 @@ function Dashboard() {
                   prefix={<UserOutlined />}
                   valueStyle={{ fontWeight: 700 }}
                 />
-                <Text type="secondary" style={{ fontSize: 12 }}>
+                <Text type="secondary" style={{ fontSize: 14 }}>
                   Total registered
                 </Text>
               </Card>
@@ -206,7 +206,7 @@ function Dashboard() {
                   valueStyle={{ fontWeight: 700 }}
                 />
                 {stats.users > 0 && (
-                  <Text type="secondary" style={{ fontSize: 12 }}>
+                  <Text type="secondary" style={{ fontSize: 14 }}>
                     ~{(stats.posts / stats.users).toFixed(1)} posts per user
                   </Text>
                 )}
@@ -221,7 +221,7 @@ function Dashboard() {
                   valueStyle={{ fontWeight: 700, color: '#D8365D' }}
                 />
                 {stats.users > 0 && (
-                  <Text type="secondary" style={{ fontSize: 12 }}>
+                  <Text type="secondary" style={{ fontSize: 14 }}>
                     {((stats.bannedUsers / stats.users) * 100).toFixed(1)}% ratio
                   </Text>
                 )}
@@ -235,7 +235,7 @@ function Dashboard() {
                   prefix={<ClockCircleOutlined />}
                   valueStyle={{ fontWeight: 700 }}
                 />
-                <Text type="secondary" style={{ fontSize: 12 }}>
+                <Text type="secondary" style={{ fontSize: 14 }}>
                   Total records
                 </Text>
               </Card>
@@ -294,7 +294,7 @@ function Dashboard() {
                     avatar={
                       <div
                         style={{
-                          fontSize: 18,
+                          fontSize: 21,
                           color: 'var(--ant-color-primary)',
                         }}
                       >
@@ -303,7 +303,7 @@ function Dashboard() {
                     }
                     title={<Text>{activity.message}</Text>}
                     description={
-                      <Text type="secondary" style={{ fontSize: 12 }}>
+                      <Text type="secondary" style={{ fontSize: 14 }}>
                         {activity.time}
                       </Text>
                     }
@@ -328,7 +328,7 @@ function Dashboard() {
             extra={
               <Space align="center" size={4}>
                 <Badge status="success" />
-                <Text type="secondary" style={{ fontSize: 12 }}>
+                <Text type="secondary" style={{ fontSize: 14 }}>
                   All Systems Operational
                 </Text>
               </Space>
@@ -349,10 +349,10 @@ function Dashboard() {
                     title={<Text strong>{system.name}</Text>}
                     description={
                       <Space size={4} split="|">
-                        <Text type="secondary" style={{ fontSize: 12 }}>
+                        <Text type="secondary" style={{ fontSize: 14 }}>
                           Uptime: {system.uptime}
                         </Text>
-                        <Text type="secondary" style={{ fontSize: 12 }}>
+                        <Text type="secondary" style={{ fontSize: 14 }}>
                           Latency: {system.latency}
                         </Text>
                       </Space>

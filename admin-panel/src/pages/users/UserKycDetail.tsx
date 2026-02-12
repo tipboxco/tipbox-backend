@@ -130,7 +130,7 @@ function UserKycDetail() {
       <Card bordered title="KYC information" style={{ marginBottom: 16 }}>
         <Row gutter={[16, 16]}>
           <Col xs={24} sm={12}>
-            <Space direction="vertical" style={{ width: '100%' }}>
+            <Space orientation="vertical" style={{ width: '100%' }}>
               <div>
                 <Text type="secondary">User ID</Text>
                 <div>
@@ -163,7 +163,7 @@ function UserKycDetail() {
             </Space>
           </Col>
           <Col xs={24} sm={12}>
-            <Space direction="vertical" style={{ width: '100%' }}>
+            <Space orientation="vertical" style={{ width: '100%' }}>
               <div>
                 <Text type="secondary">KYC level</Text>
                 <div>
@@ -192,7 +192,7 @@ function UserKycDetail() {
       </Card>
 
       <Card bordered title="Update review">
-        <Space direction="vertical" style={{ width: '100%' }} size={16}>
+        <Space orientation="vertical" style={{ width: '100%' }} size={16}>
           <div style={{ width: '100%' }}>
             <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
               Review status

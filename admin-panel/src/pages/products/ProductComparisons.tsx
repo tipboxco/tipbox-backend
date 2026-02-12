@@ -229,7 +229,7 @@ function ProductComparisons() {
         title="Comparisons"
         description="Manage product comparison posts"
         icon={<SwapOutlined />}
-        statsData={statsData}
+        stats={statsData}
         statsLoading={loading}
       />
 
@@ -244,8 +244,8 @@ function ProductComparisons() {
         />
       )}
 
-      <Card bordered={false}>
-        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      <Card>
+        <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
           <Row justify="space-between" align="middle">
             <Input
               placeholder="Search comparisons..."
@@ -297,7 +297,7 @@ function ProductComparisons() {
           <div style={{ textAlign: 'center', padding: '20px' }}>Loading...</div>
         ) : (
           selectedComparison && (
-            <Space direction="vertical" size="large" style={{ width: '100%' }}>
+            <Space orientation="vertical" size="large" style={{ width: '100%' }}>
               <Descriptions bordered column={2} size="small">
                 <Descriptions.Item label="Title" span={2}>
                   {selectedComparison.title}

@@ -64,15 +64,15 @@ function PageHeader({
               alignItems: 'flex-start',
             }}
           >
-            <Space direction="vertical" size={4}>
+            <Space orientation="vertical" size={4}>
               <Space align="center" size={12}>
-                {icon && <span style={{ fontSize: 24 }}>{icon}</span>}
+                {icon && <span style={{ fontSize: 28 }}>{icon}</span>}
                 <Title level={2} style={{ margin: 0, fontWeight: 700 }}>
                   {title}
                 </Title>
               </Space>
               {description && (
-                <Text type="secondary" style={{ fontSize: 14 }}>
+                <Text type="secondary" style={{ fontSize: 16 }}>
                   {description}
                 </Text>
               )}

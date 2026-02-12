@@ -408,7 +408,7 @@ function Sidebar() {
                     <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.4, minWidth: 0 }}>
                       <span
                         style={{
-                          fontSize: 14,
+                          fontSize: 16,
                           fontWeight: 600,
                           color: userTextColor,
                         }}
@@ -417,7 +417,7 @@ function Sidebar() {
                       </span>
                       <span
                         style={{
-                          fontSize: 12,
+                          fontSize: 14,
                           color: userEmailColor,
                         }}
                       >

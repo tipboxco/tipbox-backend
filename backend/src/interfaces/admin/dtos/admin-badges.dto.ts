@@ -96,6 +96,35 @@ export type AdminBadgeOwnerListItem = {
   userDisplayName: string | null;
 };
 
+/* ========== Admin User Progress ========== */
+
+/**
+ * User progress list item for admin panel
+ */
+export type AdminUserProgressListItem = {
+  userId: string;
+  email: string | null;
+  userName: string | null;
+  displayName: string | null;
+  totalBadges: number;
+  claimedBadges: number;
+  unclaimedBadges: number;
+  totalAchievements: number;
+  completedAchievements: number;
+  progressPercent: number; // 0-100
+  lastActivity: string | null; // ISO date
+};
+
+/**
+ * Enhanced stats for user progress page
+ */
+export type AdminUserProgressStatsResponse = {
+  totalUsers: number;
+  totalUsersWithBadges: number;
+  averageBadgesPerUser: number;
+  activeUsers: number;
+};
+
 /* ========== Admin Badge Input Types (inferred from schemas) ========== */
 
 import type {

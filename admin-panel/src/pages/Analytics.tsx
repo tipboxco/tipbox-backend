@@ -291,7 +291,7 @@ function Analytics() {
       {/* Overview Cards */}
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={24} sm={12} lg={6}>
-          <Card bordered={false}>
+          <Card>
             <Statistic
               title="User Growth Rate"
               value={dashboard?.users.growthRate ?? 0}
@@ -306,7 +306,7 @@ function Analytics() {
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card bordered={false}>
+          <Card>
             <Statistic
               title="Engagement Rate"
               value={engagement?.avgEngagementRate ?? 0}
@@ -321,7 +321,7 @@ function Analytics() {
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card bordered={false}>
+          <Card>
             <Statistic
               title="Active Subscriptions"
               value={dashboard?.revenue.activeSubscriptions ?? 0}
@@ -334,7 +334,7 @@ function Analytics() {
           </Card>
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card bordered={false}>
+          <Card>
             <Statistic
               title="Total Comments"
               value={dashboard?.content.totalComments ?? 0}
@@ -403,8 +403,8 @@ function Analytics() {
             children: (
               <Row gutter={[16, 16]}>
                 <Col xs={24} lg={12}>
-                  <Card bordered={false} title="Engagement Overview">
-                    <Space direction="vertical" size="large" style={{ width: '100%' }}>
+                  <Card title="Engagement Overview">
+                    <Space orientation="vertical" size="large" style={{ width: '100%' }}>
                       <Statistic
                         title="Total Posts"
                         value={engagement?.posts.total ?? 0}
@@ -424,9 +424,9 @@ function Analytics() {
                   </Card>
                 </Col>
                 <Col xs={24} lg={12}>
-                  <Card bordered={false} title="Posts by Type">
+                  <Card title="Posts by Type">
                     {engagement?.posts.byType && Object.keys(engagement.posts.byType).length > 0 ? (
-                      <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                      <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
                         {Object.entries(engagement.posts.byType).map(([type, count]) => (
                           <div key={type} style={{ display: 'flex', justifyContent: 'space-between' }}>
                             <Tag color="blue">{type}</Tag>
@@ -440,7 +440,7 @@ function Analytics() {
                   </Card>
                 </Col>
                 <Col xs={24}>
-                  <Card bordered={false} title={<><TrophyOutlined /> Top Contributors</>}>
+                  <Card title={<><TrophyOutlined /> Top Contributors</>}>
                     <Table
                       columns={contributorColumns}
                       dataSource={engagement?.topContributors}
@@ -467,7 +467,7 @@ function Analytics() {
             children: (
               <Row gutter={[16, 16]}>
                 <Col xs={24} lg={12}>
-                  <Card bordered={false} title="Content by Type">
+                  <Card title="Content by Type">
                     <Table
                       columns={contentTypeColumns}
                       dataSource={content?.byType}
@@ -481,7 +481,7 @@ function Analytics() {
                   </Card>
                 </Col>
                 <Col xs={24} lg={12}>
-                  <Card bordered={false} title="Trending Posts">
+                  <Card title="Trending Posts">
                     <Table
                       columns={trendingColumns}
                       dataSource={content?.trending}
@@ -508,8 +508,8 @@ function Analytics() {
             children: (
               <Row gutter={[16, 16]}>
                 <Col xs={24} lg={12}>
-                  <Card bordered={false} title="Revenue Overview">
-                    <Space direction="vertical" size="large" style={{ width: '100%' }}>
+                  <Card title="Revenue Overview">
+                    <Space orientation="vertical" size="large" style={{ width: '100%' }}>
                       <Statistic
                         title="Total Revenue"
                         value={revenue?.total ?? 0}
@@ -536,9 +536,9 @@ function Analytics() {
                   </Card>
                 </Col>
                 <Col xs={24} lg={12}>
-                  <Card bordered={false} title="Revenue by Source">
+                  <Card title="Revenue by Source">
                     {revenue?.bySource && Object.keys(revenue.bySource).length > 0 ? (
-                      <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                      <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
                         {Object.entries(revenue.bySource).map(([source, amount]) => (
                           <div key={source} style={{ display: 'flex', justifyContent: 'space-between' }}>
                             <Tag color="green">{source}</Tag>
@@ -552,7 +552,7 @@ function Analytics() {
                   </Card>
                 </Col>
                 <Col xs={24}>
-                  <Card bordered={false} title="Monthly Revenue">
+                  <Card title="Monthly Revenue">
                     <Table
                       columns={revenueMonthlyColumns}
                       dataSource={revenue?.monthly}

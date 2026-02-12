@@ -17,7 +17,7 @@ const prefix = '/admin/badges';
 /* ========== Badge Categories ========== */
 
 export async function fetchBadgeCategories() {
-  return get<AdminBadgeCategoryListItem[]>(`/admin/badge-categories`);
+  return get<AdminBadgeCategoryListItem[]>(`/admin/badges/categories`);
 }
 
 /* ========== Collections ========== */
@@ -139,8 +139,9 @@ export async function removeCollectionBadge(collectionId: string, badgeId: strin
   return del<{ message: string }>(`${prefix}/collections/${collectionId}/badges/${badgeId}`);
 }
 
-export async function fetchActionTypes() {
-  return get<AdminActionTypeListItem[]>(`/admin/action-types`);
+export async function fetchActionTypes(mainAction?: string) {
+  const query = mainAction ? { mainAction } : {};
+  return get<AdminActionTypeListItem[]>(`/admin/system/action-types`, query);
 }
 
 export async function createCollectionGoal(

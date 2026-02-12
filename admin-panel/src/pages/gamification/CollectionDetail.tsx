@@ -49,6 +49,7 @@ function CollectionDetail() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('summary');
   const [addBadgeModalOpen, setAddBadgeModalOpen] = useState(false);
+  const [badgesRefreshKey, setBadgesRefreshKey] = useState(0);
 
   const loadCollection = useCallback(async () => {
     if (!id) return;
@@ -120,6 +121,7 @@ function CollectionDetail() {
           collectionId={id}
           collectionName={collection.name}
           onUpdated={loadCollection}
+          refreshKey={badgesRefreshKey}
         />
       ),
     },
@@ -167,7 +169,7 @@ function CollectionDetail() {
         }
       />
 
-      {addBadgeModalOpen && (
+      {addBadgeModalOpen && id && (
         <AddBadgeToCollectionModal
           open={addBadgeModalOpen}
           collectionId={id}
@@ -175,6 +177,8 @@ function CollectionDetail() {
           onClose={() => setAddBadgeModalOpen(false)}
           onSuccess={() => {
             loadCollection();
+            setBadgesRefreshKey((prev) => prev + 1); // Trigger badges reload
+            setActiveTab('badges'); // Switch to badges tab
             setAddBadgeModalOpen(false);
           }}
         />
@@ -360,10 +364,12 @@ function CollectionBadgesTab({
   collectionId,
   collectionName,
   onUpdated,
+  refreshKey,
 }: {
   collectionId: string;
   collectionName: string;
   onUpdated: () => void;
+  refreshKey?: number;
 }) {
   const [badges, setBadges] = useState<AdminCollectionBadgeListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -382,7 +388,7 @@ function CollectionBadgesTab({
 
   useEffect(() => {
     loadBadges();
-  }, [loadBadges]);
+  }, [loadBadges, refreshKey]);
 
   const handleRemove = async (badgeId: string) => {
     Modal.confirm({
@@ -395,9 +401,9 @@ function CollectionBadgesTab({
         setRemoving(badgeId);
         try {
           await removeCollectionBadge(collectionId, badgeId);
-          antdMessage.success('Badge removed');
-          loadBadges();
-          onUpdated();
+          antdMessage.success('Badge removed from collection');
+          await loadBadges(); // Reload badges list
+          onUpdated(); // Update collection stats
         } catch (e) {
           antdMessage.error(e instanceof Error ? e.message : 'Failed to remove');
         } finally {
@@ -417,7 +423,7 @@ function CollectionBadgesTab({
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
           description={
-            <Space direction="vertical">
+            <Space orientation="vertical">
               <Text>No badges in this collection yet.</Text>
               <Text type="secondary">Click "Add Badge" button above to add badges to this collection.</Text>
             </Space>
@@ -448,7 +454,7 @@ function CollectionBadgesTab({
                         background: '#f0f0f0',
                       }}
                     >
-                      <TrophyOutlined style={{ fontSize: 48, color: '#ccc' }} />
+                      <TrophyOutlined style={{ fontSize: 55, color: '#ccc' }} />
                     </div>
                   )
                 }
@@ -481,23 +487,23 @@ function CollectionBadgesTab({
                     </Link>
                   }
                   description={
-                    <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                    <Space orientation="vertical" size="small" style={{ width: '100%' }}>
                       {b.description && (
-                        <Text type="secondary" style={{ fontSize: 12 }}>
+                        <Text type="secondary" style={{ fontSize: 14 }}>
                           {b.description}
                         </Text>
                       )}
                       <Space wrap>
-                        <Text type="secondary" style={{ fontSize: 11 }}>
+                        <Text type="secondary" style={{ fontSize: 13 }}>
                           {b.rarity}
                         </Text>
                         {b.categoryName && (
-                          <Text type="secondary" style={{ fontSize: 11 }}>
+                          <Text type="secondary" style={{ fontSize: 13 }}>
                             • {b.categoryName}
                           </Text>
                         )}
                       </Space>
-                      <Text type="secondary" style={{ fontSize: 11 }}>
+                      <Text type="secondary" style={{ fontSize: 13 }}>
                         {new Date(b.createdAt).toLocaleString('en-US')}
                       </Text>
                     </Space>

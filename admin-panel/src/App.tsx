@@ -28,6 +28,7 @@ import FeedHighlights from './pages/content/FeedHighlights';
 
 // Product pages
 import ProductCatalog from './pages/products/ProductCatalog';
+import ProductDetail from './pages/products/ProductDetail';
 import ProductCategories from './pages/products/ProductCategories';
 import ProductGroups from './pages/products/ProductGroups';
 import ProductSuggestions from './pages/products/ProductSuggestions';
@@ -135,13 +136,14 @@ function App() {
           <Route path="content/feed-highlights" element={<FeedHighlights />} />
           <Route path="content/tags" element={<TagsCategories />} />
 
-          {/* Products */}
+          {/* Products - static routes first, :id last */}
           <Route path="products" element={<ProductCatalog />} />
           <Route path="products/categories" element={<ProductCategories />} />
           <Route path="products/groups" element={<ProductGroups />} />
           <Route path="products/suggestions" element={<ProductSuggestions />} />
           <Route path="products/inventories" element={<UserInventories />} />
           <Route path="products/comparisons" element={<ProductComparisons />} />
+          <Route path="products/:id" element={<ProductDetail />} />
 
           {/* Brands */}
           <Route path="brands" element={<BrandList />} />

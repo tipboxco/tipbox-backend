@@ -58,13 +58,13 @@ export const darkTheme: ThemeConfig = {
     colorBorderSecondary: 'rgba(255, 255, 255, 0.08)',
 
     // Typography
-    fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-    fontSize: 14,
-    fontSizeHeading1: 32,
-    fontSizeHeading2: 24,
-    fontSizeHeading3: 20,
-    fontSizeHeading4: 16,
-    fontSizeHeading5: 14,
+    fontFamily: 'Blinker, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    fontSize: 16,
+    fontSizeHeading1: 37,
+    fontSizeHeading2: 28,
+    fontSizeHeading3: 23,
+    fontSizeHeading4: 18,
+    fontSizeHeading5: 16,
     fontWeightStrong: 600,
 
     // Spacing (8px base unit)
@@ -115,7 +115,7 @@ export const darkTheme: ThemeConfig = {
       itemSelectedColor: buttonFillYellow,
       itemHoverBg: 'rgba(255, 255, 255, 0.08)',
       itemHoverColor: '#ffffff',
-      itemColor: 'rgba(255, 255, 255, 0.65)',
+      itemColor: 'rgba(255, 255, 255, 0.88)',
       iconSize: 16,
     },
     Card: {
@@ -181,13 +181,13 @@ export const lightTheme: ThemeConfig = {
     colorBorderSecondary: '#f0f0f0',
 
     // Typography
-    fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-    fontSize: 14,
-    fontSizeHeading1: 32,
-    fontSizeHeading2: 24,
-    fontSizeHeading3: 20,
-    fontSizeHeading4: 16,
-    fontSizeHeading5: 14,
+    fontFamily: 'Blinker, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    fontSize: 16,
+    fontSizeHeading1: 37,
+    fontSizeHeading2: 28,
+    fontSizeHeading3: 23,
+    fontSizeHeading4: 18,
+    fontSizeHeading5: 16,
     fontWeightStrong: 600,
 
     // Spacing (8px base unit)

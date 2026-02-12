@@ -1,4 +1,5 @@
-import { ReactNode } from 'react';
+import { ReactNode, RefObject } from 'react';
+import type { FormInstance } from 'antd';
 
 /**
  * Configuration for a single field in an editable form section
@@ -129,6 +130,10 @@ export interface CreatableFormDrawerProps {
   initialValues?: Record<string, unknown>;
   /** Drawer width */
   width?: number | string;
+  /** Callback when a field value changes */
+  onFieldChange?: (fieldName: string, value: unknown) => void;
+  /** Form instance ref */
+  formRef?: RefObject<FormInstance>;
 }
 
 /**

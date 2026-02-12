@@ -93,10 +93,6 @@ function UserDetail() {
         const res = await fetchUser(id);
         if (!cancelled && res.data) {
           setUser(res.data);
-          setEditEmail(res.data.email ?? '');
-          setEditStatus(res.data.status ?? '');
-          setEditEmailVerified(res.data.emailVerified ?? false);
-          setEditRoles((res.data.roles ?? []).join(', '));
         }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load user');
@@ -147,13 +143,6 @@ function UserDetail() {
         const res = await fetchUserAvatar(id);
         if (!cancelled) {
           setAvatar(res.data ?? null);
-          if (res.data) {
-            setAvatarImageUrl(res.data.imageUrl);
-            if (res.data.isActive) setAvatarActiveId(res.data.id);
-          } else {
-            setAvatarImageUrl('');
-            setAvatarActiveId(null);
-          }
         }
       } catch {
         if (!cancelled) setAvatar(null);
@@ -285,7 +274,6 @@ function UserDetail() {
           await banUser(id);
           const res = await fetchUser(id);
           if (res.data) setUser(res.data);
-          setEditStatus('BANNED');
           setMessage('User banned');
         } catch (e) {
           setMessage(e instanceof Error ? e.message : 'Operation failed');
@@ -309,7 +297,6 @@ function UserDetail() {
           await unbanUser(id);
           const res = await fetchUser(id);
           if (res.data) setUser(res.data);
-          setEditStatus('');
           setMessage('Ban removed');
         } catch (e) {
           setMessage(e instanceof Error ? e.message : 'Operation failed');
@@ -635,7 +622,7 @@ function UserDetail() {
       key: 'overview',
       label: 'Overview',
       children: (
-        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+        <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
           <Card bordered title="Account">
             <Descriptions column={2} bordered size="small">
               <Descriptions.Item label="User ID" span={2}>
@@ -652,9 +639,9 @@ function UserDetail() {
               </Descriptions.Item>
               <Descriptions.Item label="Email Verified">
                 {user.emailVerified ? (
-                  <CheckCircleOutlined style={{ color: 'var(--ant-color-success)', fontSize: 18 }} />
+                  <CheckCircleOutlined style={{ color: 'var(--ant-color-success)', fontSize: 21 }} />
                 ) : (
-                  <CloseCircleOutlined style={{ color: 'var(--ant-color-text-tertiary)', fontSize: 18 }} />
+                  <CloseCircleOutlined style={{ color: 'var(--ant-color-text-tertiary)', fontSize: 21 }} />
                 )}
               </Descriptions.Item>
               <Descriptions.Item label="Roles">
@@ -700,7 +687,7 @@ function UserDetail() {
       key: 'profile',
       label: 'Profile',
       children: (
-        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+        <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
           <Card bordered title="Profile details">
             {user.profile ? (
               <Descriptions column={2} bordered size="small">
@@ -739,7 +726,7 @@ function UserDetail() {
             {avatar === undefined ? (
               <Text type="secondary">Loading…</Text>
             ) : avatar ? (
-              <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+              <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
                 <div style={{ textAlign: 'center' }}>
                   <Image src={avatar.imageUrl} alt="Avatar" width={120} />
                 </div>
@@ -756,7 +743,7 @@ function UserDetail() {
                 </Button>
               </Space>
             ) : (
-              <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+              <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
                 <Text type="secondary">No avatar yet.</Text>
                 <Button type="primary" onClick={() => setEditAvatarModalOpen(true)}>
                   Create Avatar
@@ -772,7 +759,7 @@ function UserDetail() {
       label: 'Roles',
       children: (
         <Card bordered title="User roles">
-          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
             <Descriptions column={1} bordered size="small">
               <Descriptions.Item label="Current roles">
                 {(user.roles ?? []).join(', ') || '—'}
@@ -814,7 +801,7 @@ function UserDetail() {
       key: 'badges',
       label: 'Badges',
       children: (
-        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+        <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
           <Card bordered title="Badge actions">
             <Button type="primary" onClick={() => setGrantBadgeModalOpen(true)}>
               Grant Badge
@@ -867,7 +854,7 @@ function UserDetail() {
       key: 'wallet',
       label: 'Wallet & Tips',
       children: (
-        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+        <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
           {!loadingTab && wallet.length > 0 && (
             <Card bordered title="Wallet summary">
               <Descriptions column={3} bordered size="small">

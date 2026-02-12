@@ -180,16 +180,18 @@ export default function EditableFormSection({
             </div>
           )
         }
-        bordered
+        variant="bordered"
         column={{ xs: 1, sm: 1, md: displayColumns, lg: displayColumns, xl: displayColumns }}
         size="small"
-        labelStyle={{
-          fontWeight: 500,
-          width: '140px',
-          backgroundColor: 'rgba(255, 255, 255, 0.02)'
-        }}
-        contentStyle={{
-          backgroundColor: 'rgba(255, 255, 255, 0.01)'
+        styles={{
+          label: {
+            fontWeight: 500,
+            width: '140px',
+            backgroundColor: 'rgba(255, 255, 255, 0.02)',
+          },
+          content: {
+            backgroundColor: 'rgba(255, 255, 255, 0.01)',
+          },
         }}
       >
         {fields.map((field) => (
@@ -263,7 +265,7 @@ export default function EditableFormSection({
   if (editStrategy === 'drawer') {
     return (
       <>
-        <Card bordered={bordered}>
+        <Card variant={bordered ? 'outlined' : undefined}>
           {renderViewMode()}
         </Card>
 
@@ -285,7 +287,7 @@ export default function EditableFormSection({
 
   // Render inline/collapsible for fewer fields
   return (
-    <Card bordered={bordered}>
+    <Card variant={bordered ? 'outlined' : undefined}>
       {isEditing ? renderEditMode() : renderViewMode()}
     </Card>
   );

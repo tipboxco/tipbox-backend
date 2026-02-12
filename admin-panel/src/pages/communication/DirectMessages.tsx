@@ -226,8 +226,8 @@ function DirectMessages() {
         />
       )}
 
-      <Card bordered={false}>
-        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      <Card>
+        <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
           <Row justify="space-between" align="middle">
             <Space wrap>
               <Input
@@ -284,7 +284,7 @@ function DirectMessages() {
           <div style={{ textAlign: 'center', padding: '20px' }}>Loading...</div>
         ) : (
           selectedThread && (
-            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
               <Descriptions bordered column={2} size="small">
                 <Descriptions.Item label="User 1">
                   {selectedThread.user1Username ?? selectedThread.user1Email ?? '—'}
@@ -324,7 +324,7 @@ function DirectMessages() {
                             </Space>
                           }
                           description={
-                            <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                            <Space orientation="vertical" size="small" style={{ width: '100%' }}>
                               <div>{msg.content}</div>
                               <div style={{ fontSize: '12px', color: '#888' }}>
                                 {new Date(msg.createdAt).toLocaleString('en-US')}

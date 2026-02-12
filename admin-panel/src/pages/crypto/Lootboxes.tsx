@@ -256,8 +256,8 @@ function Lootboxes() {
         />
       )}
 
-      <Card bordered={false}>
-        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      <Card>
+        <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
           <Row justify="space-between" align="middle">
             <Space wrap>
               <Input
@@ -322,7 +322,7 @@ function Lootboxes() {
           <div style={{ textAlign: 'center', padding: '20px' }}>Loading...</div>
         ) : (
           selectedLootbox && (
-            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
               <Descriptions bordered column={2} size="small">
                 <Descriptions.Item label="User">
                   {selectedLootbox.username ?? selectedLootbox.userEmail ?? '—'}
@@ -349,7 +349,7 @@ function Lootboxes() {
                         <List.Item.Meta
                           title={item.itemName ?? 'Unknown Item'}
                           description={
-                            <Space direction="vertical" size="small">
+                            <Space orientation="vertical" size="small">
                               <div>Type: {item.itemType}</div>
                               {item.quantity && <div>Quantity: {item.quantity}</div>}
                             </Space>

@@ -59,7 +59,7 @@ const IdDisplay: React.FC<IdDisplayProps> = ({
     return (
       <Text
         type="secondary"
-        style={{ fontFamily: 'monospace', fontSize: 12, ...style }}
+        style={{ fontFamily: 'monospace', fontSize: 14, ...style }}
         className={className}
       >
         —

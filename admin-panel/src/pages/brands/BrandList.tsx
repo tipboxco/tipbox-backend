@@ -394,8 +394,8 @@ function BrandList() {
         />
       )}
 
-      <Card bordered={false}>
-        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      <Card>
+        <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
           <Row justify="space-between" align="middle">
             <Space wrap>
               <Input
@@ -547,7 +547,7 @@ function BrandList() {
         footer={null}
         width={800}
       >
-        <Space direction="vertical" size="large" style={{ width: '100%' }}>
+        <Space orientation="vertical" size="large" style={{ width: '100%' }}>
           <Card title="Upload New Image" size="small">
             <Form form={imageForm} layout="vertical" onFinish={handleImageUpload}>
               <Form.Item

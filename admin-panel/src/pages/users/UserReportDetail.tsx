@@ -119,7 +119,7 @@ function UserReportDetail() {
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={24} md={12}>
           <Card bordered title="Reported user">
-            <Space direction="vertical" style={{ width: '100%' }}>
+            <Space orientation="vertical" style={{ width: '100%' }}>
               <div>
                 <Text type="secondary">ID</Text>
                 <div>
@@ -145,7 +145,7 @@ function UserReportDetail() {
 
         <Col xs={24} md={12}>
           <Card bordered title="Reporter">
-            <Space direction="vertical" style={{ width: '100%' }}>
+            <Space orientation="vertical" style={{ width: '100%' }}>
               <div>
                 <Text type="secondary">ID</Text>
                 <div>
@@ -171,7 +171,7 @@ function UserReportDetail() {
       </Row>
 
       <Card bordered title="Description" style={{ marginBottom: 16 }}>
-        <Space direction="vertical" style={{ width: '100%' }} size={16}>
+        <Space orientation="vertical" style={{ width: '100%' }} size={16}>
           <Paragraph>{report.description ?? '—'}</Paragraph>
           <div>
             <Text type="secondary">Date</Text>
@@ -196,7 +196,7 @@ function UserReportDetail() {
       </Card>
 
       <Card bordered title="Resolve">
-        <Space direction="vertical" style={{ width: '100%' }} size={16}>
+        <Space orientation="vertical" style={{ width: '100%' }} size={16}>
           <Checkbox
             checked={resolved}
             onChange={(e) => setResolved(e.target.checked)}

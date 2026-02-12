@@ -15,21 +15,23 @@ Minimal, professional admin panel (Gitbook-style): strict typography hierarchy, 
 
 ### Font Sizes
 ```css
---text-xs: 0.75rem;      /* 12px - Captions, tags, timestamps */
---text-sm: 0.875rem;     /* 14px - Body text, default */
---text-base: 1rem;       /* 16px - Sub-headers, large body */
---text-lg: 1.25rem;      /* 20px - Section headers */
---text-xl: 1.5rem;       /* 24px - Page titles */
---text-2xl: 2rem;        /* 32px - Hero titles */
+--text-xs: 0.875rem;     /* 14px - Captions, tags, timestamps */
+--text-sm: 1rem;         /* 16px - Body text, default */
+--text-base: 1.125rem;   /* 18px - Sub-headers, large body */
+--text-lg: 1.4375rem;    /* 23px - Section headers */
+--text-xl: 1.75rem;      /* 28px - Page titles */
+--text-2xl: 2.3125rem;   /* 37px - Hero titles */
 ```
 
 ### Font Weights
 ```css
 --font-regular: 400;     /* Body text, descriptions */
---font-medium: 500;      /* UI elements, labels, navigation */
+--font-medium: 600;      /* UI elements, labels, navigation (was 500 in Inter) */
 --font-semibold: 600;    /* Section headings, card titles */
 --font-bold: 700;        /* Page titles, key metrics (use sparingly) */
 ```
+
+**Note:** Blinker does not include weight 500. Weight 600 is used for all medium-weight UI elements (buttons, labels, navigation) to maintain clear hierarchy above body text (400).
 
 **Rule:** Use **bold (700)** only for page titles (`.page-title`) and primary numeric values (`.stats-value`). Prefer semibold (600) for other headings.
 
@@ -181,23 +183,23 @@ box-shadow: 0 8px 24px rgba(var(--accent-rgb), 0.15);
 
 ### Heading Hierarchy
 ```tsx
-<h1>Page Title</h1>          {/* text-2xl, semibold/bold, primary */}
-<h2>Section Header</h2>      {/* text-xl, semibold, primary */}
-<h3>Subsection</h3>          {/* text-lg, semibold, primary */}
-<p>Body text</p>             {/* text-sm, regular, secondary */}
-<span className="text-muted">Timestamp</span>  {/* text-sm, regular, muted */}
+<h1>Page Title</h1>          {/* text-2xl (37px), semibold/bold, primary */}
+<h2>Section Header</h2>      {/* text-xl (28px), semibold, primary */}
+<h3>Subsection</h3>          {/* text-lg (23px), semibold, primary */}
+<p>Body text</p>             {/* text-sm (16px), regular, secondary */}
+<span className="text-muted">Timestamp</span>  {/* text-xs (14px), regular, muted */}
 ```
 
 ### Data Display
 ```tsx
-<div className="stats-value tabular-nums">12,458</div>  {/* xl, bold, primary */}
-<div className="stats-title">Total Users</div>          {/* xs, regular, muted */}
+<div className="stats-value tabular-nums">12,458</div>  {/* xl (28px), bold, primary */}
+<div className="stats-title">Total Users</div>          {/* xs (14px), regular, muted */}
 ```
 
 ### Navigation
 ```tsx
-<nav className="nav-item">                    {/* 14px, medium, secondary */}
-  <i className="nav-icon fa-users"></i>       {/* 18px, 90% opacity */}
+<nav className="nav-item">                    {/* 16px, medium, secondary */}
+  <i className="nav-icon fa-users"></i>       {/* 20px, 90% opacity */}
   <span className="nav-label">Users</span>
 </nav>
 ```
@@ -233,7 +235,8 @@ box-shadow: 0 8px 24px rgba(var(--accent-rgb), 0.15);
 
 ## 📚 Reference
 
-**Font:** Inter (400, 500, 600, 700)  
+**Font:** Blinker (100, 200, 300, 400, 600, 700, 800, 900)
+**Active Weights:** 400 (body), 600 (UI/headings), 700 (titles)
 **Themes:** Light and Dark via `data-theme` on `<html>`. Token sets in `src/index.css`.
 
 **Base:** All CSS variables in `src/index.css`; theme-agnostic (spacing, typography scale) in `:root`, theme-specific (colors) in `[data-theme="light"]` and `[data-theme="dark"]`.

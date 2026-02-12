@@ -73,11 +73,15 @@ function ProductCategories() {
 
   const loadCategories = async () => {
     setLoadingList(true);
+    setError(null);
     try {
       const res = await fetchCategories();
       setCategories(res.data ?? []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load categories');
+      const errorMsg = e instanceof Error ? e.message : 'Failed to load categories';
+      setError(errorMsg);
+      setCategories([]); // Ensure categories is always an array
+      console.error('Failed to load categories:', e);
     } finally {
       setLoadingList(false);
     }
@@ -189,38 +193,10 @@ function ProductCategories() {
     setReorderModalOpen(true);
   };
 
-  // Build hierarchical data for display
-  const buildHierarchy = () => {
-    const categoryMap = new Map<string, AdminCategoryListItem & { children?: AdminCategoryListItem[] }>();
-    const rootCategories: (AdminCategoryListItem & { children?: AdminCategoryListItem[] })[] = [];
-
-    // First pass: create map
-    categories.forEach(cat => {
-      categoryMap.set(cat.id, { ...cat, children: [] });
-    });
-
-    // Second pass: build hierarchy
-    categories.forEach(cat => {
-      const node = categoryMap.get(cat.id)!;
-      if (cat.parentId) {
-        const parent = categoryMap.get(cat.parentId);
-        if (parent) {
-          parent.children = parent.children || [];
-          parent.children.push(node);
-        } else {
-          rootCategories.push(node);
-        }
-      } else {
-        rootCategories.push(node);
-      }
-    });
-
-    return rootCategories;
-  };
-
-  // Flatten hierarchy for table display with indentation
+  // Backend already sends hierarchical data with children
+  // We only need to flatten it for display and filter to root categories only
   const flattenHierarchy = (
-    nodes: (AdminCategoryListItem & { children?: AdminCategoryListItem[] })[],
+    nodes: AdminCategoryListItem[],
     level = 0
   ): (AdminCategoryListItem & { level: number; displayOrder?: number })[] => {
     let result: (AdminCategoryListItem & { level: number; displayOrder?: number })[] = [];
@@ -233,7 +209,24 @@ function ProductCategories() {
     return result;
   };
 
-  const hierarchicalData = flattenHierarchy(buildHierarchy());
+  // Build a flat map of all categories for parent lookup
+  const buildCategoryMap = (cats: AdminCategoryListItem[]): Map<string, AdminCategoryListItem> => {
+    const map = new Map<string, AdminCategoryListItem>();
+    const addToMap = (cat: AdminCategoryListItem) => {
+      map.set(cat.id, cat);
+      if (cat.children && cat.children.length > 0) {
+        cat.children.forEach(addToMap);
+      }
+    };
+    cats.forEach(addToMap);
+    return map;
+  };
+
+  const categoryMap = buildCategoryMap(categories);
+
+  // Filter to only root categories (parentId is null)
+  const rootCategories = categories.filter(cat => !cat.parentId);
+  const hierarchicalData = flattenHierarchy(rootCategories);
 
   const columns: ColumnsType<AdminCategoryListItem & { level: number; displayOrder?: number }> = [
     {
@@ -255,7 +248,7 @@ function ProductCategories() {
       width: TABLE_COLUMN_WIDTHS.MEDIUM_TEXT,
       ellipsis: true,
       render: (_: unknown, record: AdminCategoryListItem) =>
-        categories.find(c => c.id === record.parentId)?.name ?? '—',
+        record.parentId ? (categoryMap.get(record.parentId)?.name ?? '—') : '—',
     },
     {
       title: 'Order',
@@ -366,7 +359,7 @@ function ProductCategories() {
 
       {error && (
         <Alert
-          message="Error"
+          title="Error"
           description={error}
           type="error"
           closable
@@ -375,8 +368,8 @@ function ProductCategories() {
         />
       )}
 
-      <Card bordered={false}>
-        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      <Card variant="outlined">
+        <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
           <Row justify="space-between" align="middle">
             <Space>
               <Button icon={<SortAscendingOutlined />} onClick={openReorderModal}>
@@ -485,7 +478,7 @@ function ProductCategories() {
         width={700}
       >
         <Alert
-          message="Adjust display order numbers to reorder categories"
+          title="Adjust display order numbers to reorder categories"
           type="info"
           showIcon
           style={{ marginBottom: 16 }}

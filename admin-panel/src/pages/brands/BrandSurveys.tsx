@@ -317,8 +317,8 @@ function BrandSurveys() {
         />
       )}
 
-      <Card bordered={false}>
-        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      <Card>
+        <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
           <Row justify="space-between" align="middle">
             <Input
               placeholder="Search surveys..."
@@ -396,7 +396,7 @@ function BrandSurveys() {
                 <div style={{ marginBottom: 8, fontWeight: 'bold' }}>Questions</div>
                 {fields.map((field, index) => (
                   <Card key={field.key} size="small" style={{ marginBottom: 8 }}>
-                    <Space direction="vertical" style={{ width: '100%' }}>
+                    <Space orientation="vertical" style={{ width: '100%' }}>
                       <Form.Item
                         {...field}
                         name={[field.name, 'questionText']}
@@ -458,7 +458,7 @@ function BrandSurveys() {
           <div style={{ textAlign: 'center', padding: '20px' }}>Loading...</div>
         ) : (
           selectedSurvey && (
-            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
               <Descriptions bordered column={2} size="small">
                 <Descriptions.Item label="Brand" span={2}>
                   {selectedSurvey.brandName}

@@ -55,7 +55,7 @@ function StatItem({ label, value, icon, valueColor, loading = false }: StatItemP
         {icon && (
           <span
             style={{
-              fontSize: 16,
+              fontSize: 18,
               display: 'flex',
               alignItems: 'center',
               color: valueColor || 'inherit',
@@ -66,7 +66,7 @@ function StatItem({ label, value, icon, valueColor, loading = false }: StatItemP
         )}
         <span
           style={{
-            fontSize: 20,
+            fontSize: 23,
             fontWeight: 700,
             lineHeight: 1.2,
             color: valueColor || 'inherit',
@@ -77,7 +77,7 @@ function StatItem({ label, value, icon, valueColor, loading = false }: StatItemP
       </div>
       <div
         style={{
-          fontSize: 13,
+          fontSize: 15,
           lineHeight: 1.4,
           color: 'var(--ant-color-text-secondary)',
         }}

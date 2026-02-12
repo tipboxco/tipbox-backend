@@ -85,6 +85,12 @@ export type AdminCategoryDetailResponse = {
 
 export type AdminProductGroupStatsResponse = {
   total: number;
+  withProducts?: number;
+  mostPopular?: {
+    id: string;
+    name: string;
+    productCount: number;
+  };
 };
 
 export type AdminProductGroupListItem = {
@@ -150,6 +156,7 @@ export type AdminInventoryStatsResponse = {
   total: number;
   uniqueUsers: number;
   uniqueProducts: number;
+  avgDuration?: string;
 };
 
 export type AdminInventoryListItem = {
@@ -159,22 +166,34 @@ export type AdminInventoryListItem = {
   username: string | null;
   productId: string;
   productName: string;
+  categoryName?: string | null;
   experienceSummary: string | null;
+  experienceType?: string | null;
+  duration?: string | null;
+  location?: string | null;
+  isActive?: boolean;
   hasMedia: boolean;
   createdAt: string;
   updatedAt: string;
 };
 
 export type AdminInventoryDetailResponse = AdminInventoryListItem & {
+  purpose?: string | null;
+  isLegacy?: boolean;
   product: {
     id: string;
     name: string;
     imageUrl: string | null;
   };
-  media: {
+  media?: {
     id: string;
-    mediaUrl: string;
+    url: string;
     uploadedAt: string;
+  }[];
+  history?: {
+    action: string;
+    details?: string;
+    timestamp: string;
   }[];
 };
 
@@ -203,6 +222,9 @@ export type AdminProductAnalyticsResponse = {
 export type AdminProductComparisonStatsResponse = {
   total: number;
   thisMonth: number;
+  thisWeek?: number;
+  avgProductsCompared?: number;
+  topCategory?: string;
 };
 
 /* ========== Input Types (inferred from schemas) ========== */

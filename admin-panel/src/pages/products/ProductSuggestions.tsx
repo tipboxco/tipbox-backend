@@ -306,8 +306,8 @@ function ProductSuggestions() {
         />
       )}
 
-      <Card bordered={false}>
-        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      <Card>
+        <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
           <Row justify="space-between" align="middle">
             <Space wrap>
               <Input
@@ -437,7 +437,7 @@ function ProductSuggestions() {
         width={700}
       >
         {selectedSuggestion && (
-          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
             <div>
               <strong>Suggested Name:</strong> {selectedSuggestion.suggestedName}
             </div>

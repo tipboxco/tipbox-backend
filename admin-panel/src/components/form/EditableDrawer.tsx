@@ -122,7 +122,7 @@ export default function EditableDrawer({
       title={title}
       open={open}
       onClose={handleClose}
-      width={600}
+      width={720}
       footer={
         <Space style={{ float: 'right' }}>
           <Button icon={<CloseOutlined />} onClick={handleClose}>
@@ -141,7 +141,7 @@ export default function EditableDrawer({
     >
       {error && (
         <Alert
-          message="Error"
+          title="Error"
           description={error}
           type="error"
           closable

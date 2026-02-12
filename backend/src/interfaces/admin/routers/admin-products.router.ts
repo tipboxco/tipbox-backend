@@ -224,105 +224,6 @@ router.get(
 );
 
 /**
- * GET /admin/products/:id
- * Get product details
- */
-router.get(
-  '/:id',
-  asyncHandler(async (req: Request, res: Response) => {
-    const { id } = req.params;
-
-    const product = await prisma.product.findUnique({
-      where: { id },
-      include: {
-        _count: {
-          select: { inventories: true, contentPosts: true },
-        },
-        inventories: {
-          take: 10,
-          orderBy: { createdAt: 'desc' },
-          include: {
-            user: {
-              select: {
-                id: true,
-                profile: { select: { userName: true } },
-              },
-            },
-          },
-        },
-        contentPosts: {
-          take: 10,
-          orderBy: { createdAt: 'desc' },
-          include: {
-            user: {
-              select: {
-                id: true,
-                profile: { select: { userName: true } },
-              },
-            },
-          },
-        },
-      },
-    });
-
-    if (!product) {
-      throw new NotFoundError('Product not found');
-    }
-
-    let groupName: string | null = null;
-    let categoryName: string | null = null;
-
-    if (product.groupId) {
-      const group = await prisma.productGroup.findUnique({
-        where: { id: product.groupId },
-        select: { name: true },
-      });
-      groupName = group?.name || null;
-    }
-
-    if (product.categoryId) {
-      const category = await prisma.category.findUnique({
-        where: { id: product.categoryId },
-        select: { name: true },
-      });
-      categoryName = category?.name || null;
-    }
-
-    const data: AdminProductDetailResponse = {
-      id: product.id,
-      name: product.name,
-      subName: product.subName,
-      description: product.description,
-      groupId: product.groupId,
-      groupName,
-      categoryId: product.categoryId,
-      categoryName,
-      brandId: product.brandId,
-      imageUrl: product.imageUrl,
-      thumbnail: product.thumbnail,
-      inventoryCount: product._count.inventories,
-      postCount: product._count.contentPosts,
-      createdAt: product.createdAt.toISOString(),
-      updatedAt: product.updatedAt.toISOString(),
-      metadata: product.metadata as Record<string, unknown> | null,
-      recentInventories: product.inventories.map((inv) => ({
-        userId: inv.userId,
-        username: inv.user.profile?.userName || null,
-        createdAt: inv.createdAt.toISOString(),
-      })),
-      recentPosts: product.contentPosts.map((post) => ({
-        id: post.id,
-        userId: post.userId,
-        username: post.user.profile?.userName || null,
-        createdAt: post.createdAt.toISOString(),
-      })),
-    };
-
-    return res.json({ success: true, data });
-  })
-);
-
-/**
  * POST /admin/products
  * Create new product
  */
@@ -710,7 +611,7 @@ router.get(
       isActive: cat.isActive,
       level: cat.level,
       productCount: cat._count.products,
-      children: cat.children.map(
+      children: (cat.children || []).map(
         (child) => buildCategoryTree(child as unknown as CategoryWithChildren)
       ),
     });
@@ -972,8 +873,39 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const total = await prisma.productGroup.count();
 
+    // Groups with products
+    const withProducts = await prisma.productGroup.count({
+      where: {
+        products: {
+          some: {},
+        },
+      },
+    });
+
+    // Most popular group (by product count)
+    const groupWithMostProducts = await prisma.productGroup.findFirst({
+      orderBy: {
+        products: {
+          _count: 'desc',
+        },
+      },
+      include: {
+        _count: {
+          select: { products: true },
+        },
+      },
+    });
+
     const data: AdminProductGroupStatsResponse = {
       total,
+      withProducts,
+      mostPopular: groupWithMostProducts
+        ? {
+            id: groupWithMostProducts.id,
+            name: groupWithMostProducts.name,
+            productCount: groupWithMostProducts._count.products,
+          }
+        : undefined,
     };
 
     return res.json({ success: true, data });
@@ -1771,9 +1703,140 @@ router.get(
       where: { createdAt: { gte: startOfMonth } },
     });
 
+    // Comparisons created this week
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay());
+    startOfWeek.setHours(0, 0, 0, 0);
+    const thisWeek = await prisma.postComparison.count({
+      where: { createdAt: { gte: startOfWeek } },
+    });
+
+    // Average products compared (each comparison has exactly 2 products)
+    const avgProductsCompared = 2;
+
+    // Top category (most comparisons)
+    const categoryGroups = await prisma.postComparison.groupBy({
+      by: ['categoryId'],
+      _count: { id: true },
+      where: { categoryId: { not: null } },
+      orderBy: { _count: { id: 'desc' } },
+      take: 1,
+    });
+
+    let topCategory: string | undefined = undefined;
+    if (categoryGroups.length > 0 && categoryGroups[0].categoryId) {
+      const category = await prisma.category.findUnique({
+        where: { id: categoryGroups[0].categoryId },
+        select: { name: true },
+      });
+      topCategory = category?.name ?? undefined;
+    }
+
     const data: AdminProductComparisonStatsResponse = {
       total,
       thisMonth,
+      thisWeek,
+      avgProductsCompared,
+      topCategory,
+    };
+
+    return res.json({ success: true, data });
+  })
+);
+
+/**
+ * GET /admin/products/:id
+ * Get product details (must be after all fixed-path routes like /categories, /groups, etc.)
+ */
+router.get(
+  '/:id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    const product = await prisma.product.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: { inventories: true, contentPosts: true },
+        },
+        inventories: {
+          take: 10,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            user: {
+              select: {
+                id: true,
+                profile: { select: { userName: true } },
+              },
+            },
+          },
+        },
+        contentPosts: {
+          take: 10,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            user: {
+              select: {
+                id: true,
+                profile: { select: { userName: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!product) {
+      throw new NotFoundError('Product not found');
+    }
+
+    let groupName: string | null = null;
+    let categoryName: string | null = null;
+
+    if (product.groupId) {
+      const group = await prisma.productGroup.findUnique({
+        where: { id: product.groupId },
+        select: { name: true },
+      });
+      groupName = group?.name || null;
+    }
+
+    if (product.categoryId) {
+      const category = await prisma.category.findUnique({
+        where: { id: product.categoryId },
+        select: { name: true },
+      });
+      categoryName = category?.name || null;
+    }
+
+    const data: AdminProductDetailResponse = {
+      id: product.id,
+      name: product.name,
+      subName: product.subName,
+      description: product.description,
+      groupId: product.groupId,
+      groupName,
+      categoryId: product.categoryId,
+      categoryName,
+      brandId: product.brandId,
+      imageUrl: product.imageUrl,
+      thumbnail: product.thumbnail,
+      inventoryCount: product._count.inventories,
+      postCount: product._count.contentPosts,
+      createdAt: product.createdAt.toISOString(),
+      updatedAt: product.updatedAt.toISOString(),
+      metadata: product.metadata as Record<string, unknown> | null,
+      recentInventories: product.inventories.map((inv) => ({
+        userId: inv.userId,
+        username: inv.user.profile?.userName || null,
+        createdAt: inv.createdAt.toISOString(),
+      })),
+      recentPosts: product.contentPosts.map((post) => ({
+        id: post.id,
+        userId: post.userId,
+        username: post.user.profile?.userName || null,
+        createdAt: post.createdAt.toISOString(),
+      })),
     };
 
     return res.json({ success: true, data });
