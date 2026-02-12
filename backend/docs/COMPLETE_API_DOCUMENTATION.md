@@ -1499,7 +1499,7 @@ Cursor-based pagination kullanılır:
 
 ### 8.5. Deneyim Seçeneklerini Getir
 
-**Endpoint:** `GET /inventory/experience/options`
+**Endpoint:** `GET /posts/experience/options` (tek endpoint; hem post hem inventory akışları için kullanılır)
 
 **Authentication:** Bearer Token gerekli
 

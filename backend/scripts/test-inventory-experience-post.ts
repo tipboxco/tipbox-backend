@@ -179,7 +179,7 @@ async function main() {
 
         // 5.2. Experience options al
         console.log('  2️⃣  Experience options alınıyor...')
-        const experienceOptions = await inventoryService.getExperienceOptions()
+        const experienceOptions = await postService.getExperienceOptions()
 
         if (experienceOptions.durations.length === 0 || experienceOptions.locations.length === 0 || experienceOptions.purposes.length === 0) {
           console.log(`     ⚠️  Experience options eksik, atlanıyor`)

@@ -437,69 +437,6 @@ router.delete(
 
 /**
  * @openapi
- * /inventory/experience/options:
- *   get:
- *     summary: Deneyim seçeneklerini getir
- *     description: Duration, Location ve Purpose seçeneklerini getirir.
- *     tags: [Inventory]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Deneyim seçenekleri
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 durations:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       id:
- *                         type: string
- *                       name:
- *                         type: string
- *                 locations:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       id:
- *                         type: string
- *                       name:
- *                         type: string
- *                 purposes:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       id:
- *                         type: string
- *                       name:
- *                         type: string
- *       401:
- *         description: Kimlik doğrulaması başarısız
- */
-router.get(
-  '/experience/options',
-  authMiddleware,
-  asyncHandler(async (req: Request, res: Response) => {
-    const userPayload = req.user;
-    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-
-    if (!userId) {
-      return res.status(401).json({ message: 'Unauthorized' });
-    }
-
-    const result = await inventoryService.getExperienceOptions();
-    return res.json(result);
-  })
-);
-
-/**
- * @openapi
  * /inventory/split-experience:
  *   post:
  *     summary: Deneyim metnini AI ile kategorilere ayır
