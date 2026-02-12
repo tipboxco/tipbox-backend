@@ -95,7 +95,13 @@ function BadgeCollections() {
       key: 'category',
       width: TABLE_COLUMN_WIDTHS.MEDIUM_TEXT,
       ellipsis: true,
-      render: (_, record) => record.categoryName ?? record.categoryId ?? '—',
+      render: (_, record) => {
+        // If no category assigned, show "Custom"
+        if (!record.categoryId && !record.categoryName) {
+          return 'Custom';
+        }
+        return record.categoryName ?? record.categoryId ?? '—';
+      },
     },
     {
       title: 'Badge count',
