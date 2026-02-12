@@ -189,8 +189,32 @@ export interface Message {
   mediaUrl?: string | null;
   thumbnailUrl?: string | null;
   caption?: string | null;
-  // Shared post: kartın altındaki metin message; post kartı için sharedPostId
+  // Shared post: kartın altındaki metin message; post kartı için sharedPostId (geriye dönük)
   sharedPostId?: string | null;
+  /** Kartı doldurmak için: post sahibi (yazar) + post tipine göre dinamik içerik */
+  sharedPost?: {
+    postId: string;
+    /** Post tipi: QUESTION, UPDATE, EXPERIENCE, COMPARE, TIPS, FREE */
+    postType?: string | null;
+    authorName?: string;
+    authorTitle?: string | null;
+    authorAvatar?: string | null;
+    /** Kart görseli: post media > product > productGroup > subCategory */
+    imageUrl?: string | null;
+    /** Post context (product, productGroup, subCategory) - tip bazlı dinamik */
+    contextType?: 'product' | 'productGroup' | 'subCategory' | null;
+    contextData?: {
+      id?: string;
+      name?: string;
+      image?: string | null;
+    };
+    /** COMPARE tipi için: 2 ürün */
+    products?: Array<{
+      id: string;
+      name: string;
+      image: string | null;
+    }>;
+  };
   // Gruplanmış mesajlar (DEPRECATED - artık kullanılmıyor, her mesaj tek tek gelir)
   groupedMessages?: Array<{
     id: string;

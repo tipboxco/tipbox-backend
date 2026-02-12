@@ -29,6 +29,18 @@ import { DMRequestStatus } from '../../domain/messaging/dm-request-status.enum';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import { S3Service } from '../../infrastructure/s3/s3.service';
 
+/** Inbox listesinde son mesaj shared post ise: post içeriği (ürün/kategori görseli + başlık/özet) */
+export interface LastMessageSharedPostPreview {
+  postId: string;
+  postType: string | null;
+  title: string;
+  content: string; // title + body snippet (ilk ~80 karakter)
+  imageUrl: string | null; // Post media, product, productGroup veya subCategory görseli
+  productName?: string | null;
+  productGroupName?: string | null;
+  subCategoryName?: string | null;
+}
+
 export interface InboxMessageItem {
   id: string;
   recipientUserId: string; // Karşı tarafın (diğer kullanıcının) ID'si
@@ -40,6 +52,8 @@ export interface InboxMessageItem {
   isUnread: boolean;
   unreadCount: number;
   threadType?: 'DM' | 'SUPPORT'; // Thread tipi bilgisi (opsiyonel)
+  /** Son mesaj shared post ise: post tipine göre ürün/kategori görseli ve içerik önizlemesi */
+  lastMessageSharedPost?: LastMessageSharedPostPreview | null;
 }
 
 export interface InboxQueryOptions {
@@ -637,6 +651,16 @@ export class MessagingService {
           take: limit + 1, // hasMore kontrolü için +1
         });
 
+        // Eski Prisma client sharedPostId döndürmeyebilir; raw SQL ile shared_post_id map'i al
+        type SupportSharedRow = { id: string; shared_post_id: string | null };
+        const supportSharedRows = await this.prisma.$queryRaw<SupportSharedRow[]>`
+          SELECT id, shared_post_id FROM dm_messages
+          WHERE thread_id = (${threadId})::uuid AND shared_post_id IS NOT NULL
+        `;
+        const supportSharedPostIdByMessageId = new Map(supportSharedRows.map((r) => [r.id, r.shared_post_id!]));
+        const supportUniquePostIds = [...new Set(supportSharedPostIdByMessageId.values())];
+        const supportSharedPostAuthorByPostId = await this.resolveSharedPostAuthors(supportUniquePostIds);
+
         // TIPS mesajlarını filtrele
         const supportMessages = messages.filter((msg) => {
           const messageText = msg.message || '';
@@ -650,14 +674,26 @@ export class MessagingService {
         const messageWithMedia = message as typeof message & { mediaUrl?: string | null; mediaType?: string | null; thumbnailUrl?: string | null; caption?: string | null; sharedPostId?: string | null };
         const hasMedia = !!messageWithMedia.mediaUrl;
         const isImage = hasMedia && messageWithMedia.mediaType === 'image';
-        const sharedPostId = messageWithMedia.sharedPostId ?? null;
+        const sharedPostId = messageWithMedia.sharedPostId ?? supportSharedPostIdByMessageId.get(message.id) ?? null;
 
         if (sharedPostId) {
+          const author = supportSharedPostAuthorByPostId.get(sharedPostId);
           const messageData: Message = {
             id: message.id,
             senderId: message.senderId,
             message: message.message || undefined,
             sharedPostId,
+            sharedPost: {
+              postId: sharedPostId,
+              postType: author?.postType ?? null,
+              authorName: author?.authorName ?? 'Unknown',
+              authorTitle: author?.authorTitle ?? null,
+              authorAvatar: author?.authorAvatar ?? null,
+              imageUrl: author?.imageUrl ?? null,
+              contextType: author?.contextType ?? null,
+              contextData: author?.contextData ?? undefined,
+              products: author?.products ?? undefined,
+            },
             timestamp: message.sentAt.toISOString(),
             isUnread: !message.isRead,
           };
@@ -784,6 +820,16 @@ export class MessagingService {
         take: limit + 1, // hasMore kontrolü için +1
       });
 
+      // Eski Prisma client sharedPostId döndürmeyebilir; raw SQL ile shared_post_id map'i al
+      type Row = { id: string; shared_post_id: string | null };
+      const sharedPostRows = await this.prisma.$queryRaw<Row[]>`
+        SELECT id, shared_post_id FROM dm_messages
+        WHERE thread_id = (${threadId})::uuid AND shared_post_id IS NOT NULL
+      `;
+      const sharedPostIdByMessageId = new Map(sharedPostRows.map((r) => [r.id, r.shared_post_id!]));
+      const uniqueSharedPostIds = [...new Set(sharedPostIdByMessageId.values())];
+      const sharedPostAuthorByPostId = await this.resolveSharedPostAuthors(uniqueSharedPostIds);
+
       // 2. Thread kullanıcıları arasındaki TIPS transferlerini getir
       const tipsWhere: any = {
         OR: [
@@ -862,15 +908,28 @@ export class MessagingService {
         const messageWithMedia = message as typeof message & { mediaUrl?: string | null; mediaType?: string | null; thumbnailUrl?: string | null; caption?: string | null; sharedPostId?: string | null };
         const hasMedia = !!messageWithMedia.mediaUrl;
         const isImage = hasMedia && messageWithMedia.mediaType === 'image';
-        const sharedPostId = messageWithMedia.sharedPostId ?? null;
+        // Prisma client eskiyse sharedPostId dönmeyebilir; raw map'ten al
+        const sharedPostId = messageWithMedia.sharedPostId ?? sharedPostIdByMessageId.get(message.id) ?? null;
 
         if (sharedPostId) {
-          // Shared post mesajı: kart (sharedPostId) + altında metin (message)
+          // Shared post mesajı: kartta post sahibi (author) bilgisi; gönderen (sender) değil
+          const author = sharedPostAuthorByPostId.get(sharedPostId);
           const messageData: Message = {
             id: message.id,
             senderId: message.senderId,
             message: message.message || undefined,
             sharedPostId,
+            sharedPost: {
+              postId: sharedPostId,
+              postType: author?.postType ?? null,
+              authorName: author?.authorName ?? 'Unknown',
+              authorTitle: author?.authorTitle ?? null,
+              authorAvatar: author?.authorAvatar ?? null,
+              imageUrl: author?.imageUrl ?? null,
+              contextType: author?.contextType ?? null,
+              contextData: author?.contextData ?? undefined,
+              products: author?.products ?? undefined,
+            },
             timestamp: message.sentAt.toISOString(),
             isUnread: !message.isRead,
           };
@@ -1330,6 +1389,12 @@ export class MessagingService {
         await Promise.all(lastMessagePromises);
       }
 
+      // Son mesajı shared post olan thread'ler için post önizlemesi (görsel + içerik)
+      const sharedPostIds = resultThreads
+        .map((t) => (t.messages?.[0] as { sharedPostId?: string | null } | undefined)?.sharedPostId)
+        .filter((id): id is string => !!id);
+      const sharedPostPreviewByPostId = await this.resolveSharedPostPreviews(sharedPostIds);
+
       const items = resultThreads.map((thread) => {
         const isUserOne = thread.userOneId === userIdStr;
         const counterpart = isUserOne ? thread.userTwo : thread.userOne;
@@ -1365,12 +1430,14 @@ export class MessagingService {
             }
           } else if (lastMessage) {
             // Include'dan gelen mesaj var (silinmemiş), onu kullan
-            if (lastMessage.message) {
-              lastMessageText = lastMessage.message;
-            } else if ((lastMessage as any).mediaUrl) {
-              // Görsel mesaj için caption veya default text
-              const mediaType = (lastMessage as any).mediaType;
-              const caption = (lastMessage as any).caption;
+            const lastMsgWithSharedInner = lastMessage as { message?: string | null; mediaUrl?: string | null; mediaType?: string; caption?: string | null; sharedPostId?: string | null };
+            if (lastMsgWithSharedInner.sharedPostId) {
+              lastMessageText = lastMsgWithSharedInner.message?.trim() || '📎 Post paylaştı';
+            } else if (lastMsgWithSharedInner.message) {
+              lastMessageText = lastMsgWithSharedInner.message;
+            } else if (lastMsgWithSharedInner.mediaUrl) {
+              const mediaType = lastMsgWithSharedInner.mediaType;
+              const caption = lastMsgWithSharedInner.caption;
               if (mediaType === 'image') {
                 lastMessageText = caption || '📷 Görsel';
               } else if (mediaType === 'video') {
@@ -1384,12 +1451,14 @@ export class MessagingService {
           }
         } else if (lastMessage) {
           // Include'dan gelen mesaj var (silinmemiş), onu kullan
-          if (lastMessage.message) {
-            lastMessageText = lastMessage.message;
-          } else if ((lastMessage as any).mediaUrl) {
-            // Görsel mesaj için caption veya default text
-            const mediaType = (lastMessage as any).mediaType;
-            const caption = (lastMessage as any).caption;
+          const lastMsgWithShared = lastMessage as { message?: string | null; mediaUrl?: string | null; mediaType?: string; caption?: string | null; sharedPostId?: string | null };
+          if (lastMsgWithShared.sharedPostId) {
+            lastMessageText = lastMsgWithShared.message?.trim() || '📎 Post paylaştı';
+          } else if (lastMsgWithShared.message) {
+            lastMessageText = lastMsgWithShared.message;
+          } else if (lastMsgWithShared.mediaUrl) {
+            const mediaType = lastMsgWithShared.mediaType;
+            const caption = lastMsgWithShared.caption;
             if (mediaType === 'image') {
               lastMessageText = caption || '📷 Görsel';
             } else if (mediaType === 'video') {
@@ -1422,6 +1491,11 @@ export class MessagingService {
         const defaultAvatarPath = 'avatars/default/default-useravatar.png';
         const senderAvatar = resolveMediaUrl(senderAvatarUrl) || resolveMediaUrl(defaultAvatarPath) || '';
 
+        const lastMsgSharedPostId = (lastMessage as { sharedPostId?: string | null } | undefined)?.sharedPostId;
+        const lastMessageSharedPost = lastMsgSharedPostId
+          ? (sharedPostPreviewByPostId.get(lastMsgSharedPostId) ?? null)
+          : undefined;
+
         return {
           id: thread.id,
           recipientUserId, // Karşı tarafın ID'si
@@ -1433,6 +1507,7 @@ export class MessagingService {
           isUnread: unreadCount > 0,
           unreadCount,
           threadType: thread.isSupportThread ? 'SUPPORT' : 'DM', // Thread tipi bilgisi
+          lastMessageSharedPost: lastMessageSharedPost ?? undefined,
         } satisfies InboxMessageItem;
       });
 
@@ -2305,6 +2380,164 @@ export class MessagingService {
     socketHandler.sendMessageToUser(message.senderId, 'message_read', readEvent);
     socketHandler.sendToRoom(`thread:${message.threadId}`, 'message_read', readEvent);
     logger.info(`Message marked as read: ${messageId} by user ${userId}`);
+  }
+
+  /** Inbox listesi için: paylaşılan postların önizlemesi (görsel + başlık/body, product/productGroup/subCategory) */
+  private async resolveSharedPostPreviews(postIds: string[]): Promise<Map<string, LastMessageSharedPostPreview>> {
+    const unique = [...new Set(postIds)].filter(Boolean);
+    if (unique.length === 0) return new Map();
+    const posts = await this.prisma.contentPost.findMany({
+      where: { id: { in: unique } },
+      include: {
+        product: { select: { name: true, imageUrl: true, thumbnail: true } },
+        productGroup: { select: { name: true, imageUrl: true } },
+        subCategory: { select: { name: true, imageUrl: true } },
+        media: { orderBy: { orderIndex: 'asc' }, take: 1, select: { mediaUrl: true } },
+      },
+    });
+    const map = new Map<string, LastMessageSharedPostPreview>();
+    const bodySnippetLen = 80;
+    for (const post of posts) {
+      const firstMediaUrl = post.media?.[0]?.mediaUrl;
+      const product = post.product;
+      const productGroup = post.productGroup;
+      const subCategory = post.subCategory;
+      const imageUrl =
+        (firstMediaUrl && resolveMediaUrl(firstMediaUrl, true)) ||
+        (product?.imageUrl && resolveMediaUrl(product.imageUrl, true)) ||
+        (product?.thumbnail && resolveMediaUrl(product.thumbnail, true)) ||
+        (productGroup?.imageUrl && resolveMediaUrl(productGroup.imageUrl, true)) ||
+        (subCategory?.imageUrl && resolveMediaUrl(subCategory.imageUrl, true)) ||
+        null;
+      const bodySnippet = post.body?.replace(/\s+/g, ' ').trim().slice(0, bodySnippetLen) || '';
+      const content = bodySnippet ? `${post.title} — ${bodySnippet}${post.body.length > bodySnippetLen ? '…' : ''}` : post.title;
+      map.set(post.id, {
+        postId: post.id,
+        postType: post.type ?? null,
+        title: post.title,
+        content,
+        imageUrl,
+        productName: product?.name ?? null,
+        productGroupName: productGroup?.name ?? null,
+        subCategoryName: subCategory?.name ?? null,
+      });
+    }
+    return map;
+  }
+
+  /** Paylaşılan postların yazar + dinamik context (product/productGroup/subCategory/products) bilgisini toplu çözümler */
+  private async resolveSharedPostAuthors(postIds: string[]): Promise<Map<string, {
+    postType: string | null;
+    authorName: string;
+    authorTitle: string | null;
+    authorAvatar: string | null;
+    imageUrl: string | null;
+    contextType: 'product' | 'productGroup' | 'subCategory' | null;
+    contextData: { id?: string; name?: string; image?: string | null } | null;
+    products?: Array<{ id: string; name: string; image: string | null }>;
+  }>> {
+    const unique = [...new Set(postIds)].filter(Boolean);
+    if (unique.length === 0) return new Map();
+    const posts = await this.prisma.contentPost.findMany({
+      where: { id: { in: unique } },
+      include: {
+        user: {
+          include: {
+            profile: true,
+            titles: { orderBy: { earnedAt: 'desc' }, take: 1 },
+            avatars: { where: { isActive: true }, orderBy: { createdAt: 'desc' }, take: 1 },
+          },
+        },
+        product: { select: { id: true, name: true, imageUrl: true, thumbnail: true } },
+        productGroup: { select: { id: true, name: true, imageUrl: true } },
+        subCategory: { select: { id: true, name: true, imageUrl: true } },
+        media: { orderBy: { orderIndex: 'asc' }, take: 1, select: { mediaUrl: true } },
+        comparison: {
+          include: {
+            product1: { select: { id: true, name: true, imageUrl: true, thumbnail: true } },
+            product2: { select: { id: true, name: true, imageUrl: true, thumbnail: true } },
+          },
+        },
+      },
+    });
+    const map = new Map<string, {
+      postType: string | null;
+      authorName: string;
+      authorTitle: string | null;
+      authorAvatar: string | null;
+      imageUrl: string | null;
+      contextType: 'product' | 'productGroup' | 'subCategory' | null;
+      contextData: { id?: string; name?: string; image?: string | null } | null;
+      products?: Array<{ id: string; name: string; image: string | null }>;
+    }>();
+    for (const post of posts) {
+      const u = post.user;
+      const postType = post.type ?? null;
+      const authorName = u?.profile?.displayName || u?.profile?.userName || (u as any)?.email || 'Unknown';
+      const authorTitle = u?.titles?.[0]?.title ?? null;
+      const authorAvatar = u?.avatars?.[0]?.imageUrl ? resolveMediaUrl(u.avatars[0].imageUrl, true) : null;
+
+      const product = post.product;
+      const productGroup = post.productGroup;
+      const subCategory = post.subCategory;
+      const firstMediaUrl = post.media?.[0]?.mediaUrl;
+
+      // Context belirleme: product > productGroup > subCategory
+      let contextType: 'product' | 'productGroup' | 'subCategory' | null = null;
+      let contextData: { id?: string; name?: string; image?: string | null } | null = null;
+      let imageUrl: string | null = null;
+
+      if (product) {
+        contextType = 'product';
+        const productImageUrl = (product.imageUrl && resolveMediaUrl(product.imageUrl, true)) || (product.thumbnail && resolveMediaUrl(product.thumbnail, true)) || null;
+        imageUrl = (firstMediaUrl && resolveMediaUrl(firstMediaUrl, true)) || productImageUrl;
+        contextData = { id: product.id, name: product.name, image: productImageUrl };
+      } else if (productGroup) {
+        contextType = 'productGroup';
+        const productGroupImageUrl = productGroup.imageUrl ? resolveMediaUrl(productGroup.imageUrl, true) : null;
+        imageUrl = (firstMediaUrl && resolveMediaUrl(firstMediaUrl, true)) || productGroupImageUrl;
+        contextData = { id: productGroup.id, name: productGroup.name, image: productGroupImageUrl };
+      } else if (subCategory) {
+        contextType = 'subCategory';
+        const subCategoryImageUrl = subCategory.imageUrl ? resolveMediaUrl(subCategory.imageUrl, true) : null;
+        imageUrl = (firstMediaUrl && resolveMediaUrl(firstMediaUrl, true)) || subCategoryImageUrl;
+        contextData = { id: subCategory.id, name: subCategory.name, image: subCategoryImageUrl };
+      } else {
+        // Post media varsa onu kullan
+        imageUrl = firstMediaUrl ? resolveMediaUrl(firstMediaUrl, true) : null;
+      }
+
+      // COMPARE için: product1 + product2
+      let products: Array<{ id: string; name: string; image: string | null }> | undefined;
+      if (postType === 'COMPARE' && post.comparison) {
+        const p1 = post.comparison.product1;
+        const p2 = post.comparison.product2;
+        products = [
+          {
+            id: p1.id,
+            name: p1.name,
+            image: (p1.imageUrl && resolveMediaUrl(p1.imageUrl, true)) || (p1.thumbnail && resolveMediaUrl(p1.thumbnail, true)) || null,
+          },
+          {
+            id: p2.id,
+            name: p2.name,
+            image: (p2.imageUrl && resolveMediaUrl(p2.imageUrl, true)) || (p2.thumbnail && resolveMediaUrl(p2.thumbnail, true)) || null,
+          },
+        ];
+      }
+
+      map.set(post.id, {
+        postType,
+        authorName,
+        authorTitle,
+        authorAvatar,
+        imageUrl,
+        contextType,
+        contextData,
+        products,
+      });
+    }
+    return map;
   }
 
 }

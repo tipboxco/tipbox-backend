@@ -44,6 +44,7 @@ export class DmMessagePrismaRepository {
   async create(data: Partial<DMMessage>): Promise<DMMessage> {
     const threadIdStr = String(data.threadId!);
     const senderIdStr = String(data.senderId!);
+    const sharedPostId = (data as any).sharedPostId ?? undefined;
 
     // Get thread to determine which user's unread count to increment
     const thread = await this.prisma.dMThread.findUnique({
@@ -51,37 +52,60 @@ export class DmMessagePrismaRepository {
       select: { userOneId: true, userTwoId: true }
     });
 
-    const message = await this.prisma.dMMessage.create({
-      data: {
-        threadId: threadIdStr,
-        senderId: senderIdStr,
-        message: data.message!,
-        isRead: data.isRead || false,
-        sentAt: data.sentAt || new Date(),
-        createdAt: data.createdAt || new Date(),
-        context: (data as any).context || 'DM', // Context field'ı entity'de yok ama Prisma'da var
-        mediaUrl: data.mediaUrl,
-        mediaType: data.mediaType,
-        thumbnailUrl: data.thumbnailUrl,
-        fileName: data.fileName,
-        fileSize: data.fileSize,
-        caption: data.caption,
-        replyToMessageId: data.replyToMessageId,
-        sharedPostId: (data as any).sharedPostId ?? undefined,
-        status: data.status || 'sent',
-        deliveredAt: data.deliveredAt,
-        readAt: data.readAt,
-        isDeleted: data.isDeleted || false,
-        deletedAt: data.deletedAt,
-        deletedBy: data.deletedBy,
-        isEdited: data.isEdited || false,
-        editedAt: data.editedAt,
-      },
-      include: {
-        sender: true,
-        thread: true
+    const createPayload = {
+      threadId: threadIdStr,
+      senderId: senderIdStr,
+      message: data.message!,
+      isRead: data.isRead || false,
+      sentAt: data.sentAt || new Date(),
+      createdAt: data.createdAt || new Date(),
+      context: (data as any).context || 'DM',
+      mediaUrl: data.mediaUrl,
+      mediaType: data.mediaType,
+      thumbnailUrl: data.thumbnailUrl,
+      fileName: data.fileName,
+      fileSize: data.fileSize,
+      caption: data.caption,
+      replyToMessageId: data.replyToMessageId,
+      sharedPostId,
+      status: data.status || 'sent',
+      deliveredAt: data.deliveredAt,
+      readAt: data.readAt,
+      isDeleted: data.isDeleted || false,
+      deletedAt: data.deletedAt,
+      deletedBy: data.deletedBy,
+      isEdited: data.isEdited || false,
+      editedAt: data.editedAt,
+    };
+
+    let message: Awaited<ReturnType<typeof this.prisma.dMMessage.create>>;
+    try {
+      message = await this.prisma.dMMessage.create({
+        data: createPayload,
+        include: {
+          sender: true,
+          thread: true
+        }
+      });
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      // Eski Prisma client shared_post_id kolonunu bilmiyorsa create "Unknown argument sharedPostId" fırlatır
+      if (sharedPostId && (errMsg.includes('sharedPostId') || errMsg.includes('Unknown argument'))) {
+        const { sharedPostId: _omit, ...payloadWithoutSharedPost } = createPayload;
+        message = await this.prisma.dMMessage.create({
+          data: payloadWithoutSharedPost,
+          include: { sender: true, thread: true }
+        });
+        await this.prisma.$executeRaw`UPDATE dm_messages SET shared_post_id = ${sharedPostId} WHERE id = (${message.id})::uuid`;
+        const updated = await this.prisma.dMMessage.findUnique({
+          where: { id: message.id },
+          include: { sender: true, thread: true }
+        });
+        message = updated!;
+      } else {
+        throw err;
       }
-    });
+    }
 
     // Update thread's last message
     await this.prisma.dMThread.update({

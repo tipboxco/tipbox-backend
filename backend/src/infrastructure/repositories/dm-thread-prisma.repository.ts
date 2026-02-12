@@ -18,6 +18,7 @@ const THREAD_INCLUDE = {
       mediaType: true,
       caption: true,
       isDeleted: true, // Silinme durumunu da al (kontrol için)
+      sharedPostId: true, // Inbox listesinde shared post önizlemesi için
     },
   },
   userOne: {

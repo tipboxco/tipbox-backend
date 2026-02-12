@@ -1033,7 +1033,7 @@ router.post('/trust', asyncHandler(async (req: Request, res: Response) => {
  * /users/{id}/collections/bridges:
  *   get:
  *     summary: Bridge badge koleksiyonu
- *     tags: [Users]
+ *     tags: [Collections]
  *     parameters:
  *       - in: path
  *         name: id
@@ -1133,7 +1133,7 @@ router.get('/:id/collections/bridges', asyncHandler(async (req: Request, res: Re
  * /collections/achievements/{badgeId}/claim:
  *   post:
  *     summary: Achievement badge claim et
- *     tags: [Users]
+ *     tags: [Collections]
  *     security:
  *       - bearerAuth: []
  */
@@ -1146,6 +1146,15 @@ router.post('/collections/achievements/:badgeId/claim', asyncHandler(async (req:
   return res.status(result.success ? 201 : 400).json(result);
 }));
 
+/**
+ * @openapi
+ * /collections/bridges/{badgeId}/claim:
+ *   post:
+ *     summary: Bridge badge claim et
+ *     tags: [Collections]
+ *     security:
+ *       - bearerAuth: []
+ */
 router.post('/collections/bridges/:badgeId/claim', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
@@ -2497,7 +2506,7 @@ router.delete('/:id/mute/:targetUserId', asyncHandler(async (req: Request, res: 
  *   get:
  *     summary: Kullanıcının Achievement Badge koleksiyonunu listele
  *     description: Kullanıcının kazandığı achievement badge'leri döner. Arama parametresi ile filtreleme yapılabilir.
- *     tags: [Users]
+ *     tags: [Collections]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -2889,64 +2898,6 @@ router.get('/:id/questions', asyncHandler(async (req: Request, res: Response) =>
   const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
   const replies = await userService.getUserReplies(id, { cursor, limit });
   return res.json(replies);
-}));
-
-/**
- * @openapi
- * /users/{id}/ladder/badges:
- *   get:
- *     summary: Kullanıcının başarım merdivenlerinden kazandığı badge'leri listele
- *     tags: [Users]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *       - in: query
- *         name: cursor
- *         required: false
- *         schema:
- *           type: string
- *         description: Pagination cursor (son item'ın id'si)
- *       - in: query
- *         name: limit
- *         required: false
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 50
- *           default: 20
- *         description: Sayfa başına item sayısı
- *     responses:
- *       200:
- *         description: Ladder badge listesi
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 items:
- *                   type: array
- *                   items:
- *                     type: object
- *                 pagination:
- *                   type: object
- *                   properties:
- *                     cursor:
- *                       type: string
- *                       nullable: true
- *                     hasMore:
- *                       type: boolean
- *                     limit:
- *                       type: integer
- */
-router.get('/:id/ladder/badges', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
-  const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
-  const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
-  const badges = await userService.getUserLadderBadges(id, { cursor, limit });
-  return res.json(badges);
 }));
 
 /**

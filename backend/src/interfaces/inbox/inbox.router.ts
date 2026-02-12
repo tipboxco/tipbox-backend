@@ -123,6 +123,35 @@ router.use(authMiddleware);
  *                         type: boolean
  *                       unreadCount:
  *                         type: integer
+ *                       lastMessageSharedPost:
+ *                         type: object
+ *                         nullable: true
+ *                         description: Son mesaj shared post ise; post tipine göre ürün/kategori görseli ve içerik önizlemesi (DM listesinde kart göstermek için)
+ *                         properties:
+ *                           postId:
+ *                             type: string
+ *                           postType:
+ *                             type: string
+ *                             nullable: true
+ *                             description: QUESTION, UPDATE, EXPERIENCE, COMPARE, TIPS, FREE
+ *                           title:
+ *                             type: string
+ *                           content:
+ *                             type: string
+ *                             description: title + body snippet
+ *                           imageUrl:
+ *                             type: string
+ *                             nullable: true
+ *                             description: Post media, product, productGroup veya subCategory görseli
+ *                           productName:
+ *                             type: string
+ *                             nullable: true
+ *                           productGroupName:
+ *                             type: string
+ *                             nullable: true
+ *                           subCategoryName:
+ *                             type: string
+ *                             nullable: true
  *                 pagination:
  *                   type: object
  *                   properties:
@@ -1880,7 +1909,10 @@ router.post(
       });
     } catch (error: unknown) {
       const errorMessage = getErrorMessage(error);
-      if (errorMessage.includes('not found') || errorMessage.includes('User not found')) {
+      if (errorMessage.includes('trust list') || errorMessage.includes('Share is only allowed')) {
+        return res.status(400).json({ message: errorMessage });
+      }
+      if (errorMessage.includes('not found') || errorMessage.includes('User not found') || errorMessage.includes('Post not found')) {
         return res.status(404).json({ message: errorMessage });
       }
       logger.error('Share post error:', error);
