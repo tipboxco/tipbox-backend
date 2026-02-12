@@ -367,24 +367,25 @@ router.post(
     // Process images (from files or URLs)
     const images = await processPostImages(req, String(userId));
 
+    const boostEnabledRaw = req.body.boostEnabled;
+    const boostEnabled =
+      boostEnabledRaw === true ||
+      boostEnabledRaw === 'true' ||
+      (typeof boostEnabledRaw === 'string' && boostEnabledRaw.toLowerCase() === 'true');
+
     const request: CreateQuestionPostRequest = {
       contextType: req.body.contextType as ContextType,
       contextId: req.body.contextId,
       description: req.body.description,
       images: images,
+      boostEnabled: !!boostEnabled,
       selectedBoostOptionId: req.body.selectedBoostOptionId,
-      eventId: normalizeEventId(req.body.eventId), // Optional event ID (normalized)
+      eventId: normalizeEventId(req.body.eventId),
     };
 
-    if (
-      !request.contextType ||
-      !request.contextId ||
-      !request.description ||
-      !request.selectedBoostOptionId
-    ) {
+    if (!request.contextType || !request.contextId || !request.description) {
       return res.status(400).json({
-        message:
-          'contextType, contextId, description, and selectedBoostOptionId are required',
+        message: 'contextType, contextId, and description are required',
       });
     }
 
@@ -427,6 +428,47 @@ router.get(
 
     const boostOptions = await postService.getBoostOptions();
     return res.json(boostOptions);
+  })
+);
+
+/**
+ * @openapi
+ * /posts/boost-price:
+ *   get:
+ *     summary: Boost fiyatını getir (TIPS)
+ *     description: Soru gönderisi boost için anlık fiyat. İleride onchain/yoğunluğa göre belirlenecek; şimdilik base değer.
+ *     tags: [Posts]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Fiyat ve para birimi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 price:
+ *                   type: number
+ *                 currency:
+ *                   type: string
+ *                   example: TIPS
+ *                 factors:
+ *                   type: object
+ *                   nullable: true
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ */
+router.get(
+  '/boost-price',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    if (!userPayload?.id && !userPayload?.userId && !userPayload?.sub) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const result = await postService.getBoostPrice();
+    return res.json(result);
   })
 );
 
@@ -666,7 +708,15 @@ router.post(
  * /posts/experience:
  *   post:
  *     summary: Deneyim paylaşımı gönderisi oluştur
- *     description: Product için deneyim paylaşımı gönderisi oluşturur.
+ *     description: |
+ *       Product için deneyim paylaşımı gönderisi oluşturur.
+ *       
+ *       **Context Seçenekleri:**
+ *       1. Product context: `contextType: "product"`, `contextId: "prod_xxx"`
+ *       2. Sub-category context + Product: `contextType: "sub_category"`, `contextId: "pcat_xxx"`, `productId: "prod_xxx"`
+ *       3. Product-group context + Product: `contextType: "product_group"`, `contextId: "uuid"`, `productId: "prod_xxx"`
+ *       
+ *       **Not:** Experience post'lar her zaman bir ürün ile ilişkilidir. Sub-category veya product-group context'inde oluşturuluyorsa `productId` field'ı zorunludur.
  *     tags: [Posts]
  *     security:
  *       - bearerAuth: []
@@ -676,6 +726,32 @@ router.post(
  *         application/json:
  *           schema:
  *             $ref: '#/components/schemas/CreateExperiencePostRequest'
+ *           examples:
+ *             productContext:
+ *               summary: Product context (Standard)
+ *               value:
+ *                 contextType: "product"
+ *                 contextId: "prod_01KGM792ABCD1234567890"
+ *                 content: "Gayet iyi kulaklık..."
+ *                 experience: [{"type": "Price and Shopping", "content": "...", "rating": 4}]
+ *                 status: "tested"
+ *                 selectedDurationId: "1 Month"
+ *                 selectedLocationId: "Could Be Better"
+ *                 selectedPurposeId: "Rarely Use"
+ *                 experienceSnippetId: "uuid"
+ *             subCategoryContext:
+ *               summary: Sub-category context + Product
+ *               value:
+ *                 contextType: "sub_category"
+ *                 contextId: "pcat_01KGM792MFBC397KVRRTSCR7S3"
+ *                 productId: "prod_01KGM792ABCD1234567890"
+ *                 content: "Gayet iyi kulaklık..."
+ *                 experience: [{"type": "Price and Shopping", "content": "...", "rating": 4}]
+ *                 status: "tested"
+ *                 selectedDurationId: "1 Month"
+ *                 selectedLocationId: "Could Be Better"
+ *                 selectedPurposeId: "Rarely Use"
+ *                 experienceSnippetId: "uuid"
  *     responses:
  *       201:
  *         description: Deneyim paylaşımı gönderisi başarıyla oluşturuldu
@@ -770,6 +846,7 @@ router.post(
     const request: CreateExperiencePostRequest = {
       contextType: req.body.contextType as ContextType,
       contextId: req.body.contextId,
+      productId: req.body.productId, // Optional: for sub-category/product-group contexts
       selectedDurationId: selectedDurationId as string | null,
       selectedLocationId: selectedLocationId as string | null,
       selectedPurposeId: selectedPurposeId as string | null,
@@ -969,6 +1046,77 @@ router.get(
 
     const options = await postService.getExperienceOptions();
     return res.json(options);
+  })
+);
+
+/**
+ * @openapi
+ * /posts/{postId}/boost:
+ *   patch:
+ *     summary: Post boost aç/kapa
+ *     description: Soru gönderisi için boost açar veya kapatır. Açarken TIPS düşülür; kapatırken iade yok.
+ *     tags: [Posts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: postId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [enabled]
+ *             properties:
+ *               enabled:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Boost durumu
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 postId:
+ *                   type: string
+ *                 isBoosted:
+ *                   type: boolean
+ *                 boostPrice:
+ *                   type: number
+ *                   nullable: true
+ *                 message:
+ *                   type: string
+ *                   nullable: true
+ *       400:
+ *         description: Yetersiz TIPS veya geçersiz istek
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ *       404:
+ *         description: Gönderi bulunamadı
+ */
+router.patch(
+  '/:postId/boost',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const postId = req.params.postId;
+    if (!postId) {
+      return res.status(400).json({ message: 'postId is required' });
+    }
+
+    const enabled = req.body.enabled === true || req.body.enabled === 'true';
+    const result = await postService.togglePostBoost(postId, String(userId), enabled);
+    return res.json(result);
   })
 );
 

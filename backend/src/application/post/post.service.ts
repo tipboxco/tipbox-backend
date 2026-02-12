@@ -19,6 +19,7 @@ import {
   CreateExperiencePostRequest,
   CreateUpdatePostRequest,
   BoostOption,
+  GetBoostPriceResponse,
   SplitExperienceRequest,
   SplitExperienceResponse,
   Experience,
@@ -40,6 +41,9 @@ import { ActionLogService } from '../gamification/action-log.service';
 import { MainAction } from '../../domain/gamification/main-action.enum';
 import { IdResolverService } from '../../infrastructure/ids/id-resolver.service';
 import { getErrorMessage } from '../../infrastructure/errors/error-helper';
+import { WalletService } from '../wallet/wallet.service';
+import { TransactionService } from '../transaction/transaction.service';
+import { ValidationError } from '../../infrastructure/errors/custom-errors';
 
 export class PostService {
   private postRepo: ContentPostPrismaRepository;
@@ -57,6 +61,8 @@ export class PostService {
   private achievementProgressService: AchievementProgressService;
   private actionLogService: ActionLogService;
   private idResolver: IdResolverService;
+  private walletService: WalletService;
+  private transactionService: TransactionService;
 
   /**
    * Search posts by title and body
@@ -114,6 +120,8 @@ export class PostService {
     this.achievementProgressService = new AchievementProgressService();
     this.actionLogService = new ActionLogService();
     this.idResolver = idResolver ?? new IdResolverService();
+    this.walletService = new WalletService();
+    this.transactionService = new TransactionService();
   }
 
   /**
@@ -851,7 +859,25 @@ export class PostService {
   }
 
   /**
-   * Soru gönderisi oluştur
+   * Tekil boost fiyatı (TIPS). İleride onchain/yoğunluğa göre hesaplanacak; şimdilik base değer.
+   */
+  async getBoostPrice(): Promise<GetBoostPriceResponse> {
+    const envPrice = process.env.BOOST_PRICE ? Number(process.env.BOOST_PRICE) : NaN;
+    if (Number.isFinite(envPrice) && envPrice > 0) {
+      return { price: envPrice, currency: 'TIPS' };
+    }
+    const options = await this.getBoostOptions();
+    const price = options.length > 0 ? options[0].amount : 50;
+    return {
+      price,
+      currency: 'TIPS',
+      factors: { activityLevel: 'base' },
+    };
+  }
+
+  /**
+   * Soru gönderisi oluştur.
+   * boostEnabled true ise: boost fiyatı kadar TIPS düşülür, post boost'lu oluşturulur (boostPrice kaydedilir).
    */
   async createQuestionPost(
     userId: string,
@@ -884,12 +910,17 @@ export class PostService {
         request.images
       );
 
-      // Boost option validation
-      const boostOption = await this.getBoostOption(
-        request.selectedBoostOptionId
-      );
-      if (!boostOption) {
-        throw new Error(`Boost option not found: ${request.selectedBoostOptionId}`);
+      const boostEnabled = request.boostEnabled === true || request.boostEnabled === 'true';
+      let boostPrice: number | undefined;
+      if (boostEnabled) {
+        const { price } = await this.getBoostPrice();
+        const balanceInfo = await this.walletService.getUserBalance(userId);
+        if (balanceInfo.available < price) {
+          throw new ValidationError(
+            `Insufficient TIPS balance. Available: ${balanceInfo.available} TIPS, required: ${price} TIPS`
+          );
+        }
+        boostPrice = price;
       }
 
       const post = await this.postRepo.create(
@@ -902,24 +933,30 @@ export class PostService {
         contextIds.productGroupId,
         contextIds.productId,
         false,
-        true,
+        boostEnabled,
         request.eventId,
         undefined,
-        contextIds.categoryId
+        contextIds.categoryId,
+        boostPrice
       );
 
-      // Set boosted until date (e.g., 7 days from now)
-      const boostedUntil = new Date();
-      boostedUntil.setDate(boostedUntil.getDate() + 7);
-      await this.postRepo.update(post.id, {
-        boostedUntil,
-      });
+      if (boostEnabled && boostPrice != null) {
+        try {
+          await this.transactionService.deductForPostBoost(userId, boostPrice, post.id);
+        } catch (err) {
+          await this.postRepo.update(post.id, { isBoosted: false, boostPrice: undefined });
+          throw err;
+        }
+        const boostedUntil = new Date();
+        boostedUntil.setDate(boostedUntil.getDate() + 7);
+        await this.postRepo.update(post.id, { boostedUntil });
+      }
 
       // Create PostQuestion
       await this.questionRepo.create(
-        post.id, // post.id is already a string (VarChar(26))
-        QuestionAnswerFormat.SHORT, // Default format
-        undefined // relatedProductId
+        post.id,
+        QuestionAnswerFormat.SHORT,
+        undefined
       );
 
       // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
@@ -929,7 +966,7 @@ export class PostService {
             postId: post.id,
             userId: userId,
             mediaUrl: imageUrl,
-            orderIndex: index, // Kullanıcının yüklediği sırada
+            orderIndex: index,
           })),
         });
       }
@@ -975,6 +1012,59 @@ export class PostService {
       logger.error(`Failed to create question post:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Post boost aç/kapa. Açarken bakiye kontrolü yapılır ve TIPS düşülür; kapatırken iade yok.
+   */
+  async togglePostBoost(
+    postId: string,
+    userId: string,
+    enabled: boolean
+  ): Promise<{ success: boolean; postId: string; isBoosted: boolean; boostPrice?: number; message?: string }> {
+    const post = await this.prisma.contentPost.findUnique({
+      where: { id: postId },
+      select: { id: true, userId: true, type: true, isBoosted: true, boostPrice: true },
+    });
+    if (!post) {
+      throw new Error('Post not found');
+    }
+    if (post.userId !== userId) {
+      throw new Error('You can only change boost for your own post');
+    }
+    if (post.type !== ContentPostType.QUESTION) {
+      throw new Error('Only question posts can be boosted');
+    }
+
+    if (enabled && !post.isBoosted) {
+      const { price } = await this.getBoostPrice();
+      const balanceInfo = await this.walletService.getUserBalance(userId);
+      if (balanceInfo.available < price) {
+        return {
+          success: false,
+          postId,
+          isBoosted: false,
+          message: `Insufficient TIPS balance. Available: ${balanceInfo.available} TIPS, required: ${price} TIPS`,
+        };
+      }
+      await this.transactionService.deductForPostBoost(userId, price, postId);
+      const boostedUntil = new Date();
+      boostedUntil.setDate(boostedUntil.getDate() + 7);
+      await this.postRepo.update(postId, { isBoosted: true, boostPrice: price, boostedUntil });
+      return { success: true, postId, isBoosted: true, boostPrice: price };
+    }
+
+    if (!enabled && post.isBoosted) {
+      await this.postRepo.update(postId, { isBoosted: false });
+      return { success: true, postId, isBoosted: false };
+    }
+
+    return {
+      success: true,
+      postId,
+      isBoosted: post.isBoosted,
+      boostPrice: post.boostPrice ?? undefined,
+    };
   }
 
   /**
@@ -1165,20 +1255,56 @@ export class PostService {
     request: CreateExperiencePostRequest
   ): Promise<{ id: string; message: string; success: boolean }> {
     try {
-      // Experience posts can only be created for products
-      if (request.contextType !== ContextType.PRODUCT) {
-        throw new Error('Experience posts can only be created for products');
-      }
-
       // Event validation (if eventId is provided)
       if (request.eventId) {
         await this.validateEvent(request.eventId);
       }
 
-      const contextIds = await this.resolveContextIds(
-        request.contextType,
-        request.contextId
-      );
+      // ✅ YENİ: Sub-category veya product-group context'inde de product ID verilmişse kabul et
+      let contextIds: any;
+      
+      if (request.contextType === ContextType.PRODUCT) {
+        // Product context - normal flow
+        contextIds = await this.resolveContextIds(
+          request.contextType,
+          request.contextId
+        );
+      } else if (
+        (request.contextType === ContextType.SUB_CATEGORY || 
+         request.contextType === ContextType.PRODUCT_GROUP) &&
+        request.productId
+      ) {
+        // Sub-category veya Product-group context + productId verilmiş
+        // Bu durumda: context'ten category bilgilerini al, product'tan ürün bilgilerini al
+        const categoryContextIds = await this.resolveContextIds(
+          request.contextType,
+          request.contextId
+        );
+        
+        const productContextIds = await this.resolveContextIds(
+          ContextType.PRODUCT,
+          request.productId
+        );
+        
+        // İkisini birleştir (product bilgileri öncelikli)
+        contextIds = {
+          ...categoryContextIds,
+          ...productContextIds,
+        };
+        
+        logger.info({
+          message: 'Experience post created with mixed context (category + product)',
+          contextType: request.contextType,
+          contextId: request.contextId,
+          productId: request.productId,
+          resolvedContextIds: contextIds,
+        });
+      } else {
+        // Eski davranış: sadece product context izin verilir
+        throw new Error(
+          'Experience posts require either: (1) product context, or (2) sub-category/product-group context with productId field'
+        );
+      }
 
       if (!contextIds.productId) {
         throw new Error('Product ID is required for experience posts');

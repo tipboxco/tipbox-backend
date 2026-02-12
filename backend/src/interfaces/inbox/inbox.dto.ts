@@ -10,7 +10,7 @@
  *       enum: [pending, accepted, rejected, canceled, awaiting_completion, completed, reported]
  *     MessageType:
  *       type: string
- *       enum: [message, support-request, send-tips]
+ *       enum: [message, image, support-request, send-tips, shared_post]
  *     SenderUser:
  *       type: object
  *       properties:
@@ -168,7 +168,7 @@ export type SupportType = 'GENERAL' | 'TECHNICAL' | 'PRODUCT';
 
 export type SupportRequestStatus = 'pending' | 'accepted' | 'rejected' | 'canceled' | 'awaiting_completion' | 'completed' | 'reported';
 
-export type MessageType = 'message' | 'image' | 'support-request' | 'send-tips';
+export type MessageType = 'message' | 'image' | 'support-request' | 'send-tips' | 'shared_post';
 
 export interface SenderUser {
   id: string;
@@ -189,6 +189,32 @@ export interface Message {
   mediaUrl?: string | null;
   thumbnailUrl?: string | null;
   caption?: string | null;
+  // Shared post: kartın altındaki metin message; post kartı için sharedPostId (geriye dönük)
+  sharedPostId?: string | null;
+  /** Kartı doldurmak için: post sahibi (yazar) + post tipine göre dinamik içerik */
+  sharedPost?: {
+    postId: string;
+    /** Post tipi: QUESTION, UPDATE, EXPERIENCE, COMPARE, TIPS, FREE */
+    postType?: string | null;
+    authorName?: string;
+    authorTitle?: string | null;
+    authorAvatar?: string | null;
+    /** Kart görseli: post media > product > productGroup > subCategory */
+    imageUrl?: string | null;
+    /** Post context (product, productGroup, subCategory) - tip bazlı dinamik */
+    contextType?: 'product' | 'productGroup' | 'subCategory' | null;
+    contextData?: {
+      id?: string;
+      name?: string;
+      image?: string | null;
+    };
+    /** COMPARE tipi için: 2 ürün */
+    products?: Array<{
+      id: string;
+      name: string;
+      image: string | null;
+    }>;
+  };
   // Gruplanmış mesajlar (DEPRECATED - artık kullanılmıyor, her mesaj tek tek gelir)
   groupedMessages?: Array<{
     id: string;
@@ -302,6 +328,28 @@ export interface SendTipsCreate {
   message: string;
   amount: number;
   timestamp: string;
+}
+
+export interface SendSharedPostToDmRequest {
+  /** Mesajın gideceği thread (veya tek alıcı için recipientUserId) */
+  threadId?: string;
+  /** Tek alıcıya gönderim için; threadId yoksa thread oluşturulur/getirilir */
+  recipientUserId?: string;
+  messageType: 'shared-post';
+  sharedPost: {
+    postId: string;
+    /** Backend postId ile çekebilir; gönderilirse UI anında dolu gelir */
+    authorName?: string;
+    authorTitle?: string | null;
+    authorAvatar?: string | null;
+    authorId?: string;
+    productName?: string;
+    productImageUrl?: string | null;
+    productDescription?: string | null;
+    status?: string;
+  };
+  /** Opsiyonel metin (kartın üstünde gösterilebilir) */
+  message?: string;
 }
 
 export interface UpdateMessageRequest {

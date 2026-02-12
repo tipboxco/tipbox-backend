@@ -309,12 +309,26 @@ export interface BoostOption {
   isPopular: boolean;
 }
 
+/** GET /posts/boost-price response: single TIPS price for boosting a question post */
+export interface GetBoostPriceResponse {
+  price: number;
+  currency: string;
+  factors?: {
+    onlineUsers?: number;
+    activityLevel?: string;
+    timeOfDay?: string;
+  };
+}
+
 export interface CreateQuestionPostRequest {
   contextType: ContextType;
   contextId: string;
   description: string;
   images?: string[];
-  selectedBoostOptionId: string;
+  /** When true, post is boosted and TIPS are deducted at current boost price */
+  boostEnabled?: boolean;
+  /** Optional: legacy boost option ID; when boostEnabled is used, this is not required */
+  selectedBoostOptionId?: string;
   eventId?: string; // Optional event ID to link post to event
 }
 
@@ -341,6 +355,7 @@ export interface Experience {
 export interface CreateExperiencePostRequest {
   contextType: ContextType;
   contextId: string;
+  productId?: string; // Optional: When contextType is sub_category/product_group, specify the product
   selectedDurationId: string | null; // Resolved UUID or null if lookup fails
   selectedLocationId: string | null; // Resolved UUID or null if lookup fails
   selectedPurposeId: string | null; // Resolved UUID or null if lookup fails

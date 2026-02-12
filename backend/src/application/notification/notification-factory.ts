@@ -128,6 +128,13 @@ export class NotificationFactory {
       getMessage: (data) => `You earned ${data.amount} TIPS!`,
     });
 
+    this.registerTemplate({
+      type: NotificationType.BADGE_REMINDER,
+      category: NotificationCategory.GAMIFICATION,
+      getTitle: () => 'Badge Reminder ⏰',
+      getMessage: (data) => `Complete your "${data.badgeName || 'badge'}" goal to earn this badge!`,
+    });
+
     // Expert
     this.registerTemplate({
       type: NotificationType.EXPERT_REQUEST_AVAILABLE,

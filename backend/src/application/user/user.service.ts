@@ -3446,7 +3446,7 @@ export class UserService {
     userId: string,
     options?: {
       includeProfileCard?: boolean;
-      includeTabs?: Array<'feed' | 'reviews' | 'benchmarks' | 'tips' | 'replies' | 'ladder'>;
+      includeTabs?: Array<'feed' | 'reviews' | 'benchmarks' | 'tips' | 'replies'>;
       limit?: number;
     }
   ): Promise<{
@@ -3457,7 +3457,6 @@ export class UserService {
       benchmarks?: any[];
       tips?: any[];
       replies?: any[];
-      ladder?: any[];
     };
     meta: {
       cached: boolean;
@@ -3507,9 +3506,6 @@ export class UserService {
     if (includeTabs.includes('replies')) {
       tabPromises.push(this.getUserReplies(userId, { limit }));
     }
-    if (includeTabs.includes('ladder')) {
-      tabPromises.push(this.getUserLadderBadges(userId, { limit }));
-    }
 
     promises.push(...tabPromises);
 
@@ -3532,9 +3528,6 @@ export class UserService {
           ? ((results[tabIndex++]?.items || results[tabIndex - 1] || []) as any[]).slice(0, limit)
           : undefined,
         replies: includeTabs.includes('replies')
-          ? ((results[tabIndex++]?.items || results[tabIndex - 1] || []) as any[]).slice(0, limit)
-          : undefined,
-        ladder: includeTabs.includes('ladder')
           ? ((results[tabIndex++]?.items || results[tabIndex - 1] || []) as any[]).slice(0, limit)
           : undefined,
       },

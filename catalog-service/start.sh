@@ -1,5 +1,12 @@
 #!/bin/sh
 
+# Ensure node_modules has all deps (fixes volume mount: anonymous volume can be empty or stale)
+if [ ! -d "node_modules/@xterm/xterm" ] || [ ! -f "node_modules/.package-lock.json" ]; then
+  echo "Installing/refreshing node_modules..."
+  npm install --legacy-peer-deps
+  echo "node_modules ready."
+fi
+
 # Wait for PostgreSQL to be ready
 echo "Waiting for PostgreSQL to be ready..."
 until PGPASSWORD=postgres psql -h postgres -U postgres -c '\q' 2>/dev/null; do
