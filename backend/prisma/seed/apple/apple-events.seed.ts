@@ -41,7 +41,7 @@ export async function seedAppleEvents(brandId: string): Promise<{
   const today = new Date();
   const endDate = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 gün sonra
 
-  let event = await prisma.wishboxEvent.findFirst({
+  let event = await prisma.event.findFirst({
     where: {
       brandId: brandId,
       title: { contains: 'Apple' },
@@ -49,7 +49,7 @@ export async function seedAppleEvents(brandId: string): Promise<{
   });
 
   if (!event) {
-    event = await prisma.wishboxEvent.create({
+    event = await prisma.event.create({
       data: {
         id: eventId,
         title: 'Apple Innovation Challenge 2024',

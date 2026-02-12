@@ -16,7 +16,7 @@ import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
 import { GeminiService } from '../../infrastructure/ai/gemini.service';
 import { AiExperienceSplitPrismaRepository } from '../../infrastructure/repositories/ai-experience-split-prisma.repository';
 import { AchievementProgressService } from '../gamification/achievement-progress.service';
-import { AchievementGoalType } from '../../domain/gamification/achievement-goal-type.enum';
+import { MainAction } from '../../domain/gamification/main-action.enum';
 import { PostService } from '../post/post.service';
 import { ContextType } from '../../domain/content/context-type.enum';
 
@@ -511,9 +511,9 @@ export class InventoryService {
         inventoryId: inventory.id,
       });
 
-      // Achievement Ladder progress (event dışı) - async
+      // Collection badge progress (SYSTEM + INVENTORY_ADD) - async
       this.achievementProgressService
-        .incrementProgress(userId, AchievementGoalType.INVENTORY, 1)
+        .incrementProgressByCode(userId, MainAction.SYSTEM, 'INVENTORY_ADD', 1)
         .catch((err) => {
           logger.warn({
             message: 'Failed to increment achievement progress for inventory create',

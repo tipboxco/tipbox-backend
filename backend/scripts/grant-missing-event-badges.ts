@@ -11,7 +11,7 @@ async function grantMissingBadges() {
     const eventId = '00MKFPNIQ30000064YDGL62K7Q';
     
     // Event'te post atmış tüm kullanıcıları bul
-    const stats = await prisma.wishboxStats.findMany({
+    const stats = await prisma.eventStats.findMany({
       where: {
         eventId,
         eventPostsCount: { gt: 0 }

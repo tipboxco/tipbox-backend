@@ -87,7 +87,7 @@ docker-compose exec backend npm run db:seed
 - Feed Entries
 - Expert Requests
 - Brands
-- Wishbox Events
+- Events
 
 ## 📝 Değiştirilen Dosyalar
 

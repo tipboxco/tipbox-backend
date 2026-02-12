@@ -128,7 +128,7 @@ export interface SurveyCard {
   id: string;
   title: string;
   description: string;
-  type: string; // Anket tipi (WishboxEventType veya özel tip)
+  type: string; // Anket tipi (EventType veya özel tip)
   duration: string; // Tahmini tamamlama süresi
   points: number;
   status: SurveyStatusType;
@@ -802,7 +802,7 @@ export class BrandService {
       };
     }
 
-    const events = await this.prisma.wishboxEvent.findMany({
+    const events = await this.prisma.event.findMany({
       where: whereClause as any,
       orderBy: { startDate: 'asc' },
       take: limit + 1, // Bir fazla al ki hasMore'u kontrol edebilelim
@@ -812,7 +812,7 @@ export class BrandService {
     const resultEvents = hasMore ? events.slice(0, limit) : events;
     const nextCursor = hasMore && resultEvents.length > 0 ? resultEvents[resultEvents.length - 1].id : undefined;
 
-    const stats = await this.prisma.wishboxStats.findMany({
+    const stats = await this.prisma.eventStats.findMany({
       where: {
         userId,
         eventId: { in: resultEvents.map((e) => e.id) },
@@ -845,7 +845,7 @@ export class BrandService {
    * Brand Survey & Gamification - Event detay endpoint'i
    */
   async getBrandEventDetail(eventId: string, userId: string): Promise<BrandEventDetail> {
-    const event = (await this.prisma.wishboxEvent.findUnique({
+    const event = (await this.prisma.event.findUnique({
       where: { id: eventId },
     })) as any;
 
@@ -853,7 +853,7 @@ export class BrandService {
       throw new NotFoundError(`Event not found: ${eventId}`);
     }
 
-    const stats = await this.prisma.wishboxStats.findMany({
+    const stats = await this.prisma.eventStats.findMany({
       where: { eventId },
     });
 
@@ -867,7 +867,7 @@ export class BrandService {
     const percentage = totalUser === 0 ? 0 : Math.min(100, Math.round((totalParticipated / (totalUser * 5)) * 100));
 
     // Ödül için event'e bağlı ilk badge reward'u bulmaya çalış
-    const reward = await this.prisma.wishboxReward.findFirst({
+    const reward = await this.prisma.eventReward.findFirst({
       where: { eventId },
       include: {
         user: true,
@@ -1130,7 +1130,7 @@ export class BrandService {
     const bridgeRewardPoints = allRewards.length * 50;
 
     // Brand'e ait event'leri bul
-    const brandEvents = await this.prisma.wishboxEvent.findMany({
+    const brandEvents = await this.prisma.event.findMany({
       where: {
         brandId,
       },
@@ -1197,6 +1197,19 @@ export class BrandService {
       },
     });
 
+    // ✅ DÜZELTME: Events: kullanıcının bu marka için katıldığı event sayısı
+    // Brand'e ait event ID'lerini kullan (yukarıda zaten hesaplandı)
+    const eventIds = brandEventIds;
+
+    // Kullanıcının bu brand'e ait event'lere katılım sayısı
+    const userEvents = await this.prisma.eventStats.findMany({
+      where: {
+        userId,
+        eventId: { in: eventIds },
+      },
+      distinct: ['eventId'],
+    });
+
     const stats: BrandHistoryStats = {
       surveys: userSurveys,
       shares: userBridgePostsCount,
@@ -1249,7 +1262,7 @@ export class BrandService {
       const bridgeRewardPoints = allRewards.length * 50;
 
       // Brand'e ait event'leri bul
-      const brandEventIds = await this.prisma.wishboxEvent.findMany({
+      const brandEventIds = await this.prisma.event.findMany({
         where: {
           brandId,
         },
@@ -1317,6 +1330,15 @@ export class BrandService {
         },
       });
 
+      // ✅ DÜZELTME: Events: kullanıcının bu marka için katıldığı event sayısı
+      const userEvents = await this.prisma.eventStats.findMany({
+        where: {
+          userId,
+          eventId: { in: eventIds },
+        },
+        distinct: ['eventId'],
+      });
+
       return {
         surveys: userSurveys,
         shares: userBridgePostsCount,
@@ -1360,7 +1382,7 @@ export class BrandService {
     });
 
     // ✅ DÜZELTME: Event reward'larını da al (EVENT_PARTICIPATION, brand'e ait event'lerden)
-    const brandEventIds = await this.prisma.wishboxEvent.findMany({
+    const brandEventIds = await this.prisma.event.findMany({
       where: {
         brandId,
       },
@@ -1454,6 +1476,7 @@ export class BrandService {
       throw new NotFoundError(`Brand not found: ${brandId}`);
     }
 
+    // ✅ DÜZELTME: Brand'e ait survey'leri al (Event yerine BrandSurvey)
     const brandSurveys = await this.prisma.brandSurvey.findMany({
       where: { brandId },
       include: { questions: true },

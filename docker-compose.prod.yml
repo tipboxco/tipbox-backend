@@ -98,6 +98,23 @@ services:
       retries: 3
       start_period: 60s
 
+  admin-panel:
+    build:
+      context: ./admin-panel
+      dockerfile: Dockerfile.prod
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:3000}
+    container_name: tipbox_admin_panel_prod
+    restart: always
+    ports:
+      - "5174:5174"
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      - backend
+    networks:
+      - tipbox_network
+
   nginx:
     image: nginx:alpine
     container_name: tipbox_nginx_prod
@@ -111,6 +128,7 @@ services:
       - ./logs/nginx:/var/log/nginx
     depends_on:
       - backend
+      - admin-panel
     networks:
       - tipbox_network
     healthcheck:

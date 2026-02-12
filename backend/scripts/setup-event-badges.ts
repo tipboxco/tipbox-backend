@@ -96,7 +96,7 @@ async function main() {
 
   try {
     // 1. Event'in varlığını kontrol et
-    const event = await prisma.wishboxEvent.findUnique({
+    const event = await prisma.event.findUnique({
       where: { id: EVENT_ID },
       select: { id: true, title: true, status: true },
     });
@@ -242,7 +242,7 @@ async function main() {
         const user = testUsers[i];
         
         // Kullanıcı için event stats oluştur veya güncelle
-        await prisma.wishboxStats.upsert({
+        await prisma.eventStats.upsert({
           where: {
             userId_eventId: {
               userId: user.id,

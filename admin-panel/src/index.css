@@ -1,0 +1,333 @@
+/* ============================================
+   TIPBOX ADMIN — Ant Design Integration
+   Minimal global styles, Ant Design handles most UI
+   ============================================ */
+
+/* Ant Design 5+ uses CSS-in-JS; no separate reset.css import needed. */
+
+/* ----- Typography & Spacing (kept for consistency) ----- */
+:root {
+  /* Typography */
+  --font-family: 'Blinker', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'Monaco', 'Courier New', monospace;
+
+  /* Badge/Tag: outline only, tek renk (Tipbox sarısı) */
+  --tipbox-badge-outline: #DAF94D;
+
+  /* Motion */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --transition-fast: 0.15s var(--ease-out-expo);
+  --transition-base: 0.2s var(--ease-out-expo);
+  --transition-slow: 0.3s var(--ease-out-expo);
+}
+
+/* ============================================
+   GLOBAL BASE
+   ============================================ */
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-family);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+/* Subtle background gradient for dark theme (Tipbox lime accent) */
+[data-theme="dark"] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse 100% 70% at 90% 5%, rgba(218, 249, 77, 0.03) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: -2;
+}
+
+/* Subtle noise texture for dark theme */
+[data-theme="dark"] body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  opacity: 0.015;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Tabular numbers for stats, tables, and data displays */
+.tabular-nums,
+table,
+.stats-value,
+.data-value,
+[data-value] {
+  font-variant-numeric: tabular-nums;
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 1em;
+}
+
+/* ============================================
+   SCROLLBAR
+   ============================================ */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: #d9d9d9;
+  border-radius: 9999px;
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: #bfbfbf;
+}
+
+/* ============================================
+   ANIMATIONS
+   ============================================ */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+.fade-in {
+  animation: fadeIn 0.3s var(--ease-out-expo) forwards;
+}
+
+.fade-in-up {
+  animation: fadeInUp 0.35s var(--ease-out-expo) forwards;
+}
+
+.slide-in {
+  animation: slideInLeft 0.3s var(--ease-out-expo) forwards;
+}
+
+/* Tipbox brand accent - minimal usage (Button Fill Lime) */
+.tipbox-accent {
+  color: #DAF94D;
+}
+
+/* Primary buton: sarı arka planda okunabilirlik — yazı ve ikon siyah */
+.ant-btn-primary:not(.ant-btn-danger):not(.ant-btn-link) {
+  color: #000000 !important;
+}
+.ant-btn-primary:not(.ant-btn-danger):not(.ant-btn-link) .anticon {
+  color: #000000 !important;
+}
+
+/* Override Ant Design focus outlines for accessibility */
+.ant-btn:focus-visible,
+.ant-input:focus-visible,
+.ant-select:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+/* Tarayıcı kayıtlı şifre/email (autofill) beyaz arka planı kaldır — tema ile uyumlu yap */
+[data-theme="dark"] .ant-input:-webkit-autofill,
+[data-theme="dark"] .ant-input:-webkit-autofill:hover,
+[data-theme="dark"] .ant-input:-webkit-autofill:focus,
+[data-theme="dark"] .ant-input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 30px #1a1a1a inset !important;
+  box-shadow: 0 0 0 30px #1a1a1a inset !important;
+  -webkit-text-fill-color: #ffffff;
+  caret-color: #ffffff;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+[data-theme="light"] .ant-input:-webkit-autofill,
+[data-theme="light"] .ant-input:-webkit-autofill:hover,
+[data-theme="light"] .ant-input:-webkit-autofill:focus,
+[data-theme="light"] .ant-input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 30px #ffffff inset !important;
+  box-shadow: 0 0 0 30px #ffffff inset !important;
+  -webkit-text-fill-color: #000000;
+  caret-color: #000000;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Descriptions: consistent label column width across pages (deprecated - use EditableFormSection) */
+.ant-descriptions-item-label {
+  min-width: 140px;
+}
+
+/* ============================================
+   EDITABLE FORM SECTION
+   ============================================ */
+/* View Mode - Descriptions component styling */
+.editable-form-section.view-mode {
+  transition: all var(--transition-fast);
+}
+
+/* Compact Descriptions layout */
+.editable-form-section .ant-descriptions {
+  margin-bottom: 0;
+}
+
+.editable-form-section .ant-descriptions-item-label {
+  min-width: 140px;
+  font-weight: 500;
+  padding: 8px 12px !important;
+}
+
+.editable-form-section .ant-descriptions-item-content {
+  padding: 8px 12px !important;
+}
+
+/* Dark theme adjustments */
+[data-theme="dark"] .editable-form-section .ant-descriptions-item-label {
+  background-color: rgba(255, 255, 255, 0.02) !important;
+}
+
+[data-theme="dark"] .editable-form-section .ant-descriptions-item-content {
+  background-color: rgba(255, 255, 255, 0.01) !important;
+}
+
+/* Hover effect on description rows */
+[data-theme="dark"] .editable-form-section .ant-descriptions-row:hover {
+  background-color: rgba(218, 249, 77, 0.03);
+  transition: background-color var(--transition-fast);
+}
+
+/* Light theme adjustments */
+[data-theme="light"] .editable-form-section .ant-descriptions-item-label {
+  background-color: #fafafa !important;
+}
+
+[data-theme="light"] .editable-form-section .ant-descriptions-item-content {
+  background-color: #ffffff !important;
+}
+
+[data-theme="light"] .editable-form-section .ant-descriptions-row:hover {
+  background-color: rgba(218, 249, 77, 0.1);
+}
+
+/* Edit Mode */
+.editable-form-section.edit-mode {
+  padding: 16px;
+  background-color: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+}
+
+/* Form labels - consistent across all forms */
+.ant-form-item-label > label {
+  font-weight: 500;
+  font-size: 16px;
+}
+
+/* TextAreas - consistent height */
+.ant-input-textarea.short {
+  min-height: 64px; /* 2 rows */
+}
+
+.ant-input-textarea.medium {
+  min-height: 96px; /* 3 rows */
+}
+
+.ant-input-textarea.long {
+  min-height: 128px; /* 4 rows */
+}
+
+/* Responsive: Reduce padding on mobile */
+@media (max-width: 768px) {
+  .editable-form-section .ant-descriptions-item-label,
+  .editable-form-section .ant-descriptions-item-content {
+    padding: 6px 10px !important;
+  }
+}
+
+/* Tablo: taşan hücreler ellipsis, sadece başlık/içerik sütunları gerekirse alt satıra geçebilir */
+.ant-table-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ant-table-cell.ant-table-cell-ellipsis {
+  white-space: nowrap;
+}
+
+/* Tag/Badge: arka plansız, sadece border — tek renk (--tipbox-badge-outline) */
+.ant-tag:not(.ant-tag-default) {
+  background: transparent !important;
+  border: 1px solid var(--tipbox-badge-outline) !important;
+  color: var(--tipbox-badge-outline) !important;
+}
+
+/* View/Detail yönlendirme: arka plansız badge, ikon + metin */
+.view-action-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  font-size: 14px;
+  line-height: 23px;
+  border-radius: 6px;
+  border: 1px solid var(--tipbox-badge-outline);
+  background: transparent;
+  color: var(--tipbox-badge-outline);
+  text-decoration: none;
+  transition: opacity 0.2s;
+}
+.view-action-badge:hover {
+  opacity: 0.85;
+  color: var(--tipbox-badge-outline);
+}
+.view-action-badge .anticon {
+  font-size: 14px;
+}

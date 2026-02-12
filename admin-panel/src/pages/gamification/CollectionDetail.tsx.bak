@@ -1,0 +1,520 @@
+import { useState, useEffect, useCallback } from 'react';
+import { Link, useParams, useNavigate } from 'react-router-dom';
+import {
+  Card,
+  Tabs,
+  Button,
+  Input,
+  Select,
+  Space,
+  Spin,
+  Empty,
+  Modal,
+  Alert,
+  Row,
+  Col,
+  Typography,
+  Image,
+  Form,
+  message as antdMessage,
+} from 'antd';
+import {
+  EditOutlined,
+  DeleteOutlined,
+  PlusOutlined,
+  TrophyOutlined,
+  FolderOpenOutlined,
+  GiftOutlined,
+} from '@ant-design/icons';
+import PageHeader from '../../components/PageHeader';
+import EditableFormSection from '../../components/form/EditableFormSection';
+import type { FieldConfig } from '../../components/form/types';
+import type { StatItemData } from '../../components/StatItem';
+import {
+  fetchCollection,
+  deleteCollection,
+  fetchCollectionBadges,
+  removeCollectionBadge,
+  fetchBadgeCategories,
+  updateBadge,
+  fetchBadge,
+  updateCollection,
+} from '../../api/admin-badges-collections';
+import type {
+  AdminCollectionDetailResponse,
+  AdminCollectionBadgeListItem,
+  AdminBadgeCategoryListItem,
+  AdminBadgeDetailResponse,
+} from '../../types/admin';
+import AddBadgeToCollectionModal from './modals/AddBadgeToCollectionModal';
+
+const { Text } = Typography;
+
+function CollectionDetail() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [collection, setCollection] = useState<AdminCollectionDetailResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('summary');
+  const [addBadgeModalOpen, setAddBadgeModalOpen] = useState(false);
+
+  const loadCollection = useCallback(async () => {
+    if (!id) return;
+    try {
+      const res = await fetchCollection(id);
+      if (res.data) setCollection(res.data);
+      else setError('Collection not found');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load');
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    loadCollection();
+  }, [loadCollection]);
+
+  if (!id) {
+    return (
+      <div>
+        <PageHeader
+          title="Error"
+          description="Invalid collection ID"
+          icon={<FolderOpenOutlined />}
+          backTo="/gamification/collections"
+          backLabel="Back to list"
+        />
+      </div>
+    );
+  }
+
+  if (loading || !collection) {
+    return (
+      <div>
+        <PageHeader
+          title={loading ? 'Loading...' : 'Error'}
+          description={loading ? undefined : error ?? 'Collection not found'}
+          icon={<FolderOpenOutlined />}
+          backTo="/gamification/collections"
+          backLabel="Back to list"
+        />
+        {loading && (
+          <div style={{ textAlign: 'center', padding: 48 }}>
+            <Spin size="large" />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const tabItems = [
+    {
+      key: 'summary',
+      label: 'Summary',
+      children: (
+        <CollectionSummaryTab
+          collection={collection}
+          onUpdated={loadCollection}
+          onDeleted={() => navigate('/gamification/collections')}
+        />
+      ),
+    },
+    {
+      key: 'badges',
+      label: "Badges",
+      children: (
+        <CollectionBadgesTab
+          collectionId={id}
+          collectionName={collection.name}
+          collectionCategoryId={collection.categoryId ?? null}
+          onUpdated={loadCollection}
+        />
+      ),
+    },
+  ];
+
+  const statsData: StatItemData[] = [
+    {
+      label: 'Badge count',
+      value: collection.badgesCount,
+      icon: <TrophyOutlined />,
+    },
+    {
+      label: 'Goal count',
+      value: collection.goalsCount ?? 0,
+      icon: <GiftOutlined />,
+    },
+  ];
+
+  return (
+    <div>
+      <PageHeader
+        title={collection.name}
+        description={collection.categoryName ?? collection.categoryId ?? undefined}
+        icon={<FolderOpenOutlined />}
+        backTo="/gamification/collections"
+        backLabel="Back to list"
+        stats={statsData}
+        statsLoading={loading}
+      />
+
+      <Tabs
+        activeKey={activeTab}
+        onChange={setActiveTab}
+        items={tabItems}
+        tabBarExtraContent={
+          activeTab === 'badges' ? (
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => setAddBadgeModalOpen(true)}
+            >
+              Add Badge
+            </Button>
+          ) : null
+        }
+      />
+
+      {addBadgeModalOpen && (
+        <AddBadgeToCollectionModal
+          open={addBadgeModalOpen}
+          collectionId={id}
+          collectionCategoryId={collection.categoryId ?? null}
+          onClose={() => setAddBadgeModalOpen(false)}
+          onSuccess={() => {
+            loadCollection();
+            setAddBadgeModalOpen(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function CollectionSummaryTab({
+  collection,
+  onUpdated,
+  onDeleted,
+}: {
+  collection: AdminCollectionDetailResponse;
+  onUpdated: () => void;
+  onDeleted: () => void;
+}) {
+  const handleDelete = () => {
+    Modal.confirm({
+      title: 'Delete Collection',
+      content: 'This collection will be deleted. Badges in it will be removed from the collection. Are you sure?',
+      okText: 'Yes, delete',
+      cancelText: 'Cancel',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await deleteCollection(collection.id);
+          antdMessage.success('Collection deleted');
+          onDeleted();
+        } catch (e) {
+          antdMessage.error(e instanceof Error ? e.message : 'Failed to delete');
+        }
+      },
+    });
+  };
+
+  const handleUpdateCollection = async (values: Record<string, unknown>) => {
+    try {
+      await updateCollection(collection.id, {
+        name: values.name as string,
+        owner: (values.owner as string) || null,
+        focusSector: (values.focusSector as string) || null,
+        targetGroup: (values.targetGroup as string) || null,
+        shortDescription: (values.shortDescription as string) || null,
+        longDescription: (values.longDescription as string) || null,
+        unlockCondition: (values.unlockCondition as string) || null,
+        completionBonus: (values.completionBonus as string) || null,
+        categoryId: (values.categoryId as string) || null,
+        bannerUrl: (values.bannerUrl as string) || null,
+      });
+      antdMessage.success('Collection updated successfully');
+      await onUpdated();
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to update');
+    }
+  };
+
+  // Field configuration for editable form
+  const collectionFields: FieldConfig[] = [
+    {
+      name: 'name',
+      label: 'Collection Name',
+      type: 'text',
+      required: true,
+      maxLength: 500
+    },
+    {
+      name: 'owner',
+      label: 'Owner',
+      type: 'text',
+      maxLength: 200
+    },
+    {
+      name: 'focusSector',
+      label: 'Focus Sector',
+      type: 'text',
+      maxLength: 200
+    },
+    {
+      name: 'targetGroup',
+      label: 'Target Group',
+      type: 'text',
+      maxLength: 200
+    },
+    {
+      name: 'shortDescription',
+      label: 'Short Description',
+      type: 'textarea',
+      rows: 2,
+      maxLength: 2000
+    },
+    {
+      name: 'longDescription',
+      label: 'Long Description',
+      type: 'textarea',
+      rows: 3,
+      maxLength: 5000
+    },
+    {
+      name: 'unlockCondition',
+      label: 'Prerequisite',
+      type: 'text',
+      maxLength: 500
+    },
+    {
+      name: 'completionBonus',
+      label: 'Completion Reward',
+      type: 'text',
+      maxLength: 500
+    },
+    {
+      name: 'categoryId',
+      label: 'Category',
+      type: 'text',
+      render: () => collection.categoryName ?? collection.categoryId ?? '—'
+    },
+    {
+      name: 'bannerUrl',
+      label: 'Cover Image URL',
+      type: 'text',
+      maxLength: 1000
+    },
+    {
+      name: 'createdAt',
+      label: 'Created',
+      type: 'text',
+      editable: false,
+      render: (v) => new Date(v as string).toLocaleString('en-US')
+    },
+    {
+      name: 'updatedAt',
+      label: 'Updated',
+      type: 'text',
+      editable: false,
+      render: (v) => new Date(v as string).toLocaleString('en-US')
+    },
+  ];
+
+  return (
+    <div>
+      <Row gutter={16}>
+        {collection.bannerUrl && (
+          <Col xs={24} lg={8}>
+            <Card bordered style={{ marginBottom: 16 }}>
+              <Image
+                src={collection.bannerUrl}
+                alt={collection.name}
+                style={{ width: '100%', borderRadius: 8 }}
+                preview
+              />
+            </Card>
+          </Col>
+        )}
+        <Col xs={24} lg={collection.bannerUrl ? 16 : 24}>
+          <EditableFormSection
+            title="COLLECTION METADATA"
+            data={collection}
+            fields={collectionFields}
+            onSave={handleUpdateCollection}
+            bordered
+            columns={1}
+          />
+
+          <Card bordered style={{ marginTop: 16 }}>
+            <Space>
+              <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>
+                Delete Collection
+              </Button>
+            </Space>
+          </Card>
+        </Col>
+      </Row>
+    </div>
+  );
+}
+
+function CollectionBadgesTab({
+  collectionId,
+  collectionName,
+  onUpdated,
+}: {
+  collectionId: string;
+  collectionName: string;
+  onUpdated: () => void;
+}) {
+  const [badges, setBadges] = useState<AdminCollectionBadgeListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [removing, setRemoving] = useState<string | null>(null);
+
+  const loadBadges = useCallback(async () => {
+    try {
+      const res = await fetchCollectionBadges(collectionId);
+      setBadges(res.data ?? []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }, [collectionId]);
+
+  useEffect(() => {
+    loadBadges();
+  }, [loadBadges]);
+
+  const handleRemove = async (badgeId: string) => {
+    Modal.confirm({
+      title: 'Remove Badge',
+      content: 'This badge will be removed from the collection. Are you sure?',
+      okText: 'Yes, remove',
+      cancelText: 'Cancel',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        setRemoving(badgeId);
+        try {
+          await removeCollectionBadge(collectionId, badgeId);
+          antdMessage.success('Badge removed');
+          loadBadges();
+          onUpdated();
+        } catch (e) {
+          antdMessage.error(e instanceof Error ? e.message : 'Failed to remove');
+        } finally {
+          setRemoving(null);
+        }
+      },
+    });
+  };
+
+  return (
+    <Card bordered title={`Collection badges (${collectionName})`}>
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 48 }}>
+          <Spin size="large" />
+        </div>
+      ) : badges.length === 0 ? (
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description={
+            <Space direction="vertical">
+              <Text>No badges in this collection yet.</Text>
+              <Text type="secondary">Click "Add Badge" button above to add badges to this collection.</Text>
+            </Space>
+          }
+        />
+      ) : (
+        <Row gutter={[16, 16]}>
+          {badges.map((b) => (
+            <Col xs={24} sm={12} md={8} lg={6} key={b.id}>
+              <Card
+                bordered
+                hoverable
+                cover={
+                  b.imageUrl ? (
+                    <Image
+                      src={b.imageUrl}
+                      alt={b.name}
+                      style={{ height: 150, objectFit: 'cover' }}
+                      preview={false}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        height: 150,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: '#f0f0f0',
+                      }}
+                    >
+                      <TrophyOutlined style={{ fontSize: 48, color: '#ccc' }} />
+                    </div>
+                  )
+                }
+                actions={[
+                  <Link
+                    key="view"
+                    to={`/gamification/collections/${collectionId}/badges/${b.id}`}
+                  >
+                    <Button type="link" size="small" icon={<EditOutlined />}>
+                      View
+                    </Button>
+                  </Link>,
+                  <Button
+                    key="remove"
+                    type="link"
+                    size="small"
+                    danger
+                    icon={<DeleteOutlined />}
+                    loading={removing === b.id}
+                    onClick={() => handleRemove(b.id)}
+                  >
+                    Remove
+                  </Button>,
+                ]}
+              >
+                <Card.Meta
+                  title={
+                    <Link to={`/gamification/collections/${collectionId}/badges/${b.id}`}>
+                      {b.name}
+                    </Link>
+                  }
+                  description={
+                    <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                      {b.description && (
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          {b.description}
+                        </Text>
+                      )}
+                      <Space wrap>
+                        <Text type="secondary" style={{ fontSize: 11 }}>
+                          {b.rarity}
+                        </Text>
+                        {b.categoryName && (
+                          <Text type="secondary" style={{ fontSize: 11 }}>
+                            • {b.categoryName}
+                          </Text>
+                        )}
+                      </Space>
+                      <Text type="secondary" style={{ fontSize: 11 }}>
+                        {new Date(b.createdAt).toLocaleString('en-US')}
+                      </Text>
+                    </Space>
+                  }
+                />
+              </Card>
+            </Col>
+          ))}
+        </Row>
+      )}
+    </Card>
+  );
+}
+
+export default CollectionDetail;

@@ -510,7 +510,7 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
  *                       reason:
  *                         type: string
  *                         nullable: true
- *                         description: İşlem nedeni (örn: "Post beğenisi", "Expert sorusu", "TIPS gönderimi")
+ *                         description: 'İşlem nedeni (örn: "Post beğenisi", "Expert sorusu", "TIPS gönderimi")'
  *                       createdAt:
  *                         type: string
  *                         format: date-time

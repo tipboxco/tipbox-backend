@@ -16,7 +16,7 @@ async function main() {
   console.log('\n🔍 Verifying Event Badge System...\n');
 
   // 1. Event bilgisi
-  const event = await prisma.wishboxEvent.findUnique({
+  const event = await prisma.event.findUnique({
     where: { id: EVENT_ID },
     select: {
       id: true,
@@ -106,7 +106,7 @@ async function main() {
 
   // 3. Test kullanıcılarının durumu
   console.log('\n👥 Test Users & Metrics:');
-  const userStats = await prisma.wishboxStats.findMany({
+  const userStats = await prisma.eventStats.findMany({
     where: {
       eventId: EVENT_ID,
     },

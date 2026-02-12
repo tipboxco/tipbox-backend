@@ -37,8 +37,10 @@ import { invalidateCatalogPostsCache } from '../../infrastructure/cache/cache-in
 import { EventMetricsService } from '../event/event-metrics.service';
 import { BadgeEligibilityService } from '../gamification/badge-eligibility.service';
 import { AchievementProgressService } from '../gamification/achievement-progress.service';
-import { AchievementGoalType } from '../../domain/gamification/achievement-goal-type.enum';
+import { ActionLogService } from '../gamification/action-log.service';
+import { MainAction } from '../../domain/gamification/main-action.enum';
 import { IdResolverService } from '../../infrastructure/ids/id-resolver.service';
+import { getErrorMessage } from '../../infrastructure/errors/error-helper';
 import { WalletService } from '../wallet/wallet.service';
 import { TransactionService } from '../transaction/transaction.service';
 import { ValidationError } from '../../infrastructure/errors/custom-errors';
@@ -58,6 +60,7 @@ export class PostService {
   private eventMetricsService: EventMetricsService;
   private badgeEligibilityService: BadgeEligibilityService;
   private achievementProgressService: AchievementProgressService;
+  private actionLogService: ActionLogService;
   private idResolver: IdResolverService;
   private walletService: WalletService;
   private transactionService: TransactionService;
@@ -117,6 +120,7 @@ export class PostService {
     this.eventMetricsService = new EventMetricsService();
     this.badgeEligibilityService = new BadgeEligibilityService();
     this.achievementProgressService = new AchievementProgressService();
+    this.actionLogService = new ActionLogService();
     this.idResolver = idResolver ?? new IdResolverService();
     this.walletService = new WalletService();
     this.transactionService = new TransactionService();
@@ -148,7 +152,7 @@ export class PostService {
       throw new Error(`Invalid eventId value: "${eventId}"`);
     }
 
-    const event = await this.prisma.wishboxEvent.findUnique({
+    const event = await this.prisma.event.findUnique({
       where: { id: trimmed },
     });
 
@@ -513,7 +517,7 @@ export class PostService {
         await this.validateEventMembership(userId, request.eventId);
 
         // ✅ ROASTS event'lerde productStatus beklenir (app own|tried gönderir)
-        const event = await this.prisma.wishboxEvent.findUnique({
+        const event = await this.prisma.event.findUnique({
           where: { id: request.eventId },
           select: { feedType: true },
         });
@@ -592,7 +596,7 @@ export class PostService {
       if (request.eventId) {
         try {
           // Increment post count for user's event stats
-          await this.prisma.wishboxStats.updateMany({
+          await this.prisma.eventStats.updateMany({
             where: {
               userId: userId,
               eventId: request.eventId,
@@ -650,8 +654,20 @@ export class PostService {
       this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
         logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
       });
-      
-      return { 
+
+      // Collection badge progress (async, hata olsa bile devam et)
+      // Post type'a göre farklı action code'ları kullanılabilir
+      const postTypeCode = 'GENERAL'; // Default
+      this.achievementProgressService.incrementProgressByCode(
+        userId,
+        MainAction.POST,
+        postTypeCode,
+        1
+      ).catch((err) => {
+        logger.warn({ message: 'Failed to increment post achievement progress', userId, postId: post.id, error: err });
+      });
+
+      return {
         id: post.id,
         message: 'Post created successfully',
         success: true
@@ -666,7 +682,7 @@ export class PostService {
    * Event membership validation - kullanıcı event'e katılmış mı?
    */
   private async validateEventMembership(userId: string, eventId: string): Promise<void> {
-    const userStats = await this.prisma.wishboxStats.findUnique({
+    const userStats = await this.prisma.eventStats.findUnique({
       where: {
         userId_eventId: {
           userId: userId,
@@ -1542,9 +1558,30 @@ export class PostService {
         experienceSnippetId: request.experienceSnippetId || null
       });
 
-      // Achievement Ladder progress (event dışı) - async
+      // Log action (fire-and-forget)
+      this.actionLogService
+        .logAction({
+          userId,
+          mainAction: MainAction.POST,
+          actionTypeCode: 'EXPERIENCE',
+          entityType: 'post',
+          entityId: post.id,
+          metadata: {
+            postType: ContentPostType.EXPERIENCE,
+            categoryId: contextIds.categoryId,
+            productId: contextIds.productId,
+            hasMedia: (request.images && request.images.length > 0) || false,
+            mediaCount: request.images?.length || 0,
+            status: request.status,
+          },
+        })
+        .catch((err) => {
+          logger.warn('Failed to log action', { error: getErrorMessage(err) });
+        });
+
+      // Collection badge progress (POST + EXPERIENCE) - async
       this.achievementProgressService
-        .incrementProgress(userId, AchievementGoalType.POST, 1)
+        .incrementProgressByCode(userId, MainAction.POST, 'EXPERIENCE', 1)
         .catch((err) => {
           logger.warn({
             message: 'Failed to increment achievement progress for experience post',

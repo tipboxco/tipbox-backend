@@ -70,6 +70,7 @@ model User {
   trustRelationsAsTrusted TrustRelation[]         @relation("TrustedUserRelation")
   trustRelationsAsTarget  TrustRelation[]         @relation("TrusterRelation")
   userAchievements        UserAchievement[]
+  actionLogs              ActionLog[]
   avatars                 UserAvatar[]
   userBadges              UserBadge[]
   badgeReminders           BadgeReminder[]
@@ -87,8 +88,8 @@ model User {
   titles                  UserTitle[]
   trustScores             UserTrustScore[]
   wallets                 Wallet[]
-  wishboxRewards          WishboxReward[]
-  wishboxStats            WishboxStats[]
+  eventRewards            EventReward[]
+  eventStats              EventStats[]
   newsLikes               NewsLike[]
   newsComments            NewsComment[]
   newsShares              NewsShare[]
@@ -349,39 +350,40 @@ model EmailVerificationCode {
 }
 
 model Category {
-  id              String          @id
-  parentId        String?         @map("parent_id")
-  name            String
-  description     String?
-  thumbnail       String?         @map("thumbnail")
-  mpath           String?         @map("mpath")
-  handle          String?         @map("handle")
-  rank            Int?            @map("rank")
-  metadata        Json?           @default("{}") @map("metadata")
-  isActive        Boolean?        @default(true) @map("is_active")
-  level           Int?            @default(0)
-  createdAt       DateTime        @default(now()) @map("created_at")
-  updatedAt       DateTime        @updatedAt @map("updated_at")
-  parent          Category?       @relation("CategoryChildren", fields: [parentId], references: [id], onDelete: Cascade)
-  children        Category[]      @relation("CategoryChildren")
-  brandCategories BrandCategory[]
-  contentPosts    ContentPost[]
-  products        Product[]
+  id               String            @id
+  parentId         String?           @map("parent_id")
+  name             String
+  description      String?
+  thumbnail        String?           @map("thumbnail")
+  mpath            String?           @map("mpath")
+  handle           String?           @map("handle")
+  rank             Int?              @map("rank")
+  metadata         Json?             @default("{}") @map("metadata")
+  isActive         Boolean?          @default(true) @map("is_active")
+  level            Int?              @default(0)
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  parent           Category?         @relation("CategoryChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children         Category[]        @relation("CategoryChildren")
+  brandCategories  BrandCategory[]
+  contentPosts     ContentPost[]
+  products         Product[]
+  badgeCollections BadgeCollection[]
 
   @@index([parentId])
   @@map("categories")
 }
 
 model MainCategory {
-  id            String         @id @default(uuid()) @db.Uuid
+  id            String        @id @default(uuid()) @db.Uuid
   name          String
   description   String?
-  createdAt     DateTime       @default(now()) @map("created_at")
-  updatedAt     DateTime       @updatedAt @map("updated_at")
-  imageUrl      String?        @map("image_url")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  imageUrl      String?       @map("image_url")
   contentPosts  ContentPost[]
   subCategories SubCategory[]
-  wishboxEvents WishboxEvent[]
+  events        Event[]
 
   @@map("main_categories")
 }
@@ -397,7 +399,7 @@ model SubCategory {
   contentPosts   ContentPost[]
   productGroups  ProductGroup[]
   mainCategory   MainCategory   @relation(fields: [mainCategoryId], references: [id], onDelete: Cascade)
-  wishboxEvents  WishboxEvent[]
+  events         Event[]
 
   @@map("sub_categories")
 }
@@ -436,7 +438,7 @@ model Product {
   comparisonProduct1 PostComparison[]    @relation("ComparisonProduct1")
   comparisonProduct2 PostComparison[]    @relation("ComparisonProduct2")
   questionPosts      PostQuestion[]
-  wishboxEvents      WishboxEvent[]      @relation("WishboxEventProduct")
+  events             Event[]             @relation("EventProduct")
   brand              Brand?              @relation(fields: [brandId], references: [externalId])
   category           Category?           @relation(fields: [categoryId], references: [id])
   group              ProductGroup?       @relation(fields: [groupId], references: [id])
@@ -540,7 +542,7 @@ model ContentPost {
   contentPostTags      ContentPostTag[]
   views                ContentPostView[]
   category             Category?                 @relation(fields: [categoryId], references: [id])
-  event                WishboxEvent?             @relation(fields: [eventId], references: [id])
+  event                Event?                    @relation(fields: [eventId], references: [id])
   experienceDuration   ExperienceDuration?       @relation(fields: [experienceDurationId], references: [id])
   experienceLocation   ExperienceLocation?       @relation(fields: [experienceLocationId], references: [id])
   experiencePurpose    ExperiencePurpose?        @relation(fields: [experiencePurposeId], references: [id])
@@ -869,13 +871,15 @@ model Badge {
   boostMultiplier  Float?            @map("boost_multiplier")
   rewardMultiplier Float?            @map("reward_multiplier")
   categoryId       String            @map("category_id") @db.Uuid
+  collectionId     String?           @map("collection_id") @db.Uuid
   createdAt        DateTime          @default(now()) @map("created_at")
   achievementGoals AchievementGoal[]
   category         BadgeCategory     @relation(fields: [categoryId], references: [id])
+  collection       BadgeCollection?  @relation("BadgeToCollection", fields: [collectionId], references: [id])
   bridgeRewards    BridgeReward[]
   cosmeticProfiles Profile[]         @relation("ProfileCosmeticBadge")
   userBadges       UserBadge[]
-  eventBadges      EventBadge[] // ✅ YENİ
+  eventBadges      EventBadge[]
   badgeReminders   BadgeReminder[]
 
   @@map("badges")
@@ -899,6 +903,7 @@ model UserBadge {
   visibility   BadgeVisibility
   claimed      Boolean         @default(false)
   claimedAt    DateTime?       @map("claimed_at")
+  createdAt    DateTime        @default(now()) @map("created_at")
   badge        Badge           @relation(fields: [badgeId], references: [id])
   user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -906,6 +911,27 @@ model UserBadge {
   @@index([userId])
   @@index([badgeId, claimed])
   @@map("user_badges")
+}
+
+model BadgeCollection {
+  id                String              @id @default(uuid()) @db.Uuid
+  name              String
+  bannerUrl         String?             @map("banner_url")
+  owner             String?
+  focusSector       String?             @map("focus_sector")
+  targetGroup       String?             @map("target_group")
+  shortDescription  String?             @map("short_description")
+  longDescription   String?             @map("long_description")
+  unlockCondition   String?             @map("unlock_condition")
+  completionBonus   String?             @map("completion_bonus")
+  categoryId        String?             @map("category_id")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  category          Category?           @relation(fields: [categoryId], references: [id])
+  badges            Badge[]             @relation("BadgeToCollection")
+  achievementGoals  AchievementGoal[]
+
+  @@map("badge_collections")
 }
 
 model BadgeReminder {
@@ -933,31 +959,56 @@ model AchievementChain {
   @@map("achievement_chains")
 }
 
+model ActionType {
+  id               String            @id @default(uuid()) @db.Uuid
+  mainAction       MainAction        @map("main_action")
+  code             String
+  label            String
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  achievementGoals AchievementGoal[]
+  actionLogs       ActionLog[]
+
+  @@unique([mainAction, code])
+  @@map("action_types")
+}
+
+model ActionLog {
+  id           String     @id @default(uuid()) @db.Uuid
+  userId       String     @map("user_id") @db.Uuid
+  mainAction   MainAction @map("main_action")
+  actionTypeId String     @map("action_type_id") @db.Uuid
+  entityType   String     @map("entity_type") @db.VarChar(100)
+  entityId     String     @map("entity_id") @db.VarChar(255)
+  metadata     Json?
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  actionType ActionType @relation(fields: [actionTypeId], references: [id])
+
+  @@index([userId, mainAction])
+  @@index([userId, createdAt])
+  @@index([entityType, entityId])
+  @@map("action_logs")
+}
+
 model AchievementGoal {
   id               String                @id @default(uuid()) @db.Uuid
-  chainId          String                @map("chain_id") @db.Uuid
+  collectionId     String                @map("collection_id") @db.Uuid
   title            String
   requirement      String
-  goalType         AchievementGoalType?  @map("goal_type")
+  mainAction       MainAction            @map("main_action")
+  actionTypeId     String                @map("action_type_id") @db.Uuid
   rewardBadgeId    String?               @map("reward_badge_id") @db.Uuid
   pointsRequired   Int                   @map("points_required")
   difficulty       AchievementDifficulty
-  chain            AchievementChain      @relation(fields: [chainId], references: [id], onDelete: Cascade)
+  collection       BadgeCollection       @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  actionType       ActionType            @relation(fields: [actionTypeId], references: [id])
   rewardBadge      Badge?                @relation(fields: [rewardBadgeId], references: [id])
   userAchievements UserAchievement[]
 
-  @@index([goalType])
+  @@index([mainAction, actionTypeId])
   @@map("achievement_goals")
-}
-
-enum AchievementGoalType {
-  POST
-  INVENTORY
-  LIKE_GIVEN
-  LIKE_RECEIVED
-  COMMENT
-
-  @@map("achievement_goal_type")
 }
 
 model UserAchievement {
@@ -1035,7 +1086,7 @@ model Brand {
   rewards       BridgeReward[]
   userStats     BridgeUserStats[]
   products      Product[]
-  wishboxEvents WishboxEvent[]
+  events        Event[]
   news          News[]
 
   @@map("brands")
@@ -1320,18 +1371,18 @@ model Transaction {
 }
 
 model PaymentMethod {
-  id                      String            @id @default(uuid()) @db.Uuid
-  userId                  String            @map("user_id") @db.Uuid
-  cardAlias               String            @map("card_alias")
+  id                      String             @id @default(uuid()) @db.Uuid
+  userId                  String             @map("user_id") @db.Uuid
+  cardAlias               String             @map("card_alias")
   brand                   String
   last4                   String
-  expiryMonth             Int               @map("expiry_month")
-  expiryYear              Int               @map("expiry_year")
-  isDefault               Boolean           @default(false) @map("is_default")
-  providerPaymentMethodId String?           @map("provider_payment_method_id")
-  createdAt               DateTime          @default(now()) @map("created_at")
-  updatedAt               DateTime          @updatedAt @map("updated_at")
-  user                    User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiryMonth             Int                @map("expiry_month")
+  expiryYear              Int                @map("expiry_year")
+  isDefault               Boolean            @default(false) @map("is_default")
+  providerPaymentMethodId String?            @map("provider_payment_method_id")
+  createdAt               DateTime           @default(now()) @map("created_at")
+  updatedAt               DateTime           @updatedAt @map("updated_at")
+  user                    User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   userSubscriptions       UserSubscription[]
 
   @@index([userId])
@@ -1339,37 +1390,37 @@ model PaymentMethod {
 }
 
 model SubscriptionPlan {
-  id           String             @id @default(uuid()) @db.Uuid
-  name         String
-  price        Float
-  currency     String             @default("USD")
-  period       SubscriptionPlanPeriod
-  benefits     Json               @default("[]")
-  isActive     Boolean            @default(true) @map("is_active")
-  displayOrder Int                @default(0) @map("display_order")
-  createdAt    DateTime           @default(now()) @map("created_at")
-  updatedAt    DateTime           @updatedAt @map("updated_at")
+  id                String                 @id @default(uuid()) @db.Uuid
+  name              String
+  price             Float
+  currency          String                 @default("USD")
+  period            SubscriptionPlanPeriod
+  benefits          Json                   @default("[]")
+  isActive          Boolean                @default(true) @map("is_active")
+  displayOrder      Int                    @default(0) @map("display_order")
+  createdAt         DateTime               @default(now()) @map("created_at")
+  updatedAt         DateTime               @updatedAt @map("updated_at")
   userSubscriptions UserSubscription[]
-  invoices     Invoice[]
+  invoices          Invoice[]
 
   @@index([isActive])
   @@map("subscription_plans")
 }
 
 model UserSubscription {
-  id                 String           @id @default(uuid()) @db.Uuid
-  userId             String           @map("user_id") @db.Uuid
-  planId             String           @map("plan_id") @db.Uuid
+  id                 String             @id @default(uuid()) @db.Uuid
+  userId             String             @map("user_id") @db.Uuid
+  planId             String             @map("plan_id") @db.Uuid
   status             SubscriptionStatus
-  currentPeriodStart DateTime         @map("current_period_start")
-  currentPeriodEnd   DateTime         @map("current_period_end")
-  paymentMethodId    String?          @map("payment_method_id") @db.Uuid
-  canceledAt         DateTime?        @map("canceled_at")
-  createdAt          DateTime         @default(now()) @map("created_at")
-  updatedAt          DateTime         @updatedAt @map("updated_at")
-  user               User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plan               SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
-  paymentMethod      PaymentMethod?   @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  currentPeriodStart DateTime           @map("current_period_start")
+  currentPeriodEnd   DateTime           @map("current_period_end")
+  paymentMethodId    String?            @map("payment_method_id") @db.Uuid
+  canceledAt         DateTime?          @map("canceled_at")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan               SubscriptionPlan   @relation(fields: [planId], references: [id], onDelete: Cascade)
+  paymentMethod      PaymentMethod?     @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
   invoices           Invoice[]
 
   @@index([userId])
@@ -1378,22 +1429,22 @@ model UserSubscription {
 }
 
 model Invoice {
-  id             String        @id @default(uuid()) @db.Uuid
-  userId         String        @map("user_id") @db.Uuid
-  subscriptionId String?       @map("subscription_id") @db.Uuid
-  planId         String?       @map("plan_id") @db.Uuid
+  id             String            @id @default(uuid()) @db.Uuid
+  userId         String            @map("user_id") @db.Uuid
+  subscriptionId String?           @map("subscription_id") @db.Uuid
+  planId         String?           @map("plan_id") @db.Uuid
   amount         Float
-  currency       String        @default("USD")
+  currency       String            @default("USD")
   status         InvoiceStatus
   description    String?
-  invoiceDate    DateTime      @map("invoice_date")
-  paidAt         DateTime?     @map("paid_at")
-  externalId     String?       @map("external_id")
-  createdAt      DateTime      @default(now()) @map("created_at")
-  updatedAt      DateTime      @updatedAt @map("updated_at")
-  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invoiceDate    DateTime          @map("invoice_date")
+  paidAt         DateTime?         @map("paid_at")
+  externalId     String?           @map("external_id")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   subscription   UserSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
-  plan           SubscriptionPlan?  @relation(fields: [planId], references: [id], onDelete: SetNull)
+  plan           SubscriptionPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([invoiceDate])
@@ -1520,87 +1571,86 @@ model NFTClaim {
   @@map("nft_claims")
 }
 
-model WishboxEvent {
-  id             String               @id @db.VarChar(26)
+model Event {
+  id             String        @id @db.VarChar(26)
   title          String
   description    String?
-  startDate      DateTime             @map("start_date")
-  endDate        DateTime             @map("end_date")
-  status         WishboxEventStatus   @default(DRAFT)
-  feedType       WishboxEventFeedType @default(PICKS) @map("feed_type")
-  productId      String?              @map("product_id")
-  createdAt      DateTime             @default(now()) @map("created_at")
-  updatedAt      DateTime             @updatedAt @map("updated_at")
-  imageUrl       String?              @map("image_url")
-  brandId        String?              @map("brand_id") @db.Uuid
-  mainCategoryId String?              @map("main_category_id") @db.Uuid
-  subCategoryId  String?              @map("sub_category_id") @db.Uuid
+  startDate      DateTime      @map("start_date")
+  endDate        DateTime      @map("end_date")
+  status         EventStatus   @default(DRAFT)
+  feedType       EventFeedType @default(PICKS) @map("feed_type")
+  productId      String?       @map("product_id")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  imageUrl       String?       @map("image_url")
+  brandId        String?       @map("brand_id") @db.Uuid
+  mainCategoryId String?       @map("main_category_id") @db.Uuid
+  subCategoryId  String?       @map("sub_category_id") @db.Uuid
   posts          ContentPost[]
-  product        Product?             @relation("WishboxEventProduct", fields: [productId], references: [id], onDelete: SetNull)
-  brand          Brand?               @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  mainCategory   MainCategory?        @relation(fields: [mainCategoryId], references: [id])
-  subCategory    SubCategory?         @relation(fields: [subCategoryId], references: [id])
-  rewards        WishboxReward[]
-  stats          WishboxStats[]
-  eventBadges    EventBadge[] // ✅ YENİ
+  product        Product?      @relation("EventProduct", fields: [productId], references: [id], onDelete: SetNull)
+  brand          Brand?        @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  mainCategory   MainCategory? @relation(fields: [mainCategoryId], references: [id])
+  subCategory    SubCategory?  @relation(fields: [subCategoryId], references: [id])
+  rewards        EventReward[]
+  stats          EventStats[]
+  eventBadges    EventBadge[]
 
   @@index([productId])
   @@index([brandId])
   @@index([status, startDate, endDate])
   @@index([mainCategoryId])
-  @@map("wishbox_events")
+  @@map("events")
 }
 
-model WishboxStats {
-  id                   String       @id @default(uuid()) @db.Uuid
-  userId               String       @map("user_id") @db.Uuid
-  eventId              String       @map("event_id") @db.VarChar(26)
-  totalParticipated    Int          @map("total_participated")
-  totalComments        Int          @map("total_comments")
-  helpfulVotesReceived Int          @map("helpful_votes_received")
-  eventPostsCount      Int          @default(0) @map("event_posts_count")
-  eventLikesReceived   Int          @default(0) @map("event_likes_received")
-  createdAt            DateTime     @default(now()) @map("created_at")
-  updatedAt            DateTime     @updatedAt @map("updated_at")
-  event                WishboxEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  user                 User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+model EventStats {
+  id                   String   @id @default(uuid()) @db.Uuid
+  userId               String   @map("user_id") @db.Uuid
+  eventId              String   @map("event_id") @db.VarChar(26)
+  totalParticipated    Int      @map("total_participated")
+  totalComments        Int      @map("total_comments")
+  helpfulVotesReceived Int      @map("helpful_votes_received")
+  eventPostsCount      Int      @default(0) @map("event_posts_count")
+  eventLikesReceived   Int      @default(0) @map("event_likes_received")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+  event                Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, eventId])
-  @@map("wishbox_stats")
+  @@map("event_stats")
 }
 
-model WishboxReward {
-  id         String            @id @default(uuid()) @db.Uuid
-  userId     String            @map("user_id") @db.Uuid
-  eventId    String            @map("event_id") @db.VarChar(26)
-  rewardType WishboxRewardType @map("reward_type")
-  rewardId   Int               @map("reward_id")
+model EventReward {
+  id         String     @id @default(uuid()) @db.Uuid
+  userId     String     @map("user_id") @db.Uuid
+  eventId    String     @map("event_id") @db.VarChar(26)
+  rewardType RewardType @map("reward_type")
+  rewardId   Int        @map("reward_id")
   amount     Float?
-  awardedAt  DateTime          @default(now()) @map("awarded_at")
-  createdAt  DateTime          @default(now()) @map("created_at")
-  updatedAt  DateTime          @updatedAt @map("updated_at")
-  event      WishboxEvent      @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  awardedAt  DateTime   @default(now()) @map("awarded_at")
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+  event      Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([eventId])
-  @@map("wishbox_rewards")
+  @@map("event_rewards")
 }
 
 model EventBadge {
-  id              String       @id @default(uuid()) @db.Uuid
-  eventId         String       @map("event_id") @db.VarChar(26)
-  badgeId         String       @map("badge_id") @db.Uuid
-  requirementType String       @map("requirement_type")
-  threshold       Int
-  displayOrder    Int?         @map("display_order")
-  enabled         Boolean      @default(true)
-  createdAt       DateTime     @default(now()) @map("created_at")
-  updatedAt       DateTime     @updatedAt @map("updated_at")
-  event           WishboxEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  badge           Badge        @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  id           String   @id @default(uuid()) @db.Uuid
+  eventId      String   @map("event_id") @db.VarChar(26)
+  badgeId      String   @map("badge_id") @db.Uuid
+  rank         Int
+  displayOrder Int?     @map("display_order")
+  enabled      Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  badge        Badge    @relation(fields: [badgeId], references: [id], onDelete: Cascade)
 
-  @@unique([eventId, badgeId])
+  @@unique([eventId, rank])
   @@index([eventId])
   @@index([badgeId])
   @@map("event_badges")
@@ -1767,15 +1817,19 @@ model SupportRequestReport {
 }
 
 model UserReport {
-  id             String   @id @default(uuid()) @db.Uuid
-  reportedUserId String   @map("reported_user_id") @db.Uuid
-  reporterId     String   @map("reporter_id") @db.Uuid
+  id             String    @id @default(uuid()) @db.Uuid
+  reportedUserId String    @map("reported_user_id") @db.Uuid
+  reporterId     String    @map("reporter_id") @db.Uuid
   category       String
   description    String?
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-  reportedUser   User     @relation("UserReportReported", fields: [reportedUserId], references: [id], onDelete: Cascade)
-  reporter       User     @relation("UserReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  resolved       Boolean   @default(false)
+  resolvedAt     DateTime? @map("resolved_at")
+  resolvedBy     String?   @map("resolved_by") @db.Uuid
+  adminNote      String?   @map("admin_note")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  reportedUser   User      @relation("UserReportReported", fields: [reportedUserId], references: [id], onDelete: Cascade)
+  reporter       User      @relation("UserReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
 
   @@unique([reporterId, reportedUserId])
   @@index([reportedUserId])
@@ -2189,12 +2243,23 @@ enum VoteType {
 }
 
 enum BadgeType {
-  ACHIEVEMENT
+  COLLECTION
   EVENT
   COSMETIC
   BRAND
 
   @@map("badge_type")
+}
+
+enum MainAction {
+  POST
+  LIKE
+  COMMENT
+  BOOKMARK
+  JOIN
+  SYSTEM
+
+  @@map("main_action")
 }
 
 enum BadgeRarity {
@@ -2318,27 +2383,27 @@ enum LootboxStatus {
   @@map("lootbox_status")
 }
 
-enum WishboxEventStatus {
+enum EventStatus {
   DRAFT
   PUBLISHED
   CLOSED
 
-  @@map("wishbox_event_status")
+  @@map("event_status")
 }
 
-enum WishboxEventFeedType {
+enum EventFeedType {
   PICKS
   ROASTS
 
-  @@map("wishbox_event_feed_type")
+  @@map("event_feed_type")
 }
 
-enum WishboxRewardType {
+enum RewardType {
   TIPS
   BADGE
   TITLE
 
-  @@map("wishbox_reward_type")
+  @@map("event_reward_type")
 }
 
 enum DMRequestStatus {

@@ -149,10 +149,44 @@ export class GamificationService {
    * @param userId - Kullanıcı ID'si
    * @returns Kullanıcının rozetleri
    */
-  async getUserBadges(userId: string): Promise<UserBadge[]> {
+  async getUserBadges(userId: string) {
     try {
-      // Mock data - gerçek implementasyonda repository kullanılacak
-      return [];
+      const userBadges = await this.prisma.userBadge.findMany({
+        where: { userId },
+        include: {
+          badge: {
+            include: {
+              category: true,
+            },
+          },
+        },
+        orderBy: [
+          { claimed: 'desc' },
+          { displayOrder: 'asc' },
+          { claimedAt: 'desc' },
+        ],
+      });
+
+      return userBadges.map((ub) => ({
+        id: ub.id,
+        badgeId: ub.badgeId,
+        badge: {
+          id: ub.badge.id,
+          name: ub.badge.name,
+          description: ub.badge.description,
+          imageUrl: ub.badge.imageUrl,
+          type: ub.badge.type,
+          rarity: ub.badge.rarity,
+          pointValue: this.calculateBadgePoints(ub.badge.rarity as BadgeRarity, ub.badge.type as BadgeType),
+          category: ub.badge.category,
+        },
+        claimed: ub.claimed,
+        claimedAt: ub.claimedAt,
+        isVisible: ub.isVisible,
+        displayOrder: ub.displayOrder,
+        visibility: ub.visibility,
+        earnedAt: ub.createdAt,
+      }));
     } catch (error) {
       logger.error(`Failed to get badges for user ${userId}:`, error);
       throw error;
@@ -164,10 +198,47 @@ export class GamificationService {
    * @param userId - Kullanıcı ID'si
    * @returns Kullanıcının başarıları
    */
-  async getUserAchievements(userId: string): Promise<UserAchievement[]> {
+  async getUserAchievements(userId: string) {
     try {
-      // Mock data - gerçek implementasyonda repository kullanılacak
-      return [];
+      const userAchievements = await this.prisma.userAchievement.findMany({
+        where: { userId },
+        include: {
+          goal: {
+            include: {
+              collection: true,
+              actionType: true,
+              rewardBadge: true,
+            },
+          },
+        },
+        orderBy: [
+          { completed: 'desc' },
+          { progress: 'desc' },
+        ],
+      });
+
+      return userAchievements.map((ua) => ({
+        id: ua.id,
+        goalId: ua.goalId,
+        goal: {
+          id: ua.goal.id,
+          title: ua.goal.title,
+          requirement: ua.goal.requirement,
+          actionType: {
+            mainAction: ua.goal.mainAction,
+            label: ua.goal.actionType.label,
+          },
+          pointsRequired: ua.goal.pointsRequired,
+          difficulty: ua.goal.difficulty,
+          collection: ua.goal.collection,
+          rewardBadge: ua.goal.rewardBadge,
+        },
+        progress: ua.progress,
+        percentage: (ua.progress / ua.goal.pointsRequired) * 100,
+        completed: ua.completed,
+        completedAt: ua.completedAt,
+        remaining: ua.goal.pointsRequired - ua.progress,
+      }));
     } catch (error) {
       logger.error(`Failed to get achievements for user ${userId}:`, error);
       throw error;
@@ -179,24 +250,494 @@ export class GamificationService {
    * @param userId - Kullanıcı ID'si
    * @returns Gamification istatistikleri
    */
-  async getUserGamificationStats(userId: string): Promise<{
-    totalBadges: number;
-    totalAchievements: number;
-    level: number;
-    experience: number;
-  }> {
+  async getUserGamificationStats(userId: string) {
     try {
-      // Mock data
+      // Get badge stats
+      const totalBadges = await this.prisma.userBadge.count({ where: { userId } });
+      const claimedBadges = await this.prisma.userBadge.count({
+        where: { userId, claimed: true },
+      });
+
+      // Get achievement stats
+      const totalAchievements = await this.prisma.userAchievement.count({
+        where: { userId },
+      });
+      const completedAchievements = await this.prisma.userAchievement.count({
+        where: { userId, completed: true },
+      });
+
+      // Calculate total points from badges
+      const userBadges = await this.prisma.userBadge.findMany({
+        where: { userId, claimed: true },
+        include: { badge: true },
+      });
+
+      let totalPoints = 0;
+      const rarityBreakdown = { COMMON: 0, RARE: 0, EPIC: 0 };
+      const typeBreakdown = { COLLECTION: 0, EVENT: 0, COSMETIC: 0, BRAND: 0 };
+
+      userBadges.forEach((ub) => {
+        const points = this.calculateBadgePoints(ub.badge.rarity as BadgeRarity, ub.badge.type as BadgeType);
+        totalPoints += points;
+        rarityBreakdown[ub.badge.rarity as keyof typeof rarityBreakdown]++;
+        typeBreakdown[ub.badge.type as keyof typeof typeBreakdown]++;
+      });
+
+      // Calculate level (100 points per level)
+      const level = Math.floor(totalPoints / 100) + 1;
+      const nextLevelPoints = level * 100;
+
+      // Collection stats
+      const collections = await this.prisma.badgeCollection.findMany({
+        include: {
+          achievementGoals: {
+            include: {
+              userAchievements: {
+                where: { userId },
+              },
+            },
+          },
+        },
+      });
+
+      let completedCollections = 0;
+      let inProgressCollections = 0;
+
+      collections.forEach((collection) => {
+        const goals = collection.achievementGoals;
+        const completedGoals = goals.filter((g) =>
+          g.userAchievements.some((ua) => ua.completed)
+        ).length;
+
+        if (completedGoals === goals.length && goals.length > 0) {
+          completedCollections++;
+        } else if (completedGoals > 0) {
+          inProgressCollections++;
+        }
+      });
+
       return {
-        totalBadges: 5,
-        totalAchievements: 3,
-        level: 2,
-        experience: 150,
+        badges: {
+          total: totalBadges,
+          claimed: claimedBadges,
+          unclaimed: totalBadges - claimedBadges,
+          byRarity: rarityBreakdown,
+          byType: typeBreakdown,
+        },
+        achievements: {
+          total: totalAchievements,
+          completed: completedAchievements,
+          inProgress: totalAchievements - completedAchievements,
+          notStarted: 0,
+        },
+        level,
+        experience: totalPoints,
+        nextLevelExperience: nextLevelPoints,
+        collections: {
+          total: collections.length,
+          completed: completedCollections,
+          inProgress: inProgressCollections,
+        },
       };
     } catch (error) {
       logger.error(`Failed to get gamification stats for user ${userId}:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Calculate badge point value based on rarity and type
+   */
+  private calculateBadgePoints(rarity: BadgeRarity, type: BadgeType): number {
+    let basePoints = 0;
+
+    // Rarity points
+    switch (rarity) {
+      case BadgeRarity.COMMON:
+        basePoints = 10;
+        break;
+      case BadgeRarity.RARE:
+        basePoints = 30;
+        break;
+      case BadgeRarity.EPIC:
+        basePoints = 50;
+        break;
+    }
+
+    // Type multiplier
+    let multiplier = 1.0;
+    switch (type) {
+      case BadgeType.COLLECTION:
+        multiplier = 1.0;
+        break;
+      case BadgeType.EVENT:
+        multiplier = 1.5;
+        break;
+      case BadgeType.COSMETIC:
+        multiplier = 0.5;
+        break;
+      case BadgeType.BRAND:
+        multiplier = 2.0;
+        break;
+    }
+
+    return Math.floor(basePoints * multiplier);
+  }
+
+  /**
+   * Claim an unclaimed badge
+   */
+  async claimBadge(userId: string, badgeId: string) {
+    const userBadge = await this.prisma.userBadge.findFirst({
+      where: { userId, badgeId },
+    });
+
+    if (!userBadge) {
+      throw new Error('Badge not found in user collection');
+    }
+
+    if (userBadge.claimed) {
+      throw new Error('Badge already claimed');
+    }
+
+    const updated = await this.prisma.userBadge.update({
+      where: { id: userBadge.id },
+      data: {
+        claimed: true,
+        claimedAt: new Date(),
+      },
+      include: { badge: true },
+    });
+
+    logger.info('Badge claimed', { userId, badgeId, userBadgeId: updated.id });
+
+    return updated;
+  }
+
+  /**
+   * Update badge visibility settings
+   */
+  async updateBadgeVisibility(
+    userId: string,
+    userBadgeId: string,
+    visibility: string,
+    isVisible?: boolean
+  ) {
+    const userBadge = await this.prisma.userBadge.findUnique({
+      where: { id: userBadgeId },
+    });
+
+    if (!userBadge || userBadge.userId !== userId) {
+      throw new Error('Badge not found');
+    }
+
+    await this.prisma.userBadge.update({
+      where: { id: userBadgeId },
+      data: {
+        visibility,
+        isVisible: isVisible ?? (visibility !== 'PRIVATE'),
+      },
+    });
+
+    logger.info('Badge visibility updated', { userId, userBadgeId, visibility });
+  }
+
+  /**
+   * Update badge display order for profile showcase
+   */
+  async updateBadgeDisplayOrder(
+    userId: string,
+    badgeOrders: Array<{ userBadgeId: string; displayOrder: number }>
+  ) {
+    // Verify all badges belong to user
+    const userBadgeIds = badgeOrders.map((b) => b.userBadgeId);
+    const userBadges = await this.prisma.userBadge.findMany({
+      where: { id: { in: userBadgeIds }, userId },
+    });
+
+    if (userBadges.length !== badgeOrders.length) {
+      throw new Error('Some badges do not belong to user');
+    }
+
+    // Update display orders in transaction
+    await this.prisma.$transaction(
+      badgeOrders.map((bo) =>
+        this.prisma.userBadge.update({
+          where: { id: bo.userBadgeId },
+          data: { displayOrder: bo.displayOrder },
+        })
+      )
+    );
+
+    logger.info('Badge display order updated', { userId, count: badgeOrders.length });
+  }
+
+  /**
+   * Get all badges with filters
+   */
+  async getAllBadges(filters?: {
+    type?: string;
+    rarity?: string;
+    categoryId?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    const where: Record<string, unknown> = {};
+
+    if (filters?.type) where.type = filters.type;
+    if (filters?.rarity) where.rarity = filters.rarity;
+    if (filters?.categoryId) where.categoryId = filters.categoryId;
+    if (filters?.search) {
+      where.OR = [
+        { name: { contains: filters.search, mode: 'insensitive' } },
+        { description: { contains: filters.search, mode: 'insensitive' } },
+      ];
+    }
+
+    const badges = await this.prisma.badge.findMany({
+      where,
+      include: {
+        category: true,
+        _count: {
+          select: { userBadges: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: filters?.limit || 20,
+      skip: filters?.offset || 0,
+    });
+
+    return badges.map((badge) => ({
+      id: badge.id,
+      name: badge.name,
+      description: badge.description,
+      imageUrl: badge.imageUrl,
+      type: badge.type,
+      rarity: badge.rarity,
+      pointValue: this.calculateBadgePoints(badge.rarity as BadgeRarity, badge.type as BadgeType),
+      category: badge.category,
+      earnedByUserCount: badge._count.userBadges,
+    }));
+  }
+
+  /**
+   * Get badge by ID with details
+   */
+  async getBadgeById(badgeId: string) {
+    const badge = await this.prisma.badge.findUnique({
+      where: { id: badgeId },
+      include: {
+        category: true,
+        collection: true,
+        _count: {
+          select: { userBadges: true },
+        },
+        userBadges: {
+          where: { claimed: true },
+          include: {
+            user: {
+              include: {
+                profile: {
+                  select: { userName: true },
+                },
+              },
+            },
+          },
+          orderBy: { claimedAt: 'desc' },
+          take: 10,
+        },
+      },
+    });
+
+    if (!badge) return null;
+
+    return {
+      id: badge.id,
+      name: badge.name,
+      description: badge.description,
+      imageUrl: badge.imageUrl,
+      type: badge.type,
+      rarity: badge.rarity,
+      pointValue: this.calculateBadgePoints(badge.rarity as BadgeRarity, badge.type as BadgeType),
+      boostMultiplier: badge.boostMultiplier,
+      rewardMultiplier: badge.rewardMultiplier,
+      category: badge.category,
+      collection: badge.collection,
+      earnedByUserCount: badge._count.userBadges,
+      recentEarners: badge.userBadges.map((ub) => ({
+        userId: ub.userId,
+        username: ub.user.profile?.userName || 'Unknown',
+        claimedAt: ub.claimedAt,
+      })),
+    };
+  }
+
+  /**
+   * Get all collections with optional user progress
+   */
+  async getAllCollections(filters?: {
+    categoryId?: string;
+    search?: string;
+    userId?: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    const where: Record<string, unknown> = {};
+
+    if (filters?.categoryId) where.categoryId = filters.categoryId;
+    if (filters?.search) {
+      where.OR = [
+        { name: { contains: filters.search, mode: 'insensitive' } },
+        { shortDescription: { contains: filters.search, mode: 'insensitive' } },
+      ];
+    }
+
+    const collections = await this.prisma.badgeCollection.findMany({
+      where,
+      include: {
+        _count: {
+          select: {
+            badges: true,
+            achievementGoals: true,
+          },
+        },
+        achievementGoals: filters?.userId
+          ? {
+              include: {
+                userAchievements: {
+                  where: { userId: filters.userId },
+                },
+              },
+            }
+          : false,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: filters?.limit || 20,
+      skip: filters?.offset || 0,
+    });
+
+    return collections.map((collection) => {
+      const result: Record<string, unknown> = {
+        id: collection.id,
+        name: collection.name,
+        bannerUrl: collection.bannerUrl,
+        shortDescription: collection.shortDescription,
+        focusSector: collection.focusSector,
+        targetGroup: collection.targetGroup,
+        badgeCount: collection._count.badges,
+        goalCount: collection._count.achievementGoals,
+        isLocked: !!collection.unlockCondition,
+      };
+
+      if (filters?.userId && collection.achievementGoals) {
+        const goals = collection.achievementGoals;
+        const completedGoals = goals.filter((g) =>
+          g.userAchievements?.some((ua) => ua.completed)
+        ).length;
+
+        result.userProgress = {
+          completedGoals,
+          totalGoals: goals.length,
+          percentage: goals.length > 0 ? (completedGoals / goals.length) * 100 : 0,
+          isCompleted: completedGoals === goals.length && goals.length > 0,
+        };
+      }
+
+      return result;
+    });
+  }
+
+  /**
+   * Get collection by ID with goals and user progress
+   */
+  async getCollectionById(collectionId: string, userId?: string) {
+    const collection = await this.prisma.badgeCollection.findUnique({
+      where: { id: collectionId },
+      include: {
+        category: true,
+        badges: {
+          select: {
+            id: true,
+            name: true,
+            imageUrl: true,
+            rarity: true,
+          },
+        },
+        achievementGoals: {
+          include: {
+            actionType: true,
+            rewardBadge: {
+              select: { id: true, name: true },
+            },
+            userAchievements: userId
+              ? {
+                  where: { userId },
+                }
+              : false,
+          },
+        },
+      },
+    });
+
+    if (!collection) return null;
+
+    const goals = collection.achievementGoals.map((goal) => {
+      const userAchievement = userId ? goal.userAchievements?.[0] : undefined;
+
+      const result: Record<string, unknown> = {
+        id: goal.id,
+        title: goal.title,
+        requirement: goal.requirement,
+        actionType: {
+          mainAction: goal.mainAction,
+          label: goal.actionType.label,
+        },
+        pointsRequired: goal.pointsRequired,
+        difficulty: goal.difficulty,
+        rewardBadge: goal.rewardBadge,
+      };
+
+      if (userAchievement) {
+        result.userProgress = {
+          current: userAchievement.progress,
+          percentage: (userAchievement.progress / goal.pointsRequired) * 100,
+          completed: userAchievement.completed,
+          completedAt: userAchievement.completedAt,
+        };
+      }
+
+      return result;
+    });
+
+    const completedGoals = goals.filter(
+      (g) => g.userProgress?.completed
+    ).length;
+
+    return {
+      id: collection.id,
+      name: collection.name,
+      bannerUrl: collection.bannerUrl,
+      owner: collection.owner,
+      focusSector: collection.focusSector,
+      targetGroup: collection.targetGroup,
+      shortDescription: collection.shortDescription,
+      longDescription: collection.longDescription,
+      unlockCondition: collection.unlockCondition,
+      completionBonus: collection.completionBonus,
+      category: collection.category,
+      badges: collection.badges,
+      goals,
+      isLocked: !!collection.unlockCondition,
+      userCompletion: userId
+        ? {
+            completedGoals,
+            totalGoals: goals.length,
+            percentage: goals.length > 0 ? (completedGoals / goals.length) * 100 : 0,
+            isCompleted: completedGoals === goals.length && goals.length > 0,
+          }
+        : undefined,
+    };
   }
 }
 
