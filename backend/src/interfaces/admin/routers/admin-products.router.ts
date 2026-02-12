@@ -4,6 +4,10 @@ import { validateBody, validateQuery } from '../../../infrastructure/middleware/
 import { getPrisma } from '../../../infrastructure/repositories/prisma.client';
 import { NotFoundError, ValidationError } from '../../../infrastructure/errors/custom-errors';
 import logger from '../../../infrastructure/logger/logger';
+import multer, { FileFilterCallback } from 'multer';
+import { v4 as uuidv4 } from 'uuid';
+import { S3Service } from '../../../infrastructure/s3/s3.service';
+import { resolveMediaUrl } from '../../../infrastructure/config/media.config';
 
 // Import schemas
 import {
@@ -58,6 +62,20 @@ import type { PaginationMeta } from '../dtos/admin-common.dto';
 
 const router = Router();
 const prisma = getPrisma();
+const s3Service = new S3Service();
+
+const productUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
+    const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (file.mimetype && allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only JPG, PNG, GIF and WebP supported'));
+    }
+  },
+});
 
 /**
  * Products & Catalog Router
@@ -66,6 +84,62 @@ const prisma = getPrisma();
  */
 
 // ==================== Products ====================
+
+/**
+ * @openapi
+ * /admin/products/upload-image:
+ *   post:
+ *     summary: Upload product image to MinIO (products/ folder)
+ *     tags: [Admin - Products]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: Product image (JPG, PNG, GIF, WebP - max 5MB)
+ *     responses:
+ *       200:
+ *         description: Image uploaded successfully
+ *       400:
+ *         description: File required or unsupported format
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden (Admin required)
+ */
+router.post(
+  '/upload-image',
+  productUpload.single('file'),
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'File required (field: file)' });
+    }
+    const ext = req.file.originalname?.split('.').pop()?.toLowerCase() || 'jpg';
+    const allowedExt = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    if (!allowedExt.includes(ext)) {
+      return res.status(400).json({ success: false, message: 'Only JPG, PNG, GIF and WebP supported' });
+    }
+    const fileName = `products/${uuidv4()}.${ext}`;
+    const path = await s3Service.uploadFile(fileName, req.file.buffer, req.file.mimetype);
+    const url = resolveMediaUrl(path);
+    logger.info({
+      message: 'Product image uploaded',
+      fileName,
+      url,
+      adminId: req.user?.id,
+    });
+    return res.json({ success: true, data: { url: url ?? path } });
+  })
+);
 
 /**
  * GET /admin/products/stats

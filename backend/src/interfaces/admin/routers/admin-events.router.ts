@@ -6,6 +6,9 @@ import { NotFoundError } from '../../../infrastructure/errors/custom-errors';
 import { resolveMediaUrl } from '../../../infrastructure/config/media.config';
 import logger from '../../../infrastructure/logger/logger';
 import { generateIdForModel } from '../../../infrastructure/ids/id.strategy';
+import multer, { FileFilterCallback } from 'multer';
+import { v4 as uuidv4 } from 'uuid';
+import { S3Service } from '../../../infrastructure/s3/s3.service';
 
 // Import schemas
 import {
@@ -35,6 +38,20 @@ import type { PaginationMeta } from '../dtos/admin-common.dto';
 
 const router = Router();
 const prisma = getPrisma();
+const s3Service = new S3Service();
+
+const eventUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
+    const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (file.mimetype && allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only JPG, PNG, GIF and WebP supported'));
+    }
+  },
+});
 
 /**
  * Events Router - Handles all event management endpoints
@@ -43,6 +60,62 @@ const prisma = getPrisma();
  */
 
 /* ========== Admin Events ========== */
+
+/**
+ * @openapi
+ * /admin/events/upload-image:
+ *   post:
+ *     summary: Upload event image to MinIO (events/ folder)
+ *     tags: [Admin - Events]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: Event image (JPG, PNG, GIF, WebP - max 5MB)
+ *     responses:
+ *       200:
+ *         description: Image uploaded successfully
+ *       400:
+ *         description: File required or unsupported format
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden (Admin required)
+ */
+router.post(
+  '/upload-image',
+  eventUpload.single('file'),
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'File required (field: file)' });
+    }
+    const ext = req.file.originalname?.split('.').pop()?.toLowerCase() || 'jpg';
+    const allowedExt = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    if (!allowedExt.includes(ext)) {
+      return res.status(400).json({ success: false, message: 'Only JPG, PNG, GIF and WebP supported' });
+    }
+    const fileName = `events/${uuidv4()}.${ext}`;
+    const path = await s3Service.uploadFile(fileName, req.file.buffer, req.file.mimetype);
+    const url = resolveMediaUrl(path);
+    logger.info({
+      message: 'Event image uploaded',
+      fileName,
+      url,
+      adminId: req.user?.id,
+    });
+    return res.json({ success: true, data: { url: url ?? path } });
+  })
+);
 
 router.get(
   '/stats',

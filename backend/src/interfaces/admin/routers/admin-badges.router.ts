@@ -570,7 +570,7 @@ router.post(
     if (!allowedExt.includes(ext)) {
       return res.status(400).json({ success: false, message: 'Sadece JPG, PNG, GIF ve WebP desteklenir' });
     }
-    const fileName = `admin/collections/${uuidv4()}.${ext}`;
+    const fileName = `collections/${uuidv4()}.${ext}`;
     const path = await s3Service.uploadFile(fileName, req.file.buffer, req.file.mimetype);
     const url = resolveMediaUrl(path);
     return res.json({ success: true, data: { url: url ?? path } });
@@ -581,7 +581,7 @@ router.post(
  * @openapi
  * /admin/badges/upload-image:
  *   post:
- *     summary: Badge image yükle (MinIO'ya admin/badges/ klasörüne)
+ *     summary: Badge image yükle (MinIO'ya badges/ klasörüne)
  *     tags: [Admin - Badges]
  *     security:
  *       - bearerAuth: []
@@ -633,7 +633,7 @@ router.post(
     if (!allowedExt.includes(ext)) {
       return res.status(400).json({ success: false, message: 'Sadece JPG, PNG, GIF ve WebP desteklenir' });
     }
-    const fileName = `admin/badges/${uuidv4()}.${ext}`;
+    const fileName = `badges/${uuidv4()}.${ext}`;
     const path = await s3Service.uploadFile(fileName, req.file.buffer, req.file.mimetype);
     const url = resolveMediaUrl(path);
     logger.info({
