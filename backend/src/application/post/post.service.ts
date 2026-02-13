@@ -947,24 +947,8 @@ export class PostService {
         request.contextId
       );
 
-      // ✅ YENİ: Product context ise envanter kontrolü yap
-      if (request.contextType === ContextType.PRODUCT && contextIds.productId) {
-        const hasProduct = await this.inventoryService.hasProductInInventory(
-          userId,
-          contextIds.productId
-        );
-
-        if (!hasProduct) {
-          logger.warn({
-            message: 'User attempted to create question post for product not in inventory',
-            userId,
-            productId: contextIds.productId,
-          });
-          throw new ValidationError(
-            'Bu ürün envanterinizde bulunmuyor. Soru sormak için önce ürünü envanterinize eklemelisiniz.'
-          );
-        }
-      }
+      // ✅ Question posts do NOT require inventory check
+      // Users can ask questions about products they don't own (and pay TIPS for boost)
 
       const bodyWithImages = this.appendImagesToBody(
         request.description,
@@ -1230,7 +1214,7 @@ export class PostService {
         request.contextId
       );
 
-      // ✅ YENİ: Product context ise envanter kontrolü yap
+      // ✅ Ana ürün (context product) envanterde olmalı
       if (contextIds.productId) {
         const hasProduct = await this.inventoryService.hasProductInInventory(
           userId,
@@ -1244,29 +1228,13 @@ export class PostService {
             productId: contextIds.productId,
           });
           throw new ValidationError(
-            'Bu ürün envanterinizde bulunmuyor. Karşılaştırma paylaşmak için önce ürünü envanterinize eklemelisiniz.'
+            'Karşılaştırma yapmak istediğiniz ana ürün envanterinizde bulunmuyor. Lütfen önce ürünü envanterinize ekleyin.'
           );
         }
       }
 
-      // ✅ YENİ: Karşılaştırılan ürünler de envanterde olmalı
-      for (const product of selectedProducts) {
-        const hasProduct = await this.inventoryService.hasProductInInventory(
-          userId,
-          product.productId
-        );
-
-        if (!hasProduct) {
-          logger.warn({
-            message: 'User attempted to create benchmark post with product not in inventory',
-            userId,
-            productId: product.productId,
-          });
-          throw new ValidationError(
-            'Karşılaştırmak istediğiniz ürünlerden biri veya birkaçı envanterinizde bulunmuyor. Karşılaştırma yapabilmek için tüm ürünlerin envanterinizde olması gerekir.'
-          );
-        }
-      }
+      // ✅ Karşılaştırılacak 2. ürün için envanter kontrolü YOK
+      // Kullanıcı envanterindeki bir ürünü herhangi bir ürünle karşılaştırabilir
 
       const post = await this.postRepo.create(
         userId,
@@ -1784,24 +1752,8 @@ export class PostService {
         throw new Error('Experience post and update post must be for the same product');
       }
 
-      // ✅ YENİ: Envanter kontrolü (update post oluştururken de ürün envanterde olmalı)
-      if (contextIds.productId) {
-        const hasProduct = await this.inventoryService.hasProductInInventory(
-          userId,
-          contextIds.productId
-        );
-
-        if (!hasProduct) {
-          logger.warn({
-            message: 'User attempted to create update post for product not in inventory',
-            userId,
-            productId: contextIds.productId,
-          });
-          throw new ValidationError(
-            'Bu ürün envanterinizde bulunmuyor. Güncelleme paylaşmak için önce ürünü envanterinize eklemelisiniz.'
-          );
-        }
-      }
+      // ✅ Update posts do NOT require inventory check
+      // If experience post exists (owned or tried), user can post updates regardless of current inventory status
 
       const bodyWithImages = this.appendImagesToBody(
         request.content,
