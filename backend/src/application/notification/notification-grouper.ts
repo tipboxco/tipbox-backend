@@ -65,6 +65,11 @@ export interface UngroupedNotification {
   senderUsername?: string | null;
   recipientUserId?: string;
   recipientUsername?: string | null;
+  // TRANSACTION_CONFIRMED (DEPOSIT vb.) için
+  amount?: number | null;
+  actionType?: string | null;
+  transactionId?: string | null;
+  fromAddress?: string | null;
   // NEW_BADGE için
   badgeUrl?: string | null;
   badgeName?: string | null;
@@ -224,33 +229,56 @@ export function groupNotifications(
       };
     }
 
-    // TIPS_RECEIVED için özel işlem: sadece senderUserId, senderUsername, avatar (bildirimi alan kullanıcının)
+    // TIPS_RECEIVED: gönderenin (sender) avatar'ı, senderUserId, senderUsername, amount
     if (notifType === NotificationType.TIPS_RECEIVED) {
       return {
         id: notif.id,
         type: notifType,
-        avatar: notif.avatar || null, // Bildirimi alan kullanıcının (alıcı) avatar'ı
+        avatar: notif.avatar || null, // Gönderenin (tip atan) avatar'ı
         senderUserId: notif.senderUserId || notif.data?.senderUserId || notif.data?.senderId || undefined,
         senderUsername: notif.senderUsername || notif.data?.senderUsername || null,
+        amount: notif.data?.amount ?? null,
+        transactionId: notif.data?.transactionId ?? null,
         createdAt: new Date(notif.createdAt),
         read: notif.read || false,
-        // Post ile ilgili tüm alanlar kaldırıldı
-        // data objesi kaldırıldı
+        title: notif.title,
+        message: notif.message,
       };
     }
 
-    // TIPS_SENT için özel işlem: sadece recipientUserId, recipientUsername, avatar (bildirimi alan kullanıcının)
+    // TIPS_SENT: gönderenin avatar'ı, recipientUserId, recipientUsername, amount
     if (notifType === NotificationType.TIPS_SENT) {
       return {
         id: notif.id,
         type: notifType,
-        avatar: notif.avatar || null, // Bildirimi alan kullanıcının (gönderen) avatar'ı
+        avatar: notif.avatar || null, // Gönderenin (bildirimi alan kullanıcının) avatar'ı
         recipientUserId: notif.recipientUserId || notif.data?.recipientUserId || notif.data?.recipientId || undefined,
         recipientUsername: notif.recipientUsername || notif.data?.recipientUsername || null,
+        amount: notif.data?.amount ?? null,
+        transactionId: notif.data?.transactionId ?? null,
         createdAt: new Date(notif.createdAt),
         read: notif.read || false,
-        // Post ile ilgili tüm alanlar kaldırıldı
-        // data objesi kaldırıldı
+        title: notif.title,
+        message: notif.message,
+      };
+    }
+
+    // TRANSACTION_CONFIRMED (DEPOSIT vb.): amount, actionType, transactionId, fromAddress, sender, avatar
+    if (notifType === NotificationType.TRANSACTION_CONFIRMED) {
+      return {
+        id: notif.id,
+        type: notifType,
+        avatar: notif.avatar || null, // Gönderen (from) avatar'ı; external ise default
+        amount: notif.data?.amount ?? null,
+        actionType: notif.data?.actionType ?? null,
+        transactionId: notif.data?.transactionId ?? null,
+        fromAddress: notif.data?.fromAddress ?? null,
+        senderUserId: notif.data?.senderUserId ?? undefined,
+        senderUsername: notif.data?.senderUsername ?? null,
+        createdAt: new Date(notif.createdAt),
+        read: notif.read || false,
+        title: notif.title,
+        message: notif.message,
       };
     }
 

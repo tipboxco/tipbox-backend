@@ -15,6 +15,7 @@ import { TransactionPrismaRepository } from '../../infrastructure/repositories/t
 import { TransactionService } from '../transaction/transaction.service';
 import { WalletService } from '../wallet/wallet.service';
 import { TransactionStatus } from '../../domain/transaction/transaction-status.enum';
+import { TransactionActionType } from '../../domain/transaction/transaction-action-type.enum';
 import { ThirdwebWebhookStatus, ThirdwebOnchainStatus } from '@prisma/client';
 import {
   ThirdwebWebhookPayload,
@@ -138,8 +139,11 @@ export class ThirdwebWebhookService {
         }
       }
 
-      // Wallet'ı takip adresi ile bul: önce smart_account_address, yoksa public_address (toAddress = alıcı)
-      const wallet = await this.walletRepo.findByAddressForTracking(payload.toAddress);
+      // Wallet'ı takip adresi ile bul: önce toAddress (alıcı), yoksa fromAddress (gönderen; tip send'de contract toAddress olabilir)
+      let wallet = await this.walletRepo.findByAddressForTracking(payload.toAddress);
+      if (!wallet) {
+        wallet = (await this.walletRepo.findByAddressForTracking(payload.fromAddress)) ?? null;
+      }
 
       // Transaction'ı bul
       let transactionId: string | undefined;
@@ -148,12 +152,15 @@ export class ThirdwebWebhookService {
         // 1. Önce metadata'dan internal transaction ID'yi ara
         transactionId = this.extractInternalTransactionId(payload.functionArgs);
 
-        // 2. Bulunamazsa, wallet ve txHash ile eşleştir
+        // 2. Bulunamazsa, wallet ve txHash ile eşleştir (hash 0x ile veya olmadan saklanmış olabilir)
         if (!transactionId && payload.transactionHash) {
+          const h = (payload.transactionHash || '').trim().toLowerCase();
+          const with0x = h.startsWith('0x') ? h : `0x${h}`;
+          const without0x = with0x.startsWith('0x') ? with0x.slice(2) : with0x;
           const tx = await prisma.transaction.findFirst({
             where: {
               walletId: wallet.id,
-              txHash: payload.transactionHash
+              OR: [{ txHash: with0x }, { txHash: without0x }, { txHash: payload.transactionHash }]
             },
             select: { id: true }
           });
@@ -176,7 +183,95 @@ export class ThirdwebWebhookService {
         }
       }
 
+      // 4. Transaction yoksa: from/to smartAccount doğrulaması ile DEPOSIT veya WITHDRAW oluştur (webhook'tan gelen external transfer)
+      if (!transactionId) {
+        const fromWallet = await this.walletRepo.findByAddressForTracking(payload.fromAddress);
+        const toWallet = await this.walletRepo.findByAddressForTracking(payload.toAddress);
+
+        const isMined = payload.status === 'mined';
+        const status = isMined ? TransactionStatus.CONFIRMED : TransactionStatus.PENDING;
+        const txHash = payload.transactionHash ?? null;
+
+        // DEPOSIT: to = bizim wallet (smartAccount), from = external → alıcı bizim sistemde
+        if (toWallet && !fromWallet) {
+          const depositTx = await prisma.transaction.create({
+            data: {
+              walletId: toWallet.id,
+              actionType: TransactionActionType.DEPOSIT,
+              status,
+              amount: null,
+              fromAddress: payload.fromAddress,
+              toAddress: payload.toAddress,
+              txHash,
+              provider: 'thirdweb',
+              errorMessage: null,
+              confirmedAt: isMined ? new Date() : null,
+              failedAt: null,
+              metadata: {
+                source: 'thirdweb_webhook',
+                queueId: payload.queueId,
+                chainId: payload.chainId,
+                blockNumber: payload.blockNumber,
+              },
+            },
+          });
+          transactionId = depositTx.id;
+          logger.info({
+            transactionId: depositTx.id,
+            walletId: toWallet.id,
+            fromAddress: payload.fromAddress,
+            toAddress: payload.toAddress,
+            txHash,
+            message: 'DEPOSIT transaction created from webhook (to = our wallet)',
+          });
+        }
+        // WITHDRAW: from = bizim wallet (smartAccount), to = external → gönderen bizim sistemde
+        else if (fromWallet && !toWallet) {
+          const withdrawTx = await prisma.transaction.create({
+            data: {
+              walletId: fromWallet.id,
+              actionType: TransactionActionType.WITHDRAW,
+              status,
+              amount: null,
+              fromAddress: payload.fromAddress,
+              toAddress: payload.toAddress,
+              txHash,
+              provider: 'thirdweb',
+              errorMessage: null,
+              confirmedAt: isMined ? new Date() : null,
+              failedAt: null,
+              metadata: {
+                source: 'thirdweb_webhook',
+                queueId: payload.queueId,
+                chainId: payload.chainId,
+                blockNumber: payload.blockNumber,
+              },
+            },
+          });
+          transactionId = withdrawTx.id;
+          logger.info({
+            transactionId: withdrawTx.id,
+            walletId: fromWallet.id,
+            fromAddress: payload.fromAddress,
+            toAddress: payload.toAddress,
+            txHash,
+            message: 'WITHDRAW transaction created from webhook (from = our wallet)',
+          });
+        }
+      }
+
       // Status'a göre işlem yap
+      if (payload.status === 'mined') {
+        logger.info({
+          queueId: payload.queueId,
+          transactionHash: payload.transactionHash,
+          fromAddress: payload.fromAddress,
+          toAddress: payload.toAddress,
+          walletFound: !!wallet,
+          transactionIdFromLookup: transactionId ?? null,
+          message: 'Thirdweb mined webhook received (tip send may use worker confirm if SDK-submitted)',
+        });
+      }
       switch (payload.status) {
         case 'sent':
           await this.handleSentTransaction(payload, transactionId);
@@ -254,7 +349,7 @@ export class ThirdwebWebhookService {
   // ==========================================================================
 
   /**
-   * Sent transaction handler - Transaction pending olarak işaretlenir
+   * Sent transaction handler - Bulunan transaction ve bağlı (SEND/RECEIVE) kayıt pending + txHash ile güncellenir
    */
   private async handleSentTransaction(
     payload: ThirdwebWebhookPayload,
@@ -269,83 +364,128 @@ export class ThirdwebWebhookService {
     }
 
     const prisma = getPrisma();
+    const txHash = payload.transactionHash;
+    const metaUpdate = {
+      thirdweb: {
+        queueId: payload.queueId,
+        sentAt: payload.sentAt,
+        sentAtBlockNumber: payload.sentAtBlockNumber
+      }
+    };
 
-    // Transaction'ı pending olarak güncelle ve txHash ekle
+    const existingMeta = await this.getExistingMetadata(transactionId);
+
+    // Bulunan transaction'ı pending + txHash ile güncelle
     await prisma.transaction.update({
       where: { id: transactionId },
       data: {
         status: TransactionStatus.PENDING,
-        txHash: payload.transactionHash,
-        metadata: {
-          ...(await this.getExistingMetadata(transactionId)),
-          thirdweb: {
-            queueId: payload.queueId,
-            sentAt: payload.sentAt,
-            sentAtBlockNumber: payload.sentAtBlockNumber
-          }
-        }
+        txHash,
+        metadata: { ...existingMeta, ...metaUpdate }
       }
     });
 
+    // Tip send/receive çifti: bağlı kaydı da aynı txHash ve pending ile güncelle
+    const linkedId =
+      (existingMeta?.receiveTransactionId as string) || (existingMeta?.linkedTransactionId as string);
+    if (linkedId) {
+      const linkedMeta = await this.getExistingMetadata(linkedId);
+      await prisma.transaction.update({
+        where: { id: linkedId },
+        data: {
+          status: TransactionStatus.PENDING,
+          txHash,
+          metadata: { ...linkedMeta, ...metaUpdate }
+        }
+      });
+    }
+
     logger.info({
       transactionId,
-      txHash: payload.transactionHash,
+      linkedId: linkedId || undefined,
+      txHash,
       queueId: payload.queueId,
-      message: 'Transaction marked as pending via thirdweb webhook'
+      message: 'Transaction(s) marked as pending via thirdweb webhook'
     });
   }
 
   /**
-   * Mined transaction handler - Transaction confirmed veya failed olarak işaretlenir
+   * Mined transaction handler - Aynı txHash'e sahip tüm transaction'lar (SEND + RECEIVE) confirm/fail edilir
    */
   private async handleMinedTransaction(
     payload: ThirdwebWebhookPayload,
     transactionId?: string
   ): Promise<void> {
-    if (!transactionId) {
+    const rawHash = (payload.transactionHash || '').trim();
+    const txHash = rawHash
+      ? (rawHash.toLowerCase().startsWith('0x') ? rawHash.toLowerCase() : '0x' + rawHash.toLowerCase())
+      : undefined;
+    const errorMessage = `Transaction reverted on-chain. Block: ${payload.blockNumber}, Hash: ${payload.transactionHash}`;
+
+    // Bulunan transaction yoksa txHash ile ara (tip send/receive aynı hash ile iki kayıt)
+    let idsToProcess: string[] = transactionId ? [transactionId] : [];
+    if (txHash) {
+      const byTxHash = await this.transactionRepo.findByTxHash(txHash);
+      const pendingIds = byTxHash
+        .filter(tx => tx.status === TransactionStatus.PENDING || tx.status === TransactionStatus.CREATED)
+        .map(tx => tx.id);
+      idsToProcess = [...new Set([...idsToProcess, ...pendingIds])];
       logger.debug({
         queueId: payload.queueId,
-        message: 'No internal transaction ID found for mined webhook'
+        txHash,
+        byTxHashCount: byTxHash.length,
+        pendingIdsCount: pendingIds.length,
+        idsToProcessCount: idsToProcess.length,
+        message: 'Mined webhook: findByTxHash result',
+      });
+    }
+
+    if (idsToProcess.length === 0) {
+      logger.warn({
+        queueId: payload.queueId,
+        txHash: txHash ?? payload.transactionHash,
+        fromAddress: payload.fromAddress,
+        toAddress: payload.toAddress,
+        message: 'Mined webhook: no internal transaction found by txHash; DB status may stay PENDING'
       });
       return;
     }
 
-    // onchainStatus'a göre confirm veya fail
-    if (payload.onchainStatus === 'success') {
-      await this.transactionService.confirmTransaction(
-        transactionId,
-        payload.transactionHash || undefined
-      );
-
-      logger.info({
-        transactionId,
-        txHash: payload.transactionHash,
-        blockNumber: payload.blockNumber,
-        message: 'Transaction confirmed via thirdweb webhook'
-      });
-    } else if (payload.onchainStatus === 'reverted') {
-      await this.transactionService.failTransaction(
-        transactionId,
-        `Transaction reverted on-chain. Block: ${payload.blockNumber}, Hash: ${payload.transactionHash}`
-      );
-
+    // mined = blokta onaylandı; onchainStatus 'reverted' değilse success kabul et (bazen null gelir)
+    const isReverted = payload.onchainStatus === 'reverted';
+    if (isReverted) {
+      for (const id of idsToProcess) {
+        await this.transactionService.failTransaction(id, errorMessage);
+      }
       logger.warn({
-        transactionId,
-        txHash: payload.transactionHash,
+        transactionIds: idsToProcess,
+        txHash,
         blockNumber: payload.blockNumber,
-        message: 'Transaction reverted via thirdweb webhook'
+        message: 'Transaction(s) reverted via thirdweb webhook'
+      });
+    } else {
+      for (const id of idsToProcess) {
+        await this.transactionService.confirmTransaction(id, txHash);
+      }
+      logger.info({
+        transactionIds: idsToProcess,
+        txHash,
+        blockNumber: payload.blockNumber,
+        onchainStatus: payload.onchainStatus ?? 'success',
+        message: 'Transaction(s) confirmed via thirdweb webhook'
       });
     }
   }
 
   /**
-   * Errored transaction handler - Transaction failed olarak işaretlenir
+   * Errored transaction handler - Bulunan + bağlı (SEND/RECEIVE) transaction'lar failed olarak işaretlenir
    */
   private async handleErroredTransaction(
     payload: ThirdwebWebhookPayload,
     transactionId?: string
   ): Promise<void> {
-    if (!transactionId) {
+    const idsToFail = await this.collectTransactionIdsToUpdate(transactionId);
+    if (idsToFail.length === 0) {
       logger.warn({
         queueId: payload.queueId,
         errorMessage: payload.errorMessage,
@@ -354,27 +494,28 @@ export class ThirdwebWebhookService {
       return;
     }
 
-    await this.transactionService.failTransaction(
-      transactionId,
-      payload.errorMessage || 'Transaction failed (thirdweb engine error)'
-    );
+    const errorMessage = payload.errorMessage || 'Transaction failed (thirdweb engine error)';
+    for (const id of idsToFail) {
+      await this.transactionService.failTransaction(id, errorMessage);
+    }
 
     logger.error({
-      transactionId,
+      transactionIds: idsToFail,
       errorMessage: payload.errorMessage,
       queueId: payload.queueId,
-      message: 'Transaction failed via thirdweb webhook'
+      message: 'Transaction(s) failed via thirdweb webhook'
     });
   }
 
   /**
-   * Cancelled transaction handler - Transaction failed olarak işaretlenir
+   * Cancelled transaction handler - Bulunan + bağlı (SEND/RECEIVE) transaction'lar failed olarak işaretlenir
    */
   private async handleCancelledTransaction(
     payload: ThirdwebWebhookPayload,
     transactionId?: string
   ): Promise<void> {
-    if (!transactionId) {
+    const idsToFail = await this.collectTransactionIdsToUpdate(transactionId);
+    if (idsToFail.length === 0) {
       logger.warn({
         queueId: payload.queueId,
         message: 'No internal transaction ID found for cancelled webhook'
@@ -382,17 +523,30 @@ export class ThirdwebWebhookService {
       return;
     }
 
-    await this.transactionService.failTransaction(
-      transactionId,
-      `Transaction cancelled at ${payload.cancelledAt || 'unknown time'}`
-    );
+    const errorMessage = `Transaction cancelled at ${payload.cancelledAt || 'unknown time'}`;
+    for (const id of idsToFail) {
+      await this.transactionService.failTransaction(id, errorMessage);
+    }
 
     logger.warn({
-      transactionId,
+      transactionIds: idsToFail,
       cancelledAt: payload.cancelledAt,
       queueId: payload.queueId,
-      message: 'Transaction cancelled via thirdweb webhook'
+      message: 'Transaction(s) cancelled via thirdweb webhook'
     });
+  }
+
+  /**
+   * Bulunan transaction + metadata'daki bağlı (receiveTransactionId / linkedTransactionId) id'leri döner
+   */
+  private async collectTransactionIdsToUpdate(transactionId?: string): Promise<string[]> {
+    if (!transactionId) return [];
+    const meta = await this.getExistingMetadata(transactionId);
+    const linkedId =
+      (meta?.receiveTransactionId as string) || (meta?.linkedTransactionId as string);
+    const ids = [transactionId];
+    if (linkedId) ids.push(linkedId);
+    return ids;
   }
 
   // ==========================================================================

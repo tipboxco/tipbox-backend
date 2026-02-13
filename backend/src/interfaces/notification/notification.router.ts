@@ -63,6 +63,9 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       if (data.recipientId) userIds.add(data.recipientId);
       if (data.recipientUserId) userIds.add(data.recipientUserId);
     }
+    if (type === NotificationType.TRANSACTION_CONFIRMED && data.senderUserId) {
+      userIds.add(data.senderUserId); // DEPOSIT gönderen (from) avatar için
+    }
     
     // Event bildirimleri için event ID'leri topla
     if (data.eventId) eventIds.add(data.eventId);
@@ -480,6 +483,8 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       id: notification.id,
       userId: (notification.type === NotificationType.NEW_BADGE || notification.type === NotificationType.EVENT_STARTED) ? undefined as any : notification.userId,
       type: notification.type,
+      title: notification.title ?? '',
+      message: notification.message ?? '',
       avatar: undefined,
       username: undefined,
       data: notification.data,
@@ -857,35 +862,23 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       type === NotificationType.TIPS_SENT
     ) {
       if (type === NotificationType.TIPS_RECEIVED) {
-        // TIPS_RECEIVED için: bildirimi alan kullanıcı (alıcı) kendi avatar'ı ve userId'si
-        // Gönderen kullanıcının userId ve username'i root seviyede
+        // TIPS_RECEIVED: gönderenin (sender) avatar'ı gösterilir (tip atan kişi)
         const senderUserId = data.senderUserId || data.senderId || data.userId;
-        
-        // Bildirimi alan kullanıcının (alıcı) avatar'ı - notification.userId'den alınır
-        const recipientUserId = notification.userId; // Bildirimi alan kullanıcı
-        if (recipientUserId) {
-          const recipientAvatar = userAvatars.get(recipientUserId) || randomImageCache || null;
-          enriched.avatar = recipientAvatar;
-        }
-        
-        // Gönderen kullanıcının bilgileri root seviyede
+        enriched.avatar = data.avatar ?? (senderUserId ? userAvatars.get(senderUserId) || randomImageCache : null) ?? null;
         if (senderUserId) {
           enriched.senderUserId = senderUserId;
-          const senderUsername = userNames.get(senderUserId);
-          enriched.senderUsername = senderUsername || null;
+          enriched.senderUsername = data.senderUsername ?? userNames.get(senderUserId) ?? null;
         }
-        
-        // Tüm gereksiz alanları kaldır
+        enriched.amount = data.amount ?? undefined;
+        enriched.transactionId = data.transactionId ?? undefined;
         enriched.postId = undefined;
         enriched.postContent = undefined;
         enriched.postType = undefined;
         enriched.description = undefined;
         enriched.imageUrl = undefined;
         enriched.commentId = undefined;
-        enriched.username = undefined; // username kaldırıldı, senderUsername kullanılıyor
-        enriched.userId = undefined; // userId kaldırıldı, senderUserId kullanılıyor
-        
-        // Data objesini tamamen kaldır
+        enriched.username = undefined;
+        enriched.userId = undefined;
         enriched.data = undefined;
       } else if (type === NotificationType.TIPS_SENT) {
         // TIPS_SENT için: bildirimi alan kullanıcı (gönderen) kendi avatar'ı ve userId'si
@@ -917,6 +910,27 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
         enriched.userId = undefined; // userId kaldırıldı, recipientUserId kullanılıyor
         
         // Data objesini tamamen kaldır
+        enriched.data = undefined;
+      } else if (type === NotificationType.TRANSACTION_CONFIRMED || type === NotificationType.TRANSACTION_FAILED || type === NotificationType.TRANSACTION_PENDING) {
+        // TRANSACTION_CONFIRMED (DEPOSIT vb.): gönderen (from) avatar'ı, amount, actionType, fromAddress
+        const senderUserId = data.senderUserId ?? data.senderId;
+        enriched.avatar = data.avatar ?? (senderUserId ? userAvatars.get(senderUserId) || randomImageCache : null) ?? null;
+        enriched.amount = data.amount ?? undefined;
+        enriched.actionType = data.actionType ?? undefined;
+        enriched.transactionId = data.transactionId ?? undefined;
+        enriched.fromAddress = data.fromAddress ?? undefined;
+        if (senderUserId) {
+          enriched.senderUserId = senderUserId;
+          enriched.senderUsername = data.senderUsername ?? userNames.get(senderUserId) ?? null;
+        }
+        enriched.postId = undefined;
+        enriched.postContent = undefined;
+        enriched.postType = undefined;
+        enriched.description = undefined;
+        enriched.imageUrl = undefined;
+        enriched.commentId = undefined;
+        enriched.username = undefined;
+        enriched.userId = undefined;
         enriched.data = undefined;
       } else {
         // SYSTEM_ANNOUNCEMENT için

@@ -41,11 +41,24 @@ router.use(authMiddleware);
  *                 description: Opsiyonel mesaj (metadata'da reason olarak saklanır)
  *     responses:
  *       200:
- *         description: Transaction başarıyla oluşturuldu
+ *         description: Transaction başarıyla oluşturuldu (kuyruğa alındı; kullanıcı transaction history ile takip eder)
  *       400:
- *         description: Geçersiz parametre veya yetersiz bakiye
+ *         description: Geçersiz parametre veya işlem reddedildi (örn. yetersiz bakiye). Body'de success=false, error.message kullanıcıya gösterilmeli.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean, example: false }
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     code: { type: string }
+ *                     message: { type: string, description: 'Kullanıcıya gösterilecek hata mesajı (örn. Insufficient balance. Available: X TIPS)' }
+ *       401:
+ *         description: Unauthorized
  *       404:
- *         description: Alıcı veya gönderen wallet bulunamadı
+ *         description: Alıcı veya gönderen wallet bulunamadı (error.message kullanıcıya gösterilmeli)
  */
 router.post('/send-tip', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
@@ -81,9 +94,55 @@ router.post('/send-tip', asyncHandler(async (req: Request, res: Response) => {
     amount: result.transaction.amount,
     toAddress: result.transaction.toAddress,
     toUserId: recipientId,
+    txHash: result.transaction.txHash ?? undefined,
     metadata: result.transaction.metadata,
     provider: result.transaction.provider,
-    createdAt: result.transaction.createdAt.toISOString()
+    createdAt: result.transaction.createdAt.toISOString(),
+  });
+}));
+
+/**
+ * @openapi
+ * /transactions/{transactionId}/cancel:
+ *   post:
+ *     summary: Tip send işlemini iptal et
+ *     description: |
+ *       Sadece status=created (henüz on-chain gönderilmemiş) ve TIP_SEND olan işlem iptal edilebilir.
+ *       Kuyrukta en az 15 sn gecikme olduğu için kullanıcı bu süre içinde iptal edebilir.
+ *     tags: [Transactions]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: transactionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: İşlem iptal edildi
+ *       400:
+ *         description: İptal edilemez (örn. zaten gönderilmiş veya başka kullanıcıya ait)
+ *       404:
+ *         description: Transaction bulunamadı
+ */
+router.post('/:transactionId/cancel', asyncHandler(async (req: Request, res: Response) => {
+  const userPayload = req.user;
+  const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+  if (!userId) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+  const { transactionId } = req.params;
+  if (!transactionId) {
+    return res.status(400).json({ message: 'transactionId is required' });
+  }
+  const transaction = await transactionService.cancelTipSend(transactionId, String(userId));
+  return res.json({
+    id: transaction.id,
+    status: transaction.status,
+    errorMessage: transaction.errorMessage ?? undefined,
+    message: 'Transaction cancelled',
   });
 }));
 

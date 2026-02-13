@@ -18,6 +18,17 @@ export interface AnalyticsJobData extends JobData {
   data: any;
 }
 
+/** Tip send işlemi: contract çağrısı consumer tarafından yapılır, kullanıcı beklemez. */
+export interface TipSendJobData extends JobData {
+  sendTransactionId: string;
+  /** Alıcı bizim sistemdeyse receive transaction id; doğrudan adrese gönderimde yok. */
+  receiveTransactionId?: string | null;
+  fromUserId: string;
+  toAddress: string;
+  amount: number;
+  reason?: string;
+}
+
 class QueueProvider {
   private static instance: QueueProvider;
   private queues: Map<string, Queue> = new Map();
@@ -155,6 +166,29 @@ class QueueProvider {
     options?: { delay?: number; priority?: number }
   ) {
     return this.addJob('analytics', jobData, options);
+  }
+
+  /** Tip send job'ları eklenme anından itibaren en geç bu kadar ms sonra işleme alınır (5 sn içinde). */
+  private static readonly TIP_SEND_MAX_DELAY_MS = 5000;
+
+  /**
+   * Tip send kuyruğuna iş ekler. Contract çağrısı consumer (worker) tarafından yapılır;
+   * işlem en geç 5 sn içinde işleme alınır (delay bu süreyi aşmaz).
+   */
+  public async addTipSendJob(
+    jobData: TipSendJobData,
+    options?: { delay?: number; priority?: number; attempts?: number }
+  ) {
+    const requested = options?.delay ?? QueueProvider.TIP_SEND_MAX_DELAY_MS;
+    const delay = Math.min(
+      QueueProvider.TIP_SEND_MAX_DELAY_MS,
+      Math.max(0, requested)
+    );
+    return this.addJob('tip-send', jobData, {
+      ...options,
+      delay,
+      attempts: options?.attempts ?? 3,
+    });
   }
 
   /**

@@ -1,11 +1,19 @@
 /**
  * Thirdweb Webhook Router
- * 
+ *
  * Thirdweb Engine'den gelen webhook eventlerini dinler ve işler.
- * 
+ *
+ * İki tür webhook:
+ * 1) Transaction webhook: Engine üzerinden gönderilen işlemler (sent/mined/errored/cancelled).
+ * 2) v1.events (Contract Subscription): Blokzincir event'leri (ERC20 Transfer vb.). EOA cüzdanından
+ *    smart wallet adresine yapılan ERC20 transfer'lar SADECE bu event-based webhook ile gelir;
+ *    transaction webhook'u sadece Engine'in gönderdiği işlemler için tetiklenir. TIPS token
+ *    contract'ı için Thirdweb Dashboard'da Contract Subscription (v1.events, Transfer event)
+ *    açık olmalı; handleNormalizedTransferEvent DEPOSIT/WITHDRAW oluşturur.
+ *
  * Endpoints:
- * - POST /api/webhooks/thirdweb - Transaction webhook endpoint
- * - POST /api/webhooks/thirdweb/events - Contract event subscription endpoint
+ * - POST /api/webhooks/thirdweb - Transaction + v1.events (tek URL, topic ile ayrım)
+ * - POST /api/webhooks/thirdweb/events - Contract event subscription (alternatif endpoint)
  * - GET /api/webhooks/thirdweb/health - Health check
  * - GET /api/webhooks/thirdweb/logs - Son webhook logları (admin)
  * - GET /api/webhooks/thirdweb/events/logs - Son event logları (admin)
@@ -345,6 +353,19 @@ router.post('/',
   // Raw body middleware - signature verification için (Thirdweb req.body kullanır)
   express.raw({ type: 'application/json' }),
   asyncHandler(async (req: Request, res: Response) => {
+    logger.info({
+      message: 'Thirdweb webhook incoming',
+      req: req.headers.origin ,
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+      contentType: req.headers['content-type'],
+      contentLength: req.headers['content-length'],
+      connection: req.headers['connection'],
+      upgrade: req.headers['upgrade'],
+      via: req.headers['via'],
+      forwarded: req.headers['forwarded'],
+      xForwardedFor: req.headers['x-forwarded-for'],
+    });
     const signatureFromHeader = req.header('X-Webhook-Signature') || req.header('X-Engine-Signature');
     const timestampFromHeader = req.header('X-Webhook-Timestamp') || req.header('X-Engine-Timestamp');
 
@@ -366,6 +387,16 @@ router.post('/',
       return res.status(400).send('Invalid JSON payload');
     }
 
+    // Her gelen webhook datasını log olarak bas (transaction + v1.events)
+    const parsedObj = parsed as Record<string, unknown>;
+    const dataArr = parsedObj?.data;
+    logger.info({
+      message: 'Thirdweb webhook payload received',
+      webhookPayload: parsed,
+      topic: parsedObj?.topic,
+      hasDataArray: Array.isArray(dataArr),
+      dataLength: Array.isArray(dataArr) ? dataArr.length : undefined,
+    });
     const isV1Events =
       parsed &&
       typeof parsed === 'object' &&
@@ -471,6 +502,7 @@ router.post('/',
         : [];
     logger.info({
       message: 'Thirdweb webhook incoming (transaction)',
+      webhookPayload: parsed,
       topLevelKeys,
       dataKeys: dataKeys.length ? dataKeys : undefined,
       bodyLength: body.length
@@ -552,6 +584,12 @@ router.post('/',
 router.post('/events',
   express.raw({ type: 'application/json' }),
   asyncHandler(async (req: Request, res: Response) => {
+        // Her gelen events webhook datasını log olarak bas
+        logger.info({
+          message: 'Thirdweb events webhook payload received',
+         
+        });
+
     const rawBody = Buffer.isBuffer(req.body) 
       ? req.body.toString('utf-8')
       : typeof req.body === 'string' 
@@ -572,6 +610,14 @@ router.post('/events',
         error: 'Invalid JSON payload'
       });
     }
+
+    // Her gelen events webhook datasını log olarak bas
+    logger.info({
+      message: 'Thirdweb events webhook payload received',
+      webhookPayload: payload,
+      topic: payload?.topic,
+      dataLength: Array.isArray(payload?.data) ? payload.data.length : undefined,
+    });
 
     // =========================================================================
     // SIGNATURE VERIFICATION

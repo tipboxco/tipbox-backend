@@ -3,6 +3,7 @@ import { FeedCleanupWorker } from './feed-cleanup.worker';
 import { FeedDistributionWorker } from './feed-distribution.worker';
 import { TrustBackfillWorker } from './trust-backfill.worker';
 import { SupportRequestAutoCompleteWorker } from './support-request-auto-complete.worker';
+import { TipSendWorker } from './tip-send.worker';
 import { FeedCleanupScheduler } from '../scheduler/feed-cleanup.scheduler';
 import { TrustBackfillScheduler } from '../scheduler/trust-backfill.scheduler';
 import { SupportRequestAutoCompleteScheduler } from '../scheduler/support-request-auto-complete.scheduler';
@@ -15,6 +16,7 @@ class WorkerManager {
   private feedDistributionWorker: FeedDistributionWorker;
   private trustBackfillWorker: TrustBackfillWorker;
   private supportRequestAutoCompleteWorker: SupportRequestAutoCompleteWorker;
+  private tipSendWorker: TipSendWorker;
   private feedCleanupScheduler: FeedCleanupScheduler;
   private trustBackfillScheduler: TrustBackfillScheduler;
   private supportRequestAutoCompleteScheduler: SupportRequestAutoCompleteScheduler;
@@ -26,6 +28,7 @@ class WorkerManager {
     this.feedDistributionWorker = new FeedDistributionWorker();
     this.trustBackfillWorker = new TrustBackfillWorker();
     this.supportRequestAutoCompleteWorker = new SupportRequestAutoCompleteWorker();
+    this.tipSendWorker = new TipSendWorker();
     this.feedCleanupScheduler = new FeedCleanupScheduler();
     this.trustBackfillScheduler = new TrustBackfillScheduler();
     this.supportRequestAutoCompleteScheduler = new SupportRequestAutoCompleteScheduler();
@@ -56,6 +59,10 @@ class WorkerManager {
       // Support request auto-complete worker'ı başlat
       await this.supportRequestAutoCompleteWorker.start();
       logger.info('SupportRequestAutoCompleteWorker started');
+
+      // Tip send worker'ı başlat (contract tip send kuyruğu)
+      await this.tipSendWorker.start();
+      logger.info('TipSendWorker started');
 
       // Feed cleanup scheduler'ı başlat (günlük job schedule et)
       await this.feedCleanupScheduler.scheduleDaily();
@@ -91,6 +98,7 @@ class WorkerManager {
       await this.feedDistributionWorker.stop();
       await this.trustBackfillWorker.stop();
       await this.supportRequestAutoCompleteWorker.stop();
+      await this.tipSendWorker.stop();
       await this.feedCleanupScheduler.close();
       await this.trustBackfillScheduler.close();
       await this.supportRequestAutoCompleteScheduler.close();

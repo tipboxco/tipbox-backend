@@ -529,29 +529,43 @@ export class ContractEventService {
         });
       }
 
-      // INTERNAL TRANSFER
+      // INTERNAL TRANSFER (tip send: SEND + RECEIVE aynı txHash ile confirm edilir)
       else if (toWallet && fromWallet) {
         walletId = toWallet.id;
-        
-        const pendingReceiveTx = await prisma.transaction.findFirst({
-          where: { walletId: toWallet.id, status: 'pending', actionType: 'TIP_RECEIVE' },
-          orderBy: { createdAt: 'desc' },
-          select: { id: true }
-        });
-
-        if (pendingReceiveTx) {
-          transactionId = pendingReceiveTx.id;
-          await this.transactionService.confirmTransaction(transactionId, event.transactionHash);
-        }
-
-        const pendingSendTx = await prisma.transaction.findFirst({
-          where: { walletId: fromWallet.id, status: 'pending', actionType: 'TIP_SEND' },
-          orderBy: { createdAt: 'desc' },
-          select: { id: true }
-        });
-
-        if (pendingSendTx) {
-          await this.transactionService.confirmTransaction(pendingSendTx.id, event.transactionHash);
+        const hash = event.transactionHash?.trim();
+        const byTxHash = hash ? await this.transactionRepo.findByTxHash(hash) : [];
+        const toConfirm = byTxHash.filter(
+          tx => (tx.status === TransactionStatus.PENDING || tx.status === TransactionStatus.CREATED)
+        );
+        if (toConfirm.length > 0) {
+          for (const tx of toConfirm) {
+            await this.transactionService.confirmTransaction(tx.id, hash ?? undefined);
+            if (!transactionId) transactionId = tx.id;
+          }
+          logger.info({
+            txHash: hash,
+            transactionIds: toConfirm.map(t => t.id),
+            message: 'Internal transfer (tip) confirmed by txHash via contract event'
+          });
+        } else {
+          const pendingReceiveTx = await prisma.transaction.findFirst({
+            where: { walletId: toWallet.id, status: 'pending', actionType: 'TIP_RECEIVE' },
+            orderBy: { createdAt: 'desc' },
+            select: { id: true }
+          });
+          if (pendingReceiveTx) {
+            transactionId = pendingReceiveTx.id;
+            await this.transactionService.confirmTransaction(transactionId, event.transactionHash);
+          }
+          const pendingSendTx = await prisma.transaction.findFirst({
+            where: { walletId: fromWallet.id, status: 'pending', actionType: 'TIP_SEND' },
+            orderBy: { createdAt: 'desc' },
+            select: { id: true }
+          });
+          if (pendingSendTx) {
+            if (!transactionId) transactionId = pendingSendTx.id;
+            await this.transactionService.confirmTransaction(pendingSendTx.id, event.transactionHash);
+          }
         }
       }
     }
@@ -1033,50 +1047,63 @@ export class ContractEventService {
         }
 
         // ============================================================
-        // INTERNAL TRANSFER: TipBox Wallet → TipBox Wallet
-        // İkisi de sistemde kayıtlı
+        // INTERNAL TRANSFER: TipBox Wallet → TipBox Wallet (tip send)
+        // SEND + RECEIVE aynı txHash ile confirm edilir
         // ============================================================
         else if (toWallet && fromWallet) {
-          // Alıcı tarafı
           walletId = toWallet.id;
-          
-          const pendingReceiveTx = await prisma.transaction.findFirst({
-            where: {
-              walletId: toWallet.id,
-              status: 'pending',
-              actionType: 'TIP_RECEIVE'
-            },
-            orderBy: { createdAt: 'desc' },
-            select: { id: true }
-          });
-
-          if (pendingReceiveTx) {
-            transactionId = pendingReceiveTx.id;
-            await this.transactionService.confirmTransaction(transactionId, data.transactionHash);
+          const hash = data.transactionHash?.trim();
+          const byTxHash = hash ? await this.transactionRepo.findByTxHash(hash) : [];
+          const toConfirm = byTxHash.filter(
+            tx => (tx.status === TransactionStatus.PENDING || tx.status === TransactionStatus.CREATED)
+          );
+          if (toConfirm.length > 0) {
+            for (const tx of toConfirm) {
+              await this.transactionService.confirmTransaction(tx.id, hash ?? undefined);
+              if (!transactionId) transactionId = tx.id;
+            }
+            logger.info({
+              txHash: hash,
+              transactionIds: toConfirm.map(t => t.id),
+              fromWalletId: fromWallet.id,
+              toWalletId: toWallet.id,
+              amount,
+              message: 'ERC20 Internal transfer (tip) confirmed by txHash via contract event'
+            });
+          } else {
+            const pendingReceiveTx = await prisma.transaction.findFirst({
+              where: {
+                walletId: toWallet.id,
+                status: 'pending',
+                actionType: 'TIP_RECEIVE'
+              },
+              orderBy: { createdAt: 'desc' },
+              select: { id: true }
+            });
+            if (pendingReceiveTx) {
+              transactionId = pendingReceiveTx.id;
+              await this.transactionService.confirmTransaction(transactionId, data.transactionHash);
+            }
+            const pendingSendTx = await prisma.transaction.findFirst({
+              where: {
+                walletId: fromWallet.id,
+                status: 'pending',
+                actionType: 'TIP_SEND'
+              },
+              orderBy: { createdAt: 'desc' },
+              select: { id: true }
+            });
+            if (pendingSendTx) {
+              if (!transactionId) transactionId = pendingSendTx.id;
+              await this.transactionService.confirmTransaction(pendingSendTx.id, data.transactionHash);
+            }
+            logger.info({
+              fromWalletId: fromWallet.id,
+              toWalletId: toWallet.id,
+              amount,
+              message: 'ERC20 Internal transfer detected (fallback by pending)'
+            });
           }
-
-          // Gönderen tarafı
-          const pendingSendTx = await prisma.transaction.findFirst({
-            where: {
-              walletId: fromWallet.id,
-              status: 'pending',
-              actionType: 'TIP_SEND'
-            },
-            orderBy: { createdAt: 'desc' },
-            select: { id: true }
-          });
-
-          if (pendingSendTx) {
-            if (!transactionId) transactionId = pendingSendTx.id;
-            await this.transactionService.confirmTransaction(pendingSendTx.id, data.transactionHash);
-          }
-
-          logger.info({
-            fromWalletId: fromWallet.id,
-            toWalletId: toWallet.id,
-            amount,
-            message: 'ERC20 Internal transfer detected'
-          });
         }
       }
     }

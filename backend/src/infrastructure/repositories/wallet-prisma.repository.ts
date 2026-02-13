@@ -32,6 +32,8 @@ export class WalletPrismaRepository {
   /**
    * Tip alımı için tercih edilen wallet: önce smartAccountAddress olan, yoksa aktif wallet.
    * Alıcı tarafında tip'in Smart Account adresine gitmesi için kullanılır.
+   * userId hem UUID (kullanıcı id) hem wallet adresi (0x...) olabilir; adres verildiğinde
+   * fallback olarak findActiveByUserId çağrılmaz (UUID beklediği için hata verir).
    */
   async findPreferredForReceivingByUserId(userId: string): Promise<Wallet | null> {
     const isUuid = uuidValidate(userId);
@@ -44,7 +46,9 @@ export class WalletPrismaRepository {
       orderBy: { updatedAt: 'desc' }
     });
     if (wallet) return this.toDomain(wallet);
-    return this.findActiveByUserId(userId);
+    if (isUuid) return this.findActiveByUserId(userId);
+    // Adres path: smartAccountAddress'te bulunamadıysa public_address ile dene (doğrudan adrese tip)
+    return this.findByPublicAddress(userId);
   }
 
   /**

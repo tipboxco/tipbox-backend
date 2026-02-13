@@ -51,6 +51,14 @@ Thirdweb hem **Transaction Webhooks** hem **Contract Subscriptions (v1.events)**
 - **Routing:** Body parse edilir; `topic === 'v1.events'` ve `Array.isArray(data)` ise v1.events dalına, değilse transaction dalına gider.
 - **Alternatif:** Contract events için ayrı endpoint `POST /api/webhooks/thirdweb/events` da desteklenir; Thirdweb Dashboard'da tek URL (`/api/webhooks/thirdweb`) kullanılırsa her iki tip de burada toplanır.
 
+### EOA'dan Smart Wallet'a ERC20 Transfer (Event-based)
+
+Thirdweb dokümantasyonuna göre: **Transaction webhook** yalnızca Engine üzerinden gönderilen işlemler için tetiklenir (sent/mined/errored). EOA (Metamask vb.) cüzdanından smart wallet adresine yapılan ERC20 transfer'lar **blokzincir event'i** olduğu için **Contract Subscription (v1.events)** ile gelir; transaction webhook'u bu transfer'lar için tetiklenmez. Bu nedenle:
+
+- TIPS (veya ilgili ERC20) token contract adresi için Thirdweb Dashboard'da **Contract Subscription** (Insight / v1.events) açılmalı; event olarak **Transfer** (signature `0xddf252ad...`) seçilmeli.
+- Gelen `v1.events` payload'ında `data[].data.decoded.indexed_params.from` / `.to` ve `non_indexed_params.value` (veya `amount`) kullanılır; backend `handleNormalizedTransferEvent` ile DEPOSIT (external → TipBox wallet) veya WITHDRAW (TipBox → external) transaction kaydı oluşturur.
+- Her gelen webhook gövdesi log'a yazılır (`Thirdweb webhook payload received` / `Thirdweb events webhook payload received`).
+
 ### Payload formatları özeti
 
 | Tür | Üst seviye alanlar | İşlenen veri |
@@ -553,6 +561,18 @@ enum ThirdwebOnchainStatus {
 
 ## Güvenlik
 
+### CORS (Webhook isteği gönderen host)
+
+Thirdweb webhook istekleri (Dashboard’dan test veya Engine tarafından tetiklenen) tarayıcı veya sunucudan `Origin` header’ı ile gelebilir. Backend, bu host’lara CORS erişimi verir; böylece Dashboard’dan “Test webhook” veya preflight istekleri reddedilmez.
+
+**Varsayılan izin verilen Thirdweb origin’leri** (`src/infrastructure/config/index.ts` içinde sabit):
+
+- `https://thirdweb.com`
+- `https://portal.thirdweb.com`
+- `https://engine.thirdweb.com`
+
+Bu origin’ler `CORS_ORIGINS` tanımlı olsa bile listeye otomatik eklenir. Ek bir Thirdweb subdomain’i kullanıyorsanız `CORS_ORIGINS` env değişkenine virgülle ekleyebilirsiniz.
+
 ### HTTP Headers
 
 Thirdweb farklı header isimleri kullanabilir, sistem her ikisini de destekler:
@@ -815,7 +835,8 @@ Her başarılı webhook isteğinde (transaction veya v1.events) gelen **ham body
 | Mesaj | Anlamı |
 |-------|--------|
 | `Thirdweb webhook incoming (transaction)` | Transaction webhook body’si alındı; topLevelKeys, dataKeys, bodyLength loglanır. |
-| `Thirdweb webhook incoming` | (Eski log; artık transaction için yukarıdaki mesaj kullanılıyor.) |
+| `Thirdweb webhook payload received` | Her gelen webhook için tam body loglanır; webhookPayload, topic, dataLength dahil. |
+| `Thirdweb events webhook payload received` | POST /events ile gelen her istekte tam body loglanır. |
 | `v1.events signature invalid, accepting (THIRDWEB_WEBHOOK_SKIP_SIGNATURE_IN_DEV=true)` | Development’ta imza geçersiz ama SKIP_SIGNATURE_IN_DEV=true nedeniyle kabul edildi. |
 | `v1.events webhook signature invalid` | v1.events imzası geçersiz; 401 döndü. |
 | `v1.events processed on /api/webhooks/thirdweb` | v1.events başarıyla işlendi; eventsReceived, eventsProcessed, eventsSkipped. |

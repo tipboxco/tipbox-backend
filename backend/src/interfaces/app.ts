@@ -1,5 +1,5 @@
 import express from 'express';
-import cors from 'cors';
+import cors, { CorsOptions } from 'cors';
 import helmet from 'helmet';
 import path from 'path';
 import swaggerUi from 'swagger-ui-express';
@@ -32,6 +32,7 @@ import auth0Router from './auth0/auth0.router';
 import cannyRouter from './canny/canny.router';
 import surveyRouter from './survey/survey.router';
 import thirdwebWebhookRouter from './thirdweb-webhook/thirdweb-webhook.router';
+import alchemyWebhookRouter from './alchemy-webhook/alchemy-webhook.router';
 import subscriptionRouter from './subscription/subscription.router';
 import seedRouter from './seed/seed.router';
 
@@ -80,6 +81,18 @@ app.use((req, res, next) => {
 
 // CORS
 app.use(cors(getCorsOptions()));
+
+// Webhook route'ları için CORS: gelen webhook isteklerine izin ver (Alchemy, Thirdweb vb.)
+const webhookCorsOptions: CorsOptions = {
+  origin: true,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'X-Alchemy-Signature', 'X-Webhook-Signature', 'X-Webhook-Timestamp', 'X-Engine-Signature', 'X-Engine-Timestamp'],
+  credentials: false,
+  optionsSuccessStatus: 204,
+};
+
+// Webhook endpoint'leri (raw body gerekir - body parser'dan önce mount edilir)
+app.use('/api/webhooks/alchemy', cors(webhookCorsOptions), alchemyWebhookRouter);
 
 // Body parser
 app.use(express.json({ limit: '10mb' }));
@@ -403,7 +416,7 @@ app.use('/api/sync-receiver', syncReceiverRouter);
 app.use('/canny', cannyRouter);
 app.use('/subscription', authMiddleware, subscriptionRouter);
 
-// Webhook routes (no auth - signature verified internally)
+// Webhook routes (no auth - signature verified internally). Alchemy yukarıda body parser'dan önce mount edildi.
 app.use('/api/webhooks/thirdweb', thirdwebWebhookRouter);
 
 // Dashboard routes (must be last)

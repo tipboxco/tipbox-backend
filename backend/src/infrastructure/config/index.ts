@@ -15,6 +15,17 @@ type Config = {
   logRetentionDays: number;
 };
 
+/**
+ * Thirdweb webhook isteklerinin geldiği host'lar (Dashboard test vb.).
+ * CORS preflight / tarayıcıdan test için bu origin'lere izin verilir.
+ */
+const THIRDWEB_WEBHOOK_CORS_ORIGINS: string[] = [
+  'https://thirdweb.com',
+  'https://portal.thirdweb.com',
+  'https://engine.thirdweb.com',
+  '18.246.42.226'
+];
+
 // Ortam bazlı default değerler
 function getDefaultCorsOrigins(env: string): (string | RegExp)[] {
   const origins: (string | RegExp)[] = [];
@@ -121,9 +132,19 @@ function getConfig(): Config {
     throw new Error('NODE_ENV tanımlı değil!');
   }
 
-  const corsOrigins = process.env.CORS_ORIGINS
+  const baseCorsOrigins = process.env.CORS_ORIGINS
     ? process.env.CORS_ORIGINS.split(',').map((origin) => origin.trim())
     : getDefaultCorsOrigins(nodeEnv);
+
+  // Thirdweb webhook host'larına CORS erişimi (Dashboard test vb.); tekrarsız birleştir
+  const existingSet = new Set(baseCorsOrigins.map((o) => (typeof o === 'string' ? o : o.toString())));
+  const corsOrigins: (string | RegExp)[] = [...baseCorsOrigins];
+  for (const origin of THIRDWEB_WEBHOOK_CORS_ORIGINS) {
+    if (!existingSet.has(origin)) {
+      corsOrigins.push(origin);
+      existingSet.add(origin);
+    }
+  }
 
   const corsMethods = process.env.CORS_METHODS
     ? process.env.CORS_METHODS.split(',').map((method) => method.trim())

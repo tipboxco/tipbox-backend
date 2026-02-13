@@ -1,5 +1,6 @@
 import { TransactionPrismaRepository } from '../../infrastructure/repositories/transaction-prisma.repository';
 import { TransactionStatus } from '../../domain/transaction/transaction-status.enum';
+import QueueProvider from '../../infrastructure/queue/queue.provider';
 import logger from '../../infrastructure/logger/logger';
 
 /**
@@ -72,11 +73,32 @@ export class TransactionProcessor {
         return;
       }
 
-      // Sadece transaction olduğunda log bas
-      logger.info(`Processing ${pendingTransactions.length} pending transactions`);
+      const thirdwebCount = pendingTransactions.filter(t => t.provider === 'thirdweb').length;
+      const toProcessCount = pendingTransactions.length - thirdwebCount;
+      // Sadece gerçekten işlenecek (thirdweb olmayan) transaction varsa info log; hepsi thirdweb ise debug (gürültü azaltma)
+      if (toProcessCount > 0) {
+        logger.info(`Processing ${toProcessCount} pending transactions (${thirdwebCount} thirdweb skipped)`);
+      } else {
+        let queueInfo = '';
+        try {
+          const q = QueueProvider.getInstance();
+          const status = await q.getQueueStatus('tip-send');
+          queueInfo = ` | tip-send queue: waiting=${status.waiting}, active=${status.active}`;
+        } catch {
+          queueInfo = ' | tip-send queue: (unavailable)';
+        }
+      /*  logger.debug(
+          `Skipping ${pendingTransactions.length} pending thirdweb transactions (webhook/queue will update)${queueInfo}`
+        );*/
+      }
 
       for (const transaction of pendingTransactions) {
         try {
+          // Tip-send (thirdweb) işlemlerine dokunma: kuyruk + webhook ile işlenecek, kullanıcı iptal penceresi var
+          if (transaction.provider === 'thirdweb') {
+            continue;
+          }
+
           // Web2 Logic: Created → Pending → Confirmed (2-3 seconds delay)
           const now = new Date();
           const createdAt = new Date(transaction.createdAt);

@@ -224,6 +224,8 @@ export class NotificationFactory {
           NFT_SELL: `Your NFT sale completed`,
           SWAP_TIP_TO_SOL: `Your ${data.amount} TIPS → SOL swap completed`,
           SWAP_SOL_TO_TIP: `Your ${data.amount} SOL → TIPS swap completed`,
+          DEPOSIT: `Your ${data.amount} TIPS deposit completed`,
+          WITHDRAW: `Your ${data.amount} TIPS withdrawal completed`,
         };
         return actionMap[data.actionType] || `Your ${data.amount} TIPS transaction completed`;
       },

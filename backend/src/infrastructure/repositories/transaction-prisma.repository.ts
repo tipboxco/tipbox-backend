@@ -20,6 +20,8 @@ export interface TransactionFilters {
   actionType?: TransactionActionType;
   fromDate?: Date;
   toDate?: Date;
+  /** Kullanıcı cüzdan listesinde iptal edilmiş TIP_RECEIVE kayıtları gösterilmesin */
+  excludeCancelledTipReceive?: boolean;
 }
 
 export class TransactionPrismaRepository {
@@ -99,6 +101,16 @@ export class TransactionPrismaRepository {
       if (filters.toDate) where.createdAt.lte = filters.toDate;
     }
 
+    if (filters.excludeCancelledTipReceive) {
+      where.NOT = {
+        AND: [
+          { actionType: TransactionActionType.TIP_RECEIVE },
+          { status: TransactionStatus.FAILED },
+          { errorMessage: 'Cancelled by user' }
+        ]
+      };
+    }
+
     const limit = (options?.limit || 50) + 1; // +1 to check if there's more
 
     const records = await this.prisma.transaction.findMany({
@@ -133,6 +145,31 @@ export class TransactionPrismaRepository {
     });
 
     return records.map(r => this.mapToEntity(r));
+  }
+
+  /** Aynı on-chain txHash'e sahip tüm transaction'ları döner (tip send/receive çifti için). Hash 0x ile veya olmadan saklanmış olabilir. */
+  async findByTxHash(txHash: string): Promise<Transaction[]> {
+    const raw = (txHash ?? '').trim();
+    if (!raw) return [];
+    const lower = raw.toLowerCase();
+    const normalized = lower.startsWith('0x') ? lower : `0x${lower}`;
+    const withoutPrefix = normalized.startsWith('0x') ? normalized.slice(2) : normalized;
+    const records = await this.prisma.transaction.findMany({
+      where: {
+        OR: [{ txHash: normalized }, { txHash: withoutPrefix }, { txHash: raw }]
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+    return records.map(r => this.mapToEntity(r));
+  }
+
+  /** Sadece metadata günceller (tip send/receive eşleşmesi için). */
+  async updateMetadata(id: string, metadata: Record<string, any>): Promise<Transaction | null> {
+    const record = await this.prisma.transaction.update({
+      where: { id },
+      data: { metadata }
+    });
+    return this.mapToEntity(record);
   }
 
   async updateStatus(

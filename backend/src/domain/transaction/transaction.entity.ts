@@ -39,6 +39,7 @@ export class Transaction {
   isSend(): boolean {
     return [
       TransactionActionType.TIP_SEND,
+      TransactionActionType.WITHDRAW,
       TransactionActionType.NFT_BUY,
       TransactionActionType.SWAP_TIP_TO_SOL,
       TransactionActionType.FEE
@@ -48,6 +49,7 @@ export class Transaction {
   isReceive(): boolean {
     return [
       TransactionActionType.TIP_RECEIVE,
+      TransactionActionType.DEPOSIT,
       TransactionActionType.CLAIM_REWARD,
       TransactionActionType.CLAIM_BADGE,
       TransactionActionType.NFT_SELL,

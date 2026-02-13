@@ -10,20 +10,31 @@ import { ProfilePrismaRepository } from '../../infrastructure/repositories/profi
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import { ValidationError, NotFoundError } from '../../infrastructure/errors/custom-errors';
 import { invalidateNFTCache, invalidateUserNFTCache } from '../../infrastructure/cache/cache-invalidation';
+import { TransactionNotificationService } from './transaction-notification.service';
 import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
 import { NFTTransactionType } from '../../domain/crypto/nft-transaction-type.enum';
 import { WalletService } from '../wallet/wallet.service';
-import { getThirdwebSdkService } from '../wallet/thirdweb-sdk/thirdweb-sdk.service';
+import QueueProvider from '../../infrastructure/queue/queue.provider';
 import logger from '../../infrastructure/logger/logger';
-
-const TIPS_DECIMALS = parseInt(process.env.TIPS_TOKEN_DECIMALS || '18', 10);
 
 export interface SendTipRequest {
   fromUserId: string;
   toUserId: string;
   amount: number;
   reason?: string;
+}
+
+/** 0x + 40 hex karakter (Ethereum adresi) */
+function isEthereumAddress(s: string): boolean {
+  const trimmed = s?.trim();
+  return typeof trimmed === 'string' && /^0x[a-fA-F0-9]{40}$/.test(trimmed);
+}
+
+function normalizeEthereumAddress(s: string): string {
+  const trimmed = s?.trim();
+  if (!trimmed || !isEthereumAddress(trimmed)) return trimmed;
+  return ('0x' + trimmed.slice(2).toLowerCase()) as string;
 }
 
 export interface TransactionHistoryOptions {
@@ -53,6 +64,7 @@ export class TransactionService {
     private readonly nftRepo = new NFTPrismaRepository(),
     private readonly nftTransactionRepo = new NFTTransactionPrismaRepository(),
     private readonly nftMarketListingRepo = new NFTMarketListingPrismaRepository(),
+    private readonly transactionNotificationService = new TransactionNotificationService(),
     private readonly notificationService = new NotificationService(),
     private readonly profileRepo = new ProfilePrismaRepository(),
     private readonly walletService = new WalletService()
@@ -60,9 +72,10 @@ export class TransactionService {
 
   /**
    * TIPS gönderme işlemi
-   * - Bakiye kontrolü yapar
-   * - İki transaction oluşturur (SEND ve RECEIVE)
-   * - İşlemleri pending durumuna getirir
+   * - Önce transaction tablosuna SEND ve RECEIVE kayıtları eklenir (status: created)
+   * - İş Redis tip-send kuyruğuna eklenir; contract çağrısı consumer (worker) tarafından yapılır
+   * - Kullanıcı hemen dönüş alır; güncellemeler transaction history ile takip edilir
+   * - Nihai durum (confirmed/failed) webhook üzerinden transaction tablosunda güncellenir
    */
   async sendTip(request: SendTipRequest): Promise<{ transaction: Transaction }> {
     // Validation
@@ -80,9 +93,17 @@ export class TransactionService {
       throw new NotFoundError('Sender wallet not found');
     }
 
-    // Alıcı: recipientUserId için smart account tercih eden wallet (ERC-4337)
+    // Alıcı: recipientUserId = kullanıcı id (UUID) veya public adres (0x...). Adres bizim tabloda olmayabilir.
     const toWallet = await this.walletRepo.findPreferredForReceivingByUserId(request.toUserId);
-    if (!toWallet) {
+    let toAddress: string;
+    let receiveTransactionId: string | undefined;
+
+    if (toWallet) {
+      toAddress = toWallet.smartAccountAddress ?? toWallet.publicAddress;
+    } else if (isEthereumAddress(request.toUserId)) {
+      toAddress = normalizeEthereumAddress(request.toUserId);
+      // Doğrudan public adrese tip; alıcı bizim sistemde değil, sadece TIP_SEND kaydı oluşturulacak
+    } else {
       throw new NotFoundError('Recipient wallet not found');
     }
 
@@ -93,51 +114,9 @@ export class TransactionService {
       );
     }
 
-    // Get user profiles for notifications
-    const [fromProfile, toProfile] = await Promise.all([
-      this.profileRepo.findByUserId(request.fromUserId),
-      this.profileRepo.findByUserId(toWallet.userId),
-    ]);
-
-    // Alıcı adresi: smartAccountAddress (yoksa publicAddress) – SDK bu adrese gönderir
-    const toAddress = toWallet.smartAccountAddress ?? toWallet.publicAddress;
-
-    // Thirdweb SDK ile on-chain tip gönderimi
-    const amountWei = BigInt(Math.round(request.amount * 10 ** TIPS_DECIMALS));
-    const sdk = getThirdwebSdkService();
-    if (!sdk.isConfigured()) {
-      throw new ValidationError('Thirdweb SDK is not configured. Cannot send tip on-chain.');
-    }
-    let sdkResult: Awaited<ReturnType<typeof sdk.sendTip>>;
-    try {
-      sdkResult = await sdk.sendTip(request.fromUserId, amountWei, toAddress);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      logger.warn({
-        fromUserId: request.fromUserId,
-        toUserId: request.toUserId,
-        amount: request.amount,
-        error: msg,
-        message: 'Thirdweb sendTip failed',
-      });
-      throw new ValidationError(msg);
-    }
-
-    if (!sdkResult.success) {
-      throw new ValidationError(sdkResult.error ?? 'Tip send failed on-chain');
-    }
-
     const fromAddress = fromWallet.smartAccountAddress ?? fromWallet.publicAddress;
 
-    const txHash =
-      sdkResult.receipt &&
-      typeof sdkResult.receipt === 'object' &&
-      'transactionHash' in sdkResult.receipt &&
-      typeof (sdkResult.receipt as { transactionHash?: string }).transactionHash === 'string'
-        ? (sdkResult.receipt as { transactionHash: string }).transactionHash
-        : undefined;
-
-    // Create SEND transaction (DB kaydı – SDK gönderimi başarılı olduktan sonra)
+    // 1) TIP_SEND kaydı oluştur (status: created)
     const sendTransaction = await this.transactionRepo.create({
       walletId: fromWallet.id,
       actionType: TransactionActionType.TIP_SEND,
@@ -146,71 +125,66 @@ export class TransactionService {
       toAddress,
       metadata: {
         reason: request.reason || null,
+        recipientUserId: toWallet ? request.toUserId : null,
+        recipientAddress: toWallet ? null : toAddress,
+        source: 'thirdweb_sdk',
+      },
+      provider: 'thirdweb',
+    });
+
+    if (toWallet) {
+      const receiveTransaction = await this.transactionRepo.create({
+        walletId: toWallet.id,
+        actionType: TransactionActionType.TIP_RECEIVE,
+        amount: request.amount,
+        fromAddress,
+        toAddress,
+        metadata: {
+          reason: request.reason || null,
+          senderUserId: request.fromUserId,
+          linkedTransactionId: sendTransaction.id,
+          source: 'thirdweb_sdk',
+        },
+        provider: 'thirdweb',
+      });
+      receiveTransactionId = receiveTransaction.id;
+      await this.transactionRepo.updateMetadata(sendTransaction.id, {
+        reason: request.reason || null,
         recipientUserId: request.toUserId,
         source: 'thirdweb_sdk',
-        txHash: txHash ?? undefined
-      },
-      provider: 'thirdweb'
-    });
+        receiveTransactionId: receiveTransaction.id,
+      });
+    }
 
-    // Create RECEIVE transaction
-    const receiveTransaction = await this.transactionRepo.create({
-      walletId: toWallet.id,
-      actionType: TransactionActionType.TIP_RECEIVE,
+    // 2) Tip send işini Redis kuyruğuna ekle
+    const queueProvider = QueueProvider.getInstance();
+    const delayMs = parseInt(process.env.TIP_SEND_QUEUE_DELAY_MS || '5000', 10);
+    const delayMsFinal = Math.min(5000, Math.max(0, delayMs));
+    await queueProvider.addTipSendJob(
+      {
+        sendTransactionId: sendTransaction.id,
+        receiveTransactionId: receiveTransactionId ?? undefined,
+        fromUserId: request.fromUserId,
+        toAddress,
+        amount: request.amount,
+        reason: request.reason,
+      },
+      { delay: delayMsFinal }
+    );
+
+    logger.info({
+      sendTransactionId: sendTransaction.id,
       amount: request.amount,
-      fromAddress,
+      fromUserId: request.fromUserId,
+      toUserId: request.toUserId,
       toAddress,
-      metadata: {
-        reason: request.reason || null,
-        senderUserId: request.fromUserId,
-        linkedTransactionId: sendTransaction.id,
-        source: 'thirdweb_sdk',
-        txHash: txHash ?? undefined
-      },
-      provider: 'thirdweb'
+      externalRecipient: !toWallet,
+      message: 'Tip send queued; consumer will process on-chain',
     });
 
-    // Confirm transactions (bakiye güncelle) – on-chain zaten başarılı
-    await Promise.all([
-      this.confirmTransaction(sendTransaction.id, txHash),
-      this.confirmTransaction(receiveTransaction.id, txHash)
-    ]);
-
-    // Contract → DB sync: balance ve locked (pendingTips) güncelle
-    Promise.all([
-      this.walletService.syncWalletBalanceFromChain(fromWallet.id),
-      this.walletService.syncWalletBalanceFromChain(toWallet.id),
-    ]).catch(err => {
-      logger.warn({ error: String(err), message: 'syncWalletBalanceFromChain after sendTip failed' });
-    });
-
-    logger.info(`Tip sent: ${request.amount} TIPS from ${request.fromUserId} to ${request.toUserId}`);
-
-    // Send notifications asynchronously
-    Promise.all([
-      // Notify sender
-      this.notificationService.sendNotification(
-        request.fromUserId,
-        NotificationType.TIPS_SENT,
-        {
-          recipientUserId: request.toUserId,
-          recipientUsername: toProfile?.userName || toProfile?.displayName || null,
-        }
-      ),
-      // Notify recipient
-      this.notificationService.sendNotification(
-        request.toUserId,
-        NotificationType.TIPS_RECEIVED,
-        {
-          senderUserId: request.fromUserId,
-          senderUsername: fromProfile?.userName || fromProfile?.displayName || null,
-        }
-      ),
-    ]).catch(error => {
-      logger.error('Error sending tip notifications:', error);
-    });
-
-    return { transaction: sendTransaction };
+    // 3) Kullanıcıya hemen transaction (id, status: created) dön
+    const latest = await this.transactionRepo.findById(sendTransaction.id);
+    return { transaction: latest! };
   }
 
   /**
@@ -222,6 +196,48 @@ export class TransactionService {
       throw new NotFoundError('Transaction not found');
     }
     return transaction;
+  }
+
+  /**
+   * Tip send işlemini iptal et. Sadece status=created ve TIP_SEND ise, gönderen kullanıcı iptal edebilir.
+   * Kuyruktaki job 15 sn sonra çalıştığında zaten iptal edilmiş olduğu için SDK çağrılmaz.
+   */
+  async cancelTipSend(transactionId: string, userId: string): Promise<Transaction> {
+    const transaction = await this.transactionRepo.findById(transactionId);
+    if (!transaction) {
+      throw new NotFoundError('Transaction not found');
+    }
+    if (transaction.actionType !== TransactionActionType.TIP_SEND) {
+      throw new ValidationError('Only tip send transactions can be cancelled');
+    }
+    if (transaction.status !== TransactionStatus.CREATED) {
+      throw new ValidationError(
+        `Transaction cannot be cancelled (current status: ${transaction.status}). Only pending tip sends can be cancelled.`
+      );
+    }
+
+    const wallet = await this.walletRepo.findById(transaction.walletId);
+    if (!wallet || wallet.userId !== userId) {
+      throw new ValidationError('You can only cancel your own tip send transaction');
+    }
+
+    const receiveTransactionId = (transaction.metadata?.receiveTransactionId as string) || undefined;
+    const errorMessage = 'Cancelled by user';
+
+    await Promise.all([
+      this.transactionRepo.updateStatus(transactionId, TransactionStatus.FAILED, { errorMessage }),
+      ...(receiveTransactionId
+        ? [this.transactionRepo.updateStatus(receiveTransactionId, TransactionStatus.FAILED, { errorMessage })]
+        : []),
+    ]);
+
+    const updated = await this.transactionRepo.findById(transactionId);
+    logger.info({
+      transactionId,
+      userId,
+      message: 'Tip send cancelled by user',
+    });
+    return updated!;
   }
 
   /**
@@ -239,7 +255,7 @@ export class TransactionService {
     }
 
     const result = await this.transactionRepo.findByFilters(
-      { userId },
+      { userId, excludeCancelledTipReceive: true },
       { cursor: options?.cursor, limit: options?.limit || 20 }
     );
 
@@ -360,39 +376,45 @@ export class TransactionService {
       TransactionActionType.FEE,
     ].includes(transaction.actionType);
 
-    // Balance'ı güncelle
-    if (isReceive) {
-      await this.walletService.updateBalance(
-        transaction.walletId,
-        transaction.amount,
-        {
-          reason: `Transaction confirmed: ${transaction.actionType}`,
+    // TIP_SEND/TIP_RECEIVE: Chain zaten güncel; manuel +/- yaparsak sync ile çift sayım olur. Sadece status güncelle, bakiye sync ile gelir.
+    const isTipPair =
+      transaction.actionType === TransactionActionType.TIP_SEND ||
+      transaction.actionType === TransactionActionType.TIP_RECEIVE;
+
+    if (!isTipPair) {
+      if (isReceive) {
+        await this.walletService.updateBalance(
+          transaction.walletId,
+          transaction.amount,
+          {
+            reason: `Transaction confirmed: ${transaction.actionType}`,
+            transactionId: transaction.id,
+          }
+        );
+        logger.info({
           transactionId: transaction.id,
-        }
-      );
-      logger.info({
-        transactionId: transaction.id,
-        walletId: transaction.walletId,
-        amount: transaction.amount,
-        actionType: transaction.actionType,
-        message: 'Balance increased (RECEIVE transaction)',
-      });
-    } else if (isSend) {
-      await this.walletService.updateBalance(
-        transaction.walletId,
-        -transaction.amount,
-        {
-          reason: `Transaction confirmed: ${transaction.actionType}`,
+          walletId: transaction.walletId,
+          amount: transaction.amount,
+          actionType: transaction.actionType,
+          message: 'Balance increased (RECEIVE transaction)',
+        });
+      } else if (isSend) {
+        await this.walletService.updateBalance(
+          transaction.walletId,
+          -transaction.amount,
+          {
+            reason: `Transaction confirmed: ${transaction.actionType}`,
+            transactionId: transaction.id,
+          }
+        );
+        logger.info({
           transactionId: transaction.id,
-        }
-      );
-      logger.info({
-        transactionId: transaction.id,
-        walletId: transaction.walletId,
-        amount: -transaction.amount,
-        actionType: transaction.actionType,
-        message: 'Balance decreased (SEND transaction)',
-      });
+          walletId: transaction.walletId,
+          amount: -transaction.amount,
+          actionType: transaction.actionType,
+          message: 'Balance decreased (SEND transaction)',
+        });
+      }
     }
 
     // Transaction'ı confirm et
@@ -405,6 +427,17 @@ export class TransactionService {
     if (!confirmedTx) {
       throw new Error('Failed to confirm transaction');
     }
+
+    // Transaction'a ait notification webhook akışı üzerinden kaydedilir (tips, transfer, deposit, withdraw vb.)
+    this.transactionNotificationService
+      .sendTransactionConfirmedNotification(confirmedTx)
+      .catch(err => {
+        logger.error({
+          transactionId: confirmedTx.id,
+          error: err instanceof Error ? err.message : String(err),
+          message: 'Transaction confirmed notification failed',
+        });
+      });
 
     return confirmedTx;
   }
@@ -437,6 +470,17 @@ export class TransactionService {
       throw new Error('Failed to mark transaction as failed');
     }
 
+    // Transaction fail notification (webhook/transaction akışı üzerinden)
+    this.transactionNotificationService
+      .sendTransactionFailedNotification(failedTx, errorMessage)
+      .catch(err => {
+        logger.error({
+          transactionId: failedTx.id,
+          error: err instanceof Error ? err.message : String(err),
+          message: 'Transaction failed notification failed',
+        });
+      });
+
     return failedTx;
   }
 
@@ -467,24 +511,10 @@ export class TransactionService {
       provider: 'backend'
     });
 
-    // Confirm transaction immediately (update balance)
+    // Confirm transaction immediately (update balance); notification transaction akışı üzerinden gönderilir
     await this.confirmTransaction(transaction.id);
 
     logger.info(`Reward claimed: ${amount} TIPS for user ${userId}`);
-
-    // Send notification asynchronously
-    this.notificationService.sendNotification(
-      userId,
-      NotificationType.REWARD_CLAIMED,
-      {
-        amount,
-        rewardType,
-        rewardId,
-        transactionId: transaction.id,
-      }
-    ).catch(error => {
-      logger.error('Error sending reward claim notification:', error);
-    });
 
     return transaction;
   }
@@ -515,17 +545,11 @@ export class TransactionService {
       );
     }
 
-    // Get NFT details for notifications
+    // Get NFT details
     const nft = await this.nftRepo.findById(nftId);
     if (!nft) {
       throw new NotFoundError('NFT not found');
     }
-
-    // Get user profiles for notifications
-    const [buyerProfile, sellerProfile] = await Promise.all([
-      this.profileRepo.findByUserId(userId),
-      this.profileRepo.findByUserId(sellerId),
-    ]);
 
     // Wallet adresi: smartAccountAddress kullan (yoksa publicAddress)
     const buyerAddress = buyerWallet.smartAccountAddress ?? buyerWallet.publicAddress;
@@ -576,39 +600,7 @@ export class TransactionService {
 
     logger.info(`NFT purchase: ${price} TIPS from ${userId} to ${sellerId}`);
 
-    // Send notifications asynchronously
-    Promise.all([
-      // Notify buyer
-      this.notificationService.sendNotification(
-        userId,
-        NotificationType.NFT_PURCHASED,
-        {
-          nftId,
-          nftName: nft.name,
-          price,
-          sellerName: sellerProfile?.displayName || sellerProfile?.userName || 'Kullanıcı',
-          sellerId,
-          transactionId: buyTransaction.id,
-        }
-      ),
-      // Notify seller
-      this.notificationService.sendNotification(
-        sellerId,
-        NotificationType.NFT_LISTING_SOLD,
-        {
-          nftId,
-          nftName: nft.name,
-          price,
-          receivedAmount: sellerReceives,
-          buyerName: buyerProfile?.displayName || buyerProfile?.userName || 'Kullanıcı',
-          buyerId: userId,
-          transactionId: sellTransaction.id,
-          gasFee,
-        }
-      ),
-    ]).catch(error => {
-      logger.error('Error sending NFT transaction notifications:', error);
-    });
+    // Notifications are sent via transaction notification flow (confirmTransaction -> TransactionNotificationService)
 
     return { buyTransaction, sellTransaction };
   }

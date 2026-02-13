@@ -121,6 +121,8 @@ export async function enrichNotificationData(
     else if (data.accepterId) userIdForAvatar = data.accepterId; // SUPPORT_REQUEST_ACCEPTED için
     else if (data.likerId) userIdForAvatar = data.likerId;
     else if (data.commenterId) userIdForAvatar = data.commenterId;
+    // Tip transfer: gönderenin (from) avatar'ı gösterilir (TIPS_RECEIVED, DEPOSIT)
+    else if (data.senderUserId) userIdForAvatar = data.senderUserId;
     else if (data.senderId) userIdForAvatar = data.senderId;
     else if (data.trusterId) userIdForAvatar = data.trusterId;
     else if (data.sharerId) userIdForAvatar = data.sharerId;
@@ -297,10 +299,16 @@ export async function enrichNotificationData(
         break;
       }
 
-      // Tips bildirimleri
+      // Tips bildirimleri (avatar = gönderen için enricher yukarıda senderUserId ile çözer)
       case NotificationType.TIPS_RECEIVED:
       case NotificationType.TIPS_SENT: {
-        // Tips için avatar yeterli, imageUrl field'ı eklenmez (undefined kalır)
+        break;
+      }
+
+      // Transaction (DEPOSIT vb.): avatar = gönderen (senderUserId) yukarıda çözülür
+      case NotificationType.TRANSACTION_CONFIRMED:
+      case NotificationType.TRANSACTION_FAILED:
+      case NotificationType.TRANSACTION_PENDING: {
         break;
       }
 

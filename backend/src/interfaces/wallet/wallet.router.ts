@@ -10,6 +10,8 @@ import { ConnectWalletRequest, WalletResponse, WalletNftsResponse, NftItemRespon
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { WalletProvider } from '../../domain/wallet/wallet.entity';
 import { authMiddleware } from '../auth/auth.middleware';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
+import { TransactionActionType } from '../../domain/transaction/transaction-action-type.enum';
 import logger from '../../infrastructure/logger/logger';
 
 const router = express.Router();
@@ -78,9 +80,10 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   // Wallet yoksa Thirdweb ile oturum açıp DB'ye otomatik kaydet
   await walletService.ensureWalletForUser(String(userId));
 
-  // Contract → DB sync: preferred wallet balance/locked güncelle (background)
+  // Contract → DB sync: pasif (WALLET_BALANCE_SYNC_ENABLED=true yapılırsa çalışır)
+  const balanceSyncEnabled = process.env.WALLET_BALANCE_SYNC_ENABLED === 'true';
   const preferredWallet = await walletService.getPreferredWalletForBalance(String(userId));
-  if (preferredWallet?.id) {
+  if (balanceSyncEnabled && preferredWallet?.id) {
     walletService.syncWalletBalanceFromChain(preferredWallet.id).catch((err) => {
       logger.debug({ walletId: preferredWallet.id, error: String(err), message: 'syncWalletBalanceFromChain on wallet list' });
     });
@@ -668,19 +671,83 @@ router.get('/transactions', asyncHandler(async (req: Request, res: Response) => 
   res.setHeader('Expires', '0');
 
   try {
-    const transactions = await tipsBalanceService.getUserTransactionHistory(String(userId), {
+    const result = await transactionService.getUserTransactionHistory(String(userId), {
       cursor,
       limit,
     });
 
+    const prisma = getPrisma();
+    const items = await Promise.all(
+      result.items.map(async (tx) => {
+        let fromUser: { id: string; name: string; avatar: string | null } | null = null;
+        let toUser: { id: string; name: string; avatar: string | null } | null = null;
+
+        if (tx.metadata?.senderUserId && !String(tx.metadata.senderUserId).startsWith('0x')) {
+          const sender = await prisma.user.findUnique({
+            where: { id: tx.metadata.senderUserId as string },
+            include: {
+              profile: true,
+              avatars: { where: { isActive: true }, take: 1 },
+            },
+          });
+          if (sender) {
+            fromUser = {
+              id: sender.id,
+              name: sender.profile?.displayName || 'Unknown',
+              avatar: sender.avatars[0]?.imageUrl || null,
+            };
+          }
+        }
+        if (tx.actionType === TransactionActionType.DEPOSIT && tx.fromAddress && !fromUser) {
+          fromUser = {
+            id: tx.fromAddress,
+            name: `${tx.fromAddress.slice(0, 6)}...${tx.fromAddress.slice(-4)}`,
+            avatar: null,
+          };
+        }
+
+        if (tx.metadata?.recipientUserId && !String(tx.metadata.recipientUserId).startsWith('0x')) {
+          const recipient = await prisma.user.findUnique({
+            where: { id: tx.metadata.recipientUserId as string },
+            include: {
+              profile: true,
+              avatars: { where: { isActive: true }, take: 1 },
+            },
+          });
+          if (recipient) {
+            toUser = {
+              id: recipient.id,
+              name: recipient.profile?.displayName || 'Unknown',
+              avatar: recipient.avatars[0]?.imageUrl || null,
+            };
+          }
+        }
+        if (tx.actionType === TransactionActionType.WITHDRAW && tx.toAddress && !toUser) {
+          toUser = {
+            id: tx.toAddress,
+            name: `${tx.toAddress.slice(0, 6)}...${tx.toAddress.slice(-4)}`,
+            avatar: null,
+          };
+        }
+
+        return {
+          id: tx.id,
+          type: tx.isSend() ? 'sent' : 'received',
+          amount: tx.amount ?? 0,
+          currency: 'TIPS',
+          from: fromUser,
+          to: toUser,
+          reason: tx.metadata?.reason ?? null,
+          createdAt: tx.createdAt.toISOString(),
+        };
+      })
+    );
+
     return res.json({
-      items: transactions.items.map((item) => ({
-        ...item,
-        createdAt: item.createdAt.toISOString(),
-      })),
+      items,
       pagination: {
-        cursor: transactions.cursor || null,
-        hasMore: transactions.hasMore,
+        cursor: result.cursor || null,
+        hasMore: result.hasMore,
         limit,
       },
     });
@@ -696,39 +763,30 @@ router.get('/transactions', asyncHandler(async (req: Request, res: Response) => 
  * @openapi
  * /wallets/balance:
  *   get:
- *     summary: Kullanıcının TIPS balance'ını getir
- *     description: Kullanıcının mevcut TIPS bakiyesini döndürür
+ *     summary: Kullanıcının TIPS balance'ını getir (DB - wallet tablosu, smartAccountAddress)
+ *     description: |
+ *       Wallet tablosundaki balance değeri döndürülür. Transaction confirm edildiğinde DB güncellendiği için
+ *       bakiye hemen yansır. Arka planda chain ile sync çalışır (deposit vb. için).
  *     tags: [Wallet]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Balance başarıyla getirildi
+ *         description: Balance başarıyla getirildi (DB)
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 balance:
- *                   type: number
- *                   description: Mevcut TIPS bakiyesi
- *                 currency:
- *                   type: string
- *                   default: "TIPS"
- *                 locked:
- *                   type: number
- *                   default: 0
- *                   description: Kilitli TIPS miktarı
- *                 available:
- *                   type: number
- *                   description: Kullanılabilir TIPS miktarı (balance - locked)
- *                 pendingTips:
- *                   type: number
- *                   description: Tipbox contract pendingTips(address) - claim bekleyen tutar (locked ile aynı)
+ *                 balance: { type: number, description: 'Mevcut TIPS bakiyesi (DB)' }
+ *                 currency: { type: string, default: "TIPS" }
+ *                 locked: { type: number, description: 'Kilitli TIPS (DB)' }
+ *                 available: { type: number, description: 'balance - locked' }
+ *                 pendingTips: { type: number }
  *       401:
  *         description: Unauthorized
- *       503:
- *         description: Contract/blockchain erişilemiyor
+ *       404:
+ *         description: Wallet bulunamadı
  */
 router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
@@ -738,7 +796,6 @@ router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
     return res.status(401).json({ message: 'Unauthorized' });
   }
 
-  // Cache kontrolü - Balance asla cache'lenmemeli
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
@@ -752,42 +809,28 @@ router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
       currency: 'TIPS',
       locked: 0,
       available: 0,
+      pendingTips: 0,
     });
   }
 
+  // Contract → DB sync: pasif (WALLET_BALANCE_SYNC_ENABLED=true yapılırsa çalışır)
+  const balanceSyncEnabled = process.env.WALLET_BALANCE_SYNC_ENABLED === 'true';
   const sdk = getThirdwebSdkService();
-  if (!sdk.isConfigured()) {
-    return res.status(503).json({
-      message: 'Blockchain service not configured',
-      code: 'SERVICE_UNAVAILABLE',
-    });
+  if (balanceSyncEnabled && sdk.isConfigured() && wallet.smartAccountAddress) {
+    const syncResult = await walletService.syncWalletBalanceFromChain(wallet.id);
+    if (!syncResult.success) {
+      logger.warn({ walletId: wallet.id, error: syncResult.error, message: 'syncWalletBalanceFromChain failed, returning DB values' });
+    }
   }
 
-  const address = wallet.smartAccountAddress;
-  if (!address) {
-    return res.status(400).json({
-      message: 'Smart Account required. Connect your Thirdweb wallet first to create a Smart Account.',
-      code: 'SMART_ACCOUNT_REQUIRED',
-    });
-  }
+  // Güncel balance ve locked (pendingTips) DB'den
+  let { balance: balanceFromDb, lockedBalance: lockedFromDb } = await walletService.getBalance(wallet.id);
+  let balance = balanceFromDb ?? 0;
+  let locked = lockedFromDb ?? 0;
 
-  const userIdStr = String(userId);
-
-  const fetchBalanceAndPending = async () => {
-    const [balanceRes, pendingRes] = await Promise.all([
-      sdk.getTokenBalanceForAddress(address),
-      sdk.getPendingTips(address),
-    ]);
-    const bal = balanceRes.balanceFormatted ?? 0;
-    const pending = pendingRes.pendingFormatted ?? 0;
-    return { balance: bal, pendingTips: pending };
-  };
-
-  let { balance, pendingTips } = await fetchBalanceAndPending();
-  let locked = pendingTips;
-
-  // Locked (claim bekleyen) tutar varsa contract üzerinden claim dene
-  if (locked > 0) {
+  // lockedBalance (pendingTips) varsa claim dene; sync açıksa claim sonrası tekrar sync
+  if (sdk.isConfigured() && locked > 0) {
+    const userIdStr = String(userId);
     const tryClaim = async (): Promise<{ success: true } | { success: false; error: unknown }> => {
       try {
         await sdk.claim(userIdStr);
@@ -802,7 +845,6 @@ router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
     if (!attempt.success) {
       const errMsg = attempt.error instanceof Error ? attempt.error.message : String(attempt.error);
       const contractError = parseContractError(errMsg);
-
       if (contractError === CONTRACT_ERROR_NO_BADGE_OWNED) {
         const auth = await sdk.authenticateAndGetAddresses(userIdStr);
         const smartAccountAddress = auth.success ? auth.smartAccountAddress : undefined;
@@ -815,25 +857,23 @@ router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
     }
 
     if (attempt.success) {
-      walletService.syncWalletBalanceFromChain(wallet.id).catch((err) => {
-        logger.warn({ walletId: wallet.id, error: String(err), message: 'syncWalletBalanceFromChain after balance claim failed' });
-      });
-      const after = await fetchBalanceAndPending();
-      balance = after.balance;
-      pendingTips = after.pendingTips;
-      locked = pendingTips;
+      if (balanceSyncEnabled) {
+        await walletService.syncWalletBalanceFromChain(wallet.id);
+      }
+      const after = await walletService.getBalance(wallet.id);
+      balance = after.balance ?? 0;
+      locked = after.lockedBalance ?? 0;
     }
   }
 
   const available = Math.max(0, balance - locked);
-  await walletService.setBalanceFromContract(wallet.id, balance, locked);
 
   return res.json({
     balance,
     currency: 'TIPS',
     locked,
     available,
-    pendingTips,
+    pendingTips: locked,
   });
 }));
 
