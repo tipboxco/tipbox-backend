@@ -536,8 +536,12 @@ export class PostService {
         actualContextId // ✅ InventoryId'den gelen productId veya direkt contextId
       );
 
-      // ✅ YENİ: Product context ise envanter kontrolü yap
-      if (request.contextType === ContextType.PRODUCT && contextIds.productId) {
+      // ✅ Product context için envanter kontrolü
+      // Event post'ları için kontrol YAPILMAZ (kullanıcılar event'lerde herhangi bir ürün hakkında içerik paylaşabilir)
+      // Normal free post'lar için kontrol YAPILIR (sadece envanterindeki ürünler hakkında gönderi paylaşabilir)
+      const isEventPost = !!request.eventId;
+
+      if (request.contextType === ContextType.PRODUCT && contextIds.productId && !isEventPost) {
         const hasProduct = await this.inventoryService.hasProductInInventory(
           userId,
           contextIds.productId
@@ -545,7 +549,7 @@ export class PostService {
 
         if (!hasProduct) {
           logger.warn({
-            message: 'User attempted to create post for product not in inventory',
+            message: 'User attempted to create free post for product not in inventory',
             userId,
             productId: contextIds.productId,
             contextType: request.contextType,
@@ -558,7 +562,7 @@ export class PostService {
 
       // Support both 'body' (new) and 'description' (old) fields
       const postContent = request.body || request.description || '';
-      
+
       const bodyWithImages = this.appendImagesToBody(
         postContent,
         request.images
