@@ -375,6 +375,8 @@ router.post(
         productId: body.productId ?? null,
         productGroupId: body.productGroupId ?? null,
         eventId: body.eventId ?? null,
+        inventoryRequired: false,
+        isBoosted: false,
       },
       include: {
         user: { include: { profile: { select: { displayName: true, userName: true } } } },

@@ -53,6 +53,21 @@ export async function fetchContentPost(id: string) {
   return get<AdminContentPostDetailResponse>(`${prefix}/content/posts/${id}`);
 }
 
+export async function createContentPost(body: {
+  userId: string;
+  type: string;
+  title: string;
+  body: string;
+  mainCategoryId?: string | null;
+  subCategoryId?: string | null;
+  categoryId?: string | null;
+  productId?: string | null;
+  productGroupId?: string | null;
+  eventId?: string | null;
+}) {
+  return post<AdminContentPostDetailResponse>(`${prefix}/content/posts`, body);
+}
+
 export async function updateContentPost(
   id: string,
   body: Partial<{
