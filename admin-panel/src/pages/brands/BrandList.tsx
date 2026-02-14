@@ -32,6 +32,7 @@ import {
 import PageHeader from '../../components/PageHeader';
 import { type StatItemData } from '../../components/StatItem';
 import ViewActionButton from '../../components/ViewActionButton';
+import BrandCreateModal from './modals/BrandCreateModal';
 import {
   fetchBrandStats,
   fetchBrands,
@@ -77,6 +78,9 @@ function BrandList() {
   const [loadingImages, setLoadingImages] = useState(false);
   const [form] = Form.useForm();
   const [imageForm] = Form.useForm();
+  const [editingKey, setEditingKey] = useState<string>('');
+  const [editingField, setEditingField] = useState<string>('');
+  const [editingValue, setEditingValue] = useState<string | boolean>('');
 
   useEffect(() => {
     let cancelled = false;
@@ -137,20 +141,8 @@ function BrandList() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.offset, search, categoryFilter, popularOnly]);
 
-  const handleCreate = async (values: CreateBrandInput) => {
-    try {
-      await createBrand({
-        ...values,
-        categoryId: values.categoryId || null,
-        logoUrl: values.logoUrl || null,
-      });
-      message.success('Brand created successfully');
-      setCreateModalOpen(false);
-      form.resetFields();
-      loadBrands();
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : 'Failed to create brand');
-    }
+  const handleCreateSuccess = () => {
+    loadBrands();
   };
 
   const handleEdit = async (values: UpdateBrandInput) => {
@@ -253,6 +245,51 @@ function BrandList() {
     });
   };
 
+  const startEditing = (record: AdminBrandListItem, field: string) => {
+    setEditingKey(record.id);
+    setEditingField(field);
+    setEditingValue(record[field as keyof AdminBrandListItem] as string | boolean);
+  };
+
+  const cancelEditing = () => {
+    setEditingKey('');
+    setEditingField('');
+    setEditingValue('');
+  };
+
+  const saveEditing = async (record: AdminBrandListItem) => {
+    if (!editingField) return;
+
+    try {
+      const updateData: UpdateBrandInput = {
+        [editingField]: editingValue,
+      };
+
+      await updateBrand(record.id, updateData);
+      message.success('Brand updated successfully');
+
+      // Update local state optimistically
+      setBrands(brands.map(b =>
+        b.id === record.id
+          ? { ...b, [editingField]: editingValue }
+          : b
+      ));
+
+      cancelEditing();
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : 'Failed to update brand');
+      cancelEditing();
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent, record: AdminBrandListItem) => {
+    if (e.key === 'Enter') {
+      saveEditing(record);
+    } else if (e.key === 'Escape') {
+      cancelEditing();
+    }
+  };
+
   const columns: ColumnsType<AdminBrandListItem> = [
     {
       title: '',
@@ -271,6 +308,27 @@ function BrandList() {
       key: 'name',
       width: TABLE_COLUMN_WIDTHS.LONG_TEXT_FLEXIBLE,
       ellipsis: true,
+      render: (text, record) => {
+        const isEditing = editingKey === record.id && editingField === 'name';
+        return isEditing ? (
+          <Input
+            value={editingValue as string}
+            onChange={(e) => setEditingValue(e.target.value)}
+            onKeyDown={(e) => handleKeyDown(e, record)}
+            onBlur={() => saveEditing(record)}
+            autoFocus
+            style={{ width: '100%' }}
+          />
+        ) : (
+          <span
+            onDoubleClick={() => startEditing(record, 'name')}
+            style={{ cursor: 'pointer', display: 'block' }}
+            title="Double-click to edit"
+          >
+            {text}
+          </span>
+        );
+      },
     },
     {
       title: 'Category',
@@ -300,7 +358,24 @@ function BrandList() {
       key: 'isPopular',
       width: TABLE_COLUMN_WIDTHS.SHORT_TEXT,
       align: 'center',
-      render: (isPopular) => (isPopular ? <Tag color="gold">Popular</Tag> : null),
+      render: (isPopular, record) => (
+        <Switch
+          checked={isPopular}
+          onChange={async (checked) => {
+            try {
+              await updateBrand(record.id, { isPopular: checked });
+              message.success(`Brand ${checked ? 'marked as' : 'removed from'} popular`);
+              // Update local state
+              setBrands(brands.map(b =>
+                b.id === record.id ? { ...b, isPopular: checked } : b
+              ));
+            } catch (e) {
+              message.error(e instanceof Error ? e.message : 'Failed to update brand');
+            }
+          }}
+          size="small"
+        />
+      ),
     },
     {
       title: 'Created',
@@ -449,50 +524,11 @@ function BrandList() {
       </Card>
 
       {/* Create Brand Modal */}
-      <Modal
-        title="Create Brand"
+      <BrandCreateModal
         open={createModalOpen}
-        onCancel={() => {
-          setCreateModalOpen(false);
-          form.resetFields();
-        }}
-        onOk={() => form.submit()}
-        width={600}
-      >
-        <Form form={form} layout="vertical" onFinish={handleCreate}>
-          <Form.Item
-            name="id"
-            label="Brand ID"
-            rules={[{ required: true, message: 'Please enter brand ID' }]}
-          >
-            <Input placeholder="e.g., apple" />
-          </Form.Item>
-          <Form.Item
-            name="name"
-            label="Brand Name"
-            rules={[{ required: true, message: 'Please enter brand name' }]}
-          >
-            <Input placeholder="e.g., Apple" />
-          </Form.Item>
-          <Form.Item name="logoUrl" label="Logo URL">
-            <Input placeholder="https://..." />
-          </Form.Item>
-          <Form.Item name="categoryId" label="Category">
-            <Select
-              placeholder="Select category (optional)"
-              allowClear
-              showSearch
-              filterOption={(input, option) =>
-                (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-              }
-              options={categories.map(cat => ({ label: cat.name, value: cat.id }))}
-            />
-          </Form.Item>
-          <Form.Item name="isPopular" label="Mark as Popular" valuePropName="checked" initialValue={false}>
-            <Switch />
-          </Form.Item>
-        </Form>
-      </Modal>
+        onClose={() => setCreateModalOpen(false)}
+        onSuccess={handleCreateSuccess}
+      />
 
       {/* Edit Brand Modal */}
       <Modal

@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import {
   Card,
   Table,
-  Input,
   Space,
   Button,
   Switch,
@@ -10,10 +9,8 @@ import {
   Alert,
   Row,
   Modal,
-  Form,
-  Select,
-  InputNumber,
   message,
+  Input,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -21,17 +18,16 @@ import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
-  SortAscendingOutlined,
 } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
 import { type StatItemData } from '../../components/StatItem';
+import CategoryCreateModal from './modals/CategoryCreateModal';
+import CategoryEditModal from './modals/CategoryEditModal';
 import {
   fetchCategoryStats,
   fetchCategories,
-  createCategory,
   updateCategory,
   deleteCategory,
-  reorderCategory,
 } from '../../api/admin-products';
 import type {
   AdminCategoryStatsResponse,
@@ -48,10 +44,9 @@ function ProductCategories() {
   const [error, setError] = useState<string | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
-  const [reorderModalOpen, setReorderModalOpen] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<AdminCategoryListItem | null>(null);
-  const [form] = Form.useForm();
-  const [reorderForm] = Form.useForm();
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [editingKey, setEditingKey] = useState<string>('');
+  const [editingValue, setEditingValue] = useState<string>('');
 
   useEffect(() => {
     let cancelled = false;
@@ -91,42 +86,14 @@ function ProductCategories() {
     loadCategories();
   }, []);
 
-  const handleCreate = async (values: Record<string, unknown>) => {
-    try {
-      await createCategory({
-        id: crypto.randomUUID(),
-        name: values.name as string,
-        parentId: (values.parentId as string) || null,
-        rank: (values.rank as number) ?? null,
-        isActive: values.isActive as boolean,
-      });
-      message.success('Category created successfully');
-      setCreateModalOpen(false);
-      form.resetFields();
-      loadCategories();
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : 'Failed to create category');
-    }
+  const handleCreateSuccess = () => {
+    loadCategories();
   };
 
-  const handleEdit = async (values: UpdateCategoryInput) => {
-    if (!selectedCategory) return;
-
-    try {
-      await updateCategory(selectedCategory.id, {
-        name: values.name,
-        parentId: values.parentId ?? null,
-        rank: values.rank ?? null,
-        isActive: values.isActive,
-      });
-      message.success('Category updated successfully');
-      setEditModalOpen(false);
-      form.resetFields();
-      setSelectedCategory(null);
-      loadCategories();
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : 'Failed to update category');
-    }
+  const handleEditSuccess = () => {
+    setEditModalOpen(false);
+    setSelectedCategoryId(null);
+    loadCategories();
   };
 
   const handleDelete = async (id: string, name: string) => {
@@ -159,38 +126,61 @@ function ProductCategories() {
     }
   };
 
-  const openEditModal = (category: AdminCategoryListItem) => {
-    setSelectedCategory(category);
-    form.setFieldsValue({
-      name: category.name,
-      parentId: category.parentId ?? undefined,
-      rank: category.rank ?? 0,
-      isActive: category.isActive ?? true,
-    });
+  const openEditModal = (categoryId: string) => {
+    setSelectedCategoryId(categoryId);
     setEditModalOpen(true);
   };
 
-  const handleReorder = async (values: { categoryOrders: { categoryId: string; displayOrder: number }[] }) => {
+  const startEditingName = (record: AdminCategoryListItem) => {
+    setEditingKey(record.id);
+    setEditingValue(record.name);
+  };
+
+  const cancelEditingName = () => {
+    setEditingKey('');
+    setEditingValue('');
+  };
+
+  const saveEditingName = async (record: AdminCategoryListItem) => {
+    if (!editingValue.trim()) {
+      message.error('Category name cannot be empty');
+      cancelEditingName();
+      return;
+    }
+
     try {
-      for (const order of values.categoryOrders) {
-        await reorderCategory(order.categoryId, { rank: order.displayOrder });
-      }
-      message.success('Categories reordered successfully');
-      setReorderModalOpen(false);
-      reorderForm.resetFields();
-      loadCategories();
+      await updateCategory(record.id, {
+        name: editingValue.trim(),
+      });
+      message.success('Category name updated successfully');
+
+      // Update local state optimistically
+      const updateCategoryInTree = (cats: AdminCategoryListItem[]): AdminCategoryListItem[] => {
+        return cats.map(cat => {
+          if (cat.id === record.id) {
+            return { ...cat, name: editingValue.trim() };
+          }
+          if (cat.children && cat.children.length > 0) {
+            return { ...cat, children: updateCategoryInTree(cat.children) };
+          }
+          return cat;
+        });
+      };
+
+      setCategories(updateCategoryInTree(categories));
+      cancelEditingName();
     } catch (e) {
-      message.error(e instanceof Error ? e.message : 'Failed to reorder categories');
+      message.error(e instanceof Error ? e.message : 'Failed to update category name');
+      cancelEditingName();
     }
   };
 
-  const openReorderModal = () => {
-    const initialOrders = categories.map(cat => ({
-      categoryId: cat.id,
-      displayOrder: cat.rank ?? 0,
-    }));
-    reorderForm.setFieldsValue({ categoryOrders: initialOrders });
-    setReorderModalOpen(true);
+  const handleKeyDown = (e: React.KeyboardEvent, record: AdminCategoryListItem) => {
+    if (e.key === 'Enter') {
+      saveEditingName(record);
+    } else if (e.key === 'Escape') {
+      cancelEditingName();
+    }
   };
 
   // Backend already sends hierarchical data with children
@@ -234,12 +224,35 @@ function ProductCategories() {
       dataIndex: 'name',
       key: 'name',
       width: TABLE_COLUMN_WIDTHS.LONG_TEXT_FLEXIBLE,
-      render: (text, record) => (
-        <span style={{ paddingLeft: `${record.level * 24}px` }}>
-          {record.level > 0 && '└ '}
-          {text}
-        </span>
-      ),
+      render: (text, record) => {
+        const isEditing = editingKey === record.id;
+        const indent = record.level * 24;
+
+        return (
+          <div style={{ paddingLeft: `${indent}px`, display: 'flex', alignItems: 'center' }}>
+            {record.level > 0 && <span style={{ marginRight: 4 }}>└ </span>}
+            {isEditing ? (
+              <Input
+                value={editingValue}
+                onChange={(e) => setEditingValue(e.target.value)}
+                onKeyDown={(e) => handleKeyDown(e, record)}
+                onBlur={() => saveEditingName(record)}
+                autoFocus
+                style={{ flex: 1 }}
+                size="small"
+              />
+            ) : (
+              <span
+                onDoubleClick={() => startEditingName(record)}
+                style={{ cursor: 'pointer', flex: 1 }}
+                title="Double-click to edit"
+              >
+                {text}
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       title: 'Parent',
@@ -297,6 +310,7 @@ function ProductCategories() {
             size="small"
             type="text"
             icon={<EditOutlined />}
+            onClick={() => openEditModal(record.id)}
             onClick={() => openEditModal(record)}
           />
           <Button
@@ -370,12 +384,7 @@ function ProductCategories() {
 
       <Card variant="outlined">
         <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
-          <Row justify="space-between" align="middle">
-            <Space>
-              <Button icon={<SortAscendingOutlined />} onClick={openReorderModal}>
-                Reorder Categories
-              </Button>
-            </Space>
+          <Row justify="end" align="middle">
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
               Create Category
             </Button>
@@ -396,126 +405,24 @@ function ProductCategories() {
       </Card>
 
       {/* Create Category Modal */}
-      <Modal
-        title="Create Category"
+      <CategoryCreateModal
         open={createModalOpen}
-        onCancel={() => {
-          setCreateModalOpen(false);
-          form.resetFields();
-        }}
-        onOk={() => form.submit()}
-        width={600}
-      >
-        <Form form={form} layout="vertical" onFinish={handleCreate}>
-          <Form.Item
-            name="name"
-            label="Category Name"
-            rules={[{ required: true, message: 'Please enter category name' }]}
-          >
-            <Input placeholder="e.g., Electronics" />
-          </Form.Item>
-          <Form.Item name="parentId" label="Parent Category">
-            <Select
-              placeholder="Select parent category (optional)"
-              allowClear
-              options={parentOptions}
-            />
-          </Form.Item>
-          <Form.Item name="rank" label="Display Order" initialValue={0}>
-            <InputNumber min={0} style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item name="isActive" label="Active" valuePropName="checked" initialValue={true}>
-            <Switch />
-          </Form.Item>
-        </Form>
-      </Modal>
+        onClose={() => setCreateModalOpen(false)}
+        onSuccess={handleCreateSuccess}
+      />
 
       {/* Edit Category Modal */}
-      <Modal
-        title="Edit Category"
-        open={editModalOpen}
-        onCancel={() => {
-          setEditModalOpen(false);
-          form.resetFields();
-          setSelectedCategory(null);
-        }}
-        onOk={() => form.submit()}
-        width={600}
-      >
-        <Form form={form} layout="vertical" onFinish={handleEdit}>
-          <Form.Item
-            name="name"
-            label="Category Name"
-            rules={[{ required: true, message: 'Please enter category name' }]}
-          >
-            <Input placeholder="e.g., Electronics" />
-          </Form.Item>
-          <Form.Item name="parentId" label="Parent Category">
-            <Select
-              placeholder="Select parent category (optional)"
-              allowClear
-              options={parentOptions}
-            />
-          </Form.Item>
-          <Form.Item name="rank" label="Display Order">
-            <InputNumber min={0} style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item name="isActive" label="Active" valuePropName="checked">
-            <Switch />
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      {/* Reorder Categories Modal */}
-      <Modal
-        title="Reorder Categories"
-        open={reorderModalOpen}
-        onCancel={() => {
-          setReorderModalOpen(false);
-          reorderForm.resetFields();
-        }}
-        onOk={() => reorderForm.submit()}
-        width={700}
-      >
-        <Alert
-          title="Adjust display order numbers to reorder categories"
-          type="info"
-          showIcon
-          style={{ marginBottom: 16 }}
+      {selectedCategoryId && (
+        <CategoryEditModal
+          open={editModalOpen}
+          categoryId={selectedCategoryId}
+          onClose={() => {
+            setEditModalOpen(false);
+            setSelectedCategoryId(null);
+          }}
+          onSuccess={handleEditSuccess}
         />
-        <Form form={reorderForm} layout="vertical" onFinish={handleReorder}>
-          <Form.List name="categoryOrders">
-            {(fields) => (
-              <div style={{ maxHeight: 400, overflow: 'auto' }}>
-                {fields.map((field) => {
-                  const category = categories[field.name];
-                  return (
-                    <Row key={field.key} gutter={16} align="middle" style={{ marginBottom: 8 }}>
-                      <div style={{ flex: 1, paddingLeft: 8 }}>
-                        {category?.name ?? 'Unknown'}
-                      </div>
-                      <Form.Item
-                        {...field}
-                        name={[field.name, 'categoryId']}
-                        style={{ display: 'none' }}
-                      >
-                        <Input />
-                      </Form.Item>
-                      <Form.Item
-                        {...field}
-                        name={[field.name, 'displayOrder']}
-                        style={{ margin: 0, width: 100 }}
-                      >
-                        <InputNumber min={0} style={{ width: '100%' }} />
-                      </Form.Item>
-                    </Row>
-                  );
-                })}
-              </div>
-            )}
-          </Form.List>
-        </Form>
-      </Modal>
+      )}
     </div>
   );
 }

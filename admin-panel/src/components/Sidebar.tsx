@@ -90,6 +90,12 @@ const menuItems: MenuItem[] = [
     ],
   },
   {
+    key: 'news',
+    icon: <FileTextOutlined />,
+    label: 'News',
+    path: '/news',
+  },
+  {
     key: 'gamification',
     icon: <TrophyOutlined />,
     label: 'Gamification',
@@ -142,6 +148,7 @@ const menuItems: MenuItem[] = [
     children: [
       { key: 'communication-notifications', label: 'Notifications', path: '/communication/notifications' },
       { key: 'communication-messages', label: 'Direct Messages', path: '/communication/messages' },
+      { key: 'communication-moderation', label: 'DM Moderation', path: '/communication/moderation' },
       { key: 'communication-support', label: 'Support Requests', path: '/communication/support' },
       { key: 'communication-experts', label: 'Expert Requests', path: '/communication/experts' },
     ],

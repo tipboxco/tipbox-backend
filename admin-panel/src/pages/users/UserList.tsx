@@ -9,6 +9,10 @@ import {
   Tag,
   Empty,
   Alert,
+  Button,
+  Dropdown,
+  Modal,
+  message,
 } from 'antd';
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import {
@@ -19,14 +23,18 @@ import {
   SearchOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
+  DownOutlined,
+  StopOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
 import type { StatItemData } from '../../components/StatItem';
 import ViewActionButton from '../../components/ViewActionButton';
-import { fetchUsersStats, fetchUsers } from '../../api/admin-users';
+import { fetchUsersStats, fetchUsers, banUser, unbanUser } from '../../api/admin-users';
 import type { AdminUserListItem, AdminUsersStatsResponse } from '../../types/admin';
 import { BADGE_COLOR_SECONDARY } from '../../constants/badge-colors';
 import { TABLE_COLUMN_WIDTHS, TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
+import { exportToCSV, exportToJSON, exportToExcel, sanitizeFilename, formatDateForExport } from '../../utils/export';
 
 const PAGE_SIZE = 20;
 
@@ -53,6 +61,7 @@ function UserList() {
     (searchParams.get('order') as 'asc' | 'desc') ?? 'desc'
   );
   const [error, setError] = useState<string | null>(null);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -106,6 +115,179 @@ function UserList() {
       cancelled = true;
     };
   }, [pagination.offset, search, status, emailVerified, sort, order]);
+
+  const loadUsers = async () => {
+    setLoadingList(true);
+    try {
+      const res = await fetchUsers({
+        limit: PAGE_SIZE,
+        offset: pagination.offset,
+        search: search || undefined,
+        status: status || undefined,
+        emailVerified:
+          emailVerified === 'true'
+            ? true
+            : emailVerified === 'false'
+            ? false
+            : undefined,
+        sort,
+        order,
+      });
+      setUsers(res.data ?? []);
+      if (res.pagination) setPagination(res.pagination);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load list');
+    } finally {
+      setLoadingList(false);
+    }
+  };
+
+  const handleBulkBan = () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('Please select users to ban');
+      return;
+    }
+
+    Modal.confirm({
+      title: 'Ban Users',
+      content: `Are you sure you want to ban ${selectedRowKeys.length} user(s)? They will no longer be able to access the platform.`,
+      okText: 'Ban',
+      okType: 'danger',
+      onOk: async () => {
+        const hide = message.loading('Banning users...', 0);
+        let successCount = 0;
+        let failCount = 0;
+
+        for (const userId of selectedRowKeys) {
+          try {
+            await banUser(userId as string, 'Bulk ban via admin panel');
+            successCount++;
+          } catch (e) {
+            failCount++;
+          }
+        }
+
+        hide();
+
+        if (successCount > 0) {
+          message.success(`Successfully banned ${successCount} user(s)`);
+        }
+        if (failCount > 0) {
+          message.error(`Failed to ban ${failCount} user(s)`);
+        }
+
+        setSelectedRowKeys([]);
+        loadUsers();
+      },
+    });
+  };
+
+  const handleBulkUnban = () => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('Please select users to unban');
+      return;
+    }
+
+    Modal.confirm({
+      title: 'Unban Users',
+      content: `Are you sure you want to unban ${selectedRowKeys.length} user(s)? They will regain access to the platform.`,
+      okText: 'Unban',
+      onOk: async () => {
+        const hide = message.loading('Unbanning users...', 0);
+        let successCount = 0;
+        let failCount = 0;
+
+        for (const userId of selectedRowKeys) {
+          try {
+            await unbanUser(userId as string);
+            successCount++;
+          } catch (e) {
+            failCount++;
+          }
+        }
+
+        hide();
+
+        if (successCount > 0) {
+          message.success(`Successfully unbanned ${successCount} user(s)`);
+        }
+        if (failCount > 0) {
+          message.error(`Failed to unban ${failCount} user(s)`);
+        }
+
+        setSelectedRowKeys([]);
+        loadUsers();
+      },
+    });
+  };
+
+  const handleExport = async (format: 'csv' | 'json' | 'excel') => {
+    const hide = message.loading(`Preparing ${format.toUpperCase()} export...`, 0);
+
+    try {
+      // Fetch all data with current filters (limit 10,000 for safety)
+      const res = await fetchUsers({
+        limit: 10000,
+        offset: 0,
+        search: search || undefined,
+        status: status || undefined,
+        emailVerified:
+          emailVerified === 'true'
+            ? true
+            : emailVerified === 'false'
+            ? false
+            : undefined,
+        sort,
+        order,
+      });
+
+      const exportData = res.data ?? [];
+
+      if (exportData.length === 0) {
+        hide();
+        message.warning('No data to export');
+        return;
+      }
+
+      // Define columns for export
+      const columns = [
+        { key: 'id' as const, label: 'User ID' },
+        { key: 'displayName' as const, label: 'Display Name' },
+        { key: 'userName' as const, label: 'Username' },
+        { key: 'email' as const, label: 'Email' },
+        { key: 'status' as const, label: 'Status' },
+        { key: 'emailVerified' as const, label: 'Email Verified' },
+        { key: 'createdAt' as const, label: 'Registration Date' },
+      ];
+
+      // Transform data for export
+      const transformedData = exportData.map((user) => ({
+        id: user.id,
+        displayName: user.displayName ?? '',
+        userName: user.userName ?? '',
+        email: user.email ?? '',
+        status: user.status ?? 'ACTIVE',
+        emailVerified: user.emailVerified ? 'Yes' : 'No',
+        createdAt: formatDateForExport(user.createdAt),
+      }));
+
+      const filename = sanitizeFilename(`users_${new Date().toISOString().split('T')[0]}`);
+
+      if (format === 'csv') {
+        exportToCSV(transformedData, filename, columns);
+      } else if (format === 'json') {
+        exportToJSON(exportData, filename);
+      } else if (format === 'excel') {
+        exportToExcel(transformedData, filename, columns);
+      }
+
+      hide();
+      message.success(`Exported ${exportData.length} users to ${format.toUpperCase()}`);
+    } catch (e) {
+      hide();
+      message.error(e instanceof Error ? e.message : 'Export failed');
+    }
+  };
 
   const columns: ColumnsType<AdminUserListItem> = [
     {
@@ -236,6 +418,34 @@ function UserList() {
         title="User List"
         extra={
           <Space wrap>
+            <Dropdown
+              menu={{
+                items: [
+                  {
+                    key: 'csv',
+                    label: 'Export as CSV',
+                    icon: <DownloadOutlined />,
+                    onClick: () => handleExport('csv'),
+                  },
+                  {
+                    key: 'excel',
+                    label: 'Export as Excel',
+                    icon: <DownloadOutlined />,
+                    onClick: () => handleExport('excel'),
+                  },
+                  {
+                    key: 'json',
+                    label: 'Export as JSON',
+                    icon: <DownloadOutlined />,
+                    onClick: () => handleExport('json'),
+                  },
+                ],
+              }}
+            >
+              <Button icon={<DownloadOutlined />}>
+                Export
+              </Button>
+            </Dropdown>
             <Input
               placeholder="Search (email, displayName, userName)"
               value={search}
@@ -298,12 +508,52 @@ function UserList() {
           </Space>
         }
       >
+        {selectedRowKeys.length > 0 && (
+          <Alert
+            message={`${selectedRowKeys.length} user(s) selected`}
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+            action={
+              <Space>
+                <Dropdown
+                  menu={{
+                    items: [
+                      {
+                        key: 'ban',
+                        label: 'Ban Users',
+                        icon: <UserDeleteOutlined />,
+                        danger: true,
+                        onClick: handleBulkBan,
+                      },
+                      {
+                        key: 'unban',
+                        label: 'Unban Users',
+                        icon: <StopOutlined />,
+                        onClick: handleBulkUnban,
+                      },
+                    ],
+                  }}
+                >
+                  <Button>
+                    Bulk Actions <DownOutlined />
+                  </Button>
+                </Dropdown>
+                <Button onClick={() => setSelectedRowKeys([])}>Clear Selection</Button>
+              </Space>
+            }
+          />
+        )}
         <Table
           columns={columns}
           dataSource={users}
           rowKey="id"
           loading={loadingList}
           scroll={TABLE_SCROLL_CONFIGS.AUTO}
+          rowSelection={{
+            selectedRowKeys,
+            onChange: (newSelectedRowKeys) => setSelectedRowKeys(newSelectedRowKeys),
+          }}
           pagination={{
             current: currentPage,
             pageSize: PAGE_SIZE,

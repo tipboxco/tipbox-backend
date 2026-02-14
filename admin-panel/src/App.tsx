@@ -42,6 +42,10 @@ import BrandSurveys from './pages/brands/BrandSurveys';
 import BrandLeaderboards from './pages/brands/BrandLeaderboards';
 import BrandRewards from './pages/brands/BrandRewards';
 
+// News pages
+import NewsList from './pages/news/NewsList';
+import NewsDetail from './pages/news/NewsDetail';
+
 // Gamification pages
 import BadgeDetail from './pages/gamification/BadgeDetail';
 import BadgeCollections from './pages/gamification/BadgeCollections';
@@ -74,6 +78,7 @@ import TokenTransfers from './pages/crypto/TokenTransfers';
 // Communication pages
 import Notifications from './pages/communication/Notifications';
 import DirectMessages from './pages/communication/DirectMessages';
+import DMModeration from './pages/communication/DMModeration';
 import SupportRequests from './pages/communication/SupportRequests';
 import ExpertRequests from './pages/communication/ExpertRequests';
 
@@ -152,6 +157,10 @@ function App() {
           <Route path="brands/leaderboards" element={<BrandLeaderboards />} />
           <Route path="brands/rewards" element={<BrandRewards />} />
 
+          {/* News */}
+          <Route path="news" element={<NewsList />} />
+          <Route path="news/:id" element={<NewsDetail />} />
+
           {/* Gamification */}
           <Route path="gamification/badges" element={<Navigate to="/gamification/event-badges" replace />} />
           <Route path="gamification/collections" element={<BadgeCollections />} />
@@ -188,6 +197,7 @@ function App() {
           {/* Communication */}
           <Route path="communication/notifications" element={<Notifications />} />
           <Route path="communication/messages" element={<DirectMessages />} />
+          <Route path="communication/moderation" element={<DMModeration />} />
           <Route path="communication/support" element={<SupportRequests />} />
           <Route path="communication/experts" element={<ExpertRequests />} />
 

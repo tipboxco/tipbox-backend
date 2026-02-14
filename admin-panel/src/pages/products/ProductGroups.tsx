@@ -9,9 +9,7 @@ import {
   Alert,
   Row,
   Modal,
-  Form,
   message,
-  Select,
 } from 'antd';
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import {
@@ -23,13 +21,12 @@ import {
 } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
 import { type StatItemData } from '../../components/StatItem';
+import ProductGroupCreateModal from './modals/ProductGroupCreateModal';
+import ProductGroupEditModal from './modals/ProductGroupEditModal';
 import {
   fetchProductGroupStats,
   fetchProductGroups,
-  createProductGroup,
-  updateProductGroup,
   deleteProductGroup,
-  fetchCategories,
 } from '../../api/admin-products';
 import type {
   AdminProductGroupStatsResponse,
@@ -44,7 +41,6 @@ const PAGE_SIZE = 20;
 function ProductGroups() {
   const [stats, setStats] = useState<AdminProductGroupStatsResponse | null>(null);
   const [groups, setGroups] = useState<AdminProductGroupListItem[]>([]);
-  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [pagination, setPagination] = useState({
     total: 0,
     limit: PAGE_SIZE,
@@ -56,8 +52,7 @@ function ProductGroups() {
   const [error, setError] = useState<string | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
-  const [selectedGroup, setSelectedGroup] = useState<AdminProductGroupListItem | null>(null);
-  const [form] = Form.useForm();
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,23 +72,6 @@ function ProductGroups() {
     };
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetchCategories();
-        if (!cancelled && res.data) {
-          setCategories(res.data.map(cat => ({ id: cat.id, name: cat.name })));
-        }
-      } catch (e) {
-        // Categories are optional, just log error
-        console.error('Failed to load categories:', e);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const loadGroups = async () => {
     setLoadingList(true);
@@ -117,37 +95,14 @@ function ProductGroups() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.offset, search]);
 
-  const handleCreate = async (values: CreateProductGroupInput) => {
-    try {
-      await createProductGroup({
-        ...values,
-        subcategoryId: values.subcategoryId || null,
-      });
-      message.success('Product group created successfully');
-      setCreateModalOpen(false);
-      form.resetFields();
-      loadGroups();
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : 'Failed to create group');
-    }
+  const handleCreateSuccess = () => {
+    loadGroups();
   };
 
-  const handleEdit = async (values: UpdateProductGroupInput) => {
-    if (!selectedGroup) return;
-
-    try {
-      await updateProductGroup(selectedGroup.id, {
-        ...values,
-        subcategoryId: values.subcategoryId || null,
-      });
-      message.success('Product group updated successfully');
-      setEditModalOpen(false);
-      form.resetFields();
-      setSelectedGroup(null);
-      loadGroups();
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : 'Failed to update group');
-    }
+  const handleEditSuccess = () => {
+    setEditModalOpen(false);
+    setSelectedGroupId(null);
+    loadGroups();
   };
 
   const handleDelete = async (id: string, name: string) => {
@@ -168,12 +123,8 @@ function ProductGroups() {
     });
   };
 
-  const openEditModal = (group: AdminProductGroupListItem) => {
-    setSelectedGroup(group);
-    form.setFieldsValue({
-      name: group.name,
-      subcategoryId: group.subcategoryId || undefined,
-    });
+  const openEditModal = (groupId: string) => {
+    setSelectedGroupId(groupId);
     setEditModalOpen(true);
   };
 
@@ -218,7 +169,7 @@ function ProductGroups() {
             size="small"
             type="text"
             icon={<EditOutlined />}
-            onClick={() => openEditModal(record)}
+            onClick={() => openEditModal(record.id)}
           />
           <Button
             size="small"
@@ -318,71 +269,24 @@ function ProductGroups() {
       </Card>
 
       {/* Create Group Modal */}
-      <Modal
-        title="Create Product Group"
+      <ProductGroupCreateModal
         open={createModalOpen}
-        onCancel={() => {
-          setCreateModalOpen(false);
-          form.resetFields();
-        }}
-        onOk={() => form.submit()}
-        width={600}
-      >
-        <Form form={form} layout="vertical" onFinish={handleCreate}>
-          <Form.Item
-            name="name"
-            label="Group Name"
-            rules={[{ required: true, message: 'Please enter group name' }]}
-          >
-            <Input placeholder="e.g., Apple Laptops" />
-          </Form.Item>
-          <Form.Item name="subcategoryId" label="Subcategory">
-            <Select
-              placeholder="Select subcategory (optional)"
-              allowClear
-              showSearch
-              filterOption={(input, option) =>
-                (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-              }
-              options={categories.map(cat => ({ label: cat.name, value: cat.id }))}
-            />
-          </Form.Item>
-        </Form>
-      </Modal>
+        onClose={() => setCreateModalOpen(false)}
+        onSuccess={handleCreateSuccess}
+      />
 
       {/* Edit Group Modal */}
-      <Modal
-        title="Edit Product Group"
-        open={editModalOpen}
-        onCancel={() => {
-          setEditModalOpen(false);
-          form.resetFields();
-          setSelectedGroup(null);
-        }}
-        onOk={() => form.submit()}
-        width={600}
-      >
-        <Form form={form} layout="vertical" onFinish={handleEdit}>
-          <Form.Item
-            name="name"
-            label="Group Name"
-            rules={[{ required: true, message: 'Please enter group name' }]}
-          >
-            <Input placeholder="e.g., Apple Laptops" />
-          </Form.Item>
-          <Form.Item name="subcategoryId" label="Subcategory">
-            <Select
-              placeholder="Select subcategory (optional)"
-              allowClear
-              showSearch
-              filterOption={(input, option) =>
-                (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
-              }
-              options={categories.map(cat => ({ label: cat.name, value: cat.id }))}
-            />
-          </Form.Item>
-        </Form>
-      </Modal>
+      {selectedGroupId && (
+        <ProductGroupEditModal
+          open={editModalOpen}
+          groupId={selectedGroupId}
+          onClose={() => {
+            setEditModalOpen(false);
+            setSelectedGroupId(null);
+          }}
+          onSuccess={handleEditSuccess}
+        />
+      )}
     </div>
   );
 }

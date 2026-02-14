@@ -299,6 +299,24 @@ export async function fetchContentTags(params?: {
   return get<AdminContentTagListItem[]>(`${prefix}/content/tags`, query);
 }
 
+export async function createTag(body: { tag: string }) {
+  return post<AdminContentTagListItem>(`${prefix}/content/tags`, body);
+}
+
+export async function updateTag(oldTag: string, newTag: string) {
+  return patch<{ updated: number }>(`${prefix}/content/tags/${encodeURIComponent(oldTag)}`, {
+    newTag,
+  });
+}
+
+export async function deleteTag(tag: string) {
+  return del<{ deleted: boolean }>(`${prefix}/content/tags/${encodeURIComponent(tag)}`);
+}
+
+export async function mergeTags(body: { sourceTags: string[]; targetTag: string }) {
+  return post<{ merged: number }>(`${prefix}/content/tags/merge`, body);
+}
+
 export async function fetchUserPosts(
   userId: string,
   params?: {

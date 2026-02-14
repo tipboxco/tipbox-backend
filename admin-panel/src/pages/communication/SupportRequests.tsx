@@ -20,6 +20,9 @@ import {
   CustomerServiceOutlined,
   SearchOutlined,
   EyeOutlined,
+  CheckOutlined,
+  CloseOutlined,
+  UserAddOutlined,
 } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
 import { type StatItemData } from '../../components/StatItem';
@@ -28,6 +31,7 @@ import {
   fetchSupportRequestStats,
   fetchSupportRequests,
   fetchSupportRequest,
+  updateSupportRequest,
 } from '../../api/admin-communication';
 import type {
   AdminSupportRequestStatsResponse,
@@ -111,6 +115,50 @@ function SupportRequests() {
     }
   };
 
+  const handleUpdateStatus = async (id: string, status: string) => {
+    try {
+      await updateSupportRequest(id, { status });
+      message.success(`Request marked as ${status.toLowerCase()}`);
+      loadRequests();
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : 'Failed to update request');
+    }
+  };
+
+  const handleAssignHelper = async (id: string) => {
+    Modal.confirm({
+      title: 'Assign Helper',
+      content: (
+        <div>
+          <p>Enter the helper's user ID to assign this request:</p>
+          <Input
+            id="helper-id-input"
+            placeholder="User UUID"
+            style={{ marginTop: 8 }}
+          />
+        </div>
+      ),
+      onOk: async () => {
+        const input = document.getElementById('helper-id-input') as HTMLInputElement;
+        const helperId = input?.value?.trim();
+
+        if (!helperId) {
+          message.error('Please enter a helper ID');
+          return Promise.reject();
+        }
+
+        try {
+          await updateSupportRequest(id, { helperId });
+          message.success('Helper assigned successfully');
+          loadRequests();
+        } catch (e) {
+          message.error(e instanceof Error ? e.message : 'Failed to assign helper');
+          return Promise.reject();
+        }
+      },
+    });
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'COMPLETED':
@@ -155,8 +203,8 @@ function SupportRequests() {
     },
     {
       title: 'Amount',
-      dataIndex: 'offerAmount',
-      key: 'offerAmount',
+      dataIndex: 'amount',
+      key: 'amount',
       width: TABLE_COLUMN_WIDTHS.SHORT_TEXT,
       align: 'right',
       render: (amount) => (amount ? `${amount.toFixed(2)} TIPS` : '—'),
@@ -188,9 +236,9 @@ function SupportRequests() {
     {
       title: '',
       key: 'action',
-      width: TABLE_COLUMN_WIDTHS.ACTION_BUTTON_TRIPLE,
+      width: 200,
       render: (_, record) => (
-        <Space size="small">
+        <Space size="small" wrap>
           <ViewActionButton to={`/users/${record.requesterId}`} title="View requester" />
           {record.helperId && <ViewActionButton to={`/users/${record.helperId}`} title="View helper" />}
           <Button
@@ -198,7 +246,37 @@ function SupportRequests() {
             type="text"
             icon={<EyeOutlined />}
             onClick={() => openDetailModal(record.id)}
+            title="View details"
           />
+          {record.status === 'PENDING' && (
+            <Button
+              size="small"
+              type="text"
+              icon={<UserAddOutlined />}
+              onClick={() => handleAssignHelper(record.id)}
+              title="Assign helper"
+            />
+          )}
+          {(record.status === 'IN_PROGRESS' || record.status === 'MATCHED') && (
+            <Button
+              size="small"
+              type="text"
+              icon={<CheckOutlined />}
+              onClick={() => handleUpdateStatus(record.id, 'COMPLETED')}
+              style={{ color: '#52c41a' }}
+              title="Mark as completed"
+            />
+          )}
+          {record.status !== 'CANCELLED' && record.status !== 'COMPLETED' && (
+            <Button
+              size="small"
+              type="text"
+              danger
+              icon={<CloseOutlined />}
+              onClick={() => handleUpdateStatus(record.id, 'CANCELLED')}
+              title="Cancel request"
+            />
+          )}
         </Space>
       ),
     },
@@ -339,8 +417,8 @@ function SupportRequests() {
                 <Descriptions.Item label="Description" span={2}>
                   {selectedRequest.description ?? '—'}
                 </Descriptions.Item>
-                <Descriptions.Item label="Offer Amount">
-                  {selectedRequest.offerAmount ? `${selectedRequest.offerAmount.toFixed(2)} TIPS` : '—'}
+                <Descriptions.Item label="Amount">
+                  {selectedRequest.amount ? `${selectedRequest.amount.toFixed(2)} TIPS` : '—'}
                 </Descriptions.Item>
                 <Descriptions.Item label="Status">
                   <Tag color={getStatusColor(selectedRequest.status)}>{selectedRequest.status}</Tag>

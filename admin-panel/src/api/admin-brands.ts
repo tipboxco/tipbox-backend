@@ -1,4 +1,4 @@
-import { get, post, patch, del } from './client';
+import { get, post, patch, del, postFormData } from './client';
 import type { ApiResponse } from './client';
 
 // ==================== Type Interfaces ====================
@@ -343,6 +343,18 @@ export async function updateBrand(
 
 export async function deleteBrand(id: string): Promise<ApiResponse<void>> {
   return del<void>(`/admin/brands/${id}`);
+}
+
+export async function uploadBrandLogo(file: File): Promise<ApiResponse<{ url: string }>> {
+  const formData = new FormData();
+  formData.append('file', file);
+  return postFormData<{ url: string }>('/admin/brands/upload-logo', formData);
+}
+
+export async function uploadBrandBanner(file: File): Promise<ApiResponse<{ url: string }>> {
+  const formData = new FormData();
+  formData.append('file', file);
+  return postFormData<{ url: string }>('/admin/brands/upload-banner', formData);
 }
 
 export async function fetchBrandImages(

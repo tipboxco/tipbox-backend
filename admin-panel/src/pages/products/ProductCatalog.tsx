@@ -14,6 +14,7 @@ import {
   Modal,
   Form,
   message,
+  Dropdown,
 } from 'antd';
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import {
@@ -22,10 +23,12 @@ import {
   PlusOutlined,
   DeleteOutlined,
   SwapOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
 import StatItem, { type StatItemData } from '../../components/StatItem';
 import ViewActionButton from '../../components/ViewActionButton';
+import ProductCreateModal from './modals/ProductCreateModal';
 import {
   fetchProductStats,
   fetchProducts,
@@ -40,6 +43,7 @@ import type {
   MergeProductsInput,
 } from '../../api/admin-products';
 import { TABLE_COLUMN_WIDTHS, TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
+import { exportToCSV, exportToJSON, exportToExcel, sanitizeFilename } from '../../utils/export';
 
 const PAGE_SIZE = 20;
 
@@ -60,7 +64,6 @@ function ProductCatalog() {
   const [error, setError] = useState<string | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [mergeModalOpen, setMergeModalOpen] = useState(false);
-  const [form] = Form.useForm();
   const [mergeForm] = Form.useForm();
 
   useEffect(() => {
@@ -105,16 +108,8 @@ function ProductCatalog() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.offset, search, categoryId, brandId]);
 
-  const handleCreate = async (values: CreateProductInput) => {
-    try {
-      await createProduct(values);
-      message.success('Product created successfully');
-      setCreateModalOpen(false);
-      form.resetFields();
-      loadProducts();
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : 'Failed to create product');
-    }
+  const handleCreateSuccess = () => {
+    loadProducts();
   };
 
   const handleDelete = async (id: string, name: string) => {
@@ -144,6 +139,69 @@ function ProductCatalog() {
       loadProducts();
     } catch (e) {
       message.error(e instanceof Error ? e.message : 'Failed to merge products');
+    }
+  };
+
+  const handleExport = async (format: 'csv' | 'json' | 'excel') => {
+    const hide = message.loading(`Preparing ${format.toUpperCase()} export...`, 0);
+
+    try {
+      // Fetch all data with current filters (limit 10,000 for safety)
+      const res = await fetchProducts({
+        limit: 10000,
+        offset: 0,
+        search: search || undefined,
+        categoryId: categoryId || undefined,
+        brandId: brandId || undefined,
+      });
+
+      const exportData = res.data ?? [];
+
+      if (exportData.length === 0) {
+        hide();
+        message.warning('No data to export');
+        return;
+      }
+
+      // Define columns for export
+      const columns = [
+        { key: 'id' as const, label: 'Product ID' },
+        { key: 'name' as const, label: 'Name' },
+        { key: 'subName' as const, label: 'Sub Name' },
+        { key: 'categoryName' as const, label: 'Category' },
+        { key: 'groupName' as const, label: 'Group' },
+        { key: 'brandName' as const, label: 'Brand' },
+        { key: 'inventoryCount' as const, label: 'Inventory Count' },
+        { key: 'postCount' as const, label: 'Post Count' },
+      ];
+
+      // Transform data for export
+      const transformedData = exportData.map((product) => ({
+        id: product.id,
+        name: product.name,
+        subName: product.subName ?? '',
+        categoryName: product.categoryName ?? '',
+        groupName: product.groupName ?? '',
+        brandName: product.brandName ?? '',
+        inventoryCount: product.inventoryCount ?? 0,
+        postCount: product.postCount ?? 0,
+      }));
+
+      const filename = sanitizeFilename(`products_${new Date().toISOString().split('T')[0]}`);
+
+      if (format === 'csv') {
+        exportToCSV(transformedData, filename, columns);
+      } else if (format === 'json') {
+        exportToJSON(exportData, filename);
+      } else if (format === 'excel') {
+        exportToExcel(transformedData, filename, columns);
+      }
+
+      hide();
+      message.success(`Exported ${exportData.length} products to ${format.toUpperCase()}`);
+    } catch (e) {
+      hide();
+      message.error(e instanceof Error ? e.message : 'Export failed');
     }
   };
 
@@ -300,6 +358,34 @@ function ProductCatalog() {
               </Select>
             </Space>
             <Space>
+              <Dropdown
+                menu={{
+                  items: [
+                    {
+                      key: 'csv',
+                      label: 'Export as CSV',
+                      icon: <DownloadOutlined />,
+                      onClick: () => handleExport('csv'),
+                    },
+                    {
+                      key: 'excel',
+                      label: 'Export as Excel',
+                      icon: <DownloadOutlined />,
+                      onClick: () => handleExport('excel'),
+                    },
+                    {
+                      key: 'json',
+                      label: 'Export as JSON',
+                      icon: <DownloadOutlined />,
+                      onClick: () => handleExport('json'),
+                    },
+                  ],
+                }}
+              >
+                <Button icon={<DownloadOutlined />}>
+                  Export
+                </Button>
+              </Dropdown>
               <Button icon={<SwapOutlined />} onClick={() => setMergeModalOpen(true)}>
                 Merge Products
               </Button>
@@ -331,51 +417,11 @@ function ProductCatalog() {
       </Card>
 
       {/* Create Product Modal */}
-      <Modal
-        title="Create Product"
+      <ProductCreateModal
         open={createModalOpen}
-        onCancel={() => {
-          setCreateModalOpen(false);
-          form.resetFields();
-        }}
-        onOk={() => form.submit()}
-        width={600}
-      >
-        <Form form={form} layout="vertical" onFinish={handleCreate}>
-          <Form.Item
-            name="id"
-            label="Product ID"
-            rules={[{ required: true, message: 'Please enter product ID' }]}
-          >
-            <Input placeholder="e.g., airpods-pro-2" />
-          </Form.Item>
-          <Form.Item
-            name="name"
-            label="Product Name"
-            rules={[{ required: true, message: 'Please enter product name' }]}
-          >
-            <Input placeholder="e.g., AirPods Pro (2nd generation)" />
-          </Form.Item>
-          <Form.Item name="subName" label="Sub Name">
-            <Input placeholder="Optional sub name" />
-          </Form.Item>
-          <Form.Item name="description" label="Description">
-            <Input.TextArea rows={3} placeholder="Product description" />
-          </Form.Item>
-          <Form.Item name="categoryId" label="Category ID">
-            <Input placeholder="Optional category ID" />
-          </Form.Item>
-          <Form.Item name="groupId" label="Group ID">
-            <Input placeholder="Optional group ID" />
-          </Form.Item>
-          <Form.Item name="brandId" label="Brand ID">
-            <Input placeholder="Optional brand ID" />
-          </Form.Item>
-          <Form.Item name="imageUrl" label="Image URL">
-            <Input placeholder="https://..." />
-          </Form.Item>
-        </Form>
-      </Modal>
+        onClose={() => setCreateModalOpen(false)}
+        onSuccess={handleCreateSuccess}
+      />
 
       {/* Merge Products Modal */}
       <Modal
