@@ -109,7 +109,7 @@ router.get(
               id: true,
               profile: {
                 select: {
-                  username: true,
+                  userName: true,
                   displayName: true,
                 },
               },
@@ -121,7 +121,7 @@ router.get(
               email: true,
               profile: {
                 select: {
-                  username: true,
+                  userName: true,
                   displayName: true,
                 },
               },
@@ -132,7 +132,7 @@ router.get(
               id: true,
               profile: {
                 select: {
-                  username: true,
+                  userName: true,
                 },
               },
             },
@@ -149,14 +149,14 @@ router.get(
       description: report.description,
       status: report.status,
       reporterId: report.reporterId,
-      reporterUsername: report.reporter?.profile?.username || null,
+      reporterUsername: report.reporter?.profile?.userName || null,
       reporterDisplayName: report.reporter?.profile?.displayName || null,
       reportedUserId: report.reportedUserId,
-      reportedUsername: report.reportedUser?.profile?.username || null,
+      reportedUsername: report.reportedUser?.profile?.userName || null,
       reportedUserEmail: report.reportedUser?.email || null,
       contentId: report.contentId,
       reviewerId: report.reviewerId,
-      reviewerUsername: report.reviewer?.profile?.username || null,
+      reviewerUsername: report.reviewer?.profile?.userName || null,
       reviewNote: report.reviewNote,
       createdAt: report.createdAt.toISOString(),
       updatedAt: report.updatedAt.toISOString(),
@@ -192,7 +192,7 @@ router.get(
             email: true,
             profile: {
               select: {
-                username: true,
+                userName: true,
                 displayName: true,
                 avatarUrl: true,
               },
@@ -206,7 +206,7 @@ router.get(
             status: true,
             profile: {
               select: {
-                username: true,
+                userName: true,
                 displayName: true,
                 avatarUrl: true,
               },
@@ -218,7 +218,7 @@ router.get(
             id: true,
             profile: {
               select: {
-                username: true,
+                userName: true,
                 displayName: true,
               },
             },
@@ -241,7 +241,7 @@ router.get(
       reporter: {
         id: report.reporter.id,
         email: report.reporter.email,
-        username: report.reporter.profile?.username || null,
+        username: report.reporter.profile?.userName || null,
         displayName: report.reporter.profile?.displayName || null,
         avatarUrl: report.reporter.profile?.avatarUrl || null,
       },
@@ -249,13 +249,13 @@ router.get(
         id: report.reportedUser.id,
         email: report.reportedUser.email,
         status: report.reportedUser.status,
-        username: report.reportedUser.profile?.username || null,
+        username: report.reportedUser.profile?.userName || null,
         displayName: report.reportedUser.profile?.displayName || null,
         avatarUrl: report.reportedUser.profile?.avatarUrl || null,
       },
       reviewer: report.reviewer ? {
         id: report.reviewer.id,
-        username: report.reviewer.profile?.username || null,
+        username: report.reviewer.profile?.userName || null,
         displayName: report.reviewer.profile?.displayName || null,
       } : null,
       reviewNote: report.reviewNote,

@@ -20,6 +20,8 @@ import {
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  FlagOutlined,
+  PictureOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -50,6 +52,7 @@ const menuItems: MenuItem[] = [
       { key: 'users-kyc', label: 'KYC Verification', path: '/users/kyc' },
       { key: 'users-reports', label: 'User Reports', path: '/users/reports' },
       { key: 'users-banned', label: 'Banned Users', path: '/users/banned' },
+      { key: 'users-feed-preferences', label: 'Feed Preferences', path: '/users/feed-preferences' },
     ],
   },
   {
@@ -105,6 +108,7 @@ const menuItems: MenuItem[] = [
       { key: 'gamification-brand-badges', label: 'Brand Badges', path: '/gamification/brand-badges' },
       { key: 'gamification-cosmetic-badges', label: 'Cosmetic Badges', path: '/gamification/cosmetic-badges' },
       { key: 'gamification-progress', label: 'User Progress', path: '/gamification/progress' },
+      { key: 'gamification-lootboxes', label: 'Lootboxes', path: '/gamification/lootboxes' },
     ],
   },
   {
@@ -126,6 +130,7 @@ const menuItems: MenuItem[] = [
       { key: 'commerce-transactions', label: 'Transactions', path: '/commerce/transactions' },
       { key: 'commerce-rewards', label: 'Rewards', path: '/commerce/rewards' },
       { key: 'commerce-subscriptions', label: 'Subscriptions', path: '/commerce/subscriptions' },
+      { key: 'commerce-subscription-plans', label: 'Subscription Plans', path: '/billing/subscription-plans' },
       { key: 'commerce-invoices', label: 'Invoices', path: '/commerce/invoices' },
     ],
   },
@@ -150,6 +155,7 @@ const menuItems: MenuItem[] = [
       { key: 'communication-messages', label: 'Direct Messages', path: '/communication/messages' },
       { key: 'communication-moderation', label: 'DM Moderation', path: '/communication/moderation' },
       { key: 'communication-support', label: 'Support Requests', path: '/communication/support' },
+      { key: 'communication-dm-sessions', label: 'DM Support Sessions', path: '/support/dm-sessions' },
       { key: 'communication-experts', label: 'Expert Requests', path: '/communication/experts' },
     ],
   },
@@ -157,7 +163,26 @@ const menuItems: MenuItem[] = [
     key: 'analytics',
     icon: <PieChartOutlined />,
     label: 'Analytics',
-    path: '/analytics',
+    children: [
+      { key: 'analytics-overview', label: 'Overview', path: '/analytics' },
+      { key: 'analytics-ai-splits', label: 'AI Experience Splits', path: '/analytics/ai-experience-splits' },
+    ],
+  },
+  {
+    key: 'moderation',
+    icon: <FlagOutlined />,
+    label: 'Moderation',
+    children: [
+      { key: 'moderation-user-reports', label: 'User Reports', path: '/moderation/user-reports' },
+    ],
+  },
+  {
+    key: 'marketing',
+    icon: <PictureOutlined />,
+    label: 'Marketing',
+    children: [
+      { key: 'marketing-banners', label: 'Marketplace Banners', path: '/marketing/marketplace-banners' },
+    ],
   },
   {
     key: 'system',
@@ -167,6 +192,7 @@ const menuItems: MenuItem[] = [
       { key: 'system-logs', label: 'Admin Logs', path: '/system/logs' },
       { key: 'system-settings', label: 'Settings', path: '/system/settings' },
       { key: 'system-moderation', label: 'Moderation Actions', path: '/system/moderation' },
+      { key: 'system-themes', label: 'User Themes', path: '/system/user-themes' },
     ],
   },
 ];

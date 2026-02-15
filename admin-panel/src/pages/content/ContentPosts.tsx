@@ -714,7 +714,7 @@ function ContentPosts() {
             onClose={() => setShowAdvancedFilters(false)}
           />
         )}
-      >
+      
         {selectedRowKeys.length > 0 && (
           <Alert
             message={`${selectedRowKeys.length} post(s) selected`}
