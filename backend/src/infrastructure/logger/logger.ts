@@ -113,7 +113,7 @@ const logger: Logger = createLogger({
     format.timestamp(),
     format.errors({ stack: true }),
     format.splat(),
-    safeJsonFormat()
+    safeJsonFormat
   ),
   transports: [
     new transports.Console({
