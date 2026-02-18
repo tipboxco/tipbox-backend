@@ -70,11 +70,13 @@ export class TipSendWorker {
     const {
       sendTransactionId,
       receiveTransactionId,
+      useErc20Transfer,
       fromUserId,
       toAddress,
       amount,
     } = job.data;
     const hasReceiveTx = !!receiveTransactionId;
+    const useErc20 = !!useErc20Transfer;
 
     const sendTx = await this.transactionRepo.findById(sendTransactionId);
     if (!sendTx) {
@@ -96,18 +98,27 @@ export class TipSendWorker {
 
     const amountWei = BigInt(Math.round(amount * 10 ** TIPS_DECIMALS));
 
-    let sdkResult: Awaited<ReturnType<typeof sdk.sendTip>>;
+    let sdkResult: Awaited<ReturnType<typeof sdk.sendTip>> | Awaited<ReturnType<typeof sdk.transferToAddress>>;
     try {
-      sdkResult = await sdk.sendTip(fromUserId, amountWei, toAddress);
+      if (useErc20) {
+        sdkResult = await sdk.transferToAddress(fromUserId, amountWei, toAddress);
+      } else {
+        sdkResult = await sdk.sendTip(fromUserId, amountWei, toAddress);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      logger.warn({ sendTransactionId, error: msg, message: 'Thirdweb sendTip failed' });
+      logger.warn({
+        sendTransactionId,
+        error: msg,
+        useErc20Transfer: useErc20,
+        message: useErc20 ? 'ERC20 transfer failed' : 'Thirdweb sendTip failed',
+      });
       await this.failSendOrBoth(sendTransactionId, receiveTransactionId ?? undefined, msg);
       throw err;
     }
 
     if (!sdkResult.success) {
-      const errMsg = sdkResult.error ?? 'Tip send failed on-chain';
+      const errMsg = sdkResult.error ?? (useErc20 ? 'ERC20 transfer failed on-chain' : 'Tip send failed on-chain');
       await this.failSendOrBoth(sendTransactionId, receiveTransactionId ?? undefined, errMsg);
       throw new Error(errMsg);
     }

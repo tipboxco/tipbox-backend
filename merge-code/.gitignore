@@ -1,0 +1,68 @@
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+dist/
+build/
+*.tsbuildinfo
+
+.env
+.env.*
+!.env.example
+
+prisma/.env
+# prisma/migrations/ - Migration dosyaları commit edilmelidir, ignore edilmemeli
+.prisma/
+*.db
+
+docker-compose.override.yml
+*.local
+
+.vscode/
+.history/
+
+.DS_Store
+
+logs/
+*.log
+
+.husky/_
+
+coverage/
+.nyc_output/
+
+.idea/
+*.swp
+*.swo
+*.bak
+*.tmp
+*.orig
+
+/src/generated/prisma
+
+# Google Cloud Service Account credentials (güvenlik için)
+*service-account*.json
+*gserviceaccount*.json
+tipboxbackend-*.json
+!tipboxbackend-3e2c3d3c0b31.json.example
+tipboxbackend-3e2c3d3c0b31.json
+# Seed metadata (local development)
+prisma/seed/seed-metadata.json
+
+# Docusaurus documentation (development phase)
+tipbox-docs/
+
+# Test results (ana dizindeki - sadece tests/test-results kullanılıyor)
+/test-results/
+
+# SSL sertifikaları ve sunucu-spesifik dosyalar
+ssl/
+certbot/
+backups/
+*.pem
+*.key
+
+# api config
+api-config.json

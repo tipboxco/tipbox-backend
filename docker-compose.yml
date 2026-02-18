@@ -190,9 +190,9 @@ services:
       - TIPBOX_BACKEND_API_KEY=deneme
       - TIPBOX_BACKEND_URL=http://backend:3000
       # CORS ayarları (Medusa için gerekli)
-      - STORE_CORS=http://localhost:8000,http://localhost:3000
-      - ADMIN_CORS=http://localhost:5173,http://localhost:9002
-      - AUTH_CORS=http://localhost:5173,http://localhost:9002,http://localhost:8000
+      - STORE_CORS=http://localhost:8000,http://localhost:3000,https://zealand-distinction-strongly-sapphire.trycloudflare.com
+      - ADMIN_CORS=http://localhost:5173,http://localhost:9002,https://zealand-distinction-strongly-sapphire.trycloudflare.com
+      - AUTH_CORS=http://localhost:5173,http://localhost:9002,http://localhost:8000,https://zealand-distinction-strongly-sapphire.trycloudflare.com
       # MinIO yapılandırması - Docker Compose ile çalışan MinIO için
       # Region parametresi gerekli değil (MinIO local storage için region kullanmaz)
       - S3_ENDPOINT=http://minio:9000

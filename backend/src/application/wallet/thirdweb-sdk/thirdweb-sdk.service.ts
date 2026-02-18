@@ -144,6 +144,21 @@ export class ThirdwebSdkService {
     return this.core.sendTransactionAndWait(tipTx, account);
   }
 
+  /** ERC20 transfer: TIPS token contract üzerinden doğrudan adrese transfer (Tipbox değil). */
+  private async executeErc20Transfer(
+    account: Awaited<ReturnType<ThirdwebCore["connectWalletAndSmartAccount"]>>["smartAccount"],
+    amountWei: bigint,
+    toAddress: string
+  ): Promise<unknown> {
+    const transferTx = this.core.prepareContractCall({
+      contract: this.core.getTokenContract(),
+      method: "transfer",
+      params: [toAddress as `0x${string}`, amountWei],
+    });
+
+    return this.core.sendTransactionAndWait(transferTx, account);
+  }
+
   /**
    * Sends a tip: connects wallet for userId and transfers amountWei to targetAddress via Tipbox.
    */
@@ -192,6 +207,52 @@ export class ThirdwebSdkService {
       receipt,
       amountWei: amountWei.toString(),
       targetAddress,
+    };
+  }
+
+  /**
+   * Doğrudan wallet adresine TIPS gönderir: ERC20 token contract transfer() kullanır (Tipbox contract değil).
+   * Alıcı bizim sistemde değilse (public adres) bu metod kullanılır.
+   */
+  async transferToAddress(
+    userId: string,
+    amountWei: bigint,
+    toAddress: string
+  ): Promise<TipResult> {
+    const connected = await this.core.connectWalletAndSmartAccount(userId);
+    const smartAccountAddress = connected.smartAccountAddress;
+
+    const hasSufficientBalance = await this.checkTokenBalanceAndLog(
+      smartAccountAddress,
+      amountWei
+    );
+
+    if (!hasSufficientBalance) {
+      const userMessage = toUserMessage("ERC20InsufficientBalance");
+      return {
+        success: false,
+        error: userMessage,
+        contractError: "ERC20InsufficientBalance",
+        eoaAddress: connected.eoaAddress,
+        smartAccountAddress,
+        thirdwebUserId: userId,
+      };
+    }
+
+    const receipt = await this.executeErc20Transfer(
+      connected.smartAccount,
+      amountWei,
+      toAddress
+    );
+
+    return {
+      success: true,
+      eoaAddress: connected.eoaAddress,
+      smartAccountAddress,
+      thirdwebUserId: userId,
+      receipt,
+      amountWei: amountWei.toString(),
+      targetAddress: toAddress,
     };
   }
 

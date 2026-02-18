@@ -25,6 +25,7 @@
     "db:migrate": "medusa db:migrate"
   },
   "dependencies": {
+    "@google/genai": "^1.41.0",
     "@medusajs/admin-sdk": "2.12.3",
     "@medusajs/cli": "2.12.3",
     "@medusajs/file-s3": "^2.12.3",

@@ -164,6 +164,7 @@ export class TransactionService {
       {
         sendTransactionId: sendTransaction.id,
         receiveTransactionId: receiveTransactionId ?? undefined,
+        useErc20Transfer: !toWallet,
         fromUserId: request.fromUserId,
         toAddress,
         amount: request.amount,

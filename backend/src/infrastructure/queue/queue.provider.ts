@@ -23,6 +23,8 @@ export interface TipSendJobData extends JobData {
   sendTransactionId: string;
   /** Alıcı bizim sistemdeyse receive transaction id; doğrudan adrese gönderimde yok. */
   receiveTransactionId?: string | null;
+  /** true ise ERC20 transfer (doğrudan adrese); false ise Tipbox contract tip() kullanılır. */
+  useErc20Transfer?: boolean;
   fromUserId: string;
   toAddress: string;
   amount: number;
