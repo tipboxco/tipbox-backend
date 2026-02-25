@@ -241,7 +241,7 @@ function CategoryEditModal({ open, categoryId, onClose, onSuccess }: CategoryEdi
       onCancel={onClose}
       footer={null}
       width={700}
-      destroyOnClose
+      destroyOnHidden
     >
       {loading ? (
         <div style={{ textAlign: 'center', padding: 48 }}>

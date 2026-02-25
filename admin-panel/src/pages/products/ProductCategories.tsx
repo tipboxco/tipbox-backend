@@ -311,7 +311,6 @@ function ProductCategories() {
             type="text"
             icon={<EditOutlined />}
             onClick={() => openEditModal(record.id)}
-            onClick={() => openEditModal(record)}
           />
           <Button
             size="small"
@@ -353,13 +352,6 @@ function ProductCategories() {
         },
       ]
     : undefined;
-
-  const parentOptions = categories
-    .filter(cat => !selectedCategory || cat.id !== selectedCategory.id)
-    .map(cat => ({
-      label: cat.name,
-      value: cat.id,
-    }));
 
   return (
     <div>

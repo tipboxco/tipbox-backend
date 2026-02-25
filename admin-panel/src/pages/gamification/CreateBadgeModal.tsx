@@ -46,10 +46,19 @@ function CreateBadgeModal({
     (async () => {
       setLoading(true);
       try {
-        // Always load categories
-        const categoriesRes = await fetchBadgeCategories();
-        if (!cancelled && categoriesRes.data) {
-          setCategories(categoriesRes.data);
+        // Always load categories and action types
+        const [categoriesRes, actionTypesRes] = await Promise.all([
+          fetchBadgeCategories(),
+          fetchActionTypes(),
+        ]);
+
+        if (!cancelled) {
+          if (categoriesRes.data) {
+            setCategories(categoriesRes.data);
+          }
+          if (actionTypesRes.data) {
+            setActionTypes(actionTypesRes.data);
+          }
         }
 
         // Load collection info if in collection context to get its categoryId
@@ -57,14 +66,6 @@ function CreateBadgeModal({
           const collectionRes = await fetchCollection(collectionId);
           if (!cancelled && collectionRes.data?.categoryId) {
             setCollectionCategoryId(collectionRes.data.categoryId);
-          }
-        }
-
-        // Load action types if in collection context
-        if (inCollection) {
-          const actionTypesRes = await fetchActionTypes();
-          if (!cancelled && actionTypesRes.data) {
-            setActionTypes(actionTypesRes.data);
           }
         }
       } catch (err) {
@@ -110,13 +111,11 @@ function CreateBadgeModal({
     },
     {
       name: 'categoryId',
-      label: 'Category',
+      label: 'Badge Category',
       type: 'select',
       required: true,
       options: categories.map((c) => ({ label: c.name, value: c.id })),
       placeholder: 'Select category',
-      // Only show if NOT in collection context
-      conditional: () => !inCollection,
     },
 
     // 2. Visual
@@ -138,61 +137,53 @@ function CreateBadgeModal({
       placeholder: 'Describe what this badge represents',
     },
 
-    // 4. Activation Rules (Collection context only)
+    // 4. Activation Rules
     {
       name: 'actionTypeId',
-      label: 'Activation Type',
+      label: 'Main Action Type',
       type: 'select',
-      required: true,
+      required: false,
       options: actionTypes.map((a) => ({
         label: `${a.label} (${a.mainAction} / ${a.code})`,
         value: a.id,
       })),
-      placeholder: 'How is this badge earned?',
-      // Only show if IN collection context
-      conditional: () => inCollection,
+      placeholder: 'Select main action (POST, LIKE, BOOKMARK, etc.)',
     },
     {
       name: 'pointsRequired',
-      label: 'Target Count',
+      label: 'Target Value (Points Required)',
       type: 'number',
-      required: true,
+      required: false,
       placeholder: 'e.g., 10',
       rules: [
         {
           validator: async (_rule, value: unknown) => {
             const numValue = typeof value === 'number' ? value : Number(value);
-            if (inCollection && (!numValue || numValue < 1)) {
-              throw new Error('Target count must be at least 1');
+            if (value != null && (!numValue || numValue < 1)) {
+              throw new Error('Target value must be at least 1');
             }
           },
         },
       ],
-      // Only show if IN collection context
-      conditional: () => inCollection,
     },
     {
       name: 'difficulty',
       label: 'Difficulty',
       type: 'select',
-      required: true,
+      required: false,
       options: [
         { label: 'Easy', value: 'EASY' },
         { label: 'Medium', value: 'MEDIUM' },
         { label: 'Hard', value: 'HARD' },
       ],
       placeholder: 'Select difficulty',
-      // Only show if IN collection context
-      conditional: () => inCollection,
     },
   ];
 
   const handleSubmit = async (values: Record<string, unknown>) => {
     try {
-      // Determine categoryId: use collection's category if in collection context, otherwise use form value
-      const effectiveCategoryId = inCollection && collectionCategoryId
-        ? collectionCategoryId
-        : (values.categoryId as string);
+      // Determine categoryId: use form value (collection categoryId override removed)
+      const effectiveCategoryId = values.categoryId as string;
 
       // Create badge
       const badgeRes = await createBadge({
@@ -205,7 +196,7 @@ function CreateBadgeModal({
         collectionId: badgeType === 'COLLECTION' && collectionId ? collectionId : null,
       });
 
-      // If in collection context, create collection goal
+      // If in collection context AND actionTypeId is provided, create collection goal
       if (inCollection && collectionId && badgeRes.data?.id && values.actionTypeId) {
         await createCollectionGoal(collectionId, {
           actionTypeId: values.actionTypeId as string,

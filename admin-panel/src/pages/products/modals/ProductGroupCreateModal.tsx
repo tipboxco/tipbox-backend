@@ -182,7 +182,7 @@ function ProductGroupCreateModal({ open, onClose, onSuccess }: ProductGroupCreat
       onCancel={onClose}
       footer={null}
       width={700}
-      destroyOnClose
+      destroyOnHidden
     >
       <Form form={form} {...FORM_LAYOUT_VERTICAL} onFinish={handleSubmit}>
         {error && (

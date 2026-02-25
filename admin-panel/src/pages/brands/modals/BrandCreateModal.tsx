@@ -244,7 +244,7 @@ function BrandCreateModal({ open, onClose, onSuccess }: BrandCreateModalProps) {
       onCancel={onClose}
       footer={null}
       width={800}
-      destroyOnClose
+      destroyOnHidden
     >
       <Form form={form} {...FORM_LAYOUT_VERTICAL} onFinish={handleSubmit}>
         {error && (

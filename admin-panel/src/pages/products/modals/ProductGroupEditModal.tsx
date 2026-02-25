@@ -190,7 +190,7 @@ function ProductGroupEditModal({ open, groupId, onClose, onSuccess }: ProductGro
       onCancel={onClose}
       footer={null}
       width={700}
-      destroyOnClose
+      destroyOnHidden
     >
       {loading ? (
         <div style={{ textAlign: 'center', padding: 48 }}>

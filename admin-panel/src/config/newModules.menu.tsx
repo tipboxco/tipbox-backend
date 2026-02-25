@@ -29,11 +29,6 @@ export const newModulesMenu: MenuItem[] = [
         icon: <FlagOutlined />,
       },
       {
-        key: '/gamification/lootboxes',
-        label: 'Lootboxes',
-        icon: <GiftOutlined />,
-      },
-      {
         key: '/billing/subscription-plans',
         label: 'Subscription Plans',
         icon: <CreditCardOutlined />,
@@ -81,18 +76,6 @@ export const categorizedModulesMenu: MenuItem[] = [
         key: '/moderation/user-reports',
         label: 'User Reports',
         icon: <FlagOutlined />,
-      },
-    ],
-  },
-  {
-    key: 'gamification-extended',
-    label: 'Gamification',
-    icon: <GiftOutlined />,
-    children: [
-      {
-        key: '/gamification/lootboxes',
-        label: 'Lootboxes',
-        icon: <GiftOutlined />,
       },
     ],
   },

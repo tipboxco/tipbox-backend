@@ -178,7 +178,7 @@ function NFTEditModal({ open, nftId, onClose, onSuccess }: NFTEditModalProps) {
       onCancel={onClose}
       footer={null}
       width={800}
-      destroyOnClose
+      destroyOnHidden
     >
       {loading ? (
         <div style={{ textAlign: 'center', padding: 48 }}>

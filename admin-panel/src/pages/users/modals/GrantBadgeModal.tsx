@@ -57,7 +57,7 @@ function GrantBadgeModal({ open, userId, onClose, onSuccess }: GrantBadgeModalPr
       onCancel={onClose}
       footer={null}
       width={600}
-      destroyOnClose
+      destroyOnHidden
     >
       <Form
         form={form}

@@ -108,7 +108,7 @@ function EditEventModal({ open, eventId, onClose, onSuccess }: EditEventModalPro
       onCancel={onClose}
       footer={null}
       width={600}
-      destroyOnClose
+      destroyOnHidden
     >
       {loading ? (
         <div style={{ textAlign: 'center', padding: 48 }}>

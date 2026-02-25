@@ -108,7 +108,6 @@ const menuItems: MenuItem[] = [
       { key: 'gamification-brand-badges', label: 'Brand Badges', path: '/gamification/brand-badges' },
       { key: 'gamification-cosmetic-badges', label: 'Cosmetic Badges', path: '/gamification/cosmetic-badges' },
       { key: 'gamification-progress', label: 'User Progress', path: '/gamification/progress' },
-      { key: 'gamification-lootboxes', label: 'Lootboxes', path: '/gamification/lootboxes' },
     ],
   },
   {

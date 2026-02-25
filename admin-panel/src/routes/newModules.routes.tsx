@@ -4,7 +4,6 @@ import type { RouteObject } from 'react-router-dom';
 // Lazy load all new module components
 const UserReports = lazy(() => import('../pages/moderation/UserReports'));
 const UserReportDetail = lazy(() => import('../pages/moderation/UserReportDetail'));
-const Lootboxes = lazy(() => import('../pages/gamification/Lootboxes'));
 const SubscriptionPlans = lazy(() => import('../pages/billing/SubscriptionPlans'));
 const MarketplaceBanners = lazy(() => import('../pages/marketing/MarketplaceBanners'));
 const UserThemes = lazy(() => import('../pages/system/UserThemes'));
@@ -25,12 +24,6 @@ export const newModuleRoutes: RouteObject[] = [
   {
     path: 'moderation/user-reports/:id',
     element: <UserReportDetail />,
-  },
-
-  // Gamification
-  {
-    path: 'gamification/lootboxes',
-    element: <Lootboxes />,
   },
 
   // Billing

@@ -159,7 +159,7 @@ function ProductCreateModal({ open, onClose, onSuccess }: ProductCreateModalProp
       onCancel={onClose}
       footer={null}
       width={700}
-      destroyOnClose
+      destroyOnHidden
     >
       <Form form={form} {...FORM_LAYOUT_VERTICAL} onFinish={handleSubmit}>
         {error && (
