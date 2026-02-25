@@ -2269,6 +2269,7 @@ enum BadgeRarity {
   COMMON
   RARE
   EPIC
+  LEGENDARY
 
   @@map("badge_rarity")
 }

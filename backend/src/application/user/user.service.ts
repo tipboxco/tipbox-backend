@@ -19,13 +19,15 @@ import bcrypt from 'bcryptjs';
 import logger from '../../infrastructure/logger/logger';
 import { DEFAULT_PROFILE_BANNER_URL } from '../../domain/user/profile.constants';
 import { ExperienceContent } from '../../interfaces/feed/feed.dto';
-import { 
-  asProfileUpdate, 
+import {
+  asProfileUpdate,
   asProfileUpdateMany,
-  asProfileWhere, 
+  asProfileWhere,
   getPrismaModel,
-  getPostCounts 
+  getPostCounts
 } from '../../infrastructure/repositories/prisma-types.helper';
+import { BadgeResponseMapper } from '../../infrastructure/utils/badge-response-mapper';
+import { NotFoundError, ValidationError } from '../../infrastructure/errors/custom-errors';
 
 type CosmeticSummary = {
   id: string;
@@ -37,6 +39,10 @@ type ProfileBadgeSummary = {
   id: string;
   title: string;
   image: string | null;
+  type: 'achievement' | 'bridge';
+  earnedAt: string | null;
+  rarity: 'Usual' | 'Rare' | 'Epic' | 'Legendary';
+  owner: string; // total earned count as string
 };
 
 type BasicStats = {
@@ -286,10 +292,14 @@ export class UserService {
           })
         : Promise.resolve(null),
       this.prisma.userBadge.findMany({
-        where: { userId },
+        where: {
+          userId,
+          isVisible: true,
+          displayOrder: { not: null, lte: 3 }, // 0-3 = max 4 badges
+        },
         include: { badge: true },
-        orderBy: { claimedAt: 'desc' },
-        take: 6,
+        orderBy: { displayOrder: 'asc' },
+        take: 4,
       }),
     ]);
 
@@ -300,6 +310,21 @@ export class UserService {
           image: resolveMediaUrl(cosmeticBadge.imageUrl ?? null),
         }
       : null;
+
+    // Get total earned counts for badges
+    const badgeIds = userBadges.map((ub) => ub.badgeId);
+    const earnedCounts =
+      badgeIds.length > 0
+        ? await this.prisma.userBadge.groupBy({
+            by: ['badgeId'],
+            where: { badgeId: { in: badgeIds }, claimed: true },
+            _count: { userId: true },
+          })
+        : [];
+
+    const earnedCountMap = Object.fromEntries(
+      earnedCounts.map((ec) => [ec.badgeId, ec._count.userId]),
+    );
 
     return {
       id: card.id,
@@ -315,6 +340,10 @@ export class UserService {
         id: String(ub.badgeId),
         title: ub.badge.name,
         image: resolveMediaUrl(ub.badge.imageUrl ?? null),
+        type: BadgeResponseMapper.mapBadgeCategory(ub.badge.type),
+        earnedAt: ub.createdAt.toISOString(),
+        rarity: BadgeResponseMapper.mapRarity(ub.badge.rarity),
+        owner: String(earnedCountMap[ub.badgeId] ?? 0),
       })),
     };
   }
@@ -4717,5 +4746,285 @@ export class UserService {
         count: 0,
       };
     }
+  }
+
+  /**
+   * EP-01: Get user's badges separated by type (achievement/bridge) with pagination
+   */
+  async getUserBadgesWithCategories(
+    userId: string,
+    limit: number = 20,
+    cursor?: string,
+  ) {
+    const where: {
+      userId: string;
+      claimed: boolean;
+      id?: { lt: string };
+    } = {
+      userId,
+      claimed: true, // Only show claimed badges
+    };
+
+    if (cursor) {
+      where.id = { lt: cursor }; // Cursor pagination
+    }
+
+    const userBadges = await this.prisma.userBadge.findMany({
+      where,
+      include: {
+        badge: {
+          include: {
+            achievementGoals: {
+              include: {
+                userAchievements: {
+                  where: { userId },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit + 1, // Take one extra to check hasMore
+    });
+
+    const hasMore = userBadges.length > limit;
+    const items = hasMore ? userBadges.slice(0, limit) : userBadges;
+
+    // Separate by category
+    const brandBadges: Array<{
+      id: string;
+      title: string;
+      image: string | null;
+      rarity: 'Usual' | 'Rare' | 'Epic' | 'Legendary';
+      isClaimed: boolean;
+      nftAddress: string | null;
+      totalEarned: number;
+      earnedDate: string | null;
+      tasks: Array<{
+        id: string;
+        title: string;
+        type: 'Comment' | 'Like' | 'Share';
+        current: number;
+        total: number;
+        isCompleted: boolean;
+      }>;
+    }> = [];
+    const achievementBadges: Array<{
+      id: string;
+      title: string;
+      image: string | null;
+      rarity: 'Usual' | 'Rare' | 'Epic' | 'Legendary';
+      isClaimed: boolean;
+      nftAddress: string | null;
+      totalEarned: number;
+      earnedDate: string | null;
+      tasks: Array<{
+        id: string;
+        title: string;
+        type: 'Comment' | 'Like' | 'Share';
+        current: number;
+        total: number;
+        isCompleted: boolean;
+      }>;
+    }> = [];
+
+    for (const ub of items) {
+      const category = BadgeResponseMapper.mapBadgeCategory(ub.badge.type);
+
+      // Get total earned count
+      const totalEarned = await this.prisma.userBadge.count({
+        where: { badgeId: ub.badgeId, claimed: true },
+      });
+
+      const badgeItem = {
+        id: ub.badgeId,
+        title: ub.badge.name,
+        image: resolveMediaUrl(ub.badge.imageUrl ?? null),
+        rarity: BadgeResponseMapper.mapRarity(ub.badge.rarity),
+        isClaimed: ub.claimed,
+        nftAddress: null, // EP-04 skipped
+        totalEarned,
+        earnedDate: ub.createdAt.toISOString(),
+        tasks: ub.badge.achievementGoals.map((goal) =>
+          BadgeResponseMapper.toTaskProgress(goal, goal.userAchievements[0]),
+        ),
+      };
+
+      if (category === 'bridge') {
+        brandBadges.push(badgeItem);
+      } else {
+        achievementBadges.push(badgeItem);
+      }
+    }
+
+    return {
+      brand: { items: brandBadges },
+      achievement: { items: achievementBadges },
+      pagination: {
+        cursor: hasMore ? items[items.length - 1].id : null,
+        hasMore,
+        limit,
+      },
+    };
+  }
+
+  /**
+   * EP-03: Get badge detail with tasks
+   */
+  async getBadgeDetailWithTasks(badgeId: string, userId?: string) {
+    const badge = await this.prisma.badge.findUnique({
+      where: { id: badgeId },
+      include: {
+        achievementGoals: {
+          include: {
+            userAchievements: userId
+              ? {
+                  where: { userId },
+                }
+              : false,
+          },
+        },
+      },
+    });
+
+    if (!badge) {
+      throw new NotFoundError('Badge not found');
+    }
+
+    const totalEarned = await this.prisma.userBadge.count({
+      where: { badgeId, claimed: true },
+    });
+
+    const userBadge = userId
+      ? await this.prisma.userBadge.findUnique({
+          where: { userId_badgeId: { userId, badgeId } },
+        })
+      : null;
+
+    return {
+      id: badge.id,
+      title: badge.name,
+      image: resolveMediaUrl(badge.imageUrl ?? null),
+      rarity: BadgeResponseMapper.mapRarity(badge.rarity),
+      isClaimed: userBadge?.claimed ?? false,
+      nftAddress: null, // EP-04 skipped
+      totalEarned,
+      earnedDate: userBadge?.createdAt.toISOString() ?? null,
+      description: badge.description,
+      tasks: badge.achievementGoals.map((goal) =>
+        BadgeResponseMapper.toTaskProgress(
+          goal,
+          goal.userAchievements?.[0],
+        ),
+      ),
+    };
+  }
+
+  /**
+   * EP-05: Get highlight badge selection data
+   */
+  async getHighlightBadgeSelectionData(userId: string) {
+    // Get all claimed badges
+    const allBadges = await this.prisma.userBadge.findMany({
+      where: { userId, claimed: true },
+      include: { badge: true },
+      orderBy: { claimedAt: 'desc' },
+    });
+
+    // Get current highlights
+    const currentHighlights = await this.prisma.userBadge.findMany({
+      where: {
+        userId,
+        isVisible: true,
+        displayOrder: { not: null, lte: 3 }, // 0-3 = 4 badges
+      },
+      orderBy: { displayOrder: 'asc' },
+    });
+
+    // Separate by type
+    const eventBadges: Array<{
+      id: string;
+      title: string;
+      image: string | null;
+      rarity: 'Usual' | 'Rare' | 'Epic' | 'Legendary';
+    }> = [];
+    const collectionBadges: Array<{
+      id: string;
+      title: string;
+      image: string | null;
+      rarity: 'Usual' | 'Rare' | 'Epic' | 'Legendary';
+    }> = [];
+
+    for (const ub of allBadges) {
+      const category = BadgeResponseMapper.mapBadgeCategory(ub.badge.type);
+      const item = {
+        id: ub.badgeId,
+        title: ub.badge.name,
+        image: resolveMediaUrl(ub.badge.imageUrl ?? null),
+        rarity: BadgeResponseMapper.mapRarity(ub.badge.rarity),
+      };
+
+      if (category === 'bridge') {
+        collectionBadges.push(item);
+      } else {
+        eventBadges.push(item);
+      }
+    }
+
+    return {
+      selectedBadgeIds: currentHighlights.map((ub) => ub.badgeId),
+      availableBadges: {
+        event: eventBadges,
+        collection: collectionBadges,
+      },
+    };
+  }
+
+  /**
+   * EP-06: Update highlight badges (max 4)
+   */
+  async updateHighlightBadges(userId: string, badgeIds: string[]) {
+    if (badgeIds.length > 4) {
+      throw new ValidationError('Maximum 4 highlight badges allowed');
+    }
+
+    // Validate all badges are owned and claimed
+    const ownedBadges = await this.prisma.userBadge.findMany({
+      where: {
+        userId,
+        badgeId: { in: badgeIds },
+        claimed: true,
+      },
+    });
+
+    if (ownedBadges.length !== badgeIds.length) {
+      throw new ValidationError('Some badges are not owned or not claimed');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // Reset all badges
+      await tx.userBadge.updateMany({
+        where: { userId },
+        data: { displayOrder: null, isVisible: false },
+      });
+
+      // Set highlight badges (0-3)
+      for (const [index, badgeId] of badgeIds.entries()) {
+        await tx.userBadge.updateMany({
+          where: { userId, badgeId },
+          data: {
+            displayOrder: index,
+            isVisible: true,
+            visibility: 'PUBLIC',
+          },
+        });
+      }
+    });
+
+    // Invalidate cache
+    await this.cacheService.del(`user:${userId}:profile`);
+
+    return { success: true, badgeIds };
   }
 } 

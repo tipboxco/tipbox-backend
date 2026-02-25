@@ -61,3 +61,23 @@ export const SearchUsersQuerySchema = z.object({
 
 export type SearchUsersQuery = z.infer<typeof SearchUsersQuerySchema>;
 
+/**
+ * Get user badges query schema
+ */
+export const GetUserBadgesQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+  cursor: z.string().uuid().optional(),
+});
+
+export type GetUserBadgesQuery = z.infer<typeof GetUserBadgesQuerySchema>;
+
+/**
+ * Update highlight badges schema
+ */
+export const UpdateHighlightBadgesSchema = z.object({
+  badgeIds: z.array(z.string().uuid()).min(0).max(4),
+});
+
+export type UpdateHighlightBadgesRequest = z.infer<
+  typeof UpdateHighlightBadgesSchema
+>;
