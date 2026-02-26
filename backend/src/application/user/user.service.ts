@@ -961,7 +961,7 @@ export class UserService {
     const where: any = {
       userId,
       badge: {
-        type: 'ACHIEVEMENT',
+        achievementGoals: { some: {} },
         ...(query ? {
           OR: [
             { name: { contains: query, mode: 'insensitive' as const } },
@@ -1118,7 +1118,7 @@ export class UserService {
       iterations += 1;
 
       const batch = await this.prisma.badge.findMany({
-        where: { type: 'ACHIEVEMENT' },
+        where: { achievementGoals: { some: {} } },
         include: {
           achievementGoals: {
             include: {
