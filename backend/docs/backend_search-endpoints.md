@@ -58,7 +58,7 @@ GET /search?keyword=iphone&types=user,brand,product&limit=10
 
 ---
 
-## 2. Product Catalog Search
+## 2. Product Catalog Search (Single Product Group)
 
 **Endpoint:** `GET /catalog/product-groups/:productGroupId/products`
 
@@ -92,6 +92,118 @@ Authorization: Bearer {token}
 - Product name
 - Brand
 - Description
+
+---
+
+## 2.1. Global Product Search (All Product Groups) - BACKEND TALEBİ
+
+**Endpoint:** `GET /catalog/products/search`
+
+**Authentication:** Bearer Token gerekli
+
+**Request:**
+```http
+GET /catalog/products/search?search=iphone&cursor=&limit=20
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+- `search` (string, required): Product name, brand veya description'da arama
+- `cursor` (string, optional): Pagination cursor
+- `limit` (integer, optional, default: 20, max: 50): Sayfa başına item sayısı
+
+**Response (200):**
+```json
+{
+  "items": [
+    {
+      "productGroupId": "880e8400-e29b-41d4-a716-446655440001",
+      "productGroupName": "iPhone",
+      "productGroupImage": "http://api-test.tipbox.co:9000/tipbox-media/product-groups/iphone.jpg",
+      "subCategoryId": "990e8400-e29b-41d4-a716-446655440002",
+      "subCategoryName": "Smartphones",
+      "categoryId": "aa0e8400-e29b-41d4-a716-446655440003",
+      "categoryName": "Electronics",
+      "products": [
+        {
+          "productId": "770e8400-e29b-41d4-a716-446655440000",
+          "name": "iPhone 15 Pro",
+          "image": "http://api-test.tipbox.co:9000/tipbox-media/products/iphone-15-pro.jpg",
+          "productGroupId": "880e8400-e29b-41d4-a716-446655440001",
+          "subCategoryId": "990e8400-e29b-41d4-a716-446655440002"
+        },
+        {
+          "productId": "770e8400-e29b-41d4-a716-446655440001",
+          "name": "iPhone 15",
+          "image": "http://api-test.tipbox.co:9000/tipbox-media/products/iphone-15.jpg",
+          "productGroupId": "880e8400-e29b-41d4-a716-446655440001",
+          "subCategoryId": "990e8400-e29b-41d4-a716-446655440002"
+        }
+      ]
+    },
+    {
+      "productGroupId": "880e8400-e29b-41d4-a716-446655440004",
+      "productGroupName": "Samsung Galaxy",
+      "productGroupImage": "http://api-test.tipbox.co:9000/tipbox-media/product-groups/galaxy.jpg",
+      "subCategoryId": "990e8400-e29b-41d4-a716-446655440002",
+      "subCategoryName": "Smartphones",
+      "categoryId": "aa0e8400-e29b-41d4-a716-446655440003",
+      "categoryName": "Electronics",
+      "products": [
+        {
+          "productId": "770e8400-e29b-41d4-a716-446655440002",
+          "name": "Galaxy S24 Ultra",
+          "image": "http://api-test.tipbox.co:9000/tipbox-media/products/galaxy-s24-ultra.jpg",
+          "productGroupId": "880e8400-e29b-41d4-a716-446655440004",
+          "subCategoryId": "990e8400-e29b-41d4-a716-446655440002"
+        }
+      ]
+    }
+  ],
+  "pagination": {
+    "cursor": "880e8400-e29b-41d4-a716-446655440004",
+    "hasMore": true,
+    "limit": 20
+  }
+}
+```
+
+**Arama Alanları:**
+- Product name
+- Product brand
+- Product description
+
+**Önemli Notlar:**
+1. **Eşleşen Veri Olmayan Product Group'lar Dönmemeli**: Eğer bir product group'ta arama terimiyle eşleşen ürün yoksa, o product group response'da yer almamalıdır. Sadece en az bir eşleşen ürünü olan product group'lar dönmelidir.
+
+2. **Product Group Bazında Gruplama**: Response, product group bazında gruplanmış ürünleri içermelidir. Her product group için:
+   - Product group bilgileri (id, name, image)
+   - İlgili kategori bilgileri (subCategory, category)
+   - O product group'ta eşleşen ürünlerin listesi
+
+3. **Pagination**: Cursor-based pagination kullanılmalıdır. Cursor, son dönen product group'un ID'si olabilir.
+
+4. **Best Practice**: Trendyol ve Hepsiburada gibi e-ticaret sitelerindeki arama mantığına benzer şekilde, tüm product grupları arasında arama yapılmalı ve sonuçlar product group bazında gruplanmalıdır.
+
+5. **⚠️ KRİTİK: Aynı Ürün Farklı Gruplarda Gösterilmemeli**: 
+   - Bir ürün sadece kendi product group'unda görünmelidir
+   - Aynı `productId`'ye sahip ürün birden fazla product group'ta döndürülmemelidir
+   - Örnek: "iPhone 17 Pro Max" sadece "IOS Phones" grubunda görünmeli, "printers" veya "headphones" gruplarında görünmemelidir
+
+6. **⚠️ KRİTİK: Ürün Görseli Doğruluğu**:
+   - Her ürün için doğru `image` URL'i döndürülmelidir
+   - `image` alanı null, boş string veya yanlış URL olmamalıdır
+   - Ürün adı ile görseli eşleşmelidir (örnek: iPhone görseli laptop görseli olmamalıdır)
+
+7. **⚠️ KRİTİK: Arama Mantığı**:
+   - Arama terimi sadece ürün adı, marka veya açıklamada eşleşmelidir
+   - Product group adı veya kategori adı ile eşleşme yapılmamalıdır
+   - Örnek: "Pro max" araması "printers" veya "headphones" gibi alakasız gruplarda sonuç döndürmemelidir
+
+**Error Responses:**
+- `400 Bad Request`: `search` parametresi boş veya geçersiz
+- `401 Unauthorized`: Token geçersiz veya eksik
+- `500 Internal Server Error`: Sunucu hatası
 
 ---
 
@@ -475,42 +587,20 @@ Authorization: Bearer {token}
 - `cursor` (string, optional): Pagination cursor
 - `limit` (integer, optional, default: 20, max: 50): Sayfa başına item sayısı
 
-**Response (200):** Badge tablosundaki `type` alanına göre gruplanmış; `BRAND` olanlar `brand.items`, diğerleri `achievement.items` içinde (Tab Page yapısı için).
-
+**Response (200):**
 ```json
 {
-  "brand": {
-    "items": [
-      {
-        "id": "220e8400-e29b-41d4-a716-446655440011",
-        "title": "Bridge Ambassador",
-        "image": "http://api-test.tipbox.co:9000/tipbox-media/badges/bridge-badge.jpg",
-        "rarity": "Rare",
-        "isClaimed": true,
-        "nftAddress": null,
-        "totalEarned": 3,
-        "earnedDate": "2024-01-15T10:30:00.000Z",
-        "tasks": []
-      }
-    ]
-  },
-  "achievement": {
-    "items": [
-      {
-        "id": "330e8400-e29b-41d4-a716-446655440012",
-        "title": "Expert Badge",
-        "image": "http://api-test.tipbox.co:9000/tipbox-media/badges/expert.png",
-        "rarity": "Epic",
-        "isClaimed": true,
-        "nftAddress": null,
-        "totalEarned": 1,
-        "earnedDate": "2024-02-10T10:30:00.000Z",
-        "tasks": [{ "id": "goal-1", "title": "10 Yorum Yap", "type": "Comment" }]
-      }
-    ]
-  },
+  "items": [
+    {
+      "badgeId": "220e8400-e29b-41d4-a716-446655440011",
+      "name": "Bridge Badge",
+      "description": "Connected with community",
+      "image": "http://api-test.tipbox.co:9000/tipbox-media/badges/bridge-badge.jpg",
+      "earnedAt": "2024-01-15T10:30:00.000Z"
+    }
+  ],
   "pagination": {
-    "cursor": "330e8400-e29b-41d4-a716-446655440012",
+    "cursor": "220e8400-e29b-41d4-a716-446655440011",
     "hasMore": false,
     "limit": 20
   }
@@ -676,6 +766,91 @@ Authorization: Bearer {token}
 
 ---
 
+## 15. Global Brand Search (All Categories) - BACKEND TALEBİ
+
+**Endpoint:** `GET /brands/search`
+
+**Authentication:** Bearer Token gerekli
+
+**Request:**
+```http
+GET /brands/search?search=apple&cursor=&limit=20
+Authorization: Bearer {token}
+```
+
+**Query Parameters:**
+- `search` (string, required): Brand adında arama
+- `cursor` (string, optional): Pagination cursor
+- `limit` (integer, optional, default: 20, max: 50): Sayfa başına item sayısı
+
+**Response (200):**
+```json
+{
+  "items": [
+    {
+      "categoryId": "aa0e8400-e29b-41d4-a716-446655440003",
+      "categoryName": "Electronics",
+      "categoryImage": "http://api-test.tipbox.co:9000/tipbox-media/categories/electronics.jpg",
+      "brands": [
+        {
+          "brandId": "660e8400-e29b-41d4-a716-446655440001",
+          "id": "660e8400-e29b-41d4-a716-446655440001",
+          "name": "Apple",
+          "image": "http://api-test.tipbox.co:9000/tipbox-media/brands/apple-logo.jpg",
+          "categoryId": "aa0e8400-e29b-41d4-a716-446655440003"
+        }
+      ]
+    },
+    {
+      "categoryId": "bb0e8400-e29b-41d4-a716-446655440004",
+      "categoryName": "Fashion",
+      "categoryImage": "http://api-test.tipbox.co:9000/tipbox-media/categories/fashion.jpg",
+      "brands": [
+        {
+          "brandId": "770e8400-e29b-41d4-a716-446655440002",
+          "id": "770e8400-e29b-41d4-a716-446655440002",
+          "name": "Apple Store",
+          "image": "http://api-test.tipbox.co:9000/tipbox-media/brands/apple-store-logo.jpg",
+          "categoryId": "bb0e8400-e29b-41d4-a716-446655440004"
+        }
+      ]
+    }
+  ],
+  "pagination": {
+    "cursor": "bb0e8400-e29b-41d4-a716-446655440004",
+    "hasMore": true,
+    "limit": 20
+  }
+}
+```
+
+**Arama Alanları:**
+- Brand name
+
+**Önemli Notlar:**
+1. **Eşleşen Veri Olmayan Category'ler Dönmemeli**: Eğer bir category'de arama terimiyle eşleşen brand yoksa, o category response'da yer almamalıdır. Sadece en az bir eşleşen brand'i olan category'ler dönmelidir.
+
+2. **Category Bazında Gruplama**: Response, category bazında gruplanmış brand'leri içermelidir. Her category için:
+   - Category bilgileri (id, name, image)
+   - O category'de eşleşen brand'lerin listesi
+
+3. **Pagination**: Cursor-based pagination kullanılmalıdır. Cursor, son dönen category'nin ID'si olabilir.
+
+4. **⚠️ KRİTİK: Aynı Brand Farklı Category'lerde Gösterilmemeli**: 
+   - Bir brand sadece kendi category'sinde görünmelidir
+   - Aynı `brandId`'ye sahip brand birden fazla category'de döndürülmemelidir
+
+5. **⚠️ KRİTİK: Brand Görseli Doğruluğu**:
+   - Her brand için doğru `image` URL'i döndürülmelidir
+   - `image` alanı null, boş string veya yanlış URL olmamalıdır
+
+**Error Responses:**
+- `400 Bad Request`: `search` parametresi boş veya geçersiz
+- `401 Unauthorized`: Token geçersiz veya eksik
+- `500 Internal Server Error`: Sunucu hatası
+
+---
+
 ## Özet Tablo
 
 | # | Endpoint | Search Param | Arama Alanları | Auth |
@@ -694,6 +869,8 @@ Authorization: Bearer {token}
 | 12 | `GET /notifications` | `search` | Notification title, message | ✅ |
 | 13 | `GET /posts/search` | `q` | Post title, body | ✅ |
 | 14 | `GET /inventory/experiences/search` | `q` | Experience title, text | ✅ |
+| 15 | `GET /catalog/products/search` | `search` | Product name, brand, description | ✅ |
+| 16 | `GET /brands/search` | `search` | Brand name | ✅ |
 
 ---
 

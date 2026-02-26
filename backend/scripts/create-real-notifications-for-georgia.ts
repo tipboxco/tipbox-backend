@@ -229,7 +229,7 @@ async function createRealNotificationsForGeorgia() {
       }
 
       // Event oluştur
-      const event = await prisma.wishboxEvent.create({
+      const event = await prisma.event.create({
         data: {
           id: generateUlid(),
           title: 'Yeni Teknoloji Deneyimleri Paylaşım Etkinliği',

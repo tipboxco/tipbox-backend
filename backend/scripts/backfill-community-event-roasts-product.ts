@@ -11,7 +11,7 @@ const prisma = new PrismaClient();
  * Bulamazsa deterministik fallback olarak herhangi bir product seçer.
  */
 async function main() {
-  const roastsEvents = await prisma.wishboxEvent.findMany({
+  const roastsEvents = await prisma.event.findMany({
     where: {
       brandId: null,
       feedType: 'ROASTS',
@@ -74,14 +74,14 @@ async function main() {
       continue;
     }
 
-    await prisma.wishboxEvent.update({
+    await prisma.event.update({
       where: { id: e.id },
       data: { productId },
     });
     updated++;
   }
 
-  const snapshot = await prisma.wishboxEvent.findMany({
+  const snapshot = await prisma.event.findMany({
     where: { brandId: null, feedType: 'ROASTS' },
     select: { id: true, title: true, feedType: true, productId: true },
     orderBy: { createdAt: 'desc' },

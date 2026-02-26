@@ -86,6 +86,9 @@ CREATE TYPE "wishbox_event_status" AS ENUM ('DRAFT', 'PUBLISHED', 'CLOSED');
 CREATE TYPE "wishbox_reward_type" AS ENUM ('TIPS', 'BADGE', 'TITLE');
 
 -- CreateEnum
+CREATE TYPE "wishbox_event_feed_type" AS ENUM ('PICKS', 'ROASTS');
+
+-- CreateEnum
 CREATE TYPE "dm_request_status" AS ENUM ('PENDING', 'ACCEPTED', 'DECLINED', 'CANCELED', 'AWAITING_COMPLETION', 'COMPLETED', 'REPORTED');
 
 -- CreateEnum
@@ -1167,6 +1170,8 @@ CREATE TABLE "wishbox_events" (
     "start_date" TIMESTAMP(3) NOT NULL,
     "end_date" TIMESTAMP(3) NOT NULL,
     "status" "wishbox_event_status" NOT NULL DEFAULT 'DRAFT',
+    "feed_type" "wishbox_event_feed_type" NOT NULL DEFAULT 'PICKS',
+    "product_id" TEXT,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
     "image_url" TEXT,
@@ -2034,6 +2039,9 @@ CREATE INDEX "wishbox_events_status_start_date_end_date_idx" ON "wishbox_events"
 CREATE INDEX "wishbox_events_main_category_id_idx" ON "wishbox_events"("main_category_id");
 
 -- CreateIndex
+CREATE INDEX "wishbox_events_product_id_idx" ON "wishbox_events"("product_id");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "wishbox_stats_user_id_event_id_key" ON "wishbox_stats"("user_id", "event_id");
 
 -- CreateIndex
@@ -2617,6 +2625,8 @@ ALTER TABLE "wishbox_events" ADD CONSTRAINT "wishbox_events_main_category_id_fke
 
 -- AddForeignKey
 ALTER TABLE "wishbox_events" ADD CONSTRAINT "wishbox_events_sub_category_id_fkey" FOREIGN KEY ("sub_category_id") REFERENCES "sub_categories"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+ALTER TABLE "wishbox_events" ADD CONSTRAINT "wishbox_events_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "products"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "wishbox_stats" ADD CONSTRAINT "wishbox_stats_event_id_fkey" FOREIGN KEY ("event_id") REFERENCES "wishbox_events"("id") ON DELETE CASCADE ON UPDATE CASCADE;

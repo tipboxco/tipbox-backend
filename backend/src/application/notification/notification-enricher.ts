@@ -192,7 +192,7 @@ export async function enrichNotificationData(
       case NotificationType.EVENT_REWARD_AVAILABLE: {
         if (data.eventId) {
           try {
-            const event = await prisma.wishboxEvent.findUnique({
+            const event = await prisma.event.findUnique({
               where: { id: data.eventId },
               select: { imageUrl: true },
             });

@@ -1118,10 +1118,10 @@ router.get(
  *                   properties:
  *                     surveys:
  *                       type: integer
+ *                       description: Tamamlanan anket sayısı
  *                     shares:
  *                       type: integer
- *                     events:
- *                       type: integer
+ *                       description: Kullanıcının bu marka için attığı post sayısı
  *                 badgeList:
  *                   type: array
  *                   items:
@@ -1412,99 +1412,6 @@ router.get(
     const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
 
     const result = await brandService.getBrandHistoryPosts(brandId, userId, {
-      cursor,
-      limit,
-    });
-    return res.json(result);
-  }),
-);
-
-/**
- * @openapi
- * /brands/{brandId}/history/events:
- *   get:
- *     summary: Marka geçmişine ait event'leri getir
- *     description: Marka geçmişi ekranı için event kartlarını pagination ile döner.
- *     tags: [Brand Catalog]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: brandId
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *       - in: query
- *         name: limit
- *         required: false
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 50
- *         description: Sayfa başına dönecek event kartı sayısı (varsayılan 20)
- *       - in: query
- *         name: cursor
- *         required: false
- *         schema:
- *           type: string
- *         description: Bir sonraki sayfa için cursor (önceki sayfanın son event ID'si)
- *     responses:
- *       200:
- *         description: Marka geçmişi event'leri başarıyla getirildi.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 items:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       id:
- *                         type: string
- *                       title:
- *                         type: string
- *                       description:
- *                         type: string
- *                       type:
- *                         type: string
- *                       startDate:
- *                         type: string
- *                         format: date-time
- *                       endDate:
- *                         type: string
- *                         format: date-time
- *                       status:
- *                         type: string
- *                         enum: [joined, join]
- *                       image:
- *                         type: string
- *                 pagination:
- *                   type: object
- *                   properties:
- *                     cursor:
- *                       type: string
- *                       nullable: true
- *                     hasMore:
- *                       type: boolean
- *                     limit:
- *                       type: integer
- *       401:
- *         description: Kimlik doğrulaması başarısız.
- */
-router.get(
-  '/:brandId/history/events',
-  asyncHandler(async (req: Request, res: Response) => {
-    const { brandId } = req.params;
-    const userPayload = req.user;
-    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
-    const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
-    const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
-    const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
-
-    const result = await brandService.getBrandHistoryEvents(brandId, userId, {
       cursor,
       limit,
     });

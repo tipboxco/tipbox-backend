@@ -1,7 +1,84 @@
+# Dependencies (tüm workspace'ler)
+node_modules/
+
+# Build / cache
+dist/
+dist-ssr/
+build/
+.vite/
+*.tsbuildinfo
+.cache/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Env (örnek dosyalar hariç)
+.env
+.env.local
+.env.*.local
+!.env.example
+!.env.template
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.bak
+*.tmp
+*.orig
+
+# Backend özel
+backend/prisma/.env
+backend/.prisma/
+backend/src/generated/prisma
+*service-account*.json
+*gserviceaccount*.json
+backend/tipboxbackend-*.json
+!backend/tipboxbackend-*.json.example
+backend/prisma/seed/seed-metadata.json
+backend/tipbox-docs/
+backend/test-results/
+backend/ssl/
+backend/certbot/
+backend/backups/
+*.pem
+*.key
+backend/api-config.json
+backend/docker-compose.override.yml
+backend/coverage/
+backend/.nyc_output/
+backend/.husky/_
+
+# Catalog-service özel
+catalog-service/uploads
+catalog-service/medusa-db.sql
+catalog-service/.medusa
+catalog-service/.yarn/*
+!catalog-service/.yarn/patches
+!catalog-service/.yarn/plugins
+!catalog-service/.yarn/releases
+!catalog-service/.yarn/sdks
+!catalog-service/.yarn/versions
+
+# Test / coverage (genel)
+coverage/
+.nyc_output/
+
 # Cloudflare credentials (güvenlik için)
 .cloudflared/*.json
 !.cloudflared/.gitkeep
 cloudflared/.env
 cloudflared/config.yml
-.env
 .cloudflared/

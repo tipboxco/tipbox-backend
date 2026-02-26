@@ -200,7 +200,7 @@ export class RewardClaimService {
       if (rewardClaim.sourceType === RewardSourceType.EVENT_PARTICIPATION) {
         const eventId = rewardClaim.metadata?.eventId;
         if (eventId) {
-          const userStats = await this.prisma.wishboxStats.findUnique({
+          const userStats = await this.prisma.eventStats.findUnique({
             where: {
               userId_eventId: {
                 userId,

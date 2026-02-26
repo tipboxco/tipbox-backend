@@ -12,5 +12,6 @@ export enum TransactionActionType {
   // External wallet işlemleri
   DEPOSIT = 'DEPOSIT',       // External wallet'tan (Metamask vb.) gelen token
   WITHDRAW = 'WITHDRAW'      // External wallet'a gönderilen token
+  BOOST_POST = 'BOOST_POST'
 }
 

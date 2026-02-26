@@ -37,7 +37,7 @@ const topBrands = await prisma.brand.findMany({
 | `Brand` | ⚠️ Önceden Mevcut | Database'de önceden ekleniyor (seed'de oluşturulmaz) |
 | `BrandCategory` | ⚠️ Önceden Mevcut | Database'de önceden ekleniyor |
 | `Product` | ✅ Var | Brand'lere ait ürünler |
-| `WishboxEvent` | ✅ Var | Event'ler oluşturuluyor |
+| `Event` | ✅ Var | Event'ler oluşturuluyor |
 | `ContentPost` | ✅ Var | Ürünlere ait post'lar |
 
 ---
@@ -266,7 +266,7 @@ async function seedBridgeRewards(prisma: PrismaClient): Promise<void> {
 
 ### Orta Öncelikli
 
-#### 5. `WishboxStats` - Event Katılım Verileri
+#### 5. `EventStats` - Event Katılım Verileri
 **Etkilenen Endpoint'ler:**
 - `GET /brands/:brandId/events` (status: joined/join)
 - `GET /brands/events/:eventId` (statistics)
@@ -350,7 +350,7 @@ async function seedBrandNews(prisma: PrismaClient): Promise<void> {
 
 ## Endpoint - Tablo İlişki Matrisi
 
-| Endpoint | BridgeFollower | BrandSurvey | BridgePost | BridgeReward | WishboxStats | News |
+| Endpoint | BridgeFollower | BrandSurvey | BridgePost | BridgeReward | EventStats | News |
 |----------|----------------|-------------|------------|--------------|--------------|------|
 | `/brands/:id/catalog` | ✅ | - | - | - | - | - |
 | `/brands/:id/surveys` | - | ✅ | - | - | - | - |
@@ -406,7 +406,7 @@ async function getTopBrandsByProductCount(prisma: PrismaClient, limit = 5) {
 ### 5. seedBrandNews()
 - Top 5 brand için 3-5 haber
 
-### 6. seedWishboxStats() (Güncelleme)
+### 6. seedEventStats() (Güncelleme)
 - Top 5 brand'e ait event'ler için katılım verilerini genişlet
 
 ---
@@ -455,7 +455,7 @@ async function seedBrandCatalogData(prisma: PrismaClient): Promise<void> {
 
 3. **Faz 3 (Tamamlayıcı):**
    - `seedBrandNews()` - News akışı için
-   - WishboxStats güncellemesi - Event katılımları
+   - EventStats güncellemesi - Event katılımları
 
 ---
 

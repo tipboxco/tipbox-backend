@@ -325,6 +325,30 @@ export class CacheService {
 
     return this.isConnected && this.client !== null;
   }
+
+  /**
+   * Redis ping komutu - health check için kullanılır
+   * @returns ping response
+   */
+  public async ping(): Promise<string> {
+    if (isCacheDisabled) {
+      throw new Error('Cache is disabled');
+    }
+
+    if (!this.client || !this.isConnected) {
+      throw new Error('Cache client not connected');
+    }
+
+    try {
+      const response = await this.withTimeout(this.client.ping());
+      this.recordSuccess();
+      return response;
+    } catch (error) {
+      logger.error('Error pinging Redis:', error);
+      this.recordError();
+      throw error;
+    }
+  }
 }
 
 export default CacheService;

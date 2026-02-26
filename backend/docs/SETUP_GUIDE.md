@@ -230,7 +230,7 @@ Seed işlemi sonrası test edebileceğiniz endpoint'ler:
 ### Explore
 - `GET /explore/hottest` - Trend içerikler
 - `GET /explore/marketplace-banners` - Marketplace banner'ları
-- `GET /explore/events` - Wishbox event'leri
+- `GET /explore/events` - Event'ler
 
 ## ⚠️ Önemli Notlar
 

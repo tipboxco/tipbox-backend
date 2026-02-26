@@ -32,52 +32,67 @@ function getSwaggerApis(): string[] {
   return ['./src/interfaces/**/*.ts'];
 }
 
-export function getSwaggerServers() {
+/**
+ * Tek base URL için kullanılacak (env ve BASE_URL'e göre).
+ * Routing değişmez; sadece Swagger dokümantasyonunda "App" vs "Admin" seçeneği sunar.
+ */
+function getBaseServerUrl(): { url: string; envLabel: string } {
   const PORT = process.env.PORT || 3000;
   const nodeEnv = config.nodeEnv;
-
-  // Öncelik sırası:
-  // 1. BASE_URL (en yüksek öncelik - local veya sunucu için)
-  // 2. SWAGGER_SERVER_URL veya API_BASE_URL (sunucu için)
-  // 3. Localhost (fallback - sadece development)
-  
   const baseUrl = process.env.BASE_URL || process.env.SWAGGER_SERVER_URL || process.env.API_BASE_URL;
-  
+
   if (baseUrl) {
-    // BASE_URL tam URL olabilir (http://example.com) veya sadece host (example.com)
     let cleanUrl = baseUrl.replace(/\/$/, '');
-    // Eğer protocol yoksa http:// ekle
-    if (!cleanUrl.match(/^https?:\/\//)) {
-      cleanUrl = `http://${cleanUrl}`;
-    }
-    // Port yoksa ve development ise PORT ekle
+    if (!cleanUrl.match(/^https?:\/\//)) cleanUrl = `http://${cleanUrl}`;
     if (nodeEnv === 'development' && !cleanUrl.match(/:\d+$/)) {
       cleanUrl = cleanUrl.replace(/\/$/, '') + `:${PORT}`;
     }
-    return [{ 
-      url: cleanUrl, 
-      description: `${nodeEnv === 'development' ? 'Development' : nodeEnv === 'test' ? 'Test' : 'Production'} (${baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1') ? 'Local' : 'Server'})` 
-    }];
+    const envLabel =
+      nodeEnv === 'development' ? 'Development' : nodeEnv === 'test' ? 'Test' : 'Production';
+    return { url: cleanUrl, envLabel };
   }
 
   switch (nodeEnv) {
-    case 'development': {
-      // Local development için localhost kullan
-      return [{ url: `http://localhost:${PORT}`, description: 'Development (Localhost)' }];
-    }
-    case 'test': {
-      const testUrl = 'https://api-test.tipbox.co';
-      return [{ url: testUrl, description: 'Test Environment' }];
-    }
-    case 'production': {
-      const prodUrl = 'https://api.tipbox.co';
-      return [{ url: prodUrl, description: 'Production' }];
-    }
-    default: {
-      return [{ url: `http://localhost:${PORT}`, description: 'Development (Localhost)' }];
-    }
+    case 'test':
+      return { url: 'https://api-test.tipbox.co', envLabel: 'Test' };
+    case 'production':
+      return { url: 'https://api.tipbox.co', envLabel: 'Production' };
+    default:
+      return { url: `http://localhost:${PORT}`, envLabel: 'Development (Localhost)' };
   }
 }
+
+/**
+ * Swagger UI'da Server dropdown: aynı URL ile "App API" ve "Admin API" seçenekleri.
+ * EP routing değişmez; sadece dokümantasyon gruplaması.
+ */
+export function getSwaggerServers() {
+  const { url, envLabel } = getBaseServerUrl();
+  return [
+    { url, description: `App API — Kullanıcı ve uygulama endpoint'leri (${envLabel})` },
+    { url, description: `Admin API — Admin panel endpoint'leri (${envLabel})` },
+  ];
+}
+
+/** Swagger UI'da grupların sırası ve kısa açıklamaları. Admin önce, sonra App. */
+const SWAGGER_TAGS: Array<{ name: string; description: string }> = [
+  { name: 'Admin - Auth', description: 'Admin giriş ve oturum' },
+  { name: 'Admin - Dashboard', description: 'Admin genel istatistikler' },
+  { name: 'Admin - Users', description: 'Admin kullanıcı yönetimi' },
+  { name: 'Admin - Reports & KYC', description: 'Şikayetler, KYC ve güven skorları' },
+  { name: 'Admin - Logs', description: 'Admin işlem logları' },
+  { name: 'Admin - Content', description: 'İçerik, post, yorum, highlight, trending' },
+  { name: 'Admin - Event Gamification', description: 'Event, koleksiyon ve badge yönetimi' },
+  { name: 'Users', description: 'Kullanıcı profili ve ayarları (App)' },
+  { name: 'Auth', description: 'Giriş ve token (App)' },
+  { name: 'Feed', description: 'Feed ve gönderiler (App)' },
+  { name: 'Inventory', description: 'Envanter (App)' },
+  { name: 'Wallet', description: 'Cüzdan ve işlemler (App)' },
+  { name: 'Events', description: 'Eventler (App)' },
+  { name: 'Notifications', description: 'Bildirimler (App)' },
+  { name: 'Inbox', description: 'Mesajlaşma (App)' },
+  { name: 'Admin', description: 'Genel admin (eski tag, yeni gruplara taşındı)' },
+];
 
 export function getSwaggerOptions() {
   return {
@@ -86,9 +101,10 @@ export function getSwaggerOptions() {
       info: {
         title: 'Tipbox API',
         version: '1.0.0',
-        description: 'Tipbox servisleri için API dokümantasyonu',
+        description: 'Tipbox servisleri için API dokümantasyonu. Server\'da App API / Admin API aynı base URL\'i kullanır; gruplama sadece dokümantasyon içindir.',
       },
       servers: getSwaggerServers(),
+      tags: SWAGGER_TAGS,
       components: {
         securitySchemes: {
           bearerAuth: {
@@ -128,7 +144,71 @@ export const swaggerAuthHelperJs = `
     }
   }
 
+  function getContextFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const c = params.get('context');
+    return c === 'admin' ? 'admin' : c === 'all' ? 'all' : 'app';
+  }
+
+  function injectContextDropdown() {
+    var root = document.querySelector('.swagger-ui');
+    if (!root || document.getElementById('tipbox-api-context-bar')) return;
+    var bar = document.createElement('div');
+    bar.id = 'tipbox-api-context-bar';
+    bar.style.cssText = 'padding:12px 20px;background:#1b1b1b;color:#fff;display:flex;align-items:center;gap:10px;font-family:system-ui,sans-serif;';
+    bar.innerHTML = '<label for="tipbox-api-context" style="font-weight:600;">API:</label>' +
+      '<select id="tipbox-api-context" style="padding:6px 10px;border-radius:4px;min-width:140px;">' +
+      '<option value="all">Tümü (All)</option>' +
+      '<option value="app">App API</option>' +
+      '<option value="admin">Admin API</option>' +
+      '</select>';
+    var sel = bar.querySelector('select');
+    sel.value = getContextFromUrl();
+    sel.addEventListener('change', function () {
+      window.location.href = window.location.pathname + '?context=' + sel.value;
+    });
+    root.insertBefore(bar, root.firstChild);
+  }
+
+  function navigateByContext(context) {
+    window.location.href = window.location.pathname + '?context=' + context;
+  }
+
+  function hookServersDropdownForFiltering() {
+    var selects = document.querySelectorAll('.swagger-ui select');
+    for (var i = 0; i < selects.length; i++) {
+      var sel = selects[i];
+      if (sel.dataset.tipboxHooked === 'yes') continue;
+      var opts = [].slice.call(sel.options || []);
+      var hasApp = opts.some(function (o) { return o.text.indexOf('App API') !== -1; });
+      var hasAdmin = opts.some(function (o) { return o.text.indexOf('Admin API') !== -1; });
+      if (!hasApp || !hasAdmin) continue;
+      sel.dataset.tipboxHooked = 'yes';
+      var ctx = getContextFromUrl();
+      for (var j = 0; j < opts.length; j++) {
+        if (ctx === 'admin' && opts[j].text.indexOf('Admin API') !== -1) { sel.selectedIndex = j; break; }
+        if (ctx === 'app' && opts[j].text.indexOf('App API') !== -1) { sel.selectedIndex = j; break; }
+      }
+      sel.addEventListener('change', function () {
+        var text = (this.options[this.selectedIndex] && this.options[this.selectedIndex].text) || '';
+        if (text.indexOf('Admin API') !== -1) navigateByContext('admin');
+        else if (text.indexOf('App API') !== -1) navigateByContext('app');
+      });
+      break;
+    }
+  }
+
+  function tryHookServersDropdown() {
+    hookServersDropdownForFiltering();
+  }
+
   window.addEventListener('load', function () {
+    injectContextDropdown();
+    tryHookServersDropdown();
+    [300, 600, 1000, 2000].forEach(function (ms) {
+      setTimeout(tryHookServersDropdown, ms);
+    });
+
     const ui = window.ui;
     if (!ui) return;
 
@@ -141,7 +221,7 @@ export const swaggerAuthHelperJs = `
       try {
         const url = args[0] ? args[0].toString() : '';
         const method = (args[1]?.method || 'GET').toUpperCase();
-        if (url.includes('/auth/login') && method === 'POST') {
+        if ((url.includes('/auth/login') || url.includes('/admin/login')) && method === 'POST') {
           const clone = response.clone();
           const data = await clone.json().catch(() => null);
           const token = data?.token || data?.access_token || data?.accessToken;

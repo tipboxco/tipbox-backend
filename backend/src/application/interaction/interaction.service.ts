@@ -17,8 +17,10 @@ import { NotificationType } from '../../domain/notification/notification-type.en
 import { EventMetricsService } from '../event/event-metrics.service';
 import { BadgeEligibilityService } from '../gamification/badge-eligibility.service';
 import { AchievementProgressService } from '../gamification/achievement-progress.service';
-import { AchievementGoalType } from '../../domain/gamification/achievement-goal-type.enum';
+import { ActionLogService } from '../gamification/action-log.service';
+import { MainAction } from '../../domain/gamification/main-action.enum';
 import logger from '../../infrastructure/logger/logger';
+import { getErrorMessage } from '../../infrastructure/errors/error-helper';
 
 export class InteractionService {
   private contentLikeRepo = new ContentLikePrismaRepository();
@@ -32,6 +34,7 @@ export class InteractionService {
   private eventMetricsService = new EventMetricsService();
   private badgeEligibilityService = new BadgeEligibilityService();
   private achievementProgressService = new AchievementProgressService();
+  private actionLogService = new ActionLogService();
 
   constructor() {}
 
@@ -74,33 +77,36 @@ export class InteractionService {
         select: { eventId: true, userId: true },
       });
 
-      // Achievement Ladder progress (event dışı) - async
+      // Log action (fire-and-forget)
+      this.actionLogService
+        .logAction({
+          userId,
+          mainAction: MainAction.LIKE,
+          actionTypeCode: 'ALL',
+          entityType: 'post',
+          entityId: postId,
+          metadata: {
+            postType: post.type,
+            authorId: post.userId,
+          },
+        })
+        .catch((err) => {
+          logger.warn('Failed to log like action', { error: getErrorMessage(err) });
+        });
+
+      // Collection badge progress (async)
       this.achievementProgressService
-        .incrementProgress(userId, AchievementGoalType.LIKE_GIVEN, 1)
+        .incrementProgressByCode(userId, MainAction.LIKE, 'ALL', 1)
         .catch((err) => {
           logger.warn({
-            message: 'Failed to increment achievement progress for like given',
+            message: 'Failed to increment achievement progress for like',
             userId,
             postId,
             error: err instanceof Error ? err.message : String(err),
           });
         });
-      if (postWithEventId?.userId) {
-        this.achievementProgressService
-          .incrementProgress(
-            String(postWithEventId.userId),
-            AchievementGoalType.LIKE_RECEIVED,
-            1
-          )
-          .catch((err) => {
-            logger.warn({
-              message: 'Failed to increment achievement progress for like received',
-              userId: String(postWithEventId.userId),
-              postId,
-              error: err instanceof Error ? err.message : String(err),
-            });
-          });
-      }
+      // Note: LIKE_RECEIVED is not tracked in the new Collection badge system
+      // Collection badges only track actions by the user, not received actions
 
       if (postWithEventId?.eventId) {
         // Async olarak event metrik ve badge kontrolü yap (hata olsa bile devam et)
@@ -213,7 +219,24 @@ export class InteractionService {
 
       // Favori sayısını güncelle
       await this.contentPostRepo.incrementFavoriteCount(postId);
-      
+
+      // Log action (fire-and-forget)
+      this.actionLogService
+        .logAction({
+          userId,
+          mainAction: MainAction.BOOKMARK,
+          actionTypeCode: 'ALL',
+          entityType: 'post',
+          entityId: postId,
+          metadata: {
+            postType: post.type,
+            authorId: post.userId,
+          },
+        })
+        .catch((err) => {
+          logger.warn('Failed to log bookmark action', { error: getErrorMessage(err) });
+        });
+
       // Post sahibine bildirim gönder
       if (post.userId !== userId) {
         const user = await this.userRepo.findById(userId);
@@ -229,6 +252,18 @@ export class InteractionService {
           );
         }
       }
+
+      // Collection badge progress (async)
+      this.achievementProgressService
+        .incrementProgressByCode(userId, MainAction.BOOKMARK, 'ALL', 1)
+        .catch((err) => {
+          logger.warn({
+            message: 'Failed to increment achievement progress for bookmark',
+            userId,
+            postId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
 
       logger.info(`User ${userId} favorited post ${postId}`);
       return favorite;
@@ -336,6 +371,26 @@ export class InteractionService {
       // Post'un comment count'unu artır
       await this.contentPostRepo.incrementCommentCount(postId);
 
+      // Log action (fire-and-forget)
+      this.actionLogService
+        .logAction({
+          userId,
+          mainAction: MainAction.COMMENT,
+          actionTypeCode: 'ALL',
+          entityType: 'comment',
+          entityId: comment.id,
+          metadata: {
+            postId,
+            postType: post.type,
+            postAuthorId: post.userId,
+            isReply: !!parentId,
+            parentId: parentId || null,
+          },
+        })
+        .catch((err) => {
+          logger.warn('Failed to log comment action', { error: getErrorMessage(err) });
+        });
+
       // Post sahibine bildirim (kendi yorumu değilse)
       if (post.userId !== userId && !parentId) {
         const commenter = await this.userRepo.findById(userId);
@@ -373,6 +428,18 @@ export class InteractionService {
           }
         }
       }
+
+      // Collection badge progress (async)
+      this.achievementProgressService
+        .incrementProgressByCode(userId, MainAction.COMMENT, 'ALL', 1)
+        .catch((err) => {
+          logger.warn({
+            message: 'Failed to increment achievement progress for comment',
+            userId,
+            postId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
 
       logger.info(`User ${userId} commented on post ${postId}`);
       return comment;

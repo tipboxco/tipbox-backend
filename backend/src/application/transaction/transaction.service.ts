@@ -375,6 +375,7 @@ export class TransactionService {
       TransactionActionType.NFT_BUY,
       TransactionActionType.SWAP_TIP_TO_SOL,
       TransactionActionType.FEE,
+      TransactionActionType.BOOST_POST,
     ].includes(transaction.actionType);
 
     // TIP_SEND/TIP_RECEIVE: Chain zaten güncel; manuel +/- yaparsak sync ile çift sayım olur. Sadece status güncelle, bakiye sync ile gelir.
@@ -517,6 +518,42 @@ export class TransactionService {
 
     logger.info(`Reward claimed: ${amount} TIPS for user ${userId}`);
 
+    return transaction;
+  }
+
+  /**
+   * Post boost için TIPS düşer (BOOST_POST transaction oluşturur ve confirm eder).
+   * Önce bakiye kontrolü yapılmalı; yetersizse ValidationError fırlatır.
+   */
+  async deductForPostBoost(userId: string, amount: number, postId: string): Promise<Transaction> {
+    if (amount <= 0) {
+      throw new ValidationError('Boost amount must be greater than 0');
+    }
+
+    const wallet = await this.walletRepo.findActiveByUserId(userId);
+    if (!wallet) {
+      throw new NotFoundError('Wallet not found');
+    }
+
+    if (!wallet.hasBalance(amount)) {
+      throw new ValidationError(
+        `Insufficient balance. Available: ${wallet.getAvailableBalance()} TIPS`
+      );
+    }
+
+    const transaction = await this.transactionRepo.create({
+      walletId: wallet.id,
+      actionType: TransactionActionType.BOOST_POST,
+      amount: amount,
+      fromAddress: wallet.publicAddress,
+      toAddress: null,
+      metadata: { postId },
+      provider: 'backend',
+    });
+
+    await this.confirmTransaction(transaction.id);
+
+    logger.info({ userId, postId, amount, message: 'Post boost deducted' });
     return transaction;
   }
 

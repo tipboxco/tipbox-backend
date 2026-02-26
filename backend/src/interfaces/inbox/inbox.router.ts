@@ -123,6 +123,35 @@ router.use(authMiddleware);
  *                         type: boolean
  *                       unreadCount:
  *                         type: integer
+ *                       lastMessageSharedPost:
+ *                         type: object
+ *                         nullable: true
+ *                         description: Son mesaj shared post ise; post tipine göre ürün/kategori görseli ve içerik önizlemesi (DM listesinde kart göstermek için)
+ *                         properties:
+ *                           postId:
+ *                             type: string
+ *                           postType:
+ *                             type: string
+ *                             nullable: true
+ *                             description: QUESTION, UPDATE, EXPERIENCE, COMPARE, TIPS, FREE
+ *                           title:
+ *                             type: string
+ *                           content:
+ *                             type: string
+ *                             description: title + body snippet
+ *                           imageUrl:
+ *                             type: string
+ *                             nullable: true
+ *                             description: Post media, product, productGroup veya subCategory görseli
+ *                           productName:
+ *                             type: string
+ *                             nullable: true
+ *                           productGroupName:
+ *                             type: string
+ *                             nullable: true
+ *                           subCategoryName:
+ *                             type: string
+ *                             nullable: true
  *                 pagination:
  *                   type: object
  *                   properties:
@@ -1651,6 +1680,224 @@ router.post(
           },
         });
       }
+      throw error;
+    }
+  }),
+);
+
+/**
+ * @openapi
+ * /inbox/share-post:
+ *   post:
+ *     summary: Post paylaş (DM'e post gönder)
+ *     description: |
+ *       Bir post'u DM'e paylaşır. Eğer daha önce mesajlaşmadığı biri ise önce thread oluşturulur, sonra mesaj gönderilir.
+ *       Post paylaşıldığında `new_message` socket event'i messageType alanı "shared-post" olacak şekilde tetiklenir.
+ *     tags: [Inbox]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - messageType
+ *               - sharedPost
+ *             properties:
+ *               threadId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Mesajın gideceği thread (threadId veya recipientUserId'den biri zorunlu)
+ *                 example: "550e8400-e29b-41d4-a716-446655440000"
+ *               recipientUserId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Tek alıcıya gönderim için; threadId yoksa thread oluşturulur/getirilir (threadId veya recipientUserId'den biri zorunlu)
+ *                 example: "660e8400-e29b-41d4-a716-446655440001"
+ *               messageType:
+ *                 type: string
+ *                 enum: [shared-post]
+ *                 description: Mesaj tipi (shared-post olmalı)
+ *                 example: "shared-post"
+ *               sharedPost:
+ *                 type: object
+ *                 required:
+ *                   - postId
+ *                 properties:
+ *                   postId:
+ *                     type: string
+ *                     description: Paylaşılacak post ID'si
+ *                     example: "01JKP1234567890ABCDEFG"
+ *                   authorName:
+ *                     type: string
+ *                     description: Post sahibinin adı (opsiyonel, backend postId ile çekebilir)
+ *                     example: "Ahmet Yılmaz"
+ *                   authorTitle:
+ *                     type: string
+ *                     nullable: true
+ *                     description: Post sahibinin ünvanı
+ *                     example: "Product Expert"
+ *                   authorAvatar:
+ *                     type: string
+ *                     nullable: true
+ *                     description: Post sahibinin avatar URL'si
+ *                     example: "https://example.com/avatar.jpg"
+ *                   authorId:
+ *                     type: string
+ *                     description: Post sahibinin kullanıcı ID'si
+ *                     example: "550e8400-e29b-41d4-a716-446655440000"
+ *                   productName:
+ *                     type: string
+ *                     description: Ürün adı
+ *                     example: "iPhone 15 Pro"
+ *                   productImageUrl:
+ *                     type: string
+ *                     nullable: true
+ *                     description: Ürün görseli URL'si
+ *                     example: "https://example.com/product.jpg"
+ *                   productDescription:
+ *                     type: string
+ *                     nullable: true
+ *                     description: Ürün açıklaması
+ *                     example: "Harika bir telefon!"
+ *                   status:
+ *                     type: string
+ *                     description: Post durumu
+ *                     example: "published"
+ *               message:
+ *                 type: string
+ *                 description: Opsiyonel metin (kartın üstünde gösterilebilir)
+ *                 example: "Bu ürünü beğenebilirsin"
+ *           example:
+ *             recipientUserId: "660e8400-e29b-41d4-a716-446655440001"
+ *             messageType: "shared-post"
+ *             sharedPost:
+ *               postId: "01JKP1234567890ABCDEFG"
+ *               authorName: "Ahmet Yılmaz"
+ *               authorTitle: "Product Expert"
+ *               authorAvatar: "https://example.com/avatar.jpg"
+ *               productName: "iPhone 15 Pro"
+ *               productImageUrl: "https://example.com/product.jpg"
+ *               productDescription: "Harika bir telefon!"
+ *             message: "Bu ürünü beğenebilirsin"
+ *     responses:
+ *       201:
+ *         description: Post başarıyla paylaşıldı
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 threadId:
+ *                   type: string
+ *                   format: uuid
+ *                   example: "550e8400-e29b-41d4-a716-446655440000"
+ *                 messageId:
+ *                   type: string
+ *                   format: uuid
+ *                   example: "770e8400-e29b-41d4-a716-446655440002"
+ *       400:
+ *         description: Geçersiz istek (eksik veya hatalı parametreler)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   examples:
+ *                     missingThreadOrRecipient:
+ *                       value: "Either threadId or recipientUserId is required"
+ *                     missingPostId:
+ *                       value: "sharedPost.postId is required"
+ *                     invalidMessageType:
+ *                       value: "messageType must be 'shared-post'"
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ *       404:
+ *         description: Post veya kullanıcı bulunamadı
+ */
+router.post(
+  '/share-post',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const senderId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!senderId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { threadId, recipientUserId, messageType, sharedPost, message } = req.body;
+
+    // Validate messageType
+    if (messageType !== 'shared-post') {
+      return res.status(400).json({ message: 'messageType must be "shared-post"' });
+    }
+
+    // Validate sharedPost
+    if (!sharedPost || typeof sharedPost !== 'object') {
+      return res.status(400).json({ message: 'sharedPost is required' });
+    }
+
+    if (!sharedPost.postId || typeof sharedPost.postId !== 'string') {
+      return res.status(400).json({ message: 'sharedPost.postId is required' });
+    }
+
+    // threadId veya recipientUserId'den biri zorunlu
+    if (!threadId && !recipientUserId) {
+      return res.status(400).json({ message: 'Either threadId or recipientUserId is required' });
+    }
+
+    try {
+      let targetRecipientId = recipientUserId;
+
+      // Eğer threadId verilmişse, thread'den recipientUserId'yi bulalım
+      if (threadId) {
+        const thread = await messagingService.getThreadById(threadId);
+        if (!thread) {
+          return res.status(404).json({ message: 'Thread not found' });
+        }
+
+        // Thread erişim kontrolü
+        const hasAccess = await messagingService.validateThreadAccess(threadId, String(senderId));
+        if (!hasAccess) {
+          return res.status(403).json({ message: 'User is not a participant of this thread' });
+        }
+
+        // Karşı tarafın ID'sini bul
+        targetRecipientId = thread.userOneId === String(senderId) ? thread.userTwoId : thread.userOneId;
+      }
+
+      if (!targetRecipientId) {
+        return res.status(400).json({ message: 'Could not determine recipient' });
+      }
+
+      // Shared post gönder (thread yoksa oluşturulur)
+      const result = await messagingService.sendSharedPostMessage(
+        String(senderId),
+        targetRecipientId,
+        sharedPost.postId,
+        message || ''
+      );
+
+      return res.status(201).json({
+        success: true,
+        threadId: result.threadId,
+        messageId: result.messageId,
+      });
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error);
+      if (errorMessage.includes('trust list') || errorMessage.includes('Share is only allowed')) {
+        return res.status(400).json({ message: errorMessage });
+      }
+      if (errorMessage.includes('not found') || errorMessage.includes('User not found') || errorMessage.includes('Post not found')) {
+        return res.status(404).json({ message: errorMessage });
+      }
+      logger.error('Share post error:', error);
       throw error;
     }
   }),

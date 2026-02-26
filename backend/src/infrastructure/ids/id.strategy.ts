@@ -13,7 +13,7 @@ export const modelIdStrategy: Record<string, IdFormat> = {
   FeedHighlight: 'ULID',
   TrendingPost: 'ULID',
   BridgePost: 'ULID',
-  WishboxEvent: 'ULID',
+  Event: 'ULID',
   // Varsayılanlar (diğerleri UUID4)
 };
 

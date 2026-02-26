@@ -10,7 +10,7 @@ import { getAuthToken, makeAuthenticatedRequest, getUserTokens, getUserEmails } 
  * - BridgeUserStats: Prisma ile (okuma ve hesaplama)
  * - RewardClaim: Prisma ile (endpoint yok)
  * - BridgeReward: Prisma ile (endpoint yok)
- * - WishboxStats: Prisma ile (okuma ve hesaplama)
+ * - EventStats: Prisma ile (okuma ve hesaplama)
  */
 export async function seedAppleHistory(
   brandId: string,
@@ -35,7 +35,7 @@ export async function seedAppleHistory(
   }
 
   // Event'i bul
-  const event = await prisma.wishboxEvent.findUnique({
+  const event = await prisma.event.findUnique({
     where: { id: eventId },
     include: {
       eventBadges: {
@@ -353,9 +353,9 @@ export async function seedAppleHistory(
       }
     }
 
-    // 6. WISHBOXSTATS (Event Participation) - Prisma ile (okuma ve hesaplama)
+    // 6. EVENTSTATS (Event Participation) - Prisma ile (okuma ve hesaplama)
     // Ömer için gerçek veriler, diğerleri için hesaplanmış değerler
-    const existingEventStats = await prisma.wishboxStats.findUnique({
+    const existingEventStats = await prisma.eventStats.findUnique({
       where: {
         userId_eventId: {
           userId: userId,
@@ -404,7 +404,7 @@ export async function seedAppleHistory(
     const finalEventLikesReceived = isOmer ? Math.max(eventLikesReceived, 25) : eventLikesReceived;
 
     if (!existingEventStats) {
-      await prisma.wishboxStats.create({
+      await prisma.eventStats.create({
         data: {
           id: randomUUID(),
           userId: userId,
@@ -418,7 +418,7 @@ export async function seedAppleHistory(
       });
       eventStatsCount++;
     } else {
-      await prisma.wishboxStats.update({
+      await prisma.eventStats.update({
         where: {
           userId_eventId: {
             userId: userId,
@@ -440,7 +440,7 @@ export async function seedAppleHistory(
   console.log(`   BridgeUserStats: ${userStatsCount}`);
   console.log(`   RewardClaims: ${rewardClaimsCount}`);
   console.log(`   BridgeRewards: ${bridgeRewardsCount}`);
-  console.log(`   WishboxStats: ${eventStatsCount}`);
+  console.log(`   EventStats: ${eventStatsCount}`);
 
   return {
     userStats: userStatsCount,

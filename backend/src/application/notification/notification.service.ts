@@ -1,5 +1,6 @@
 import { NotificationPrismaRepository } from '../../infrastructure/repositories/notification-prisma.repository';
 import { UserSettingsPrismaRepository } from '../../infrastructure/repositories/user-settings-prisma.repository';
+import { BadgeReminderPrismaRepository } from '../../infrastructure/repositories/badge-reminder-prisma.repository';
 import { NotificationFactory } from './notification-factory';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
 import { NotificationCategory } from '../../domain/notification/notification-category.enum';
@@ -7,16 +8,19 @@ import QueueProvider from '../../infrastructure/queue/queue.provider';
 import logger from '../../infrastructure/logger/logger';
 import { Notification } from '../../domain/notification/notification.entity';
 import { enrichNotificationData } from './notification-enricher';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 
 export class NotificationService {
   private notificationRepo: NotificationPrismaRepository;
   private settingsRepo: UserSettingsPrismaRepository;
+  private badgeReminderRepo: BadgeReminderPrismaRepository;
   private notificationFactory: NotificationFactory;
   private queueProvider: QueueProvider;
 
   constructor() {
     this.notificationRepo = new NotificationPrismaRepository();
     this.settingsRepo = new UserSettingsPrismaRepository();
+    this.badgeReminderRepo = new BadgeReminderPrismaRepository();
     this.notificationFactory = new NotificationFactory();
     this.queueProvider = QueueProvider.getInstance();
   }
@@ -206,6 +210,58 @@ export class NotificationService {
    */
   async cleanupOldNotifications(olderThanDays: number = 90): Promise<number> {
     return await this.notificationRepo.deleteOldNotifications(olderThanDays);
+  }
+
+  /**
+   * Badge için hatırlatma ayarla (belirtilen zamanda push gönderilecek).
+   * Aynı badge için mevcut hatırlatma varsa güncellenir.
+   */
+  async setBadgeReminder(
+    userId: string,
+    badgeId: string,
+    remindAt: Date
+  ): Promise<{ id: string; remindAt: string }> {
+    const record = await this.badgeReminderRepo.upsert(userId, badgeId, remindAt);
+    logger.info({ userId, badgeId, remindAt: record.remindAt, message: 'Badge reminder set' });
+    return {
+      id: record.id,
+      remindAt: record.remindAt.toISOString(),
+    };
+  }
+
+  /**
+   * Süresi gelen badge hatırlatmalarını işle: bildirim gönder, kaydı sil.
+   * Scheduler/cron tarafından periyodik çağrılmalı.
+   */
+  async processDueBadgeReminders(limit: number = 100): Promise<number> {
+    const now = new Date();
+    const due = await this.badgeReminderRepo.findDue(now, limit);
+    const prisma = getPrisma();
+    let processed = 0;
+    for (const r of due) {
+      try {
+        const badge = await prisma.badge.findUnique({
+          where: { id: r.badgeId },
+          select: { name: true },
+        });
+        const badgeName = badge?.name ?? 'Badge';
+        await this.sendNotification(r.userId, NotificationType.BADGE_REMINDER, {
+          badgeId: r.badgeId,
+          badgeName,
+        });
+        await this.badgeReminderRepo.delete(r.id);
+        processed++;
+      } catch (err) {
+        logger.error({
+          message: 'Failed to process badge reminder',
+          reminderId: r.id,
+          userId: r.userId,
+          badgeId: r.badgeId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+    return processed;
   }
 }
 

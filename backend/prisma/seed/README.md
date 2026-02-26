@@ -10,7 +10,7 @@ You can keep using `npm run db:seed` as-is, or run the modular seeds explicitly.
 - `content.seed.ts`: Minimal products and content posts (extend as needed)
 - `feed.seed.ts`: Minimal feed/trending entries
 - `marketplace.seed.ts`: Minimal marketplace banners (extend as needed)
-- `explore.seed.ts`: Minimal brands and wishbox data
+- `explore.seed.ts`: Minimal brands and event data
 - `index.ts`: Orchestrates all seeds
 
 ## Usage

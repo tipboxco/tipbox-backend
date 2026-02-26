@@ -14,7 +14,7 @@ async function main() {
     'Kamera Performansı: Gece Çekimleri',
   ];
 
-  const roastsResult = await prisma.wishboxEvent.updateMany({
+  const roastsResult = await prisma.event.updateMany({
     where: {
       brandId: null,
       title: { in: roastsTitles },
@@ -24,7 +24,7 @@ async function main() {
     },
   });
 
-  const picksResult = await prisma.wishboxEvent.updateMany({
+  const picksResult = await prisma.event.updateMany({
     where: {
       brandId: null,
       title: { notIn: roastsTitles },
@@ -35,7 +35,7 @@ async function main() {
   });
 
   // Kontrol amaçlı son durumu yazdır
-  const snapshot = await prisma.wishboxEvent.findMany({
+  const snapshot = await prisma.event.findMany({
     where: { brandId: null },
     select: { id: true, title: true, feedType: true },
     orderBy: { createdAt: 'desc' },

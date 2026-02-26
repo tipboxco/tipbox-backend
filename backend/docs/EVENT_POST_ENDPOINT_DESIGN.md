@@ -36,7 +36,7 @@ Bu dokümantasyon, Event post oluşturma için endpoint tasarımını açıklar.
 model ContentPost {
   // ... mevcut field'lar
   eventId String? @map("event_id") @db.VarChar(26)
-  event   WishboxEvent? @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  event   Event? @relation(fields: [eventId], references: [id], onDelete: SetNull)
   
   @@index([eventId])
 }
@@ -80,7 +80,7 @@ async createFreePost(
   
   // Event validation (eğer eventId varsa)
   if (request.eventId) {
-    const event = await this.prisma.wishboxEvent.findUnique({
+    const event = await this.prisma.event.findUnique({
       where: { id: request.eventId },
     });
     

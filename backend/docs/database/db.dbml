@@ -519,57 +519,57 @@ Table nft_claims {
   claimed_at timestamp
 }
 
-Table wishbox_events {
-  id int [pk, increment]
+Table events {
+  id varchar(26) [pk]
   title varchar
   description text
   start_date timestamp
   end_date timestamp
   status enum('draft', 'published', 'closed')
+  feed_type enum('picks', 'roasts')
+  product_id varchar [null]
+  image_url text [null]
+  brand_id uuid [null, ref: > brands.id]
+  main_category_id uuid [null, ref: > main_categories.id]
+  sub_category_id uuid [null, ref: > sub_categories.id]
   created_at timestamp
   updated_at timestamp
 }
-Table wishbox_scenarios {
-  id int [pk, increment]
-  event_id int [ref: > wishbox_events.id]
-  title varchar
-  description text
-  order_index int
-  created_at timestamp
-}
 
-Table scenario_choices {
-  id int [pk, increment]
-  scenario_id int [ref: > wishbox_scenarios.id]
-  user_id int [ref: > users.id]
-  choice_text varchar
-  is_selected boolean
-  created_at timestamp
-}
-Table choice_comments {
-  id int [pk, increment]
-  choice_id int [ref: > scenario_choices.id]
-  user_id int [ref: > users.id]
-  comment text
-  created_at timestamp
-}
-Table wishbox_stats {
-  id int [pk, increment]
-  user_id int [ref: > users.id]
-  event_id int [ref: > wishbox_events.id]
+Table event_stats {
+  id uuid [pk]
+  user_id uuid [ref: > users.id]
+  event_id varchar(26) [ref: > events.id]
   total_participated int
   total_comments int
   helpful_votes_received int
+  event_posts_count int
+  event_likes_received int
+  created_at timestamp
   updated_at timestamp
 }
-Table wishbox_rewards {
-  id int [pk, increment]
-  user_id int [ref: > users.id]
-  event_id int [ref: > wishbox_events.id]
+
+Table event_rewards {
+  id uuid [pk]
+  user_id uuid [ref: > users.id]
+  event_id varchar(26) [ref: > events.id]
   reward_type enum('tips', 'badge', 'title')
   reward_id int
   amount float
   awarded_at timestamp
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table event_badges {
+  id uuid [pk]
+  event_id varchar(26) [ref: > events.id]
+  badge_id uuid [ref: > badges.id]
+  rank int
+  display_order int [null]
+  enabled boolean
+  created_at timestamp
+  updated_at timestamp
 }
 
 Table dm_threads {

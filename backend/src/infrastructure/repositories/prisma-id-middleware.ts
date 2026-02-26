@@ -33,7 +33,10 @@ export function createPrismaWithIdMiddleware() {
     console.error('Failed to connect to database:', error);
   });
 
-  return extendedClient;
+  // $extends() dönüş tipi DynamicClientExtensionThis olduğu için event/eventStats
+  // TypeScript tarafından tanınmıyor. Runtime'da extended client tüm modellere sahip;
+  // tip olarak PrismaClient kullanıyoruz ki event/eventStats erişilebilir olsun.
+  return extendedClient as unknown as PrismaClient;
 }
 
 

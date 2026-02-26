@@ -171,7 +171,11 @@ export class SearchService {
             select: {
               id: true,
               name: true,
-              brand: true,
+              brand: {
+                select: {
+                  name: true,
+                },
+              },
               description: true,
               imageUrl: true,
             },
@@ -179,8 +183,8 @@ export class SearchService {
           }).then((products) => {
             // Popüler brand'lardan gelen product'ları önceliklendir
             const sortedProducts = products.sort((a, b) => {
-              const aBrandLower = (a.brand || '').toLowerCase();
-              const bBrandLower = (b.brand || '').toLowerCase();
+              const aBrandLower = (a.brand?.name || '').toLowerCase();
+              const bBrandLower = (b.brand?.name || '').toLowerCase();
               
               // Tam eşleşme veya içeriyor mu kontrol et
               const aIndex = popularBrandNames.findIndex(name => {
@@ -215,13 +219,17 @@ export class SearchService {
               OR: [
                 { name: { contains: trimmed, mode: 'insensitive' } },
                 { description: { contains: trimmed, mode: 'insensitive' } },
-                { brand: { contains: trimmed, mode: 'insensitive' } },
+                { brand: { is: { name: { contains: trimmed, mode: 'insensitive' } } } },
               ],
             },
             select: {
               id: true,
               name: true,
-              brand: true,
+              brand: {
+                select: {
+                  name: true,
+                },
+              },
               description: true,
               imageUrl: true,
             },
@@ -281,7 +289,7 @@ export class SearchService {
       return {
         id: String(p.id),
         name: p.name,
-        model: p.brand || '',
+        model: p.brand?.name || '',
         specs: p.description || '',
         image: buildFullUrl(imagePath),
       };

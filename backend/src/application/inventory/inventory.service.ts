@@ -16,7 +16,7 @@ import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
 import { GeminiService } from '../../infrastructure/ai/gemini.service';
 import { AiExperienceSplitPrismaRepository } from '../../infrastructure/repositories/ai-experience-split-prisma.repository';
 import { AchievementProgressService } from '../gamification/achievement-progress.service';
-import { AchievementGoalType } from '../../domain/gamification/achievement-goal-type.enum';
+import { MainAction } from '../../domain/gamification/main-action.enum';
 import { PostService } from '../post/post.service';
 import { ContextType } from '../../domain/content/context-type.enum';
 
@@ -28,7 +28,7 @@ export class InventoryService {
   private readonly geminiService: GeminiService;
   private readonly experienceSnippetRepo: AiExperienceSplitPrismaRepository;
   private readonly achievementProgressService: AchievementProgressService;
-  private readonly postService: PostService;
+  private _postService?: PostService;
 
   constructor() {
     this.prisma = getPrisma();
@@ -38,7 +38,15 @@ export class InventoryService {
     this.geminiService = GeminiService.getInstance();
     this.experienceSnippetRepo = new AiExperienceSplitPrismaRepository();
     this.achievementProgressService = new AchievementProgressService();
-    this.postService = new PostService();
+    // PostService lazy initialization to break circular dependency
+  }
+
+  // Lazy initialization for PostService to break circular dependency
+  private get postService(): PostService {
+    if (!this._postService) {
+      this._postService = new PostService();
+    }
+    return this._postService;
   }
 
   /**
@@ -233,44 +241,6 @@ export class InventoryService {
       logger.error({
         message: 'Error getting user inventory list',
         userId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Duration, Location, Purpose seçeneklerini getir
-   */
-  async getExperienceOptions(): Promise<{
-    durations: Array<{ id: string; name: string }>;
-    locations: Array<{ id: string; name: string }>;
-    purposes: Array<{ id: string; name: string }>;
-  }> {
-    try {
-      const [durations, locations, purposes] = await Promise.all([
-        this.prisma.experienceDuration.findMany({
-          where: { isActive: true },
-          orderBy: { name: 'asc' },
-        }),
-        this.prisma.experienceLocation.findMany({
-          where: { isActive: true },
-          orderBy: { name: 'asc' },
-        }),
-        this.prisma.experiencePurpose.findMany({
-          where: { isActive: true },
-          orderBy: { name: 'asc' },
-        }),
-      ]);
-
-      return {
-        durations: durations.map((d) => ({ id: d.id, name: d.name })),
-        locations: locations.map((l) => ({ id: l.id, name: l.name })),
-        purposes: purposes.map((p) => ({ id: p.id, name: p.name })),
-      };
-    } catch (error) {
-      logger.error({
-        message: 'Error getting experience options',
         error: error instanceof Error ? error.message : String(error),
       });
       throw error;
@@ -549,9 +519,9 @@ export class InventoryService {
         inventoryId: inventory.id,
       });
 
-      // Achievement Ladder progress (event dışı) - async
+      // Collection badge progress (SYSTEM + INVENTORY_ADD) - async
       this.achievementProgressService
-        .incrementProgress(userId, AchievementGoalType.INVENTORY, 1)
+        .incrementProgressByCode(userId, MainAction.SYSTEM, 'INVENTORY_ADD', 1)
         .catch((err) => {
           logger.warn({
             message: 'Failed to increment achievement progress for inventory create',
@@ -724,6 +694,31 @@ export class InventoryService {
         : 'Product and Usage Experience';
     const safeRating = Math.min(Math.max(Math.round(experience.rating), 1), 5);
     return `${readable} (${safeRating}/5)`;
+  }
+
+  /**
+   * Kullanıcının envanterinde belirli bir ürün var mı kontrol et
+   */
+  async hasProductInInventory(userId: string, productId: string): Promise<boolean> {
+    try {
+      const inventory = await this.prisma.inventory.findFirst({
+        where: {
+          userId,
+          productId,
+        },
+        select: { id: true },
+      });
+
+      return !!inventory;
+    } catch (error) {
+      logger.error({
+        message: 'Error checking product in inventory',
+        userId,
+        productId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return false;
+    }
   }
 
   /**

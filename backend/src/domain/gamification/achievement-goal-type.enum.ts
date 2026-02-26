@@ -1,8 +1,0 @@
-export enum AchievementGoalType {
-  POST = 'POST',
-  INVENTORY = 'INVENTORY',
-  LIKE_GIVEN = 'LIKE_GIVEN',
-  LIKE_RECEIVED = 'LIKE_RECEIVED',
-  COMMENT = 'COMMENT',
-}
-

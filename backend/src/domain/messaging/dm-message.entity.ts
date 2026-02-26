@@ -17,6 +17,8 @@ export class DMMessage {
     public readonly caption?: string | null,
     // Reply/Threading
     public readonly replyToMessageId?: string | null,
+    // Shared post (message type: shared post card + text below)
+    public readonly sharedPostId?: string | null,
     // Status Tracking
     public readonly status?: string,
     public readonly deliveredAt?: Date | null,

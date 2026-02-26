@@ -332,7 +332,7 @@ export class ExploreService {
       logger.warn({ message: 'Cache error', error: error instanceof Error ? error.message : String(error) });
     }
 
-    const events = await this.prisma.wishboxEvent.findMany({
+    const events = await this.prisma.event.findMany({
       where: {
         status: 'PUBLISHED',
         ...(search && {
@@ -359,7 +359,7 @@ export class ExploreService {
     // Get participant counts and sample participants for each event
     const eventItems: EventResponse[] = await Promise.all(
       resultEvents.map(async (event) => {
-        const participantData = await this.prisma.wishboxStats.findMany({
+        const participantData = await this.prisma.eventStats.findMany({
           where: { eventId: event.id },
           include: {
             user: {
@@ -378,7 +378,7 @@ export class ExploreService {
           take: 5, // Sample of top participants
         });
 
-        const totalParticipants = await this.prisma.wishboxStats.count({
+        const totalParticipants = await this.prisma.eventStats.count({
           where: { eventId: event.id },
         });
 

@@ -19,6 +19,7 @@ import {
   CreateExperiencePostRequest,
   CreateUpdatePostRequest,
   BoostOption,
+  GetBoostPriceResponse,
   SplitExperienceRequest,
   SplitExperienceResponse,
   Experience,
@@ -36,8 +37,14 @@ import { invalidateCatalogPostsCache } from '../../infrastructure/cache/cache-in
 import { EventMetricsService } from '../event/event-metrics.service';
 import { BadgeEligibilityService } from '../gamification/badge-eligibility.service';
 import { AchievementProgressService } from '../gamification/achievement-progress.service';
-import { AchievementGoalType } from '../../domain/gamification/achievement-goal-type.enum';
+import { ActionLogService } from '../gamification/action-log.service';
+import { MainAction } from '../../domain/gamification/main-action.enum';
 import { IdResolverService } from '../../infrastructure/ids/id-resolver.service';
+import { getErrorMessage } from '../../infrastructure/errors/error-helper';
+import { WalletService } from '../wallet/wallet.service';
+import { TransactionService } from '../transaction/transaction.service';
+import { ValidationError } from '../../infrastructure/errors/custom-errors';
+import { InventoryService } from '../inventory/inventory.service';
 
 export class PostService {
   private postRepo: ContentPostPrismaRepository;
@@ -53,7 +60,11 @@ export class PostService {
   private eventMetricsService: EventMetricsService;
   private badgeEligibilityService: BadgeEligibilityService;
   private achievementProgressService: AchievementProgressService;
+  private actionLogService: ActionLogService;
   private idResolver: IdResolverService;
+  private walletService: WalletService;
+  private transactionService: TransactionService;
+  private inventoryService: InventoryService;
 
   /**
    * Search posts by title and body
@@ -109,7 +120,11 @@ export class PostService {
     this.eventMetricsService = new EventMetricsService();
     this.badgeEligibilityService = new BadgeEligibilityService();
     this.achievementProgressService = new AchievementProgressService();
+    this.actionLogService = new ActionLogService();
     this.idResolver = idResolver ?? new IdResolverService();
+    this.walletService = new WalletService();
+    this.transactionService = new TransactionService();
+    this.inventoryService = new InventoryService();
   }
 
   /**
@@ -137,7 +152,7 @@ export class PostService {
       throw new Error(`Invalid eventId value: "${eventId}"`);
     }
 
-    const event = await this.prisma.wishboxEvent.findUnique({
+    const event = await this.prisma.event.findUnique({
       where: { id: trimmed },
     });
 
@@ -502,7 +517,7 @@ export class PostService {
         await this.validateEventMembership(userId, request.eventId);
 
         // ✅ ROASTS event'lerde productStatus beklenir (app own|tried gönderir)
-        const event = await this.prisma.wishboxEvent.findUnique({
+        const event = await this.prisma.event.findUnique({
           where: { id: request.eventId },
           select: { feedType: true },
         });
@@ -521,9 +536,33 @@ export class PostService {
         actualContextId // ✅ InventoryId'den gelen productId veya direkt contextId
       );
 
+      // ✅ Product context için envanter kontrolü
+      // Event post'ları için kontrol YAPILMAZ (kullanıcılar event'lerde herhangi bir ürün hakkında içerik paylaşabilir)
+      // Normal free post'lar için kontrol YAPILIR (sadece envanterindeki ürünler hakkında gönderi paylaşabilir)
+      const isEventPost = !!request.eventId;
+
+      if (request.contextType === ContextType.PRODUCT && contextIds.productId && !isEventPost) {
+        const hasProduct = await this.inventoryService.hasProductInInventory(
+          userId,
+          contextIds.productId
+        );
+
+        if (!hasProduct) {
+          logger.warn({
+            message: 'User attempted to create free post for product not in inventory',
+            userId,
+            productId: contextIds.productId,
+            contextType: request.contextType,
+          });
+          throw new ValidationError(
+            'Bu ürün envanterinizde bulunmuyor. Gönderi oluşturmak için önce ürünü envanterinize eklemelisiniz.'
+          );
+        }
+      }
+
       // Support both 'body' (new) and 'description' (old) fields
       const postContent = request.body || request.description || '';
-      
+
       const bodyWithImages = this.appendImagesToBody(
         postContent,
         request.images
@@ -561,7 +600,7 @@ export class PostService {
       if (request.eventId) {
         try {
           // Increment post count for user's event stats
-          await this.prisma.wishboxStats.updateMany({
+          await this.prisma.eventStats.updateMany({
             where: {
               userId: userId,
               eventId: request.eventId,
@@ -619,8 +658,20 @@ export class PostService {
       this.feedService.addPostToFeeds(post.id, userId).catch((err) => {
         logger.warn({ message: 'Failed to add post to feeds', postId: post.id, error: err });
       });
-      
-      return { 
+
+      // Collection badge progress (async, hata olsa bile devam et)
+      // Post type'a göre farklı action code'ları kullanılabilir
+      const postTypeCode = 'GENERAL'; // Default
+      this.achievementProgressService.incrementProgressByCode(
+        userId,
+        MainAction.POST,
+        postTypeCode,
+        1
+      ).catch((err) => {
+        logger.warn({ message: 'Failed to increment post achievement progress', userId, postId: post.id, error: err });
+      });
+
+      return {
         id: post.id,
         message: 'Post created successfully',
         success: true
@@ -635,7 +686,7 @@ export class PostService {
    * Event membership validation - kullanıcı event'e katılmış mı?
    */
   private async validateEventMembership(userId: string, eventId: string): Promise<void> {
-    const userStats = await this.prisma.wishboxStats.findUnique({
+    const userStats = await this.prisma.eventStats.findUnique({
       where: {
         userId_eventId: {
           userId: userId,
@@ -723,6 +774,25 @@ export class PostService {
         request.contextType,
         request.contextId
       );
+
+      // ✅ YENİ: Product context ise envanter kontrolü yap
+      if (request.contextType === ContextType.PRODUCT && contextIds.productId) {
+        const hasProduct = await this.inventoryService.hasProductInInventory(
+          userId,
+          contextIds.productId
+        );
+
+        if (!hasProduct) {
+          logger.warn({
+            message: 'User attempted to create tips post for product not in inventory',
+            userId,
+            productId: contextIds.productId,
+          });
+          throw new ValidationError(
+            'Bu ürün envanterinizde bulunmuyor. İpucu paylaşmak için önce ürünü envanterinize eklemelisiniz.'
+          );
+        }
+      }
 
       const bodyWithImages = this.appendImagesToBody(
         request.description,
@@ -835,7 +905,25 @@ export class PostService {
   }
 
   /**
-   * Soru gönderisi oluştur
+   * Tekil boost fiyatı (TIPS). İleride onchain/yoğunluğa göre hesaplanacak; şimdilik base değer.
+   */
+  async getBoostPrice(): Promise<GetBoostPriceResponse> {
+    const envPrice = process.env.BOOST_PRICE ? Number(process.env.BOOST_PRICE) : NaN;
+    if (Number.isFinite(envPrice) && envPrice > 0) {
+      return { price: envPrice, currency: 'TIPS' };
+    }
+    const options = await this.getBoostOptions();
+    const price = options.length > 0 ? options[0].amount : 50;
+    return {
+      price,
+      currency: 'TIPS',
+      factors: { activityLevel: 'base' },
+    };
+  }
+
+  /**
+   * Soru gönderisi oluştur.
+   * boostEnabled true ise: boost fiyatı kadar TIPS düşülür, post boost'lu oluşturulur (boostPrice kaydedilir).
    */
   async createQuestionPost(
     userId: string,
@@ -863,17 +951,25 @@ export class PostService {
         request.contextId
       );
 
+      // ✅ Question posts do NOT require inventory check
+      // Users can ask questions about products they don't own (and pay TIPS for boost)
+
       const bodyWithImages = this.appendImagesToBody(
         request.description,
         request.images
       );
 
-      // Boost option validation
-      const boostOption = await this.getBoostOption(
-        request.selectedBoostOptionId
-      );
-      if (!boostOption) {
-        throw new Error(`Boost option not found: ${request.selectedBoostOptionId}`);
+      const boostEnabled = request.boostEnabled === true || request.boostEnabled === 'true';
+      let boostPrice: number | undefined;
+      if (boostEnabled) {
+        const { price } = await this.getBoostPrice();
+        const balanceInfo = await this.walletService.getUserBalance(userId);
+        if (balanceInfo.available < price) {
+          throw new ValidationError(
+            `Insufficient TIPS balance. Available: ${balanceInfo.available} TIPS, required: ${price} TIPS`
+          );
+        }
+        boostPrice = price;
       }
 
       const post = await this.postRepo.create(
@@ -886,24 +982,30 @@ export class PostService {
         contextIds.productGroupId,
         contextIds.productId,
         false,
-        true,
+        boostEnabled,
         request.eventId,
         undefined,
-        contextIds.categoryId
+        contextIds.categoryId,
+        boostPrice
       );
 
-      // Set boosted until date (e.g., 7 days from now)
-      const boostedUntil = new Date();
-      boostedUntil.setDate(boostedUntil.getDate() + 7);
-      await this.postRepo.update(post.id, {
-        boostedUntil,
-      });
+      if (boostEnabled && boostPrice != null) {
+        try {
+          await this.transactionService.deductForPostBoost(userId, boostPrice, post.id);
+        } catch (err) {
+          await this.postRepo.update(post.id, { isBoosted: false, boostPrice: undefined });
+          throw err;
+        }
+        const boostedUntil = new Date();
+        boostedUntil.setDate(boostedUntil.getDate() + 7);
+        await this.postRepo.update(post.id, { boostedUntil });
+      }
 
       // Create PostQuestion
       await this.questionRepo.create(
-        post.id, // post.id is already a string (VarChar(26))
-        QuestionAnswerFormat.SHORT, // Default format
-        undefined // relatedProductId
+        post.id,
+        QuestionAnswerFormat.SHORT,
+        undefined
       );
 
       // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
@@ -913,7 +1015,7 @@ export class PostService {
             postId: post.id,
             userId: userId,
             mediaUrl: imageUrl,
-            orderIndex: index, // Kullanıcının yüklediği sırada
+            orderIndex: index,
           })),
         });
       }
@@ -959,6 +1061,59 @@ export class PostService {
       logger.error(`Failed to create question post:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Post boost aç/kapa. Açarken bakiye kontrolü yapılır ve TIPS düşülür; kapatırken iade yok.
+   */
+  async togglePostBoost(
+    postId: string,
+    userId: string,
+    enabled: boolean
+  ): Promise<{ success: boolean; postId: string; isBoosted: boolean; boostPrice?: number; message?: string }> {
+    const post = await this.prisma.contentPost.findUnique({
+      where: { id: postId },
+      select: { id: true, userId: true, type: true, isBoosted: true, boostPrice: true },
+    });
+    if (!post) {
+      throw new Error('Post not found');
+    }
+    if (post.userId !== userId) {
+      throw new Error('You can only change boost for your own post');
+    }
+    if (post.type !== ContentPostType.QUESTION) {
+      throw new Error('Only question posts can be boosted');
+    }
+
+    if (enabled && !post.isBoosted) {
+      const { price } = await this.getBoostPrice();
+      const balanceInfo = await this.walletService.getUserBalance(userId);
+      if (balanceInfo.available < price) {
+        return {
+          success: false,
+          postId,
+          isBoosted: false,
+          message: `Insufficient TIPS balance. Available: ${balanceInfo.available} TIPS, required: ${price} TIPS`,
+        };
+      }
+      await this.transactionService.deductForPostBoost(userId, price, postId);
+      const boostedUntil = new Date();
+      boostedUntil.setDate(boostedUntil.getDate() + 7);
+      await this.postRepo.update(postId, { isBoosted: true, boostPrice: price, boostedUntil });
+      return { success: true, postId, isBoosted: true, boostPrice: price };
+    }
+
+    if (!enabled && post.isBoosted) {
+      await this.postRepo.update(postId, { isBoosted: false });
+      return { success: true, postId, isBoosted: false };
+    }
+
+    return {
+      success: true,
+      postId,
+      isBoosted: post.isBoosted,
+      boostPrice: post.boostPrice ?? undefined,
+    };
   }
 
   /**
@@ -1063,6 +1218,28 @@ export class PostService {
         request.contextId
       );
 
+      // ✅ Ana ürün (context product) envanterde olmalı
+      if (contextIds.productId) {
+        const hasProduct = await this.inventoryService.hasProductInInventory(
+          userId,
+          contextIds.productId
+        );
+
+        if (!hasProduct) {
+          logger.warn({
+            message: 'User attempted to create benchmark post for product not in inventory',
+            userId,
+            productId: contextIds.productId,
+          });
+          throw new ValidationError(
+            'Karşılaştırma yapmak istediğiniz ana ürün envanterinizde bulunmuyor. Lütfen önce ürünü envanterinize ekleyin.'
+          );
+        }
+      }
+
+      // ✅ Karşılaştırılacak 2. ürün için envanter kontrolü YOK
+      // Kullanıcı envanterindeki bir ürünü herhangi bir ürünle karşılaştırabilir
+
       const post = await this.postRepo.create(
         userId,
         ContentPostType.COMPARE,
@@ -1149,23 +1326,79 @@ export class PostService {
     request: CreateExperiencePostRequest
   ): Promise<{ id: string; message: string; success: boolean }> {
     try {
-      // Experience posts can only be created for products
-      if (request.contextType !== ContextType.PRODUCT) {
-        throw new Error('Experience posts can only be created for products');
-      }
-
       // Event validation (if eventId is provided)
       if (request.eventId) {
         await this.validateEvent(request.eventId);
       }
 
-      const contextIds = await this.resolveContextIds(
-        request.contextType,
-        request.contextId
-      );
+      // ✅ YENİ: Sub-category veya product-group context'inde de product ID verilmişse kabul et
+      let contextIds: any;
+      
+      if (request.contextType === ContextType.PRODUCT) {
+        // Product context - normal flow
+        contextIds = await this.resolveContextIds(
+          request.contextType,
+          request.contextId
+        );
+      } else if (
+        (request.contextType === ContextType.SUB_CATEGORY || 
+         request.contextType === ContextType.PRODUCT_GROUP) &&
+        request.productId
+      ) {
+        // Sub-category veya Product-group context + productId verilmiş
+        // Bu durumda: context'ten category bilgilerini al, product'tan ürün bilgilerini al
+        const categoryContextIds = await this.resolveContextIds(
+          request.contextType,
+          request.contextId
+        );
+        
+        const productContextIds = await this.resolveContextIds(
+          ContextType.PRODUCT,
+          request.productId
+        );
+        
+        // İkisini birleştir (product bilgileri öncelikli)
+        contextIds = {
+          ...categoryContextIds,
+          ...productContextIds,
+        };
+        
+        logger.info({
+          message: 'Experience post created with mixed context (category + product)',
+          contextType: request.contextType,
+          contextId: request.contextId,
+          productId: request.productId,
+          resolvedContextIds: contextIds,
+        });
+      } else {
+        // Eski davranış: sadece product context izin verilir
+        throw new Error(
+          'Experience posts require either: (1) product context, or (2) sub-category/product-group context with productId field'
+        );
+      }
 
       if (!contextIds.productId) {
         throw new Error('Product ID is required for experience posts');
+      }
+
+      // ✅ YENİ: "I owned" status ise envanter kontrolü yap (tried için kontrol yok)
+      if (request.status === ExperienceStatus.OWN) {
+        const hasProduct = await this.inventoryService.hasProductInInventory(
+          userId,
+          contextIds.productId
+        );
+
+        if (!hasProduct) {
+          logger.warn({
+            message: 'User attempted to create owned experience post for product not in inventory',
+            userId,
+            productId: contextIds.productId,
+            status: request.status,
+          });
+          throw new ValidationError(
+            'Bu ürün "Sahip Olduğum" olarak işaretlenmiş ancak envanterinizde bulunmuyor. Lütfen önce ürünü envanterinize ekleyin veya "Denedim" seçeneğini kullanın.'
+          );
+        }
       }
 
       // I owned ise ürünü kullanıcı envanterine ekle/güncelle (görseli ile); I tried ise envantere ekleme
@@ -1297,9 +1530,30 @@ export class PostService {
         experienceSnippetId: request.experienceSnippetId || null
       });
 
-      // Achievement Ladder progress (event dışı) - async
+      // Log action (fire-and-forget)
+      this.actionLogService
+        .logAction({
+          userId,
+          mainAction: MainAction.POST,
+          actionTypeCode: 'EXPERIENCE',
+          entityType: 'post',
+          entityId: post.id,
+          metadata: {
+            postType: ContentPostType.EXPERIENCE,
+            categoryId: contextIds.categoryId,
+            productId: contextIds.productId,
+            hasMedia: (request.images && request.images.length > 0) || false,
+            mediaCount: request.images?.length || 0,
+            status: request.status,
+          },
+        })
+        .catch((err) => {
+          logger.warn('Failed to log action', { error: getErrorMessage(err) });
+        });
+
+      // Collection badge progress (POST + EXPERIENCE) - async
       this.achievementProgressService
-        .incrementProgress(userId, AchievementGoalType.POST, 1)
+        .incrementProgressByCode(userId, MainAction.POST, 'EXPERIENCE', 1)
         .catch((err) => {
           logger.warn({
             message: 'Failed to increment achievement progress for experience post',
@@ -1501,6 +1755,9 @@ export class PostService {
       if (experiencePost.productId !== contextIds.productId) {
         throw new Error('Experience post and update post must be for the same product');
       }
+
+      // ✅ Update posts do NOT require inventory check
+      // If experience post exists (owned or tried), user can post updates regardless of current inventory status
 
       const bodyWithImages = this.appendImagesToBody(
         request.content,

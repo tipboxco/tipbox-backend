@@ -20,7 +20,7 @@
  * - Feed, TrendingPost, FeedHighlight
  * - Inventory, ProductExperience, InventoryMedia
  * - BrandSurvey, BridgePost, BridgeFollower, vb.
- * - WishboxEvent, WishboxScenario, vb.
+ * - Event, EventScenario, vb.
  * - DMThread, DMMessage, DMRequest, vb.
  * - ExpertRequest, ExpertAnswer, vb.
  * - Wallet, TipsTokenTransfer, NFT, vb.
@@ -84,11 +84,11 @@ export async function clearUserContentData(): Promise<void> {
     await prisma.nFTAttribute.deleteMany({});
     await prisma.nFT.deleteMany({});
 
-    // Explore/Bridge verileri (BrandSurvey, BridgePost, WishboxEvent, vb.)
+    // Explore/Bridge verileri (BrandSurvey, BridgePost, Event, vb.)
     progress.increment('Explore/Bridge verileri temizleniyor...');
-    await prisma.wishboxStats.deleteMany({});
-    await prisma.wishboxReward.deleteMany({});
-    await prisma.wishboxEvent.deleteMany({});
+    await prisma.eventStats.deleteMany({});
+    await prisma.eventReward.deleteMany({});
+    await prisma.event.deleteMany({});
     await prisma.bridgeReward.deleteMany({});
     await prisma.bridgeUserStats.deleteMany({});
     await prisma.bridgeLeaderboard.deleteMany({});
