@@ -57,7 +57,7 @@
     "clear:georgia": "docker-compose exec backend npx ts-node scripts/clear-georgia-all-data.ts",
     "delete:georgia-threads": "docker-compose exec backend npx ts-node scripts/delete-georgia-threads-complete.ts",
     "minio:set-cors": "npx ts-node scripts/set-minio-cors.ts",
-    "minio:set-cors:docker": "docker-compose exec backend npx ts-node scripts/set-minio-cors.ts"
+    "minio:set-cors:docker": "docker-compose exec backend npx ts-node scripts/set-minio-cors.ts",
     "sync-badge-images": "npx ts-node scripts/sync-badge-images-from-minio.ts"
   },
   "prisma": {
