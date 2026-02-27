@@ -1,9 +1,9 @@
 #!/bin/sh
 
 # Ensure node_modules has all deps (fixes volume mount: anonymous volume can be empty or stale)
-if [ ! -d "node_modules/@xterm/xterm" ] || [ ! -f "node_modules/.package-lock.json" ]; then
+if [ ! -d "node_modules/@xterm/xterm" ]; then
   echo "Installing/refreshing node_modules..."
-  npm install --legacy-peer-deps
+  pnpm install --legacy-peer-deps
   echo "node_modules ready."
 fi
 
@@ -39,7 +39,8 @@ fi
 # Run migrations and start server
 echo "Running database migrations..."
 npx medusa db:migrate
-npx medusa user -e root@tipbox.co -p root@tipbox.co
+# Medusa admin user (zaten varsa hata vermez)
+npx medusa user -e root@tipbox.co -p root@tipbox.co 2>/dev/null || true
 
 echo "Starting Medusa development server..."
-npm run dev
+pnpm run dev

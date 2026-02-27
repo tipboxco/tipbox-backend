@@ -5,6 +5,7 @@
   "description": "Tipbox monorepo - backend, admin-panel, catalog-service, cloudflared tunnel",
   "packageManager": "pnpm@9.15.0",
   "scripts": {
+    "dev": "concurrently -n backend,catalog \"pnpm --filter tipbox-backend dev\" \"pnpm --filter tipbox-medusa dev\"",
     "backend": "pnpm --filter tipbox-backend dev",
     "backend:start": "pnpm --filter tipbox-backend start",
     "admin": "pnpm --filter tipbox-admin-panel dev",
@@ -18,5 +19,8 @@
     "tunnel:quick": "cloudflared tunnel --url http://localhost:3000",
     "tunnel:stop": "node cloudflared/tunnel-stop.js",
     "tunnel:route-dns": "node cloudflared/setup-routes.js"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
   }
 }

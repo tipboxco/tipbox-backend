@@ -37,23 +37,40 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
 
       - name: Install dependencies
-        run: cd backend && npm ci --legacy-peer-deps
+        run: pnpm install
 
       - name: Run linter
-        run: cd backend && npm run lint
+        run: pnpm --filter tipbox-backend run lint
         continue-on-error: true
         env:
           ESLINT_NO_DEV_ERRORS: true
 
       - name: Run tests
-        run: cd backend && npm test
+        run: pnpm --filter tipbox-backend test
         continue-on-error: true
 
       - name: Build TypeScript
-        run: cd backend && npm run build
+        run: pnpm --filter tipbox-backend run build
 
       - name: Check SSH secrets
         id: check-secrets

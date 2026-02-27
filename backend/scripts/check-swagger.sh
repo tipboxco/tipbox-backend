@@ -15,7 +15,7 @@ fi
 
 # TypeScript'i derle
 echo "📦 TypeScript dosyaları derleniyor..."
-docker-compose exec backend npm run build
+docker-compose exec backend pnpm run build
 
 # Container'ı restart et
 echo "🔄 Backend container restart ediliyor..."

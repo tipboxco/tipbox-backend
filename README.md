@@ -9,10 +9,11 @@ Bu repo **pnpm monorepo** yapısındadır. Paketler: `backend`, `admin-panel`, `
 ```bash
 # pnpm yükle (yoksa): corepack enable && corepack prepare pnpm@9.15.0 --activate
 pnpm install          # Tüm workspace bağımlılıklarını yükler
-pnpm run backend      # Backend dev server
+pnpm run dev          # Backend + Catalog Service aynı anda (paralel)
+pnpm run backend      # Sadece backend dev server
 pnpm run admin        # Admin panel dev
-pnpm run catalog      # Catalog (Medusa) dev
-pnpm run clean:modules # Tüm projelerdeki node_modules'leri siler (root + backend, admin-panel, catalog-service, merge-code)
+pnpm run catalog      # Sadece Catalog (Medusa) dev
+pnpm run clean:modules # Tüm projelerdeki node_modules'leri siler
 ```
 
 ## Getting Started
@@ -31,7 +32,7 @@ docker-compose up -d --build
 docker-compose exec backend npx prisma db push
 
 # 4. Seed data'yı yükle (opsiyonel)
-docker-compose exec backend npm run db:seed
+docker-compose exec backend pnpm run db:seed
 ```
 
 Detaylı kurulum rehberi için: [docs/SETUP.md](docs/SETUP.md)

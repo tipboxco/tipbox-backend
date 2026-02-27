@@ -180,7 +180,7 @@ echo ""
 
 # 7. Seed data import
 info "7️⃣  Seed data import ediliyor..."
-npm run db:seed:all || npm run db:seed
+pnpm run db:seed:all || pnpm run db:seed
 success "Seed data import edildi"
 echo ""
 
@@ -211,7 +211,7 @@ while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
 done
 
 if [ $WAIT_COUNT -ge $MAX_WAIT ]; then
-    warning "Backend henüz hazır olmadı. Logları kontrol edin: npm run docker:logs"
+    warning "Backend henüz hazır olmadı. Logları kontrol edin: pnpm run docker:logs"
 else
     success "Backend başarıyla başlatıldı!"
 fi
@@ -237,7 +237,7 @@ echo "   • PgAdmin: http://localhost:5050"
 echo "   • MinIO Console: http://localhost:9001"
 echo ""
 info "📝 Yararlı komutlar:"
-echo "   • Logları görmek: npm run docker:logs"
+echo "   • Logları görmek: pnpm run docker:logs"
 echo "   • Container durumunu görmek: $DOCKER_COMPOSE_CMD ps"
-echo "   • Prisma Studio: npm run db:studio"
+echo "   • Prisma Studio: pnpm run db:studio"
 echo ""

@@ -4,14 +4,17 @@ FROM node:20-alpine
 # Install dos2unix, postgresql-client and unzip
 RUN apk add --no-cache dos2unix postgresql-client unzip
 
+# pnpm (start.sh pnpm run dev kullanıyor)
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+
 # Set working directory
 WORKDIR /server
 
-# Copy package files and npm config
+# Copy package files
 COPY package.json  ./
 
-# Install all dependencies using npm
-RUN npm install --legacy-peer-deps
+# Install all dependencies
+RUN pnpm install --legacy-peer-deps
 
 # Copy source code
 COPY . .

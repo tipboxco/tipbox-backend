@@ -4,6 +4,7 @@ import { SupportRequestStatus } from '../../domain/messaging/support-request-sta
 import { DMRequestStatus } from '../../domain/messaging/dm-request-status.enum';
 import { SupportType } from '../../domain/messaging/support-type.enum';
 import SocketManager from '../../infrastructure/realtime/socket-manager';
+import { SocketHandler } from '../../infrastructure/realtime/socket.handler';
 import logger from '../../infrastructure/logger/logger';
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import { SupportRequestReportPrismaRepository } from '../../infrastructure/repositories/support-request-report-prisma.repository';
@@ -840,7 +841,13 @@ export class SupportRequestService {
 
       const now = new Date();
       const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 1 gün önce
-      const socketHandler = SocketManager.getInstance().getSocketHandler();
+      // Worker HTTP server'dan önce çalışabilir; SocketHandler henüz initialize edilmemiş olabilir
+      let socketHandler: SocketHandler | null = null;
+      try {
+        socketHandler = SocketManager.getInstance().getSocketHandler();
+      } catch {
+        socketHandler = null;
+      }
 
       let completedCount = 0;
 
@@ -912,18 +919,19 @@ export class SupportRequestService {
 
           await this.dmRequestRepo.update(request.id, updateData);
 
-          // Socket bildirimi gönder
-          const completedEvent = {
-            requestId: request.id,
-            status: 'completed' as const,
-            userId: null, // Sistem otomatik olarak yaptı
-            rating: 3,
-            timestamp: now.toISOString(),
-            autoCompleted: true,
-          };
-
-          socketHandler.sendMessageToUser(request.fromUserId, 'support_request_closed', completedEvent);
-          socketHandler.sendMessageToUser(request.toUserId, 'support_request_closed', completedEvent);
+          // Socket bildirimi gönder (handler hazırsa)
+          if (socketHandler) {
+            const completedEvent = {
+              requestId: request.id,
+              status: 'completed' as const,
+              userId: null, // Sistem otomatik olarak yaptı
+              rating: 3,
+              timestamp: now.toISOString(),
+              autoCompleted: true,
+            };
+            socketHandler.sendMessageToUser(request.fromUserId, 'support_request_closed', completedEvent);
+            socketHandler.sendMessageToUser(request.toUserId, 'support_request_closed', completedEvent);
+          }
 
           completedCount++;
           logger.info(`Auto-completed support request ${request.id} after 1 day (closed by ${closedByUserId})`);

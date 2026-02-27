@@ -3,4 +3,4 @@
 # MinIO badges/custom görsellerini Badge tablosu ile eşleştirir.
 set -e
 cd "$(dirname "$0")/../backend"
-exec npm run sync-badge-images
+exec pnpm run sync-badge-images

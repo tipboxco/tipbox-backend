@@ -4,11 +4,11 @@ echo.
 
 :: Backend servisini yeni pencerede başlat
 echo Starting Backend...
-start "Tipbox Backend" cmd /k "cd /d %~dp0backend && npm run dev"
+start "Tipbox Backend" cmd /k "cd /d %~dp0backend && pnpm run dev"
 
 :: Catalog Service'i yeni pencerede başlat
 echo Starting Catalog Service...
-start "Tipbox Catalog Service" cmd /k "cd /d %~dp0catalog-service && npm run dev"
+start "Tipbox Catalog Service" cmd /k "cd /d %~dp0catalog-service && pnpm run dev"
 
 echo.
 echo Both services are starting in separate windows.

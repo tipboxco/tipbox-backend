@@ -23,17 +23,23 @@
           with:
             node-version: '20'
 
+        # 2.5. pnpm kur
+        - name: Setup pnpm
+          uses: pnpm/action-setup@v4
+          with:
+            version: 9
+
         # 3. Bağımlılıkları yükle
         - name: Install dependencies
-          run: npm ci
+          run: pnpm install
 
         # 3.5. Prisma Client'ı generate et
         - name: Generate Prisma Client
-          run: npx prisma generate
+          run: pnpm --filter tipbox-backend exec prisma generate
 
         # 4. Projeyi build et
         - name: Build project
-          run: npm run build
+          run: pnpm --filter tipbox-backend run build
 
         # 5. Projeyi zip'le (sadece gerekli dosyalar)
         - name: Zip project files

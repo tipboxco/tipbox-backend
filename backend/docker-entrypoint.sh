@@ -57,6 +57,6 @@ else
   echo "✅ Migration işlemi tamamlandı!"
 fi
 
-# Gelen komutu çalıştır (npm run dev gibi)
+# Gelen komutu çalıştır (pnpm run dev gibi)
 exec "$@"
 

@@ -338,7 +338,7 @@ run_seed() {
     fi
     
     log "Seed çalıştırılıyor..."
-    run_prisma "npm run db:seed"
+    run_prisma "pnpm run db:seed"
     success "Seed başarıyla tamamlandı"
 }
 

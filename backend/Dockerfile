@@ -5,21 +5,22 @@ WORKDIR /app
 # node-gyp için Python ve build araçları (utf-8-validate, bufferutil gibi native modüller için)
 RUN apk add --no-cache python3 make g++ && ln -sf /usr/bin/python3 /usr/bin/python
 
-# Package files ve Prisma schema'yı kopyala
-COPY package*.json ./
+# pnpm kullan (monorepo ile uyumlu)
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+
+# Package files ve Prisma schema'yı kopyala (backend tek başına build edilir; lockfile kökte)
+COPY package.json ./
 COPY prisma ./prisma
 
-# Dependencies'leri yükle (cache friendly)
-# npm ci package-lock.json varsa kullanır (daha hızlı ve güvenilir)
-# Yoksa npm install'a fallback yapar
-RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps --no-optional
+# Dependencies'leri yükle
+RUN pnpm install
 
 # Docker CLI ve netcat kur (docker ps ve PostgreSQL port kontrolü için)
 RUN apk add --no-cache docker-cli netcat-openbsd
 
 # Prisma Client'ı generate et (schema kopyalandıktan sonra)
 # Not: prisma db push runtime'da çalıştırılacak (DATABASE_URL gerektirir)
-RUN npx prisma generate
+RUN pnpm exec prisma generate
 
 # Source code'u kopyala
 COPY . .
@@ -35,4 +36,4 @@ EXPOSE 3000
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 # Development için nodemon ile başlat
-CMD ["npm", "run", "dev"]
+CMD ["pnpm", "run", "dev"]

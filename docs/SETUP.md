@@ -53,7 +53,7 @@ docker-compose up -d --build
 docker-compose exec backend npx prisma db push
 
 # 5. (İsteğe bağlı) Seed data yükle
-docker-compose exec backend npm run db:seed
+docker-compose exec backend pnpm run db:seed
 ```
 
 - **Backend API:** http://localhost:3000  
@@ -143,7 +143,7 @@ docker-compose exec backend npx prisma generate
 ### Seed (test verisi)
 
 ```bash
-docker-compose exec backend npm run db:seed
+docker-compose exec backend pnpm run db:seed
 ```
 
 Seed sonrası test kullanıcıları (backend/docs/SETUP_GUIDE.md ile uyumlu):
