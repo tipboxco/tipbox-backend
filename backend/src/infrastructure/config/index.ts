@@ -28,8 +28,8 @@ const THIRDWEB_WEBHOOK_CORS_ORIGINS: string[] = [
 
 /** Developer Console / API base URL – CORS_ORIGINS set edilse bile her zaman whitelist’e eklenir. */
 const TIPBOX_API_CORS_ORIGINS: string[] = [
-  'https://api-tipbox.exportergo.com',
-  'http://api-tipbox.exportergo.com',
+  'https://api-tipbox.tipbox.co',
+  'http://api-tipbox.tipbox.co',
 ];
 
 // Ortam bazlı default değerler
@@ -61,7 +61,7 @@ function getDefaultCorsOrigins(env: string): (string | RegExp)[] {
       // Bu pattern'ler sadece CORS_ORIGINS env variable set edilmişse kullanılır
       return [
         ...origins,
-        'https://api-tipbox.exportergo.com',
+        'https://api-tipbox.tipbox.co',
         'http://localhost:3000',
         'http://localhost:3001',
         'http://localhost:5173',
@@ -80,7 +80,7 @@ function getDefaultCorsOrigins(env: string): (string | RegExp)[] {
     case 'test':
       return [
         ...origins,
-        'https://api-tipbox.exportergo.com',
+        'https://api-tipbox.tipbox.co',
         'http://localhost:3000',
         'https://api-test.tipbox.co',
         'http://api-test.tipbox.co',
@@ -93,7 +93,7 @@ function getDefaultCorsOrigins(env: string): (string | RegExp)[] {
         /^https:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+|100\.\d+\.\d+\.\d+|10\.0\.2\.2)(:\d+)?$/,
       ] as any;
     case 'production':
-      return ['https://api-tipbox.exportergo.com', 'https://api.tipbox.co', 'https://api.tipbox.co/v1', 'https://api.tipbox.co/v1/docs', 'https://app.tipbox.co'];
+      return ['https://api-tipbox.tipbox.co', 'https://api.tipbox.co', 'https://api.tipbox.co/v1', 'https://api.tipbox.co/v1/docs', 'https://app.tipbox.co'];
     default:
       return ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173'];
   }
