@@ -62,12 +62,12 @@ services:
 
   backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile.prod
     container_name: tipbox_backend_prod
     restart: always
     env_file:
-      - .env.production
+      - ./backend/.env.production
     environment:
       - NODE_ENV=production
       - NODE_OPTIONS=--max-old-space-size=4096
@@ -87,7 +87,7 @@ services:
     expose:
       - "3000"
     volumes:
-      - ./tipboxbackend-3e2c3d3c0b31.json:/app/tipboxbackend-3e2c3d3c0b31.json:ro
+      - ./backend/tipboxbackend-3e2c3d3c0b31.json:/app/tipboxbackend-3e2c3d3c0b31.json:ro
       - ./logs:/app/logs
     networks:
       - tipbox_network
