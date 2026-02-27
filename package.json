@@ -5,11 +5,15 @@
   "description": "Tipbox monorepo - backend, admin-panel, catalog-service, cloudflared tunnel",
   "packageManager": "pnpm@9.15.0",
   "scripts": {
+    "prepare": "husky",
     "dev": "concurrently -n backend,catalog \"pnpm --filter tipbox-backend dev\" \"pnpm --filter tipbox-medusa dev\"",
     "backend": "pnpm --filter tipbox-backend dev",
     "backend:start": "pnpm --filter tipbox-backend start",
     "admin": "pnpm --filter tipbox-admin-panel dev",
     "catalog": "pnpm --filter tipbox-medusa dev",
+    "lint": "pnpm --filter tipbox-backend run lint",
+    "build": "pnpm --filter tipbox-backend run build",
+    "format": "pnpm --filter tipbox-backend run format",
     "install:all": "pnpm install",
     "clean:modules": "node scripts/clean-node-modules.cjs",
     "tunnel:setup": "node cloudflared/setup-routes.js",
@@ -20,7 +24,21 @@
     "tunnel:stop": "node cloudflared/tunnel-stop.js",
     "tunnel:route-dns": "node cloudflared/setup-routes.js"
   },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "lint-staged": {
+    "backend/**/*.{ts,tsx}": [
+      "prettier --write"
+    ],
+    "*.{md,json,yml,yaml}": [
+      "prettier --write"
+    ]
+  },
   "devDependencies": {
-    "concurrently": "^9.1.0"
+    "concurrently": "^9.1.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.1.2",
+    "prettier": "^3.6.2"
   }
 }

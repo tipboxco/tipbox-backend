@@ -1,6 +1,10 @@
 # Dependencies (tüm workspace'ler)
 node_modules/
 
+# Eski paket yöneticisi artıkları (sadece pnpm-lock.yaml kullanılır)
+package-lock.json
+yarn.lock
+
 # Build / cache
 dist/
 dist-ssr/
@@ -59,7 +63,7 @@ backend/api-config.json
 backend/docker-compose.override.yml
 backend/coverage/
 backend/.nyc_output/
-backend/.husky/_
+.husky/_
 
 # Catalog-service özel
 catalog-service/uploads

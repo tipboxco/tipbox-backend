@@ -4,3 +4,4 @@ packages:
   - "backend"
   - "admin-panel"
   - "catalog-service"
+  - "merge-code"
