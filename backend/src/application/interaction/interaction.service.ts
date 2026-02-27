@@ -527,7 +527,11 @@ export class InteractionService {
   /**
    * Post'un yorumlarını getir
    */
-  async getPostComments(postId: string, limit = 50): Promise<{
+  async getPostComments(
+    postId: string, 
+    limit = 50,
+    sortBy: 'newest' | 'oldest' | 'popular' = 'newest'
+  ): Promise<{
     comments: Array<{
       comment: ContentComment;
       replies: ContentComment[];
@@ -539,7 +543,7 @@ export class InteractionService {
     }>;
   }> {
     try {
-      const comments = await this.commentRepo.findByPostId(postId, limit);
+      const comments = await this.commentRepo.findByPostId(postId, limit, sortBy);
 
       const commentsWithData = await Promise.all(
         comments.map(async (comment) => {

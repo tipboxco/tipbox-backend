@@ -37,10 +37,26 @@ export class ContentCommentPrismaRepository {
     return comment ? this.toDomain(comment) : null;
   }
 
-  async findByPostId(postId: string, limit = 50): Promise<ContentComment[]> {
+  async findByPostId(
+    postId: string, 
+    limit = 50, 
+    sortBy: 'newest' | 'oldest' | 'popular' = 'newest'
+  ): Promise<ContentComment[]> {
+    // Sıralama kriterini belirle
+    let orderBy: any = { createdAt: 'desc' }; // Default: newest
+    
+    if (sortBy === 'oldest') {
+      orderBy = { createdAt: 'asc' };
+    } else if (sortBy === 'popular') {
+      orderBy = [
+        { likesCount: 'desc' },
+        { createdAt: 'desc' }, // Aynı like sayısında yeniler önce
+      ];
+    }
+
     const comments = await this.prisma.contentComment.findMany({
       where: { postId, parentId: null }, // Sadece top-level
-      orderBy: { createdAt: 'desc' },
+      orderBy,
       take: limit,
     });
     return comments.map(c => this.toDomain(c));

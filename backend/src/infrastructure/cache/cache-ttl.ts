@@ -66,6 +66,7 @@ export const CACHE_TTL = {
   // Search related
   SEARCH_RESULTS: 1800,        // 30 dakika - arama sonuçları
   SEARCH_SUGGESTIONS: 3600,    // 1 saat - arama önerileri
+  SEARCH_DEFAULT: 300,         // 5 dakika - boş keyword ile default veri (SearchModal ilk açılış)
   
   // Auth related
   TOKEN_BLACKLIST: 604800,     // 7 gün - token'ın expire süresine eşit

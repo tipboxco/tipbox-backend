@@ -56,6 +56,11 @@ GET /search?keyword=iphone&types=user,brand,product&limit=10
 - **Brand**: name, category, description
 - **Product**: name, brand, description
 
+**Timeout ve performans (GET /search):**
+- Mobil client timeout: 30 saniye (Axios). `GET /search?keyword=&types=user,brand,product&limit=4` (SearchModal ilk açılış) bu süre içinde yanıt vermezse client "timeout of 30000ms exceeded" hatası alır.
+- **Backend önlemi:** Boş `keyword` ile yapılan istekler (default veri) Redis ile cache’lenir. Key: `search:default:{types}`, TTL: 5 dakika (`CACHE_TTL.SEARCH_DEFAULT`). Tekrarlayan modal açılışlarında DB’e gidilmez, timeout riski azalır.
+- Timeout alınıyorsa: Backend/DB/Redis erişilebilirliği ve yanıt süresi kontrol edilmeli; gerekirse default search için DB sorguları (index, limit) optimize edilmeli.
+
 ---
 
 ## 2. Product Catalog Search (Single Product Group)
@@ -851,6 +856,50 @@ Authorization: Bearer {token}
 
 ---
 
+## 17. Collections (BadgeCollection) – Liste ve collection içi badge araması
+
+Akış: Önce collection listesinde arama → bir collection seç → o collection’ın badge’leri arasında arama.
+
+### 17.1. Collection listesi (koleksiyon araması)
+
+**Endpoint:** `GET /api/collections`
+
+**Authentication:** Opsiyonel (varsa kullanıcı ilerleme bilgisi döner)
+
+**Request:**
+```http
+GET /api/collections?search=expert&categoryId=&limit=20&offset=0
+```
+
+**Query Parameters:**
+- `search` (string, optional): Koleksiyon adı veya kısa açıklamasında arama (case-insensitive)
+- `categoryId` (string, optional): Kategori filtresi
+- `limit` (integer, optional, default: 20, max: 100)
+- `offset` (integer, optional, default: 0)
+
+**Arama Alanları:** Collection name, shortDescription
+
+---
+
+### 17.2. Collection detayı – içindeki badge’lerde arama
+
+**Endpoint:** `GET /api/collections/:id`
+
+**Authentication:** Opsiyonel
+
+**Request:**
+```http
+GET /api/collections/{collectionId}?search=builder
+GET /api/collections/{collectionId}?q=builder
+```
+
+**Query Parameters:**
+- `search` veya `q` (string, optional): Bu koleksiyondaki badge’lerde arama; badge name ve description’da contains (case-insensitive). Verilmezse koleksiyondaki tüm badge’ler döner.
+
+**Arama Alanları:** Badge name, badge description (sadece o collection’a ait badge’ler)
+
+---
+
 ## Özet Tablo
 
 | # | Endpoint | Search Param | Arama Alanları | Auth |
@@ -871,6 +920,8 @@ Authorization: Bearer {token}
 | 14 | `GET /inventory/experiences/search` | `q` | Experience title, text | ✅ |
 | 15 | `GET /catalog/products/search` | `search` | Product name, brand, description | ✅ |
 | 16 | `GET /brands/search` | `search` | Brand name | ✅ |
+| 17a | `GET /api/collections` | `search` | Collection name, shortDescription | Opsiyonel |
+| 17b | `GET /api/collections/:id` | `search` veya `q` | Badge name, description (o collection içinde) | Opsiyonel |
 
 ---
 

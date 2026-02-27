@@ -188,7 +188,7 @@ export class MessagingService {
     senderId: string,
     recipientId: string,
     postId: string,
-    message: string = ''
+    messageText: string = ''
   ): Promise<{ threadId: string; messageId: string }> {
     const senderIdStr = String(senderId).trim();
     const recipientIdStr = String(recipientId).trim();
@@ -209,15 +209,27 @@ export class MessagingService {
 
     const thread = await this.createThreadIfNotExists(senderIdStr, recipientIdStr);
 
-    const createdMessage = await this.dmMessageRepo.create({
-      threadId: thread.id,
-      senderId: senderIdStr,
-      message,
-      sharedPostId: postId,
-      isRead: false,
-      context: 'DM',
-      sentAt: new Date(),
-    } as any);
+    // Transaction kullanarak message oluştur ve share count'u artır
+    const createdMessage = await this.prisma.$transaction(async (tx) => {
+      // Message oluştur
+      const dmMessage = await this.dmMessageRepo.create({
+        threadId: thread.id,
+        senderId: senderIdStr,
+        message: messageText,
+        sharedPostId: postId,
+        isRead: false,
+        context: 'DM',
+        sentAt: new Date(),
+      } as any);
+
+      // Post'un share count'unu artır
+      await tx.contentPost.update({
+        where: { id: postId },
+        data: { sharesCount: { increment: 1 } },
+      });
+
+      return dmMessage;
+    });
 
     await this.prisma.dMThread.update({
       where: { id: thread.id },
@@ -230,7 +242,7 @@ export class MessagingService {
       threadId: thread.id,
       senderId: senderIdStr,
       recipientId: recipientIdStr,
-      message,
+      message: messageText,
       messageType: 'shared_post' as const,
       sharedPostId: postId,
       context: 'DM',

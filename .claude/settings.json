@@ -1,0 +1,15 @@
+{
+  "permissionMode": "auto",
+  "skipDangerousModePermissionPrompt": true,
+  "autoApprovePrompts": [
+    "read files",
+    "search files",
+    "edit files",
+    "write files",
+    "run commands",
+    "install packages",
+    "run tests",
+    "git operations"
+  ],
+  "model": "sonnet"
+}

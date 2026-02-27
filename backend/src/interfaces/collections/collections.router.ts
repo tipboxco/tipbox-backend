@@ -1,17 +1,348 @@
 import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { authMiddleware } from '../auth/auth.middleware';
+import { validateQuery } from '../../infrastructure/middleware/validation.middleware';
 import { NotificationService } from '../../application/notification/notification.service';
+import { CollectionsService } from '../../application/collections/collections.service';
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
+import {
+  CollectionsListQuerySchema,
+  CollectionDetailQuerySchema,
+} from './collections.schemas';
+import type { CollectionsListQuery, CollectionDetailQuery } from './collections.schemas';
 
 const router = Router();
 const notificationService = new NotificationService();
+const collectionsService = new CollectionsService();
 
 router.use(authMiddleware);
 
+/* ========== EP-01: Collections List ========== */
+
 /**
  * @openapi
- * /collections/badges/{badgeId}/reminder:
+ * /events/collections:
+ *   get:
+ *     summary: Collection listesini getir
+ *     description: |
+ *       Collections tab'ında gösterilen collection listesini getirir.
+ *       Arama, kategori chip filtresi ve bottom sheet filtreleri destekler.
+ *       Cursor tabanlı pagination ile infinite scroll desteği sağlar.
+ *     tags: [Collections]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Collection title veya description'da arama (500ms debounce önerilir)
+ *       - in: query
+ *         name: category
+ *         schema:
+ *           type: string
+ *         description: "Chip filter kategorisi (örn. electronics, cosmetics). all veya bos = tum kategoriler"
+ *       - in: query
+ *         name: mainCategoryId
+ *         schema:
+ *           type: string
+ *         description: Bottom sheet ana kategori filtresi (Medusa category ID)
+ *       - in: query
+ *         name: subCategoryId
+ *         schema:
+ *           type: string
+ *         description: Bottom sheet alt kategori filtresi (Medusa category ID)
+ *       - in: query
+ *         name: productGroupId
+ *         schema:
+ *           type: string
+ *         description: Bottom sheet ürün grubu filtresi (Medusa category ID) - ileride eklenecek
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *         description: Pagination cursor (infinite scroll için)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *           minimum: 1
+ *           maximum: 50
+ *         description: Sayfa başına item sayısı
+ *     responses:
+ *       200:
+ *         description: Collection listesi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 collections:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       title:
+ *                         type: string
+ *                       description:
+ *                         type: string
+ *                       currentProgress:
+ *                         type: integer
+ *                         description: Kullanıcının bu collection'daki mevcut ilerlemesi
+ *                       totalProgress:
+ *                         type: integer
+ *                         description: Collection'ın toplam ilerleme hedefi
+ *                       backgroundGradient:
+ *                         type: object
+ *                         properties:
+ *                           colors:
+ *                             type: array
+ *                             items:
+ *                               type: string
+ *                             description: Min 2 renk, hex formatında
+ *                           start:
+ *                             type: object
+ *                             properties:
+ *                               x:
+ *                                 type: number
+ *                               y:
+ *                                 type: number
+ *                           end:
+ *                             type: object
+ *                             properties:
+ *                               x:
+ *                                 type: number
+ *                               y:
+ *                                 type: number
+ *                       category:
+ *                         type: string
+ *                         nullable: true
+ *                         description: Chip filter kategorisi handle'ı
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     cursor:
+ *                       type: string
+ *                       nullable: true
+ *                       description: Sonraki sayfa cursor'ı (null = son sayfa)
+ *                     hasMore:
+ *                       type: boolean
+ *                     limit:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                       description: Toplam collection sayısı (filtreler dahil)
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ */
+router.get(
+  '/',
+  validateQuery(CollectionsListQuerySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const query = req.query as unknown as CollectionsListQuery;
+
+    const result = await collectionsService.listCollections(String(userId), {
+      search: query.search,
+      category: query.category,
+      mainCategoryId: query.mainCategoryId,
+      subCategoryId: query.subCategoryId,
+      productGroupId: query.productGroupId,
+      cursor: query.cursor,
+      limit: query.limit,
+    });
+
+    return res.json(result);
+  }),
+);
+
+/* ========== EP-02: Collection Categories ========== */
+
+/**
+ * @openapi
+ * /events/collections/categories:
+ *   get:
+ *     summary: Collection chip filtre kategorilerini getir
+ *     description: |
+ *       CollectionsTab üstündeki yatay kaydırılabilir chip filtrelerin kategorilerini getirir.
+ *       Sadece en az bir collection'a sahip kategoriler döner.
+ *       Frontend 24 saat cache'liyor.
+ *     tags: [Collections]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Kategori listesi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 categories:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       name:
+ *                         type: string
+ *                         description: UI'da gösterilecek isim
+ *                       handle:
+ *                         type: string
+ *                         description: EP-01'de "category" query param olarak gönderilecek değer
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ */
+router.get(
+  '/categories',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const result = await collectionsService.getCollectionCategories();
+    return res.json(result);
+  }),
+);
+
+/* ========== EP-03: Collection Detail + Badges ========== */
+
+/**
+ * @openapi
+ * /events/collections/{collectionId}:
+ *   get:
+ *     summary: Collection detayı ve badge listesi
+ *     description: |
+ *       Belirli bir collection'ın detayını ve ona ait badge listesini getirir.
+ *       Badge'ler içinde arama destekler.
+ *       Status hesaplama:
+ *       - not_started: currentProgress === 0
+ *       - in_progress: currentProgress > 0 && currentProgress < totalProgress
+ *       - completed: currentProgress >= totalProgress
+ *     tags: [Collections]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: collectionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Collection ID
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Badge title veya description'da arama (400ms debounce önerilir)
+ *     responses:
+ *       200:
+ *         description: Collection detayı ve badge listesi
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 collection:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     title:
+ *                       type: string
+ *                     description:
+ *                       type: string
+ *                     currentProgress:
+ *                       type: integer
+ *                     totalProgress:
+ *                       type: integer
+ *                     backgroundGradient:
+ *                       type: object
+ *                       properties:
+ *                         colors:
+ *                           type: array
+ *                           items:
+ *                             type: string
+ *                         start:
+ *                           type: object
+ *                           properties:
+ *                             x:
+ *                               type: number
+ *                             y:
+ *                               type: number
+ *                         end:
+ *                           type: object
+ *                           properties:
+ *                             x:
+ *                               type: number
+ *                             y:
+ *                               type: number
+ *                     category:
+ *                       type: string
+ *                       nullable: true
+ *                 badges:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       title:
+ *                         type: string
+ *                       description:
+ *                         type: string
+ *                       icon:
+ *                         type: string
+ *                         description: Public CDN URL (badge görseli)
+ *                       currentProgress:
+ *                         type: integer
+ *                       totalProgress:
+ *                         type: integer
+ *                       status:
+ *                         type: string
+ *                         enum: [not_started, in_progress, completed]
+ *       401:
+ *         description: Kimlik doğrulaması başarısız
+ *       404:
+ *         description: Collection bulunamadı
+ */
+router.get(
+  '/:collectionId',
+  validateQuery(CollectionDetailQuerySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { collectionId } = req.params;
+    const query = req.query as unknown as CollectionDetailQuery;
+
+    const result = await collectionsService.getCollectionDetail(
+      collectionId,
+      String(userId),
+      query.search,
+    );
+
+    if (!result) {
+      return res.status(404).json({ message: 'Collection not found' });
+    }
+
+    return res.json(result);
+  }),
+);
+
+/* ========== Badge Reminder ========== */
+
+/**
+ * @openapi
+ * /events/collections/badges/{badgeId}/reminder:
  *   post:
  *     summary: Badge için hatırlatma ayarla
  *     description: Belirtilen zamanda (veya varsayılan 1 gün sonra) badge görevi tamamlama hatırlatması gönderilir. Aynı badge için mevcut hatırlatma varsa güncellenir.
@@ -96,10 +427,10 @@ router.post(
     const result = await notificationService.setBadgeReminder(
       String(userId),
       badgeId,
-      remindAt
+      remindAt,
     );
     return res.json(result);
-  })
+  }),
 );
 
 export default router;
