@@ -14,7 +14,7 @@ NC='\033[0m' # No Color
 
 # Konfigürasyon
 PROJECT_DIR="/opt/tipbox-backend"
-COMPOSE_FILE="docker-compose.production.yml"
+COMPOSE_FILE="docker-compose.prod.yml"
 BRANCH="${1:-main}"
 
 echo -e "${RED}⚠️  PRODUCTION DEPLOYMENT - Bu işlem canlı sistemi etkileyecek!${NC}"
@@ -36,8 +36,8 @@ git checkout "$BRANCH"
 git pull origin "$BRANCH"
 
 # Environment dosyasının varlığını kontrol et
-if [ ! -f .env.production ]; then
-  echo -e "${RED}❌ .env.production file not found! Please create it first.${NC}"
+if [ ! -f backend/.env.production ]; then
+  echo -e "${RED}❌ backend/.env.production file not found! Please create it first.${NC}"
   exit 1
 fi
 

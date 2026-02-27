@@ -31,8 +31,8 @@ git checkout "$BRANCH"
 git pull origin "$BRANCH"
 
 # Environment dosyasının varlığını kontrol et
-if [ ! -f .env.test ]; then
-  echo -e "${RED}❌ .env.test file not found! Please create it first.${NC}"
+if [ ! -f backend/.env.test ]; then
+  echo -e "${RED}❌ backend/.env.test file not found! Please create it first.${NC}"
   exit 1
 fi
 

@@ -99,10 +99,12 @@ runs:
               echo "✅ Images built successfully"
               ;;
             prisma)
-              echo "🔧 Generating Prisma Client on host..."
+              echo "🔧 Generating Prisma Client..."
               cd "$PROJECT_DIR" || exit 1
-              npx prisma generate || {
+              # Host'ta backend dizininde prisma generate çalıştır
+              cd backend && npx prisma generate && cd .. || {
                 echo "⚠️  Prisma generate on host failed, trying in container..."
+                cd "$PROJECT_DIR"
                 docker compose -f "$COMPOSE_FILE" run --rm backend npx prisma generate || {
                   echo "❌ Prisma generate failed! Check the logs above."
                   exit 1

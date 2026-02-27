@@ -41,7 +41,7 @@ on:
         type: boolean
 
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '23'
 
 permissions:
   contents: write
@@ -66,10 +66,10 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        run: cd backend && npm ci --legacy-peer-deps
 
       - name: Run linter
-        run: npm run lint
+        run: cd backend && npm run lint
         continue-on-error: true
         env:
           ESLINT_NO_DEV_ERRORS: true
@@ -133,7 +133,7 @@ jobs:
           project_dir: /opt/tipbox-backend
           compose_file: docker-compose.test.yml
           deploy_branch: ${{ github.event.inputs.branch || github.ref_name }}
-          env_file: .env.test
+          env_file: backend/.env.test
 
       - name: Backup database
         # Otomatik deployment: Backup alınır (varsayılan)
