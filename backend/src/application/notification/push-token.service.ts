@@ -1,6 +1,15 @@
 import { PushTokenPrismaRepository } from '../../infrastructure/repositories/push-token-prisma.repository';
 import { PushToken } from '../../domain/notification/push-token.entity';
+import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import logger from '../../infrastructure/logger/logger';
+
+/** Kullanıcı veritabanında yok (örn. JWT'deki id ile User.id eşleşmiyor). */
+export class PushTokenUserNotFoundError extends Error {
+  constructor(public readonly userId: string) {
+    super(`User not found: ${userId}`);
+    this.name = 'PushTokenUserNotFoundError';
+  }
+}
 
 export class PushTokenService {
   private pushTokenRepo: PushTokenPrismaRepository;
@@ -21,6 +30,14 @@ export class PushTokenService {
       // Basic token validation (non-empty)
       if (!token || token.trim().length === 0) {
         throw new Error('Invalid push token: token cannot be empty');
+      }
+
+      // User must exist (foreign key); avoid P2003 by checking first
+      console.log({userId})
+      const prisma = getPrisma();
+      const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+      if (!user) {
+        throw new PushTokenUserNotFoundError(userId);
       }
 
       // Create or update token

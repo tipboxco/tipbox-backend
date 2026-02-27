@@ -106,4 +106,24 @@ export class ExternalServiceError extends Error {
     super(message);
     this.name = 'ExternalServiceError';
   }
+}
+
+/** Thirdweb SDK yapılandırılmamış; wallet oluşturmak için Thirdweb gerekli. */
+export class ThirdwebNotConfiguredError extends Error {
+  status = 503;
+  code = ErrorCode.THIRDWEB_NOT_CONFIGURED;
+  constructor(message = 'Wallet oluşturmak için Thirdweb yapılandırması gerekli.') {
+    super(message);
+    this.name = 'ThirdwebNotConfiguredError';
+  }
+}
+
+/** Thirdweb wallet connect/oturum alınamadı; kullanıcı önce Thirdweb ile cüzdan bağlamalı. */
+export class ThirdwebWalletAuthFailedError extends Error {
+  status = 400;
+  code = ErrorCode.THIRDWEB_WALLET_AUTH_FAILED;
+  constructor(message = 'Cüzdan oluşturmak için önce Thirdweb ile wallet connect yapılmalı.') {
+    super(message);
+    this.name = 'ThirdwebWalletAuthFailedError';
+  }
 } 

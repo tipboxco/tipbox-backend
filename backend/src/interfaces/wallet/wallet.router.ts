@@ -8,6 +8,10 @@ import { parseContractError } from '../../application/wallet/thirdweb-sdk/contra
 import { createWeb3NftService, resolveNftImageUrl } from '../../application/wallet/web3-nft-service';
 import { ConnectWalletRequest, WalletResponse, WalletNftsResponse, NftItemResponse } from './wallet.dto';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
+import {
+  ThirdwebNotConfiguredError,
+  ThirdwebWalletAuthFailedError,
+} from '../../infrastructure/errors/custom-errors';
 import { WalletProvider } from '../../domain/wallet/wallet.entity';
 import { authMiddleware } from '../auth/auth.middleware';
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
@@ -881,13 +885,16 @@ router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
  * @openapi
  * /wallets/create:
  *   post:
- *     summary: Kullanıcı için yeni wallet oluştur
+ *     summary: Kullanıcı için yeni wallet oluştur (Thirdweb Wallet Connect zorunlu)
+ *     description: |
+ *       Wallet yalnızca Thirdweb üzerinden oluşturulur. Mock/sahte adres kullanılmaz.
+ *       Kullanıcı önce uygulama içinde Thirdweb ile wallet connect yapmış olmalı.
  *     tags: [Wallet]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       201:
- *         description: Wallet başarıyla oluşturuldu
+ *         description: Wallet başarıyla oluşturuldu (Thirdweb oturumu ile)
  *         content:
  *           application/json:
  *             schema:
@@ -900,7 +907,9 @@ router.get('/balance', asyncHandler(async (req: Request, res: Response) => {
  *                 balance:
  *                   type: number
  *       400:
- *         description: Wallet zaten mevcut
+ *         description: Thirdweb wallet oturumu yok; önce wallet connect yapılmalı
+ *       503:
+ *         description: Thirdweb yapılandırılmamış (THIRDWEB_CLIENT_ID/SECRET_KEY)
  */
 router.post('/create', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
@@ -916,24 +925,35 @@ router.post('/create', asyncHandler(async (req: Request, res: Response) => {
     const balanceInfo = await walletService.getUserBalance(String(userId));
     return res.json({
       walletId: existingWallet.id,
-      walletIdentifier: existingWallet.publicAddress,
+      walletIdentifier: existingWallet.smartAccountAddress ?? existingWallet.publicAddress,
       balance: balanceInfo.balance
     });
   }
 
-  // Create new wallet with fake address for Web2
-  const fakeAddress = `0xTIPBOX_${userId}_${Date.now()}`;
-  const wallet = await walletService.connectWallet(
-    String(userId),
-    fakeAddress,
-    WalletProvider.CUSTOM
-  );
-
-  return res.status(201).json({
-    walletId: wallet.id,
-    walletIdentifier: wallet.smartAccountAddress,
-    balance: 0
-  });
+  try {
+    // Wallet creation only via Thirdweb wallet connect (no mock/fake address)
+    const wallet = await walletService.createWalletViaThirdweb(String(userId));
+    const balanceInfo = await walletService.getUserBalance(String(userId));
+    return res.status(201).json({
+      walletId: wallet.id,
+      walletIdentifier: wallet.smartAccountAddress ?? wallet.publicAddress,
+      balance: balanceInfo.balance
+    });
+  } catch (err: any) {
+    if (err instanceof ThirdwebNotConfiguredError) {
+      return res.status(503).json({
+        message: err.message,
+        code: err.code,
+      });
+    }
+    if (err instanceof ThirdwebWalletAuthFailedError) {
+      return res.status(400).json({
+        message: err.message,
+        code: err.code,
+      });
+    }
+    throw err;
+  }
 }));
 
 /**

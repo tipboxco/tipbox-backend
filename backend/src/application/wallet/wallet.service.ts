@@ -3,7 +3,11 @@ import { WalletPrismaRepository } from '../../infrastructure/repositories/wallet
 import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
 import logger from '../../infrastructure/logger/logger';
-import { InsufficientBalanceError } from '../../infrastructure/errors/custom-errors';
+import {
+  InsufficientBalanceError,
+  ThirdwebNotConfiguredError,
+  ThirdwebWalletAuthFailedError,
+} from '../../infrastructure/errors/custom-errors';
 import { getThirdwebSdkService } from './thirdweb-sdk/thirdweb-sdk.service';
 
 export class WalletService {
@@ -50,6 +54,49 @@ export class WalletService {
         message: 'ensureWalletForUser: Thirdweb session or wallet create failed',
       });
     }
+  }
+
+  /**
+   * Sadece Thirdweb wallet connect ile yeni wallet oluşturur. Mock/sahte adres kullanılmaz.
+   * Thirdweb yapılandırılmamışsa veya kullanıcı Thirdweb oturumu yoksa hata fırlatır.
+   */
+  async createWalletViaThirdweb(userId: string): Promise<Wallet> {
+    const sdk = getThirdwebSdkService();
+    if (!sdk.isConfigured()) {
+      throw new ThirdwebNotConfiguredError(
+        'Wallet oluşturmak için Thirdweb yapılandırması gerekli. THIRDWEB_CLIENT_ID ve THIRDWEB_SECRET_KEY tanımlı olmalı.'
+      );
+    }
+
+    let auth: { success: boolean; eoaAddress?: string; smartAccountAddress?: string };
+    try {
+      auth = await sdk.authenticateAndGetAddresses(userId);
+    } catch (err) {
+      logger.warn({ userId, error: err, message: 'Thirdweb authenticateAndGetAddresses failed' });
+      throw new ThirdwebWalletAuthFailedError(
+        'Cüzdan oluşturmak için önce uygulama içinde Thirdweb ile wallet connect yapılmalı.'
+      );
+    }
+
+    if (!auth.success || !auth.eoaAddress) {
+      throw new ThirdwebWalletAuthFailedError(
+        'Thirdweb wallet oturumu bulunamadı. Lütfen önce uygulama içinde cüzdan bağlayın (Wallet Connect).'
+      );
+    }
+
+    const wallet = await this.connectWallet(
+      userId,
+      auth.eoaAddress,
+      WalletProvider.THIRDWEB,
+      auth.smartAccountAddress ?? undefined
+    );
+    logger.info({
+      userId,
+      eoaAddress: auth.eoaAddress,
+      smartAccountAddress: auth.smartAccountAddress,
+      message: 'Wallet created via Thirdweb (createWalletViaThirdweb)',
+    });
+    return wallet;
   }
 
   async getActiveWallet(userId: string): Promise<Wallet | null> {
@@ -278,6 +325,12 @@ export class WalletService {
     provider: WalletProvider,
     smartAccountAddress?: string
   ): Promise<Wallet> {
+    // Mock/sahte adres kabul edilmez; wallet Thirdweb üzerinden bağlanmalı
+    if (publicAddress.startsWith('0xTIPBOX_')) {
+      throw new ThirdwebWalletAuthFailedError(
+        'Sahte (mock) cüzdan adresi kabul edilmez. Cüzdan Thirdweb Wallet Connect ile bağlanmalı.'
+      );
+    }
     // Aynı adres zaten var mı kontrol et
     const existingWallets = await this.walletRepo.findByUserId(userId);
     const existing = existingWallets.find(w => w.publicAddress.toLowerCase() === publicAddress.toLowerCase());

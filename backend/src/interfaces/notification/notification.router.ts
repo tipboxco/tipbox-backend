@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { NotificationService } from '../../application/notification/notification.service';
-import { PushTokenService } from '../../application/notification/push-token.service';
+import { PushTokenService, PushTokenUserNotFoundError } from '../../application/notification/push-token.service';
 import { UserSettingsPrismaRepository } from '../../infrastructure/repositories/user-settings-prisma.repository';
 import { RegisterPushTokenDto, UpdateNotificationSettingsDto, GetNotificationsQuery } from './notification.dto';
 import { authMiddleware } from '../auth/auth.middleware';
@@ -2033,7 +2033,19 @@ router.post('/push-token', authMiddleware, async (req: Request, res: Response) =
       message: 'Push token registered successfully',
       data: pushToken.toJSON(),
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error instanceof PushTokenUserNotFoundError) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found. The authenticated user may not exist in the database.',
+      });
+    }
+    if (error?.code === 'P2003') {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found. Cannot register push token for this account.',
+      });
+    }
     logger.error('Error registering push token:', error);
     return res.status(500).json({
       success: false,
