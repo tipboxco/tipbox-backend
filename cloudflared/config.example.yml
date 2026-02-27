@@ -8,25 +8,25 @@
 #   cloudflared tunnel create tipbox-tunnel
 # Bu komut credentials dosyasını ~/.cloudflared/ oluşturur.
 #
-# api-tipbox.exportergo.com -> backend:3000 (tek servis)
+# api-tipbox.tipbox.co -> backend:3000 (tek servis)
 
 tunnel: <TUNNEL_UUID>
 credentials-file: .cloudflared/<TUNNEL_UUID>.json
 
 ingress:
-  # api-tipbox.exportergo.com - Backend API
-  - hostname: api-tipbox.exportergo.com
+  # api-tipbox.tipbox.co - Backend API
+  - hostname: api-tipbox.tipbox.co
     service: http://localhost:3000
     originRequest:
       connectTimeout: 30s
       # Auth0 callback için: Backend'e Host header olarak orijinal hostname iletilir
-      httpHostHeader: api-tipbox.exportergo.com
+      httpHostHeader: api-tipbox.tipbox.co
 
-  # minio-tipbox.exportergo.com - MinIO S3 API (port 9000)
-  - hostname: minio-tipbox.exportergo.com
+  # minio-tipbox.tipbox.co - MinIO S3 API (port 9000)
+  - hostname: minio-tipbox.tipbox.co
     service: http://localhost:9000
     originRequest:
       connectTimeout: 30s
-      httpHostHeader: minio-tipbox.exportergo.com
+      httpHostHeader: minio-tipbox.tipbox.co
 
   - service: http_status:404

@@ -20,7 +20,7 @@
 - `Cloudflare Tunnel` → **Edit**
 
 **Zone permissions:**
-- `DNS` → **Edit** (api-tipbox.exportergo.com CNAME için)
+- `DNS` → **Edit** (api-tipbox.tipbox.co CNAME için)
 
 ## Alternatif Hazır Şablonlar
 
@@ -37,4 +37,4 @@ Bunlara ek olarak **Zone → DNS → Edit** gerekir (`tunnel route dns` için).
 
 ## Zone Resources (DNS için)
 
-- **Include** → **Specific zone** → `exportergo.com` seçin
+- **Include** → **Specific zone** → `tipbox.co` seçin

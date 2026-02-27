@@ -43,7 +43,7 @@ if (!loaded) {
 }
 
 const TUNNEL_ID = process.env.TUNNEL_ID || 'bf6b66c8-5cff-420c-8ea9-a1f67aed24ab';
-const TUNNEL_DOMAIN = process.env.TUNNEL_DOMAIN || 'exportergo.com';
+const TUNNEL_DOMAIN = process.env.TUNNEL_DOMAIN || 'tipbox.co';
 const TUNNEL_API_SUBDOMAIN = process.env.TUNNEL_API_SUBDOMAIN || 'api-tipbox';
 const TUNNEL_MINIO_SUBDOMAIN = process.env.TUNNEL_MINIO_SUBDOMAIN || 'minio-tipbox';
 const API_HOST = `${TUNNEL_API_SUBDOMAIN}.${TUNNEL_DOMAIN}`;
