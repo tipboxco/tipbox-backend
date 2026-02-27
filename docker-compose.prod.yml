@@ -1,12 +1,14 @@
+# Production: .env veya .env.production kullanılır.
+# cp .env.example .env ile oluşturup production değerleri girin.
 services:
   postgres:
     image: postgres:15-alpine
     container_name: tipbox_postgres_prod
     restart: always
     environment:
-      POSTGRES_USER: tipbox_user
-      POSTGRES_PASSWORD: tipbox_prod_password
-      POSTGRES_DB: tipbox_prod
+      POSTGRES_USER: ${POSTGRES_USER:-tipbox_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tipbox_prod_password}
+      POSTGRES_DB: ${POSTGRES_DB:-tipbox_prod}
     expose:
       - "5432"
     volumes:
@@ -29,8 +31,8 @@ services:
       - "9000:9000"
       - "9001:9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin123
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
     volumes:
       - minio_prod_data:/data
     networks:
@@ -67,15 +69,15 @@ services:
     container_name: tipbox_backend_prod
     restart: always
     env_file:
-      - .env.production
+      - .env
     environment:
       - NODE_ENV=production
       - NODE_OPTIONS=--max-old-space-size=4096
       - SKIP_DB_MIGRATIONS=${SKIP_DB_MIGRATIONS:-0}
       # Container içinde çalışırken servis isimlerini kullan
-      - DATABASE_URL=postgresql://tipbox_user:tipbox_prod_password@postgres:5432/tipbox_prod
-      - REDIS_URL=redis://:tipbox_redis_prod@redis:6379
-      - S3_ENDPOINT=http://minio:9000
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-tipbox_user}:${POSTGRES_PASSWORD:-tipbox_prod_password}@postgres:5432/${POSTGRES_DB:-tipbox_prod}
+      - REDIS_URL=${REDIS_URL:-redis://:tipbox_redis_prod@redis:6379}
+      - S3_ENDPOINT=${S3_ENDPOINT:-http://minio:9000}
       - PORT=3000
     depends_on:
       postgres:
@@ -104,6 +106,8 @@ services:
       dockerfile: Dockerfile.prod
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:3000}
+    env_file:
+      - .env
     container_name: tipbox_admin_panel_prod
     restart: always
     ports:

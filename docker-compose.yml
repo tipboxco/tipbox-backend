@@ -1,12 +1,14 @@
+# Tüm servisler proje kökündeki .env dosyasını kullanır.
+# cp .env.example .env ile oluşturun.
 services:
   postgres:
     image: postgres:15
     container_name: tipbox_postgres
     restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: tipbox_dev
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-tipbox_dev}
     ports:
       - '5432:5432'
     volumes:
@@ -66,26 +68,25 @@ services:
     restart: always
     ports:
       - "3000:3000"
-    # Gizli kalması gerekenler (JWT_SECRET, CLIENT_SECRET, API key'ler vb.) sadece .env'de tanımlanır
     env_file:
-      - ./backend/.env
+      - .env
     environment:
-      - PORT=3000
+      - PORT=${PORT:-3000}
       - NODE_ENV=development
       - NODE_OPTIONS=--max-old-space-size=4096
       - SKIP_DB_MIGRATIONS=${SKIP_DB_MIGRATIONS:-0}
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/tipbox_dev
-      - REDIS_URL=redis://redis:6379
-      - CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:5173,http://localhost:9002,https://api-test.tipbox.co
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-tipbox_dev}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001,http://localhost:5173,http://localhost:9002,https://api-test.tipbox.co}
       - CORS_METHODS=GET,POST,PUT,DELETE,OPTIONS,PATCH
-      - S3_ENDPOINT=http://minio:9000
-      - MINIO_ROOT_USER=minioadmin
-      - MINIO_ROOT_PASSWORD=minioadmin123
-      - S3_BUCKET_NAME=tipbox-media
-      - S3_REGION=eu-central-1
-      - S3_ACCESS_KEY=minioadmin
-      - S3_SECRET_KEY=minioadmin123
-      - BASE_URL=http://localhost:3000
+      - S3_ENDPOINT=${S3_ENDPOINT:-http://minio:9000}
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin123}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-tipbox-media}
+      - S3_REGION=${S3_REGION:-eu-central-1}
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-minioadmin}
+      - S3_SECRET_KEY=${S3_SECRET_KEY:-minioadmin123}
+      - BASE_URL=${BASE_URL:-http://localhost:3000}
       - SEED_MEDIA_BASE_URL=http://localhost:9000
       - SEED_API_TOKEN=deneme
       - GEMINI_MODEL=gemini-2.5-pro
@@ -153,9 +154,9 @@ services:
     ports:
       - "5555:5555"
     env_file:
-      - ./backend/.env
+      - .env
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/tipbox_dev
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-tipbox_dev}
     depends_on:
       - postgres
     volumes:
@@ -172,6 +173,8 @@ services:
       dockerfile: Dockerfile
     container_name: tipbox_catalog_service
     restart: always
+    env_file:
+      - .env
     depends_on:
       postgres:
         condition: service_started
@@ -185,24 +188,21 @@ services:
     environment:
       - NODE_ENV=development
       - NODE_OPTIONS=--max-old-space-size=4096
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/medusa-store?sslmode=disable
-      - REDIS_URL=redis://redis:6379
-      - TIPBOX_BACKEND_API_KEY=deneme
-      - TIPBOX_BACKEND_URL=http://backend:3000
-      # CORS ayarları (Medusa için gerekli)
-      - STORE_CORS=http://localhost:8000,http://localhost:3000,https://zealand-distinction-strongly-sapphire.trycloudflare.com
-      - ADMIN_CORS=http://localhost:5173,http://localhost:9002,https://zealand-distinction-strongly-sapphire.trycloudflare.com
-      - AUTH_CORS=http://localhost:5173,http://localhost:9002,http://localhost:8000,https://zealand-distinction-strongly-sapphire.trycloudflare.com
-      # MinIO yapılandırması - Docker Compose ile çalışan MinIO için
-      # Region parametresi gerekli değil (MinIO local storage için region kullanmaz)
-      - S3_ENDPOINT=http://minio:9000
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/medusa-store?sslmode=disable
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - TIPBOX_BACKEND_API_KEY=${TIPBOX_BACKEND_API_KEY:-deneme}
+      - TIPBOX_BACKEND_URL=${TIPBOX_BACKEND_URL:-http://backend:3000}
+      - STORE_CORS=${STORE_CORS:-http://localhost:8000,http://localhost:3000}
+      - ADMIN_CORS=${ADMIN_CORS:-http://localhost:5173,http://localhost:9002}
+      - AUTH_CORS=${AUTH_CORS:-http://localhost:5173,http://localhost:9002,http://localhost:8000}
+      - S3_ENDPOINT=${S3_ENDPOINT:-http://minio:9000}
       - S3_ENDPOINT_EXTERNAL=http://localhost:9000
-      - MINIO_ROOT_USER=minioadmin
-      - MINIO_ROOT_PASSWORD=minioadmin123
-      - S3_BUCKET_NAME=tipbox-media
-      - S3_REGION=eu-central-1
-      - S3_ACCESS_KEY=minioadmin
-      - S3_SECRET_KEY=minioadmin123
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin123}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-tipbox-media}
+      - S3_REGION=${S3_REGION:-eu-central-1}
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-minioadmin}
+      - S3_SECRET_KEY=${S3_SECRET_KEY:-minioadmin123}
     volumes:
       - ./catalog-service:/server
       - catalog_service_node_modules:/server/node_modules
@@ -230,8 +230,10 @@ services:
     restart: always
     ports:
       - "5174:5174"
+    env_file:
+      - .env
     environment:
-      - VITE_API_BASE_URL=http://localhost:3000
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:3000}
     depends_on:
       - backend
     volumes:

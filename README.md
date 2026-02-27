@@ -7,20 +7,21 @@ This repository contains the backend API for the Tipbox application, built with 
 ### Quick Start (Docker - Önerilen)
 
 ```bash
-# 1. Container'ları başlat
-docker-compose up -d
+# 1. Proje kökünde .env oluştur
+cp .env.example .env
+# Gerekli key'leri doldurun (minimal: POSTGRES_*, MINIO_*, JWT_SECRET)
 
-# 2. Veritabanı şemasını uygula
+# 2. Container'ları başlat
+docker-compose up -d --build
+
+# 3. Veritabanı şemasını uygula
 docker-compose exec backend npx prisma db push
 
-# 3. Seed data'yı yükle
+# 4. Seed data'yı yükle (opsiyonel)
 docker-compose exec backend npm run db:seed
-
-# 4. Prisma Studio'yu başlat (opsiyonel)
-docker-compose exec backend npx prisma studio --port 5555
 ```
 
-Detaylı kurulum rehberi için: [docs/SETUP_GUIDE.md](docs/SETUP_GUIDE.md)
+Detaylı kurulum rehberi için: [docs/SETUP.md](docs/SETUP.md)
 
 ### Manual Installation
 
@@ -71,7 +72,8 @@ For more test accounts, see [docs/SETUP_GUIDE.md](docs/SETUP_GUIDE.md)
 
 ## Documentation
 
-- [Setup Guide](docs/SETUP_GUIDE.md) - Detailed setup instructions
+- [Setup Guide](docs/SETUP.md) - Kurulum, .env, Docker ve harici servisler
+- [Backend Setup (detay)](backend/docs/SETUP_GUIDE.md) - Backend odaklı adımlar ve test kullanıcıları
 - [Session Summary](docs/SESSION_SUMMARY.md) - Recent changes and fixes
 
 ## Contribution

@@ -1,12 +1,13 @@
+# Test: Proje kökündeki .env kullanılır.
 services:
   postgres:
     image: postgres:15-alpine
     container_name: tipbox_postgres_test
     restart: always
     environment:
-      POSTGRES_USER: tipbox_user
-      POSTGRES_PASSWORD: tipbox_test_password
-      POSTGRES_DB: tipbox_test
+      POSTGRES_USER: ${POSTGRES_USER:-tipbox_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tipbox_test_password}
+      POSTGRES_DB: ${POSTGRES_DB:-tipbox_test}
     expose:
       - "5432"
     volumes:
@@ -83,15 +84,14 @@ services:
     restart: always
     command: npm run dev
     env_file:
-      - .env.test
+      - .env
     environment:
       - NODE_ENV=test
       - NODE_OPTIONS=--max-old-space-size=4096
       - SKIP_DB_MIGRATIONS=${SKIP_DB_MIGRATIONS:-0}
-      # Container içinde çalışırken servis isimlerini kullan
-      - DATABASE_URL=postgresql://tipbox_user:tipbox_test_password@postgres:5432/tipbox_test
-      - REDIS_URL=redis://redis:6379
-      - S3_ENDPOINT=http://minio:9000
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-tipbox_user}:${POSTGRES_PASSWORD:-tipbox_test_password}@postgres:5432/${POSTGRES_DB:-tipbox_test}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - S3_ENDPOINT=${S3_ENDPOINT:-http://minio:9000}
       - PORT=3000
     depends_on:
       postgres:
@@ -149,9 +149,9 @@ services:
     ports:
       - "5555:5555"
     env_file:
-      - .env.test
+      - .env
     environment:
-      - DATABASE_URL=postgresql://tipbox_user:tipbox_test_password@postgres:5432/tipbox_test
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-tipbox_user}:${POSTGRES_PASSWORD:-tipbox_test_password}@postgres:5432/${POSTGRES_DB:-tipbox_test}
     depends_on:
       postgres:
         condition: service_healthy
@@ -171,8 +171,10 @@ services:
     restart: always
     ports:
       - "5174:5174"
+    env_file:
+      - .env
     environment:
-      - VITE_API_BASE_URL=http://localhost:3000
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:3000}
     depends_on:
       - backend
     volumes:
