@@ -102,7 +102,7 @@ export class TransactionService {
       toAddress = toWallet.smartAccountAddress ?? toWallet.publicAddress;
     } else if (isEthereumAddress(request.toUserId)) {
       toAddress = normalizeEthereumAddress(request.toUserId);
-      // Doğrudan public adrese tip; alıcı bizim sistemde değil, sadece TIP_SEND kaydı oluşturulacak
+      // Doğrudan wallet adresine gönderim = WITHDRAW (tip transfer değil)
     } else {
       throw new NotFoundError('Recipient wallet not found');
     }
@@ -116,10 +116,14 @@ export class TransactionService {
 
     const fromAddress = fromWallet.smartAccountAddress ?? fromWallet.publicAddress;
 
-    // 1) TIP_SEND kaydı oluştur (status: created)
+    // Wallet adresine gönderim = WITHDRAW; Tipbox kullanıcısına gönderim = TIP_SEND
+    const isWithdrawToAddress = !toWallet;
+    const sendActionType = isWithdrawToAddress ? TransactionActionType.WITHDRAW : TransactionActionType.TIP_SEND;
+
+    // 1) Gönderim kaydı oluştur (status: created)
     const sendTransaction = await this.transactionRepo.create({
       walletId: fromWallet.id,
-      actionType: TransactionActionType.TIP_SEND,
+      actionType: sendActionType,
       amount: request.amount,
       fromAddress,
       toAddress,
@@ -200,16 +204,17 @@ export class TransactionService {
   }
 
   /**
-   * Tip send işlemini iptal et. Sadece status=created ve TIP_SEND ise, gönderen kullanıcı iptal edebilir.
-   * Kuyruktaki job 15 sn sonra çalıştığında zaten iptal edilmiş olduğu için SDK çağrılmaz.
+   * Tip send / withdraw işlemini iptal et. Sadece status=created ve TIP_SEND veya WITHDRAW ise, gönderen iptal edebilir.
+   * Kuyruktaki job çalıştığında zaten iptal edilmiş olduğu için SDK çağrılmaz.
    */
   async cancelTipSend(transactionId: string, userId: string): Promise<Transaction> {
     const transaction = await this.transactionRepo.findById(transactionId);
     if (!transaction) {
       throw new NotFoundError('Transaction not found');
     }
-    if (transaction.actionType !== TransactionActionType.TIP_SEND) {
-      throw new ValidationError('Only tip send transactions can be cancelled');
+    const cancellableTypes = [TransactionActionType.TIP_SEND, TransactionActionType.WITHDRAW];
+    if (!cancellableTypes.includes(transaction.actionType)) {
+      throw new ValidationError('Only pending tip send or withdraw transactions can be cancelled');
     }
     if (transaction.status !== TransactionStatus.CREATED) {
       throw new ValidationError(
