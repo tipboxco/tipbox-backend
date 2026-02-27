@@ -3669,5 +3669,129 @@ export class BrandService {
     };
   }
 
+  /**
+   * Anketi tamamla - puan ver ve badge kontrolü yap
+   */
+  async completeSurvey(surveyId: string, userId: string) {
+    // Survey var mı kontrol et
+    const survey = await this.prisma.brandSurvey.findUnique({
+      where: { id: surveyId },
+      include: { questions: true },
+    });
+
+    if (!survey) {
+      throw new NotFoundError('Survey not found');
+    }
+
+    // Kullanıcı tüm sorulara cevap vermiş mi kontrol et
+    const userAnswers = await this.prisma.brandSurveyAnswer.findMany({
+      where: {
+        userId,
+        question: { surveyId },
+      },
+    });
+
+    if (userAnswers.length < survey.questions.length) {
+      return {
+        success: false,
+        message: `Lütfen tüm soruları cevaplayın. (${userAnswers.length}/${survey.questions.length})`,
+      };
+    }
+
+    // Daha önce tamamlanmış mı kontrol et
+    const existingCompletion = await this.prisma.userSurveyCompletion.findUnique({
+      where: {
+        userId_surveyId: {
+          userId,
+          surveyId,
+        },
+      },
+    });
+
+    if (existingCompletion) {
+      return {
+        success: false,
+        message: 'Bu anketi zaten tamamladınız.',
+      };
+    }
+
+    // Puan ver (her anket 10 puan)
+    const pointsAwarded = 10;
+
+    // Completion kaydını oluştur
+    await this.prisma.userSurveyCompletion.create({
+      data: {
+        userId,
+        surveyId,
+        pointsAwarded,
+      },
+    });
+
+    // Toplam survey puanını hesapla
+    const completions = await this.prisma.userSurveyCompletion.findMany({
+      where: { userId },
+      select: { pointsAwarded: true },
+    });
+    const totalSurveyPoints = completions.reduce((sum, c) => sum + c.pointsAwarded, 0);
+
+    // Badge kontrolü yap
+    const badgesEarned: any[] = [];
+    const surveyBadges = await this.prisma.badge.findMany({
+      where: {
+        category: { name: 'Survey' },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    // Badge kazanma koşulları
+    const badgeThresholds = [
+      { points: 10, name: 'Survey Explorer (Bronze)' },
+      { points: 25, name: 'Survey Master (Silver)' },
+      { points: 50, name: 'Survey Legend (Gold)' },
+    ];
+
+    for (const threshold of badgeThresholds) {
+      if (totalSurveyPoints >= threshold.points) {
+        const badge = surveyBadges.find((b) => b.name === threshold.name);
+        if (badge) {
+          // Badge zaten kazanılmış mı kontrol et
+          const hasBadge = await this.prisma.userBadge.findFirst({
+            where: { userId, badgeId: badge.id },
+          });
+
+          if (!hasBadge) {
+            // Badge'i ver
+            await this.prisma.userBadge.create({
+              data: {
+                id: randomUUID(),
+                userId,
+                badgeId: badge.id,
+                earnedAt: new Date(),
+              },
+            });
+
+            badgesEarned.push({
+              id: badge.id,
+              name: badge.name,
+              description: badge.description,
+              image: resolveMediaUrl(badge.imageUrl),
+              rarity: badge.rarity,
+            });
+
+            logger.info(`User ${userId} earned badge: ${badge.name}`);
+          }
+        }
+      }
+    }
+
+    return {
+      success: true,
+      message: 'Anket tamamlandı! Tebrikler!',
+      pointsAwarded,
+      totalSurveyPoints,
+      badgesEarned,
+    };
+  }
+
 }
 

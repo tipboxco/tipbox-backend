@@ -155,4 +155,64 @@ router.post(
   }),
 );
 
+/**
+ * @openapi
+ * /surveys/{surveyId}/complete:
+ *   post:
+ *     summary: Anketi tamamla ve puan kazan
+ *     description: Tüm soruları cevaplanan anketi tamamlar, kullanıcıya puan verir ve badge kontrolü yapar.
+ *     tags: [Surveys]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: surveyId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Anket ID'si
+ *     responses:
+ *       200:
+ *         description: Anket başarıyla tamamlandı, puan ve badge bilgileri döndü.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 pointsAwarded:
+ *                   type: integer
+ *                 totalSurveyPoints:
+ *                   type: integer
+ *                 badgesEarned:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       400:
+ *         description: Anket henüz tamamlanmadı veya zaten tamamlanmış.
+ *       401:
+ *         description: Kimlik doğrulaması başarısız.
+ *       404:
+ *         description: Anket bulunamadı.
+ */
+router.post(
+  '/:surveyId/complete',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { surveyId } = req.params;
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const result = await brandService.completeSurvey(surveyId, userId);
+    return res.json(result);
+  }),
+);
+
 export default router;

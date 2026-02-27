@@ -746,6 +746,8 @@ export class CatalogService {
           images,
           status: (post.productStatus === 'own' || post.productStatus === 'tried' ? post.productStatus : null) as 'own' | 'tried' | null,
           statusLabel: post.productStatus === 'own' ? 'I owned' : post.productStatus === 'tried' ? 'I tried' : null,
+          isBoosted: post.isBoosted ?? false,
+          boostedUntil: post.boostedUntil ? (post.boostedUntil as Date).toISOString() : null,
         };
 
         if (post.type === ContentPostType.UPDATE && post.updateContent?.experiencePost) {
@@ -1090,6 +1092,8 @@ export class CatalogService {
           contextData: contextData,
           content: post.body,
           images: (post.media || []).map((m: any) => resolveMediaUrl(m.mediaUrl)).filter((url: string | null): url is string => url !== null),
+          isBoosted: post.isBoosted ?? false,
+          boostedUntil: post.boostedUntil ? (post.boostedUntil as Date).toISOString() : null,
         };
 
         return {
@@ -1295,6 +1299,8 @@ export class CatalogService {
           contextData: contextData,
           content: post.body,
           images: (post.media || []).map((m: any) => resolveMediaUrl(m.mediaUrl)).filter((url: string | null): url is string => url !== null),
+          isBoosted: post.isBoosted ?? false,
+          boostedUntil: post.boostedUntil ? (post.boostedUntil as Date).toISOString() : null,
         };
 
         return {

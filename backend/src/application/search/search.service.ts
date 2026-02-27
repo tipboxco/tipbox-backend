@@ -1,14 +1,18 @@
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import { SearchData, SearchUserData, SearchBrandData, SearchProductData } from '../../interfaces/search/search.dto';
 import { resolveMediaUrl, getPublicMediaBaseUrl } from '../../infrastructure/config/media.config';
+import { CacheService } from '../../infrastructure/cache/cache.service';
+import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
 
 export type SearchTypes = Array<'user' | 'brand' | 'product'>;
 
 export class SearchService {
   private prisma: ReturnType<typeof getPrisma>;
+  private readonly cacheService: CacheService;
 
   constructor() {
     this.prisma = getPrisma();
+    this.cacheService = CacheService.getInstance();
   }
 
   async searchAll(keyword: string | undefined, limitPerType: number = 10, types?: SearchTypes): Promise<SearchData> {
@@ -17,6 +21,13 @@ export class SearchService {
     const isDefaultMode = !keyword || trimmed.length === 0;
     const defaultLimit = 4; // Default mode'da 4'er adet
     const actualLimit = isDefaultMode ? defaultLimit : limitPerType;
+
+    // Default mode: cache ile tekrarlayan isteklerde DB yükü ve timeout riski azaltılır
+    if (isDefaultMode) {
+      const cacheKey = `search:default:${[...activeTypes].sort().join(',')}`;
+      const cached = await this.cacheService.get<SearchData>(cacheKey);
+      if (cached) return cached;
+    }
 
     const tasks: Array<Promise<any>> = [];
 
@@ -295,7 +306,14 @@ export class SearchService {
       };
     });
 
-    return { userData, brandData, productData };
+    const result: SearchData = { userData, brandData, productData };
+
+    if (isDefaultMode) {
+      const cacheKey = `search:default:${[...activeTypes].sort().join(',')}`;
+      await this.cacheService.set(cacheKey, result, CACHE_TTL.SEARCH_DEFAULT);
+    }
+
+    return result;
   }
 }
 

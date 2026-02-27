@@ -19,6 +19,7 @@ model User {
   adminLogs               AdminLog[]
   aiExperienceSplits      AiExperienceSplit[]     @relation("UserAiExperienceSplits")
   brandSurveyAnswers      BrandSurveyAnswer[]
+  userSurveyCompletions   UserSurveyCompletion[]
   bridgeFollowers         BridgeFollower[]
   bridgeLeaderboards      BridgeLeaderboard[]
   bridgePosts             BridgePost[]
@@ -1120,6 +1121,7 @@ model BrandSurvey {
   createdAt   DateTime              @default(now()) @map("created_at")
   updatedAt   DateTime              @updatedAt @map("updated_at")
   questions   BrandSurveyQuestion[]
+  completions UserSurveyCompletion[]
   brand       Brand                 @relation(fields: [brandId], references: [id], onDelete: Cascade)
 
   @@index([brandId])
@@ -1153,6 +1155,22 @@ model BrandSurveyAnswer {
   @@index([questionId])
   @@index([userId])
   @@map("brand_survey_answers")
+}
+
+model UserSurveyCompletion {
+  id            String      @id @default(uuid()) @db.Uuid
+  userId        String      @map("user_id") @db.Uuid
+  surveyId      String      @map("survey_id") @db.Uuid
+  completedAt   DateTime    @default(now()) @map("completed_at")
+  pointsAwarded Int         @default(10) @map("points_awarded")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  survey        BrandSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, surveyId])
+  @@index([userId])
+  @@index([surveyId])
+  @@map("user_survey_completions")
 }
 
 model BridgeFollower {

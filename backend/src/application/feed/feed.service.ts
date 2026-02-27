@@ -508,6 +508,7 @@ export class FeedService {
           createdAt: post.createdAt.toISOString(),
           contextType: this.mapContextType(post),
           ...(feedSource && { source: feedSource }),
+          ...(post.isBoosted && { isBoosted: true, boostedUntil: post.boostedUntil?.toISOString() }),
         };
 
         // Get images for this post from PostMedia (orderIndex'e göre sıralı)
@@ -958,6 +959,7 @@ export class FeedService {
           createdAt: post.createdAt.toISOString(),
           contextType: this.mapContextType(post),
           ...(feedSource && { source: feedSource }),
+          ...(post.isBoosted && { isBoosted: true, boostedUntil: post.boostedUntil?.toISOString() }),
         };
 
         // Get images for this post from PostMedia (orderIndex'e göre sıralı)

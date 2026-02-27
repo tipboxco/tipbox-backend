@@ -103,15 +103,24 @@ router.get(
 
 /**
  * GET /api/collections/:id
- * Get collection details with goals and user progress
+ * Get collection details with goals and user progress.
+ * Optional query: search (or q) = filter badges within this collection by name/description.
  */
 router.get(
   '/collections/:id',
   asyncHandler(async (req: Request, res: Response) => {
     const collectionId = req.params.id;
     const userId = req.user?.id;
+    const search =
+      typeof req.query.search === 'string'
+        ? req.query.search.trim()
+        : typeof req.query.q === 'string'
+          ? req.query.q.trim()
+          : undefined;
 
-    const collection = await gamificationService.getCollectionById(collectionId, userId);
+    const collection = await gamificationService.getCollectionById(collectionId, userId, {
+      ...(search ? { badgeSearch: search } : {}),
+    });
 
     if (!collection) {
       return res.status(404).json({ success: false, message: 'Collection not found' });

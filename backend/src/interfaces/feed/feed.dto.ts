@@ -254,6 +254,8 @@ export interface BasePost {
   createdAt: string;
   contextType: ContextType;
   source?: string; // Feed source: TRUSTER, BOOSTED, CATEGORY_MATCH, TRENDING, NEW_USER
+  isBoosted?: boolean; // Post boost edildi mi?
+  boostedUntil?: string; // Boost bitiş tarihi (ISO string)
 }
 
 

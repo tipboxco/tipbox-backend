@@ -290,6 +290,13 @@ router.post(
  *         schema:
  *           type: integer
  *           default: 50
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [newest, oldest, popular]
+ *           default: newest
+ *         description: Yorumları sıralama kriteri (newest=en yeni, oldest=en eski, popular=en popüler)
  *     responses:
  *       200:
  *         description: Yorumlar listelendi
@@ -302,8 +309,16 @@ router.get(
     const postId = await postService.resolvePostId(rawPostId);
     if (!postId) return res.status(404).json({ message: 'Post not found' });
     const limit = parseInt(req.query.limit as string) || 50;
+    const sortBy = (req.query.sortBy as 'newest' | 'oldest' | 'popular') || 'newest';
 
-    const result = await interactionService.getPostComments(postId, limit);
+    // Validate sortBy parameter
+    if (!['newest', 'oldest', 'popular'].includes(sortBy)) {
+      return res.status(400).json({ 
+        message: 'Invalid sortBy parameter. Must be: newest, oldest, or popular' 
+      });
+    }
+
+    const result = await interactionService.getPostComments(postId, limit, sortBy);
 
     return res.status(200).json({
       success: true,

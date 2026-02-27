@@ -649,14 +649,28 @@ export class GamificationService {
   }
 
   /**
-   * Get collection by ID with goals and user progress
+   * Get collection by ID with goals and user progress.
+   * Optional badgeSearch: filters badges by name/description (case-insensitive).
    */
-  async getCollectionById(collectionId: string, userId?: string) {
+  async getCollectionById(
+    collectionId: string,
+    userId?: string,
+    options?: { badgeSearch?: string }
+  ) {
+    const badgeSearchTrimmed = options?.badgeSearch?.trim();
     const collection = await this.prisma.badgeCollection.findUnique({
       where: { id: collectionId },
       include: {
         category: true,
         badges: {
+          where: badgeSearchTrimmed
+            ? {
+                OR: [
+                  { name: { contains: badgeSearchTrimmed, mode: 'insensitive' as const } },
+                  { description: { contains: badgeSearchTrimmed, mode: 'insensitive' as const } },
+                ],
+              }
+            : undefined,
           select: {
             id: true,
             name: true,
