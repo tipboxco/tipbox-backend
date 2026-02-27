@@ -3,7 +3,7 @@
 # Ensure node_modules has all deps (fixes volume mount: anonymous volume can be empty or stale)
 if [ ! -d "node_modules/@xterm/xterm" ]; then
   echo "Installing/refreshing node_modules..."
-  pnpm install --legacy-peer-deps
+  pnpm install
   echo "node_modules ready."
 fi
 

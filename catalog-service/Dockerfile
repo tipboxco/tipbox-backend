@@ -14,7 +14,7 @@ WORKDIR /server
 COPY package.json  ./
 
 # Install all dependencies
-RUN pnpm install --legacy-peer-deps
+RUN pnpm install
 
 # Copy source code
 COPY . .

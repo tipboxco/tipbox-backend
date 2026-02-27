@@ -18,7 +18,7 @@ tipbox_catalog_service exited with code 127 (restarting)
 
 **Düzeltme:**
 - `catalog-service/Dockerfile` içine `corepack enable` ve `pnpm@9.15.0` eklendi.
-- Bağımlılık kurulumu `npm install` → `pnpm install --legacy-peer-deps` olarak değiştirildi.
+- Bağımlılık kurulumu `pnpm install` (pnpm `--legacy-peer-deps` desteklemez; gerekirse `.npmrc` ile `strict-peer-dependencies=false` kullanın).
 
 ---
 
