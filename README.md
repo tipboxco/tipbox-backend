@@ -2,6 +2,19 @@
 
 This repository contains the backend API for the Tipbox application, built with Node.js, Express, and TypeScript. The architecture follows Domain-Driven Design (DDD) and Modular Monolith principles.
 
+Bu repo **pnpm monorepo** yapısındadır. Paketler: `backend`, `admin-panel`, `catalog-service`.
+
+## Monorepo (pnpm)
+
+```bash
+# pnpm yükle (yoksa): corepack enable && corepack prepare pnpm@9.15.0 --activate
+pnpm install          # Tüm workspace bağımlılıklarını yükler
+pnpm run backend      # Backend dev server
+pnpm run admin        # Admin panel dev
+pnpm run catalog      # Catalog (Medusa) dev
+pnpm run clean:modules # Tüm projelerdeki node_modules'leri siler (root + backend, admin-panel, catalog-service, merge-code)
+```
+
 ## Getting Started
 
 ### Quick Start (Docker - Önerilen)

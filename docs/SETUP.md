@@ -23,7 +23,8 @@ Bu doküman, Tipbox monorepo’sunu (backend, admin-panel, catalog-service) **Do
 |------------|----------|
 | **Docker Desktop** | Docker ve Docker Compose. [İndir](https://www.docker.com/products/docker-desktop/) |
 | **Git** | Repo klonlama |
-| **Node.js 18+** | Sadece Docker kullanmadan backend/admin-panel çalıştıracaksanız |
+| **Node.js 18+** | Docker kullanmadan yerel çalıştırma için |
+| **pnpm 9+** | Monorepo paket yöneticisi. `corepack enable && corepack prepare pnpm@9.15.0 --activate` |
 
 Kontrol:
 
@@ -164,9 +165,35 @@ Tarayıcıda: http://localhost:5555
 
 ## 7. Yerel Geliştirme (Docker Olmadan)
 
-- **Backend:** `backend/` içinde `npm install`, `cp .env.example .env` (veya kök `.env`’i kopyalayıp `backend/.env` yapın). `DATABASE_URL` ve `REDIS_URL`’i localhost’a çevirin. `npx prisma db push`, `npx prisma generate`, `npm run dev`.
-- **Admin Panel:** `admin-panel/` içinde `npm install`, `.env` içinde `VITE_API_BASE_URL=http://localhost:3000`, `npm run dev`.
-- **PostgreSQL / Redis / MinIO** yerelde yüklü olmalı veya sadece bu servisleri Docker ile çalıştırıp uygulamaları host’tan çalıştırabilirsiniz.
+Bu repo **pnpm monorepo** yapısındadır. Tüm bağımlılıklar kökten tek komutla yüklenir.
+
+### 7.1 pnpm ile (önerilen)
+
+```bash
+# Kökte
+pnpm install
+cp .env.example .env   # Gerekli key'leri doldurun
+
+# Backend
+pnpm run backend       # backend dev server (nodemon)
+
+# Admin Panel
+pnpm run admin         # admin-panel dev (Vite)
+
+# Catalog (Medusa)
+pnpm run catalog       # catalog-service dev
+```
+
+- **PostgreSQL / Redis / MinIO** yerelde kurulu olmalı veya sadece bu servisleri Docker ile açıp uygulamaları host’tan çalıştırabilirsiniz. `.env` içinde `DATABASE_URL` ve `REDIS_URL`’i localhost’a göre ayarlayın (örn. `postgres:5432` → `localhost:5432`).
+
+### 7.2 node_modules temizleme
+
+Tüm projelerdeki `node_modules` klasörlerini silip yeniden kurmak için:
+
+```bash
+pnpm run clean:modules
+pnpm install
+```
 
 Detaylı backend adımları: [backend/docs/SETUP_GUIDE.md](backend/docs/SETUP_GUIDE.md).
 
@@ -208,4 +235,4 @@ Daha fazla senaryo: [backend/docs/SETUP_GUIDE.md](backend/docs/SETUP_GUIDE.md#-s
 
 ---
 
-**Son güncelleme:** Bu rehber, proje kökünde tek `.env` kullanan Docker Compose yapısına göre düzenlenmiştir.
+**Son güncelleme:** Proje kökünde tek `.env`, pnpm monorepo ve `clean:modules` script’i dahil edilmiştir.
