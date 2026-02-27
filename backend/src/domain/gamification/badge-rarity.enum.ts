@@ -1,5 +1,6 @@
 export enum BadgeRarity {
   COMMON = 'COMMON',
   RARE = 'RARE',
-  EPIC = 'EPIC'
+  EPIC = 'EPIC',
+  LEGENDARY = 'LEGENDARY',
 }

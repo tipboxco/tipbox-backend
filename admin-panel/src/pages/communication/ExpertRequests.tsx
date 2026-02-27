@@ -20,6 +20,8 @@ import {
   UserOutlined,
   SearchOutlined,
   EyeOutlined,
+  SendOutlined,
+  CheckOutlined,
 } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
 import { type StatItemData } from '../../components/StatItem';
@@ -28,6 +30,8 @@ import {
   fetchExpertRequestStats,
   fetchExpertRequests,
   fetchExpertRequest,
+  broadcastExpertRequest,
+  closeExpertRequest,
 } from '../../api/admin-communication';
 import type {
   AdminExpertRequestStatsResponse,
@@ -111,6 +115,41 @@ function ExpertRequests() {
     }
   };
 
+  const handleBroadcast = async (id: string, question: string) => {
+    Modal.confirm({
+      title: 'Broadcast to Experts',
+      content: `Broadcast this question to all available experts: "${question.substring(0, 100)}..."?`,
+      okText: 'Broadcast',
+      onOk: async () => {
+        try {
+          await broadcastExpertRequest(id);
+          message.success('Request broadcasted to experts');
+          loadRequests();
+        } catch (e) {
+          message.error(e instanceof Error ? e.message : 'Failed to broadcast request');
+        }
+      },
+    });
+  };
+
+  const handleClose = async (id: string) => {
+    Modal.confirm({
+      title: 'Close Request',
+      content: 'Are you sure you want to close this expert request? This action cannot be undone.',
+      okText: 'Close',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          await closeExpertRequest(id);
+          message.success('Request closed successfully');
+          loadRequests();
+        } catch (e) {
+          message.error(e instanceof Error ? e.message : 'Failed to close request');
+        }
+      },
+    });
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'ANSWERED':
@@ -139,23 +178,16 @@ function ExpertRequests() {
     },
     {
       title: 'Category',
-      dataIndex: 'category',
-      key: 'category',
+      dataIndex: 'categoryName',
+      key: 'categoryName',
       width: TABLE_COLUMN_WIDTHS.MEDIUM_TEXT,
       ellipsis: true,
       render: (text) => text ?? '—',
     },
     {
-      title: 'Question',
-      dataIndex: 'question',
-      key: 'question',
-      width: TABLE_COLUMN_WIDTHS.LONG_TEXT,
-      ellipsis: true,
-    },
-    {
-      title: 'Offer Amount',
-      dataIndex: 'offerAmount',
-      key: 'offerAmount',
+      title: 'Amount',
+      dataIndex: 'amount',
+      key: 'amount',
       width: TABLE_COLUMN_WIDTHS.SHORT_TEXT,
       align: 'right',
       render: (amount) => (amount ? `${amount.toFixed(2)} TIPS` : '—'),
@@ -187,16 +219,37 @@ function ExpertRequests() {
     {
       title: '',
       key: 'action',
-      width: TABLE_COLUMN_WIDTHS.ACTION_BUTTON_DOUBLE,
+      width: 180,
       render: (_, record) => (
-        <Space size="small">
+        <Space size="small" wrap>
           <ViewActionButton to={`/users/${record.userId}`} />
           <Button
             size="small"
             type="text"
             icon={<EyeOutlined />}
             onClick={() => openDetailModal(record.id)}
+            title="View details"
           />
+          {record.status === 'PENDING' && (
+            <Button
+              size="small"
+              type="text"
+              icon={<SendOutlined />}
+              onClick={() => handleBroadcast(record.id, 'Expert request')}
+              style={{ color: '#1890ff' }}
+              title="Broadcast to experts"
+            />
+          )}
+          {(record.status === 'BROADCASTING' || record.status === 'ANSWERED') && (
+            <Button
+              size="small"
+              type="text"
+              icon={<CheckOutlined />}
+              onClick={() => handleClose(record.id)}
+              style={{ color: '#52c41a' }}
+              title="Close request"
+            />
+          )}
         </Space>
       ),
     },
@@ -329,13 +382,13 @@ function ExpertRequests() {
                   {selectedRequest.username ?? selectedRequest.userEmail ?? '—'}
                 </Descriptions.Item>
                 <Descriptions.Item label="Category">
-                  {selectedRequest.category ?? '—'}
+                  {selectedRequest.categoryName ?? '—'}
                 </Descriptions.Item>
                 <Descriptions.Item label="Question" span={2}>
                   {selectedRequest.question}
                 </Descriptions.Item>
-                <Descriptions.Item label="Offer Amount">
-                  {selectedRequest.offerAmount ? `${selectedRequest.offerAmount.toFixed(2)} TIPS` : '—'}
+                <Descriptions.Item label="Amount">
+                  {selectedRequest.amount ? `${selectedRequest.amount.toFixed(2)} TIPS` : '—'}
                 </Descriptions.Item>
                 <Descriptions.Item label="Status">
                   <Tag color={getStatusColor(selectedRequest.status)}>{selectedRequest.status}</Tag>
@@ -359,7 +412,7 @@ function ExpertRequests() {
                         <List.Item.Meta
                           title={
                             <Space>
-                              <span>{answer.expertUsername ?? answer.expertEmail ?? 'Unknown'}</span>
+                              <span>{answer.username ?? 'Unknown Expert'}</span>
                               {answer.isAccepted && <Tag color="green">Accepted</Tag>}
                             </Space>
                           }

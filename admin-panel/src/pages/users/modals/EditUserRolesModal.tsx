@@ -86,7 +86,7 @@ function EditUserRolesModal({ open, userId, onClose, onSuccess }: EditUserRolesM
       onCancel={onClose}
       footer={null}
       width={600}
-      destroyOnClose
+      destroyOnHidden
     >
       {loading ? (
         <div style={{ textAlign: 'center', padding: 48 }}>

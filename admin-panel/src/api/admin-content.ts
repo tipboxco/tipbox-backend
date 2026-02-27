@@ -53,6 +53,21 @@ export async function fetchContentPost(id: string) {
   return get<AdminContentPostDetailResponse>(`${prefix}/content/posts/${id}`);
 }
 
+export async function createContentPost(body: {
+  userId: string;
+  type: string;
+  title: string;
+  body: string;
+  mainCategoryId?: string | null;
+  subCategoryId?: string | null;
+  categoryId?: string | null;
+  productId?: string | null;
+  productGroupId?: string | null;
+  eventId?: string | null;
+}) {
+  return post<AdminContentPostDetailResponse>(`${prefix}/content/posts`, body);
+}
+
 export async function updateContentPost(
   id: string,
   body: Partial<{
@@ -282,6 +297,24 @@ export async function fetchContentTags(params?: {
   if (params?.postId) query.postId = params.postId;
   if (params?.search) query.search = params.search;
   return get<AdminContentTagListItem[]>(`${prefix}/content/tags`, query);
+}
+
+export async function createTag(body: { tag: string }) {
+  return post<AdminContentTagListItem>(`${prefix}/content/tags`, body);
+}
+
+export async function updateTag(oldTag: string, newTag: string) {
+  return patch<{ updated: number }>(`${prefix}/content/tags/${encodeURIComponent(oldTag)}`, {
+    newTag,
+  });
+}
+
+export async function deleteTag(tag: string) {
+  return del<{ deleted: boolean }>(`${prefix}/content/tags/${encodeURIComponent(tag)}`);
+}
+
+export async function mergeTags(body: { sourceTags: string[]; targetTag: string }) {
+  return post<{ merged: number }>(`${prefix}/content/tags/merge`, body);
 }
 
 export async function fetchUserPosts(

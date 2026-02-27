@@ -32,8 +32,6 @@ interface FormValues {
   imageUrl?: string;
   type: string;
   rarity: 'COMMON' | 'RARE' | 'EPIC';
-  boostMultiplier?: number | null;
-  rewardMultiplier?: number | null;
   categoryId: string;
   collectionId?: string;
 }
@@ -67,8 +65,6 @@ function EditBadgeModal({ open, badgeId, onClose, onSuccess }: EditBadgeModalPro
               imageUrl: badgeRes.data.imageUrl ?? '',
               type: badgeRes.data.type,
               rarity: badgeRes.data.rarity as 'COMMON' | 'RARE' | 'EPIC',
-              boostMultiplier: badgeRes.data.boostMultiplier ?? null,
-              rewardMultiplier: badgeRes.data.rewardMultiplier ?? null,
               categoryId: badgeRes.data.categoryId,
               collectionId: badgeRes.data.collectionId ?? '',
             });
@@ -103,8 +99,6 @@ function EditBadgeModal({ open, badgeId, onClose, onSuccess }: EditBadgeModalPro
         imageUrl: values.imageUrl?.trim() || null,
         type: values.type,
         rarity: values.rarity,
-        boostMultiplier: values.boostMultiplier ?? null,
-        rewardMultiplier: values.rewardMultiplier ?? null,
         categoryId: values.categoryId,
         collectionId: values.collectionId?.trim() || null,
       });
@@ -125,7 +119,7 @@ function EditBadgeModal({ open, badgeId, onClose, onSuccess }: EditBadgeModalPro
       onCancel={onClose}
       footer={null}
       width={600}
-      destroyOnClose
+      destroyOnHidden
     >
       {loading ? (
         <div style={{ textAlign: 'center', padding: 48 }}>
@@ -205,25 +199,6 @@ function EditBadgeModal({ open, badgeId, onClose, onSuccess }: EditBadgeModalPro
           {/* 4. Associations */}
           <Form.Item label="Collection ID" name="collectionId">
             <Input placeholder="Optional: Link to a specific collection" />
-          </Form.Item>
-
-          {/* 5. Multipliers (Optional) */}
-          <Form.Item label="Boost Multiplier" name="boostMultiplier">
-            <InputNumber
-              min={0}
-              step={0.1}
-              style={{ width: '100%' }}
-              placeholder="Optional: e.g., 1.5"
-            />
-          </Form.Item>
-
-          <Form.Item label="Reward Multiplier" name="rewardMultiplier">
-            <InputNumber
-              min={0}
-              step={0.1}
-              style={{ width: '100%' }}
-              placeholder="Optional: e.g., 2.0"
-            />
           </Form.Item>
 
           <Form.Item style={{ marginBottom: 0, marginTop: 24 }}>

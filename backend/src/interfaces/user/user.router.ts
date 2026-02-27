@@ -1114,18 +1114,24 @@ router.post('/trust', asyncHandler(async (req: Request, res: Response) => {
  *                       type: integer
  */
 router.get('/:id/collections/bridges', asyncHandler(async (req: Request, res: Response) => {
-  const id = String(req.params.id);
-  if (!/^[0-9a-fA-F-]{36}$/.test(id)) {
-    return res.status(400).json({ message: 'Invalid user id format' });
+  const userId = req.params.id;
+  const limit = parseInt(req.query.limit as string) || 20;
+  const cursor = req.query.cursor as string | undefined;
+
+  if (limit < 1 || limit > 50) {
+    return res.status(400).json({
+      success: false,
+      message: 'Limit must be between 1 and 50',
+    });
   }
-  const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
-  const q = typeof req.query.q === 'string' ? req.query.q.trim() : undefined;
-  const keyword = q || search || undefined;
-  const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
-  const limitParam = req.query.limit ? Number(req.query.limit) : undefined;
-  const limit = limitParam && !Number.isNaN(limitParam) ? Math.min(limitParam, 50) : 20;
-  const list = await userService.listBridgeBadges(id, keyword, { cursor, limit });
-  return res.json(list);
+
+  const result = await userService.getUserBadgesWithCategories(
+    userId,
+    limit,
+    cursor,
+  );
+
+  return res.json(result);
 }));
 
 /**
@@ -3885,5 +3891,134 @@ router.delete('/me', asyncHandler(async (req: Request, res: Response) => {
     throw error;
   }
 }));
+
+/**
+ * @openapi
+ * /users/{id}/collections/bridges/{badgeId}:
+ *   get:
+ *     summary: Get badge detail with tasks (EP-03)
+ *     description: Get detailed badge information including task progress
+ *     tags: [Users, Badges]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: badgeId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Badge detail with tasks
+ *       404:
+ *         description: Badge not found
+ */
+router.get(
+  '/:id/collections/bridges/:badgeId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.params.id;
+    const badgeId = req.params.badgeId;
+    const userPayload = req.user;
+    const viewerId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    const badge = await userService.getBadgeDetailWithTasks(
+      badgeId,
+      viewerId === userId ? userId : undefined,
+    );
+
+    return res.json(badge);
+  }),
+);
+
+/**
+ * @openapi
+ * /users/me/highlight-badges:
+ *   get:
+ *     summary: Get highlight badge selection data (EP-05)
+ *     description: Get current highlight badges and available badges for selection
+ *     tags: [Users, Badges]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Highlight badge selection data
+ *       401:
+ *         description: Unauthorized
+ */
+router.get(
+  '/me/highlight-badges',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const data = await userService.getHighlightBadgeSelectionData(
+      String(userId),
+    );
+    return res.json(data);
+  }),
+);
+
+/**
+ * @openapi
+ * /users/me/highlight-badges:
+ *   put:
+ *     summary: Update highlight badges (EP-06)
+ *     description: Set up to 4 highlight badges for profile
+ *     tags: [Users, Badges]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               badgeIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 maxItems: 4
+ *     responses:
+ *       200:
+ *         description: Highlight badges updated
+ *       400:
+ *         description: Invalid request (max 4 badges or badges not owned)
+ *       401:
+ *         description: Unauthorized
+ */
+router.put(
+  '/me/highlight-badges',
+  asyncHandler(async (req: Request, res: Response) => {
+    const userPayload = req.user;
+    const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { badgeIds } = req.body;
+
+    if (!Array.isArray(badgeIds)) {
+      return res.status(400).json({
+        success: false,
+        message: 'badgeIds must be an array',
+      });
+    }
+
+    const result = await userService.updateHighlightBadges(
+      String(userId),
+      badgeIds,
+    );
+    return res.json(result);
+  }),
+);
 
 export default router; 

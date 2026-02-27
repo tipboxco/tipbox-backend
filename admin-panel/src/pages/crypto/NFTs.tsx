@@ -29,12 +29,12 @@ import {
 import PageHeader from '../../components/PageHeader';
 import { type StatItemData } from '../../components/StatItem';
 import ViewActionButton from '../../components/ViewActionButton';
+import NFTCreateModal from './modals/NFTCreateModal';
+import NFTEditModal from './modals/NFTEditModal';
 import {
   fetchNFTStats,
   fetchNFTs,
   fetchNFT,
-  createNFT,
-  updateNFT,
   deleteNFT,
   transferNFT,
 } from '../../api/admin-crypto';
@@ -42,8 +42,6 @@ import type {
   AdminNFTStatsResponse,
   AdminNFTListItem,
   AdminNFTDetailResponse,
-  CreateNFTInput,
-  UpdateNFTInput,
   TransferNFTInput,
 } from '../../api/admin-crypto';
 import { TABLE_COLUMN_WIDTHS, TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
@@ -72,9 +70,8 @@ function NFTs() {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [transferModalOpen, setTransferModalOpen] = useState(false);
   const [selectedNFT, setSelectedNFT] = useState<AdminNFTDetailResponse | null>(null);
+  const [selectedNFTId, setSelectedNFTId] = useState<string | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
-  const [createForm] = Form.useForm();
-  const [editForm] = Form.useForm();
   const [transferForm] = Form.useForm();
 
   useEffect(() => {
@@ -132,58 +129,25 @@ function NFTs() {
     }
   };
 
-  const openEditModal = async (nft: AdminNFTListItem) => {
-    setLoadingDetail(true);
-    try {
-      const res = await fetchNFT(nft.id);
-      setSelectedNFT(res.data);
-      editForm.setFieldsValue({
-        name: res.data.name,
-        description: res.data.description,
-        imageUrl: res.data.imageUrl,
-        type: res.data.type,
-        rarity: res.data.rarity,
-        attributes: res.data.attributes,
-      });
-      setEditModalOpen(true);
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : 'Failed to load NFT details');
-    } finally {
-      setLoadingDetail(false);
-    }
+  const openEditModal = (nftId: string) => {
+    setSelectedNFTId(nftId);
+    setEditModalOpen(true);
+  };
+
+  const handleCreateSuccess = () => {
+    setPagination((prev) => ({ ...prev, offset: 0 }));
+    loadNFTs();
+  };
+
+  const handleEditSuccess = () => {
+    setEditModalOpen(false);
+    setSelectedNFTId(null);
+    loadNFTs();
   };
 
   const openTransferModal = (nft: AdminNFTListItem) => {
     setSelectedNFT(nft as AdminNFTDetailResponse);
     setTransferModalOpen(true);
-  };
-
-  const handleCreate = async (values: CreateNFTInput) => {
-    try {
-      await createNFT(values);
-      message.success('NFT created successfully');
-      setCreateModalOpen(false);
-      createForm.resetFields();
-      setPagination((prev) => ({ ...prev, offset: 0 }));
-      loadNFTs();
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : 'Failed to create NFT');
-    }
-  };
-
-  const handleEdit = async (values: UpdateNFTInput) => {
-    if (!selectedNFT) return;
-
-    try {
-      await updateNFT(selectedNFT.id, values);
-      message.success('NFT updated successfully');
-      setEditModalOpen(false);
-      editForm.resetFields();
-      setSelectedNFT(null);
-      loadNFTs();
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : 'Failed to update NFT');
-    }
   };
 
   const handleTransfer = async (values: TransferNFTInput) => {
@@ -312,7 +276,7 @@ function NFTs() {
             size="small"
             type="text"
             icon={<EditOutlined />}
-            onClick={() => openEditModal(record)}
+            onClick={() => openEditModal(record.id)}
           />
           <Button
             size="small"
@@ -516,151 +480,25 @@ function NFTs() {
         )}
       </Modal>
 
-      {/* Create Modal */}
-      <Modal
-        title="Create NFT"
+      {/* Create NFT Modal */}
+      <NFTCreateModal
         open={createModalOpen}
-        onCancel={() => {
-          setCreateModalOpen(false);
-          createForm.resetFields();
-        }}
-        onOk={() => createForm.submit()}
-        width={700}
-      >
-        <Form form={createForm} layout="vertical" onFinish={handleCreate}>
-          <Form.Item
-            name="name"
-            label="Name"
-            rules={[{ required: true, message: 'Please enter NFT name' }]}
-          >
-            <Input placeholder="NFT name" />
-          </Form.Item>
-          <Form.Item name="description" label="Description">
-            <Input.TextArea rows={3} placeholder="NFT description" />
-          </Form.Item>
-          <Form.Item
-            name="imageUrl"
-            label="Image URL"
-            rules={[{ required: true, message: 'Please enter image URL' }]}
-          >
-            <Input placeholder="https://..." />
-          </Form.Item>
-          <Form.Item
-            name="type"
-            label="Type"
-            rules={[{ required: true, message: 'Please select type' }]}
-          >
-            <Select placeholder="Select type">
-              <Select.Option value="BADGE">Badge</Select.Option>
-              <Select.Option value="COSMETIC">Cosmetic</Select.Option>
-              <Select.Option value="LOOTBOX">Lootbox</Select.Option>
-            </Select>
-          </Form.Item>
-          <Form.Item
-            name="rarity"
-            label="Rarity"
-            rules={[{ required: true, message: 'Please select rarity' }]}
-          >
-            <Select placeholder="Select rarity">
-              <Select.Option value="COMMON">Common</Select.Option>
-              <Select.Option value="UNCOMMON">Uncommon</Select.Option>
-              <Select.Option value="RARE">Rare</Select.Option>
-              <Select.Option value="EPIC">Epic</Select.Option>
-              <Select.Option value="LEGENDARY">Legendary</Select.Option>
-            </Select>
-          </Form.Item>
-          <Form.Item
-            name="ownerId"
-            label="Owner ID"
-            rules={[{ required: true, message: 'Please enter owner ID' }]}
-          >
-            <Input placeholder="User UUID" />
-          </Form.Item>
-          <Form.Item name="attributes" label="Attributes (JSON)">
-            <Input.TextArea
-              rows={4}
-              placeholder='{"key": "value"}'
-              onBlur={(e) => {
-                try {
-                  if (e.target.value) JSON.parse(e.target.value);
-                } catch {
-                  message.warning('Invalid JSON format');
-                }
-              }}
-            />
-          </Form.Item>
-        </Form>
-      </Modal>
+        onClose={() => setCreateModalOpen(false)}
+        onSuccess={handleCreateSuccess}
+      />
 
-      {/* Edit Modal */}
-      <Modal
-        title="Edit NFT"
-        open={editModalOpen}
-        onCancel={() => {
-          setEditModalOpen(false);
-          editForm.resetFields();
-          setSelectedNFT(null);
-        }}
-        onOk={() => editForm.submit()}
-        width={700}
-      >
-        <Form form={editForm} layout="vertical" onFinish={handleEdit}>
-          <Form.Item
-            name="name"
-            label="Name"
-            rules={[{ required: true, message: 'Please enter NFT name' }]}
-          >
-            <Input placeholder="NFT name" />
-          </Form.Item>
-          <Form.Item name="description" label="Description">
-            <Input.TextArea rows={3} placeholder="NFT description" />
-          </Form.Item>
-          <Form.Item
-            name="imageUrl"
-            label="Image URL"
-            rules={[{ required: true, message: 'Please enter image URL' }]}
-          >
-            <Input placeholder="https://..." />
-          </Form.Item>
-          <Form.Item
-            name="type"
-            label="Type"
-            rules={[{ required: true, message: 'Please select type' }]}
-          >
-            <Select placeholder="Select type">
-              <Select.Option value="BADGE">Badge</Select.Option>
-              <Select.Option value="COSMETIC">Cosmetic</Select.Option>
-              <Select.Option value="LOOTBOX">Lootbox</Select.Option>
-            </Select>
-          </Form.Item>
-          <Form.Item
-            name="rarity"
-            label="Rarity"
-            rules={[{ required: true, message: 'Please select rarity' }]}
-          >
-            <Select placeholder="Select rarity">
-              <Select.Option value="COMMON">Common</Select.Option>
-              <Select.Option value="UNCOMMON">Uncommon</Select.Option>
-              <Select.Option value="RARE">Rare</Select.Option>
-              <Select.Option value="EPIC">Epic</Select.Option>
-              <Select.Option value="LEGENDARY">Legendary</Select.Option>
-            </Select>
-          </Form.Item>
-          <Form.Item name="attributes" label="Attributes (JSON)">
-            <Input.TextArea
-              rows={4}
-              placeholder='{"key": "value"}'
-              onBlur={(e) => {
-                try {
-                  if (e.target.value) JSON.parse(e.target.value);
-                } catch {
-                  message.warning('Invalid JSON format');
-                }
-              }}
-            />
-          </Form.Item>
-        </Form>
-      </Modal>
+      {/* Edit NFT Modal */}
+      {selectedNFTId && (
+        <NFTEditModal
+          open={editModalOpen}
+          nftId={selectedNFTId}
+          onClose={() => {
+            setEditModalOpen(false);
+            setSelectedNFTId(null);
+          }}
+          onSuccess={handleEditSuccess}
+        />
+      )}
 
       {/* Transfer Modal */}
       <Modal

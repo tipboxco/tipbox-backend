@@ -56,7 +56,7 @@ function AddBadgeToEventModal({ open, eventId, onClose, onSuccess }: AddBadgeToE
       onCancel={onClose}
       footer={null}
       width={600}
-      destroyOnClose
+      destroyOnHidden
     >
       <Form
         form={form}

@@ -74,8 +74,9 @@ export function getSwaggerServers() {
   ];
 }
 
-/** Swagger UI'da grupların sırası ve kısa açıklamaları. Admin önce, sonra App. */
+/** Swagger UI'da grupların sırası ve kısa açıklamaları. Authentication en üstte, sonra Admin, sonra App. */
 const SWAGGER_TAGS: Array<{ name: string; description: string }> = [
+  { name: 'Authentication', description: 'Giriş, kayıt ve token (App)' },
   { name: 'Admin - Auth', description: 'Admin giriş ve oturum' },
   { name: 'Admin - Dashboard', description: 'Admin genel istatistikler' },
   { name: 'Admin - Users', description: 'Admin kullanıcı yönetimi' },
@@ -84,11 +85,11 @@ const SWAGGER_TAGS: Array<{ name: string; description: string }> = [
   { name: 'Admin - Content', description: 'İçerik, post, yorum, highlight, trending' },
   { name: 'Admin - Event Gamification', description: 'Event, koleksiyon ve badge yönetimi' },
   { name: 'Users', description: 'Kullanıcı profili ve ayarları (App)' },
-  { name: 'Auth', description: 'Giriş ve token (App)' },
   { name: 'Feed', description: 'Feed ve gönderiler (App)' },
   { name: 'Inventory', description: 'Envanter (App)' },
   { name: 'Wallet', description: 'Cüzdan ve işlemler (App)' },
   { name: 'Events', description: 'Eventler (App)' },
+  { name: 'Collections', description: 'Koleksiyonlar ve badge ilerlemesi (App)' },
   { name: 'Notifications', description: 'Bildirimler (App)' },
   { name: 'Inbox', description: 'Mesajlaşma (App)' },
   { name: 'Admin', description: 'Genel admin (eski tag, yeni gruplara taşındı)' },

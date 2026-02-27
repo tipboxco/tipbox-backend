@@ -1,4 +1,4 @@
-import { get, post, patch, del, put } from './client';
+import { get, post, patch, del, put, postFormData } from './client';
 import type { ApiResponse } from './client';
 
 // ==================== Type Interfaces ====================
@@ -398,6 +398,12 @@ export async function createProduct(
   data: CreateProductInput
 ): Promise<ApiResponse<AdminProductDetailResponse>> {
   return post<AdminProductDetailResponse>('/admin/products', data);
+}
+
+export async function uploadProductImage(file: File): Promise<ApiResponse<{ url: string }>> {
+  const formData = new FormData();
+  formData.append('file', file);
+  return postFormData<{ url: string }>('/admin/products/upload-image', formData);
 }
 
 export async function updateProduct(

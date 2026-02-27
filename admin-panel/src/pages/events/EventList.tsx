@@ -9,6 +9,11 @@ import {
   Alert,
   Image,
   Tag,
+  Button,
+  Row,
+  Col,
+  Dropdown,
+  message,
 } from 'antd';
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
 import {
@@ -17,14 +22,18 @@ import {
   SignalFilled,
   InboxOutlined,
   SearchOutlined,
+  PlusOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
 import type { StatItemData } from '../../components/StatItem';
 import ViewActionButton from '../../components/ViewActionButton';
+import EventCreateModal from './modals/EventCreateModal';
 import { fetchEventsStats, fetchEvents } from '../../api/admin-events';
 import type { AdminEventListItem, AdminEventStatsResponse } from '../../types/admin';
 import { BADGE_COLOR_PRIMARY, BADGE_COLOR_SECONDARY } from '../../constants/badge-colors';
 import { TABLE_COLUMN_WIDTHS, TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
+import { exportToCSV, exportToJSON, exportToExcel, sanitizeFilename, formatDateForExport } from '../../utils/export';
 
 const PAGE_SIZE = 20;
 
@@ -40,6 +49,7 @@ function EventList() {
   const [sort, setSort] = useState<'createdAt' | 'startDate' | 'endDate' | 'title'>('createdAt');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const [error, setError] = useState<string | null>(null);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,6 +96,82 @@ function EventList() {
       cancelled = true;
     };
   }, [pagination.offset, search, status, feedType, sort, order]);
+
+  const handleCreateSuccess = () => {
+    // Reload the first page of events
+    setPagination((prev) => ({ ...prev, offset: 0 }));
+    // Trigger a reload by updating dependencies
+    setSearch((s) => s); // Force re-render to trigger useEffect
+  };
+
+  const handleExport = async (format: 'csv' | 'json' | 'excel') => {
+    const hide = message.loading(`Preparing ${format.toUpperCase()} export...`, 0);
+
+    try {
+      // Fetch all data with current filters (limit 10,000 for safety)
+      const res = await fetchEvents({
+        limit: 10000,
+        offset: 0,
+        search: search || undefined,
+        status: status || undefined,
+        feedType: feedType || undefined,
+        sort,
+        order,
+      });
+
+      const exportData = res.data ?? [];
+
+      if (exportData.length === 0) {
+        hide();
+        message.warning('No data to export');
+        return;
+      }
+
+      // Define columns for export
+      const columns = [
+        { key: 'id' as const, label: 'Event ID' },
+        { key: 'title' as const, label: 'Title' },
+        { key: 'status' as const, label: 'Status' },
+        { key: 'feedType' as const, label: 'Feed Type' },
+        { key: 'productName' as const, label: 'Product' },
+        { key: 'brandName' as const, label: 'Brand' },
+        { key: 'participantCount' as const, label: 'Participants' },
+        { key: 'startDate' as const, label: 'Start Date' },
+        { key: 'endDate' as const, label: 'End Date' },
+        { key: 'createdAt' as const, label: 'Created At' },
+      ];
+
+      // Transform data for export
+      const transformedData = exportData.map((event) => ({
+        id: event.id,
+        title: event.title,
+        status: event.status,
+        feedType: event.feedType,
+        productName: event.productName ?? '',
+        brandName: event.brandName ?? '',
+        participantCount: event.participantCount ?? 0,
+        startDate: formatDateForExport(event.startDate),
+        endDate: formatDateForExport(event.endDate),
+        createdAt: formatDateForExport(event.createdAt),
+      }));
+
+      const filename = sanitizeFilename(`events_${new Date().toISOString().split('T')[0]}`);
+
+      if (format === 'csv') {
+        exportToCSV(transformedData, filename, columns);
+      } else if (format === 'json') {
+        exportToJSON(exportData, filename);
+      } else if (format === 'excel') {
+        exportToExcel(transformedData, filename, columns);
+      }
+
+      hide();
+      message.success(`Exported ${exportData.length} events to ${format.toUpperCase()}`);
+    } catch (e) {
+      hide();
+      message.error(e instanceof Error ? e.message : 'Export failed');
+    }
+  };
 
   const columns: ColumnsType<AdminEventListItem> = [
     {
@@ -246,7 +332,50 @@ function EventList() {
       {/* Event List */}
       <Card
         bordered
-        title="Event list"
+        title={
+          <Row justify="space-between" align="middle" style={{ width: '100%' }}>
+            <Col>Event list</Col>
+            <Col>
+              <Space>
+                <Dropdown
+                  menu={{
+                    items: [
+                      {
+                        key: 'csv',
+                        label: 'Export as CSV',
+                        icon: <DownloadOutlined />,
+                        onClick: () => handleExport('csv'),
+                      },
+                      {
+                        key: 'excel',
+                        label: 'Export as Excel',
+                        icon: <DownloadOutlined />,
+                        onClick: () => handleExport('excel'),
+                      },
+                      {
+                        key: 'json',
+                        label: 'Export as JSON',
+                        icon: <DownloadOutlined />,
+                        onClick: () => handleExport('json'),
+                      },
+                    ],
+                  }}
+                >
+                  <Button icon={<DownloadOutlined />}>
+                    Export
+                  </Button>
+                </Dropdown>
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={() => setCreateModalOpen(true)}
+                >
+                  Create Event
+                </Button>
+              </Space>
+            </Col>
+          </Row>
+        }
         extra={
           <Space wrap>
             <Input
@@ -338,6 +467,13 @@ function EventList() {
           }}
         />
       </Card>
+
+      {/* Create Event Modal */}
+      <EventCreateModal
+        open={createModalOpen}
+        onClose={() => setCreateModalOpen(false)}
+        onSuccess={handleCreateSuccess}
+      />
     </div>
   );
 }

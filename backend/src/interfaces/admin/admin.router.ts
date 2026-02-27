@@ -28,6 +28,14 @@ import adminNFTRouter from './routers/admin-nft.router';
 import adminMessagingRouter from './routers/admin-messaging.router';
 import adminSystemRouter from './routers/admin-system.router';
 import adminAnalyticsRouter from './routers/admin-analytics.router';
+import adminUserReportsRouter from './routers/admin-user-reports.router';
+import adminLootboxesRouter from './routers/admin-lootboxes.router';
+import adminSubscriptionPlansRouter from './routers/admin-subscription-plans.router';
+import adminMarketplaceBannersRouter from './routers/admin-marketplace-banners.router';
+import adminUserThemesRouter from './routers/admin-user-themes.router';
+import adminUserFeedPreferencesRouter from './routers/admin-user-feed-preferences.router';
+import adminDMSupportSessionsRouter from './routers/admin-dm-support-sessions.router';
+import adminAiExperienceSplitsRouter from './routers/admin-ai-experience-splits.router';
 
 const router = Router();
 const prisma = getPrisma();
@@ -229,5 +237,13 @@ router.use('/nft', authMiddleware, requireAdmin, adminNFTRouter);
 router.use('/messaging', authMiddleware, requireAdmin, adminMessagingRouter);
 router.use('/system', authMiddleware, requireAdmin, adminSystemRouter);
 router.use('/analytics', authMiddleware, requireAdmin, adminAnalyticsRouter);
+router.use('/user-reports', authMiddleware, requireAdmin, adminUserReportsRouter);
+router.use('/lootboxes', authMiddleware, requireAdmin, adminLootboxesRouter);
+router.use('/subscription-plans', authMiddleware, requireAdmin, adminSubscriptionPlansRouter);
+router.use('/marketplace-banners', authMiddleware, requireAdmin, adminMarketplaceBannersRouter);
+router.use('/user-themes', authMiddleware, requireAdmin, adminUserThemesRouter);
+router.use('/user-feed-preferences', authMiddleware, requireAdmin, adminUserFeedPreferencesRouter);
+router.use('/dm-support-sessions', authMiddleware, requireAdmin, adminDMSupportSessionsRouter);
+router.use('/ai-experience-splits', authMiddleware, requireAdmin, adminAiExperienceSplitsRouter);
 
 export default router;

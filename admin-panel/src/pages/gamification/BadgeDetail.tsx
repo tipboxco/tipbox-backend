@@ -137,11 +137,30 @@ function BadgeDetail() {
 
   const backPath = getListPathFromPathname(location.pathname, badge.type);
 
+  const handleDelete = () => {
+    Modal.confirm({
+      title: 'Delete Badge',
+      content: 'This badge will be deleted. Are you sure?',
+      okText: 'Yes, delete',
+      cancelText: 'Cancel',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await deleteBadge(badge.id);
+          antdMessage.success('Badge deleted');
+          navigate(backPath);
+        } catch (e) {
+          antdMessage.error(e instanceof Error ? e.message : 'Failed to delete');
+        }
+      },
+    });
+  };
+
   const tabItems = [
     {
       key: 'summary',
       label: 'Summary',
-      children: <BadgeSummaryTab badge={badge} onUpdated={loadBadge} onDeleted={() => navigate(backPath)} />,
+      children: <BadgeSummaryTab badge={badge} onUpdated={loadBadge} />,
     },
     {
       key: 'owners',
@@ -165,14 +184,6 @@ function BadgeDetail() {
       label: 'Collection',
       value: badge.collectionName,
       icon: <FolderOpenOutlined />,
-    });
-  }
-
-  if (badge.rewardMultiplier != null && badge.rewardMultiplier !== 1) {
-    statsData.push({
-      label: 'Reward',
-      value: `${badge.rewardMultiplier}×`,
-      icon: <GiftOutlined />,
     });
   }
 
@@ -208,6 +219,11 @@ function BadgeDetail() {
         activeKey={activeTab}
         onChange={setActiveTab}
         items={tabItems}
+        tabBarExtraContent={
+          <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>
+            Delete Badge
+          </Button>
+        }
       />
     </div>
   );
@@ -216,30 +232,10 @@ function BadgeDetail() {
 function BadgeSummaryTab({
   badge,
   onUpdated,
-  onDeleted,
 }: {
   badge: AdminBadgeDetailResponse;
   onUpdated: () => void;
-  onDeleted: () => void;
 }) {
-  const handleDelete = () => {
-    Modal.confirm({
-      title: 'Delete Badge',
-      content: 'This badge will be deleted. Are you sure?',
-      okText: 'Yes, delete',
-      cancelText: 'Cancel',
-      okButtonProps: { danger: true },
-      onOk: async () => {
-        try {
-          await deleteBadge(badge.id);
-          antdMessage.success('Badge deleted');
-          onDeleted();
-        } catch (e) {
-          antdMessage.error(e instanceof Error ? e.message : 'Failed to delete');
-        }
-      },
-    });
-  };
 
   const handleUpdateBadge = async (values: Record<string, unknown>) => {
     try {
@@ -248,8 +244,6 @@ function BadgeSummaryTab({
         name: values.name as string,
         description: (values.description as string) || null,
         imageUrl: (values.imageUrl as string) || null,
-        boostMultiplier: values.boostMultiplier != null ? Number(values.boostMultiplier) : null,
-        rewardMultiplier: values.rewardMultiplier != null ? Number(values.rewardMultiplier) : null,
       });
       antdMessage.success('Badge updated successfully');
       await onUpdated();
@@ -320,21 +314,7 @@ function BadgeSummaryTab({
       maxLength: 2000,
     },
 
-    // 5. Multipliers (Optional)
-    {
-      name: 'boostMultiplier',
-      label: 'Boost Multiplier',
-      type: 'number',
-      render: (v) => (v != null ? `${v}×` : '—'),
-    },
-    {
-      name: 'rewardMultiplier',
-      label: 'Reward Multiplier',
-      type: 'number',
-      render: (v) => (v != null ? `${v}×` : '—'),
-    },
-
-    // 6. Metadata (Read-only)
+    // 5. Metadata (Read-only)
     {
       name: 'createdAt',
       label: 'Created',
@@ -375,14 +355,6 @@ function BadgeSummaryTab({
             bordered
             columns={2}
           />
-
-          <Card bordered style={{ marginTop: 16 }}>
-            <Space>
-              <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>
-                Delete Badge
-              </Button>
-            </Space>
-          </Card>
         </Col>
       </Row>
     </div>

@@ -399,8 +399,9 @@ app.use('/products', catalogRouter); // Backward compatibility için
 app.use('/brands', brandRouter);
 app.use('/search', searchRouter);
 app.use('/posts', postRouter);
+app.use('/events/collections', collectionsRouter);
 app.use('/events', eventRouter);
-app.use('/collections', authMiddleware, collectionsRouter);
+app.use('/collections', collectionsRouter);
 app.use('/news', newsRouter);
 app.use('/interactions', interactionRouter);
 app.use('/notifications', authMiddleware, notificationRouter);

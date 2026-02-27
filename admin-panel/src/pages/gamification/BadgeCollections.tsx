@@ -8,16 +8,26 @@ import {
   Space,
   Empty,
   Alert,
+  Modal,
+  message,
 } from 'antd';
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table';
-import { FolderOpenOutlined, SearchOutlined, PlusOutlined } from '@ant-design/icons';
+import {
+  FolderOpenOutlined,
+  SearchOutlined,
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
+} from '@ant-design/icons';
 import PageHeader from '../../components/PageHeader';
 import type { StatItemData } from '../../components/StatItem';
 import ViewActionButton from '../../components/ViewActionButton';
 import CreateCollectionModal from './CreateCollectionModal';
+import EditCollectionModal from './modals/EditCollectionModal';
 import {
   fetchCollectionsStats,
   fetchCollections,
+  deleteCollection,
 } from '../../api/admin-badges-collections';
 import type { AdminCollectionListItem, AdminCollectionStatsResponse } from '../../types/admin';
 import { TABLE_COLUMN_WIDTHS, TABLE_SCROLL_CONFIGS } from '../../constants/table-widths';
@@ -35,6 +45,8 @@ function BadgeCollections() {
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
   const [error, setError] = useState<string | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   useEffect(() => {
@@ -80,6 +92,35 @@ function BadgeCollections() {
       cancelled = true;
     };
   }, [pagination.offset, search, sort, order, refreshTrigger]);
+
+  const openEditModal = (collectionId: string) => {
+    setSelectedCollectionId(collectionId);
+    setEditModalOpen(true);
+  };
+
+  const handleEditSuccess = () => {
+    setEditModalOpen(false);
+    setSelectedCollectionId(null);
+    setRefreshTrigger((t) => t + 1);
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    Modal.confirm({
+      title: 'Delete Collection',
+      content: `Are you sure you want to delete "${name}"? This action cannot be undone and will affect all badges in this collection.`,
+      okText: 'Delete',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          await deleteCollection(id);
+          message.success('Collection deleted successfully');
+          setRefreshTrigger((t) => t + 1);
+        } catch (e) {
+          message.error(e instanceof Error ? e.message : 'Failed to delete collection');
+        }
+      },
+    });
+  };
 
   const columns: ColumnsType<AdminCollectionListItem> = [
     {
@@ -131,8 +172,25 @@ function BadgeCollections() {
     {
       title: '',
       key: 'action',
-      width: TABLE_COLUMN_WIDTHS.ACTION_BUTTON,
-      render: (_, record) => <ViewActionButton to={`/gamification/collections/${record.id}`} />,
+      width: TABLE_COLUMN_WIDTHS.ACTION_BUTTON_TRIPLE,
+      render: (_, record) => (
+        <Space size="small">
+          <ViewActionButton to={`/gamification/collections/${record.id}`} />
+          <Button
+            size="small"
+            type="text"
+            icon={<EditOutlined />}
+            onClick={() => openEditModal(record.id)}
+          />
+          <Button
+            size="small"
+            type="text"
+            danger
+            icon={<DeleteOutlined />}
+            onClick={() => handleDelete(record.id, record.name)}
+          />
+        </Space>
+      ),
     },
   ];
 
@@ -248,11 +306,25 @@ function BadgeCollections() {
         />
       </Card>
 
+      {/* Create Collection Modal */}
       <CreateCollectionModal
         open={createModalOpen}
         onClose={() => setCreateModalOpen(false)}
         onSuccess={() => setRefreshTrigger((t) => t + 1)}
       />
+
+      {/* Edit Collection Modal */}
+      {selectedCollectionId && (
+        <EditCollectionModal
+          open={editModalOpen}
+          collectionId={selectedCollectionId}
+          onClose={() => {
+            setEditModalOpen(false);
+            setSelectedCollectionId(null);
+          }}
+          onSuccess={handleEditSuccess}
+        />
+      )}
     </div>
   );
 }

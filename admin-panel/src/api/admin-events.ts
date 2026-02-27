@@ -1,4 +1,4 @@
-import { get, post, patch, del } from './client';
+import { get, post, patch, del, postFormData } from './client';
 import type {
   AdminEventStatsResponse,
   AdminEventListItem,
@@ -78,6 +78,12 @@ export async function updateEvent(
 
 export async function deleteEvent(id: string) {
   return del<{ message: string }>(`${prefix}/events/${id}`);
+}
+
+export async function uploadEventImage(file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return postFormData<{ url: string }>(`${prefix}/events/upload-image`, formData);
 }
 
 export async function fetchEventParticipants(

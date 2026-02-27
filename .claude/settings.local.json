@@ -15,7 +15,20 @@
       "Bash(docker-compose exec:*)",
       "Bash(docker-compose logs:*)",
       "Bash(docker-compose restart:*)",
-      "Bash(docker cp:*)"
+      "Bash(docker cp:*)",
+      "Bash(docker-compose ps --format \"table {{.Name}}\\\\t{{.Status}}\")",
+      "Bash(npx tsc --noEmit)",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/health)",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/events/collections)",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/events/collections/categories)",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/events/collections/some-id)",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/collections/badges/some-id/reminder -X POST -H \"Content-Type: application/json\")",
+      "Bash(curl -s \"http://localhost:3000/api-docs/swagger.json?context=app\")",
+      "Bash(python3 -c \"import json,sys; spec=json.load\\(sys.stdin\\); paths=[p for p in spec.get\\(''paths'',{}\\) if ''collection'' in p.lower\\(\\)]; print\\(''Collections paths:'', paths\\); tags=[t for t in spec.get\\(''tags'',[]\\) if ''collection'' in t[''name''].lower\\(\\)]; print\\(''Collections tags:'', tags\\)\")",
+      "Bash(python3 -c \":*)",
+      "Bash(curl -s \"http://localhost:3000/api-docs/swagger.json?context=all\")",
+      "Bash(node -e \":*)",
+      "Bash(curl -s -w \"\\\\n%{http_code}\" \"http://localhost:3000/events/collections?limit=20\")"
     ],
     "defaultMode": "bypassPermissions"
   }
