@@ -4307,7 +4307,7 @@ router.patch(
  * @openapi
  * /admin/content/posts/{id}:
  *   delete:
- *     summary: Post sil (cascade: yorumlar, beğeniler vb.)
+ *     summary: "Post sil (cascade: yorumlar, beğeniler vb.)"
  *     tags: [Admin - Content]
  *     security:
  *       - bearerAuth: []

@@ -26,6 +26,12 @@ const THIRDWEB_WEBHOOK_CORS_ORIGINS: string[] = [
   '18.246.42.226'
 ];
 
+/** Developer Console / API base URL – CORS_ORIGINS set edilse bile her zaman whitelist’e eklenir. */
+const TIPBOX_API_CORS_ORIGINS: string[] = [
+  'https://api-tipbox.exportergo.com',
+  'http://api-tipbox.exportergo.com',
+];
+
 // Ortam bazlı default değerler
 function getDefaultCorsOrigins(env: string): (string | RegExp)[] {
   const origins: (string | RegExp)[] = [];
@@ -55,7 +61,7 @@ function getDefaultCorsOrigins(env: string): (string | RegExp)[] {
       // Bu pattern'ler sadece CORS_ORIGINS env variable set edilmişse kullanılır
       return [
         ...origins,
-        'https://api-tipbox.tipbox.co',
+        'https://api-tipbox.exportergo.com',
         'http://localhost:3000',
         'http://localhost:3001',
         'http://localhost:5173',
@@ -74,7 +80,7 @@ function getDefaultCorsOrigins(env: string): (string | RegExp)[] {
     case 'test':
       return [
         ...origins,
-        'https://api-tipbox.tipbox.co',
+        'https://api-tipbox.exportergo.com',
         'http://localhost:3000',
         'https://api-test.tipbox.co',
         'http://api-test.tipbox.co',
@@ -87,7 +93,7 @@ function getDefaultCorsOrigins(env: string): (string | RegExp)[] {
         /^https:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+|100\.\d+\.\d+\.\d+|10\.0\.2\.2)(:\d+)?$/,
       ] as any;
     case 'production':
-      return ['https://api-tipbox.tipbox.co', 'https://api.tipbox.co', 'https://api.tipbox.co/v1', 'https://api.tipbox.co/v1/docs', 'https://app.tipbox.co'];
+      return ['https://api-tipbox.exportergo.com', 'https://api.tipbox.co', 'https://api.tipbox.co/v1', 'https://api.tipbox.co/v1/docs', 'https://app.tipbox.co'];
     default:
       return ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173'];
   }
@@ -136,10 +142,10 @@ function getConfig(): Config {
     ? process.env.CORS_ORIGINS.split(',').map((origin) => origin.trim())
     : getDefaultCorsOrigins(nodeEnv);
 
-  // Thirdweb webhook host'larına CORS erişimi (Dashboard test vb.); tekrarsız birleştir
+  // Thirdweb webhook + Tipbox API (Developer Console) origin'leri; CORS_ORIGINS set edilse bile eklenir
   const existingSet = new Set(baseCorsOrigins.map((o) => (typeof o === 'string' ? o : o.toString())));
   const corsOrigins: (string | RegExp)[] = [...baseCorsOrigins];
-  for (const origin of THIRDWEB_WEBHOOK_CORS_ORIGINS) {
+  for (const origin of [...THIRDWEB_WEBHOOK_CORS_ORIGINS, ...TIPBOX_API_CORS_ORIGINS]) {
     if (!existingSet.has(origin)) {
       corsOrigins.push(origin);
       existingSet.add(origin);

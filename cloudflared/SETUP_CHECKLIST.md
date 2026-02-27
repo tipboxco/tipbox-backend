@@ -17,7 +17,7 @@ Gerekli: `cloudflared/.env` içinde `TUNNEL_CLOUDFLARE_API_TOKEN`, `TUNNEL_CLOUD
 
 **Configure** sekmesinde **Public Hostname** bölümünde şu kayıt olmalı:
 
-- [ ] **api-tipbox.tipbox.co** → `http://localhost:3000`
+- [ ] **api-tipbox.exportergo.com** → `http://localhost:3000`
 
 **Ekleme:** Add a public hostname → Subdomain: `api-tipbox`, Domain: `tipbox.co`, URL: `localhost:3000`
 
@@ -43,7 +43,7 @@ Cloudflare DNS (tipbox.co) veya `bun run tunnel:route-dns`:
 **backend/.env:**
 ```
 PORT=3000
-BETTER_AUTH_URL=https://api-tipbox.tipbox.co
+BETTER_AUTH_URL=https://api-tipbox.exportergo.com
 ```
 
 ---
@@ -55,5 +55,5 @@ BETTER_AUTH_URL=https://api-tipbox.tipbox.co
 curl http://localhost:3000/health
 
 # Tunnel üzerinden (DNS yayıldıktan sonra)
-curl https://api-tipbox.tipbox.co/health
+curl https://api-tipbox.exportergo.com/health
 ```
