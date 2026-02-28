@@ -32,12 +32,21 @@ export const ForgotPasswordSchema = z.object({
 export type ForgotPasswordRequest = z.infer<typeof ForgotPasswordSchema>;
 
 /**
+ * Verify reset code request schema
+ */
+export const VerifyResetCodeSchema = z.object({
+  mail: CommonSchemas.email,
+  code: z.string().length(6, 'Doğrulama kodu 6 haneli olmalıdır'),
+});
+
+export type VerifyResetCodeRequest = z.infer<typeof VerifyResetCodeSchema>;
+
+/**
  * Reset password request schema
  */
 export const ResetPasswordSchema = z.object({
-  code: z.string().length(6, 'Doğrulama kodu 6 haneli olmalıdır'),
-  mail: CommonSchemas.email,
-  newPassword: CommonSchemas.password,
+  email: CommonSchemas.email,
+  password: CommonSchemas.password,
 });
 
 export type ResetPasswordRequest = z.infer<typeof ResetPasswordSchema>;

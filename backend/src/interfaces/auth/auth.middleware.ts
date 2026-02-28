@@ -7,17 +7,14 @@ import logger from '../../infrastructure/logger/logger';
 export async function authMiddleware(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
   const token = authHeader.split(' ')[1];
-  
+
   // Token blacklist kontrolü (logout sonrası)
   const isBlacklisted = await isTokenBlacklisted(token);
   if (isBlacklisted) {
-    return res.status(401).json({ 
-      message: 'Token has been revoked',
-      code: 'TOKEN_REVOKED'
-    });
+    return res.status(401).json({ success: false, message: 'Token has been revoked' });
   }
   
   // Önce backend JWT'yi dene
@@ -59,5 +56,5 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     tokenPrefix: token.substring(0, 20) + '...'
   });
   
-  return res.status(401).json({ message: 'Invalid token' });
+  return res.status(401).json({ success: false, message: 'Invalid token' });
 } 

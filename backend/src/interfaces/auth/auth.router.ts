@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { AuthService } from '../../application/auth/auth.service';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
+import { authMiddleware } from './auth.middleware';
 import { UserAvatarPrismaRepository } from '../../infrastructure/repositories/user-avatar-prisma.repository';
 import { ProfilePrismaRepository } from '../../infrastructure/repositories/profile-prisma.repository';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
@@ -17,6 +18,7 @@ import {
   ForgotPasswordSchema,
   ResetPasswordSchema,
   VerifyEmailSchema,
+  VerifyResetCodeSchema,
   ResendVerificationSchema
 } from './auth.schemas';
 
@@ -172,13 +174,19 @@ router.post('/login', loginRateLimiter, validateBody(LoginSchema), asyncHandler(
   });
 
   // Response
-  return res.json({
+  const loginData = {
     id: user.id,
     fullName,
     email: user.email || '',
     avatar: avatarUrl,
     token,
     refreshToken,
+  };
+  return res.json({
+    success: true,
+    data: loginData,
+    // Backward compatibility - flat fields (deprecated, use data object)
+    ...loginData,
   });
 }));
 
@@ -429,22 +437,8 @@ router.post('/resend-verification', verificationRateLimiter, validateBody(Resend
  *                   type: string
  *                   example: Email doğrulama sırasında bir hata oluştu
  */
-router.post('/verify-email', verificationRateLimiter, asyncHandler(async (req: Request, res: Response) => {
+router.post('/verify-email', verificationRateLimiter, validateBody(VerifyEmailSchema), asyncHandler(async (req: Request, res: Response) => {
   const { email, code } = req.body;
-
-  if (!email || !code) {
-    return res.status(400).json({
-      success: false,
-      message: 'Email ve kod alanları zorunludur',
-    });
-  }
-
-  if (!/^[0-9]{6}$/.test(code)) {
-    return res.status(400).json({
-      success: false,
-      message: 'Kod 6 haneli rakam olmalıdır',
-    });
-  }
 
   const result = await authService.verifyEmail(email, code);
 
@@ -534,15 +528,15 @@ router.post('/verify-email', verificationRateLimiter, asyncHandler(async (req: R
  *                   type: string
  *                   example: Kullanıcı bilgileri alınırken bir hata oluştu
  */
-router.get('/me', asyncHandler(async (req: Request, res: Response) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
-  const token = authHeader.split(' ')[1];
+router.get('/me', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
+  // authMiddleware handles token validation + blacklist check and sets req.user
+  const token = req.token;
+  if (!token) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
   const user = await authService.getUserFromToken(token);
-  if (!user) return res.status(401).json({ message: 'Invalid token' });
-  return res.json({
+  if (!user) return res.status(401).json({ success: false, message: 'User not found' });
+
+  const meData = {
     id: user.id,
     email: user.email,
     name: user.name,
@@ -551,7 +545,13 @@ router.get('/me', asyncHandler(async (req: Request, res: Response) => {
     walletAddress: user.walletAddress || null,
     kycStatus: user.kycStatus || '',
     createdAt: user.createdAt,
-    updatedAt: user.updatedAt
+    updatedAt: user.updatedAt,
+  };
+  return res.json({
+    success: true,
+    data: meData,
+    // Backward compatibility - flat fields (deprecated, use data object)
+    ...meData,
   });
 }));
 
@@ -617,15 +617,8 @@ router.get('/me', asyncHandler(async (req: Request, res: Response) => {
  *                   type: string
  *                   example: Email gönderilemedi. Lütfen tekrar deneyin.
  */
-router.post('/forgot-password', verificationRateLimiter, asyncHandler(async (req: Request, res: Response) => {
+router.post('/forgot-password', verificationRateLimiter, validateBody(ForgotPasswordSchema), asyncHandler(async (req: Request, res: Response) => {
   const { mail } = req.body;
-
-  if (!mail) {
-    return res.status(400).json({
-      success: false,
-      message: 'Email alanı zorunludur',
-    });
-  }
 
   const result = await authService.forgotPassword(mail);
 
@@ -718,22 +711,8 @@ router.post('/forgot-password', verificationRateLimiter, asyncHandler(async (req
  *                   type: string
  *                   example: Kod doğrulama sırasında bir hata oluştu
  */
-router.post('/verify-reset-code', verificationRateLimiter, asyncHandler(async (req: Request, res: Response) => {
+router.post('/verify-reset-code', verificationRateLimiter, validateBody(VerifyResetCodeSchema), asyncHandler(async (req: Request, res: Response) => {
   const { mail, code } = req.body;
-
-  if (!mail || !code) {
-    return res.status(400).json({
-      success: false,
-      message: 'Email ve kod alanları zorunludur',
-    });
-  }
-
-  if (!/^[0-9]{6}$/.test(code)) {
-    return res.status(400).json({
-      success: false,
-      message: 'Kod 6 haneli rakam olmalıdır',
-    });
-  }
 
   const result = await authService.verifyResetCode(mail, code);
 
@@ -825,22 +804,8 @@ router.post('/verify-reset-code', verificationRateLimiter, asyncHandler(async (r
  *                   type: string
  *                   example: Şifre güncellenirken bir hata oluştu
  */
-router.post('/reset-password', verificationRateLimiter, asyncHandler(async (req: Request, res: Response) => {
+router.post('/reset-password', verificationRateLimiter, validateBody(ResetPasswordSchema), asyncHandler(async (req: Request, res: Response) => {
   const { email, password } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({
-      success: false,
-      message: 'Email and password fields are required',
-    });
-  }
-
-  if (password.length < 6) {
-    return res.status(400).json({
-      success: false,
-      message: 'Password must be at least 6 characters long',
-    });
-  }
 
   const result = await authService.resetPassword(email, password);
 
@@ -889,11 +854,11 @@ router.post('/reset-password', verificationRateLimiter, asyncHandler(async (req:
 router.post('/logout', asyncHandler(async (req: Request, res: Response) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
-  
+
   const token = authHeader.split(' ')[1];
-  
+
   // Token'ı blacklist'e ekle
   const { blacklistToken } = await import('../../infrastructure/auth/token-blacklist');
   await blacklistToken(token);

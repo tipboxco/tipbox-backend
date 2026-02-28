@@ -48,6 +48,7 @@ import { requestContextMiddleware } from '../infrastructure/middleware/request-c
 import { bigIntSerializerMiddleware } from '../infrastructure/middleware/bigint-serializer.middleware';
 import { metricsMiddleware } from '../infrastructure/metrics/metrics.middleware';
 import { globalRateLimiter } from '../infrastructure/middleware/rate-limit.middleware';
+import { asyncHandler } from '../infrastructure/errors/async-handler';
 
 // Services & Config
 import { getMetricsService } from '../infrastructure/metrics/metrics.service';
@@ -196,31 +197,21 @@ if (issuerBaseURL && clientID && secret && !issuerBaseURL.includes('{yourDomain}
 
   // Custom callback handler: Cloudflared/nginx arkasında Host localhost olarak geldiği için
   // redirectUri'yi request header'larından (x-forwarded-host, x-forwarded-proto) oluştur
-  app.get('/auth0/callback', express.urlencoded({ extended: false }), (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    try {
-      const redirectUri = getDynamicBaseUrl(req) + '/auth0/callback';
-      logger.info({
-        message: 'Auth0 callback - dinamik redirectUri kullanılıyor',
-        redirectUri,
-        host: req.get('host'),
-        xForwardedHost: req.get('x-forwarded-host'),
-        xForwardedProto: req.get('x-forwarded-proto')
-      });
-      (res as any).oidc.callback({ redirectUri });
-    } catch (error) {
-      logger.error({ message: 'Auth0 GET callback error', error });
-      next(error);
-    }
-  });
-  app.post('/auth0/callback', express.urlencoded({ extended: false }), (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    try {
-      const redirectUri = getDynamicBaseUrl(req) + '/auth0/callback';
-      (res as any).oidc.callback({ redirectUri });
-    } catch (error) {
-      logger.error({ message: 'Auth0 POST callback error', error });
-      next(error);
-    }
-  });
+  app.get('/auth0/callback', express.urlencoded({ extended: false }), asyncHandler(async (req: express.Request, res: express.Response) => {
+    const redirectUri = getDynamicBaseUrl(req) + '/auth0/callback';
+    logger.info({
+      message: 'Auth0 callback - dinamik redirectUri kullanılıyor',
+      redirectUri,
+      host: req.get('host'),
+      xForwardedHost: req.get('x-forwarded-host'),
+      xForwardedProto: req.get('x-forwarded-proto')
+    });
+    (res as any).oidc.callback({ redirectUri });
+  }));
+  app.post('/auth0/callback', express.urlencoded({ extended: false }), asyncHandler(async (req: express.Request, res: express.Response) => {
+    const redirectUri = getDynamicBaseUrl(req) + '/auth0/callback';
+    (res as any).oidc.callback({ redirectUri });
+  }));
 
   // Callback URL'ini hesapla ve log'la
   logger.info({ 
