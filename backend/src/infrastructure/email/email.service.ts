@@ -1,7 +1,15 @@
 import { JWT } from 'google-auth-library';
+import type { gmail_v1 } from 'googleapis';
 import logger from '../logger/logger';
 import path from 'path';
 import fs from 'fs';
+
+interface ServiceAccountKey {
+  private_key: string;
+  client_email: string;
+  project_id?: string;
+  type?: string;
+}
 
 export interface EmailOptions {
   to: string;
@@ -11,15 +19,31 @@ export interface EmailOptions {
 }
 
 export class EmailService {
-  private gmail: any = null;
+  private gmail: gmail_v1.Gmail | null = null;
   private fromEmail: string;
   private fromName: string;
-  private authClient: any = null;
+  private authClient: JWT | null = null;
   private isInitialized: boolean = false;
 
   constructor() {
     this.fromEmail = process.env.EMAIL_USER_TO_IMPERSONATE || 'info@tipbox.co';
     this.fromName = process.env.EMAIL_FROM_NAME || 'Tipbox';
+
+    // EMAIL_USER_TO_IMPERSONATE validasyonu
+    if (!process.env.EMAIL_USER_TO_IMPERSONATE) {
+      logger.warn({
+        message: 'EMAIL_USER_TO_IMPERSONATE not configured. Using default: info@tipbox.co',
+      });
+    } else if (
+      this.fromEmail.includes('your-email') ||
+      this.fromEmail.includes('yourdomain') ||
+      this.fromEmail.includes('example.com')
+    ) {
+      logger.error({
+        message: 'EMAIL_USER_TO_IMPERSONATE contains a placeholder value. Please set a valid Google Workspace email address.',
+        configuredValue: this.fromEmail,
+      });
+    }
 
     // OAuth 2.0 ile Gmail API'yi asenkron olarak başlat
     this.initializeGmail().catch((error) => {
@@ -107,15 +131,23 @@ export class EmailService {
       });
 
       // JSON dosyasını oku ve parse et
-      let keyData: any;
+      let keyData: ServiceAccountKey;
       try {
         const keyFileContent = fs.readFileSync(keyFilePath, 'utf8');
-        keyData = JSON.parse(keyFileContent);
-        
+        const parsed: unknown = JSON.parse(keyFileContent);
+
         // JSON dosyasının geçerli bir service account key olduğunu kontrol et
-        if (!keyData.private_key || !keyData.client_email) {
-          throw new Error('Invalid Google service account key file. Missing required fields.');
+        if (
+          !parsed ||
+          typeof parsed !== 'object' ||
+          !('private_key' in parsed) ||
+          !('client_email' in parsed) ||
+          typeof (parsed as Record<string, unknown>).private_key !== 'string' ||
+          typeof (parsed as Record<string, unknown>).client_email !== 'string'
+        ) {
+          throw new Error('Invalid Google service account key file. Missing required fields: private_key, client_email.');
         }
+        keyData = parsed as ServiceAccountKey;
       } catch (parseError) {
         throw new Error(
           `Failed to read or parse Google credentials file: ${keyFilePath}. ` +
@@ -144,8 +176,6 @@ export class EmailService {
         message: 'Gmail API initialized successfully with OAuth 2.0',
         fromEmail: this.fromEmail,
       });
-      
-      this.isInitialized = true;
     } catch (error) {
       logger.error({
         message: 'Failed to initialize Gmail API with OAuth 2.0',

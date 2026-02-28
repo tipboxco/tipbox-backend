@@ -23,7 +23,7 @@ export class AuthService implements IAuthService {
    * Mevcut kullanıcı için email doğrulama kodu üretir ve gönderir
    * (kullanıcıyı silmez; önceki aktif kodları invalidate eder)
    */
-  async sendEmailVerificationCode(email: string): Promise<{ success: boolean; message: string; devCode?: string }> {
+  async sendEmailVerificationCode(email: string): Promise<{ success: boolean; message: string }> {
     const user = await this.userRepo.findByEmail(email);
 
     if (!user) {
@@ -44,7 +44,7 @@ export class AuthService implements IAuthService {
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + 10);
 
-    await this.emailVerificationRepo.create(user.id, email, code, expiresAt);
+    await this.emailVerificationRepo.create(email, code, expiresAt, undefined, undefined, user.id);
 
     try {
       await this.emailService.sendVerificationCode(email, code);
@@ -60,32 +60,17 @@ export class AuthService implements IAuthService {
         error: error instanceof Error ? error.message : String(error),
       });
 
-      const isProd = process.env.NODE_ENV === 'production';
-      const exposeCode = process.env.EXPOSE_VERIFICATION_CODE === 'true';
+      // Email servisi hatası olsa bile verification code DB'de oluşturuldu
+      // Kullanıcı email servisi düzeltildikten sonra resend ile tekrar deneyebilir
+      logger.warn({
+        message: 'Email service unavailable; verification code generated but email not sent',
+        email,
+        userId: user.id,
+      });
 
-      // Dev/Test ortamında email servis hatası kayıt akışını bloklamasın:
-      // Kod DB'de durur, gerekirse resend ile tekrar denenir.
-      if (!isProd) {
-        logger.warn({
-          message: 'Email service unavailable; verification code generated (dev fallback)',
-          email,
-          userId: user.id,
-          code: exposeCode ? code : undefined,
-        });
-
-        return {
-          success: true,
-          message: exposeCode
-            ? 'Email gönderilemedi (dev). Doğrulama kodu response içine eklendi.'
-            : 'Email gönderilemedi (dev). Doğrulama kodu loglara yazdırıldı.',
-          devCode: exposeCode ? code : undefined,
-        };
-      }
-
-      const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata';
       return {
-        success: false,
-        message: `Email gönderilemedi: ${errorMessage}. Lütfen tekrar deneyin.`,
+        success: true,
+        message: 'Doğrulama kodu oluşturuldu. Email gönderilemedi, lütfen tekrar deneyin.',
       };
     }
   }
@@ -179,16 +164,11 @@ export class AuthService implements IAuthService {
           message: 'Email service failed but verification code created. User can verify later when email service is fixed.',
           email,
           verificationCodeId: verificationCode.id,
-          code: code, // Log code for manual verification if needed
         });
-        
-        // Development ortamında verification code'u response'a ekle (güvenlik için sadece development)
-        const isDevelopment = process.env.NODE_ENV !== 'production';
-        
+
         return {
           success: true,
           message: 'Registration successful. Verification code has been created. Please contact support if you did not receive the verification email.',
-          ...(isDevelopment && { verificationCode: code }), // Sadece development'ta göster
         };
       }
     } catch (error) {

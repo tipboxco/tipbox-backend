@@ -213,6 +213,61 @@ services:
     networks:
       - tipbox_network
 
+  catalog-service:
+    build:
+      context: ./catalog-service
+      dockerfile: Dockerfile
+    container_name: tipbox_catalog_service_test
+    restart: always
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+    ports:
+      - "9002:9000"  # Medusa backend API (host:container - minio ile çakışmaması için 9002)
+      - "5173:5173"  # Medusa admin dashboard
+    environment:
+      - NODE_ENV=test
+      - NODE_OPTIONS=--max-old-space-size=4096
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-tipbox_user}:${POSTGRES_PASSWORD:-tipbox_test_password}@postgres:5432/medusa-store?sslmode=disable
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - TIPBOX_BACKEND_API_KEY=${TIPBOX_BACKEND_API_KEY:-deneme}
+      - TIPBOX_BACKEND_URL=${TIPBOX_BACKEND_URL:-http://backend:3000}
+      - STORE_CORS=${STORE_CORS:-http://localhost:8000,http://localhost:3000}
+      - ADMIN_CORS=${ADMIN_CORS:-http://localhost:5173,http://localhost:9002}
+      - AUTH_CORS=${AUTH_CORS:-http://localhost:5173,http://localhost:9002,http://localhost:8000}
+      - S3_ENDPOINT=${S3_ENDPOINT:-http://minio:9000}
+      - S3_ENDPOINT_EXTERNAL=http://localhost:9000
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin123}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-tipbox-media}
+      - S3_REGION=${S3_REGION:-eu-central-1}
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY:-minioadmin}
+      - S3_SECRET_KEY=${S3_SECRET_KEY:-minioadmin123}
+    volumes:
+      - ./catalog-service:/server
+      - catalog_service_test_node_modules:/server/node_modules
+    working_dir: /server
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+    networks:
+      - tipbox_network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
 volumes:
   postgres_test_data:
   pgadmin_test_data:
@@ -220,6 +275,7 @@ volumes:
   redis_test_data:
   backend_test_node_modules:
   backend_test_prisma_node_modules:
+  catalog_service_test_node_modules:
 
 networks:
   tipbox_network:
