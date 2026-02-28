@@ -45,6 +45,7 @@ import { WalletService } from '../wallet/wallet.service';
 import { TransactionService } from '../transaction/transaction.service';
 import { ValidationError } from '../../infrastructure/errors/custom-errors';
 import { InventoryService } from '../inventory/inventory.service';
+import { generateIdForModel } from '../../infrastructure/ids/id.strategy';
 
 export class PostService {
   private postRepo: ContentPostPrismaRepository;
@@ -1247,40 +1248,63 @@ export class PostService {
       // ✅ Karşılaştırılacak 2. ürün için envanter kontrolü YOK
       // Kullanıcı envanterindeki bir ürünü herhangi bir ürünle karşılaştırabilir
 
-      const post = await this.postRepo.create(
-        userId,
-        ContentPostType.COMPARE,
-        '',
-        request.description,
-        contextIds.subCategoryId,
-        contextIds.mainCategoryId,
-        contextIds.productGroupId,
-        contextIds.productId,
-        false,
-        false,
-        request.eventId,
-        undefined,
-        contextIds.categoryId
-      );
+      // Transaction: Post, Comparison ve Media kayıtlarını atomik olarak oluştur
+      const post = await this.prisma.$transaction(async (tx) => {
+        const postId = generateIdForModel('ContentPost');
 
-      // Create PostComparison
-      await this.comparisonRepo.create(
-        post.id, // post.id is already a string (VarChar(26))
-        product1.productId, // productId is already a string (UUID)
-        product2.productId // productId is already a string (UUID)
-      );
-
-      // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
-      if (request.images && request.images.length > 0) {
-        await this.prisma.postMedia.createMany({
-          data: request.images.map((imageUrl, index) => ({
-            postId: post.id,
-            userId: userId,
-            mediaUrl: imageUrl,
-            orderIndex: index, // Kullanıcının yüklediği sırada
-          })),
+        const createdPost = await tx.contentPost.create({
+          data: {
+            id: postId,
+            userId,
+            type: ContentPostType.COMPARE,
+            title: '',
+            body: request.description,
+            subCategoryId: contextIds.subCategoryId || null,
+            mainCategoryId: contextIds.mainCategoryId || null,
+            productGroupId: contextIds.productGroupId || null,
+            productId: contextIds.productId || null,
+            categoryId: contextIds.categoryId || null,
+            productStatus: null,
+            inventoryRequired: false,
+            isBoosted: false,
+            eventId: request.eventId || null,
+            boostPrice: null,
+          },
         });
-      }
+
+        // PostComparison oluştur
+        await tx.postComparison.create({
+          data: {
+            postId: createdPost.id,
+            product1Id: product1.productId,
+            product2Id: product2.productId,
+          },
+        });
+
+        // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
+        if (request.images && request.images.length > 0) {
+          await tx.postMedia.createMany({
+            data: request.images.map((imageUrl, index) => ({
+              postId: createdPost.id,
+              userId: userId,
+              mediaUrl: imageUrl,
+              orderIndex: index,
+            })),
+          });
+        }
+
+        // Kullanıcının post sayısını artır
+        await tx.profile.updateMany({
+          where: { userId },
+          data: {
+            postsCount: {
+              increment: 1,
+            },
+          },
+        });
+
+        return createdPost;
+      });
 
       logger.info(`Benchmark post created: ${post.id} by user ${userId}`);
       
