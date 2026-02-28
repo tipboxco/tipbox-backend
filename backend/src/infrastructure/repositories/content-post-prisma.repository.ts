@@ -1,4 +1,5 @@
 import { getPrisma } from './prisma.client';
+import type { ContentPost as PrismaContentPostModel } from '@prisma/client';
 import { ContentPost } from '../../domain/content/content-post.entity';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
 import { generateIdForModel } from '../ids/id.strategy';
@@ -165,7 +166,7 @@ export class ContentPostPrismaRepository {
         postsCount: {
           increment: 1
         }
-      } as any
+      }
     });
 
     return this.toDomain(post);
@@ -216,7 +217,7 @@ export class ContentPostPrismaRepository {
           postsCount: {
             increment: -1
           }
-        } as any
+        }
       });
 
       return true;
@@ -270,7 +271,7 @@ export class ContentPostPrismaRepository {
       },
       orderBy: {
         likesCount: 'desc'
-      } as any,
+      },
       take: limit
     });
     return posts.map(post => this.toDomain(post));
@@ -280,10 +281,8 @@ export class ContentPostPrismaRepository {
     await this.prisma.contentPost.update({
       where: { id: postId },
       data: {
-        likesCount: {
-          increment: 1
-        }
-      } as any
+        likesCount: { increment: 1 }
+      }
     });
   }
 
@@ -291,10 +290,8 @@ export class ContentPostPrismaRepository {
     await this.prisma.contentPost.update({
       where: { id: postId },
       data: {
-        likesCount: {
-          increment: -1
-        }
-      } as any
+        likesCount: { increment: -1 }
+      }
     });
   }
 
@@ -302,10 +299,8 @@ export class ContentPostPrismaRepository {
     await this.prisma.contentPost.update({
       where: { id: postId },
       data: {
-        viewsCount: {
-          increment: 1
-        }
-      } as any
+        viewsCount: { increment: 1 }
+      }
     });
   }
 
@@ -313,10 +308,8 @@ export class ContentPostPrismaRepository {
     await this.prisma.contentPost.update({
       where: { id: postId },
       data: {
-        favoritesCount: {
-          increment: 1
-        }
-      } as any
+        favoritesCount: { increment: 1 }
+      }
     });
   }
 
@@ -324,10 +317,8 @@ export class ContentPostPrismaRepository {
     await this.prisma.contentPost.update({
       where: { id: postId },
       data: {
-        favoritesCount: {
-          increment: -1
-        }
-      } as any
+        favoritesCount: { increment: -1 }
+      }
     });
   }
 
@@ -335,10 +326,8 @@ export class ContentPostPrismaRepository {
     await this.prisma.contentPost.update({
       where: { id: postId },
       data: {
-        commentsCount: {
-          increment: 1
-        }
-      } as any
+        commentsCount: { increment: 1 }
+      }
     });
   }
 
@@ -346,10 +335,8 @@ export class ContentPostPrismaRepository {
     await this.prisma.contentPost.update({
       where: { id: postId },
       data: {
-        commentsCount: {
-          increment: -1
-        }
-      } as any
+        commentsCount: { increment: -1 }
+      }
     });
   }
 
@@ -357,14 +344,12 @@ export class ContentPostPrismaRepository {
     await this.prisma.contentPost.update({
       where: { id: postId },
       data: {
-        sharesCount: {
-          increment: 1
-        }
-      } as any
+        sharesCount: { increment: 1 }
+      }
     });
   }
 
-  private toDomain(prismaPost: any): ContentPost {
+  private toDomain(prismaPost: PrismaContentPostModel): ContentPost {
     return new ContentPost(
       prismaPost.id,
       prismaPost.userId,

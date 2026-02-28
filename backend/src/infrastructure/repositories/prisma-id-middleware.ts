@@ -17,9 +17,9 @@ export function createPrismaWithIdMiddleware() {
           // id alanı String/UUID yapılacak modeller için id üret
           if (model && args.data) {
             const data = args.data as Record<string, unknown>;
-            const currentId = (data as any).id;
+            const currentId = data.id;
             if (currentId == null) {
-              (args.data as any).id = generateIdForModel(model);
+              data.id = generateIdForModel(model);
             }
           }
           return query(args);

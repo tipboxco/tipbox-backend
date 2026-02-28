@@ -1,3 +1,4 @@
+import type { UserCollection as PrismaUserCollectionModel } from '@prisma/client';
 import { UserCollection } from '../../domain/user/user-collection.entity';
 import { getPrisma } from './prisma.client';
 
@@ -67,7 +68,7 @@ export class UserCollectionPrismaRepository {
     return collections.map(collection => this.toDomain(collection));
   }
 
-  private toDomain(prismaCollection: any): UserCollection {
+  private toDomain(prismaCollection: PrismaUserCollectionModel): UserCollection {
     return new UserCollection(
       prismaCollection.id,
       prismaCollection.userId,

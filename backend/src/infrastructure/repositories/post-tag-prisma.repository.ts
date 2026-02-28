@@ -1,3 +1,4 @@
+import type { PostTag as PrismaPostTagModel } from '@prisma/client';
 import { PostTag } from '../../domain/content/post-tag.entity';
 import { getPrisma } from './prisma.client';
 
@@ -181,7 +182,7 @@ export class PostTagPrismaRepository {
     return tags.map(tag => this.toDomain(tag));
   }
 
-  private toDomain(prismaTag: any): PostTag {
+  private toDomain(prismaTag: PrismaPostTagModel): PostTag {
     return new PostTag(
       prismaTag.id,
       prismaTag.postId,

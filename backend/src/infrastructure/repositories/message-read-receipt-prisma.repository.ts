@@ -1,3 +1,4 @@
+import type { MessageReadReceipt as PrismaMessageReadReceiptModel } from '@prisma/client';
 import { MessageReadReceipt } from '../../domain/messaging/message-read-receipt.entity';
 import { getPrisma } from './prisma.client';
 
@@ -109,7 +110,7 @@ export class MessageReadReceiptPrismaRepository {
     }
   }
 
-  private toDomain(prismaReceipt: any): MessageReadReceipt {
+  private toDomain(prismaReceipt: PrismaMessageReadReceiptModel): MessageReadReceipt {
     return new MessageReadReceipt(
       prismaReceipt.id,
       prismaReceipt.messageId,

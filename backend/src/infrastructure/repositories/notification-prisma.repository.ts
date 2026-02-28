@@ -1,4 +1,4 @@
-import { PrismaClient, NotificationType as PrismaNotificationType } from '@prisma/client';
+import { PrismaClient, Prisma, NotificationType as PrismaNotificationType } from '@prisma/client';
 import { Notification } from '../../domain/notification/notification.entity';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
 import { NotificationCategory } from '../../domain/notification/notification-category.enum';
@@ -22,7 +22,7 @@ export class NotificationPrismaRepository {
     type: NotificationType;
     title: string;
     message: string;
-    data?: any;
+    data?: Prisma.InputJsonValue | null;
   }): Promise<Notification> {
     try {
       const notification = await this.prisma.notification.create({
@@ -118,10 +118,10 @@ export class NotificationPrismaRepository {
       }
 
       const searchTrimmed = options?.search?.trim();
-      const whereClause: any = {
+      const whereClause: Prisma.NotificationWhereInput = {
         userId,
         ...(options?.unreadOnly && { read: false }),
-        ...(typeFilter && typeFilter.length > 0 && { type: { in: typeFilter } }),
+        ...(typeFilter && typeFilter.length > 0 && { type: { in: typeFilter as PrismaNotificationType[] } }),
       };
 
       // Add search filter if provided
@@ -188,10 +188,10 @@ export class NotificationPrismaRepository {
       }
 
       const searchTrimmed = options?.search?.trim();
-      const whereClause: any = {
+      const whereClause: Prisma.NotificationWhereInput = {
         userId,
         ...(options?.unreadOnly && { read: false }),
-        ...(typeFilter && typeFilter.length > 0 && { type: { in: typeFilter } }),
+        ...(typeFilter && typeFilter.length > 0 && { type: { in: typeFilter as PrismaNotificationType[] } }),
       };
 
       // Add search filter if provided

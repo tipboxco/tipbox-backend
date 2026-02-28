@@ -131,8 +131,8 @@ export class DMRequestPrismaRepository {
       data: {
         fromUserId: data.fromUserId,
         toUserId: data.toUserId,
-        status: (data.status || DMRequestStatus.PENDING) as any,
-        type: supportType as any,
+        status: data.status || DMRequestStatus.PENDING,
+        type: supportType,
         amount: data.amount ?? 0,
         description: data.description || null,
         sentAt: now,
@@ -174,9 +174,11 @@ export class DMRequestPrismaRepository {
       }
       
       if (data.threadId !== undefined) {
-        // threadId is a direct field in schema, but Prisma types may not include it in UpdateInput
-        // Use type assertion for now - this is safe as threadId exists in the schema
-        (updateData as any).threadId = data.threadId;
+        if (data.threadId) {
+          updateData.thread = { connect: { id: data.threadId } };
+        } else {
+          updateData.thread = { disconnect: true };
+        }
       }
       
       if (data.fromUserRating !== undefined) {

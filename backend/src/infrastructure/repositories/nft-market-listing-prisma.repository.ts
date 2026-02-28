@@ -1,3 +1,5 @@
+import { Prisma } from '@prisma/client';
+import type { NFTMarketListing as PrismaNFTMarketListingModel } from '@prisma/client';
 import { getPrisma } from './prisma.client';
 import { NFTMarketListing } from '../../domain/crypto/nft-market-listing.entity';
 import { NFTMarketListingStatus } from '../../domain/crypto/nft-market-listing-status.enum';
@@ -61,7 +63,7 @@ export class NFTMarketListingPrismaRepository {
   }
 
   async findActiveListings(filter: FindListingsFilter = {}): Promise<NFTMarketListing[]> {
-    const where: any = {
+    const where: Prisma.NFTMarketListingWhereInput = {
       status: NFTMarketListingStatus.ACTIVE,
     };
 
@@ -74,36 +76,36 @@ export class NFTMarketListingPrismaRepository {
     }
 
     if (filter.minPrice !== undefined) {
-      where.price = { ...where.price, gte: filter.minPrice };
+      where.price = { ...(where.price as Prisma.FloatFilter), gte: filter.minPrice };
     }
 
     if (filter.maxPrice !== undefined) {
-      where.price = { ...where.price, lte: filter.maxPrice };
+      where.price = { ...(where.price as Prisma.FloatFilter), lte: filter.maxPrice };
     }
 
     // NFT filtreleri (search, type, rarity)
-    const nftFilters: any = {};
-    
+    const nftFilters: Prisma.NFTWhereInput = {};
+
     if (filter.search) {
       nftFilters.OR = [
         { name: { contains: filter.search, mode: 'insensitive' } },
         { description: { contains: filter.search, mode: 'insensitive' } },
       ];
     }
-    
+
     if (filter.nftType) {
       nftFilters.type = filter.nftType;
     }
-    
+
     if (filter.nftRarity) {
       nftFilters.rarity = filter.nftRarity;
     }
-    
+
     if (Object.keys(nftFilters).length > 0) {
       where.nft = nftFilters;
     }
 
-    const orderBy: any = {};
+    const orderBy: Prisma.NFTMarketListingOrderByWithRelationInput = {};
     if (filter.orderBy) {
       if (filter.orderBy === 'price_asc') {
         orderBy.price = 'asc';
@@ -159,7 +161,7 @@ export class NFTMarketListingPrismaRepository {
   }
 
   async findByUserId(userId: string, status?: NFTMarketListingStatus): Promise<NFTMarketListing[]> {
-    const where: any = { listedByUserId: userId };
+    const where: Prisma.NFTMarketListingWhereInput = { listedByUserId: userId };
     if (status) {
       where.status = status;
     }
@@ -299,7 +301,7 @@ export class NFTMarketListingPrismaRepository {
     return listings;
   }
 
-  private toDomain(prismaListing: any): NFTMarketListing {
+  private toDomain(prismaListing: PrismaNFTMarketListingModel): NFTMarketListing {
     return new NFTMarketListing(
       prismaListing.id,
       prismaListing.nftId,

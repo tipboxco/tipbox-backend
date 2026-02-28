@@ -1,3 +1,4 @@
+import type { ExpertAnswer as PrismaExpertAnswerModel } from '@prisma/client';
 import { ExpertAnswer } from '../../domain/expert/expert-answer.entity';
 import { getPrisma } from './prisma.client';
 
@@ -33,7 +34,7 @@ export class ExpertAnswerPrismaRepository {
       },
       orderBy: { createdAt: 'desc' },
     });
-    return answers.map((answer: any) => this.toDomain(answer));
+    return answers.map((answer) => this.toDomain(answer));
   }
 
   async create(
@@ -94,7 +95,7 @@ export class ExpertAnswerPrismaRepository {
     }
   }
 
-  private toDomain(prismaAnswer: any): ExpertAnswer {
+  private toDomain(prismaAnswer: PrismaExpertAnswerModel): ExpertAnswer {
     return new ExpertAnswer(
       prismaAnswer.id,
       prismaAnswer.requestId,

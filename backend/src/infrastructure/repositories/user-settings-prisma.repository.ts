@@ -1,3 +1,4 @@
+import type { UserSettings as PrismaUserSettingsModel } from '@prisma/client';
 import { UserSettings } from '../../domain/user/user-settings.entity';
 import { getPrisma } from './prisma.client';
 import { UserVisibility } from '../../domain/user/user-visibility.enum';
@@ -112,7 +113,7 @@ export class UserSettingsPrismaRepository {
     return settings.map((setting) => this.toDomain(setting));
   }
 
-  private toDomain(prismaSettings: any): UserSettings {
+  private toDomain(prismaSettings: PrismaUserSettingsModel): UserSettings {
     return new UserSettings(
       prismaSettings.id,
       prismaSettings.userId,

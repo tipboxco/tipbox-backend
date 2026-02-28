@@ -1,4 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
+import type { RewardClaim as PrismaRewardClaimModel } from '@prisma/client';
 import { 
   IRewardClaimRepository, 
   CreateRewardClaimDTO, 
@@ -17,7 +18,7 @@ export class RewardClaimPrismaRepository implements IRewardClaimRepository {
     this.prisma = prisma || new PrismaClient();
   }
 
-  private mapToEntity(data: any): RewardClaim {
+  private mapToEntity(data: PrismaRewardClaimModel): RewardClaim {
     return new RewardClaim(
       data.id,
       data.userId,
@@ -29,7 +30,7 @@ export class RewardClaimPrismaRepository implements IRewardClaimRepository {
       data.claimedAt,
       data.expiresAt,
       data.sourceId,
-      data.metadata as any,
+      data.metadata as Record<string, unknown> | null,
       data.transactionId,
       data.createdAt,
       data.updatedAt
@@ -73,7 +74,7 @@ export class RewardClaimPrismaRepository implements IRewardClaimRepository {
 
   async findByUserId(userId: string, filters?: RewardClaimFilters): Promise<RewardClaim[]> {
     try {
-      const where: any = { userId };
+      const where: Prisma.RewardClaimWhereInput = { userId };
 
       if (filters) {
         if (filters.status) {

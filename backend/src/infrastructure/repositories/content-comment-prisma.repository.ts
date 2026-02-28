@@ -1,3 +1,4 @@
+import type { ContentComment as PrismaContentCommentModel, Prisma } from '@prisma/client';
 import { ContentComment } from '../../domain/interaction/content-comment.entity';
 import { getPrisma } from './prisma.client';
 import { generateIdForModel } from '../ids/id.strategy';
@@ -24,7 +25,7 @@ export class ContentCommentPrismaRepository {
         parentId: data.parentId || null,
         isAnswer: data.isAnswer || false,
         likesCount: 0,
-      } as any,
+      },
     });
     
     return this.toDomain(comment);
@@ -43,8 +44,8 @@ export class ContentCommentPrismaRepository {
     sortBy: 'newest' | 'oldest' | 'popular' = 'newest'
   ): Promise<ContentComment[]> {
     // Sıralama kriterini belirle
-    let orderBy: any = { createdAt: 'desc' }; // Default: newest
-    
+    let orderBy: Prisma.ContentCommentOrderByWithRelationInput | Prisma.ContentCommentOrderByWithRelationInput[] = { createdAt: 'desc' }; // Default: newest
+
     if (sortBy === 'oldest') {
       orderBy = { createdAt: 'asc' };
     } else if (sortBy === 'popular') {
@@ -93,7 +94,7 @@ export class ContentCommentPrismaRepository {
     });
   }
 
-  private toDomain(prismaComment: any): ContentComment {
+  private toDomain(prismaComment: PrismaContentCommentModel): ContentComment {
     return new ContentComment(
       prismaComment.id,
       prismaComment.postId,

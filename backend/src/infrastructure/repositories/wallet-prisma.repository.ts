@@ -1,3 +1,4 @@
+import type { Wallet as PrismaWalletModel } from '@prisma/client';
 import { validate as uuidValidate } from 'uuid';
 import { Wallet, WalletProvider } from '../../domain/wallet/wallet.entity';
 import { getPrisma } from './prisma.client';
@@ -197,7 +198,7 @@ export class WalletPrismaRepository {
   }
 
   async setBalance(id: string, balance: number, lockedBalance?: number): Promise<Wallet | null> {
-    const data: any = { balance };
+    const data: { balance: number; lockedBalance?: number } = { balance };
     if (lockedBalance !== undefined) {
       data.lockedBalance = lockedBalance;
     }
@@ -209,7 +210,7 @@ export class WalletPrismaRepository {
     return this.toDomain(updatedWallet);
   }
 
-  private toDomain(prismaWallet: any): Wallet {
+  private toDomain(prismaWallet: PrismaWalletModel): Wallet {
     return new Wallet(
       prismaWallet.id,
       prismaWallet.userId,

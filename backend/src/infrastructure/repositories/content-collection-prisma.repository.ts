@@ -1,3 +1,4 @@
+import type { ContentCollection as PrismaContentCollectionModel } from '@prisma/client';
 import { ContentCollection } from '../../domain/content/content-collection.entity';
 import { getPrisma } from './prisma.client';
 
@@ -103,7 +104,7 @@ export class ContentCollectionPrismaRepository {
     return collections.map(collection => this.toDomain(collection));
   }
 
-  private toDomain(prismaCollection: any): ContentCollection {
+  private toDomain(prismaCollection: PrismaContentCollectionModel): ContentCollection {
     return new ContentCollection(
       prismaCollection.id,
       prismaCollection.userId,

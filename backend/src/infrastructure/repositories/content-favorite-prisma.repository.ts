@@ -1,3 +1,4 @@
+import type { ContentFavorite as PrismaContentFavoriteModel } from '@prisma/client';
 import { ContentFavorite } from '../../domain/interaction/content-favorite.entity';
 import { getPrisma } from './prisma.client';
 
@@ -50,7 +51,7 @@ export class ContentFavoritePrismaRepository {
     return favorites.map(f => this.toDomain(f));
   }
 
-  private toDomain(prismaFavorite: any): ContentFavorite {
+  private toDomain(prismaFavorite: PrismaContentFavoriteModel): ContentFavorite {
     return new ContentFavorite(
       prismaFavorite.id,
       prismaFavorite.userId,

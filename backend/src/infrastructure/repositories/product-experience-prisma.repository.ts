@@ -1,3 +1,4 @@
+import type { ProductExperience as PrismaProductExperienceModel } from '@prisma/client';
 import { ProductExperience } from '../../domain/inventory/product-experience.entity';
 import { getPrisma } from './prisma.client';
 
@@ -173,7 +174,7 @@ export class ProductExperiencePrismaRepository {
     return experiences.map(experience => this.toDomain(experience));
   }
 
-  private toDomain(prismaExperience: any): ProductExperience {
+  private toDomain(prismaExperience: PrismaProductExperienceModel): ProductExperience {
     return new ProductExperience(
       prismaExperience.id,
       prismaExperience.inventoryId,

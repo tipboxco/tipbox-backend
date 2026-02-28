@@ -1,7 +1,24 @@
+import type { NFT as PrismaNFTModel, Prisma } from '@prisma/client';
 import { getPrisma } from './prisma.client';
 import { NFT } from '../../domain/crypto/nft.entity';
 import { NFTType } from '../../domain/crypto/nft-type.enum';
 import { NFTRarity } from '../../domain/crypto/nft-rarity.enum';
+
+/** Shape accepted by toDomain -- either a full Prisma row or a manually-mapped raw-query result */
+interface NFTDomainInput {
+  id: string;
+  name: string;
+  description: string | null;
+  imageUrl: string;
+  type: string;
+  rarity: string;
+  isTransferable: boolean;
+  currentOwnerId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  tokenId?: string | null;
+  contractAddress?: string | null;
+}
 
 export interface FindNFTsFilter {
   search?: string;
@@ -28,7 +45,7 @@ export class NFTPrismaRepository {
 
   async findByOwnerId(ownerId: string, limit?: number, cursor?: string): Promise<NFT[]> {
     // Prisma client type'ları henüz currentOwnerId'yi tanımıyor, raw query ile çözüyoruz
-    const params: any[] = [ownerId];
+    const params: (string | number)[] = [ownerId];
     let paramIndex = params.length + 1;
 
     let cursorFilter = '';
@@ -82,7 +99,7 @@ export class NFTPrismaRepository {
   }
 
   async findMany(filter: FindNFTsFilter = {}): Promise<NFT[]> {
-    const where: any = {};
+    const where: Prisma.NFTWhereInput = {};
 
     if (filter.search) {
       where.OR = [
@@ -102,7 +119,7 @@ export class NFTPrismaRepository {
     if (filter.ownerId) {
       // Owner filtresi için ayrı bir query - Prisma client henüz currentOwnerId'yi tanımıyor
       const conditions: string[] = ['current_owner_id = $1::uuid'];
-      const params: any[] = [filter.ownerId];
+      const params: (string | number)[] = [filter.ownerId];
       let paramIndex = 2;
 
       if (filter.search) {
@@ -278,7 +295,7 @@ export class NFTPrismaRepository {
     return this.toDomain(nft);
   }
 
-  private toDomain(prismaNFT: any): NFT {
+  private toDomain(prismaNFT: PrismaNFTModel | NFTDomainInput): NFT {
     return new NFT(
       prismaNFT.id,
       prismaNFT.name,
@@ -290,8 +307,8 @@ export class NFTPrismaRepository {
       prismaNFT.currentOwnerId,
       prismaNFT.createdAt,
       prismaNFT.updatedAt,
-      prismaNFT.tokenId ?? prismaNFT.token_id ?? null,
-      prismaNFT.contractAddress ?? prismaNFT.contract_address ?? null
+      prismaNFT.tokenId ?? null,
+      prismaNFT.contractAddress ?? null
     );
   }
 }

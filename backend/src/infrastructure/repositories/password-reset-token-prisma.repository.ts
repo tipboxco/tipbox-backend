@@ -1,3 +1,4 @@
+import type { PasswordResetToken as PrismaPasswordResetTokenModel } from '@prisma/client';
 import { PasswordResetToken } from '../../domain/user/password-reset-token.entity';
 import { getPrisma } from './prisma.client';
 
@@ -120,7 +121,7 @@ export class PasswordResetTokenPrismaRepository {
     return tokens.map(token => this.toDomain(token));
   }
 
-  private toDomain(prismaToken: any): PasswordResetToken {
+  private toDomain(prismaToken: PrismaPasswordResetTokenModel): PasswordResetToken {
     return new PasswordResetToken(
       prismaToken.id,
       prismaToken.userId,

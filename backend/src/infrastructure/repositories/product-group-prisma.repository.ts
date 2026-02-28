@@ -1,3 +1,4 @@
+import type { ProductGroup as PrismaProductGroupModel } from '@prisma/client';
 import { ProductGroup } from '../../domain/product/product-group.entity';
 import { getPrisma } from './prisma.client';
 
@@ -90,7 +91,7 @@ export class ProductGroupPrismaRepository {
     return groups.map(group => this.toDomain(group));
   }
 
-  private toDomain(prismaGroup: any): ProductGroup {
+  private toDomain(prismaGroup: PrismaProductGroupModel): ProductGroup {
     return new ProductGroup(
       prismaGroup.id,
       prismaGroup.subCategoryId,

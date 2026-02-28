@@ -1,3 +1,4 @@
+import type { Feed as PrismaFeedModel, Prisma } from '@prisma/client';
 import { Feed } from '../../domain/admin/feed.entity';
 import { getPrisma } from './prisma.client';
 import { FeedSource } from '../../domain/admin/feed-source.enum';
@@ -12,7 +13,7 @@ export class FeedPrismaRepository {
 
   async findByUserId(userId: string, options?: { limit?: number; cursor?: string; seen?: boolean }): Promise<{ feeds: Feed[]; nextCursor?: string }> {
     const limit = options?.limit || 20;
-    const where: any = { 
+    const where: Prisma.FeedWhereInput = {
       userId,
       // Kullanıcının kendi post'larını feed'inde gösterme
       post: {
@@ -115,7 +116,7 @@ export class FeedPrismaRepository {
           unseenFeedCount: {
             increment: -1
           }
-        } as any
+        }
       });
     }
 
@@ -161,7 +162,7 @@ export class FeedPrismaRepository {
           unseenFeedCount: {
             increment: -count
           }
-        } as any
+        }
       });
     }
 
@@ -172,9 +173,9 @@ export class FeedPrismaRepository {
     // Use denormalized count from Profile table
     const profile = await this.prisma.profile.findUnique({
       where: { userId },
-      select: { unseenFeedCount: true } as any
+      select: { unseenFeedCount: true }
     });
-    return (profile as any)?.unseenFeedCount || 0;
+    return profile?.unseenFeedCount || 0;
   }
 
   async delete(feedId: string): Promise<boolean> {
@@ -197,7 +198,7 @@ export class FeedPrismaRepository {
         unseenFeedCount: {
           increment: 1
         }
-      } as any
+      }
     });
   }
 
@@ -239,7 +240,7 @@ export class FeedPrismaRepository {
     });
   }
 
-  private toDomain(prismaFeed: any): Feed {
+  private toDomain(prismaFeed: PrismaFeedModel): Feed {
     return new Feed(
       prismaFeed.id,
       prismaFeed.userId,

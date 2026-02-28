@@ -1,3 +1,4 @@
+import type { ComparisonMetric as PrismaComparisonMetricModel } from '@prisma/client';
 import { ComparisonMetric } from '../../domain/product/comparison-metric.entity';
 import { getPrisma } from './prisma.client';
 
@@ -85,7 +86,7 @@ export class ComparisonMetricPrismaRepository {
     return metrics.map(metric => this.toDomain(metric));
   }
 
-  private toDomain(prismaMetric: any): ComparisonMetric {
+  private toDomain(prismaMetric: PrismaComparisonMetricModel): ComparisonMetric {
     return new ComparisonMetric(
       prismaMetric.id,
       prismaMetric.name,

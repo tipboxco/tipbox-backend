@@ -1,3 +1,4 @@
+import type { TrustRelation as PrismaTrustRelationModel } from '@prisma/client';
 import { TrustRelation } from '../../domain/user/trust-relation.entity';
 import { getPrisma } from './prisma.client';
 import { TrustBackfillScheduler } from '../scheduler/trust-backfill.scheduler';
@@ -66,7 +67,7 @@ export class TrustRelationPrismaRepository {
         trustCount: {
           increment: 1
         }
-      } as any
+      }
     });
 
     // Increment trusted user's trusterCount
@@ -76,7 +77,7 @@ export class TrustRelationPrismaRepository {
         trusterCount: {
           increment: 1
         }
-      } as any
+      }
     });
 
     // 🚀 EVENT: Trust backfill job'ı kuyruğa ekle (async - bloke etmez)
@@ -123,7 +124,7 @@ export class TrustRelationPrismaRepository {
           trustCount: {
             increment: -1
           }
-        } as any
+        }
       });
 
       // Decrement trusted user's trusterCount
@@ -133,7 +134,7 @@ export class TrustRelationPrismaRepository {
           trusterCount: {
             increment: -1
           }
-        } as any
+        }
       });
 
       return true;
@@ -163,7 +164,7 @@ export class TrustRelationPrismaRepository {
           trustCount: {
             increment: -1
           }
-        } as any
+        }
       });
 
       // Decrement trusted user's trusterCount
@@ -173,7 +174,7 @@ export class TrustRelationPrismaRepository {
           trusterCount: {
             increment: -1
           }
-        } as any
+        }
       });
 
       return true;
@@ -187,11 +188,13 @@ export class TrustRelationPrismaRepository {
     return relations.map(relation => this.toDomain(relation));
   }
 
-  private toDomain(prismaRelation: any): TrustRelation {
+  private toDomain(prismaRelation: PrismaTrustRelationModel): TrustRelation {
+    // Note: Domain entity types trusterId/trustedUserId as number but they are actually UUID strings.
+    // This is a pre-existing domain model mismatch; runtime behavior is unchanged.
     return new TrustRelation(
       prismaRelation.id,
-      prismaRelation.trusterId,
-      prismaRelation.trustedUserId,
+      prismaRelation.trusterId as unknown as number,
+      prismaRelation.trustedUserId as unknown as number,
       prismaRelation.createdAt,
       prismaRelation.updatedAt
     );

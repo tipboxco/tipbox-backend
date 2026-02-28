@@ -1,3 +1,4 @@
+import type { InventoryMedia as PrismaInventoryMediaModel } from '@prisma/client';
 import { InventoryMedia } from '../../domain/inventory/inventory-media.entity';
 import { getPrisma } from './prisma.client';
 
@@ -139,7 +140,7 @@ export class InventoryMediaPrismaRepository {
     return medias.map(media => this.toDomain(media));
   }
 
-  private toDomain(prismaMedia: any): InventoryMedia {
+  private toDomain(prismaMedia: PrismaInventoryMediaModel): InventoryMedia {
     return new InventoryMedia(
       prismaMedia.id,
       prismaMedia.inventoryId,

@@ -1,3 +1,4 @@
+import type { NFTTransaction as PrismaNFTTransactionModel } from '@prisma/client';
 import { getPrisma } from './prisma.client';
 import { NFTTransaction } from '../../domain/crypto/nft-transaction.entity';
 import { NFTTransactionType } from '../../domain/crypto/nft-transaction-type.enum';
@@ -80,7 +81,7 @@ export class NFTTransactionPrismaRepository {
     return this.toDomain(transaction);
   }
 
-  private toDomain(prismaTransaction: any): NFTTransaction {
+  private toDomain(prismaTransaction: PrismaNFTTransactionModel): NFTTransaction {
     return new NFTTransaction(
       prismaTransaction.id,
       prismaTransaction.nftId,

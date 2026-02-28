@@ -1,3 +1,4 @@
+import type { UserTitle as PrismaUserTitleModel } from '@prisma/client';
 import { UserTitle } from '../../domain/user/user-title.entity';
 import { getPrisma } from './prisma.client';
 
@@ -57,7 +58,7 @@ export class UserTitlePrismaRepository {
     return titles.map(title => this.toDomain(title));
   }
 
-  private toDomain(prismaTitle: any): UserTitle {
+  private toDomain(prismaTitle: PrismaUserTitleModel): UserTitle {
     return new UserTitle(
       prismaTitle.id,
       prismaTitle.userId,
