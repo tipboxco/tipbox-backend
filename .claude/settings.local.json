@@ -39,7 +39,11 @@
       "Bash(docker-compose ps)",
       "Bash(curl -s -X POST 'http://localhost:3000/auth/register' -H 'Content-Type: application/json' -d '{\"\"email\"\": \"\"test-verify@fuzyon.ist\"\", \"\"password\"\": \"\"password123\"\", \"\"name\"\": \"\"Test User\"\"}')",
       "Bash(python3 -m json.tool)",
-      "Bash(curl -s -X POST 'http://localhost:3000/auth/register' -H 'Content-Type: application/json' -d '{\"\"email\"\": \"\"test-verify2@fuzyon.ist\"\", \"\"password\"\": \"\"password123\"\", \"\"name\"\": \"\"Test User 2\"\"}')"
+      "Bash(curl -s -X POST 'http://localhost:3000/auth/register' -H 'Content-Type: application/json' -d '{\"\"email\"\": \"\"test-verify2@fuzyon.ist\"\", \"\"password\"\": \"\"password123\"\", \"\"name\"\": \"\"Test User 2\"\"}')",
+      "Bash(wc -l /Users/omerfaruk/Desktop/Dev/tipbox/tipbox-backend/backend/src/interfaces/admin/routers/*.router.ts)",
+      "Bash(grep -E \"TODO|FIXME|XXX|HACK|BUG\" /Users/omerfaruk/Desktop/Dev/tipbox/tipbox-backend/backend/src/interfaces/**/*.router.ts)",
+      "Bash(grep -c \"validateBody\\\\|validateQuery\" /Users/omerfaruk/Desktop/Dev/tipbox/tipbox-backend/backend/src/interfaces/**/*.router.ts)",
+      "Bash(find /Users/omerfaruk/Desktop/Dev/tipbox/tipbox-backend/backend/src/interfaces -name \"*.router.ts\" -type f -exec grep -l \"authMiddleware\\\\|requireAdmin\\\\|requireRole\" {} ;)"
     ],
     "defaultMode": "bypassPermissions"
   }

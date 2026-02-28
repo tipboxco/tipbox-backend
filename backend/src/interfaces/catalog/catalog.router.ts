@@ -39,7 +39,6 @@ router.get(
   '/categories',
   asyncHandler(async (req: Request, res: Response) => {
     const categories = await catalogService.getAllCategories();
-    console.log({categories});
     return res.json(categories);
   }),
 );

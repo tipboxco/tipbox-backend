@@ -98,7 +98,6 @@ export class CatalogService {
             level: 0
           }
         });
-        console.log({categories});
         const { resolveMediaUrl } = await import('../../infrastructure/config/media.config');
 
         return categories.map((category: any) => {

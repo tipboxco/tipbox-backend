@@ -4,6 +4,7 @@ import { PushTokenService, PushTokenUserNotFoundError } from '../../application/
 import { UserSettingsPrismaRepository } from '../../infrastructure/repositories/user-settings-prisma.repository';
 import { RegisterPushTokenDto, UpdateNotificationSettingsDto, GetNotificationsQuery } from './notification.dto';
 import { authMiddleware } from '../auth/auth.middleware';
+import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import logger from '../../infrastructure/logger/logger';
 import { parseQueryInt, parseQueryBoolean } from '../../infrastructure/utils/query-parser';
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
@@ -1320,7 +1321,7 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
  *       500:
  *         description: Server error
  */
-router.get('/', authMiddleware, async (req: Request, res: Response) => {
+router.get('/', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
   try {
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
@@ -1576,7 +1577,7 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
       message: 'Failed to get notifications',
     });
   }
-});
+}));
 
 /**
  * @openapi
@@ -1606,7 +1607,7 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
  *       500:
  *         description: Server error
  */
-router.get('/unread-count', authMiddleware, async (req: Request, res: Response) => {
+router.get('/unread-count', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
   // Timeout kontrolü için timer
   const timeout = setTimeout(() => {
     if (!res.headersSent) {
@@ -1651,7 +1652,7 @@ router.get('/unread-count', authMiddleware, async (req: Request, res: Response) 
       message: 'Failed to get unread count',
     });
   }
-});
+}));
 
 /**
  * @openapi
@@ -1677,7 +1678,7 @@ router.get('/unread-count', authMiddleware, async (req: Request, res: Response) 
  *       500:
  *         description: Server error
  */
-router.put('/:id/read', authMiddleware, async (req: Request, res: Response) => {
+router.put('/:id/read', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const userPayload = req.user;
@@ -1713,7 +1714,7 @@ router.put('/:id/read', authMiddleware, async (req: Request, res: Response) => {
       message: 'Failed to mark notification as read',
     });
   }
-});
+}));
 
 /**
  * @openapi
@@ -1745,7 +1746,7 @@ router.put('/:id/read', authMiddleware, async (req: Request, res: Response) => {
  *       500:
  *         description: Server error
  */
-router.put('/mark-all-read', authMiddleware, async (req: Request, res: Response) => {
+router.put('/mark-all-read', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
   try {
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
@@ -1783,7 +1784,7 @@ router.put('/mark-all-read', authMiddleware, async (req: Request, res: Response)
       message: 'Failed to mark all notifications as read',
     });
   }
-});
+}));
 
 /**
  * @openapi
@@ -1809,7 +1810,7 @@ router.put('/mark-all-read', authMiddleware, async (req: Request, res: Response)
  *       500:
  *         description: Server error
  */
-router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
+router.delete('/:id', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     await notificationService.deleteNotification(id);
@@ -1825,7 +1826,7 @@ router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
       message: 'Failed to delete notification',
     });
   }
-});
+}));
 
 /**
  * @openapi
@@ -1852,7 +1853,7 @@ router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
  *       500:
  *         description: Server error
  */
-router.get('/settings', authMiddleware, async (req: Request, res: Response) => {
+router.get('/settings', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
   try {
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
@@ -1917,7 +1918,7 @@ router.get('/settings', authMiddleware, async (req: Request, res: Response) => {
       message: 'Failed to get notification settings',
     });
   }
-});
+}));
 
 /**
  * @openapi
@@ -1941,7 +1942,7 @@ router.get('/settings', authMiddleware, async (req: Request, res: Response) => {
  *       500:
  *         description: Server error
  */
-router.put('/settings', authMiddleware, async (req: Request, res: Response) => {
+router.put('/settings', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
   try {
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
@@ -1971,7 +1972,7 @@ router.put('/settings', authMiddleware, async (req: Request, res: Response) => {
       message: 'Failed to update notification settings',
     });
   }
-});
+}));
 
 /**
  * @openapi
@@ -2008,7 +2009,7 @@ router.put('/settings', authMiddleware, async (req: Request, res: Response) => {
  *       500:
  *         description: Server error
  */
-router.post('/push-token', authMiddleware, async (req: Request, res: Response) => {
+router.post('/push-token', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
   try {
     const userPayload = req.user;
     const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
@@ -2052,7 +2053,7 @@ router.post('/push-token', authMiddleware, async (req: Request, res: Response) =
       message: 'Failed to register push token',
     });
   }
-});
+}));
 
 /**
  * @openapi
@@ -2084,7 +2085,7 @@ router.post('/push-token', authMiddleware, async (req: Request, res: Response) =
  *       500:
  *         description: Server error
  */
-router.delete('/push-token', authMiddleware, async (req: Request, res: Response) => {
+router.delete('/push-token', authMiddleware, asyncHandler(async (req: Request, res: Response) => {
   try {
     const { token } = req.body;
 
@@ -2108,7 +2109,7 @@ router.delete('/push-token', authMiddleware, async (req: Request, res: Response)
       message: 'Failed to delete push token',
     });
   }
-});
+}));
 
 export default router;
 

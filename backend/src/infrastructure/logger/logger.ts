@@ -88,7 +88,8 @@ if (ensureLogDir()) {
     [mainFile, errorFile].forEach((t) => {
       t.on('error', (err) => {
         // Yazma hatası (disk dolu, permission vb.) uygulamayı çökertmesin
-        console.error('[logger] File transport error:', err.message);
+        // Not: console.error burada bilinçli - logger kendi transport hatasını loglarken kendini kullanamaz
+        console.error('[logger] File transport error:', err.message); // eslint-disable-line no-console
       });
     });
     fileTransports.push(mainFile, errorFile);

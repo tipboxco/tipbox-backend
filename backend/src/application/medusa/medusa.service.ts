@@ -32,6 +32,8 @@ export interface FilterableProductsResponse {
   filterable_options: FilterableOptionsType | null;
 }
 
+import logger from '../../infrastructure/logger/logger';
+
 export class MedusaService {
   private readonly baseUrl: string;
   private readonly apiKey: string | null;
@@ -211,7 +213,7 @@ export class MedusaService {
       });
 
       if (!fallbackResponse.ok) {
-        console.error('[getFilterableProductsByCategoryId] Error:', fallbackResponse.status);
+        logger.error({ message: '[getFilterableProductsByCategoryId] Error', status: fallbackResponse.status });
         return { products: [], total: 0, filterable_options: null };
       }
 
@@ -223,7 +225,7 @@ export class MedusaService {
         filterable_options: null,
       };
     } catch (error) {
-      console.error('[getFilterableProductsByCategoryId] Exception:', error);
+      logger.error({ message: '[getFilterableProductsByCategoryId] Exception', error: error instanceof Error ? error.message : String(error) });
       return { products: [], total: 0, filterable_options: null };
     }
   }

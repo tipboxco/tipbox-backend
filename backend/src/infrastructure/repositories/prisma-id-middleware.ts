@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { generateIdForModel } from '../ids/id.strategy';
+import logger from '../logger/logger';
 
 // Bu middleware, publicId alanı olan modellerde create sırasında otomatik ID üretir
 // Prisma 6.x'te $use kaldırıldı, $extends kullanılıyor
@@ -30,7 +31,7 @@ export function createPrismaWithIdMiddleware() {
   // Prisma Client'ı açıkça bağla (async olarak, arka planda)
   // İlk query'de zaten otomatik bağlanır, ama bu explicit bağlantıyı garanti eder
   baseClient.$connect().catch((error) => {
-    console.error('Failed to connect to database:', error);
+    logger.error({ message: 'Failed to connect to database', error: error instanceof Error ? error.message : String(error) });
   });
 
   // $extends() dönüş tipi DynamicClientExtensionThis olduğu için event/eventStats

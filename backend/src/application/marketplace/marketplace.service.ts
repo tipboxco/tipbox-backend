@@ -267,7 +267,6 @@ export class MarketplaceService {
 
       const results: UserNFTResponse[] = paginated.map(nft => {
         const listing = listingMap.get(nft.id);
-        console.log({nft})
         return {
           id: nft.id,
           title: nft.name,

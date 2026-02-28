@@ -795,11 +795,6 @@ router.get(
     // Parse search query
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : undefined;
     
-    // Debug: Log search parameter
-    if (search) {
-      console.log('[Support Requests] Search parameter received:', search);
-    }
-
     // Parse limit
     let limit: number | undefined;
     if (typeof req.query.limit === 'string') {
@@ -818,11 +813,6 @@ router.get(
       cursor,
     });
     
-    // Debug: Log results count
-    if (search) {
-      console.log('[Support Requests] Search results count:', result.items.length);
-    }
-
     return res.json({
       items: result.items,
       pagination: {

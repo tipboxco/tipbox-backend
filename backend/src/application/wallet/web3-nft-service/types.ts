@@ -97,7 +97,6 @@ export interface NFTMetadataInput {
 function stripPortFromUrl(urlString: string): string {
   try {
     const url = new URL(urlString);
-    console.log({url});
     url.port = "";
     return url.toString();
   } catch {
@@ -114,7 +113,6 @@ function replaceImageUrlHost(imageUrl: string): string {
   try {
     const { resolveMediaUrl } = require("../../infrastructure/config/media.config");
     const resolved = resolveMediaUrl(imageUrl);
-    console.log({resolved, imageUrl});
     return resolved ? stripPortFromUrl(resolved) : imageUrl;
   } catch {
     return imageUrl;

@@ -70,22 +70,36 @@ export class ExpertService {
         });
       }
 
-      const request = await this.expertRequestRepo.create(
-        userId,
-        dto.description,
-        dto.tipsAmount || 0,
-        dto.category
-      );
+      // Request, media ve status guncelleme atomic olarak yapilmali
+      const { request, mediaList } = await this.prisma.$transaction(async (tx) => {
+        const createdRequest = await tx.expertRequest.create({
+          data: {
+            userId,
+            description: dto.description,
+            tipsAmount: dto.tipsAmount || 0,
+            category: dto.category || null,
+            status: ExpertRequestStatus.BROADCASTING,
+          },
+        });
 
-      // Media'ları oluştur
-      if (dto.mediaUrls && dto.mediaUrls.length > 0) {
-        for (const media of dto.mediaUrls) {
-          await this.expertMediaRepo.create(request.id, media.url, media.type);
+        // Media'lari olustur
+        if (dto.mediaUrls && dto.mediaUrls.length > 0) {
+          await tx.expertRequestMedia.createMany({
+            data: dto.mediaUrls.map((media) => ({
+              requestId: createdRequest.id,
+              mediaUrl: media.url,
+              mediaType: media.type,
+            })),
+          });
         }
-      }
 
-      // Media'ları da dahil ederek response döndür
-      const mediaList = await this.expertMediaRepo.findByRequestId(request.id);
+        const createdMediaList = await tx.expertRequestMedia.findMany({
+          where: { requestId: createdRequest.id },
+        });
+
+        return { request: createdRequest, mediaList: createdMediaList };
+      });
+
       const response = this.mapToResponse(request);
       response.media = mediaList.map((m) => ({
         id: m.id,
@@ -93,11 +107,6 @@ export class ExpertService {
         mediaType: m.mediaType,
         uploadedAt: m.uploadedAt.toISOString(),
       }));
-
-      // Request'i BROADCASTING durumuna güncelle
-      await this.expertRequestRepo.update(request.id, {
-        status: ExpertRequestStatus.BROADCASTING,
-      });
 
       // Potansiyel expert'lere bildirim gönder (asenkron)
       this.expertNotificationService
@@ -470,51 +479,61 @@ export class ExpertService {
         throw new Error('Cannot answer your own request');
       }
 
-      // Cevabı oluştur
-      const answer = await this.expertAnswerRepo.create(requestId, expertUserId, dto.content);
-
-      // Request'i ANSWERED durumuna güncelle
-      await this.expertRequestRepo.update(requestId, {
-        status: ExpertRequestStatus.ANSWERED,
-        answeredAt: new Date(),
-      });
-
-      // tipsAmount varsa unlock ve transfer yap
-      if (request.tipsAmount > 0) {
-        // Request sahibinin wallet'ını bul
-        const requesterWallet = await this.walletService.getActiveWallet(request.userId);
-        // Expert'in wallet'ını bul
-        const expertWallet = await this.walletService.getActiveWallet(expertUserId);
-
-        if (requesterWallet && expertWallet) {
-          // Locked balance'ı unlock et
-          await this.walletService.updateLockedBalance(requesterWallet.id, -request.tipsAmount, {
-            reason: 'Expert request answered',
-            lockType: 'EXPERT_REQUEST_UNLOCK',
-          });
-
-          // Balance'dan düş
-          await this.walletService.updateBalance(requesterWallet.id, -request.tipsAmount, {
-            reason: 'Expert request payment',
-            transactionId: answer.id,
-            sourceType: 'EXPERT_REQUEST',
-          });
-
-          // Expert'e ekle
-          await this.walletService.updateBalance(expertWallet.id, request.tipsAmount, {
-            reason: 'Expert answer reward',
-            transactionId: answer.id,
-            sourceType: 'EXPERT_ANSWER',
-          });
-
-          logger.info({
+      // Cevap olusturma, status guncelleme ve finansal transferler atomic olmali
+      const answer = await this.prisma.$transaction(async (tx) => {
+        // Cevabi olustur
+        const createdAnswer = await tx.expertAnswer.create({
+          data: {
             requestId,
             expertUserId,
-            amount: request.tipsAmount,
-            message: 'TIPS transferred to expert',
-          });
+            content: dto.content,
+          },
+        });
+
+        // Request'i ANSWERED durumuna guncelle
+        await tx.expertRequest.update({
+          where: { id: requestId },
+          data: {
+            status: ExpertRequestStatus.ANSWERED,
+            answeredAt: new Date(),
+          },
+        });
+
+        // tipsAmount varsa unlock ve transfer yap
+        if (request.tipsAmount > 0) {
+          const requesterWallet = await this.walletService.getActiveWallet(request.userId);
+          const expertWallet = await this.walletService.getActiveWallet(expertUserId);
+
+          if (requesterWallet && expertWallet) {
+            // Locked balance'i unlock et
+            await tx.wallet.update({
+              where: { id: requesterWallet.id },
+              data: { lockedBalance: { decrement: request.tipsAmount } },
+            });
+
+            // Requester balance'dan dus
+            await tx.wallet.update({
+              where: { id: requesterWallet.id },
+              data: { balance: { decrement: request.tipsAmount } },
+            });
+
+            // Expert'e ekle
+            await tx.wallet.update({
+              where: { id: expertWallet.id },
+              data: { balance: { increment: request.tipsAmount } },
+            });
+
+            logger.info({
+              requestId,
+              expertUserId,
+              amount: request.tipsAmount,
+              message: 'TIPS transferred to expert',
+            });
+          }
         }
-      }
+
+        return createdAnswer;
+      });
 
       // Expert user bilgilerini getir
       const expertProfile = await this.profileRepo.findByUserId(expertUserId);

@@ -804,40 +804,47 @@ export class PostService {
         request.benefitCategory
       );
 
-      const post = await this.postRepo.create(
-        userId,
-        ContentPostType.TIPS,
-        '',
-        bodyWithImages,
-        contextIds.subCategoryId,
-        contextIds.mainCategoryId,
-        contextIds.productGroupId,
-        contextIds.productId,
-        false,
-        false,
-        request.eventId,
-        undefined,
-        contextIds.categoryId
-      );
+      // Post, PostTip ve PostMedia atomic olarak olusturulmali
+      const post = await this.prisma.$transaction(async (tx) => {
+        const createdPost = await this.postRepo.create(
+          userId,
+          ContentPostType.TIPS,
+          '',
+          bodyWithImages,
+          contextIds.subCategoryId,
+          contextIds.mainCategoryId,
+          contextIds.productGroupId,
+          contextIds.productId,
+          false,
+          false,
+          request.eventId,
+          undefined,
+          contextIds.categoryId
+        );
 
-      // Create PostTip
-      await this.tipRepo.create(
-        post.id, // post.id is already a string (VarChar(26))
-        tipCategory,
-        false // isVerified - can be verified later
-      );
-
-      // Görselleri PostMedia'ya kaydet (orderIndex ile sıralı)
-      if (request.images && request.images.length > 0) {
-        await this.prisma.postMedia.createMany({
-          data: request.images.map((imageUrl, index) => ({
-            postId: post.id,
-            userId: userId,
-            mediaUrl: imageUrl,
-            orderIndex: index, // Kullanıcının yüklediği sırada
-          })),
+        // Create PostTip
+        await tx.postTip.create({
+          data: {
+            postId: createdPost.id,
+            tipCategory,
+            isVerified: false,
+          },
         });
-      }
+
+        // Gorselleri PostMedia'ya kaydet (orderIndex ile sirali)
+        if (request.images && request.images.length > 0) {
+          await tx.postMedia.createMany({
+            data: request.images.map((imageUrl, index) => ({
+              postId: createdPost.id,
+              userId: userId,
+              mediaUrl: imageUrl,
+              orderIndex: index,
+            })),
+          });
+        }
+
+        return createdPost;
+      });
 
       logger.info(
         `Tips and tricks post created: ${post.id} by user ${userId}`

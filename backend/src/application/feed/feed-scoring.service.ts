@@ -116,9 +116,8 @@ export class FeedScoringService {
         },
       };
     } catch (error) {
-      console.error('❌ FULL SCORING ERROR:', error);
-      logger.error({ 
-        message: 'Full scoring error', 
+      logger.error({
+        message: 'Full scoring error',
         errorMessage: error instanceof Error ? error.message : String(error),
         errorStack: error instanceof Error ? error.stack : undefined,
         userId, 
@@ -163,12 +162,11 @@ export class FeedScoringService {
         },
       };
     } catch (error) {
-      console.error('❌ FAST SCORING ERROR:', error);
-      logger.error({ 
-        message: 'Fast scoring error', 
+      logger.error({
+        message: 'Fast scoring error',
         errorMessage: error instanceof Error ? error.message : String(error),
         errorStack: error instanceof Error ? error.stack : undefined,
-        userId 
+        userId
       });
       return this.getFallbackScore();
     }

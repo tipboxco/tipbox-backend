@@ -6,9 +6,14 @@ import { ProfilePrismaRepository } from '../../infrastructure/repositories/profi
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import logger from '../../infrastructure/logger/logger';
 import { validateBody } from '../../infrastructure/middleware/validation.middleware';
-import { 
-  LoginSchema, 
-  RegisterSchema, 
+import {
+  loginRateLimiter,
+  authRateLimiter,
+  verificationRateLimiter,
+} from '../../infrastructure/middleware/rate-limit.middleware';
+import {
+  LoginSchema,
+  RegisterSchema,
   ForgotPasswordSchema,
   ResetPasswordSchema,
   VerifyEmailSchema,
@@ -118,12 +123,11 @@ const profileRepo = new ProfilePrismaRepository();
  *                   type: string
  *                   example: Giriş yapılırken bir hata oluştu
  */
-router.post('/login', validateBody(LoginSchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/login', loginRateLimiter, validateBody(LoginSchema), asyncHandler(async (req: Request, res: Response) => {
   const { email, password } = req.body;
 
   // Authentication
   const user = await authService.authenticate(email, password);
-  console.log({user});
   if (!user) {
     return res.status(401).json({
       success: false,
@@ -266,7 +270,7 @@ router.post('/login', validateBody(LoginSchema), asyncHandler(async (req: Reques
  *                   type: string
  *                   example: Email gönderilemedi. Lütfen tekrar deneyin.
  */
-router.post('/register', validateBody(RegisterSchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/register', authRateLimiter, validateBody(RegisterSchema), asyncHandler(async (req: Request, res: Response) => {
   const { email, password, name } = req.body;
 
   if (!email || !password || !name) {
@@ -328,7 +332,7 @@ router.post('/register', validateBody(RegisterSchema), asyncHandler(async (req: 
 /**
  * Email doğrulama kodunu yeniden gönderir
  */
-router.post('/resend-verification', validateBody(ResendVerificationSchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/resend-verification', verificationRateLimiter, validateBody(ResendVerificationSchema), asyncHandler(async (req: Request, res: Response) => {
   const { email } = req.body;
   const result = await authService.sendEmailVerificationCode(email);
 
@@ -425,7 +429,7 @@ router.post('/resend-verification', validateBody(ResendVerificationSchema), asyn
  *                   type: string
  *                   example: Email doğrulama sırasında bir hata oluştu
  */
-router.post('/verify-email', asyncHandler(async (req: Request, res: Response) => {
+router.post('/verify-email', verificationRateLimiter, asyncHandler(async (req: Request, res: Response) => {
   const { email, code } = req.body;
 
   if (!email || !code) {
@@ -613,7 +617,7 @@ router.get('/me', asyncHandler(async (req: Request, res: Response) => {
  *                   type: string
  *                   example: Email gönderilemedi. Lütfen tekrar deneyin.
  */
-router.post('/forgot-password', asyncHandler(async (req: Request, res: Response) => {
+router.post('/forgot-password', verificationRateLimiter, asyncHandler(async (req: Request, res: Response) => {
   const { mail } = req.body;
 
   if (!mail) {
@@ -714,7 +718,7 @@ router.post('/forgot-password', asyncHandler(async (req: Request, res: Response)
  *                   type: string
  *                   example: Kod doğrulama sırasında bir hata oluştu
  */
-router.post('/verify-reset-code', asyncHandler(async (req: Request, res: Response) => {
+router.post('/verify-reset-code', verificationRateLimiter, asyncHandler(async (req: Request, res: Response) => {
   const { mail, code } = req.body;
 
   if (!mail || !code) {
@@ -821,7 +825,7 @@ router.post('/verify-reset-code', asyncHandler(async (req: Request, res: Respons
  *                   type: string
  *                   example: Şifre güncellenirken bir hata oluştu
  */
-router.post('/reset-password', asyncHandler(async (req: Request, res: Response) => {
+router.post('/reset-password', verificationRateLimiter, asyncHandler(async (req: Request, res: Response) => {
   const { email, password } = req.body;
 
   if (!email || !password) {

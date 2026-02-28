@@ -33,7 +33,6 @@ export class PushTokenService {
       }
 
       // User must exist (foreign key); avoid P2003 by checking first
-      console.log({userId})
       const prisma = getPrisma();
       const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
       if (!user) {

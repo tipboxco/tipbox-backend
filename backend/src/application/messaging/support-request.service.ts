@@ -224,24 +224,13 @@ export class SupportRequestService {
       let filteredRequests = supportRequests;
       if (options.search) {
         const searchLower = options.search.toLowerCase();
-        console.log('[Support Requests Service] Filtering with search:', searchLower);
-        console.log('[Support Requests Service] Total requests before filter:', supportRequests.length);
         filteredRequests = supportRequests.filter((req) => {
-          const matches = (
+          return (
             req.userName.toLowerCase().includes(searchLower) ||
             req.userTitle?.toLowerCase().includes(searchLower) ||
             req.requestDescription.toLowerCase().includes(searchLower)
           );
-          if (matches) {
-            console.log('[Support Requests Service] Match found:', {
-              userName: req.userName,
-              userTitle: req.userTitle,
-              descriptionPreview: req.requestDescription.substring(0, 50),
-            });
-          }
-          return matches;
         });
-        console.log('[Support Requests Service] Filtered requests count:', filteredRequests.length);
       }
 
       // Pagination uygula (search filtresinden sonra)
