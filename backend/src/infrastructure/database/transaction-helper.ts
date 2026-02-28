@@ -83,41 +83,42 @@ export async function withTransaction<T>(
       }
       
       return result;
-    } catch (error: any) {
-      lastError = error;
-      
+    } catch (error: unknown) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+
       // Prisma error codes
-      const isDeadlock = error.code === 'P2034';
-      const isTimeout = error.code === 'P2024';
-      const isConnectionError = error.code === 'P1001' || error.code === 'P1002';
-      
+      const prismaError = error as { code?: string; message?: string; stack?: string };
+      const isDeadlock = prismaError.code === 'P2034';
+      const isTimeout = prismaError.code === 'P2024';
+      const isConnectionError = prismaError.code === 'P1001' || prismaError.code === 'P1002';
+
       // Retry edilebilir hatalar
       const isRetriable = isDeadlock || isTimeout || isConnectionError;
-      
+
       if (isRetriable && attempt < maxRetries - 1) {
         const delay = Math.pow(2, attempt) * retryDelayMs;
-        
+
         logger.warn('Transaction failed, retrying', {
           attempt: attempt + 1,
           maxRetries,
-          errorCode: error.code,
-          errorMessage: error.message,
+          errorCode: prismaError.code,
+          errorMessage: prismaError.message,
           delayMs: delay,
         });
-        
+
         // Exponential backoff
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
-      
+
       // Retry edilemez hata veya max retry aşıldı
       logger.error('Transaction failed after all retries', {
         attempts: attempt + 1,
-        errorCode: error.code,
-        errorMessage: error.message,
-        stack: error.stack,
+        errorCode: prismaError.code,
+        errorMessage: prismaError.message,
+        stack: prismaError.stack,
       });
-      
+
       throw error;
     }
   }

@@ -542,12 +542,12 @@ router.post(
       
       // Profil tablosunda bannerUrl'i güncelle
       const existingProfile = await prisma.profile.findUnique({
-        where: { userId } as any,
+        where: { userId } as Parameters<typeof prisma.profile.findUnique>[0]['where'],
       });
-      
+
       if (existingProfile) {
         await prisma.profile.update({
-          where: { userId } as any,
+          where: { userId } as Parameters<typeof prisma.profile.update>[0]['where'],
           data: { bannerUrl: filePath },
         });
       } else {
@@ -558,7 +558,7 @@ router.post(
             displayName: 'Anonymous User',
             userName: null,
             bannerUrl: filePath,
-          } as any,
+          } as Parameters<typeof prisma.profile.create>[0]['data'],
         });
       }
       
@@ -1589,7 +1589,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     };
     return res.status(201).json(response);
   } catch (error: unknown) {
-    const code = (error as any).code;
+    const code = (error as { code?: string }).code;
     if (code === 'P2002' && 
         typeof error === 'object' && 
         error !== null && 
@@ -1807,7 +1807,7 @@ router.get('/avatars', asyncHandler(async (req: Request, res: Response) => {
  *                   type: string
  *                   example: Profil tamamlanırken bir hata oluştu
  */
-router.post('/setup-profile', upload.fields([{ name: 'Avatar', maxCount: 1 }, { name: 'Banner', maxCount: 1 }]), asyncHandler(async (req: Request & { files?: { [fieldname: string]: Express.Multer.File[] } }, res: Response) => {
+router.post('/setup-profile', upload.fields([{ name: 'Avatar', maxCount: 1 }, { name: 'Banner', maxCount: 1 }]), asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   
@@ -3987,7 +3987,7 @@ router.post('/settings/payment-methods', asyncHandler(async (req: Request<{}, {}
  *       401:
  *         description: Unauthorized
  */
-router.patch('/settings/payment-methods/:id', asyncHandler(async (req: Request<{ id: string }, {}, UpdatePaymentMethodRequest>, res: Response) => {
+router.patch('/settings/payment-methods/:id', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
@@ -4023,7 +4023,7 @@ router.patch('/settings/payment-methods/:id', asyncHandler(async (req: Request<{
  *       401:
  *         description: Unauthorized
  */
-router.delete('/settings/payment-methods/:id', asyncHandler(async (req: Request<{ id: string }>, res: Response) => {
+router.delete('/settings/payment-methods/:id', asyncHandler(async (req: Request, res: Response) => {
   const userPayload = req.user;
   const userId = userPayload?.id || userPayload?.userId || userPayload?.sub;
   if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });

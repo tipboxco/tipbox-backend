@@ -33,6 +33,21 @@ declare global {
       traceId?: string;
 
       /**
+       * Request start time - request-timing middleware tarafından eklenir
+       */
+      startTime?: number;
+
+      /**
+       * Cache hit/miss status - request-timing middleware tarafından eklenir
+       */
+      cacheHit?: boolean;
+
+      /**
+       * Multer file upload - multer middleware tarafından eklenir
+       */
+      file?: Express.Multer.File;
+
+      /**
        * Auth0 OIDC middleware (express-openid-connect)
        */
       oidc?: {
@@ -61,8 +76,9 @@ declare global {
        * Auth0 OIDC middleware methods
        */
       oidc?: {
-        login: (options?: { returnTo?: string }) => void;
+        login: (options?: { returnTo?: string; authorizationParams?: Record<string, unknown> }) => void;
         logout: (options?: { returnTo?: string }) => void;
+        callback: (options?: { redirectUri?: string }) => void;
       };
     }
   }

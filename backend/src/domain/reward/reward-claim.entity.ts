@@ -13,7 +13,7 @@ export interface RewardMetadata {
   eventId?: string;
   eventName?: string;
   description?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export class RewardClaim {

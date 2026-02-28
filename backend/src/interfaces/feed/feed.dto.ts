@@ -283,6 +283,7 @@ export interface BenchmarkProduct extends BaseProduct {
 
 export interface BenchmarkPost extends BasePost {
   contextData: ContextData;
+  products: BenchmarkProduct[];
   content: string;
 }
 

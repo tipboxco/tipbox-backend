@@ -596,7 +596,7 @@ router.post('/events',
         : JSON.stringify(req.body);
 
     // Parse payload first
-    let payload: any;
+    let payload: unknown;
     try {
       payload = JSON.parse(rawBody);
     } catch (error) {
@@ -1017,7 +1017,7 @@ router.get('/events/logs',
       blockNumber: log.blockNumber,
       transactionHash: log.transactionHash,
       eventName: log.eventName,
-      decodedLog: log.decodedLog,
+      decodedLog: log.decodedLog as Record<string, unknown>,
       timestamp: log.timestamp.toISOString(),
       transactionId: log.transactionId,
       walletId: log.walletId,
@@ -1092,7 +1092,7 @@ router.get('/events/by-hash/:transactionHash',
       blockNumber: log.blockNumber,
       transactionHash: log.transactionHash,
       eventName: log.eventName,
-      decodedLog: log.decodedLog,
+      decodedLog: log.decodedLog as Record<string, unknown>,
       timestamp: log.timestamp.toISOString(),
       transactionId: log.transactionId,
       walletId: log.walletId,
@@ -1147,7 +1147,7 @@ router.get('/events/by-wallet/:walletId',
       blockNumber: log.blockNumber,
       transactionHash: log.transactionHash,
       eventName: log.eventName,
-      decodedLog: log.decodedLog,
+      decodedLog: log.decodedLog as Record<string, unknown>,
       timestamp: log.timestamp.toISOString(),
       transactionId: log.transactionId,
       walletId: log.walletId,

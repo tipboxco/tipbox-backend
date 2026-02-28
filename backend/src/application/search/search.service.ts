@@ -29,7 +29,7 @@ export class SearchService {
       if (cached) return cached;
     }
 
-    const tasks: Array<Promise<any>> = [];
+    const tasks: Array<Promise<unknown[]>> = [];
 
     // Users
     if (activeTypes.includes('user')) {
@@ -272,36 +272,44 @@ export class SearchService {
       return resolveMediaUrl(path);
     };
 
-    const userData: SearchUserData[] = (users as any[]).map((u) => {
-      const rawAvatarUrl = u?.avatars?.[0]?.imageUrl || null;
+    const typedUsers = users as Array<Record<string, unknown>>;
+    const typedBrands = brands as Array<Record<string, unknown>>;
+    const typedProducts = products as Array<Record<string, unknown>>;
+
+    const userData: SearchUserData[] = typedUsers.map((u) => {
+      const avatars = u?.avatars as Array<{ imageUrl?: string }> | undefined;
+      const profile = u?.profile as { displayName?: string; userName?: string } | undefined;
+      const titles = u?.titles as Array<{ title?: string }> | undefined;
+      const rawAvatarUrl = avatars?.[0]?.imageUrl || null;
       const avatarPath = extractPath(rawAvatarUrl);
       return {
         id: String(u.id),
-        name: u?.profile?.displayName || u?.email || 'Anonymous',
+        name: profile?.displayName || String(u?.email || 'Anonymous'),
         avatar: buildFullUrl(avatarPath),
-        cosmetic: u?.titles?.[0]?.title || '', // fallback: last earned title or empty
+        cosmetic: titles?.[0]?.title || '', // fallback: last earned title or empty
       };
     });
 
-    const brandData: SearchBrandData[] = (brands as any[]).map((b) => {
-      const rawLogoUrl = b.logoUrl || null;
+    const brandData: SearchBrandData[] = typedBrands.map((b) => {
+      const rawLogoUrl = (b.logoUrl as string) || null;
       const logoPath = extractPath(rawLogoUrl);
       return {
         id: String(b.id),
-        name: b.name,
-        category: b.category || null,
+        name: String(b.name),
+        category: (b.category as string) || null,
         logo: buildFullUrl(logoPath),
       };
     });
 
-    const productData: SearchProductData[] = (products as any[]).map((p) => {
-      const rawImageUrl = p.imageUrl || null;
+    const productData: SearchProductData[] = typedProducts.map((p) => {
+      const rawImageUrl = (p.imageUrl as string) || null;
       const imagePath = extractPath(rawImageUrl);
+      const brand = p.brand as { name?: string } | undefined;
       return {
         id: String(p.id),
-        name: p.name,
-        model: p.brand?.name || '',
-        specs: p.description || '',
+        name: String(p.name),
+        model: brand?.name || '',
+        specs: String(p.description || ''),
         image: buildFullUrl(imagePath),
       };
     });

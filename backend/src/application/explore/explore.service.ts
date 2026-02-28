@@ -13,10 +13,120 @@ import {
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
 import { FeedItemType } from '../../domain/feed/feed-item-type.enum';
 import { ContextType } from '../../domain/content/context-type.enum';
-import { ContextData, ExperiencePost, ExperienceContent, ReviewProduct } from '../../interfaces/feed/feed.dto';
+import {
+  ContextData,
+  ExperiencePost,
+  ExperienceContent,
+  ReviewProduct,
+  BaseUser,
+  BaseStats,
+  BaseProduct,
+  BenchmarkProduct,
+  FeedItem,
+} from '../../interfaces/feed/feed.dto';
 import { PostService } from '../post/post.service';
 import { CatalogService } from '../catalog/catalog.service';
 import { BrandService } from '../brand/brand.service';
+import { getPostCounts } from '../../infrastructure/repositories/prisma-types.helper';
+
+/** Lightweight shape used by explore mapping helpers (product relation with optional group). */
+interface ExploreProductLike {
+  id: string;
+  name: string;
+  brand?: string | null;
+  imageUrl?: string | null;
+  group?: { name: string; subCategory?: { name: string; imageUrl?: string | null; mainCategory?: { name: string; imageUrl?: string | null } | null } | null; imageUrl?: string | null } | null;
+}
+
+/** Tag record from relations. */
+interface ExploreTagRecord {
+  tag: string;
+}
+
+/**
+ * Shape of a ContentPost with relations as used by explore mapping helpers.
+ */
+interface ExploreContentPost {
+  id: string;
+  userId: string;
+  type: ContentPostType;
+  title: string;
+  body: string;
+  mainCategoryId?: string | null;
+  subCategoryId?: string | null;
+  categoryId?: string | null;
+  productGroupId?: string | null;
+  productId?: string | null;
+  productStatus?: string | null;
+  isBoosted: boolean;
+  boostedUntil?: Date | null;
+  createdAt: Date;
+  likesCount?: number;
+  commentsCount?: number;
+  sharesCount?: number;
+  favoritesCount?: number;
+  viewsCount?: number;
+  user?: { id: string; profile?: { displayName?: string | null; userName?: string | null } | null } | null;
+  product?: ExploreProductLike | null;
+  productGroup?: { id: string; name: string; imageUrl?: string | null; subCategory?: { id: string; name: string; imageUrl?: string | null; mainCategory?: { id: string; name: string; imageUrl?: string | null } | null } | null } | null;
+  subCategory?: { id: string; name: string; imageUrl?: string | null; mainCategory?: { id: string; name: string; imageUrl?: string | null } | null } | null;
+  mainCategory?: { id: string; name: string; imageUrl?: string | null } | null;
+  comparison?: { product1Id: string; product2Id: string; comparisonSummary?: string | null; product1?: ExploreProductLike | null; product2?: ExploreProductLike | null; scores?: { scoreProduct1: number; scoreProduct2: number }[] } | null;
+  tags?: ExploreTagRecord[];
+  contentPostTags?: ExploreTagRecord[];
+  media?: { mediaUrl: string }[];
+  likes?: unknown[];
+  comments?: unknown[];
+  favorites?: unknown[];
+  question?: unknown;
+  tip?: unknown;
+}
+
+/** Shape of the base post object passed to explore mapping helpers. */
+interface ExploreBasePost {
+  id: string;
+  user: BaseUser;
+  stats: BaseStats;
+  createdAt: string;
+  contextType: ContextType;
+  source?: string;
+  isBoosted?: boolean;
+  boostedUntil?: string;
+}
+
+/** Shape used for parsed JSON content arrays in parseExperienceContent. */
+interface ExploreParsedContentItem {
+  title?: string;
+  content?: string;
+  rating?: number;
+}
+
+/** Search result item for the unified explore search. */
+interface ExploreSearchResultItem {
+  id: string;
+  type: 'post' | 'product' | 'brand';
+  title: string;
+  content?: string;
+  image?: string;
+  [key: string]: unknown;
+}
+
+/** Product search result item from CatalogService. */
+interface CatalogProductItem {
+  productId: string;
+  name: string;
+  image: string | null;
+  productGroupId: string;
+  subCategoryId: string;
+}
+
+/** Brand search result item from BrandService. */
+interface BrandSearchItem {
+  brandId: string;
+  name: string;
+  image: string | null;
+  categoryId: string;
+}
 
 export class ExploreService {
   private readonly prisma: ReturnType<typeof getPrisma>;
@@ -160,11 +270,12 @@ export class ExploreService {
     const posts = resultPosts.map((tp) => tp.post);
     const statsMap = new Map();
     posts.forEach((post) => {
+      const counts = getPostCounts(post);
       statsMap.set(post.id, {
-        likes: (post as any).likesCount || 0,
-        comments: (post as any).commentsCount || 0,
-        shares: (post as any).sharesCount || 0,
-        bookmarks: (post as any).favoritesCount || 0,
+        likes: counts.likesCount,
+        comments: counts.commentsCount,
+        shares: counts.sharesCount,
+        bookmarks: counts.favoritesCount,
       });
     });
     // Batch fetch images from PostMedia (orderIndex'e göre sıralı)
@@ -215,21 +326,22 @@ export class ExploreService {
         const rawImages = postMediaMap.get(post.id) || [];
         const images = rawImages.map((img: string) => resolveMediaUrl(img) || img);
 
-        switch (post.type) {
+        const typedPost = post as unknown as ExploreContentPost;
+        switch (post.type as ContentPostType) {
           case ContentPostType.FREE:
-            return this.mapToPostItem(post, basePost, FeedItemType.POST, images);
+            return this.mapToPostItem(typedPost, basePost, FeedItemType.POST, images);
           case ContentPostType.COMPARE:
-            return this.mapToBenchmarkItem(post, basePost, ownedProductIds, images);
+            return this.mapToBenchmarkItem(typedPost, basePost, ownedProductIds, images);
           case ContentPostType.QUESTION:
-            return this.mapToPostItem(post, basePost, FeedItemType.QUESTION, images);
+            return this.mapToPostItem(typedPost, basePost, FeedItemType.QUESTION, images);
           case ContentPostType.TIPS:
-            return this.mapToTipsAndTricksItem(post, basePost, images);
+            return this.mapToTipsAndTricksItem(typedPost, basePost, images);
           case ContentPostType.EXPERIENCE:
-            return this.mapToExperienceItem(post, basePost, FeedItemType.EXPERIENCE, images, ownedProductIds);
+            return this.mapToExperienceItem(typedPost, basePost, FeedItemType.EXPERIENCE, images, ownedProductIds);
           case ContentPostType.UPDATE:
-            return this.mapToExperienceItem(post, basePost, FeedItemType.UPDATE, images, ownedProductIds);
+            return this.mapToExperienceItem(typedPost, basePost, FeedItemType.UPDATE, images, ownedProductIds);
           default:
-            return this.mapToPostItem(post, basePost, FeedItemType.POST, images);
+            return this.mapToPostItem(typedPost, basePost, FeedItemType.POST, images);
         }
       })
     );
@@ -385,7 +497,7 @@ export class ExploreService {
         return {
           eventId: event.id,
           eventType: 'SURVEY',
-          image: resolveMediaUrl((event as any).imageUrl) || null,
+          image: resolveMediaUrl(event.imageUrl) || null,
           title: event.title,
           description: event.description || '',
           startDate: event.startDate.toISOString(),
@@ -466,7 +578,7 @@ export class ExploreService {
     const response = {
       items: resultBrands.map((brand) => ({
         brandId: brand.id,
-        images: resolveMediaUrl(brand.logoUrl) || null,
+        images: resolveMediaUrl(brand.logoUrl) ? [resolveMediaUrl(brand.logoUrl) as string] : [],
         title: brand.name,
         description: brand.description || '',
       })),
@@ -550,7 +662,7 @@ export class ExploreService {
     const response = {
       items: resultProducts.map((product) => ({
         productId: product.id,
-        images: resolveMediaUrl(productImageMap.get(product.id) || product.imageUrl) || null,
+        images: (() => { const url = resolveMediaUrl(productImageMap.get(product.id) || product.imageUrl); return url ? [url] : []; })(),
         title: product.name,
       })),
       pagination: {
@@ -587,7 +699,7 @@ export class ExploreService {
     };
   }
 
-  private getProductBase(product: any) {
+  private getProductBase(product: ExploreProductLike | null | undefined): BaseProduct | null {
     if (!product) return null;
     return {
       id: String(product.id),
@@ -597,7 +709,7 @@ export class ExploreService {
     };
   }
 
-  private mapContextType(post: any): ContextType {
+  private mapContextType(post: Pick<ExploreContentPost, 'productId' | 'productGroupId'>): ContextType {
     if (post?.productId) {
       return 'product' as ContextType;
     }
@@ -607,7 +719,7 @@ export class ExploreService {
     return 'sub_category' as ContextType;
   }
 
-  private buildContextData(post: any): ContextData {
+  private buildContextData(post: ExploreContentPost): ContextData {
     const contextType = this.mapContextType(post);
 
     if (contextType === ContextType.PRODUCT && post.product) {
@@ -673,7 +785,7 @@ export class ExploreService {
     };
   }
 
-  private mapToPostItem(post: any, basePost: any, type: any, images: string[] = []) {
+  private mapToPostItem(post: ExploreContentPost, basePost: ExploreBasePost, type: FeedItemType.POST | FeedItemType.QUESTION, images: string[] = []): FeedItem {
     const postData = {
       ...basePost,
       type,
@@ -688,7 +800,7 @@ export class ExploreService {
     };
   }
 
-  private mapToBenchmarkItem(post: any, basePost: any, ownedProductIds: Set<string>, images: string[] = []) {
+  private mapToBenchmarkItem(post: ExploreContentPost, basePost: ExploreBasePost, ownedProductIds: Set<string>, images: string[] = []): FeedItem {
     const comparison = post.comparison;
     if (!comparison) {
       return this.mapToPostItem(post, basePost, FeedItemType.POST, images);
@@ -697,7 +809,7 @@ export class ExploreService {
     const product1 = this.getProductBase(comparison.product1);
     const product2 = this.getProductBase(comparison.product2);
 
-    const products: any[] = [];
+    const products: BenchmarkProduct[] = [];
     if (product1) {
       products.push({
         ...product1,
@@ -726,7 +838,7 @@ export class ExploreService {
     };
   }
 
-  private mapToTipsAndTricksItem(post: any, basePost: any, images: string[] = []) {
+  private mapToTipsAndTricksItem(post: ExploreContentPost, basePost: ExploreBasePost, images: string[] = []): FeedItem {
     const tag = post.tags?.[0]?.tag || post.contentPostTags?.[0]?.tag || '';
 
     const tipsData = {
@@ -744,8 +856,8 @@ export class ExploreService {
   }
 
   private mapToExperienceItem(
-    post: any,
-    basePost: any,
+    post: ExploreContentPost,
+    basePost: ExploreBasePost,
     type: FeedItemType.EXPERIENCE | FeedItemType.UPDATE,
     images: string[] = [],
     ownedProductIds?: Set<string>
@@ -768,7 +880,7 @@ export class ExploreService {
     const experienceContent: ExperienceContent[] = this.parseExperienceContent(post.body);
 
     // Get tags
-    const tags = post.tags?.map((t: any) => t.tag) || post.contentPostTags?.map((t: any) => t.tag) || [];
+    const tags = post.tags?.map((t: ExploreTagRecord) => t.tag) || post.contentPostTags?.map((t: ExploreTagRecord) => t.tag) || [];
 
     if (type === FeedItemType.UPDATE) {
       const relatedPost = {
@@ -803,7 +915,6 @@ export class ExploreService {
     const statusLabel = post.productStatus === 'own' ? 'I owned' : post.productStatus === 'tried' ? 'I tried' : null;
     const experienceData: ExperiencePost = {
       ...basePost,
-      product,
       content: contentString,
       experienceContent,
       tags,
@@ -836,7 +947,7 @@ export class ExploreService {
       const parsed = JSON.parse(body);
       
       // Handle case where parsed is an object with content array
-      let contentArray: any[] | undefined = undefined;
+      let contentArray: ExploreParsedContentItem[] | undefined = undefined;
       if (parsed && Array.isArray(parsed.content)) {
         contentArray = parsed.content;
       } else if (Array.isArray(parsed)) {
@@ -986,14 +1097,7 @@ export class ExploreService {
     query: string,
     options?: { type?: 'hottest' | 'news'; cursor?: string; limit?: number }
   ): Promise<{
-    items: Array<{
-      id: string;
-      type: 'post' | 'product' | 'brand';
-      title: string;
-      content?: string;
-      image?: string;
-      [key: string]: any;
-    }>;
+    items: ExploreSearchResultItem[];
     pagination: {
       cursor?: string;
       hasMore: boolean;
@@ -1018,14 +1122,7 @@ export class ExploreService {
 
     try {
       const cached = await this.cacheService.get<{
-        items: Array<{
-          id: string;
-          type: 'post' | 'product' | 'brand';
-          title: string;
-          content?: string;
-          image?: string;
-          [key: string]: any;
-        }>;
+        items: ExploreSearchResultItem[];
         pagination: {
           cursor?: string;
           hasMore: boolean;
@@ -1040,14 +1137,7 @@ export class ExploreService {
       logger.warn({ message: 'Cache error', error: error instanceof Error ? error.message : String(error) });
     }
 
-    const items: Array<{
-      id: string;
-      type: 'post' | 'product' | 'brand';
-      title: string;
-      content?: string;
-      image?: string;
-      [key: string]: any;
-    }> = [];
+    const items: ExploreSearchResultItem[] = [];
 
     // Search posts
     try {
@@ -1056,16 +1146,13 @@ export class ExploreService {
         cursor: options?.cursor,
       });
 
-      postResults.items.forEach((item: any) => {
-        // PostService.searchPosts returns FeedItem format: { type, data }
-        const postData = item.data || item;
+      postResults.items.forEach((item) => {
+        // PostService.searchPosts returns ContentPost entities
         items.push({
-          id: postData.id || item.id,
+          id: item.id,
           type: 'post',
-          title: postData.title || postData.content?.substring(0, 100) || '',
-          content: postData.content || postData.body || '',
-          image: postData.images?.[0] || null,
-          ...item,
+          title: item.title || item.body?.substring(0, 100) || '',
+          content: item.body || '',
         });
       });
     } catch (error) {
@@ -1080,15 +1167,14 @@ export class ExploreService {
       });
 
       productResults.items.forEach((group) => {
-        group.products.forEach((product: any) => {
+        group.products.forEach((product) => {
           items.push({
             id: product.productId,
             type: 'product',
             title: product.name,
-            image: product.image,
+            image: product.image ?? undefined,
             productGroupId: product.productGroupId,
             subCategoryId: product.subCategoryId,
-            ...product,
           });
         });
       });
@@ -1104,14 +1190,13 @@ export class ExploreService {
       });
 
       brandResults.items.forEach((category) => {
-        category.brands.forEach((brand: any) => {
+        category.brands.forEach((brand) => {
           items.push({
             id: brand.brandId,
             type: 'brand',
             title: brand.name,
-            image: brand.image,
+            image: brand.image ?? undefined,
             categoryId: brand.categoryId,
-            ...brand,
           });
         });
       });

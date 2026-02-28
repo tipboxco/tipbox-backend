@@ -34,6 +34,7 @@ import {
 import { CONTRACT_ADDRESSES } from '../../infrastructure/config/web3-config/contracts.config';
 import { CHAIN_CONFIG } from '../../infrastructure/config/web3-config/chain.config';
 import { TransactionActionType } from '../../domain/transaction/transaction-action-type.enum';
+import { TransactionActionType as PrismaTransactionActionType } from '@prisma/client';
 import { TransactionStatus } from '../../domain/transaction/transaction-status.enum';
 import logger from '../../infrastructure/logger/logger';
 
@@ -171,7 +172,7 @@ export class AlchemyWebhookService {
           where: {
             walletId: toWallet.id,
             status: TransactionStatus.PENDING,
-            actionType: { in: [TransactionActionType.TIP_RECEIVE, TransactionActionType.DEPOSIT] },
+            actionType: { in: [TransactionActionType.TIP_RECEIVE, TransactionActionType.DEPOSIT as string as PrismaTransactionActionType] },
           },
           orderBy: { createdAt: 'desc' },
           select: { id: true },
@@ -185,7 +186,7 @@ export class AlchemyWebhookService {
           const depositTx = await prisma.transaction.create({
             data: {
               walletId: toWallet.id,
-              actionType: TransactionActionType.DEPOSIT,
+              actionType: TransactionActionType.DEPOSIT as string as PrismaTransactionActionType,
               status: TransactionStatus.CONFIRMED,
               amount,
               fromAddress: transfer.from,
@@ -252,7 +253,7 @@ export class AlchemyWebhookService {
           where: {
             walletId: fromWallet.id,
             status: TransactionStatus.PENDING,
-            actionType: { in: [TransactionActionType.TIP_SEND, TransactionActionType.WITHDRAW] },
+            actionType: { in: [TransactionActionType.TIP_SEND, TransactionActionType.WITHDRAW as string as PrismaTransactionActionType] },
           },
           orderBy: { createdAt: 'desc' },
           select: { id: true },
@@ -264,7 +265,7 @@ export class AlchemyWebhookService {
           await prisma.transaction.create({
             data: {
               walletId: fromWallet.id,
-              actionType: TransactionActionType.WITHDRAW,
+              actionType: TransactionActionType.WITHDRAW as string as PrismaTransactionActionType,
               status: TransactionStatus.CONFIRMED,
               amount,
               fromAddress: transfer.from,
@@ -345,7 +346,7 @@ export class AlchemyWebhookService {
       topics: [],
       data: null,
       timestamp: blockTimestamp,
-      rawPayload: { source: 'alchemy_webhook', transfer, blockNumber: block.number },
+      rawPayload: { source: 'alchemy_webhook', transfer: transfer as unknown as Record<string, unknown>, blockNumber: block.number ?? null },
       walletId: walletId ?? null,
       processed: true,
     });

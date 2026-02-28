@@ -5,7 +5,7 @@ export interface ErrorResponse {
   error: {
     code: ErrorCode | string;
     message: string;
-    details?: any;
+    details?: unknown;
     traceId?: string;
     timestamp: string;
     path: string;
@@ -17,6 +17,6 @@ export interface ErrorContext {
   userId?: string;
   path?: string;
   method?: string;
-  details?: any;
+  details?: unknown;
 }
 

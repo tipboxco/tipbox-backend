@@ -16,7 +16,19 @@ import { TransactionService } from '../transaction/transaction.service';
 import { WalletService } from '../wallet/wallet.service';
 import { TransactionStatus } from '../../domain/transaction/transaction-status.enum';
 import { TransactionActionType } from '../../domain/transaction/transaction-action-type.enum';
-import { ThirdwebWebhookStatus, ThirdwebOnchainStatus } from '@prisma/client';
+import { TransactionActionType as PrismaTransactionActionType } from '@prisma/client';
+// Local enum definitions matching Prisma schema (Prisma client may not have regenerated yet)
+enum ThirdwebWebhookStatus {
+  sent = 'sent',
+  mined = 'mined',
+  errored = 'errored',
+  cancelled = 'cancelled',
+}
+
+enum ThirdwebOnchainStatus {
+  success = 'success',
+  reverted = 'reverted',
+}
 import {
   ThirdwebWebhookPayload,
   WebhookProcessResult,
@@ -197,7 +209,7 @@ export class ThirdwebWebhookService {
           const depositTx = await prisma.transaction.create({
             data: {
               walletId: toWallet.id,
-              actionType: TransactionActionType.DEPOSIT,
+              actionType: TransactionActionType.DEPOSIT as string as PrismaTransactionActionType,
               status,
               amount: null,
               fromAddress: payload.fromAddress,
@@ -230,7 +242,7 @@ export class ThirdwebWebhookService {
           const withdrawTx = await prisma.transaction.create({
             data: {
               walletId: fromWallet.id,
-              actionType: TransactionActionType.WITHDRAW,
+              actionType: TransactionActionType.WITHDRAW as string as PrismaTransactionActionType,
               status,
               amount: null,
               fromAddress: payload.fromAddress,
@@ -310,7 +322,7 @@ export class ThirdwebWebhookService {
         functionName: payload.functionName,
         functionArgs: payload.functionArgs,
         errorMessage: payload.errorMessage,
-        rawPayload: payload as any,
+        rawPayload: JSON.parse(JSON.stringify(payload)),
         transactionId: transactionId
       });
 
@@ -593,13 +605,13 @@ export class ThirdwebWebhookService {
   /**
    * Mevcut transaction metadata'sını getirir
    */
-  private async getExistingMetadata(transactionId: string): Promise<Record<string, any>> {
+  private async getExistingMetadata(transactionId: string): Promise<Record<string, unknown>> {
     const prisma = getPrisma();
     const tx = await prisma.transaction.findUnique({
       where: { id: transactionId },
       select: { metadata: true }
     });
-    return (tx?.metadata as Record<string, any>) || {};
+    return (tx?.metadata as Record<string, unknown>) || {};
   }
 
   // ==========================================================================

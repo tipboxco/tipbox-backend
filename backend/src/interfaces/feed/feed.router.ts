@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { FeedService } from '../../application/feed/feed.service';
 import { asyncHandler } from '../../infrastructure/errors/async-handler';
 import { FeedFilterOptions } from './feed.dto';
+import { ContextType } from '../../domain/content/context-type.enum';
 
 const router = Router();
 const feedService = new FeedService();
@@ -124,7 +125,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const feed = await feedService.getUserFeed(String(userId), {
     cursor,
     ...(typeof limitParam === 'number' ? { limit: limitParam } : {}),
-    ...(contextType && contextId ? { contextType: contextType as any, contextId } : {}),
+    ...(contextType && contextId ? { contextType: contextType as ContextType, contextId } : {}),
   });
   return res.json(feed);
 }));
@@ -326,13 +327,13 @@ router.get('/filtered', asyncHandler(async (req: Request, res: Response) => {
   if (req.query.contextType) {
     const contextTypeValue = req.query.contextType;
     // Boolean true ise default context type kullan (sub_category)
-    if (contextTypeValue === 'true' || contextTypeValue === true) {
-      filters.contextType = 'sub_category' as any;
+    if (contextTypeValue === 'true') {
+      filters.contextType = ContextType.SUB_CATEGORY;
     } else if (typeof contextTypeValue === 'string') {
       // Enum değerlerini kontrol et
       const validContextTypes = ['sub_category', 'product_group', 'product'];
       if (validContextTypes.includes(contextTypeValue)) {
-        filters.contextType = contextTypeValue as any;
+        filters.contextType = contextTypeValue as ContextType;
       }
     }
   }
@@ -582,7 +583,7 @@ router.get('/source-counts', asyncHandler(async (req: Request, res: Response) =>
   }
 
   const counts = await feedService.getFeedSourceCounts(String(userId));
-  res.json({ counts });
+  return res.json({ counts });
 }));
 
 export default router;

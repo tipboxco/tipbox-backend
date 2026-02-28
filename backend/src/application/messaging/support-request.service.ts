@@ -94,7 +94,7 @@ export class SupportRequestService {
             { userOneId: userIdStr },
             { userTwoId: userIdStr },
           ],
-        } as any,
+        },
         select: { id: true, isActive: true, userOneId: true, userTwoId: true },
       });
 
@@ -103,7 +103,7 @@ export class SupportRequestService {
       const threadMap = new Map<string, { threadId: string; isActive: boolean }>();
       for (const request of requests) {
         // Type assertion: Prisma type'ında threadId tanımlı olmayabilir
-        const requestThreadId = (request as any).threadId as string | null | undefined;
+        const requestThreadId = request.threadId;
         
         // Önce request'in kendi threadId'sini kontrol et
         // Pending request'lerde threadId null olmalı, bu durumda eşleştirme yapma
@@ -196,7 +196,7 @@ export class SupportRequestService {
 
         // ThreadId'yi belirle: Önce request'in kendi threadId'sini kontrol et, sonra threadMap'i kontrol et
         // PENDING durumunda request.threadId null olmalı, bu durumda threadInfo da null olacak
-        const requestThreadId = (request as any).threadId as string | null | undefined;
+        const requestThreadId = request.threadId;
         let finalThreadId: string | null = null;
         if (requestThreadId) {
           // Request'in kendi threadId'si varsa onu kullan
@@ -281,7 +281,7 @@ export class SupportRequestService {
           { userOneId: senderId, userTwoId: payload.recipientUserId },
           { userOneId: payload.recipientUserId, userTwoId: senderId },
         ],
-      } as any,
+      },
     });
 
     let dmThreadId: string | null = null;
@@ -691,7 +691,7 @@ export class SupportRequestService {
     const isFromUser = request.belongsToSender(userId);
     
     // ThreadId'yi koru (completed durumunda da threadId korunmalı - mesaj geçmişi görüntülenebilmeli)
-    const currentThreadId = (request as any).threadId as string | null | undefined;
+    const currentThreadId = request.threadId;
     
     const updateData: {
       fromUserRating?: number | null;
@@ -796,7 +796,7 @@ export class SupportRequestService {
     const now = new Date();
     
     // ThreadId'yi koru (completed durumunda da threadId korunmalı - mesaj geçmişi görüntülenebilmeli)
-    const currentThreadId = (request as any).threadId as string | null | undefined;
+    const currentThreadId = request.threadId;
     
     const updateData: {
       fromUserRating?: number | null;
@@ -862,7 +862,7 @@ export class SupportRequestService {
       // Tüm kullanıcıların request'lerini almak için Prisma'yı direkt kullanıyoruz
       const awaitingRequests = await this.prisma.dMRequest.findMany({
         where: {
-          status: DMRequestStatus.AWAITING_COMPLETION as any,
+          status: 'AWAITING_COMPLETION',
           description: { not: null }, // Support requests only
         },
         include: {
@@ -892,15 +892,15 @@ export class SupportRequestService {
       let completedCount = 0;
 
       for (const prismaRequest of awaitingRequests) {
-        const request = this.dmRequestRepo.toDomain(prismaRequest as any);
+        const request = this.dmRequestRepo.toDomain(prismaRequest as unknown as Parameters<typeof this.dmRequestRepo.toDomain>[0]);
         if (!request) continue;
 
         // Sadece AWAITING_COMPLETION durumundaki request'ler
         if (request.status !== DMRequestStatus.AWAITING_COMPLETION) continue;
 
         // Prisma request'inden closed timestamps'leri al (domain entity'de henüz güncel olmayabilir)
-        const closedByFromUserAt = (prismaRequest as any).closedByFromUserAt as Date | null;
-        const closedByToUserAt = (prismaRequest as any).closedByToUserAt as Date | null;
+        const closedByFromUserAt = prismaRequest.closedByFromUserAt;
+        const closedByToUserAt = prismaRequest.closedByToUserAt;
 
         // Hangi kullanıcı close yaptı ve ne zaman?
         let closedTimestamp: Date | null = null;
@@ -929,7 +929,7 @@ export class SupportRequestService {
           const isFromUser = closedByUserId === request.fromUserId;
           
           // ThreadId'yi koru (completed durumunda da threadId korunmalı - mesaj geçmişi görüntülenebilmeli)
-          const currentThreadId = (prismaRequest as any).threadId as string | null | undefined;
+          const currentThreadId = prismaRequest.threadId;
           
           const updateData: {
             fromUserRating?: number | null;
@@ -981,7 +981,7 @@ export class SupportRequestService {
       if (completedCount > 0) {
         logger.info(`Auto-completed ${completedCount} support request(s) after 1 day`);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('Error in autoCompleteAwaitingRequests:', error);
     }
   }
@@ -1027,7 +1027,7 @@ export class SupportRequestService {
     });
 
     // ThreadId'yi al (mesaj geçmişi görünsün diye korunacak)
-    const requestThreadId = (request as any).threadId as string | null | undefined;
+    const requestThreadId = request.threadId;
 
     // Thread varsa kapat (isActive = false) - mesaj geçmişi görünsün ama yeni mesaj gönderilemesin
     if (requestThreadId) {

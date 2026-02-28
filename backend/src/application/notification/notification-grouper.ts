@@ -1,5 +1,47 @@
 import { NotificationType } from '../../domain/notification/notification-type.enum';
 
+/** Notification data payload - flexible key-value pairs from DB JSON column */
+type NotificationData = Record<string, string | number | boolean | null | undefined>;
+
+/** Safely extract a string value from NotificationData */
+function dataStr(data: NotificationData | undefined, key: string): string | undefined {
+  const val = data?.[key];
+  return typeof val === 'string' ? val : undefined;
+}
+
+/** Safely extract a string-or-null value from NotificationData (for nullable fields) */
+function dataStrNull(data: NotificationData | undefined, key: string): string | null {
+  const val = data?.[key];
+  return typeof val === 'string' ? val : null;
+}
+
+/** Safely extract a number-or-null value from NotificationData */
+function dataNum(data: NotificationData | undefined, key: string): number | null {
+  const val = data?.[key];
+  return typeof val === 'number' ? val : null;
+}
+
+/** Raw notification input from DB/API */
+interface RawNotification {
+  id: string;
+  type: string;
+  userId?: string;
+  username?: string | null;
+  avatar?: string | null;
+  title?: string;
+  message?: string;
+  read?: boolean;
+  createdAt: string | Date;
+  data?: NotificationData;
+  senderUserId?: string;
+  senderUsername?: string | null;
+  recipientUserId?: string;
+  recipientUsername?: string | null;
+  badgeUrl?: string | null;
+  badgeName?: string | null;
+  imageUrl?: string | null;
+}
+
 /**
  * Gruplanabilir bildirim tipleri
  * Aynı postId ve type'a sahip bildirimler 1 dakika içinde gruplanabilir
@@ -44,7 +86,7 @@ export interface GroupedNotification {
   // Diğer alanlar (title, message, data vb.)
   title?: string;
   message?: string;
-  data?: any;
+  data?: NotificationData;
 }
 
 export interface UngroupedNotification {
@@ -77,7 +119,7 @@ export interface UngroupedNotification {
   read: boolean;
   title?: string;
   message?: string;
-  data?: any;
+  data?: NotificationData;
 }
 
 export type ProcessedNotification = GroupedNotification | UngroupedNotification;
@@ -87,15 +129,15 @@ export type ProcessedNotification = GroupedNotification | UngroupedNotification;
  * Aynı postId + type'a sahip bildirimler 1 dakika içinde gruplanır
  */
 export function groupNotifications(
-  notifications: any[]
+  notifications: RawNotification[],
 ): ProcessedNotification[] {
   if (notifications.length === 0) {
     return [];
   }
 
   // Gruplanabilir bildirimleri ayır
-  const groupableNotifications: any[] = [];
-  const ungroupableNotifications: any[] = [];
+  const groupableNotifications: RawNotification[] = [];
+  const ungroupableNotifications: RawNotification[] = [];
 
   notifications.forEach((notif) => {
     const notifType = notif.type as NotificationType;
@@ -116,15 +158,20 @@ export function groupNotifications(
       id: notif.id,
       type: notifType,
       // isGrouped alanı eklenmez - sadece gruplanabilir bildirimlerde olur
-      userId: notif.userId || notif.data?.likerId || notif.data?.commenterId || notif.data?.userId || undefined,
+      userId:
+        notif.userId ||
+        dataStr(notif.data, 'likerId') ||
+        dataStr(notif.data, 'commenterId') ||
+        dataStr(notif.data, 'userId') ||
+        undefined,
       username: notif.username || null,
       avatar: notif.avatar || null,
-      postId: notif.data?.postId,
-      commentId: notif.data?.commentId,
-      postContent: notif.data?.postContent || null,
-      postType: notif.data?.postType || null,
-      description: notif.data?.description || null,
-      imageUrl: notif.data?.imageUrl || null,
+      postId: dataStr(notif.data, 'postId'),
+      commentId: dataStr(notif.data, 'commentId'),
+      postContent: dataStrNull(notif.data, 'postContent'),
+      postType: dataStrNull(notif.data, 'postType'),
+      description: dataStrNull(notif.data, 'description'),
+      imageUrl: dataStrNull(notif.data, 'imageUrl'),
       createdAt: new Date(notif.createdAt),
       read: notif.read || false,
       title: notif.title,
@@ -134,17 +181,17 @@ export function groupNotifications(
 
     // EVENT_STARTED için sadece eventId, eventName ve imageUrl (user bilgileri yok - event kazanan kullanıcıya gidiyor)
     if (notifType === NotificationType.EVENT_STARTED) {
-      return {
+      const result: UngroupedNotification = {
         id: notif.id,
         type: notifType,
         title: notif.title,
         message: notif.message,
         data: {
-          eventId: notif.data?.eventId,
-          eventName: notif.data?.eventName,
-          imageUrl: notif.data?.imageUrl || null,
+          eventId: dataStr(notif.data, 'eventId'),
+          eventName: dataStr(notif.data, 'eventName'),
+          imageUrl: dataStrNull(notif.data, 'imageUrl'),
         },
-        imageUrl: notif.data?.imageUrl || null, // Root seviyede de olabilir
+        imageUrl: dataStrNull(notif.data, 'imageUrl'), // Root seviyede de olabilir
         createdAt: new Date(notif.createdAt),
         read: notif.read || false,
         // Tüm user ve post ile ilgili alanları kaldır (event zaten kazanan kullanıcıya gidiyor)
@@ -157,17 +204,19 @@ export function groupNotifications(
         postType: undefined,
         description: undefined,
       };
+      return result;
     }
 
     // NEW_BADGE için sadece badgeUrl ve badgeName root seviyede (user bilgileri yok - badge kazanan kullanıcıya gidiyor)
     if (notifType === NotificationType.NEW_BADGE) {
-      return {
+      const result: UngroupedNotification = {
         id: notif.id,
         type: notifType,
         title: notif.title,
         message: notif.message,
-        badgeUrl: notif.badgeUrl || notif.data?.imageUrl || notif.imageUrl || null,
-        badgeName: notif.badgeName || notif.data?.badgeName || null,
+        badgeUrl:
+          notif.badgeUrl || dataStrNull(notif.data, 'imageUrl') || notif.imageUrl || null,
+        badgeName: notif.badgeName || dataStrNull(notif.data, 'badgeName') || null,
         createdAt: new Date(notif.createdAt),
         read: notif.read || false,
         // Tüm user ve post ile ilgili alanları kaldır (badge zaten kazanan kullanıcıya gidiyor)
@@ -183,15 +232,16 @@ export function groupNotifications(
         // Data objesi kaldırıldı
         data: undefined,
       };
+      return result;
     }
 
     // DM_REQUEST_RECEIVED için özel işlem: sadece userId, avatar, username (data objesi yok)
     if (notifType === NotificationType.DM_REQUEST_RECEIVED) {
-      return {
+      const result: UngroupedNotification = {
         id: notif.id,
         type: notifType,
-        userId: notif.userId || notif.data?.userId || undefined,
-        username: notif.username || notif.data?.username || null,
+        userId: notif.userId || dataStr(notif.data, 'userId'),
+        username: notif.username || dataStrNull(notif.data, 'username'),
         avatar: notif.avatar || null,
         createdAt: new Date(notif.createdAt),
         read: notif.read || false,
@@ -207,6 +257,7 @@ export function groupNotifications(
         // Data objesi kaldırıldı
         data: undefined,
       };
+      return result;
     }
 
     // Mesajlaşma bildirimleri için (DM_REQUEST_ACCEPTED, DM_REQUEST_DECLINED, SUPPORT_REQUEST_ACCEPTED)
@@ -231,55 +282,68 @@ export function groupNotifications(
 
     // TIPS_RECEIVED: gönderenin (sender) avatar'ı, senderUserId, senderUsername, amount
     if (notifType === NotificationType.TIPS_RECEIVED) {
-      return {
+      const result: UngroupedNotification = {
         id: notif.id,
         type: notifType,
         avatar: notif.avatar || null, // Gönderenin (tip atan) avatar'ı
-        senderUserId: notif.senderUserId || notif.data?.senderUserId || notif.data?.senderId || undefined,
-        senderUsername: notif.senderUsername || notif.data?.senderUsername || null,
-        amount: notif.data?.amount ?? null,
-        transactionId: notif.data?.transactionId ?? null,
+        senderUserId:
+          notif.senderUserId ||
+          dataStr(notif.data, 'senderUserId') ||
+          dataStr(notif.data, 'senderId') ||
+          undefined,
+        senderUsername:
+          notif.senderUsername || dataStrNull(notif.data, 'senderUsername') || null,
+        amount: dataNum(notif.data, 'amount'),
+        transactionId: dataStrNull(notif.data, 'transactionId'),
         createdAt: new Date(notif.createdAt),
         read: notif.read || false,
         title: notif.title,
         message: notif.message,
       };
+      return result;
     }
 
     // TIPS_SENT: gönderenin avatar'ı, recipientUserId, recipientUsername, amount
     if (notifType === NotificationType.TIPS_SENT) {
-      return {
+      const result: UngroupedNotification = {
         id: notif.id,
         type: notifType,
         avatar: notif.avatar || null, // Gönderenin (bildirimi alan kullanıcının) avatar'ı
-        recipientUserId: notif.recipientUserId || notif.data?.recipientUserId || notif.data?.recipientId || undefined,
-        recipientUsername: notif.recipientUsername || notif.data?.recipientUsername || null,
-        amount: notif.data?.amount ?? null,
-        transactionId: notif.data?.transactionId ?? null,
+        recipientUserId:
+          notif.recipientUserId ||
+          dataStr(notif.data, 'recipientUserId') ||
+          dataStr(notif.data, 'recipientId') ||
+          undefined,
+        recipientUsername:
+          notif.recipientUsername || dataStrNull(notif.data, 'recipientUsername') || null,
+        amount: dataNum(notif.data, 'amount'),
+        transactionId: dataStrNull(notif.data, 'transactionId'),
         createdAt: new Date(notif.createdAt),
         read: notif.read || false,
         title: notif.title,
         message: notif.message,
       };
+      return result;
     }
 
     // TRANSACTION_CONFIRMED (DEPOSIT vb.): amount, actionType, transactionId, fromAddress, sender, avatar
     if (notifType === NotificationType.TRANSACTION_CONFIRMED) {
-      return {
+      const result: UngroupedNotification = {
         id: notif.id,
         type: notifType,
         avatar: notif.avatar || null, // Gönderen (from) avatar'ı; external ise default
-        amount: notif.data?.amount ?? null,
-        actionType: notif.data?.actionType ?? null,
-        transactionId: notif.data?.transactionId ?? null,
-        fromAddress: notif.data?.fromAddress ?? null,
-        senderUserId: notif.data?.senderUserId ?? undefined,
-        senderUsername: notif.data?.senderUsername ?? null,
+        amount: dataNum(notif.data, 'amount'),
+        actionType: dataStrNull(notif.data, 'actionType'),
+        transactionId: dataStrNull(notif.data, 'transactionId'),
+        fromAddress: dataStrNull(notif.data, 'fromAddress'),
+        senderUserId: dataStr(notif.data, 'senderUserId'),
+        senderUsername: dataStrNull(notif.data, 'senderUsername'),
         createdAt: new Date(notif.createdAt),
         read: notif.read || false,
         title: notif.title,
         message: notif.message,
       };
+      return result;
     }
 
     return baseNotification;
@@ -299,25 +363,27 @@ export function groupNotifications(
 /**
  * Bildirimleri postId ve type'a göre gruplar
  */
-function groupNotificationsByPostAndType(notifications: any[]): GroupedNotification[] {
+function groupNotificationsByPostAndType(
+  notifications: RawNotification[],
+): ProcessedNotification[] {
   if (notifications.length === 0) {
     return [];
   }
 
   // Grupları oluştur: key = `${postId}_${type}`
-  const groups = new Map<string, any[]>();
+  const groups = new Map<string, RawNotification[]>();
 
   notifications.forEach((notif) => {
-    const postId = notif.data?.postId;
+    const postId = dataStr(notif.data, 'postId');
     const type = notif.type;
-    const commentId = notif.data?.commentId; // Comment bildirimleri için commentId de önemli
+    const commentId = dataStr(notif.data, 'commentId'); // Comment bildirimleri için commentId de önemli
 
     if (!postId || !type) {
       return; // Geçersiz bildirim, atla
     }
 
     // Comment bildirimleri için commentId'yi de key'e ekle
-    const key = commentId 
+    const key = commentId
       ? `${postId}_${type}_${commentId}`
       : `${postId}_${type}`;
 
@@ -330,7 +396,7 @@ function groupNotificationsByPostAndType(notifications: any[]): GroupedNotificat
   // Her grup için gruplanmış bildirim oluştur
   const groupedNotifications: (GroupedNotification | UngroupedNotification)[] = [];
 
-  groups.forEach((groupNotifs, key) => {
+  groups.forEach((groupNotifs) => {
     // Tarihe göre sırala (yeni önce)
     groupNotifs.sort((a, b) => {
       const timeA = new Date(a.createdAt).getTime();
@@ -345,15 +411,20 @@ function groupNotificationsByPostAndType(notifications: any[]): GroupedNotificat
         id: notif.id,
         type: notif.type as NotificationType,
         // isGrouped alanı eklenmez - sadece gruplanabilir bildirimlerde olur
-        userId: notif.userId || notif.data?.likerId || notif.data?.commenterId || notif.data?.userId || undefined,
+        userId:
+          notif.userId ||
+          dataStr(notif.data, 'likerId') ||
+          dataStr(notif.data, 'commenterId') ||
+          dataStr(notif.data, 'userId') ||
+          undefined,
         username: notif.username || null,
         avatar: notif.avatar || null,
-        postId: notif.data?.postId,
-        commentId: notif.data?.commentId,
-        postContent: notif.data?.postContent || null,
-        postType: notif.data?.postType || null,
-        description: notif.data?.description || null,
-        imageUrl: notif.data?.imageUrl || null,
+        postId: dataStr(notif.data, 'postId'),
+        commentId: dataStr(notif.data, 'commentId'),
+        postContent: dataStrNull(notif.data, 'postContent'),
+        postType: dataStrNull(notif.data, 'postType'),
+        description: dataStrNull(notif.data, 'description'),
+        imageUrl: dataStrNull(notif.data, 'imageUrl'),
         createdAt: new Date(notif.createdAt),
         read: notif.read || false,
         title: notif.title,
@@ -364,8 +435,8 @@ function groupNotificationsByPostAndType(notifications: any[]): GroupedNotificat
     }
 
     // Gruplama yap: Window içindeki bildirimleri grupla
-    const windowGroups: any[][] = [];
-    let currentWindow: any[] = [groupNotifs[0]];
+    const windowGroups: RawNotification[][] = [];
+    let currentWindow: RawNotification[] = [groupNotifs[0]];
 
     for (let i = 1; i < groupNotifs.length; i++) {
       const currentNotif = groupNotifs[i];
@@ -393,15 +464,20 @@ function groupNotificationsByPostAndType(notifications: any[]): GroupedNotificat
           id: notif.id,
           type: notif.type as NotificationType,
           // isGrouped alanı eklenmez - sadece gruplanabilir bildirimlerde olur
-          userId: notif.userId || notif.data?.likerId || notif.data?.commenterId || notif.data?.userId || undefined,
+          userId:
+            notif.userId ||
+            dataStr(notif.data, 'likerId') ||
+            dataStr(notif.data, 'commenterId') ||
+            dataStr(notif.data, 'userId') ||
+            undefined,
           username: notif.username || null,
           avatar: notif.avatar || null,
-          postId: notif.data?.postId,
-          commentId: notif.data?.commentId,
-          postContent: notif.data?.postContent || null,
-          postType: notif.data?.postType || null,
-          description: notif.data?.description || null,
-          imageUrl: notif.data?.imageUrl || null,
+          postId: dataStr(notif.data, 'postId'),
+          commentId: dataStr(notif.data, 'commentId'),
+          postContent: dataStrNull(notif.data, 'postContent'),
+          postType: dataStrNull(notif.data, 'postType'),
+          description: dataStrNull(notif.data, 'description'),
+          imageUrl: dataStrNull(notif.data, 'imageUrl'),
           createdAt: new Date(notif.createdAt),
           read: notif.read || false,
           title: notif.title,
@@ -416,10 +492,18 @@ function groupNotificationsByPostAndType(notifications: any[]): GroupedNotificat
       const otherNotifs = windowNotifs.slice(1);
 
       // Kullanıcıları topla (unique)
-      const usersMap = new Map<string, { id: string; username: string | null; avatar: string | null }>();
-      
+      const usersMap = new Map<
+        string,
+        { id: string; username: string | null; avatar: string | null }
+      >();
+
       // Primary user
-      const primaryUserId = primaryNotif.userId || primaryNotif.data?.likerId || primaryNotif.data?.commenterId || primaryNotif.data?.userId || '';
+      const primaryUserId: string =
+        primaryNotif.userId ||
+        dataStr(primaryNotif.data, 'likerId') ||
+        dataStr(primaryNotif.data, 'commenterId') ||
+        dataStr(primaryNotif.data, 'userId') ||
+        '';
       usersMap.set(primaryUserId, {
         id: primaryUserId,
         username: primaryNotif.username || null,
@@ -428,7 +512,12 @@ function groupNotificationsByPostAndType(notifications: any[]): GroupedNotificat
 
       // Other users
       otherNotifs.forEach((notif) => {
-        const userId = notif.userId || notif.data?.likerId || notif.data?.commenterId || notif.data?.userId || '';
+        const userId: string =
+          notif.userId ||
+          dataStr(notif.data, 'likerId') ||
+          dataStr(notif.data, 'commenterId') ||
+          dataStr(notif.data, 'userId') ||
+          '';
         if (userId && userId !== primaryUserId && !usersMap.has(userId)) {
           usersMap.set(userId, {
             id: userId,
@@ -450,12 +539,12 @@ function groupNotificationsByPostAndType(notifications: any[]): GroupedNotificat
         count: windowNotifs.length,
         primaryUser,
         otherUsers,
-        postId: primaryNotif.data?.postId,
-        commentId: primaryNotif.data?.commentId,
-        postContent: primaryNotif.data?.postContent || null,
-        postType: primaryNotif.data?.postType || null,
-        description: primaryNotif.data?.description || null,
-        imageUrl: primaryNotif.data?.imageUrl || null,
+        postId: dataStr(primaryNotif.data, 'postId'),
+        commentId: dataStr(primaryNotif.data, 'commentId'),
+        postContent: dataStrNull(primaryNotif.data, 'postContent'),
+        postType: dataStrNull(primaryNotif.data, 'postType'),
+        description: dataStrNull(primaryNotif.data, 'description'),
+        imageUrl: dataStrNull(primaryNotif.data, 'imageUrl'),
         createdAt: new Date(primaryNotif.createdAt),
         read: windowNotifs.some((n) => n.read), // En az biri okunmuşsa okunmuş sayılır
         title: primaryNotif.title,

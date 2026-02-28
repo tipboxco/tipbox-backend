@@ -178,7 +178,7 @@ export class TrustBackfillWorker {
   private async backfillPosts(
     trusterId: string,
     trustedUserId: string,
-    posts: any[],
+    posts: Awaited<ReturnType<typeof this.prisma.contentPost.findMany>>,
     job: Job<TrustBackfillJobData>
   ): Promise<{ created: number; updated: number; belowThreshold: number }> {
     let created = 0;
@@ -253,7 +253,7 @@ export class TrustBackfillWorker {
               unseenFeedCount: {
                 increment: 1,
               },
-            } as any,
+            } as Parameters<typeof this.prisma.profile.updateMany>[0]['data'],
           });
 
           created++;

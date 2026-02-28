@@ -8,6 +8,7 @@
  */
 
 import crypto from 'crypto';
+import { TransactionActionType } from '@prisma/client';
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import { ContractEventLogPrismaRepository } from '../../infrastructure/repositories/contract-event-log-prisma.repository';
 import { WalletPrismaRepository } from '../../infrastructure/repositories/wallet-prisma.repository';
@@ -118,16 +119,16 @@ export class ContractEventService {
    */
   async processEvent(payload: ThirdwebContractSubscriptionPayload): Promise<EventProcessResult> {
     try {
-      if ((payload as any).type === 'event-log') {
+      if ('type' in payload && (payload as ContractEventPayload).type === 'event-log') {
         return this.processEventLog(payload as ContractEventPayload);
-      } else if ((payload as any).type === 'transaction-receipt') {
+      } else if ('type' in payload && (payload as TransactionReceiptPayload).type === 'transaction-receipt') {
         return this.processTransactionReceipt(payload as TransactionReceiptPayload);
       }
 
       return {
         success: false,
         action: 'skipped',
-        message: `Unknown payload type: ${(payload as any).type}`
+        message: `Unknown payload type: ${'type' in payload ? String((payload as unknown as Record<string, unknown>).type) : 'unknown'}`
       };
     } catch (error) {
       logger.error({
@@ -261,11 +262,11 @@ export class ContractEventService {
       transactionIndex: event.transactionIndex,
       logIndex: event.logIndex,
       eventName: event.eventName,
-      decodedLog: event.decodedLog,
+      decodedLog: JSON.parse(JSON.stringify(event.decodedLog)),
       topics: event.topics,
       data: event.data,
       timestamp: event.blockTimestamp,
-      rawPayload: event.rawPayload as any,
+      rawPayload: JSON.parse(JSON.stringify(event.rawPayload)),
       transactionId,
       walletId,
       processed: !!transactionId
@@ -399,7 +400,7 @@ export class ContractEventService {
           where: {
             walletId: toWallet.id,
             status: 'pending',
-            actionType: { in: ['TIP_RECEIVE', 'DEPOSIT'] }
+            actionType: { in: ['TIP_RECEIVE', 'DEPOSIT'] as TransactionActionType[] }
           },
           orderBy: { createdAt: 'desc' },
           select: { id: true }
@@ -413,7 +414,7 @@ export class ContractEventService {
           const depositTx = await prisma.transaction.create({
             data: {
               walletId: toWallet.id,
-              actionType: 'DEPOSIT' as any, // Prisma generate sonrası düzeltilecek
+              actionType: 'DEPOSIT' as unknown as TransactionActionType,
               status: 'confirmed',
               amount: amount,
               fromAddress: transferEvent.from,
@@ -452,7 +453,7 @@ export class ContractEventService {
           where: {
             walletId: fromWallet.id,
             status: 'pending',
-            actionType: { in: ['TIP_SEND', 'WITHDRAW'] }
+            actionType: { in: ['TIP_SEND', 'WITHDRAW'] as TransactionActionType[] }
           },
           orderBy: { createdAt: 'desc' },
           select: { id: true }
@@ -466,7 +467,7 @@ export class ContractEventService {
           const withdrawTx = await prisma.transaction.create({
             data: {
               walletId: fromWallet.id,
-              actionType: 'WITHDRAW' as any, // Prisma generate sonrası düzeltilecek
+              actionType: 'WITHDRAW' as unknown as TransactionActionType,
               status: 'confirmed',
               amount: amount,
               fromAddress: transferEvent.from,
@@ -718,11 +719,11 @@ export class ContractEventService {
       transactionIndex: data.transactionIndex,
       logIndex: data.logIndex,
       eventName: data.eventName,
-      decodedLog: data.decodedLog,
+      decodedLog: JSON.parse(JSON.stringify(data.decodedLog)),
       topics: data.topics,
       data: data.data,
       timestamp: new Date(data.timestamp),
-      rawPayload: payload as any,
+      rawPayload: JSON.parse(JSON.stringify(payload)),
       transactionId,
       walletId,
       processed: !!transactionId // Eğer transaction eşleştiyse processed
@@ -935,7 +936,7 @@ export class ContractEventService {
             where: {
               walletId: toWallet.id,
               status: 'pending',
-              actionType: { in: ['TIP_RECEIVE', 'DEPOSIT'] }
+              actionType: { in: ['TIP_RECEIVE', 'DEPOSIT'] as TransactionActionType[] }
             },
             orderBy: { createdAt: 'desc' },
             select: { id: true }
@@ -950,7 +951,7 @@ export class ContractEventService {
             const depositTx = await prisma.transaction.create({
               data: {
                 walletId: toWallet.id,
-                actionType: 'DEPOSIT' as any, // Prisma generate sonrası düzeltilecek
+                actionType: 'DEPOSIT' as unknown as TransactionActionType,
                 status: 'confirmed',
                 amount: amount,
                 fromAddress: transferEvent.from,
@@ -997,7 +998,7 @@ export class ContractEventService {
             where: {
               walletId: fromWallet.id,
               status: 'pending',
-              actionType: { in: ['TIP_SEND', 'WITHDRAW'] }
+              actionType: { in: ['TIP_SEND', 'WITHDRAW'] as TransactionActionType[] }
             },
             orderBy: { createdAt: 'desc' },
             select: { id: true }
@@ -1011,7 +1012,7 @@ export class ContractEventService {
             const withdrawTx = await prisma.transaction.create({
               data: {
                 walletId: fromWallet.id,
-                actionType: 'WITHDRAW' as any, // Prisma generate sonrası düzeltilecek
+                actionType: 'WITHDRAW' as unknown as TransactionActionType,
                 status: 'confirmed',
                 amount: amount,
                 fromAddress: transferEvent.from,

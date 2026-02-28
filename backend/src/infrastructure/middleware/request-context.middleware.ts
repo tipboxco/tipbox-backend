@@ -15,7 +15,7 @@ export const requestContext = new AsyncLocalStorage<RequestContext>();
  * Bu sayede tüm uygulama boyunca (service layer dahil) request'e erişebiliriz
  */
 export function requestContextMiddleware(req: Request, res: Response, next: NextFunction) {
-  const traceId = (req as any).traceId || 'unknown';
+  const traceId = req.traceId || 'unknown';
   
   const context: RequestContext = {
     req,
@@ -44,7 +44,7 @@ export function getCurrentContext(): RequestContext | undefined {
 export function markCacheStatus(status: 'hit' | 'miss' | 'bypass'): void {
   const context = getCurrentContext();
   if (context) {
-    (context.req as any).cacheHit = status === 'hit' ? true : status === 'miss' ? false : undefined;
+    context.req.cacheHit = status === 'hit' ? true : status === 'miss' ? false : undefined;
   }
 }
 

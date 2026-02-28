@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../../../infrastructure/errors/async-handler';
 import { validateBody, validateQuery } from '../../../infrastructure/middleware/validation.middleware';
+import { Prisma } from '@prisma/client';
 import { getPrisma } from '../../../infrastructure/repositories/prisma.client';
 import { NotFoundError } from '../../../infrastructure/errors/custom-errors';
 import logger from '../../../infrastructure/logger/logger';
@@ -85,7 +86,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const query = AdminUserReportsQuerySchema.parse(req.query);
 
-    const where: any = {};
+    const where: Prisma.UserReportWhereInput = {};
     if (query.status) where.status = query.status;
     if (query.reportType) where.reportType = query.reportType;
     if (query.reporterId) where.reporterId = query.reporterId;
@@ -290,7 +291,7 @@ router.patch(
       throw new NotFoundError('User report not found');
     }
 
-    const updateData: any = {};
+    const updateData: Prisma.UserReportUpdateInput = {};
     if (body.status !== undefined) updateData.status = body.status;
     if (body.reviewNote !== undefined) updateData.reviewNote = body.reviewNote;
     if (body.reviewerId !== undefined) {

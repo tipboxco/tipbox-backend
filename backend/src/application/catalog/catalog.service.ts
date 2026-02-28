@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import logger from '../../infrastructure/logger/logger';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
@@ -10,6 +11,77 @@ import { ContentPostType } from '../../domain/content/content-post-type.enum';
 import { IdResolverService } from '../../infrastructure/ids/id-resolver.service';
 
 const prisma = getPrisma();
+
+/** Feed item shape used by catalog endpoints (lighter than full FeedItem) */
+interface CatalogFeedItem {
+  type: string;
+  data: Record<string, unknown>;
+}
+
+/** Context data shape for catalog posts */
+interface CatalogContextData {
+  id: string;
+  name: string;
+  subName: string;
+  image: string | null;
+}
+
+/** Category row shape from Prisma select */
+interface CategoryRow {
+  id: string;
+  name: string;
+  thumbnail: string | null;
+}
+
+/** Category row with parentId */
+interface CategoryWithParentRow {
+  id: string;
+  name: string;
+  thumbnail: string | null;
+  parentId: string | null;
+}
+
+/** Product row shape from Prisma select */
+interface ProductRow {
+  id: string;
+  name: string;
+  imageUrl: string | null;
+  categoryId: string | null;
+}
+
+/** Structural type for posts passed to buildContextDataFromPost */
+interface CatalogPostForContext {
+  product?: {
+    id: string;
+    name: string;
+    imageUrl: string | null;
+    group?: {
+      name: string;
+      imageUrl: string | null;
+      subCategory?: {
+        name: string;
+        imageUrl: string | null;
+        mainCategory?: { name: string; imageUrl: string | null } | null;
+      } | null;
+    } | null;
+  } | null;
+  productGroup?: {
+    id: string;
+    name: string;
+    imageUrl: string | null;
+    subCategory?: {
+      name: string;
+      imageUrl: string | null;
+      mainCategory?: { name: string; imageUrl: string | null } | null;
+    } | null;
+  } | null;
+  subCategory?: {
+    id: string;
+    name: string;
+    imageUrl: string | null;
+    mainCategory?: { name: string; imageUrl: string | null } | null;
+  } | null;
+}
 
 export interface CategoryItem {
   categoryId: string;
@@ -100,7 +172,7 @@ export class CatalogService {
         });
         const { resolveMediaUrl } = await import('../../infrastructure/config/media.config');
 
-        return categories.map((category: any) => {
+        return categories.map((category: CategoryRow) => {
           const imageUrl = resolveMediaUrl(category.thumbnail);
 
           return {
@@ -137,18 +209,13 @@ export class CatalogService {
       // Category ID'yi resolve et - tüm ID formatlarını kabul eder
       const resolvedCategoryId = await this.resolveCategoryId(categoryId);
 
-      const whereClause: any = {
+      const subCatWhere: Prisma.CategoryWhereInput = {
         parentId: resolvedCategoryId,
+        ...(cursor && { id: { gt: cursor } }),
       };
 
-      if (cursor) {
-        whereClause.id = {
-          gt: cursor,
-        };
-      }
-
       const subCategories = await prisma.category.findMany({
-        where: whereClause,
+        where: subCatWhere,
         select: {
           id: true,
           name: true,
@@ -166,7 +233,7 @@ export class CatalogService {
         ? resultSubCategories[resultSubCategories.length - 1].id 
         : undefined;
 
-      const items = resultSubCategories.map((subCategory: any) => {
+      const items = resultSubCategories.map((subCategory) => {
         const imageUrl = resolveMediaUrl(subCategory.thumbnail);
 
         return {
@@ -212,18 +279,13 @@ export class CatalogService {
       // Sub Category ID'yi resolve et - tüm ID formatlarını kabul eder
       const resolvedSubCategoryId = await this.resolveCategoryId(subCategoryId);
 
-      const whereClause: any = {
+      const prodGroupWhere: Prisma.CategoryWhereInput = {
         parentId: resolvedSubCategoryId,
+        ...(cursor && { id: { gt: cursor } }),
       };
 
-      if (cursor) {
-        whereClause.id = {
-          gt: cursor,
-        };
-      }
-
       const productGroups = await prisma.category.findMany({
-        where: whereClause,
+        where: prodGroupWhere,
         select: {
           id: true,
           name: true,
@@ -242,7 +304,7 @@ export class CatalogService {
         ? resultProductGroups[resultProductGroups.length - 1].id 
         : undefined;
 
-      const items = resultProductGroups.map((group: any) => {
+      const items = resultProductGroups.map((group) => {
         const imageUrl = resolveMediaUrl(group.thumbnail);
 
         return {
@@ -308,25 +370,20 @@ export class CatalogService {
       // productGroupId ile başla, tüm child/alt kategorilerin id'lerini bul
       const categoryIds = await getAllDescendantCategoryIds(productGroupId);
 
-      const whereClause: any = {
+      const productsByGroupWhere: Prisma.ProductWhereInput = {
         categoryId: { in: categoryIds },
         ...(searchTrimmed && {
           OR: [
-            { name: { contains: searchTrimmed, mode: 'insensitive' } },
-            { brand: { name: { contains: searchTrimmed, mode: 'insensitive' } } },
-            { description: { contains: searchTrimmed, mode: 'insensitive' } },
+            { name: { contains: searchTrimmed, mode: 'insensitive' as const } },
+            { brand: { name: { contains: searchTrimmed, mode: 'insensitive' as const } } },
+            { description: { contains: searchTrimmed, mode: 'insensitive' as const } },
           ],
         }),
+        ...(cursor && { id: { gt: cursor } }),
       };
 
-      if (cursor) {
-        whereClause.id = {
-          gt: cursor,
-        };
-      }
-
       const products = await prisma.product.findMany({
-        where: whereClause,
+        where: productsByGroupWhere,
         select: {
           id: true,
           name: true,
@@ -345,7 +402,7 @@ export class CatalogService {
         ? resultProducts[resultProducts.length - 1].id 
         : undefined;
 
-      const items = resultProducts.map((product: any) => {
+      const items = resultProducts.map((product) => {
         const imageUrl = resolveMediaUrl(product.imageUrl);
 
         return {
@@ -455,7 +512,7 @@ export class CatalogService {
       sort?: string;
     }
   ): Promise<{
-    items: Array<{ type: string; data: any }>;
+    items: CatalogFeedItem[];
     pagination: { cursor?: string; hasMore: boolean; limit: number };
     contextType: string; // Hangi context'ten geldiğini frontend'e bildir
   }> {
@@ -560,7 +617,7 @@ export class CatalogService {
       sort?: string; // newest, oldest, most_popular
     }
   ): Promise<{
-    items: Array<{ type: string; data: any }>;
+    items: CatalogFeedItem[];
     pagination: { cursor?: string; hasMore: boolean; limit: number };
   }> {
     try {
@@ -595,16 +652,13 @@ export class CatalogService {
         typeFilter = this.getAllowedPostTypesForContext(ContextType.PRODUCT);
       }
 
-      const whereClause: any = {
+      const productPostsWhere: Prisma.ContentPostWhereInput = {
         productId: actualProductId,
+        ...(typeFilter && { type: { in: typeFilter } }),
       };
 
-      if (typeFilter) {
-        whereClause.type = { in: typeFilter };
-      }
-
       const posts = await prisma.contentPost.findMany({
-        where: whereClause,
+        where: productPostsWhere,
         include: {
           user: {
             include: {
@@ -719,12 +773,12 @@ export class CatalogService {
       };
 
       // Convert posts to feed items (experience: profil/feed ile aynı yapı)
-      const feedItems: Array<{ type: string; data: any }> = resultPosts.map((post: any) => {
-        const baseType = mapContentPostTypeToFeedItemType(post.type);
+      const feedItems: CatalogFeedItem[] = resultPosts.map((post) => {
+        const baseType = mapContentPostTypeToFeedItemType(post.type as ContentPostType);
         const contextData = this.buildContextDataFromPost(post);
-        const images = (post.media || []).map((m: any) => resolveMediaUrl(m.mediaUrl)).filter((url: string | null): url is string => url !== null);
+        const images = (post.media || []).map((m: { mediaUrl: string }) => resolveMediaUrl(m.mediaUrl)).filter((url: string | null): url is string => url !== null);
 
-        const baseData: any = {
+        const baseData: Record<string, unknown> = {
           id: post.id,
           type: baseType,
           user: {
@@ -733,10 +787,10 @@ export class CatalogService {
             avatar: resolveMediaUrl(post.user.avatars?.[0]?.imageUrl || null, true) || '',
           },
           stats: {
-            likes: (post as any).likesCount ?? post.likes?.length ?? 0,
-            comments: (post as any).commentsCount ?? post.comments?.length ?? 0,
-            shares: (post as any).sharesCount ?? 0,
-            bookmarks: (post as any).favoritesCount ?? post.favorites?.length ?? 0,
+            likes: post.likesCount ?? post.likes?.length ?? 0,
+            comments: post.commentsCount ?? post.comments?.length ?? 0,
+            shares: post.sharesCount ?? 0,
+            bookmarks: post.favoritesCount ?? post.favorites?.length ?? 0,
           },
           createdAt: post.createdAt.toISOString(),
           contextType: post.product ? ContextType.PRODUCT : post.productGroup ? ContextType.PRODUCT_GROUP : ContextType.SUB_CATEGORY,
@@ -749,41 +803,44 @@ export class CatalogService {
           boostedUntil: post.boostedUntil ? (post.boostedUntil as Date).toISOString() : null,
         };
 
-        if (post.type === ContentPostType.UPDATE && post.updateContent?.experiencePost) {
-          const expPost = post.updateContent.experiencePost;
-          const expProduct = expPost.product
+        const updateContent = post as unknown as { updateContent?: { experiencePost?: Record<string, unknown>; content?: string } };
+        if (post.type === ContentPostType.UPDATE && updateContent.updateContent?.experiencePost) {
+          const expPost = updateContent.updateContent.experiencePost as Record<string, unknown>;
+          const expPostProduct = expPost.product as { id: string; name: string; imageUrl: string | null; group?: { name: string } | null } | null;
+          const expProduct = expPostProduct
             ? {
-                id: expPost.product.id,
-                name: expPost.product.name,
-                subName: expPost.product.group?.name ?? '',
-                image: resolveMediaUrl(expPost.product.imageUrl) ?? null,
+                id: expPostProduct.id,
+                name: expPostProduct.name,
+                subName: expPostProduct.group?.name ?? '',
+                image: resolveMediaUrl(expPostProduct.imageUrl) ?? null,
                 isOwned: expPost.productId ? ownedProductIds.has(String(expPost.productId)) : false,
               }
-            : { id: expPost.productId || '', name: '', subName: '', image: null, isOwned: false };
-          const expContent = this.parseExperienceContentForCatalog(expPost.body);
+            : { id: (expPost.productId as string) || '', name: '', subName: '', image: null, isOwned: false };
+          const expContent = this.parseExperienceContentForCatalog(expPost.body as string);
           const expContentString =
             expContent.length > 0
-              ? expContent.map((item: any) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`).join('\n\n')
-              : expPost.body || '';
+              ? expContent.map((item: { title: string; content: string; rating: number }) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`).join('\n\n')
+              : (expPost.body as string) || '';
+          const expPostTags = expPost.contentPostTags as Array<{ tag: string }> | undefined;
           baseData.relatedPost = {
             id: String(expPost.id),
             product: expProduct,
             content: expContentString,
             experienceContent: expContent,
-            tags: expPost.contentPostTags?.map((t: any) => t.tag) || [],
+            tags: expPostTags?.map((t: { tag: string }) => t.tag) || [],
             images: [],
-            status: expPost.productStatus ?? null,
+            status: (expPost.productStatus as string) ?? null,
             statusLabel: expPost.productStatus === 'own' ? 'I owned' : expPost.productStatus === 'tried' ? 'I tried' : null,
           };
-          baseData.content = post.updateContent.content || post.body;
-          baseData.tags = post.contentPostTags?.map((t: any) => t.tag) || post.tags?.map((t: any) => t.tag) || [];
+          baseData.content = updateContent.updateContent.content || post.body;
+          baseData.tags = post.contentPostTags?.map((t: { tag: string }) => t.tag) || post.tags?.map((t: { tag: string }) => t.tag) || [];
         } else if (post.type === ContentPostType.EXPERIENCE || post.type === ContentPostType.UPDATE) {
           baseData.product = {
             ...contextData,
             isOwned: post.productId ? ownedProductIds.has(String(post.productId)) : false,
           };
           baseData.experienceContent = this.parseExperienceContentForCatalog(post.body);
-          baseData.tags = post.contentPostTags?.map((t: any) => t.tag) || post.tags?.map((t: any) => t.tag) || [];
+          baseData.tags = post.contentPostTags?.map((t: { tag: string }) => t.tag) || post.tags?.map((t: { tag: string }) => t.tag) || [];
         }
 
         return {
@@ -832,7 +889,7 @@ export class CatalogService {
   /**
    * Post'tan context data oluşturur
    */
-  private buildContextDataFromPost(post: any): any {
+  private buildContextDataFromPost(post: CatalogPostForContext): CatalogContextData {
     // Product context
     if (post.product) {
       const product = post.product;
@@ -921,7 +978,7 @@ export class CatalogService {
       sort?: string; // newest, oldest, most_popular
     }
   ): Promise<{
-    items: Array<{ type: string; data: any }>;
+    items: CatalogFeedItem[];
     pagination: { cursor?: string; hasMore: boolean; limit: number };
   }> {
     try {
@@ -948,18 +1005,16 @@ export class CatalogService {
         typeFilter = this.getAllowedPostTypesForContext(ContextType.SUB_CATEGORY);
       }
 
-      const whereClause: any = {
+      const subCatPostsWhere: Prisma.ContentPostWhereInput = {
         OR: [
           { categoryId: { in: descendantCategoryIds } },
           { productId: { not: null }, product: { categoryId: { in: descendantCategoryIds } } },
         ],
+        ...(typeFilter?.length && { type: { in: typeFilter } }),
       };
-      if (typeFilter?.length) {
-        whereClause.type = { in: typeFilter };
-      }
 
-      const posts = await prisma.contentPost.findMany({
-        where: whereClause,
+      const subCatPosts = await prisma.contentPost.findMany({
+        where: subCatPostsWhere,
         include: {
           user: {
             include: {
@@ -1021,11 +1076,11 @@ export class CatalogService {
           },
         },
         // Sıralama
-        ...(sort === 'most_popular' 
+        ...(sort === 'most_popular'
           ? {} // Most popular için önce tüm postları alıp sonra sıralayacağız
           : {
-              orderBy: sort === 'oldest' 
-                ? { createdAt: 'asc' } 
+              orderBy: sort === 'oldest'
+                ? { createdAt: 'asc' }
                 : { createdAt: 'desc' }
             }
         ),
@@ -1037,17 +1092,17 @@ export class CatalogService {
       });
 
       // Most popular sıralaması için beğeni + yorum + kaydetme sayısına göre sırala
-      let sortedPosts = posts;
+      let sortedSubCatPosts = subCatPosts;
       if (sort === 'most_popular') {
-        sortedPosts = posts.sort((a, b) => {
+        sortedSubCatPosts = subCatPosts.sort((a, b) => {
           const aScore = (a.likes?.length || 0) + (a.comments?.length || 0) + (a.favorites?.length || 0);
           const bScore = (b.likes?.length || 0) + (b.comments?.length || 0) + (b.favorites?.length || 0);
           return bScore - aScore; // Yüksekten düşüğe
         });
       }
 
-      const hasMore = sortedPosts.length > limit;
-      const resultPosts = hasMore ? sortedPosts.slice(0, limit) : sortedPosts;
+      const hasMore = sortedSubCatPosts.length > limit;
+      const resultPosts = hasMore ? sortedSubCatPosts.slice(0, limit) : sortedSubCatPosts;
       const nextCursor = hasMore && resultPosts.length > 0 ? resultPosts[resultPosts.length - 1].id : undefined;
 
       // Map ContentPostType to FeedItemType
@@ -1068,8 +1123,8 @@ export class CatalogService {
       };
 
       // Convert posts to feed items
-      const feedItems: Array<{ type: string; data: any }> = resultPosts.map((post) => {
-        const baseType = mapContentPostTypeToFeedItemType(post.type as any);
+      const feedItems: CatalogFeedItem[] = resultPosts.map((post) => {
+        const baseType = mapContentPostTypeToFeedItemType(post.type as ContentPostType);
         const contextData = this.buildContextDataFromPost(post);
 
         const baseData = {
@@ -1081,16 +1136,16 @@ export class CatalogService {
             avatar: resolveMediaUrl(post.user.avatars?.[0]?.imageUrl || null, true) || '',
           },
           stats: {
-            likes: (post as any).likesCount ?? post.likes?.length ?? 0,
-            comments: (post as any).commentsCount ?? post.comments?.length ?? 0,
-            shares: (post as any).sharesCount ?? 0,
-            bookmarks: (post as any).favoritesCount ?? post.favorites?.length ?? 0,
+            likes: post.likesCount ?? post.likes?.length ?? 0,
+            comments: post.commentsCount ?? post.comments?.length ?? 0,
+            shares: post.sharesCount ?? 0,
+            bookmarks: post.favoritesCount ?? post.favorites?.length ?? 0,
           },
           createdAt: post.createdAt.toISOString(),
           contextType: post.product ? ContextType.PRODUCT : post.productGroup ? ContextType.PRODUCT_GROUP : ContextType.SUB_CATEGORY,
           contextData: contextData,
           content: post.body,
-          images: (post.media || []).map((m: any) => resolveMediaUrl(m.mediaUrl)).filter((url: string | null): url is string => url !== null),
+          images: (post.media || []).map((m: { mediaUrl: string }) => resolveMediaUrl(m.mediaUrl)).filter((url: string | null): url is string => url !== null),
           isBoosted: post.isBoosted ?? false,
           boostedUntil: post.boostedUntil ? (post.boostedUntil as Date).toISOString() : null,
         };
@@ -1116,6 +1171,27 @@ export class CatalogService {
   }
 
   /**
+   * Main category'ye ait post'ları getir.
+   * Altındaki tüm sub-category ve product group'ları kapsayan hiyerarşik feed.
+   * Delegates to getSubCategoryPosts since both use getAllDescendantCategoryIds recursively.
+   */
+  async getMainCategoryPosts(
+    mainCategoryId: string,
+    userId?: string,
+    options?: {
+      cursor?: string;
+      limit?: number;
+      filter?: string;
+      sort?: string;
+    }
+  ): Promise<{
+    items: CatalogFeedItem[];
+    pagination: { cursor?: string; hasMore: boolean; limit: number };
+  }> {
+    return this.getSubCategoryPosts(mainCategoryId, userId, options);
+  }
+
+  /**
    * Product group'a ait post'ları getir (hiyerarşik feed)
    * Product group = categories tablosunda bir düğüm. Altındaki tüm gönderiler:
    * 1) category_id bu düğüm veya alt kategorilerde olan postlar
@@ -1131,7 +1207,7 @@ export class CatalogService {
       sort?: string; // newest, oldest, most_popular
     }
   ): Promise<{
-    items: Array<{ type: string; data: any }>;
+    items: CatalogFeedItem[];
     pagination: { cursor?: string; hasMore: boolean; limit: number };
   }> {
     try {
@@ -1155,18 +1231,16 @@ export class CatalogService {
         typeFilter = this.getAllowedPostTypesForContext(ContextType.PRODUCT_GROUP);
       }
 
-      const whereClause: any = {
+      const pgPostsWhere: Prisma.ContentPostWhereInput = {
         OR: [
           { categoryId: { in: descendantCategoryIds } },
           { productId: { not: null }, product: { categoryId: { in: descendantCategoryIds } } },
         ],
+        ...(typeFilter?.length && { type: { in: typeFilter } }),
       };
-      if (typeFilter?.length) {
-        whereClause.type = { in: typeFilter };
-      }
 
       const posts = await prisma.contentPost.findMany({
-        where: whereClause,
+        where: pgPostsWhere,
         include: {
           user: {
             include: {
@@ -1275,8 +1349,8 @@ export class CatalogService {
       };
 
       // Convert posts to feed items
-      const feedItems: Array<{ type: string; data: any }> = resultPosts.map((post) => {
-        const baseType = mapContentPostTypeToFeedItemType(post.type as any);
+      const feedItems: CatalogFeedItem[] = resultPosts.map((post) => {
+        const baseType = mapContentPostTypeToFeedItemType(post.type as ContentPostType);
         const contextData = this.buildContextDataFromPost(post);
 
         const baseData = {
@@ -1288,16 +1362,16 @@ export class CatalogService {
             avatar: resolveMediaUrl(post.user.avatars?.[0]?.imageUrl || null, true) || '',
           },
           stats: {
-            likes: (post as any).likesCount ?? post.likes?.length ?? 0,
-            comments: (post as any).commentsCount ?? post.comments?.length ?? 0,
-            shares: (post as any).sharesCount ?? 0,
-            bookmarks: (post as any).favoritesCount ?? post.favorites?.length ?? 0,
+            likes: post.likesCount ?? post.likes?.length ?? 0,
+            comments: post.commentsCount ?? post.comments?.length ?? 0,
+            shares: post.sharesCount ?? 0,
+            bookmarks: post.favoritesCount ?? post.favorites?.length ?? 0,
           },
           createdAt: post.createdAt.toISOString(),
           contextType: post.product ? ContextType.PRODUCT : post.productGroup ? ContextType.PRODUCT_GROUP : ContextType.SUB_CATEGORY,
           contextData: contextData,
           content: post.body,
-          images: (post.media || []).map((m: any) => resolveMediaUrl(m.mediaUrl)).filter((url: string | null): url is string => url !== null),
+          images: (post.media || []).map((m: { mediaUrl: string }) => resolveMediaUrl(m.mediaUrl)).filter((url: string | null): url is string => url !== null),
           isBoosted: post.isBoosted ?? false,
           boostedUntil: post.boostedUntil ? (post.boostedUntil as Date).toISOString() : null,
         };
@@ -1390,15 +1464,13 @@ export class CatalogService {
       const nextCursor = hasMore && resultPosts.length > 0 ? resultPosts[resultPosts.length - 1].id : undefined;
 
       // Haber response formatına dönüştür
-      const newsItems = resultPosts.map((post: any) => {
+      const newsItems = resultPosts.map((post) => {
         const title = post.title || post.body?.slice(0, 80) || 'News';
         const description = post.body || '';
         const source = product.brand?.name || 'tipbox';
         const image =
-          (post as any).imageUrl ||
           post.product?.imageUrl ||
           post.product?.group?.imageUrl ||
-          (post as any).thumbnailUrl ||
           '';
 
         return {

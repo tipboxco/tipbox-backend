@@ -10,20 +10,20 @@ export function requestTimingMiddleware(req: Request, res: Response, next: NextF
   const startHrTime = process.hrtime();
 
   // Request bilgilerini sakla
-  (req as any).startTime = startTime;
+  req.startTime = startTime;
 
   // Response header'ı hemen ekle (finish'den önce)
   const originalSend = res.send;
-  res.send = function(this: Response, data: any) {
+  res.send = function(this: Response, data?: string | Buffer | object) {
     const endTime = Date.now();
     const durationMs = endTime - startTime;
-    
+
     // Header'ları ekle (henüz gönderilmemişse)
     if (!res.headersSent) {
       res.setHeader('X-Response-Time', `${durationMs}ms`);
-      
+
       // Cache status header'ı ekle
-      const cacheHit = (req as any).cacheHit;
+      const cacheHit = req.cacheHit;
       if (cacheHit === true) {
         res.setHeader('X-Cache-Status', 'HIT');
       } else if (cacheHit === false) {
@@ -32,9 +32,9 @@ export function requestTimingMiddleware(req: Request, res: Response, next: NextF
         res.setHeader('X-Cache-Status', 'BYPASS');
       }
     }
-    
+
     return originalSend.call(this, data);
-  } as any;
+  } as typeof res.send;
 
   // Response tamamlandığında timing'i log'la
   res.on('finish', () => {
@@ -49,7 +49,7 @@ export function requestTimingMiddleware(req: Request, res: Response, next: NextF
     const durationMsHighPrecision = durationMicroseconds / 1000;
 
     // Cache bilgisi varsa ekle
-    const cacheHit = (req as any).cacheHit;
+    const cacheHit = req.cacheHit;
     const cacheSource = cacheHit ? 'cache' : 'database';
 /*
     // Log'a yaz
@@ -61,8 +61,8 @@ export function requestTimingMiddleware(req: Request, res: Response, next: NextF
       durationMsHighPrecision: durationMsHighPrecision.toFixed(2),
       source: cacheSource,
       cacheHit: cacheHit || false,
-      userId: (req as any).user?.id,
-      traceId: (req as any).traceId,
+      userId: req.user?.id,
+      traceId: req.traceId,
       ip: req.ip,
       userAgent: req.headers['user-agent'],
     };
@@ -89,11 +89,11 @@ export function requestTimingMiddleware(req: Request, res: Response, next: NextF
  * Service layer'da cache hit/miss durumunu işaretle
  */
 export function markCacheHit(req: Request): void {
-  (req as any).cacheHit = true;
+  req.cacheHit = true;
 }
 
 export function markCacheMiss(req: Request): void {
-  (req as any).cacheHit = false;
+  req.cacheHit = false;
 }
 
 /**
@@ -103,7 +103,7 @@ export function markCacheMiss(req: Request): void {
 export async function measureOperation<T>(
   operationName: string,
   operation: () => Promise<T>,
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 ): Promise<T> {
   const startTime = Date.now();
   

@@ -36,7 +36,7 @@ export interface RewardClaimSummary {
     [key: string]: {
       count: number;
       amount: number;
-      claims: any[];
+      claims: Array<{ id: string; amount: number; earnedAt: Date; metadata: RewardClaim['metadata'] }>;
     };
   };
 }
@@ -243,9 +243,9 @@ export class RewardClaimService {
         toAddress: wallet.smartAccountAddress ?? wallet.publicAddress,
         metadata: {
           rewardClaimId: rewardClaim.id,
-          rewardType: rewardClaim.rewardType,
-          sourceType: rewardClaim.sourceType,
-          metadata: rewardClaim.metadata,
+          rewardType: rewardClaim.rewardType as string,
+          sourceType: rewardClaim.sourceType as string,
+          metadata: rewardClaim.metadata as Record<string, unknown> | null,
         },
         provider: 'backend',
       });

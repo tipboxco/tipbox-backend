@@ -252,7 +252,7 @@ export interface ContractEventLogDTO {
   blockNumber: number;
   transactionHash: string;
   eventName: string;
-  decodedLog: Record<string, any>;
+  decodedLog: Record<string, unknown>;
   timestamp: string;
   transactionId: string | null;
   walletId: string | null;
@@ -433,16 +433,18 @@ export function isContractSupported(address: string): boolean {
 /**
  * Check if payload is the new Thirdweb format (v1.events)
  */
-export function isThirdwebV1Payload(payload: any): payload is ThirdwebWebhookPayloadWrapper {
-  return payload && 
-    typeof payload.timestamp === 'number' && 
-    payload.topic === 'v1.events' && 
-    Array.isArray(payload.data);
+export function isThirdwebV1Payload(payload: unknown): payload is ThirdwebWebhookPayloadWrapper {
+  if (!payload || typeof payload !== 'object') return false;
+  const p = payload as Record<string, unknown>;
+  return typeof p.timestamp === 'number' &&
+    p.topic === 'v1.events' &&
+    Array.isArray(p.data);
 }
 
 /**
  * Check if payload is legacy format
  */
-export function isLegacyPayload(payload: any): payload is ContractEventPayload {
-  return payload && payload.type === 'event-log';
+export function isLegacyPayload(payload: unknown): payload is ContractEventPayload {
+  if (!payload || typeof payload !== 'object') return false;
+  return (payload as Record<string, unknown>).type === 'event-log';
 }

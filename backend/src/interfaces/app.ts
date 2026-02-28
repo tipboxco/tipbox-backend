@@ -126,7 +126,7 @@ if (issuerBaseURL && clientID && secret && !issuerBaseURL.includes('{yourDomain}
     return `${protocol}://${host}`;
   }
 
-  const auth0Config: any = {
+  const auth0Config: Record<string, unknown> = {
     authRequired: false,
     auth0Logout: true,
     // baseURL string olmalı (express-openid-connect gereksinimi)
@@ -146,7 +146,7 @@ if (issuerBaseURL && clientID && secret && !issuerBaseURL.includes('{yourDomain}
       response_mode: 'query' // veya 'form_post' (daha güvenli)
       // PKCE parametrelerini eklemiyoruz (confidential client olduğumuz için client_secret kullanıyoruz)
       // code_challenge ve code_challenge_method gönderilmediği için PKCE kullanılmayacak
-    } as any,
+    } as Record<string, string>,
     routes: {
       // Callback route'u custom handler ile handle edilecek (request header'ından dinamik redirectUri)
       callback: false,
@@ -164,7 +164,7 @@ if (issuerBaseURL && clientID && secret && !issuerBaseURL.includes('{yourDomain}
       }
     },
     // Login state oluşturulurken dinamik redirect_uri ayarla
-    getLoginState: (req: express.Request, options: any) => {
+    getLoginState: (req: express.Request, options: Record<string, unknown> & { authorizationParams?: Record<string, unknown> }) => {
       const dynamicBaseUrl = getDynamicBaseUrl(req);
       const dynamicCallbackUrl = `${dynamicBaseUrl}/auth0/callback`;
       
@@ -188,7 +188,7 @@ if (issuerBaseURL && clientID && secret && !issuerBaseURL.includes('{yourDomain}
       };
     },
     // Callback sonrasında session'ı döndür
-    afterCallback: async (req: express.Request, res: express.Response, session: any) => {
+    afterCallback: async (req: express.Request, res: express.Response, session: Record<string, unknown>) => {
       return session;
     }
   };
@@ -206,11 +206,11 @@ if (issuerBaseURL && clientID && secret && !issuerBaseURL.includes('{yourDomain}
       xForwardedHost: req.get('x-forwarded-host'),
       xForwardedProto: req.get('x-forwarded-proto')
     });
-    (res as any).oidc.callback({ redirectUri });
+    res.oidc?.callback({ redirectUri });
   }));
   app.post('/auth0/callback', express.urlencoded({ extended: false }), asyncHandler(async (req: express.Request, res: express.Response) => {
     const redirectUri = getDynamicBaseUrl(req) + '/auth0/callback';
-    (res as any).oidc.callback({ redirectUri });
+    res.oidc?.callback({ redirectUri });
   }));
 
   // Callback URL'ini hesapla ve log'la
@@ -218,8 +218,8 @@ if (issuerBaseURL && clientID && secret && !issuerBaseURL.includes('{yourDomain}
     message: 'Auth0 middleware initialized',
     baseURL: baseURL,
     hasClientSecret: !!clientSecret,
-    responseType: auth0Config.authorizationParams?.response_type,
-    scope: auth0Config.authorizationParams?.scope,
+    responseType: (auth0Config.authorizationParams as Record<string, unknown> | undefined)?.response_type,
+    scope: (auth0Config.authorizationParams as Record<string, unknown> | undefined)?.scope,
     note: 'Callback endpoint manuel olarak handle ediliyor (request\'ten host bilgisi kullanılıyor). Auth0 Dashboard\'da tüm olası callback URL\'lerini ekleyin.'
   });
 } else {

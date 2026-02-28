@@ -441,7 +441,7 @@ export class FeedDistributionWorker {
   ): Promise<{ success: boolean; error?: string }> {
     try {
       await this.prisma.feed.createMany({
-        data: chunk as any, // Type assertion for Prisma enum compatibility
+        data: chunk as NonNullable<Parameters<typeof this.prisma.feed.createMany>[0]>['data'],
         skipDuplicates: true,
       });
 
@@ -500,7 +500,7 @@ export class FeedDistributionWorker {
             unseenFeedCount: {
               increment: feedRecords.filter((r) => r.userId === userId).length,
             },
-          } as any,
+          } as Parameters<typeof this.prisma.profile.updateMany>[0]['data'],
         });
       } catch (error) {
         logger.warn({

@@ -97,7 +97,7 @@ export class EventBadgeDistributorService {
           user: {
             select: {
               id: true,
-              name: true,
+              profile: { select: { displayName: true, userName: true } },
             },
           },
         },
@@ -140,8 +140,9 @@ export class EventBadgeDistributorService {
           // Award badge
           await this.gamificationService.grantBadgeToUser(userId, badgeId);
 
+          const userName = userStats.user.profile?.displayName || userStats.user.profile?.userName || 'Unknown';
           logger.info(
-            `✅ Badge "${eventBadge.badge.name}" (rank ${eventBadge.rank}) awarded to user ${userStats.user.name} ` +
+            `Badge "${eventBadge.badge.name}" (rank ${eventBadge.rank}) awarded to user ${userName} ` +
             `(${userStats.helpfulVotesReceived} upvotes) for event "${event.title}"`
           );
 
@@ -196,7 +197,7 @@ export class EventBadgeDistributorService {
           user: {
             select: {
               id: true,
-              name: true,
+              profile: { select: { displayName: true, userName: true } },
             },
           },
         },
@@ -204,7 +205,7 @@ export class EventBadgeDistributorService {
 
       return topUsers.map((stats, index) => ({
         userId: stats.userId,
-        userName: stats.user.name || 'Unknown',
+        userName: stats.user.profile?.displayName || stats.user.profile?.userName || 'Unknown',
         helpfulVotesReceived: stats.helpfulVotesReceived,
         rank: index + 1,
       }));

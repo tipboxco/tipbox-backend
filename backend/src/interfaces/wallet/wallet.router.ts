@@ -13,6 +13,7 @@ import {
   ThirdwebWalletAuthFailedError,
 } from '../../infrastructure/errors/custom-errors';
 import { WalletProvider } from '../../domain/wallet/wallet.entity';
+import { RewardSourceType } from '../../domain/reward/reward-source-type.enum';
 import { authMiddleware } from '../auth/auth.middleware';
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import { TransactionActionType } from '../../domain/transaction/transaction-action-type.enum';
@@ -941,7 +942,7 @@ router.post('/create', asyncHandler(async (req: Request, res: Response) => {
       walletIdentifier: wallet.smartAccountAddress ?? wallet.publicAddress,
       balance: balanceInfo.balance
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (err instanceof ThirdwebNotConfiguredError) {
       return res.status(503).json({
         success: false,
@@ -1390,7 +1391,7 @@ router.get('/rewards/source/:sourceType', asyncHandler(async (req: Request, res:
   try {
     const rewards = await rewardClaimService.getRewardsBySourceType(
       String(userId),
-      sourceType as any
+      sourceType as RewardSourceType
     );
     return res.json(rewards.map((r) => r.toDTO()));
   } catch (error) {

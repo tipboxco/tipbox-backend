@@ -8,7 +8,7 @@ export interface MedusaProduct {
     id: string;
     url: string;
   }>;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface MedusaCategory {
@@ -84,34 +84,25 @@ export class MedusaService {
         throw new Error(`Medusa API error: ${response.status} ${response.statusText}`);
       }
 
-      const data = (await response.json()) as { product?: any } | any;
-      let product: any | undefined;
-      if ('product' in data && data.product) {
-        product = data.product;
+      const data = (await response.json()) as Record<string, unknown>;
+      let product: Record<string, unknown> | undefined;
+      if ('product' in data && data.product && typeof data.product === 'object') {
+        product = data.product as Record<string, unknown>;
       } else if ('id' in data && 'title' in data) {
-        product = data;
+        product = data as Record<string, unknown>;
       }
       if (!product) {
         return null;
       }
       // Only pick required fields
-      const {
-        id,
-        title,
-        description,
-        handle,
-        status,
-        images,
-        metadata,
-      } = product;
       return {
-        id,
-        title,
-        description,
-        handle,
-        status,
-        images,
-        metadata,
+        id: product.id as string,
+        title: product.title as string,
+        description: product.description as string | undefined,
+        handle: product.handle as string | undefined,
+        status: product.status as string | undefined,
+        images: product.images as Array<{ id: string; url: string }> | undefined,
+        metadata: product.metadata as Record<string, unknown> | undefined,
       };
     } catch (error) {
       if (error instanceof Error) {

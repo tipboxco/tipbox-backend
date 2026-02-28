@@ -108,7 +108,7 @@ function getRandomAssetUrl(category: 'avatars' | 'badges' | 'events' | 'products
  */
 export async function enrichNotificationData(
   type: NotificationType,
-  data: any
+  data: Record<string, unknown>
 ): Promise<{ avatar?: string | null; imageUrl?: string | null }> {
   const result: { avatar?: string | null; imageUrl?: string | null } = {};
 
@@ -116,17 +116,17 @@ export async function enrichNotificationData(
     // Avatar URL'i bul
     let userIdForAvatar: string | undefined;
     
-    if (data.userId) userIdForAvatar = data.userId;
-    else if (data.requesterId) userIdForAvatar = data.requesterId; // DM_REQUEST_RECEIVED için
-    else if (data.accepterId) userIdForAvatar = data.accepterId; // SUPPORT_REQUEST_ACCEPTED için
-    else if (data.likerId) userIdForAvatar = data.likerId;
-    else if (data.commenterId) userIdForAvatar = data.commenterId;
+    if (data.userId) userIdForAvatar = String(data.userId);
+    else if (data.requesterId) userIdForAvatar = String(data.requesterId); // DM_REQUEST_RECEIVED için
+    else if (data.accepterId) userIdForAvatar = String(data.accepterId); // SUPPORT_REQUEST_ACCEPTED için
+    else if (data.likerId) userIdForAvatar = String(data.likerId);
+    else if (data.commenterId) userIdForAvatar = String(data.commenterId);
     // Tip transfer: gönderenin (from) avatar'ı gösterilir (TIPS_RECEIVED, DEPOSIT)
-    else if (data.senderUserId) userIdForAvatar = data.senderUserId;
-    else if (data.senderId) userIdForAvatar = data.senderId;
-    else if (data.trusterId) userIdForAvatar = data.trusterId;
-    else if (data.sharerId) userIdForAvatar = data.sharerId;
-    else if (data.replierId) userIdForAvatar = data.replierId;
+    else if (data.senderUserId) userIdForAvatar = String(data.senderUserId);
+    else if (data.senderId) userIdForAvatar = String(data.senderId);
+    else if (data.trusterId) userIdForAvatar = String(data.trusterId);
+    else if (data.sharerId) userIdForAvatar = String(data.sharerId);
+    else if (data.replierId) userIdForAvatar = String(data.replierId);
 
     if (userIdForAvatar) {
       try {
@@ -167,7 +167,7 @@ export async function enrichNotificationData(
         if (data.postId) {
           try {
             const postMedia = await prisma.postMedia.findFirst({
-              where: { postId: data.postId },
+              where: { postId: String(data.postId) },
               orderBy: [{ orderIndex: 'asc' }, { createdAt: 'asc' }],
             });
 
@@ -177,7 +177,7 @@ export async function enrichNotificationData(
               result.imageUrl = getRandomAssetUrl('posts');
             }
           } catch (error) {
-            logger.debug(`Error fetching post media for ${data.postId}:`, error);
+            logger.debug(`Error fetching post media for ${String(data.postId)}:`, error);
             result.imageUrl = getRandomAssetUrl('posts');
           }
         } else {
@@ -193,7 +193,7 @@ export async function enrichNotificationData(
         if (data.eventId) {
           try {
             const event = await prisma.event.findUnique({
-              where: { id: data.eventId },
+              where: { id: String(data.eventId) },
               select: { imageUrl: true },
             });
 
@@ -203,7 +203,7 @@ export async function enrichNotificationData(
               result.imageUrl = getRandomAssetUrl('events');
             }
           } catch (error) {
-            logger.debug(`Error fetching event image for ${data.eventId}:`, error);
+            logger.debug(`Error fetching event image for ${String(data.eventId)}:`, error);
             result.imageUrl = getRandomAssetUrl('events');
           }
         } else {
@@ -218,7 +218,7 @@ export async function enrichNotificationData(
         if (data.badgeId) {
           try {
             const badge = await prisma.badge.findUnique({
-              where: { id: data.badgeId },
+              where: { id: String(data.badgeId) },
               select: { imageUrl: true },
             });
 
@@ -228,7 +228,7 @@ export async function enrichNotificationData(
               result.imageUrl = getRandomAssetUrl('badges');
             }
           } catch (error) {
-            logger.debug(`Error fetching badge image for ${data.badgeId}:`, error);
+            logger.debug(`Error fetching badge image for ${String(data.badgeId)}:`, error);
             result.imageUrl = getRandomAssetUrl('badges');
           }
         } else {
@@ -244,7 +244,7 @@ export async function enrichNotificationData(
         if (data.productId) {
           try {
             const product = await prisma.product.findUnique({
-              where: { id: data.productId },
+              where: { id: String(data.productId) },
               select: { imageUrl: true },
             });
 
@@ -254,7 +254,7 @@ export async function enrichNotificationData(
               result.imageUrl = getRandomAssetUrl('products');
             }
           } catch (error) {
-            logger.debug(`Error fetching product image for ${data.productId}:`, error);
+            logger.debug(`Error fetching product image for ${String(data.productId)}:`, error);
             result.imageUrl = getRandomAssetUrl('products');
           }
         } else {
@@ -269,7 +269,7 @@ export async function enrichNotificationData(
         if (data.postId) {
           try {
             const postMedia = await prisma.postMedia.findFirst({
-              where: { postId: data.postId },
+              where: { postId: String(data.postId) },
               orderBy: [{ orderIndex: 'asc' }, { createdAt: 'asc' }],
             });
 

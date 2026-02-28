@@ -6,6 +6,7 @@ import { authMiddleware } from '../auth/auth.middleware';
 import { MessagingService } from '../../application/messaging/messaging.service';
 import { SupportRequestService } from '../../application/messaging/support-request.service';
 import { SupportRequestStatus } from '../../domain/messaging/support-request-status.enum';
+import { SupportRequestReportCategory } from '../../domain/messaging/support-request-report-category.enum';
 import { SendTipsCreate, SupportRequestCreate, SupportType } from './inbox.dto';
 import { UserPrismaRepository } from '../../infrastructure/repositories/user-prisma.repository';
 import { getErrorMessage, hasErrorMessage, errorMessageIncludes } from '../../infrastructure/errors/error-helper';
@@ -379,7 +380,7 @@ router.post(
       });
     }
 
-    const file = (req as any).file;
+    const file = req.file;
     const isMultipart = !!file;
     
     let recipientUserId: string;
@@ -1141,7 +1142,7 @@ router.post(
     try {
       await supportRequestService.rejectSupportRequest(requestId, String(expertUserId));
       return res.status(200).json({ message: 'Support request rejected' });
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (hasErrorMessage(error, 'Support request not found')) {
         return res.status(404).json({ success: false, message: getErrorMessage(error) });
       }
@@ -1201,7 +1202,7 @@ router.post(
     try {
       await supportRequestService.cancelSupportRequest(requestId, String(senderId));
       return res.status(200).json({ message: 'Support request cancelled' });
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (hasErrorMessage(error, 'Support request not found')) {
         return res.status(404).json({ success: false, message: getErrorMessage(error) });
       }
@@ -1514,7 +1515,7 @@ router.post(
       await supportRequestService.reportSupportRequest(
         requestId,
         String(userId),
-        normalizedReason as any,
+        normalizedReason as SupportRequestReportCategory,
         description || null
       );
       return res.status(200).end();
@@ -2936,7 +2937,7 @@ router.post(
 
     const { threadId } = req.params;
     const { mediaType, caption, fileName, fileSize } = req.body;
-    const file = (req as any).file;
+    const file = req.file;
 
     if (!file) {
       return res.status(400).json({ success: false, message: 'Media file is required' });

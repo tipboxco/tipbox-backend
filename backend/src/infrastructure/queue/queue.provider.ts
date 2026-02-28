@@ -3,19 +3,19 @@ import RedisConfigManager from '../config/redis.config';
 import logger from '../logger/logger';
 
 export interface JobData {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface NotificationJobData extends JobData {
   type: string;
   userId: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface AnalyticsJobData extends JobData {
   event: string;
   userId?: string;
-  data: any;
+  data: unknown;
 }
 
 /** Tip send işlemi: contract çağrısı consumer tarafından yapılır, kullanıcı beklemez. */

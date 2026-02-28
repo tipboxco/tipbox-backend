@@ -734,7 +734,7 @@ export class TransactionService {
           fromUserId,
           toUserId,
           price: null,
-          transactionType: NFTTransactionType.TRANSFER as any,
+          transactionType: NFTTransactionType.TRANSFER as NFTTransactionType,
         },
         select: {
           id: true,

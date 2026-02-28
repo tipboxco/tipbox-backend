@@ -87,7 +87,22 @@ function getAuth0Config() {
 /**
  * Auth0 API hatalarını işler
  */
-function handleAuth0ApiError(axiosError: any, auth0Domain: string, res: Response, context: string) {
+interface AxiosLikeError {
+  message?: string;
+  code?: string;
+  isAxiosError?: boolean;
+  response?: {
+    status: number;
+    data?: {
+      error?: string;
+      error_description?: string;
+      message?: string;
+      code?: string;
+    };
+  };
+}
+
+function handleAuth0ApiError(axiosError: AxiosLikeError, auth0Domain: string, res: Response, context: string) {
   logger.error({
     message: `Auth0 API isteği başarısız (${context})`,
     error: axiosError?.message || String(axiosError),
@@ -168,9 +183,10 @@ async function findOrCreateUser(
         email: auth0Email,
         userId: user.id
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Email zaten varsa mevcut kullanıcıyı güncelle
-      if (error.name === 'EmailAlreadyExistsError' || error.code === 'P2002') {
+      const errObj = error as { name?: string; code?: string };
+      if (errObj.name === 'EmailAlreadyExistsError' || errObj.code === 'P2002') {
         const existingUser = await userRepo.findByEmail(auth0Email);
         if (existingUser) {
           const { getPrisma } = await import('../../infrastructure/repositories/prisma.client');
@@ -257,7 +273,7 @@ async function getUserProfileData(userId: string, auth0Name: string | null, auth
 /**
  * Backend token'ları oluşturur ve device tracking yapar
  */
-async function generateBackendTokens(user: any, req: Request) {
+async function generateBackendTokens(user: { id: string; email?: string | null }, req: Request) {
   const backendToken = authService.generateToken(user);
   const backendRefreshToken = authService.generateRefreshToken(user);
 
@@ -518,7 +534,7 @@ router.post('/email', loginRateLimiter, validateBody(LoginSchema), asyncHandler(
 
     // Token decode
     const jwt = await import('jsonwebtoken');
-    const decoded = jwt.decode(idToken) as any;
+    const decoded = jwt.decode(idToken) as { sub?: string; email?: string; name?: string; picture?: string; email_verified?: boolean } | null;
 
     if (!decoded?.sub || !decoded?.email) {
       return res.status(500).json({
@@ -576,9 +592,10 @@ router.post('/email', loginRateLimiter, validateBody(LoginSchema), asyncHandler(
       backendRefreshToken
     ));
 
-  } catch (error: any) {
-    if (error.isAxiosError) {
-      return handleAuth0ApiError(error, config.auth0Domain!, res, 'login');
+  } catch (error: unknown) {
+    const axiosErr = error as AxiosLikeError;
+    if (axiosErr.isAxiosError) {
+      return handleAuth0ApiError(axiosErr, config.auth0Domain!, res, 'login');
     }
     throw error;
   }
@@ -655,7 +672,7 @@ router.post('/register', authRateLimiter, validateBody(RegisterSchema), asyncHan
 
     // Token decode
     const jwt = await import('jsonwebtoken');
-    const decoded = jwt.decode(idToken) as any;
+    const decoded = jwt.decode(idToken) as { sub?: string; email?: string; name?: string; picture?: string; email_verified?: boolean } | null;
 
     if (!decoded?.sub || !decoded?.email) {
       return res.status(201).json({
@@ -716,9 +733,10 @@ router.post('/register', authRateLimiter, validateBody(RegisterSchema), asyncHan
       backendRefreshToken
     ));
 
-  } catch (error: any) {
-    if (error.isAxiosError) {
-      return handleAuth0ApiError(error, config.auth0Domain!, res, 'register');
+  } catch (error: unknown) {
+    const axiosErr = error as AxiosLikeError;
+    if (axiosErr.isAxiosError) {
+      return handleAuth0ApiError(axiosErr, config.auth0Domain!, res, 'register');
     }
     throw error;
   }

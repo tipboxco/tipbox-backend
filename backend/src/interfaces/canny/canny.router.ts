@@ -37,7 +37,7 @@ function getCallbackUrl(req: Request): string {
 /**
  * Query parametresinden değer alır
  */
-function getQueryParameterByName(name: string, query: any): string | null {
+function getQueryParameterByName(name: string, query: Record<string, unknown>): string | null {
   const value = query[name];
   if (!value) return null;
   return decodeURIComponent(String(value));
@@ -143,9 +143,10 @@ async function findOrCreateUser(
         email: auth0Email,
         userId: user.id
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Email zaten varsa mevcut kullanıcıyı güncelle
-      if (error.name === 'EmailAlreadyExistsError' || error.code === 'P2002') {
+      const errObj = error as { name?: string; code?: string };
+      if (errObj.name === 'EmailAlreadyExistsError' || errObj.code === 'P2002') {
         const existingUser = await userRepo.findByEmail(auth0Email);
         if (existingUser) {
           const { getPrisma } = await import('../../infrastructure/repositories/prisma.client');

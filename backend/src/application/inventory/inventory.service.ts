@@ -53,55 +53,22 @@ export class InventoryService {
    * Search product experiences by title and text
    */
   async searchExperiences(query: string, options?: { limit?: number; cursor?: string }): Promise<{
-    items: any[];
+    items: Array<Record<string, unknown>>;
     pagination: { cursor?: string; hasMore: boolean; limit: number };
   }> {
     const limit = options?.limit || 20;
     const searchTrimmed = query?.trim();
-    
+
     if (!searchTrimmed) {
       return { items: [], pagination: { hasMore: false, limit } };
     }
 
     // ProductExperience tablosu artık yok, boş sonuç dön
-    const experiences: any[] = [];
-    
-    // Apply cursor-based pagination if needed
-    let resultExperiences = experiences;
-    if (options?.cursor) {
-      const cursorIndex = resultExperiences.findIndex(e => e.id === options.cursor);
-      if (cursorIndex >= 0) {
-        resultExperiences = resultExperiences.slice(cursorIndex + 1);
-      }
-    }
-    
-    const hasMore = resultExperiences.length > limit;
-    const paginated = hasMore ? resultExperiences.slice(0, limit) : resultExperiences;
-    const nextCursor = hasMore && paginated.length > 0 ? paginated[paginated.length - 1].id : undefined;
-
-    // Map to response format
-    const items = paginated.map(exp => ({
-      id: exp.id,
-      title: exp.title,
-      experienceText: exp.experienceText,
-      inventory: exp.inventory ? {
-        id: exp.inventory.id,
-        product: exp.inventory.product ? {
-          id: exp.inventory.product.id,
-          name: exp.inventory.product.name,
-        } : null,
-        user: exp.inventory.user ? {
-          id: exp.inventory.user.id,
-        } : null,
-      } : null,
-      createdAt: exp.createdAt.toISOString(),
-    }));
-
+    // Return empty result immediately since the table no longer exists
     return {
-      items,
+      items: [],
       pagination: {
-        cursor: nextCursor,
-        hasMore,
+        hasMore: false,
         limit,
       },
     };
@@ -150,7 +117,7 @@ export class InventoryService {
         if (!product) continue;
 
         // ProductExperience tablosu artık yok, boş array kullan
-        const experiences: any[] = [];
+        const experiences: Array<{ title: string; experienceText: string }> = [];
 
         // Media'dan ilk resmi al
         const images = await this.mediaRepo.findByInventoryId(inventory.id);
@@ -546,8 +513,8 @@ export class InventoryService {
           description: product.description,
         },
       };
-    } catch (error: any) {
-      if (error?.code === 'P2002') {
+    } catch (error: unknown) {
+      if (error instanceof Error && 'code' in error && (error as { code: string }).code === 'P2002') {
         logger.warn({
           message: 'Inventory already exists for this product and user',
           userId,
