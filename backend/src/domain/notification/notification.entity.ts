@@ -6,7 +6,7 @@ export class Notification {
   type: NotificationType;
   title: string;
   message: string;
-  data?: any;
+  data?: Record<string, unknown>;
   read: boolean;
   readAt?: Date;
   createdAt: Date;
@@ -18,7 +18,7 @@ export class Notification {
     type: NotificationType;
     title: string;
     message: string;
-    data?: any;
+    data?: Record<string, unknown>;
     read: boolean;
     readAt?: Date;
     createdAt: Date;
@@ -74,9 +74,9 @@ export class Notification {
     //   - requestId: Expert request ID'si (ZORUNLU)
     //   - expertId: Expert kullanıcı ID'si
     //   - tipsAmount: TIPS miktarı
-    let dataWithoutNavigation = this.data;
+    let dataWithoutNavigation: Record<string, unknown> | undefined = this.data;
     if (this.data && typeof this.data === 'object') {
-      const { navigation, ...rest } = this.data;
+      const { navigation, ...rest } = this.data as Record<string, unknown>;
       // Navigation dışındaki tüm alanları koru (ID'ler ve diğer payload verileri)
       dataWithoutNavigation = Object.keys(rest).length > 0 ? rest : undefined;
     }

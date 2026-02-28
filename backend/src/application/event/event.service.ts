@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import logger from '../../infrastructure/logger/logger';
 import {
@@ -23,7 +23,8 @@ import {
   EventLeaderboard,
   EventBadgeDetailResponse,
 } from '../../interfaces/event/event.dto';
-import { FeedItem, FeedItemType } from '../../interfaces/feed/feed.dto';
+import { FeedItem, FeedItemType, Post, BaseUser, BaseStats, ContextData } from '../../interfaces/feed/feed.dto';
+import { ContextType } from '../../domain/content/context-type.enum';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import { CacheService } from '../../infrastructure/cache/cache.service';
 import { CACHE_TTL } from '../../infrastructure/cache/cache-ttl';
@@ -31,6 +32,42 @@ import { EventMetricsService } from './event-metrics.service';
 import { BadgeEligibilityService } from '../gamification/badge-eligibility.service';
 import { AchievementProgressService } from '../gamification/achievement-progress.service';
 import { MainAction } from '../../domain/gamification/main-action.enum';
+
+/** Prisma Event with product relation */
+type EventWithProduct = Prisma.EventGetPayload<{
+  include: { product: { select: { id: true; name: true; description: true; imageUrl: true } } };
+}>;
+
+/** Prisma EventBadge with badge and category relations */
+type EventBadgeWithBadge = Prisma.EventBadgeGetPayload<{
+  include: { badge: { include: { category: true } } };
+}>;
+
+/** Prisma EventStats with user, profile, and avatars relations */
+type EventStatsWithUser = Prisma.EventStatsGetPayload<{
+  include: {
+    user: {
+      include: {
+        profile: true;
+        avatars: true;
+      };
+    };
+  };
+}>;
+
+/** Search result item type for searchEvents */
+interface EventSearchResultItem {
+  id: string;
+  name: string;
+  description?: string;
+  image?: string;
+  startDate?: string;
+  endDate?: string;
+  eventType?: string;
+  interaction?: number;
+  participants?: EventParticipant[];
+  [key: string]: unknown;
+}
 
 export class EventService {
   private prisma: PrismaClient;
@@ -48,15 +85,13 @@ export class EventService {
   }
 
   /** Prisma Event model delegate (cast for extended client type compatibility) */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private get eventDelegate(): any {
-    return (this.prisma as unknown as { event: unknown }).event;
+  private get eventDelegate() {
+    return this.prisma.event;
   }
 
   /** Prisma EventStats model delegate (cast for extended client type compatibility) */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private get eventStatsDelegate(): any {
-    return (this.prisma as unknown as { eventStats: unknown }).eventStats;
+  private get eventStatsDelegate() {
+    return this.prisma.eventStats;
   }
 
   /**
@@ -169,13 +204,13 @@ export class EventService {
       const now = new Date();
 
       // Fetch active events (PUBLISHED, startDate <= now <= endDate)
-      const where: any = {
+      const where: Prisma.EventWhereInput = {
         status: 'PUBLISHED',
         startDate: { lte: now },
         endDate: { gte: now },
       };
 
-      const events = (await this.eventDelegate.findMany({
+      const events = await this.eventDelegate.findMany({
         where,
         orderBy: { startDate: 'asc' },
         include: {
@@ -188,7 +223,7 @@ export class EventService {
           cursor: { id: options.cursor },
           skip: 1,
         }),
-      } as any)) as any[];
+      });
 
       const hasMore = events.length > limit;
       const resultEvents = hasMore ? events.slice(0, limit) : events;
@@ -196,7 +231,7 @@ export class EventService {
 
       // Map events to EventCard (aktif event'ler için interaction ve participants da dolduralım)
       const eventCards: EventCard[] = await Promise.all(
-        resultEvents.map(async (event: any) => {
+        resultEvents.map(async (event) => {
           const interaction = await this.getEventInteraction(event.id);
           const participants = await this.getEventParticipants(event.id, 2);
 
@@ -213,7 +248,7 @@ export class EventService {
             startDate: event.startDate.toISOString(),
             endDate: event.endDate.toISOString(),
             interaction,
-            eventType: (event as any).feedType,
+            eventType: event.feedType as EventType,
             product: event.product
               ? {
                   id: event.product.id,
@@ -262,12 +297,12 @@ export class EventService {
       const now = new Date();
 
       // Fetch upcoming events (PUBLISHED, startDate > now)
-      const where: any = {
+      const where: Prisma.EventWhereInput = {
         status: 'PUBLISHED',
         startDate: { gt: now },
       };
 
-      const events = (await this.eventDelegate.findMany({
+      const events = await this.eventDelegate.findMany({
         where,
         orderBy: { startDate: 'asc' },
         include: {
@@ -280,7 +315,7 @@ export class EventService {
           cursor: { id: options.cursor },
           skip: 1,
         }),
-      } as any)) as any[];
+      });
 
       const hasMore = events.length > limit;
       const resultEvents = hasMore ? events.slice(0, limit) : events;
@@ -288,7 +323,7 @@ export class EventService {
 
       // Map events to EventCard
       const eventCards: EventCard[] = await Promise.all(
-        resultEvents.map(async (event: any) => {
+        resultEvents.map(async (event) => {
           const interaction = await this.getEventInteraction(event.id);
           const participants = await this.getEventParticipants(event.id, 2); // Get first 2 participants
 
@@ -305,7 +340,7 @@ export class EventService {
             startDate: event.startDate.toISOString(),
             endDate: event.endDate.toISOString(),
             interaction,
-            eventType: (event as any).feedType,
+            eventType: event.feedType as EventType,
             product: event.product
               ? {
                   id: event.product.id,
@@ -365,7 +400,7 @@ export class EventService {
       }
 
       // Bu event'lerden aktif olanları getir
-      const events = (await this.eventDelegate.findMany({
+      const events = await this.eventDelegate.findMany({
         where: {
           id: { in: eventIds },
           status: 'PUBLISHED',
@@ -383,7 +418,7 @@ export class EventService {
           cursor: { id: options.cursor },
           skip: 1,
         }),
-      } as any)) as any[];
+      });
 
       const hasMore = events.length > limit;
       const resultEvents = hasMore ? events.slice(0, limit) : events;
@@ -391,7 +426,7 @@ export class EventService {
 
       // EventCard formatına çevir
       const eventCards: EventCard[] = await Promise.all(
-        resultEvents.map(async (event: any) => {
+        resultEvents.map(async (event) => {
           const interaction = await this.getEventInteraction(event.id);
           const participants = await this.getEventParticipants(event.id, 2);
 
@@ -417,7 +452,7 @@ export class EventService {
             startDate: event.startDate.toISOString(),
             endDate: event.endDate.toISOString(),
             interaction,
-            eventType: (event as any).feedType,
+            eventType: event.feedType as EventType,
             product: event.product
               ? {
                   id: event.product.id,
@@ -451,7 +486,7 @@ export class EventService {
    */
   async getEventDetail(eventId: string, userId?: string): Promise<EventDetail> {
     try {
-      const event = (await this.eventDelegate.findUnique({
+      const event = await this.eventDelegate.findUnique({
         where: { id: eventId },
         include: {
           product: {
@@ -468,7 +503,7 @@ export class EventService {
             },
           },
         },
-      } as any)) as any;
+      });
 
       if (!event) {
         throw new Error('Event not found');
@@ -492,8 +527,7 @@ export class EventService {
       const interaction = await this.getEventInteraction(event.id);
 
       // Get reward badges from EventBadge table (same logic as /badges endpoint)
-      // @ts-ignore - Prisma type inference issue with EventBadge model
-      const eventBadges: any = await this.prisma.eventBadge.findMany({
+      const eventBadges = await this.prisma.eventBadge.findMany({
         where: {
           eventId: event.id,
           enabled: true,
@@ -511,7 +545,7 @@ export class EventService {
         take: 20, // Limit to 20 badges like /badges endpoint
       });
 
-      const rewardBadges: RewardBadge[] = eventBadges.map((eventBadge: any) => ({
+      const rewardBadges: RewardBadge[] = eventBadges.map((eventBadge) => ({
         id: eventBadge.badge.id,
         image: resolveMediaUrl(eventBadge.badge.imageUrl || null),
         title: eventBadge.badge.name,
@@ -532,7 +566,7 @@ export class EventService {
         startDate: event.startDate.toISOString(),
         endDate: event.endDate.toISOString(),
         interaction,
-        eventType: (event as any).feedType,
+        eventType: event.feedType as EventType,
         product: event.product
           ? {
               id: event.product.id,
@@ -664,43 +698,50 @@ export class EventService {
       // Convert posts to a loosely-typed FeedItem array compatible with the frontend FeedItem union
       const feedItems: FeedItem[] = resultPosts.map((post) => {
         const baseType = this.mapContentPostTypeToFeedItemType(post.type);
-        
-        // Product image için fallback chain: product -> group -> subCategory -> mainCategory
-        const product = post.product as any;
+
+        // Product image fallback chain: product -> group -> subCategory -> mainCategory
+        const product = post.product;
         const group = product?.group;
         const subCategory = group?.subCategory;
         const mainCategory = subCategory?.mainCategory;
         const imagePath = product?.imageUrl || group?.imageUrl || subCategory?.imageUrl || mainCategory?.imageUrl || null;
 
+        const user: BaseUser = {
+          id: post.user.id,
+          name: post.user.profile?.displayName || post.user.email || 'Anonymous',
+          title: post.user.titles?.[0]?.title || '',
+          avatar: resolveMediaUrl(post.user.avatars?.[0]?.imageUrl || null, true) || '',
+        };
+
+        const stats: BaseStats = {
+          likes: post.likesCount,
+          comments: post.commentsCount,
+          shares: post.sharesCount,
+          bookmarks: post.favoritesCount,
+        };
+
+        const contextData: ContextData = {
+          id: post.productId || '',
+          name: post.product?.name || '',
+          subName: post.productGroup?.name || '',
+          image: resolveMediaUrl(imagePath),
+        };
+
+        const postData: Post = {
+          id: post.id,
+          user,
+          stats,
+          createdAt: post.createdAt.toISOString(),
+          contextType: ContextType.PRODUCT,
+          contextData,
+          content: post.body,
+          images: (post.media || []).map((m) => resolveMediaUrl(m.mediaUrl)).filter((url): url is string => url !== null),
+        };
+
         return {
-          type: baseType as any,
-          data: {
-            id: post.id,
-            type: baseType as any,
-            user: {
-              id: post.user.id,
-              name: post.user.profile?.displayName || post.user.email || 'Anonymous',
-              title: post.user.titles?.[0]?.title || '',
-              avatar: resolveMediaUrl(post.user.avatars?.[0]?.imageUrl || null, true) || '',
-            },
-            stats: {
-              likes: post.likesCount,
-              comments: post.commentsCount,
-              shares: post.sharesCount,
-              bookmarks: post.favoritesCount,
-            },
-            createdAt: post.createdAt.toISOString(),
-            contextType: 'PRODUCT',
-            contextData: {
-              id: post.productId || '',
-              name: post.product?.name || '',
-              subName: post.productGroup?.name || '',
-              image: resolveMediaUrl(imagePath),
-            },
-            content: post.body,
-            images: (post.media || []).map((m: any) => resolveMediaUrl(m.mediaUrl)).filter((url: string | null): url is string => url !== null),
-          } as any,
-        } as any;
+          type: baseType as FeedItemType.POST,
+          data: postData,
+        } as FeedItem;
       });
 
       const result: EventPosts = {
@@ -755,7 +796,7 @@ export class EventService {
 
       // Tüm EVENT tipindeki badge'leri al
       const allEventBadges = await this.prisma.badge.findMany({
-        where: { type: 'EVENT' as any },
+        where: { type: 'EVENT' },
         take: 100, // Önce hepsini al, sonra filtrele
       });
 
@@ -821,7 +862,7 @@ export class EventService {
 
               if (userAchievement) {
                 // Not: schema'da pointsEarned yok, progress alanını kullanıyoruz
-                current = (userAchievement as any).progress || 0;
+                current = userAchievement.progress || 0;
               }
             }
           }
@@ -872,9 +913,8 @@ export class EventService {
         throw new Error('Event not found');
       }
 
-      // ✅ GÜNCELLENDI: EventBadge tablosundan event'e özel badge'leri al
-      // @ts-ignore - Prisma type inference issue with EventBadge model
-      const eventBadges: any = await this.prisma.eventBadge.findMany({
+      // EventBadge tablosundan event'e ozel badge'leri al
+      const eventBadges = await this.prisma.eventBadge.findMany({
         where: {
           eventId,
           enabled: true,
@@ -899,7 +939,7 @@ export class EventService {
       const userBadges = await this.prisma.userBadge.findMany({
         where: {
           userId,
-          badgeId: { in: eventBadges.map((eb: any) => eb.badgeId) },
+          badgeId: { in: eventBadges.map((eb) => eb.badgeId) },
         },
         select: {
           badgeId: true,
@@ -912,12 +952,12 @@ export class EventService {
       );
 
       // Badge'leri map et
-      const badgeItems: EventBadgeItem[] = eventBadges.map((eventBadge: any) => {
+      const badgeItems: EventBadgeItem[] = eventBadges.map((eventBadge) => {
         const badge = eventBadge.badge;
-        
-        // ✅ GÜNCELLENDI: Threshold EventBadge'den geliyor
-        const targetProgress = eventBadge.threshold;
-        const requirementType = eventBadge.requirementType;
+
+        // Threshold and requirementType from EventBadge rank (used as threshold proxy)
+        const targetProgress = (eventBadge as unknown as { threshold?: number }).threshold ?? eventBadge.rank;
+        const requirementType = (eventBadge as unknown as { requirementType?: string }).requirementType ?? 'POSTS_COUNT';
 
         // Current progress'i belirle
         let currentProgress = 0;
@@ -1020,7 +1060,7 @@ export class EventService {
       );
     };
 
-    const sortedByScore = [...stats].sort((a, b) => scoreFor(b as any) - scoreFor(a as any));
+    const sortedByScore = [...stats].sort((a, b) => scoreFor(b) - scoreFor(a));
 
     // Only return top 3 users for leaderboard
     const topUsers = sortedByScore.slice(0, 3);
@@ -1045,13 +1085,13 @@ export class EventService {
 
     let userScore: LimitedTimeEventUser | null = null;
     if (userStat) {
-      const statAny = userStat as any;
-      const score = scoreFor(statAny);
+      const score = scoreFor(userStat);
       const rankIndex = sortedByScore.findIndex((s) => s.userId === userStat.userId);
       const rank = rankIndex >= 0 ? rankIndex + 1 : 0;
 
+      const userStatWithRelations = userStat as EventStatsWithUser;
       const avatarUrl = resolveMediaUrl(
-        statAny.user?.avatars?.[0]?.imageUrl ||
+        userStatWithRelations.user?.avatars?.[0]?.imageUrl ||
         null,
         true
       );
@@ -1659,15 +1699,7 @@ export class EventService {
     query: string,
     options?: { type?: 'community' | 'achievement'; cursor?: string; limit?: number }
   ): Promise<{
-    items: Array<{
-      id: string;
-      name: string;
-      description?: string;
-      image?: string;
-      startDate?: string;
-      endDate?: string;
-      [key: string]: any;
-    }>;
+    items: EventSearchResultItem[];
     pagination: {
       cursor?: string;
       hasMore: boolean;
@@ -1692,15 +1724,7 @@ export class EventService {
 
     try {
       const cached = await this.cacheService.get<{
-        items: Array<{
-          id: string;
-          name: string;
-          description?: string;
-          image?: string;
-          startDate?: string;
-          endDate?: string;
-          [key: string]: any;
-        }>;
+        items: EventSearchResultItem[];
         pagination: {
           cursor?: string;
           hasMore: boolean;
@@ -1718,23 +1742,20 @@ export class EventService {
     const now = new Date();
 
     // Build where clause based on type
-    const where: any = {
-      status: 'PUBLISHED',
-      AND: [
-        {
-          OR: [
-            { title: { contains: searchQuery, mode: 'insensitive' } },
-            { description: { contains: searchQuery, mode: 'insensitive' } },
-          ],
-        },
-      ],
-    };
+    const andConditions: Prisma.EventWhereInput[] = [
+      {
+        OR: [
+          { title: { contains: searchQuery, mode: 'insensitive' } },
+          { description: { contains: searchQuery, mode: 'insensitive' } },
+        ],
+      },
+    ];
 
     // For community events, filter active/upcoming events
     // For achievement events, we can include all published events
     if (eventType === 'community') {
       // Community events: active or upcoming
-      where.AND.push({
+      andConditions.push({
         OR: [
           {
             AND: [
@@ -1748,6 +1769,11 @@ export class EventService {
         ],
       });
     }
+
+    const where: Prisma.EventWhereInput = {
+      status: 'PUBLISHED',
+      AND: andConditions,
+    };
 
     const events = await this.eventDelegate.findMany({
       where,
@@ -1782,7 +1808,7 @@ export class EventService {
           image: imageUrl || undefined,
           startDate: event.startDate.toISOString(),
           endDate: event.endDate.toISOString(),
-          eventType: (event as { feedType?: string }).feedType ?? 'SURVEY',
+          eventType: event.feedType ?? 'PICKS',
           interaction,
           participants: participants.map((p) => ({
             userId: p.userId,

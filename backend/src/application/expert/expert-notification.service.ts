@@ -159,7 +159,7 @@ export class ExpertNotificationService {
         expert: {
           id: expert.id,
           name: expert.profile?.displayName || 'Expert',
-          title: expert.titles?.map((t: any) => t.title) || [],
+          title: expert.titles?.map((t: { title: string }) => t.title) || [],
           avatar: expert.avatars?.[0]?.imageUrl || null,
         },
         message: 'Bir uzman sorunuzla ilgilenmeye başladı!',

@@ -1,3 +1,4 @@
+import type { DMThread as PrismaDMThreadModel } from '@prisma/client';
 import { Prisma  } from '@prisma/client';
 import { getPrisma } from './prisma.client';
 import { DMThread } from '../../domain/messaging/dm-thread.entity';
@@ -7,7 +8,7 @@ const THREAD_INCLUDE = {
     where: {
       isDeleted: false, // Silinmemiş mesajları al
       context: 'DM', // Sadece DM context'li mesajları al (support mesajları hariç)
-    } as any,
+    } satisfies Prisma.DMMessageWhereInput,
     orderBy: { sentAt: 'desc' as const },
     take: 1,
     select: {
@@ -75,7 +76,7 @@ export class DMThreadPrismaRepository {
           { userTwoId: String(userId) },
         ],
         isSupportThread: false,
-      } as any,
+      },
       include: THREAD_INCLUDE,
       orderBy: { updatedAt: 'desc' },
     });
@@ -99,7 +100,7 @@ export class DMThreadPrismaRepository {
 
     // Cursor-based pagination: cursor'dan önceki (daha eski) thread'leri getir
     const cursorDate = options.cursor ? new Date(options.cursor) : undefined;
-    const whereClause: any = {
+    const whereClause: Prisma.DMThreadWhereInput = {
       OR: [
         { userOneId: userIdStr },
         { userTwoId: userIdStr },
@@ -158,7 +159,7 @@ export class DMThreadPrismaRepository {
           { userTwoId: userId },
         ],
         isSupportThread: false,
-      } as any,
+      },
       select: {
         userOneId: true,
         userTwoId: true,
@@ -206,7 +207,7 @@ export class DMThreadPrismaRepository {
         startedAt: data.startedAt ?? new Date(),
         createdAt: data.createdAt ?? new Date(),
         updatedAt: data.updatedAt ?? new Date(),
-      } as any,
+      },
       include: THREAD_INCLUDE,
     });
     return this.toDomain(thread);
@@ -214,10 +215,10 @@ export class DMThreadPrismaRepository {
 
   async update(id: string, data: Partial<DMThread>): Promise<DMThread | null> {
     try {
-      const updateData: any = {
+      const updateData: Prisma.DMThreadUpdateInput = {
         updatedAt: new Date(),
       };
-      
+
       if (data.isActive !== undefined) {
         updateData.isActive = data.isActive;
       }
@@ -266,7 +267,7 @@ export class DMThreadPrismaRepository {
     });
   }
 
-  private toDomain(prismaThread: any): DMThread {
+  private toDomain(prismaThread: PrismaDMThreadModel): DMThread {
     return new DMThread(
       prismaThread.id,
       prismaThread.userOneId,

@@ -1,6 +1,7 @@
 import { AuthenticatedSocket } from '../socket.handler';
 import { SocketHandler } from '../socket.handler';
 import logger from '../../logger/logger';
+import { getErrorMessage } from '../../errors/error-helper';
 import { SupportRequestService } from '../../../application/messaging/support-request.service';
 import { DMRequestPrismaRepository } from '../../repositories/dm-request-prisma.repository';
 import { DMRequestStatus } from '../../../domain/messaging/dm-request-status.enum';
@@ -71,10 +72,10 @@ export class RequestSocketService {
         logger.info(
           `Support request ${requestId} accepted by ${userId} via socket`
         );
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.error('Error in accept_support_request handler:', error);
         socket.emit('error', {
-          message: error.message || 'Failed to accept support request',
+          message: getErrorMessage(error) || 'Failed to accept support request',
         });
       }
     });
@@ -125,10 +126,10 @@ export class RequestSocketService {
         logger.info(
           `Support request ${requestId} rejected by ${userId} via socket`
         );
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.error('Error in reject_support_request handler:', error);
         socket.emit('error', {
-          message: error.message || 'Failed to reject support request',
+          message: getErrorMessage(error) || 'Failed to reject support request',
         });
       }
     });
@@ -183,10 +184,10 @@ export class RequestSocketService {
         logger.info(
           `Support request ${requestId} cancelled by ${userId} via socket`
         );
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.error('Error in cancel_support_request handler:', error);
         socket.emit('error', {
-          message: error.message || 'Failed to cancel support request',
+          message: getErrorMessage(error) || 'Failed to cancel support request',
         });
       }
     });

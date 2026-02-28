@@ -372,7 +372,7 @@ export class AuthService implements IAuthService {
   async validateToken(token: string): Promise<User | null> {
     const payload = verifyJwt(token);
     if (!payload || typeof payload !== 'object' || !('id' in payload)) return null;
-    const user = await this.userRepo.findById(String((payload as any).id));
+    const user = await this.userRepo.findById(String((payload as Record<string, unknown>).id));
     return user;
   }
 

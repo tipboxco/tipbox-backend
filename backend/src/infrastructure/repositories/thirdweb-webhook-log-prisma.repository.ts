@@ -1,5 +1,5 @@
 import { getPrisma } from './prisma.client';
-import { ThirdwebWebhookStatus, ThirdwebOnchainStatus } from '@prisma/client';
+import { ThirdwebWebhookStatus, ThirdwebOnchainStatus, Prisma } from '@prisma/client';
 
 // ============================================================================
 // TYPES
@@ -17,7 +17,7 @@ export interface CreateThirdwebWebhookLogData {
   functionName?: string | null;
   functionArgs?: string | null;
   errorMessage?: string | null;
-  rawPayload: Record<string, any>;
+  rawPayload: Prisma.JsonValue;
   transactionId?: string | null;
 }
 
@@ -27,7 +27,7 @@ export interface UpdateThirdwebWebhookLogData {
   transactionHash?: string | null;
   blockNumber?: number | null;
   errorMessage?: string | null;
-  rawPayload?: Record<string, any>;
+  rawPayload?: Prisma.JsonValue;
   transactionId?: string | null;
   processedAt?: Date;
 }
@@ -55,7 +55,7 @@ export interface ThirdwebWebhookLogRecord {
   functionName: string | null;
   functionArgs: string | null;
   errorMessage: string | null;
-  rawPayload: any;
+  rawPayload: Prisma.JsonValue;
   transactionId: string | null;
   processedAt: Date;
   createdAt: Date;
@@ -210,7 +210,7 @@ export class ThirdwebWebhookLogPrismaRepository {
     filters: ThirdwebWebhookLogFilters,
     options?: { limit?: number; cursor?: string }
   ): Promise<{ items: ThirdwebWebhookLogRecord[]; nextCursor?: string }> {
-    const where: any = {};
+    const where: Prisma.ThirdwebWebhookLogWhereInput = {};
 
     if (filters.status) {
       where.status = filters.status;

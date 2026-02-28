@@ -7,6 +7,7 @@ import { ProfilePrismaRepository } from '../../infrastructure/repositories/profi
 import { UserTitlePrismaRepository } from '../../infrastructure/repositories/user-title-prisma.repository';
 import { UserAvatarPrismaRepository } from '../../infrastructure/repositories/user-avatar-prisma.repository';
 import { WalletService } from '../wallet/wallet.service';
+import { ExpertRequest } from '../../domain/expert/expert-request.entity';
 import { ExpertRequestStatus } from '../../domain/expert/expert-request-status.enum';
 import {
   CreateExpertRequestDto,
@@ -788,7 +789,7 @@ export class ExpertService {
       }
 
       // Update data hazırla
-      const updateData: any = {};
+      const updateData: { description?: string } = {};
       if (dto.description !== undefined) {
         updateData.description = dto.description;
       }
@@ -947,7 +948,17 @@ export class ExpertService {
     }
   }
 
-  private mapToResponse(request: any): ExpertRequestResponse {
+  private mapToResponse(request: {
+    id: string;
+    userId: string;
+    description: string;
+    category: string | null;
+    tipsAmount: number;
+    status: ExpertRequestStatus | string;
+    answeredAt: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }): ExpertRequestResponse {
     return {
       id: request.id,
       userId: request.userId,

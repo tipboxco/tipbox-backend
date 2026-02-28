@@ -1,3 +1,4 @@
+import type { ProductSuggestion as PrismaProductSuggestionModel } from '@prisma/client';
 import { ProductSuggestion } from '../../domain/product/product-suggestion.entity';
 import { getPrisma } from './prisma.client';
 import { ProductSuggestionStatus } from '../../domain/product/product-suggestion-status.enum';
@@ -148,7 +149,7 @@ export class ProductSuggestionPrismaRepository {
     return suggestions.map(suggestion => this.toDomain(suggestion));
   }
 
-  private toDomain(prismaSuggestion: any): ProductSuggestion {
+  private toDomain(prismaSuggestion: PrismaProductSuggestionModel): ProductSuggestion {
     return new ProductSuggestion(
       prismaSuggestion.id,
       prismaSuggestion.userId,

@@ -1,3 +1,4 @@
+import type { UserKycRecord as PrismaUserKycRecordModel } from '@prisma/client';
 import { UserKycRecord } from '../../domain/user/user-kyc-record.entity';
 import { getPrisma } from './prisma.client';
 import { KycReviewStatus, KycReviewResult, KycProvider } from '../../domain/user/kyc-enums';
@@ -95,7 +96,7 @@ export class UserKycRecordPrismaRepository {
     return records.map(record => this.toDomain(record));
   }
 
-  private toDomain(prismaRecord: any): UserKycRecord {
+  private toDomain(prismaRecord: PrismaUserKycRecordModel): UserKycRecord {
     return new UserKycRecord(
       prismaRecord.id,
       prismaRecord.userId,

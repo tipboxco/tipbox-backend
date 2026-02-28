@@ -242,10 +242,12 @@ export class AchievementProgressService {
   private async findGoalsByAction(
     mainAction: MainAction,
     actionTypeId: string
-  ): Promise<Array<{ id: string; pointsRequired: number; rewardBadgeId: string | null }>> {
+  ): Promise<Array<{ id: string; pointsRequired: number; rewardBadgeId: string | null; title: string; requirement: string }>> {
     const goals = await this.prisma.achievementGoal.findMany({
       select: {
         id: true,
+        title: true,
+        requirement: true,
         pointsRequired: true,
         rewardBadgeId: true,
         mainAction: true,
@@ -257,7 +259,7 @@ export class AchievementProgressService {
         },
       },
       where: {
-        mainAction: mainAction as any,
+        mainAction: mainAction as unknown as import('@prisma/client').MainAction,
         actionTypeId,
       },
     });
@@ -268,6 +270,8 @@ export class AchievementProgressService {
         id: String(g.id),
         pointsRequired: Number(g.pointsRequired) || 0,
         rewardBadgeId: g.rewardBadgeId ? String(g.rewardBadgeId) : null,
+        title: g.title,
+        requirement: g.requirement,
       }))
       .filter((x) => x.pointsRequired > 0);
   }
@@ -334,7 +338,7 @@ export class AchievementProgressService {
       const actionType = await this.prisma.actionType.findUnique({
         where: {
           mainAction_code: {
-            mainAction: mainAction as any,
+            mainAction: mainAction as unknown as import('@prisma/client').MainAction,
             code,
           },
         },

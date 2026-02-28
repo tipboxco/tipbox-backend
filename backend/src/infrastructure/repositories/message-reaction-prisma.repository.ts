@@ -1,3 +1,4 @@
+import type { MessageReaction as PrismaMessageReactionModel } from '@prisma/client';
 import { MessageReaction } from '../../domain/messaging/message-reaction.entity';
 import { getPrisma } from './prisma.client';
 
@@ -113,7 +114,7 @@ export class MessageReactionPrismaRepository {
     }
   }
 
-  private toDomain(prismaReaction: any): MessageReaction {
+  private toDomain(prismaReaction: PrismaMessageReactionModel): MessageReaction {
     return new MessageReaction(
       prismaReaction.id,
       prismaReaction.messageId,

@@ -1,3 +1,4 @@
+import type { LoginAttempt as PrismaLoginAttemptModel } from '@prisma/client';
 import { LoginAttempt } from '../../domain/user/login-attempt.entity';
 import { getPrisma } from './prisma.client';
 import { LoginAttemptStatus } from '../../domain/user/login-attempt-status.enum';
@@ -103,7 +104,7 @@ export class LoginAttemptPrismaRepository {
     return attempts.map(attempt => this.toDomain(attempt));
   }
 
-  private toDomain(prismaAttempt: any): LoginAttempt {
+  private toDomain(prismaAttempt: PrismaLoginAttemptModel): LoginAttempt {
     return new LoginAttempt(
       prismaAttempt.id,
       prismaAttempt.userId,

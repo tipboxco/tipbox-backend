@@ -126,14 +126,23 @@ export class FeedDistributionScheduler {
   /**
    * Belirli bir job'ın durumunu getir
    */
-  public async getJobStatus(jobId: string): Promise<any> {
+  public async getJobStatus(jobId: string): Promise<{
+    id: string | undefined;
+    name: string;
+    data: Record<string, unknown>;
+    progress: number | object;
+    attemptsMade: number;
+    processedOn: number | undefined;
+    finishedOn: number | undefined;
+    failedReason: string | undefined;
+  } | null> {
     const job = await this.queue.getJob(jobId);
     if (!job) return null;
 
     return {
       id: job.id,
       name: job.name,
-      data: job.data,
+      data: job.data as Record<string, unknown>,
       progress: job.progress,
       attemptsMade: job.attemptsMade,
       processedOn: job.processedOn,

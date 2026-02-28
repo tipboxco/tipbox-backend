@@ -1,3 +1,4 @@
+import type { UserTrustScore as PrismaUserTrustScoreModel } from '@prisma/client';
 import { UserTrustScore } from '../../domain/user/user-trust-score.entity';
 import { getPrisma } from './prisma.client';
 import { invalidateTrustScoreCache } from '../cache/cache-invalidation';
@@ -89,7 +90,7 @@ export class UserTrustScorePrismaRepository {
     return scores.map(score => this.toDomain(score));
   }
 
-  private toDomain(prismaScore: any): UserTrustScore {
+  private toDomain(prismaScore: PrismaUserTrustScoreModel): UserTrustScore {
     return new UserTrustScore(
       prismaScore.id,
       prismaScore.userId,

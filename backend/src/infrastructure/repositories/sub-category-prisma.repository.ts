@@ -1,3 +1,4 @@
+import type { SubCategory as PrismaSubCategoryModel } from '@prisma/client';
 import { SubCategory } from '../../domain/product/sub-category.entity';
 import { getPrisma } from './prisma.client';
 
@@ -107,7 +108,7 @@ export class SubCategoryPrismaRepository {
     return categories.map(category => this.toDomain(category));
   }
 
-  private toDomain(prismaCategory: any): SubCategory {
+  private toDomain(prismaCategory: PrismaSubCategoryModel): SubCategory {
     return new SubCategory(
       prismaCategory.id,
       prismaCategory.mainCategoryId,

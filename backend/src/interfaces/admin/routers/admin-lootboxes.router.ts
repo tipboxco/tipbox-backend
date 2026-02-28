@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../../../infrastructure/errors/async-handler';
 import { validateBody, validateQuery } from '../../../infrastructure/middleware/validation.middleware';
+import { Prisma } from '@prisma/client';
 import { getPrisma } from '../../../infrastructure/repositories/prisma.client';
 import { NotFoundError } from '../../../infrastructure/errors/custom-errors';
 import logger from '../../../infrastructure/logger/logger';
@@ -97,7 +98,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const query = AdminLootboxesQuerySchema.parse(req.query);
 
-    const where: any = {};
+    const where: Prisma.LootboxWhereInput = {};
     if (query.userId) where.userId = query.userId;
     if (query.type) where.type = query.type;
     if (query.opened !== undefined) where.opened = query.opened;
@@ -301,7 +302,7 @@ router.patch(
       });
     }
 
-    const updateData: any = {};
+    const updateData: Prisma.LootboxUpdateInput = {};
     if (body.type !== undefined) updateData.type = body.type;
     if (body.tier !== undefined) updateData.tier = body.tier;
     if (body.expiresAt !== undefined) {

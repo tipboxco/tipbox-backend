@@ -1,3 +1,4 @@
+import type { Product as PrismaProductModel } from '@prisma/client';
 import { Product } from '../../domain/product/product.entity';
 import { generateUuidV4 } from '../ids/id.strategy';
 import { getPrisma } from './prisma.client';
@@ -160,7 +161,7 @@ export class ProductPrismaRepository {
     return products.map(product => this.toDomain(product));
   }
 
-  private toDomain(prismaProduct: any): Product {
+  private toDomain(prismaProduct: PrismaProductModel): Product {
     return new Product(
       prismaProduct.id,
       prismaProduct.name,

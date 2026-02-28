@@ -23,7 +23,7 @@ const prisma = getPrisma();
  * Notification'ları enrich eder - avatar URL'leri ve görseller ekler
  * Tüm 22 notification type'ı destekler
  */
-async function enrichNotifications(notifications: any[]): Promise<any[]> {
+async function enrichNotifications(notifications: Record<string, unknown>[]): Promise<Record<string, unknown>[]> {
   try {
   // Tüm user ID'leri topla
   const userIds = new Set<string>();
@@ -37,9 +37,9 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
   const commentIds = new Set<string>();
 
   notifications.forEach((notification) => {
-    const data = notification.data || {};
+    const data = (notification.data || {}) as Record<string, string>;
     const type = notification.type as NotificationType;
-    
+
     // User etkileşimleri için user ID'leri topla
     if (data.trusterId) userIds.add(data.trusterId);
     if (data.trustedId) userIds.add(data.trustedId);
@@ -56,13 +56,15 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
     // Tips bildirimleri için senderId ve recipientId ekle
     if (type === NotificationType.TIPS_RECEIVED) {
       // Bildirimi alan kullanıcı (alıcı) ve gönderen kullanıcı
-      if (notification.userId) userIds.add(notification.userId); // Alıcı
+      const notifUserId = notification.userId as string | undefined;
+      if (notifUserId) userIds.add(notifUserId); // Alıcı
       if (data.senderId) userIds.add(data.senderId);
       if (data.senderUserId) userIds.add(data.senderUserId);
     }
     if (type === NotificationType.TIPS_SENT) {
       // Bildirimi alan kullanıcı (gönderen) ve alıcı kullanıcı
-      if (notification.userId) userIds.add(notification.userId); // Gönderen
+      const notifUserId = notification.userId as string | undefined;
+      if (notifUserId) userIds.add(notifUserId); // Gönderen
       if (data.recipientId) userIds.add(data.recipientId);
       if (data.recipientUserId) userIds.add(data.recipientUserId);
     }
@@ -174,7 +176,7 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
     
     // eventType'ı raw query ile almayı dene (field varsa)
     try {
-      const eventsWithType = await prisma.$queryRaw<any[]>`
+      const eventsWithType = await prisma.$queryRaw<Array<{ id: string; event_type: string | null }>>`
         SELECT id, event_type
         FROM events
         WHERE id = ANY(${Array.from(eventIds)}::text[])
@@ -370,7 +372,7 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
   const supportThreadIds = new Set<string>();
   
   notifications.forEach((notification) => {
-    const data = notification.data || {};
+    const data = (notification.data || {}) as Record<string, string>;
     const type = notification.type as NotificationType;
     if (type === NotificationType.SUPPORT_REQUEST_ACCEPTED && data.threadId) {
       supportThreadIds.add(data.threadId);
@@ -457,6 +459,15 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
   // Notification'ları enrich et
   return notifications.map((notification) => {
     // Minimal response structure (title, message, readAt, updatedAt kaldırıldı)
+    const notifId = notification.id as string;
+    const notifUserId = notification.userId as string | undefined;
+    const notifType = notification.type as NotificationType;
+    const notifTitle = (notification.title as string) ?? '';
+    const notifMessage = (notification.message as string) ?? '';
+    const notifData = (notification.data ?? {}) as Record<string, unknown>;
+    const notifRead = notification.read as boolean;
+    const notifCreatedAt = notification.createdAt as string;
+
     const enriched: {
       id: string;
       userId?: string;
@@ -478,23 +489,23 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       // NEW_BADGE için
       badgeUrl?: string | null;
       badgeName?: string | null;
-      data: any;
+      data?: Record<string, unknown>;
       read: boolean;
       createdAt: string;
-      [key: string]: any; // Dinamik alanlar için
+      [key: string]: unknown; // Dinamik alanlar için
     } = {
-      id: notification.id,
-      userId: (notification.type === NotificationType.NEW_BADGE || notification.type === NotificationType.EVENT_STARTED) ? undefined as any : notification.userId,
-      type: notification.type,
-      title: notification.title ?? '',
-      message: notification.message ?? '',
+      id: notifId,
+      userId: (notifType === NotificationType.NEW_BADGE || notifType === NotificationType.EVENT_STARTED) ? undefined : notifUserId,
+      type: notifType,
+      title: notifTitle,
+      message: notifMessage,
       avatar: undefined,
       username: undefined,
-      data: notification.data,
-      read: notification.read,
-      createdAt: notification.createdAt,
+      data: notifData,
+      read: notifRead,
+      createdAt: notifCreatedAt,
     };
-    const data = notification.data || {};
+    const data = (notification.data || {}) as Record<string, string>;
     const type = notification.type as NotificationType;
 
     // Eğer data'da zaten avatar varsa (enricher'dan gelmişse), onu kullan
@@ -773,26 +784,28 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
         enriched.commentId = undefined;
         
         // Data objesini tamamen kaldır
+        if (enriched.data) {
+          delete enriched.data.sharerId;
+          delete enriched.data.trusterId;
+          delete enriched.data.trustedId;
+          delete enriched.data.expertId;
+          delete enriched.data.requesterId;
+          delete enriched.data.accepterId;
+          delete enriched.data.userName;
+          delete enriched.data.amount;
+          delete enriched.data.transactionId;
+          delete enriched.data.reason;
+          delete enriched.data.threadId;
+          delete enriched.data.requestId;
+          delete enriched.data.eventId;
+          delete enriched.data.eventName;
+          delete enriched.data.productId;
+          delete enriched.data.collectionId;
+        }
         enriched.data = undefined;
-        delete enriched.data.sharerId;
-        delete enriched.data.trusterId;
-        delete enriched.data.trustedId;
-        delete enriched.data.expertId;
-        delete enriched.data.requesterId;
-        delete enriched.data.accepterId;
-        delete enriched.data.userName;
-        delete enriched.data.amount;
-        delete enriched.data.transactionId;
-        delete enriched.data.reason;
-        delete enriched.data.threadId;
-        delete enriched.data.requestId;
-        delete enriched.data.eventId;
-        delete enriched.data.eventName;
-        delete enriched.data.productId;
-        delete enriched.data.collectionId;
-        // Sadece badgeId, badgeName, imageUrl kalacak
       } else if (type === NotificationType.ACHIEVEMENT_UNLOCKED) {
         // ACHIEVEMENT_UNLOCKED için badgeId ve imageUrl (achievementId kaldırıldı)
+        if (!enriched.data) enriched.data = {};
         if (data.badgeId) enriched.data.badgeId = data.badgeId;
         let badgeImageUrl = null;
         if (data.badgeId && badgeImages.has(data.badgeId)) {
@@ -803,6 +816,7 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
         if (badgeImageUrl) enriched.data.imageUrl = badgeImageUrl;
       } else if (type === NotificationType.REWARD_EARNED) {
         // REWARD_EARNED için sadece amount (badgeId ve imageUrl kaldırıldı)
+        if (!enriched.data) enriched.data = {};
         if (data.amount) enriched.data.amount = data.amount;
       }
     }
@@ -858,11 +872,14 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
       }
     }
 
-    // Sistem/Tips ile ilgili (3)
+    // Sistem/Tips/Transaction ile ilgili (6)
     if (
       type === NotificationType.SYSTEM_ANNOUNCEMENT ||
       type === NotificationType.TIPS_RECEIVED ||
-      type === NotificationType.TIPS_SENT
+      type === NotificationType.TIPS_SENT ||
+      type === NotificationType.TRANSACTION_CONFIRMED ||
+      type === NotificationType.TRANSACTION_FAILED ||
+      type === NotificationType.TRANSACTION_PENDING
     ) {
       if (type === NotificationType.TIPS_RECEIVED) {
         // TIPS_RECEIVED: gönderenin (sender) avatar'ı gösterilir (tip atan kişi)
@@ -872,7 +889,7 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
           enriched.senderUserId = senderUserId;
           enriched.senderUsername = data.senderUsername ?? userNames.get(senderUserId) ?? null;
         }
-        enriched.amount = data.amount ?? undefined;
+        enriched.amount = data.amount ? Number(data.amount) : undefined;
         enriched.transactionId = data.transactionId ?? undefined;
         enriched.postId = undefined;
         enriched.postContent = undefined;
@@ -889,7 +906,7 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
         const recipientUserId = data.recipientUserId || data.recipientId || data.userId;
         
         // Bildirimi alan kullanıcının (gönderen) avatar'ı - notification.userId'den alınır
-        const senderUserId = notification.userId; // Bildirimi alan kullanıcı
+        const senderUserId = notification.userId as string | undefined; // Bildirimi alan kullanıcı
         if (senderUserId) {
           const senderAvatar = userAvatars.get(senderUserId) || randomImageCache || null;
           enriched.avatar = senderAvatar;
@@ -918,7 +935,7 @@ async function enrichNotifications(notifications: any[]): Promise<any[]> {
         // TRANSACTION_CONFIRMED (DEPOSIT vb.): gönderen (from) avatar'ı, amount, actionType, fromAddress
         const senderUserId = data.senderUserId ?? data.senderId;
         enriched.avatar = data.avatar ?? (senderUserId ? userAvatars.get(senderUserId) || randomImageCache : null) ?? null;
-        enriched.amount = data.amount ?? undefined;
+        enriched.amount = data.amount ? Number(data.amount) : undefined;
         enriched.actionType = data.actionType ?? undefined;
         enriched.transactionId = data.transactionId ?? undefined;
         enriched.fromAddress = data.fromAddress ?? undefined;
@@ -1400,10 +1417,10 @@ router.get('/', authMiddleware, asyncHandler(async (req: Request, res: Response)
     ]);
 
     // Notification'ları JSON'a çevir
-    const notificationJSONs = notifications.map((n) => n.toJSON());
-    
+    const notificationJSONs = notifications.map((n) => n.toJSON()) as Record<string, unknown>[];
+
     // Avatar URL'leri ve görselleri ekle
-    let enrichedNotifications;
+    let enrichedNotifications: Record<string, unknown>[];
     try {
       enrichedNotifications = await enrichNotifications(notificationJSONs);
     } catch (enrichError) {
@@ -1414,152 +1431,154 @@ router.get('/', authMiddleware, asyncHandler(async (req: Request, res: Response)
 
     // Bildirimleri grupla (backend'de gruplama)
     const { groupNotifications } = await import('../../application/notification/notification-grouper');
-    const groupedNotifications = groupNotifications(enrichedNotifications);
+    const groupedNotifications = groupNotifications(enrichedNotifications as unknown as Parameters<typeof groupNotifications>[0]);
 
     // Bildirimleri işle ve temizle
-    const processedNotifications = groupedNotifications.map((notif: any) => {
+    const processedNotifications = groupedNotifications.map((notif) => {
+      const mutableNotif = notif as unknown as Record<string, unknown>;
+      const notifData = (mutableNotif.data || {}) as Record<string, unknown>;
       // EVENT_STARTED bildirimleri için root seviyede imageUrl ekle (eğer data içinde varsa)
-      if (notif.type === 'EVENT_STARTED' && notif.data?.imageUrl && !notif.imageUrl) {
-        notif.imageUrl = notif.data.imageUrl; // Root seviyede de ekle
+      if (mutableNotif.type === 'EVENT_STARTED' && notifData.imageUrl && !mutableNotif.imageUrl) {
+        mutableNotif.imageUrl = notifData.imageUrl; // Root seviyede de ekle
       }
 
       // EVENT_STARTED için tüm user ve gereksiz alanları kaldır (sadece eventId, eventName, imageUrl kalacak)
-      if (notif.type === 'EVENT_STARTED') {
+      if (mutableNotif.type === 'EVENT_STARTED') {
         // Root seviyedeki tüm user ve post ile ilgili alanları kaldır
-        delete notif.userId;
-        delete notif.username;
-        delete notif.avatar;
-        delete notif.postId;
-        delete notif.postContent;
-        delete notif.postType;
-        delete notif.description;
-        delete notif.commentId;
-        
+        delete mutableNotif.userId;
+        delete mutableNotif.username;
+        delete mutableNotif.avatar;
+        delete mutableNotif.postId;
+        delete mutableNotif.postContent;
+        delete mutableNotif.postType;
+        delete mutableNotif.description;
+        delete mutableNotif.commentId;
+
         // data içinde sadece eventId, eventName, imageUrl kalacak
-        if (notif.data) {
+        if (mutableNotif.data) {
           // Tüm user ve gereksiz alanları kaldır
-          delete notif.data.avatar;
-          delete notif.data.userId;
-          delete notif.data.username;
-          delete notif.data.userName;
-          delete notif.data.postId;
-          delete notif.data.postContent;
-          delete notif.data.postType;
-          delete notif.data.description;
-          delete notif.data.commentId;
-          delete notif.data.senderId;
-          delete notif.data.senderUserId;
-          delete notif.data.recipientId;
-          delete notif.data.recipientUserId;
-          delete notif.data.likerId;
-          delete notif.data.commenterId;
-          delete notif.data.replierId;
-          delete notif.data.sharerId;
-          delete notif.data.trusterId;
-          delete notif.data.trustedId;
-          delete notif.data.expertId;
-          delete notif.data.requesterId;
-          delete notif.data.accepterId;
-          delete notif.data.amount;
-          delete notif.data.transactionId;
-          delete notif.data.reason;
-          delete notif.data.threadId;
-          delete notif.data.requestId;
-          delete notif.data.productId;
-          delete notif.data.collectionId;
-          delete notif.data.badgeId;
-          delete notif.data.badgeName;
-          delete notif.data.eventType;
-          delete notif.data.hoursRemaining;
-          delete notif.data.rewardAmount;
+          delete notifData.avatar;
+          delete notifData.userId;
+          delete notifData.username;
+          delete notifData.userName;
+          delete notifData.postId;
+          delete notifData.postContent;
+          delete notifData.postType;
+          delete notifData.description;
+          delete notifData.commentId;
+          delete notifData.senderId;
+          delete notifData.senderUserId;
+          delete notifData.recipientId;
+          delete notifData.recipientUserId;
+          delete notifData.likerId;
+          delete notifData.commenterId;
+          delete notifData.replierId;
+          delete notifData.sharerId;
+          delete notifData.trusterId;
+          delete notifData.trustedId;
+          delete notifData.expertId;
+          delete notifData.requesterId;
+          delete notifData.accepterId;
+          delete notifData.amount;
+          delete notifData.transactionId;
+          delete notifData.reason;
+          delete notifData.threadId;
+          delete notifData.requestId;
+          delete notifData.productId;
+          delete notifData.collectionId;
+          delete notifData.badgeId;
+          delete notifData.badgeName;
+          delete notifData.eventType;
+          delete notifData.hoursRemaining;
+          delete notifData.rewardAmount;
           // Sadece eventId, eventName, imageUrl kalacak
         }
       }
 
       // Mesajlaşma bildirimleri için post ile ilgili alanları kaldır (undefined değerleri temizle)
       if (
-        notif.type === 'DM_REQUEST_RECEIVED' ||
-        notif.type === 'DM_REQUEST_ACCEPTED' ||
-        notif.type === 'DM_REQUEST_DECLINED' ||
-        notif.type === 'SUPPORT_REQUEST_ACCEPTED'
+        mutableNotif.type === 'DM_REQUEST_RECEIVED' ||
+        mutableNotif.type === 'DM_REQUEST_ACCEPTED' ||
+        mutableNotif.type === 'DM_REQUEST_DECLINED' ||
+        mutableNotif.type === 'SUPPORT_REQUEST_ACCEPTED'
       ) {
         // undefined değerleri kaldır
-        if (notif.postId === undefined) delete notif.postId;
-        if (notif.postContent === undefined) delete notif.postContent;
-        if (notif.postType === undefined) delete notif.postType;
-        if (notif.description === undefined) delete notif.description;
-        if (notif.imageUrl === undefined) delete notif.imageUrl;
-        if (notif.commentId === undefined) delete notif.commentId;
+        if (mutableNotif.postId === undefined) delete mutableNotif.postId;
+        if (mutableNotif.postContent === undefined) delete mutableNotif.postContent;
+        if (mutableNotif.postType === undefined) delete mutableNotif.postType;
+        if (mutableNotif.description === undefined) delete mutableNotif.description;
+        if (mutableNotif.imageUrl === undefined) delete mutableNotif.imageUrl;
+        if (mutableNotif.commentId === undefined) delete mutableNotif.commentId;
       }
 
       // DM_REQUEST_RECEIVED için data objesini kaldır
-      if (notif.type === 'DM_REQUEST_RECEIVED') {
-        if (notif.data === undefined) delete notif.data;
+      if (mutableNotif.type === 'DM_REQUEST_RECEIVED') {
+        if (mutableNotif.data === undefined) delete mutableNotif.data;
       }
 
       // TIPS_RECEIVED için post ile ilgili alanları ve data objesini kaldır
-      if (notif.type === 'TIPS_RECEIVED') {
+      if (mutableNotif.type === 'TIPS_RECEIVED') {
         // undefined değerleri kaldır
-        if (notif.postId === undefined) delete notif.postId;
-        if (notif.postContent === undefined) delete notif.postContent;
-        if (notif.postType === undefined) delete notif.postType;
-        if (notif.description === undefined) delete notif.description;
-        if (notif.imageUrl === undefined) delete notif.imageUrl;
-        if (notif.commentId === undefined) delete notif.commentId;
-        if (notif.userId === undefined) delete notif.userId;
-        if (notif.username === undefined) delete notif.username;
-        if (notif.amount === undefined) delete notif.amount;
-        if (notif.data === undefined) delete notif.data;
+        if (mutableNotif.postId === undefined) delete mutableNotif.postId;
+        if (mutableNotif.postContent === undefined) delete mutableNotif.postContent;
+        if (mutableNotif.postType === undefined) delete mutableNotif.postType;
+        if (mutableNotif.description === undefined) delete mutableNotif.description;
+        if (mutableNotif.imageUrl === undefined) delete mutableNotif.imageUrl;
+        if (mutableNotif.commentId === undefined) delete mutableNotif.commentId;
+        if (mutableNotif.userId === undefined) delete mutableNotif.userId;
+        if (mutableNotif.username === undefined) delete mutableNotif.username;
+        if (mutableNotif.amount === undefined) delete mutableNotif.amount;
+        if (mutableNotif.data === undefined) delete mutableNotif.data;
       }
 
       // TIPS_SENT için post ile ilgili alanları ve data objesini kaldır
-      if (notif.type === 'TIPS_SENT') {
+      if (mutableNotif.type === 'TIPS_SENT') {
         // undefined değerleri kaldır
-        if (notif.postId === undefined) delete notif.postId;
-        if (notif.postContent === undefined) delete notif.postContent;
-        if (notif.postType === undefined) delete notif.postType;
-        if (notif.description === undefined) delete notif.description;
-        if (notif.imageUrl === undefined) delete notif.imageUrl;
-        if (notif.commentId === undefined) delete notif.commentId;
-        if (notif.userId === undefined) delete notif.userId;
-        if (notif.username === undefined) delete notif.username;
-        if (notif.data === undefined) delete notif.data;
+        if (mutableNotif.postId === undefined) delete mutableNotif.postId;
+        if (mutableNotif.postContent === undefined) delete mutableNotif.postContent;
+        if (mutableNotif.postType === undefined) delete mutableNotif.postType;
+        if (mutableNotif.description === undefined) delete mutableNotif.description;
+        if (mutableNotif.imageUrl === undefined) delete mutableNotif.imageUrl;
+        if (mutableNotif.commentId === undefined) delete mutableNotif.commentId;
+        if (mutableNotif.userId === undefined) delete mutableNotif.userId;
+        if (mutableNotif.username === undefined) delete mutableNotif.username;
+        if (mutableNotif.data === undefined) delete mutableNotif.data;
       }
 
       // NEW_BADGE için tüm user ve gereksiz alanları kaldır (sadece badgeUrl ve badgeName root seviyede)
-      if (notif.type === 'NEW_BADGE') {
+      if (mutableNotif.type === 'NEW_BADGE') {
         // Root seviyedeki tüm user ve post ile ilgili alanları kaldır
-        delete notif.userId;
-        delete notif.username;
-        delete notif.avatar;
-        delete notif.postId;
-        delete notif.postContent;
-        delete notif.postType;
-        delete notif.description;
-        delete notif.commentId;
-        delete notif.imageUrl; // imageUrl yerine badgeUrl kullanılıyor
-        
+        delete mutableNotif.userId;
+        delete mutableNotif.username;
+        delete mutableNotif.avatar;
+        delete mutableNotif.postId;
+        delete mutableNotif.postContent;
+        delete mutableNotif.postType;
+        delete mutableNotif.description;
+        delete mutableNotif.commentId;
+        delete mutableNotif.imageUrl; // imageUrl yerine badgeUrl kullanılıyor
+
         // Data objesinden badgeUrl ve badgeName'i root seviyeye taşı
-        if (notif.data) {
-          if (notif.data.imageUrl) {
-            notif.badgeUrl = notif.data.imageUrl;
+        if (mutableNotif.data) {
+          if (notifData.imageUrl) {
+            mutableNotif.badgeUrl = notifData.imageUrl;
           }
-          if (notif.data.badgeName) {
-            notif.badgeName = notif.data.badgeName;
+          if (notifData.badgeName) {
+            mutableNotif.badgeName = notifData.badgeName;
           }
           // Data objesini tamamen kaldır
-          delete notif.data;
+          delete mutableNotif.data;
         }
       }
 
       // undefined değerleri kaldır (genel temizlik)
-      Object.keys(notif).forEach((key) => {
-        if (notif[key] === undefined) {
-          delete notif[key];
+      Object.keys(mutableNotif).forEach((key) => {
+        if (mutableNotif[key] === undefined) {
+          delete mutableNotif[key];
         }
       });
 
-      return notif;
+      return mutableNotif;
     });
 
     return res.json({
@@ -1637,12 +1656,13 @@ router.get('/unread-count', authMiddleware, asyncHandler(async (req: Request, re
       success: true,
       data: { count },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     clearTimeout(timeout);
     logger.error('Error getting unread count:', error);
-    
+
     // Timeout hatası için özel mesaj
-    if (error.code === 'P2024' || error.message?.includes('timeout')) {
+    const errObj = error as { code?: string; message?: string };
+    if (errObj.code === 'P2024' || errObj.message?.includes('timeout')) {
       return res.status(504).json({
         success: false,
         message: 'Database query timeout - please try again',
@@ -1961,7 +1981,10 @@ router.put('/settings', authMiddleware, validateBody(UpdateNotificationSettingsS
       settings = await settingsRepo.create(userId);
     }
 
-    await settingsRepo.updateByUserId(userId, updates);
+    await settingsRepo.updateByUserId(userId, {
+      ...updates,
+      receiveNotifications: updates.receiveNotifications ?? undefined,
+    });
 
     return res.json({
       success: true,
@@ -2029,14 +2052,15 @@ router.post('/push-token', authMiddleware, validateBody(RegisterPushTokenSchema)
       message: 'Push token registered successfully',
       data: pushToken.toJSON(),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof PushTokenUserNotFoundError) {
       return res.status(404).json({
         success: false,
         message: 'User not found. The authenticated user may not exist in the database.',
       });
     }
-    if (error?.code === 'P2003') {
+    const prismaErr = error as { code?: string };
+    if (prismaErr?.code === 'P2003') {
       return res.status(404).json({
         success: false,
         message: 'User not found. Cannot register push token for this account.',

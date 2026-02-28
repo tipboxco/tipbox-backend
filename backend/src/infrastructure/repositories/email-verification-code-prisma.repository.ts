@@ -1,3 +1,4 @@
+import type { EmailVerificationCode as PrismaEmailVerificationCodeModel } from '@prisma/client';
 import { getPrisma } from './prisma.client';
 
 export interface EmailVerificationCodeData {
@@ -121,7 +122,7 @@ export class EmailVerificationCodePrismaRepository {
     return result.count;
   }
 
-  private toDomain(prismaCode: any): EmailVerificationCodeData {
+  private toDomain(prismaCode: PrismaEmailVerificationCodeModel): EmailVerificationCodeData {
     return {
       id: prismaCode.id,
       userId: prismaCode.userId,

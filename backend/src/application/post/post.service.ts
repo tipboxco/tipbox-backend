@@ -2,6 +2,7 @@ import { ContentPostPrismaRepository } from '../../infrastructure/repositories/c
 import { PostTipPrismaRepository } from '../../infrastructure/repositories/post-tip-prisma.repository';
 import { PostQuestionPrismaRepository } from '../../infrastructure/repositories/post-question-prisma.repository';
 import { PostComparisonPrismaRepository } from '../../infrastructure/repositories/post-comparison-prisma.repository';
+import { ContentPost } from '../../domain/content/content-post.entity';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
 import { ContextType } from '../../domain/content/context-type.enum';
 import { withCache } from '../../infrastructure/cache/cache-wrapper.helper';
@@ -71,7 +72,7 @@ export class PostService {
    * Search posts by title and body
    */
   async searchPosts(query: string, options?: { limit?: number; cursor?: string }): Promise<{
-    items: any[];
+    items: ContentPost[];
     pagination: { cursor?: string; hasMore: boolean; limit: number };
   }> {
     const limit = options?.limit || 20;
@@ -522,7 +523,7 @@ export class PostService {
           where: { id: request.eventId },
           select: { feedType: true },
         });
-        if ((event as any)?.feedType === 'ROASTS') {
+        if (event?.feedType === 'ROASTS') {
           if (!request.productStatus) {
             throw new Error('productStatus is required for ROASTS event posts');
           }
@@ -967,7 +968,7 @@ export class PostService {
         request.images
       );
 
-      const boostEnabled = request.boostEnabled === true || request.boostEnabled === 'true';
+      const boostEnabled = request.boostEnabled === true;
       let boostPrice: number | undefined;
       if (boostEnabled) {
         const { price } = await this.getBoostPrice();
@@ -1363,7 +1364,13 @@ export class PostService {
       }
 
       // ✅ YENİ: Sub-category veya product-group context'inde de product ID verilmişse kabul et
-      let contextIds: any;
+      let contextIds: {
+        categoryId?: string;
+        subCategoryId?: string;
+        productGroupId?: string;
+        productId?: string;
+        mainCategoryId?: string;
+      };
       
       if (request.contextType === ContextType.PRODUCT) {
         // Product context - normal flow
@@ -1881,7 +1888,13 @@ export class PostService {
   async getUserProductReviews(
     userId: string,
     productId: string
-  ): Promise<any[]> {
+  ): Promise<Array<{
+    inventoryId: string;
+    hasOwned: boolean;
+    experienceSummary: string | null;
+    experiences: unknown[];
+    media: Array<{ id: string; mediaUrl: string }>;
+  }>> {
     try {
       // Get user's inventory for the product
       const inventory = await this.prisma.inventory.findUnique({
@@ -2098,7 +2111,7 @@ export class PostService {
    * Parametre ContentPost.id veya ContentFavorite.id (UUID) olabilir; resolvePostId ile çözülür.
    * userId verilirse isOwned vb. doğru hesaplanır.
    */
-  async getPostById(postId: string, userId?: string): Promise<any> {
+  async getPostById(postId: string, userId?: string): Promise<unknown> {
     const resolvedPostId = await this.resolvePostId(postId);
     if (!resolvedPostId) return null;
 
@@ -2213,12 +2226,13 @@ export class PostService {
     }
 
     try {
-      const feedItem = await this.feedService.getPostAsFeedItem(post, userId);
+      // Cast to FeedContentPost for mapping helpers (Prisma return type is a structural superset)
+      const feedItem = await this.feedService.getPostAsFeedItem(post as unknown as Parameters<typeof this.feedService.getPostAsFeedItem>[0], userId);
       const data = feedItem?.data ?? null;
       if (!data) return null;
 
-      if (post.type === ContentPostType.UPDATE && (post as any).updateContent?.experiencePostId) {
-        const experiencePostId = (post as any).updateContent.experiencePostId as string;
+      if (post.type === ContentPostType.UPDATE && post.updateContent?.experiencePostId) {
+        const experiencePostId = post.updateContent.experiencePostId;
         const allUpdatesForExperience = await this.prisma.postUpdateContent.findMany({
           where: { experiencePostId },
           include: {
@@ -2233,7 +2247,7 @@ export class PostService {
         const relatedUpdates = allUpdatesForExperience.map((uc) => ({
           id: uc.post.id,
           content: uc.content,
-          images: (uc.post.media || []).map((m: any) => resolveMediaUrl(m.mediaUrl)).filter(Boolean) as string[],
+          images: (uc.post.media || []).map((m: { mediaUrl: string }) => resolveMediaUrl(m.mediaUrl)).filter(Boolean) as string[],
           createdAt: uc.post.createdAt.toISOString(),
         }));
         return { ...data, relatedUpdates };

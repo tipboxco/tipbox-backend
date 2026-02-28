@@ -4,7 +4,7 @@ import logger from './logger';
 
 export const requestLogger = (req: Request, res: Response, next: NextFunction) => {
   const traceId = uuidv4();
-  (req as any).traceId = traceId;
+  req.traceId = traceId;
   res.setHeader('X-Trace-Id', traceId);
 
   const start = Date.now();

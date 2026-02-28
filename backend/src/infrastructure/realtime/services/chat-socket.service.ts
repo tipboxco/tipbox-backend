@@ -1,6 +1,7 @@
 import { AuthenticatedSocket } from '../socket.handler';
 import { SocketHandler } from '../socket.handler';
 import logger from '../../logger/logger';
+import { getErrorMessage } from '../../errors/error-helper';
 import { MessagingService } from '../../../application/messaging/messaging.service';
 import { DMThreadPrismaRepository } from '../../repositories/dm-thread-prisma.repository';
 import { DmMessagePrismaRepository } from '../../repositories/dm-message-prisma.repository';
@@ -51,10 +52,10 @@ export class ChatSocketService {
         logger.info(
           `Message sent via socket from ${userId} to ${recipientId}`
         );
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.error('Error in send_message handler:', error);
         socket.emit('error', {
-          message: error.message || 'Failed to send message',
+          message: getErrorMessage(error) || 'Failed to send message',
         });
       }
     });
@@ -111,10 +112,10 @@ export class ChatSocketService {
         logger.info(
           `Support message sent via socket from ${userId} to ${recipientId} in thread ${threadId}`
         );
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.error('Error in send_support_message handler:', error);
         socket.emit('error', {
-          message: error.message || 'Failed to send support message',
+          message: getErrorMessage(error) || 'Failed to send support message',
         });
       }
     });
@@ -201,10 +202,10 @@ export class ChatSocketService {
         logger.info(
           `Message ${messageId} marked as read by ${userId} in thread ${message.threadId}`
         );
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.error('Error in mark_message_read handler:', error);
         socket.emit('error', {
-          message: error.message || 'Failed to mark message as read',
+          message: getErrorMessage(error) || 'Failed to mark message as read',
         });
       }
     });
@@ -286,10 +287,10 @@ export class ChatSocketService {
         logger.info(
           `Thread ${threadId} marked as read by ${userId} (${unreadMessages.length} messages)`
         );
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.error('Error in mark_thread_read handler:', error);
         socket.emit('error', {
-          message: error.message || 'Failed to mark thread as read',
+          message: getErrorMessage(error) || 'Failed to mark thread as read',
         });
       }
     });
@@ -334,10 +335,10 @@ export class ChatSocketService {
         });
 
         logger.info(`User ${userId} joined thread ${threadId}`);
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.error('Error in join_thread handler:', error);
         socket.emit('error', {
-          message: error.message || 'Failed to join thread',
+          message: getErrorMessage(error) || 'Failed to join thread',
         });
       }
     });
@@ -367,10 +368,10 @@ export class ChatSocketService {
         });
 
         logger.info(`User ${userId} left thread ${threadId}`);
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.error('Error in leave_thread handler:', error);
         socket.emit('error', {
-          message: error.message || 'Failed to leave thread',
+          message: getErrorMessage(error) || 'Failed to leave thread',
         });
       }
     });
@@ -410,10 +411,10 @@ export class ChatSocketService {
         }, 3000);
 
         this.typingTimeouts.set(typingKey, timeout);
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.error('Error in start_typing handler:', error);
         socket.emit('error', {
-          message: error.message || 'Failed to start typing',
+          message: getErrorMessage(error) || 'Failed to start typing',
         });
       }
     });
@@ -441,10 +442,10 @@ export class ChatSocketService {
           userId,
           timestamp: new Date().toISOString()
         });
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.error('Error in stop_typing handler:', error);
         socket.emit('error', {
-          message: error.message || 'Failed to stop typing',
+          message: getErrorMessage(error) || 'Failed to stop typing',
         });
       }
     });
@@ -469,10 +470,10 @@ export class ChatSocketService {
         await this.messagingService.editMessage(messageId, userId, message);
 
         logger.info(`Message edited via socket: ${messageId} by ${userId}`);
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.error('Error in edit_message handler:', error);
         socket.emit('error', {
-          message: error.message || 'Failed to edit message',
+          message: getErrorMessage(error) || 'Failed to edit message',
         });
       }
     });
@@ -490,10 +491,10 @@ export class ChatSocketService {
         await this.messagingService.deleteMessage(messageId, userId);
 
         logger.info(`Message deleted via socket: ${messageId} by ${userId}`);
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.error('Error in delete_message handler:', error);
         socket.emit('error', {
-          message: error.message || 'Failed to delete message',
+          message: getErrorMessage(error) || 'Failed to delete message',
         });
       }
     });
@@ -518,10 +519,10 @@ export class ChatSocketService {
         await this.messagingService.addReaction(messageId, userId, emoji.trim());
 
         logger.info(`Reaction added via socket: ${emoji} to message ${messageId} by ${userId}`);
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.error('Error in add_reaction handler:', error);
         socket.emit('error', {
-          message: error.message || 'Failed to add reaction',
+          message: getErrorMessage(error) || 'Failed to add reaction',
         });
       }
     });
@@ -541,10 +542,10 @@ export class ChatSocketService {
         await this.messagingService.removeReaction(messageId, userId, emoji.trim());
 
         logger.info(`Reaction removed via socket: ${emoji} from message ${messageId} by ${userId}`);
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.error('Error in remove_reaction handler:', error);
         socket.emit('error', {
-          message: error.message || 'Failed to remove reaction',
+          message: getErrorMessage(error) || 'Failed to remove reaction',
         });
       }
     });

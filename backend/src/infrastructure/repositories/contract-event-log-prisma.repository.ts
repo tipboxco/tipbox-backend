@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { getPrisma } from './prisma.client';
 
 // ============================================================================
@@ -12,11 +13,11 @@ export interface CreateContractEventLogData {
   transactionIndex: number;
   logIndex: number;
   eventName: string;
-  decodedLog: Record<string, any>;
+  decodedLog: Prisma.JsonValue;
   topics: string[];
   data?: string | null;
   timestamp: Date;
-  rawPayload: Record<string, any>;
+  rawPayload: Prisma.JsonValue;
   transactionId?: string | null;
   walletId?: string | null;
   processed?: boolean;
@@ -51,11 +52,11 @@ export interface ContractEventLogRecord {
   transactionIndex: number;
   logIndex: number;
   eventName: string;
-  decodedLog: any;
+  decodedLog: Prisma.JsonValue;
   topics: string[];
   data: string | null;
   timestamp: Date;
-  rawPayload: any;
+  rawPayload: Prisma.JsonValue;
   transactionId: string | null;
   walletId: string | null;
   processed: boolean;
@@ -242,7 +243,7 @@ export class ContractEventLogPrismaRepository {
     filters: ContractEventLogFilters,
     options?: { limit?: number; cursor?: string }
   ): Promise<{ items: ContractEventLogRecord[]; nextCursor?: string }> {
-    const where: any = {};
+    const where: Prisma.ContractEventLogWhereInput = {};
 
     if (filters.chainId) {
       where.chainId = filters.chainId;

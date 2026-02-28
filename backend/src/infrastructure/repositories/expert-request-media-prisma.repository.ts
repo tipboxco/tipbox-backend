@@ -1,3 +1,4 @@
+import type { ExpertRequestMedia as PrismaExpertRequestMediaModel } from '@prisma/client';
 import { ExpertRequestMedia } from '../../domain/expert/expert-request-media.entity';
 import { getPrisma } from './prisma.client';
 
@@ -9,7 +10,7 @@ export class ExpertRequestMediaPrismaRepository {
       where: { requestId },
       orderBy: { uploadedAt: 'desc' },
     });
-    return media.map((m: any) => this.toDomain(m));
+    return media.map((m) => this.toDomain(m));
   }
 
   async create(
@@ -47,7 +48,7 @@ export class ExpertRequestMediaPrismaRepository {
     }
   }
 
-  private toDomain(prismaMedia: any): ExpertRequestMedia {
+  private toDomain(prismaMedia: PrismaExpertRequestMediaModel): ExpertRequestMedia {
     return new ExpertRequestMedia(
       prismaMedia.id,
       prismaMedia.requestId,

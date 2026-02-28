@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { FeedPrismaRepository } from '../../infrastructure/repositories/feed-prisma.repository';
 import { ProfilePrismaRepository } from '../../infrastructure/repositories/profile-prisma.repository';
 import { CacheService } from '../../infrastructure/cache/cache.service';
@@ -19,6 +20,8 @@ import {
   BaseProduct,
   BenchmarkProduct,
   ContextData,
+  RelatedPostData,
+  UpdatePost,
 } from '../../interfaces/feed/feed.dto';
 import { ContextType } from '../../domain/content/context-type.enum';
 import { ContentPostType } from '../../domain/content/content-post-type.enum';
@@ -28,7 +31,88 @@ import logger from '../../infrastructure/logger/logger';
 import { FeedScoringService } from './feed-scoring.service';
 import { FeedCleanupScheduler } from '../../infrastructure/scheduler/feed-cleanup.scheduler';
 import { FeedDistributionScheduler } from '../../infrastructure/scheduler/feed-distribution.scheduler';
-import { getPostCounts } from '../../infrastructure/repositories/prisma-types.helper';
+import { getPostCounts, asProfileUpdateMany } from '../../infrastructure/repositories/prisma-types.helper';
+
+/** Lightweight shape used by feed mapping helpers (product relation with optional group). */
+interface FeedProductLike {
+  id: string;
+  name: string;
+  brand?: string | null;
+  imageUrl?: string | null;
+  group?: { name: string; subCategory?: { name: string; imageUrl?: string | null; mainCategory?: { name: string; imageUrl?: string | null } | null } | null; imageUrl?: string | null } | null;
+}
+
+/** Lightweight shape used by tag relation arrays. */
+interface TagRecord {
+  tag: string;
+}
+
+/** Lightweight shape for media records. */
+interface MediaRecord {
+  mediaUrl: string;
+}
+
+/**
+ * Shape of a ContentPost row with all the relations that feed mapping methods rely on.
+ * Used as the common parameter type for mapToPostItem, mapToBenchmarkItem, etc.
+ */
+interface FeedContentPost {
+  id: string;
+  userId: string;
+  type: ContentPostType;
+  title: string;
+  body: string;
+  mainCategoryId?: string | null;
+  subCategoryId?: string | null;
+  categoryId?: string | null;
+  productGroupId?: string | null;
+  productId?: string | null;
+  productStatus?: string | null;
+  isBoosted: boolean;
+  boostedUntil?: Date | null;
+  createdAt: Date;
+  // Count fields (may or may not be present in Prisma types depending on generation)
+  likesCount?: number;
+  commentsCount?: number;
+  sharesCount?: number;
+  favoritesCount?: number;
+  viewsCount?: number;
+  // Relations
+  user?: { id: string; profile?: { displayName?: string | null; userName?: string | null } | null } | null;
+  product?: FeedProductLike | null;
+  productGroup?: { id: string; name: string; imageUrl?: string | null; subCategory?: { id: string; name: string; imageUrl?: string | null; mainCategory?: { id: string; name: string; imageUrl?: string | null } | null } | null } | null;
+  subCategory?: { id: string; name: string; imageUrl?: string | null; mainCategory?: { id: string; name: string; imageUrl?: string | null } | null } | null;
+  mainCategory?: { id: string; name: string; imageUrl?: string | null } | null;
+  comparison?: { product1Id: string; product2Id: string; comparisonSummary?: string | null; product1?: FeedProductLike | null; product2?: FeedProductLike | null; scores?: { scoreProduct1: number; scoreProduct2: number }[] } | null;
+  tags?: TagRecord[];
+  contentPostTags?: TagRecord[];
+  media?: MediaRecord[];
+  likes?: unknown[];
+  comments?: unknown[];
+  favorites?: unknown[];
+  updateContent?: { content: string; experiencePostId: string; experiencePost: FeedContentPost } | null;
+  question?: unknown;
+  tip?: unknown;
+}
+
+/** Shape of the base post object passed to mapping helpers. */
+interface FeedBasePost {
+  id: string;
+  user: BaseUser;
+  stats: BaseStats;
+  createdAt: string;
+  contextType: ContextType;
+  source?: string;
+  isBoosted?: boolean;
+  boostedUntil?: string;
+}
+
+/** Shape used for parsed JSON content arrays in parseExperienceContent. */
+interface ParsedContentItem {
+  title?: string;
+  content?: string;
+  rating?: number;
+}
 
 export class FeedService {
   private readonly feedRepo: FeedPrismaRepository;
@@ -514,21 +598,24 @@ export class FeedService {
         // Get images for this post from PostMedia (orderIndex'e göre sıralı)
         const images = postMediaMap.get(post.id) || [];
 
+        // Cast to FeedContentPost for mapping helpers (Prisma return type is a structural superset)
+        const feedPost = post as unknown as FeedContentPost;
+
         switch (post.type) {
           case ContentPostType.FREE:
-            return this.mapToPostItem(post, basePost, FeedItemType.POST, images, ownedProductIds);
+            return this.mapToPostItem(feedPost, basePost, FeedItemType.POST, images, ownedProductIds);
           case ContentPostType.COMPARE:
-            return this.mapToBenchmarkItem(post, basePost, ownedProductIds, images);
+            return this.mapToBenchmarkItem(feedPost, basePost, ownedProductIds, images);
           case ContentPostType.QUESTION:
-            return this.mapToPostItem(post, basePost, FeedItemType.QUESTION, images, ownedProductIds);
+            return this.mapToPostItem(feedPost, basePost, FeedItemType.QUESTION, images, ownedProductIds);
           case ContentPostType.TIPS:
-            return this.mapToTipsAndTricksItem(post, basePost, images, ownedProductIds);
+            return this.mapToTipsAndTricksItem(feedPost, basePost, images, ownedProductIds);
           case ContentPostType.EXPERIENCE:
-            return this.mapToExperienceItem(post, basePost, FeedItemType.EXPERIENCE, images, ownedProductIds);
+            return this.mapToExperienceItem(feedPost, basePost, FeedItemType.EXPERIENCE, images, ownedProductIds);
           case ContentPostType.UPDATE:
-            return this.mapToExperienceItem(post, basePost, FeedItemType.UPDATE, images, ownedProductIds);
+            return this.mapToExperienceItem(feedPost, basePost, FeedItemType.UPDATE, images, ownedProductIds);
           default:
-            return this.mapToPostItem(post, basePost, FeedItemType.POST, images, ownedProductIds);
+            return this.mapToPostItem(feedPost, basePost, FeedItemType.POST, images, ownedProductIds);
         }
       })
     );
@@ -559,7 +646,7 @@ export class FeedService {
     const limit = options?.limit ?? 20;
 
     // Build filter query
-    const postWhere: any = {};
+    const postWhere: Prisma.ContentPostWhereInput & { AND?: Prisma.ContentPostWhereInput[] } = {};
 
     // Category filter - sadece main category (UUID, prefix'li ID veya name ile)
     // Multiple category selection desteği
@@ -602,7 +689,7 @@ export class FeedService {
     }
 
     // Interests filter - şu feed source'lar kabul edilir: TRUSTER, CATEGORY_MATCH, TRENDING, NEW_USER, BOOSTED, INVENTORY_MATCH, PRODUCT_GROUP_MATCH
-    const feedWhere: any = {};
+    const feedWhere: Prisma.FeedWhereInput = {};
     if (filters.interests && filters.interests.length > 0) {
       // İzin verilen feed source'lar
       const allowedSources = [
@@ -687,7 +774,7 @@ export class FeedService {
         }
       });
       
-      const tagConditions: any[] = [];
+      const tagConditions: Prisma.ContentPostWhereInput[] = [];
       
       // Add type-based filtering
       if (typeFilters.length > 0) {
@@ -759,7 +846,7 @@ export class FeedService {
     };
 
     // Combine feed filters (source) with post filters
-    const finalFeedWhere: any = {
+    const finalFeedWhere: Prisma.FeedWhereInput = {
       userId,
       ...feedWhere, // Feed source filters (interests)
       ...(Object.keys(finalPostWhere).length > 0 && {
@@ -965,21 +1052,24 @@ export class FeedService {
         // Get images for this post from PostMedia (orderIndex'e göre sıralı)
         const images = postMediaMap.get(post.id) || [];
 
+        // Cast to FeedContentPost for mapping helpers (Prisma return type is a structural superset)
+        const feedPost = post as unknown as FeedContentPost;
+
         switch (post.type) {
           case ContentPostType.FREE:
-            return this.mapToPostItem(post, basePost, FeedItemType.POST, images, ownedProductIds);
+            return this.mapToPostItem(feedPost, basePost, FeedItemType.POST, images, ownedProductIds);
           case ContentPostType.COMPARE:
-            return this.mapToBenchmarkItem(post, basePost, ownedProductIds, images);
+            return this.mapToBenchmarkItem(feedPost, basePost, ownedProductIds, images);
           case ContentPostType.QUESTION:
-            return this.mapToPostItem(post, basePost, FeedItemType.QUESTION, images, ownedProductIds);
+            return this.mapToPostItem(feedPost, basePost, FeedItemType.QUESTION, images, ownedProductIds);
           case ContentPostType.TIPS:
-            return this.mapToTipsAndTricksItem(post, basePost, images, ownedProductIds);
+            return this.mapToTipsAndTricksItem(feedPost, basePost, images, ownedProductIds);
           case ContentPostType.EXPERIENCE:
-            return this.mapToExperienceItem(post, basePost, FeedItemType.EXPERIENCE, images, ownedProductIds);
+            return this.mapToExperienceItem(feedPost, basePost, FeedItemType.EXPERIENCE, images, ownedProductIds);
           case ContentPostType.UPDATE:
-            return this.mapToExperienceItem(post, basePost, FeedItemType.UPDATE, images, ownedProductIds);
+            return this.mapToExperienceItem(feedPost, basePost, FeedItemType.UPDATE, images, ownedProductIds);
           default:
-            return this.mapToPostItem(post, basePost, FeedItemType.POST, images, ownedProductIds);
+            return this.mapToPostItem(feedPost, basePost, FeedItemType.POST, images, ownedProductIds);
         }
       })
     );
@@ -1071,7 +1161,7 @@ export class FeedService {
     };
   }
 
-  private getProductBase(product: any): BaseProduct | null {
+  private getProductBase(product: FeedProductLike | null | undefined): BaseProduct | null {
     if (!product) return null;
     return {
       id: String(product.id),
@@ -1081,7 +1171,7 @@ export class FeedService {
     };
   }
 
-  private mapContextType(post: any): ContextType {
+  private mapContextType(post: Pick<FeedContentPost, 'productId' | 'productGroupId'>): ContextType {
     if (post?.productId) {
       return 'product' as ContextType;
     }
@@ -1119,7 +1209,7 @@ export class FeedService {
    * Context-based filtreleme uygular
    */
   private async applyContextBasedFiltering(
-    postWhere: any,
+    postWhere: Prisma.ContentPostWhereInput & { AND?: Prisma.ContentPostWhereInput[] },
     contextType: ContextType,
     contextId: string
   ): Promise<void> {
@@ -1182,7 +1272,7 @@ export class FeedService {
   /**
    * Kart header / navigasyon için context bilgisini oluşturur.
    */
-  private async buildContextData(post: any, ownedProductIds?: Set<string>): Promise<ContextData> {
+  private async buildContextData(post: FeedContentPost, ownedProductIds?: Set<string>): Promise<ContextData> {
     const contextType = this.mapContextType(post);
 
     if (contextType === ContextType.PRODUCT) {
@@ -1261,7 +1351,7 @@ export class FeedService {
             id: String(category.id),
             name: category.name,
             subName: '',
-            image: this.buildFullMediaUrl(category.imageUrl),
+            image: this.buildFullMediaUrl(category.thumbnail),
           };
         }
       }
@@ -1317,7 +1407,7 @@ export class FeedService {
             id: String(category.id),
             name: category.name,
             subName: '',
-            image: this.buildFullMediaUrl(category.imageUrl),
+            image: this.buildFullMediaUrl(category.thumbnail),
           };
         }
       }
@@ -1400,7 +1490,7 @@ export class FeedService {
   /**
    * Tek bir post'u feed item formatına çevirir (public metod)
    */
-  async getPostAsFeedItem(post: any, userId?: string): Promise<FeedItem | null> {
+  async getPostAsFeedItem(post: FeedContentPost, userId?: string): Promise<FeedItem | null> {
     if (!post) return null;
 
     // Get user inventories for benchmark isOwned check
@@ -1471,8 +1561,8 @@ export class FeedService {
   }
 
   private async mapToPostItem(
-    post: any,
-    basePost: any,
+    post: FeedContentPost,
+    basePost: FeedBasePost,
     type: FeedItemType.POST | FeedItemType.QUESTION,
     images: string[] = [],
     ownedProductIds?: Set<string>
@@ -1492,8 +1582,8 @@ export class FeedService {
   }
 
   private async mapToBenchmarkItem(
-    post: any,
-    basePost: any,
+    post: FeedContentPost,
+    basePost: FeedBasePost,
     ownedProductIds: Set<string>,
     images: string[] = []
   ): Promise<FeedItem> {
@@ -1541,8 +1631,8 @@ export class FeedService {
   }
 
   private async mapToTipsAndTricksItem(
-    post: any,
-    basePost: any,
+    post: FeedContentPost,
+    basePost: FeedBasePost,
     images: string[] = [],
     ownedProductIds?: Set<string>
   ): Promise<FeedItem> {
@@ -1563,8 +1653,8 @@ export class FeedService {
   }
 
   private async mapToExperienceItem(
-    post: any,
-    basePost: any,
+    post: FeedContentPost,
+    basePost: FeedBasePost,
     type: FeedItemType.EXPERIENCE | FeedItemType.UPDATE,
     images: string[] = [],
     ownedProductIds?: Set<string>
@@ -1573,7 +1663,7 @@ export class FeedService {
     const productBase = post.product
       ? this.getProductBase(post.product)
       : post.productId
-      ? this.getProductBase({ id: post.productId, name: post.product?.name || '', imageUrl: post.product?.imageUrl || null, group: post.productGroup })
+      ? this.getProductBase({ id: post.productId, name: '', imageUrl: null, group: post.productGroup })
       : null;
 
     const product: ReviewProduct = productBase
@@ -1594,7 +1684,7 @@ export class FeedService {
     const experienceContent: ExperienceContent[] = this.parseExperienceContent(post.body);
 
     // Get tags
-    const tags = post.tags?.map((t: any) => t.tag) || post.contentPostTags?.map((t: any) => t.tag) || [];
+    const tags = post.tags?.map((t: TagRecord) => t.tag) || post.contentPostTags?.map((t: TagRecord) => t.tag) || [];
 
     if (type === FeedItemType.UPDATE) {
       // Get experience post from PostUpdateContent
@@ -1605,14 +1695,14 @@ export class FeedService {
           ? experienceContent.map((item) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`).join('\n\n')
           : post.body || '';
 
-        const relatedPost = {
+        const relatedPost: RelatedPostData = {
           id: post.id,
           product,
           content: relatedPostContentString,
           experienceContent,
           tags,
           images,
-        } as any;
+        };
 
         const updateData = {
           ...basePost,
@@ -1646,17 +1736,17 @@ export class FeedService {
             isOwned: false,
           };
 
-      const experiencePostTags = experiencePost.tags?.map((t: any) => t.tag) || experiencePost.contentPostTags?.map((t: any) => t.tag) || [];
+      const experiencePostTags = experiencePost.tags?.map((t: TagRecord) => t.tag) || experiencePost.contentPostTags?.map((t: TagRecord) => t.tag) || [];
       const experiencePostContent = this.parseExperienceContent(experiencePost.body);
       const experiencePostContentString = experiencePostContent.length > 0
         ? experiencePostContent.map((item) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`).join('\n\n')
         : experiencePost.body || '';
 
-      const expStatus = (experiencePost as any).productStatus;
+      const expStatus = experiencePost.productStatus;
       const relatedPostImages = (experiencePost.media || [])
-        .map((m: any) => this.buildFullMediaUrl(m.mediaUrl))
+        .map((m: MediaRecord) => this.buildFullMediaUrl(m.mediaUrl))
         .filter(Boolean) as string[];
-      const relatedPost = {
+      const relatedPost: RelatedPostData & { status?: string | null; statusLabel?: string | null } = {
         id: experiencePost.id,
         product: experiencePostProductData,
         content: experiencePostContentString,
@@ -1665,7 +1755,7 @@ export class FeedService {
         images: relatedPostImages,
         status: expStatus === 'own' || expStatus === 'tried' ? expStatus : null,
         statusLabel: expStatus === 'own' ? 'I owned' : expStatus === 'tried' ? 'I tried' : null,
-      } as any;
+      };
 
       // Update post content from PostUpdateContent
       const updatePostContent = updateContent.content || post.body || '';
@@ -1690,11 +1780,11 @@ export class FeedService {
       ? experienceContent.map((item) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`).join('\n\n')
       : post.body || '';
 
-    const productStatus = (post as any).productStatus;
+    const productStatus = post.productStatus;
     const status = productStatus === 'own' || productStatus === 'tried' ? productStatus : null;
     const statusLabel = productStatus === 'own' ? 'I owned' : productStatus === 'tried' ? 'I tried' : null;
 
-    const experienceData: ExperiencePost = {
+    const experienceData: ExperiencePost & { product: ReviewProduct } = {
       ...basePost,
       product,
       content: contentString, // String for mobile compatibility
@@ -1703,7 +1793,7 @@ export class FeedService {
       images,
       status: status ?? undefined,
       statusLabel: statusLabel ?? undefined,
-    } as any; // Her zaman döndür; productStatus yoksa (eski kayıt) null/undefined // Type assertion needed because ExperiencePost interface expects content: ExperienceContent[]
+    };
 
     return {
       type,
@@ -1731,7 +1821,7 @@ export class FeedService {
       const parsed = JSON.parse(body);
       
       // Handle case where parsed is an object with content array
-      let contentArray: any[] | undefined = undefined;
+      let contentArray: ParsedContentItem[] | undefined = undefined;
       if (parsed && Array.isArray(parsed.content)) {
         contentArray = parsed.content;
       } else if (Array.isArray(parsed)) {
@@ -2259,9 +2349,9 @@ export class FeedService {
 
         await this.prisma.profile.updateMany({
           where: { userId: user.id },
-          data: {
+          data: asProfileUpdateMany({
             unseenFeedCount: unseenCount,
-          } as any,
+          }),
         });
       }
 

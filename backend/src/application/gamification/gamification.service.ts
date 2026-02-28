@@ -431,7 +431,7 @@ export class GamificationService {
   async updateBadgeVisibility(
     userId: string,
     userBadgeId: string,
-    visibility: string,
+    visibility: BadgeVisibility,
     isVisible?: boolean
   ) {
     const userBadge = await this.prisma.userBadge.findUnique({
@@ -652,7 +652,7 @@ export class GamificationService {
       };
 
       if (filters?.userId && collection.achievementGoals) {
-        const goals = collection.achievementGoals;
+        const goals = collection.achievementGoals as Array<{ userAchievements?: Array<{ completed: boolean }> }>;
         const completedGoals = goals.filter((g) =>
           g.userAchievements?.some((ua) => ua.completed)
         ).length;
@@ -746,7 +746,7 @@ export class GamificationService {
     });
 
     const completedGoals = goals.filter(
-      (g) => g.userProgress?.completed
+      (g) => (g.userProgress as { completed?: boolean } | undefined)?.completed
     ).length;
 
     return {

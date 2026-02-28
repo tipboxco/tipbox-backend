@@ -1,3 +1,4 @@
+import type { UserFeedPreferences as PrismaUserFeedPreferencesModel } from '@prisma/client';
 import { UserFeedPreferences } from '../../domain/user/user-feed-preferences.entity';
 import { getPrisma } from './prisma.client';
 
@@ -56,7 +57,7 @@ export class UserFeedPreferencesPrismaRepository {
     return preferences.map(pref => this.toDomain(pref));
   }
 
-  private toDomain(prismaPreferences: any): UserFeedPreferences {
+  private toDomain(prismaPreferences: PrismaUserFeedPreferencesModel): UserFeedPreferences {
     return new UserFeedPreferences(
       prismaPreferences.id,
       prismaPreferences.userId,

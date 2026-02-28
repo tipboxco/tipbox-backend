@@ -651,8 +651,7 @@ export class MarketplaceService {
 
       // Owner user bilgisi: NFT modeli ownerId taşımıyor olabilir; listing varsa sellerId, yoksa parametre
       const ownerId =
-        (nft as any).userId ||
-        (nft as any).ownerId ||
+        nft.currentOwnerId ||
         activeListing?.listedByUserId ||
         userId;
       const ownerProfile = await this.profileRepo.findByUserId(ownerId);

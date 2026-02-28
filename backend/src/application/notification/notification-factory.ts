@@ -1,11 +1,16 @@
 import { NotificationType } from '../../domain/notification/notification-type.enum';
 import { NotificationCategory } from '../../domain/notification/notification-category.enum';
 
+/** Safely extract a string value from notification data */
+function str(val: unknown): string {
+  return typeof val === 'string' ? val : String(val ?? '');
+}
+
 export interface NotificationTemplate {
   type: NotificationType;
   category: NotificationCategory;
-  getTitle: (data: any) => string;
-  getMessage: (data: any) => string;
+  getTitle: (data: Record<string, unknown>) => string;
+  getMessage: (data: Record<string, unknown>) => string;
 }
 
 export class NotificationFactory {
@@ -82,7 +87,10 @@ export class NotificationFactory {
       type: NotificationType.DM_REQUEST_RECEIVED,
       category: NotificationCategory.SUPPORT,
       getTitle: () => 'New Support Request! 🆘',
-      getMessage: (data) => `${data.userName || data.requesterName} sent you a support request${data.message ? `: "${data.message.substring(0, 50)}${data.message.length > 50 ? '...' : ''}"` : ''}`,
+      getMessage: (data) => {
+        const msg = str(data.message);
+        return `${data.userName || data.requesterName} sent you a support request${msg ? `: "${msg.substring(0, 50)}${msg.length > 50 ? '...' : ''}"` : ''}`;
+      },
     });
 
     this.registerTemplate({
@@ -154,8 +162,8 @@ export class NotificationFactory {
     this.registerTemplate({
       type: NotificationType.SYSTEM_ANNOUNCEMENT,
       category: NotificationCategory.SYSTEM,
-      getTitle: (data) => data.title || 'System Announcement',
-      getMessage: (data) => data.message,
+      getTitle: (data) => str(data.title) || 'System Announcement',
+      getMessage: (data) => str(data.message),
     });
 
     this.registerTemplate({
@@ -234,7 +242,7 @@ export class NotificationFactory {
           DEPOSIT: `Your ${data.amount} TIPS deposit completed`,
           WITHDRAW: `Your ${data.amount} TIPS withdrawal completed`,
         };
-        return actionMap[data.actionType] || `Your ${data.amount} TIPS transaction completed`;
+        return actionMap[str(data.actionType)] || `Your ${data.amount} TIPS transaction completed`;
       },
     });
 
@@ -277,7 +285,7 @@ export class NotificationFactory {
           EVENT_PARTICIPATION: 'Event participation',
           SYSTEM_GRANT: 'System grant',
         };
-        const source = sourceMap[data.sourceType] || 'Reward';
+        const source = sourceMap[str(data.sourceType)] || 'Reward';
         return `You can claim ${data.amount} TIPS for ${source}`;
       },
     });
@@ -351,7 +359,7 @@ export class NotificationFactory {
     this.templates.set(template.type, template);
   }
 
-  public createNotification(type: NotificationType, data: any) {
+  public createNotification(type: NotificationType, data: Record<string, unknown>) {
     const template = this.templates.get(type);
 
     if (!template) {

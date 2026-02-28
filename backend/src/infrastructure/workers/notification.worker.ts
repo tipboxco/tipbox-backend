@@ -125,7 +125,7 @@ export class NotificationWorker {
   /**
    * Socket.IO ile bildirim gönderir
    */
-  private async sendSocketNotification(userId: string, notification: any): Promise<void> {
+  private async sendSocketNotification(userId: string, notification: Record<string, unknown>): Promise<void> {
     try {
       const { default: SocketManager } = await import('../realtime/socket-manager');
       const socketManager = SocketManager.getInstance();

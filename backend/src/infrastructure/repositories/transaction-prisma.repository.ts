@@ -1,3 +1,5 @@
+import { Prisma } from '@prisma/client';
+import type { Transaction as PrismaTransactionModel } from '@prisma/client';
 import { Transaction } from '../../domain/transaction/transaction.entity';
 import { TransactionActionType } from '../../domain/transaction/transaction-action-type.enum';
 import { TransactionStatus } from '../../domain/transaction/transaction-status.enum';
@@ -9,7 +11,7 @@ export interface CreateTransactionData {
   amount: number | null;
   fromAddress: string | null;
   toAddress: string | null;
-  metadata?: Record<string, any> | null;
+  metadata?: Prisma.InputJsonValue | null;
   provider?: string;
 }
 
@@ -77,7 +79,7 @@ export class TransactionPrismaRepository {
     filters: TransactionFilters,
     options?: { limit?: number; cursor?: string }
   ): Promise<{ items: Transaction[]; nextCursor?: string }> {
-    const where: any = {};
+    const where: Prisma.TransactionWhereInput = {};
 
     if (filters.walletId) {
       where.walletId = filters.walletId;
@@ -164,7 +166,7 @@ export class TransactionPrismaRepository {
   }
 
   /** Sadece metadata günceller (tip send/receive eşleşmesi için). */
-  async updateMetadata(id: string, metadata: Record<string, any>): Promise<Transaction | null> {
+  async updateMetadata(id: string, metadata: Prisma.InputJsonValue): Promise<Transaction | null> {
     const record = await this.prisma.transaction.update({
       where: { id },
       data: { metadata }
@@ -177,7 +179,7 @@ export class TransactionPrismaRepository {
     status: TransactionStatus,
     data?: { errorMessage?: string; txHash?: string }
   ): Promise<Transaction | null> {
-    const updateData: any = { status };
+    const updateData: Prisma.TransactionUpdateInput = { status };
 
     if (status === TransactionStatus.CONFIRMED) {
       updateData.confirmedAt = new Date();
@@ -238,7 +240,7 @@ export class TransactionPrismaRepository {
     return Math.max(0, balance); // Never negative
   }
 
-  private mapToEntity(record: any): Transaction {
+  private mapToEntity(record: PrismaTransactionModel): Transaction {
     return new Transaction(
       record.id,
       record.walletId,
@@ -247,7 +249,7 @@ export class TransactionPrismaRepository {
       record.amount,
       record.fromAddress,
       record.toAddress,
-      record.metadata as Record<string, any> | null,
+      record.metadata as Record<string, unknown> | null,
       record.txHash,
       record.provider,
       record.errorMessage,

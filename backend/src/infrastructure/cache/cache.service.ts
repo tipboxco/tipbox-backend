@@ -179,7 +179,7 @@ export class CacheService {
    * @param value - Kaydedilecek veri
    * @param ttlInSeconds - Time to live (saniye), varsayılan 3600 (1 saat)
    */
-  public async set(key: string, value: any, ttlInSeconds: number = 3600): Promise<void> {
+  public async set(key: string, value: unknown, ttlInSeconds: number = 3600): Promise<void> {
     if (isCacheDisabled) {
       return;
     }

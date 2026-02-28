@@ -1,3 +1,4 @@
+import type { ExpertRequest as PrismaExpertRequestModel } from '@prisma/client';
 import { ExpertRequest } from '../../domain/expert/expert-request.entity';
 import { getPrisma } from './prisma.client';
 import { ExpertRequestStatus } from '../../domain/expert/expert-request-status.enum';
@@ -37,7 +38,7 @@ export class ExpertRequestPrismaRepository {
       },
       orderBy: { createdAt: 'desc' },
     });
-    return requests.map((request: any) => this.toDomain(request));
+    return requests.map((request) => this.toDomain(request));
   }
 
   async create(
@@ -74,7 +75,7 @@ export class ExpertRequestPrismaRepository {
         description: data.description,
         category: data.category !== undefined ? data.category : undefined,
         tipsAmount: data.tipsAmount,
-        status: data.status as any,
+        status: data.status,
         answeredAt: data.answeredAt,
       },
       include: {
@@ -115,7 +116,7 @@ export class ExpertRequestPrismaRepository {
       },
       orderBy: { answeredAt: 'desc' },
     });
-    return requests.map((request: any) => this.toDomain(request));
+    return requests.map((request) => this.toDomain(request));
   }
 
   async delete(id: string): Promise<boolean> {
@@ -127,7 +128,7 @@ export class ExpertRequestPrismaRepository {
     }
   }
 
-  private toDomain(prismaRequest: any): ExpertRequest {
+  private toDomain(prismaRequest: PrismaExpertRequestModel): ExpertRequest {
     return new ExpertRequest(
       prismaRequest.id,
       prismaRequest.userId,

@@ -157,7 +157,7 @@ export class SocketHandler {
   /**
    * Belirli bir kullanıcıya mesaj gönder
    */
-  public sendMessageToUser(userId: string, event: string, payload: any): void {
+  public sendMessageToUser(userId: string, event: string, payload: unknown): void {
     try {
       // Kullanıcılar connection handler'da kendi userId room'una katılıyor (socket.join(userId))
       // Room adı userId string olarak kullanılıyor
@@ -172,7 +172,7 @@ export class SocketHandler {
   /**
    * Tüm bağlı client'lara yayın yap
    */
-  public broadcast(event: string, payload: any): void {
+  public broadcast(event: string, payload: unknown): void {
     try {
       this.io.emit(event, payload);
       logger.info(`Broadcast message sent: ${event}`);
@@ -184,7 +184,7 @@ export class SocketHandler {
   /**
    * Belirli bir odaya mesaj gönder
    */
-  public sendToRoom(room: string, event: string, payload: any): void {
+  public sendToRoom(room: string, event: string, payload: unknown): void {
     try {
       this.io.to(room).emit(event, payload);
       logger.info(`Message sent to room ${room}: ${event}`);

@@ -1,3 +1,4 @@
+import type { PostComparison as PrismaPostComparisonModel } from '@prisma/client';
 import { PostComparison } from '../../domain/product/post-comparison.entity';
 import { getPrisma } from './prisma.client';
 
@@ -158,7 +159,7 @@ export class PostComparisonPrismaRepository {
     return comparisons.map(comparison => this.toDomain(comparison));
   }
 
-  private toDomain(prismaComparison: any): PostComparison {
+  private toDomain(prismaComparison: PrismaPostComparisonModel): PostComparison {
     return new PostComparison(
       prismaComparison.id,
       prismaComparison.postId,

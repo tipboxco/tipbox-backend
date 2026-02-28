@@ -76,7 +76,7 @@ function getDefaultCorsOrigins(env: string): (string | RegExp)[] {
         // Herhangi bir localhost (tüm portlar)
         /^http:\/\/localhost(:\d+)?$/,
         /^https:\/\/localhost(:\d+)?$/,
-      ] as any; // TypeScript için any cast (cors kütüphanesi regex'i destekler)
+      ] as (string | RegExp)[];
     case 'test':
       return [
         ...origins,
@@ -91,7 +91,7 @@ function getDefaultCorsOrigins(env: string): (string | RegExp)[] {
         /^http:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+|100\.\d+\.\d+\.\d+|10\.0\.2\.2)(:\d+)?$/,
         // HTTPS local network (self-signed certificate için)
         /^https:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+|100\.\d+\.\d+\.\d+|10\.0\.2\.2)(:\d+)?$/,
-      ] as any;
+      ] as (string | RegExp)[];
     case 'production':
       return ['https://api-tipbox.tipbox.co', 'https://api.tipbox.co', 'https://api.tipbox.co/v1', 'https://api.tipbox.co/v1/docs', 'https://app.tipbox.co'];
     default:

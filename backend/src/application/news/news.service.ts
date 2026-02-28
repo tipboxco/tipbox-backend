@@ -119,11 +119,12 @@ export class NewsService {
         }
 
         // ContentPost'u NewsDetail formatına çevir
-        const likesCount = (post as any).likesCount ?? post.likes?.length ?? 0;
-        const commentsCount = (post as any).commentsCount ?? post.comments?.length ?? 0;
-        const sharesCount = (post as any).sharesCount ?? 0;
-        const favoritesCount = (post as any).favoritesCount ?? post.favorites?.length ?? 0;
-        const viewsCount = (post as any).viewsCount ?? 0;
+        const postRecord = post as unknown as Record<string, unknown>;
+        const likesCount = (postRecord.likesCount as number) ?? post.likes?.length ?? 0;
+        const commentsCount = (postRecord.commentsCount as number) ?? post.comments?.length ?? 0;
+        const sharesCount = (postRecord.sharesCount as number) ?? 0;
+        const favoritesCount = (postRecord.favoritesCount as number) ?? post.favorites?.length ?? 0;
+        const viewsCount = (postRecord.viewsCount as number) ?? 0;
 
         // Banner image - öncelik sırası: Post media > Inventory media > Product image
         const bannerImage = post.media && post.media.length > 0
@@ -135,7 +136,7 @@ export class NewsService {
           : null;
 
         // Tags
-        const tags = post.contentPostTags?.map((t: any) => t.tag) || [];
+        const tags = post.contentPostTags?.map((t: { tag: string }) => t.tag) || [];
 
         // Kullanıcının interaction durumunu kontrol et
         const isLiked = userId ? (post.likes && post.likes.length > 0) : false;
@@ -144,19 +145,21 @@ export class NewsService {
 
         // View count'u artır (userId varsa)
         if (userId) {
-          await this.prisma.contentPostView.upsert({
+          const existingView = await this.prisma.contentPostView.findFirst({
             where: {
-              userId_postId: {
-                userId: userId,
-                postId: post.id,
-              },
-            },
-            create: {
               userId: userId,
               postId: post.id,
             },
-            update: {},
-          }).catch(() => {}); // Hata olursa devam et
+          }).catch(() => null);
+          if (!existingView) {
+            await this.prisma.contentPostView.create({
+              data: {
+                userId: userId,
+                postId: post.id,
+                viewerIp: '',
+              },
+            }).catch(() => {}); // Hata olursa devam et
+          }
         }
 
         // Tarih formatını gün/ay/yıl şeklinde formatla (Türkçe)
@@ -188,7 +191,7 @@ export class NewsService {
 
         return {
           id: post.id,
-          title: (post as any).title || post.body?.slice(0, 80) || 'News',
+          title: (postRecord.title as string) || post.body?.slice(0, 80) || 'News',
           content: longContent,
           source: post.product?.brand?.name || 'tipbox',
           date: formattedDate,

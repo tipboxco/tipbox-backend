@@ -1,3 +1,4 @@
+import type { MainCategory as PrismaMainCategoryModel } from '@prisma/client';
 import { MainCategory } from '../../domain/product/main-category.entity';
 import { getPrisma } from './prisma.client';
 
@@ -85,7 +86,7 @@ export class MainCategoryPrismaRepository {
     return categories.map(category => this.toDomain(category));
   }
 
-  private toDomain(prismaCategory: any): MainCategory {
+  private toDomain(prismaCategory: PrismaMainCategoryModel): MainCategory {
     return new MainCategory(
       prismaCategory.id,
       prismaCategory.name,

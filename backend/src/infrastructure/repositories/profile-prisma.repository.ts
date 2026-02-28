@@ -1,3 +1,4 @@
+import type { Profile as PrismaProfileModel } from '@prisma/client';
 import { Profile } from '../../domain/user/profile.entity';
 import { DEFAULT_PROFILE_BANNER_URL } from '../../domain/user/profile.constants';
 import { getPrisma } from './prisma.client';
@@ -6,12 +7,12 @@ export class ProfilePrismaRepository {
   private prisma = getPrisma();
 
   async findById(id: string): Promise<Profile | null> {
-    const profile = await this.prisma.profile.findUnique({ where: { id } as any });
+    const profile = await this.prisma.profile.findUnique({ where: { id } });
     return profile ? this.toDomain(profile) : null;
   }
 
   async findByUserId(userId: string): Promise<Profile | null> {
-    const profile = await this.prisma.profile.findUnique({ where: { userId } as any });
+    const profile = await this.prisma.profile.findUnique({ where: { userId } });
     return profile ? this.toDomain(profile) : null;
   }
 
@@ -19,42 +20,42 @@ export class ProfilePrismaRepository {
     const profile = await this.prisma.profile.create({
       data: {
         userId,
-        displayName,
-        userName,
-        bio,
+        displayName: displayName ?? null,
+        userName: userName ?? null,
+        bio: bio ?? null,
         bannerUrl: DEFAULT_PROFILE_BANNER_URL,
-        cosmeticBadgeId,
-        country,
-        birthDate
-      } as any
+        cosmeticBadgeId: cosmeticBadgeId ?? null,
+        country: country ?? null,
+        birthDate: birthDate ?? null,
+      }
     });
     return this.toDomain(profile);
   }
 
   async update(id: string, data: { displayName?: string; userName?: string; bio?: string; bannerUrl?: string | null; cosmeticBadgeId?: string | null; country?: string; birthDate?: Date }): Promise<Profile | null> {
     const profile = await this.prisma.profile.update({
-      where: { id } as any,
-      data: data as any
+      where: { id },
+      data
     });
     return profile ? this.toDomain(profile) : null;
   }
 
   async updateByUserId(userId: string, data: { displayName?: string; userName?: string; bio?: string; bannerUrl?: string | null; cosmeticBadgeId?: string | null; country?: string; birthDate?: Date }): Promise<Profile | null> {
     const profile = await this.prisma.profile.update({
-      where: { userId } as any,
-      data: data as any
+      where: { userId },
+      data
     });
     return profile ? this.toDomain(profile) : null;
   }
 
   async findByUserName(userName: string): Promise<Profile | null> {
-    const profile = await this.prisma.profile.findUnique({ where: { userName } as any });
+    const profile = await this.prisma.profile.findUnique({ where: { userName } });
     return profile ? this.toDomain(profile) : null;
   }
 
   async delete(id: string): Promise<boolean> {
     try {
-      await this.prisma.profile.delete({ where: { id } as any });
+      await this.prisma.profile.delete({ where: { id } });
       return true;
     } catch {
       return false;
@@ -66,7 +67,7 @@ export class ProfilePrismaRepository {
     return profiles.map(profile => this.toDomain(profile));
   }
 
-  private toDomain(prismaProfile: any): Profile {
+  private toDomain(prismaProfile: PrismaProfileModel): Profile {
     return new Profile(
       prismaProfile.id,
       prismaProfile.userId,

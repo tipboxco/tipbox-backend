@@ -4,6 +4,13 @@ import { s3Config } from '../config/s3.config';
 import { getPublicMediaBaseUrl, resolveMediaUrl } from '../config/media.config';
 import logger from '../logger/logger';
 import fs from 'fs';
+
+/** Type guard for S3 errors that have $metadata and name properties */
+interface S3Error extends Error {
+  name: string;
+  Code?: string;
+  $metadata?: { httpStatusCode?: number };
+}
 export class S3Service {
   private s3Client: S3Client;
   private effectiveEndpoint: string;
@@ -115,31 +122,33 @@ export class S3Service {
       this.setBucketPublicPolicy().catch(() => {
         // Policy zaten ayarlanmış olabilir veya yetki sorunu olabilir, kritik değil
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Bucket yoksa oluştur
-      const isNotFound = error.name === 'NotFound' 
-        || error.name === 'NoSuchBucket'
-        || error.Code === 'NoSuchBucket'
-        || error.$metadata?.httpStatusCode === 404;
-      
+      const s3Err = error as S3Error;
+      const isNotFound = s3Err.name === 'NotFound'
+        || s3Err.name === 'NoSuchBucket'
+        || s3Err.Code === 'NoSuchBucket'
+        || s3Err.$metadata?.httpStatusCode === 404;
+
       if (isNotFound) {
         try {
           await this.s3Client.send(new CreateBucketCommand({
             Bucket: s3Config.bucketName,
           }));
-          
+
           logger.info({
             message: 'S3 bucket oluşturuldu',
             bucketName: s3Config.bucketName,
           });
           // Bucket oluşturulduktan sonra public read policy ekle
           await this.setBucketPublicPolicy();
-        } catch (createError: any) {
+        } catch (createError: unknown) {
           // Bucket zaten oluşturulmuşsa bu bir hata değil
-          const isAlreadyOwned = createError.name === 'BucketAlreadyOwnedByYou'
-            || createError.Code === 'BucketAlreadyOwnedByYou'
-            || createError.message?.includes('already own it');
-          
+          const createS3Err = createError as S3Error;
+          const isAlreadyOwned = createS3Err.name === 'BucketAlreadyOwnedByYou'
+            || createS3Err.Code === 'BucketAlreadyOwnedByYou'
+            || createS3Err.message?.includes('already own it');
+
           if (isAlreadyOwned) {
             logger.info({
               message: 'S3 bucket zaten mevcut (başka bir instance tarafından oluşturulmuş)',
@@ -159,9 +168,9 @@ export class S3Service {
           message: 'S3 bucket kontrolü hatası',
           error: error instanceof Error ? error.message : String(error),
           bucketName: s3Config.bucketName,
-          errorDetails: error.$metadata || error,
+          errorDetails: s3Err.$metadata || error,
         });
-        throw new Error(`S3 bucket kontrolü yapılamadı: ${error.message || String(error)}`);
+        throw new Error(`S3 bucket kontrolü yapılamadı: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
   }
@@ -190,7 +199,7 @@ export class S3Service {
         message: 'S3 bucket public read policy eklendi',
         bucketName: s3Config.bucketName,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Policy ayarlama hatası kritik değil, sadece log'la
       logger.warn({
         message: 'S3 bucket public policy ayarlanamadı (dosyalar pre-signed URL ile erişilebilir)',
@@ -220,11 +229,12 @@ export class S3Service {
         Key: fileName,
       }));
       return true;
-    } catch (error: any) {
-      const isNotFound = error.name === 'NotFound' 
-        || error.name === 'NoSuchKey'
-        || error.Code === 'NoSuchKey'
-        || error.$metadata?.httpStatusCode === 404;
+    } catch (error: unknown) {
+      const s3Err = error as S3Error;
+      const isNotFound = s3Err.name === 'NotFound'
+        || s3Err.name === 'NoSuchKey'
+        || s3Err.Code === 'NoSuchKey'
+        || s3Err.$metadata?.httpStatusCode === 404;
       
       if (isNotFound) {
         return false;
@@ -273,18 +283,19 @@ export class S3Service {
       });
       
       return fileName; // Sadece path döndür
-    } catch (error: any) {
+    } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      const isBucketError = error.name === 'NoSuchBucket' 
-        || error.Code === 'NoSuchBucket'
-        || error.$metadata?.httpStatusCode === 404;
-      
+      const s3Err = error as S3Error;
+      const isBucketError = s3Err.name === 'NoSuchBucket'
+        || s3Err.Code === 'NoSuchBucket'
+        || s3Err.$metadata?.httpStatusCode === 404;
+
       logger.error({
         message: 'Dosya yükleme hatası',
         error: errorMessage,
         fileName,
         bucketName: s3Config.bucketName,
-        errorDetails: error.$metadata || error,
+        errorDetails: s3Err.$metadata || error,
         isBucketError,
       });
       
@@ -312,10 +323,11 @@ export class S3Service {
         filePath,
         bucketName: s3Config.bucketName,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      const s3Err = error as S3Error;
       // Dosya zaten yoksa hata verme (idempotent operation)
-      if (error.name === 'NoSuchKey' || error.Code === 'NoSuchKey' || error.$metadata?.httpStatusCode === 404) {
+      if (s3Err.name === 'NoSuchKey' || s3Err.Code === 'NoSuchKey' || s3Err.$metadata?.httpStatusCode === 404) {
         logger.warn({
           message: 'Dosya zaten silinmiş veya bulunamadı',
           filePath,
@@ -326,7 +338,7 @@ export class S3Service {
         message: 'Dosya silme hatası',
         filePath,
         error: errorMessage,
-        errorDetails: error.$metadata || error,
+        errorDetails: s3Err.$metadata || error,
       });
       throw new Error(`Dosya silinemedi: ${errorMessage}`);
     }
@@ -399,7 +411,7 @@ export class S3Service {
           }
         }
         continuationToken = response.NextContinuationToken;
-      } catch (error: any) {
+      } catch (error: unknown) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         logger.error({
           message: 'MinIO folder delete error',

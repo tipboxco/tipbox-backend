@@ -62,7 +62,7 @@ router.use(authMiddleware);
  * Helper function: Normalize eventId by removing invalid values
  * Returns undefined for invalid values, trimmed string for valid ones
  */
-function normalizeEventId(eventId: any): string | undefined {
+function normalizeEventId(eventId: unknown): string | undefined {
   // Return undefined for falsy values
   if (!eventId) {
     return undefined;
@@ -625,7 +625,7 @@ router.post(
       // Map products array - handle id, productId, and externalId fields
       try {
         // Resolve all product IDs in parallel (supports both id and externalId)
-        const productIdPromises = productsInput.map(async (p: any) => {
+        const productIdPromises = productsInput.map(async (p: { productId?: string; id?: string; externalId?: string }) => {
           const productIdOrExternalId = p.productId || p.id || p.externalId;
           if (!productIdOrExternalId) {
             throw new Error('Product must have either productId, id, or externalId field');
@@ -1589,8 +1589,9 @@ router.post(
     try {
       const result = await postService.createUpdatePost(String(userId), request);
       return res.status(201).json(result);
-    } catch (err: any) {
-      if (err?.message === 'LEGACY_INVENTORY_NO_POST') {
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      if (errMsg === 'LEGACY_INVENTORY_NO_POST') {
         return res.status(400).json({
           success: false,
           message: 'This is a legacy inventory item without an associated experience post',
@@ -1598,18 +1599,18 @@ router.post(
           hint: 'Update posts can only be created for experience posts. This inventory item was created before the new post system and does not have a corresponding post. Please create a new experience post for this product first.',
         });
       }
-      if (err?.message === 'Experience post not found') {
+      if (errMsg === 'Experience post not found') {
         return res.status(404).json({
           success: false,
-          message: err.message,
+          message: errMsg,
           code: 'EXPERIENCE_POST_NOT_FOUND',
           hint: 'experiencePostId must be the experience post id (ULID, 26 chars from post detail or feed item id). If opening from bookmarks, use the post id from the item (item.id), not the bookmark id.',
         });
       }
-      if (err?.message?.includes('legacy inventory-based reviews')) {
+      if (errMsg?.includes('legacy inventory-based reviews')) {
         return res.status(400).json({
           success: false,
-          message: err.message,
+          message: errMsg,
           code: 'LEGACY_REVIEW_NOT_SUPPORTED',
           hint: 'Update posts cannot be created for old inventory-based reviews. The review must be a ContentPost (experience post). Please create a new experience post for this product first.',
         });
@@ -2022,7 +2023,7 @@ router.post(
         inventoryId: inventoryId, // ✅ YENİ: InventoryId'yi service'e gönder
         images: imageUrls,
         eventId: eventId,
-        productStatus: typeof productStatus === 'string' ? (productStatus as any) : undefined,
+        productStatus: typeof productStatus === 'string' ? (productStatus as 'own' | 'tried') : undefined,
       };
 
       const result = await postService.createFreePost(String(userId), postData);

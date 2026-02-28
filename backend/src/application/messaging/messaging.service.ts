@@ -28,6 +28,34 @@ import { SupportRequestService } from './support-request.service';
 import { DMRequestStatus } from '../../domain/messaging/dm-request-status.enum';
 import { resolveMediaUrl } from '../../infrastructure/config/media.config';
 import { S3Service } from '../../infrastructure/s3/s3.service';
+import { Prisma } from '@prisma/client';
+
+/** Shape returned by DMMessage findFirst/findMany with select for inbox last message */
+interface InboxLastMessageRow {
+  message: string | null;
+  sentAt: Date;
+  mediaUrl?: string | null;
+  mediaType?: string | null;
+  caption?: string | null;
+  isDeleted?: boolean;
+}
+
+/** DM message create data shape (repo create accepts these fields) */
+interface DmMessageCreateData {
+  threadId: string;
+  senderId: string;
+  message: string;
+  isRead: boolean;
+  sentAt: Date;
+  context?: string;
+  sharedPostId?: string;
+  mediaUrl?: string;
+  mediaType?: string;
+  thumbnailUrl?: string;
+  fileName?: string;
+  fileSize?: bigint;
+  caption?: string;
+}
 
 /** Inbox listesinde son mesaj shared post ise: post içeriği (ürün/kategori görseli + başlık/özet) */
 export interface LastMessageSharedPostPreview {
@@ -144,7 +172,7 @@ export class MessagingService {
       isRead: false,
       context: "DM",
       sentAt: new Date(),
-    } as any);
+    } as DmMessageCreateData);
 
     await this.prisma.dMThread.update({
       where: { id: thread.id },
@@ -220,7 +248,7 @@ export class MessagingService {
         isRead: false,
         context: 'DM',
         sentAt: new Date(),
-      } as any);
+      } as DmMessageCreateData);
 
       // Post'un share count'unu artır
       await tx.contentPost.update({
@@ -277,11 +305,10 @@ export class MessagingService {
     const thread = await this.createThreadIfNotExists(senderId, recipientId);
 
     // Mesaj ile birlikte medya oluştur (repository kullanarak)
-    // Context field'ı entity'de yok ama Prisma'da var, bu yüzden any kullanıyoruz
-    const messageData: any = {
+    const messageData: DmMessageCreateData = {
       threadId: thread.id,
       senderId: String(senderId),
-      message: message , // Mesaj yoksa boş string
+      message: message , // Mesaj yoksa bos string
       isRead: false,
       sentAt: new Date(),
       mediaUrl,
@@ -289,8 +316,8 @@ export class MessagingService {
       thumbnailUrl,
       fileName,
       fileSize,
-      caption: message || undefined, // Caption olarak mesajı kullan
-      context: "DM", // Context field'ı entity'de yok ama Prisma'da var
+      caption: message || undefined, // Caption olarak mesaji kullan
+      context: "DM",
     };
     const createdMessage = await this.dmMessageRepo.create(messageData);
 
@@ -638,14 +665,11 @@ export class MessagingService {
       // SUPPORT THREAD: Sadece SUPPORT context'li mesajları döndür
       if (isSupportThread) {
         // Cursor-based pagination: cursor'dan önceki (daha eski) mesajları getir
-        const whereClause: any = {
+        const whereClause: Prisma.DMMessageWhereInput = {
           threadId,
           context: "SUPPORT",
+          ...(cursorDate && { sentAt: { lt: cursorDate } }),
         };
-        
-        if (cursorDate) {
-          whereClause.sentAt = { lt: cursorDate };
-        }
 
         // Limit + 1 al (hasMore kontrolü için)
         const messages = await this.prisma.dMMessage.findMany({
@@ -778,15 +802,15 @@ export class MessagingService {
         });
         
         if (supportRequest) {
-          const prismaType = (supportRequest as any).type as string;
-          supportRequestType = 
+          const prismaType = String(supportRequest.type);
+          supportRequestType =
             prismaType === 'GENERAL' || prismaType === 'TECHNICAL' || prismaType === 'PRODUCT'
               ? prismaType
               : 'GENERAL';
-          
-          const amount = typeof (supportRequest as any).amount === 'number'
-            ? (supportRequest as any).amount
-            : Number((supportRequest as any).amount) || 0;
+
+          const amount = typeof supportRequest.amount === 'number'
+            ? supportRequest.amount
+            : Number(supportRequest.amount) || 0;
           supportRequestAmount = amount > 0 ? amount : undefined;
         }
 
@@ -808,14 +832,11 @@ export class MessagingService {
       
       // 1. DMMessage'ları getir (DM context'li mesajlar)
       // Not: context field'ı nullable değil, default değeri DM
-      const messageWhere: any = {
+      const messageWhere: Prisma.DMMessageWhereInput = {
         threadId,
         context: "DM", // Sadece DM context'li mesajlar
+        ...(cursorDate && { sentAt: { lt: cursorDate } }),
       };
-      
-      if (cursorDate) {
-        messageWhere.sentAt = { lt: cursorDate };
-      }
 
       const allMessages = await this.prisma.dMMessage.findMany({
         where: messageWhere,
@@ -843,16 +864,13 @@ export class MessagingService {
       const sharedPostAuthorByPostId = await this.resolveSharedPostAuthors(uniqueSharedPostIds);
 
       // 2. Thread kullanıcıları arasındaki TIPS transferlerini getir
-      const tipsWhere: any = {
+      const tipsWhere: Prisma.TipsTokenTransferWhereInput = {
         OR: [
           { fromUserId: thread.userOneId, toUserId: thread.userTwoId },
           { fromUserId: thread.userTwoId, toUserId: thread.userOneId },
         ],
+        ...(cursorDate && { createdAt: { lt: cursorDate } }),
       };
-      
-      if (cursorDate) {
-        tipsWhere.createdAt = { lt: cursorDate };
-      }
 
       const tipsTransfers = await this.prisma.tipsTokenTransfer.findMany({
         where: tipsWhere,
@@ -870,17 +888,14 @@ export class MessagingService {
       });
 
       // 3. Thread kullanıcıları arasındaki Support Request'leri getir
-      const requestWhere: any = {
+      const requestWhere: Prisma.DMRequestWhereInput = {
         OR: [
           { fromUserId: thread.userOneId, toUserId: thread.userTwoId },
           { fromUserId: thread.userTwoId, toUserId: thread.userOneId },
         ],
         description: { not: null }, // Sadece support request'ler
+        ...(cursorDate && { sentAt: { lt: cursorDate } }),
       };
-      
-      if (cursorDate) {
-        requestWhere.sentAt = { lt: cursorDate };
-      }
 
       const supportRequests = await this.prisma.dMRequest.findMany({
         where: requestWhere,
@@ -1029,16 +1044,15 @@ export class MessagingService {
           status = 'rejected';
         }
 
-        const dmRequestWithType = request as typeof request & { type: string; amount: number | any };
-        const prismaType = dmRequestWithType.type;
-        const supportType: SupportType = 
+        const prismaType = String(request.type);
+        const supportType: SupportType =
           prismaType === 'GENERAL' || prismaType === 'TECHNICAL' || prismaType === 'PRODUCT'
             ? prismaType
             : 'GENERAL';
 
-        const amount = typeof dmRequestWithType.amount === 'number'
-          ? dmRequestWithType.amount
-          : Number(dmRequestWithType.amount) || 0;
+        const amount = typeof request.amount === 'number'
+          ? request.amount
+          : Number(request.amount) || 0;
 
         const requestThreadId = request.threadId ?? null;
         // Support request için isUnread kontrolü (pending ise genelde unread)
@@ -1131,41 +1145,40 @@ export class MessagingService {
       let supportRequestAmount: number | undefined;
       
       if (isSupportThread) {
-        // Support thread'de threadId'ye göre support request'i bul
+        // Support thread'de threadId'ye gore support request'i bul
         const supportRequest = allSupportRequests.find(req => {
-          const requestThreadId = (req as any).threadId as string | null | undefined;
-          return requestThreadId === threadId && (req as any).status === DMRequestStatus.ACCEPTED;
+          return req.threadId === threadId && req.status === DMRequestStatus.ACCEPTED;
         });
-        
+
         if (supportRequest) {
-          const prismaType = (supportRequest as any).type as string;
-          supportRequestType = 
+          const prismaType = String(supportRequest.type);
+          supportRequestType =
             prismaType === 'GENERAL' || prismaType === 'TECHNICAL' || prismaType === 'PRODUCT'
               ? prismaType
               : 'GENERAL';
-          
-          const amount = typeof (supportRequest as any).amount === 'number'
-            ? (supportRequest as any).amount
-            : Number((supportRequest as any).amount) || 0;
-          supportRequestAmount = amount > 0 ? amount : undefined;
+
+          const srAmount = typeof supportRequest.amount === 'number'
+            ? supportRequest.amount
+            : Number(supportRequest.amount) || 0;
+          supportRequestAmount = srAmount > 0 ? srAmount : undefined;
         }
       } else {
         // Normal DM thread'de accepted support request'i bul
         const acceptedRequest = allSupportRequests.find(req => {
-          return (req as any).status === DMRequestStatus.ACCEPTED;
+          return req.status === DMRequestStatus.ACCEPTED;
         });
-        
+
         if (acceptedRequest) {
-          const prismaType = (acceptedRequest as any).type as string;
-          supportRequestType = 
+          const prismaType = String(acceptedRequest.type);
+          supportRequestType =
             prismaType === 'GENERAL' || prismaType === 'TECHNICAL' || prismaType === 'PRODUCT'
               ? prismaType
               : 'GENERAL';
-          
-          const amount = typeof (acceptedRequest as any).amount === 'number'
-            ? (acceptedRequest as any).amount
-            : Number((acceptedRequest as any).amount) || 0;
-          supportRequestAmount = amount > 0 ? amount : undefined;
+
+          const arAmount = typeof acceptedRequest.amount === 'number'
+            ? acceptedRequest.amount
+            : Number(acceptedRequest.amount) || 0;
+          supportRequestAmount = arAmount > 0 ? arAmount : undefined;
         }
       }
 
@@ -1331,8 +1344,8 @@ export class MessagingService {
           const lastMsgAll = await this.prisma.dMMessage.findFirst({
             where: {
               threadId,
-              context: 'DM', // Sadece DM context'li mesajları al
-            } as any,
+              context: 'DM',
+            },
             select: {
               message: true,
               sentAt: true,
@@ -1340,60 +1353,59 @@ export class MessagingService {
               mediaType: true,
               caption: true,
               isDeleted: true,
-            } as any,
+            },
             orderBy: {
               sentAt: 'desc',
             },
           });
 
-          // Eğer en son mesaj silinmişse, "Bu mesaj silindi" göster
+          // Eger en son mesaj silinmisse, "Bu mesaj silindi" goster
           if (lastMsgAll && lastMsgAll.isDeleted) {
             lastMessagesMap.set(threadId, {
               message: 'Bu mesaj silindi',
-              sentAt: lastMsgAll.sentAt as unknown as Date,
+              sentAt: lastMsgAll.sentAt,
               isDeleted: true,
             });
             return;
           }
 
-          // Silinmemiş en son mesajı bul
+          // Silinmemis en son mesaji bul
           const lastMsg = await this.prisma.dMMessage.findFirst({
             where: {
               threadId,
-              isDeleted: false, // Prisma schema'da isDeleted field'ı var
-              context: 'DM', // Sadece DM context'li mesajları al
-            } as any,
+              isDeleted: false,
+              context: 'DM',
+            },
             select: {
               message: true,
               sentAt: true,
               mediaUrl: true,
               mediaType: true,
               caption: true,
-            } as any,
+            },
             orderBy: {
               sentAt: 'desc',
             },
           });
-          
+
           if (lastMsg) {
-            // Mesaj içeriği: text mesaj varsa message, görsel mesaj varsa caption veya "📷 Görsel"
-            const msg = lastMsg as any;
+            const msg = lastMsg as InboxLastMessageRow;
             let messageText = msg.message;
             if (!messageText && msg.mediaUrl) {
               if (msg.mediaType === 'image') {
-                messageText = msg.caption || '📷 Görsel';
+                messageText = msg.caption || 'Gorsel';
               } else if (msg.mediaType === 'video') {
-                messageText = msg.caption || '🎥 Video';
+                messageText = msg.caption || 'Video';
               } else if (msg.mediaType === 'audio') {
-                messageText = msg.caption || '🎵 Ses';
+                messageText = msg.caption || 'Ses';
               } else {
-                messageText = msg.caption || '📎 Dosya';
+                messageText = msg.caption || 'Dosya';
               }
             }
-            
+
             lastMessagesMap.set(threadId, {
               message: messageText,
-              sentAt: lastMsg.sentAt as unknown as Date,
+              sentAt: lastMsg.sentAt,
             });
           }
         });
@@ -1432,13 +1444,13 @@ export class MessagingService {
                 : new Date(lastMessage.sentAt).getTime())
             : 0;
           
-          // Fallback'teki silinmiş mesaj daha yeni ise, "Bu mesaj silindi" göster
+          // Fallback'teki silinmis mesaj daha yeni ise, "Bu mesaj silindi" goster
           if (fallbackTimestamp > includeTimestamp) {
             lastMessageText = 'Bu mesaj silindi';
             if (!lastMessage) {
               lastMessage = {
                 sentAt: fallbackMessage.sentAt,
-              } as any;
+              } as unknown as typeof lastMessage;
             }
           } else if (lastMessage) {
             // Include'dan gelen mesaj var (silinmemiş), onu kullan
@@ -1487,7 +1499,7 @@ export class MessagingService {
           if (!lastMessage) {
             lastMessage = {
               sentAt: fallbackMessage.sentAt,
-            } as any;
+            } as unknown as typeof lastMessage;
           }
         }
         
@@ -1721,16 +1733,13 @@ export class MessagingService {
       }
 
       // 3. TIPS transferlerini getir - cursor ile
-      const tipsWhere: any = {
+      const tipsWhere: Prisma.TipsTokenTransferWhereInput = {
         OR: [
           { fromUserId: userIdStr },
           { toUserId: userIdStr },
         ],
+        ...(cursorDate && { createdAt: { lt: cursorDate } }),
       };
-      
-      if (cursorDate) {
-        tipsWhere.createdAt = { lt: cursorDate };
-      }
 
       const tipsTransfers = await this.prisma.tipsTokenTransfer.findMany({
         where: tipsWhere,
@@ -1996,14 +2005,11 @@ export class MessagingService {
 
       // Mesajlara bağlı reaksiyonları ve read receipt'leri sil
       if (messageIds.length > 0) {
-        // Prisma client'ta model isimleri camelCase olarak erişilir
-        // TypeScript tip tanımlarında bu modeller tanımlı olmayabilir, bu yüzden as any kullanıyoruz
-        const prismaClient = this.prisma as any;
-        await prismaClient.messageReaction.deleteMany({
+        await this.prisma.messageReaction.deleteMany({
           where: { messageId: { in: messageIds } },
         });
 
-        await prismaClient.messageReadReceipt.deleteMany({
+        await this.prisma.messageReadReceipt.deleteMany({
           where: { messageId: { in: messageIds } },
         });
 
@@ -2485,7 +2491,7 @@ export class MessagingService {
     for (const post of posts) {
       const u = post.user;
       const postType = post.type ?? null;
-      const authorName = u?.profile?.displayName || u?.profile?.userName || (u as any)?.email || 'Unknown';
+      const authorName = u?.profile?.displayName || u?.profile?.userName || 'Unknown';
       const authorTitle = u?.titles?.[0]?.title ?? null;
       const authorAvatar = u?.avatars?.[0]?.imageUrl ? resolveMediaUrl(u.avatars[0].imageUrl, true) : null;
 

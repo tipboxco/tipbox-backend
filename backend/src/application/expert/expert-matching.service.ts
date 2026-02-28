@@ -32,7 +32,7 @@ export class ExpertMatchingService {
             select: { userId: true },
             distinct: ['userId'],
           });
-          usersWithCategoryBadges.forEach((ub: any) => {
+          usersWithCategoryBadges.forEach((ub: { userId: string }) => {
             if (ub.userId !== excludeUserId) {
               expertUserIds.add(ub.userId);
             }
@@ -53,7 +53,7 @@ export class ExpertMatchingService {
       });
 
       if (expertBadges.length > 0) {
-        const expertBadgeIds = expertBadges.map((b: any) => b.id);
+        const expertBadgeIds = expertBadges.map((b: { id: string }) => b.id);
         const usersWithExpertBadges = await this.prisma.userBadge.findMany({
           where: {
             badgeId: { in: expertBadgeIds },
@@ -62,7 +62,7 @@ export class ExpertMatchingService {
           select: { userId: true },
           distinct: ['userId'],
         });
-        usersWithExpertBadges.forEach((ub: any) => {
+        usersWithExpertBadges.forEach((ub: { userId: string }) => {
           if (ub.userId !== excludeUserId) {
             expertUserIds.add(ub.userId);
           }
@@ -77,7 +77,7 @@ export class ExpertMatchingService {
         select: { userId: true },
         distinct: ['userId'],
       });
-      expertRoleUsers.forEach((ur: any) => {
+      expertRoleUsers.forEach((ur: { userId: string }) => {
         if (ur.userId !== excludeUserId) {
           expertUserIds.add(ur.userId);
         }
@@ -94,7 +94,7 @@ export class ExpertMatchingService {
         distinct: ['expertUserId'],
         take: 50, // En aktif 50 expert
       });
-      activeExperts.forEach((ea: any) => {
+      activeExperts.forEach((ea: { expertUserId: string }) => {
         if (ea.expertUserId !== excludeUserId) {
           expertUserIds.add(ea.expertUserId);
         }
@@ -134,7 +134,7 @@ export class ExpertMatchingService {
         },
         select: { id: true },
       });
-      return badges.map((b: any) => b.id);
+      return badges.map((b: { id: string }) => b.id);
     } catch (error) {
       logger.error({
         message: 'Error finding category badges',

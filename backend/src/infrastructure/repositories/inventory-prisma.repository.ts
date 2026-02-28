@@ -1,3 +1,4 @@
+import type { Inventory as PrismaInventoryModel } from '@prisma/client';
 import { Inventory } from '../../domain/inventory/inventory.entity';
 import { getPrisma } from './prisma.client';
 
@@ -165,7 +166,7 @@ export class InventoryPrismaRepository {
     return inventories.map(inventory => this.toDomain(inventory));
   }
 
-  private toDomain(prismaInventory: any): Inventory {
+  private toDomain(prismaInventory: PrismaInventoryModel): Inventory {
     return new Inventory(
       prismaInventory.id,
       prismaInventory.userId,

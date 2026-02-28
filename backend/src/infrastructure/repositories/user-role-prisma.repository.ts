@@ -1,3 +1,4 @@
+import type { UserRole as PrismaUserRoleModel } from '@prisma/client';
 import { UserRole } from '../../domain/user/user-role.entity';
 import { getPrisma } from './prisma.client';
 
@@ -85,7 +86,7 @@ export class UserRolePrismaRepository {
     return roles.map(role => this.toDomain(role));
   }
 
-  private toDomain(prismaRole: any): UserRole {
+  private toDomain(prismaRole: PrismaUserRoleModel): UserRole {
     return new UserRole(
       prismaRole.id,
       prismaRole.userId,

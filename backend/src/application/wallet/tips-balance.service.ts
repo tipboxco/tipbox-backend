@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import { WalletService } from '../wallet/wallet.service';
 import logger from '../../infrastructure/logger/logger';
@@ -72,7 +73,7 @@ export class TipsBalanceService {
       }
 
       // Alınan TIPS'ler (toUserId = userId)
-      const receivedWhere: any = { toUserId: userId };
+      const receivedWhere: Prisma.TipsTokenTransferWhereInput = { toUserId: userId };
       if (cursorCreatedAt && cursorId) {
         // Cursor pagination: createdAt < cursorCreatedAt VEYA (createdAt = cursorCreatedAt AND id < cursorId)
         receivedWhere.OR = [
@@ -109,7 +110,7 @@ export class TipsBalanceService {
       });
 
       // Gönderilen TIPS'ler (fromUserId = userId)
-      const sentWhere: any = { fromUserId: userId };
+      const sentWhere: Prisma.TipsTokenTransferWhereInput = { fromUserId: userId };
       if (cursorCreatedAt && cursorId) {
         // Cursor pagination: createdAt < cursorCreatedAt VEYA (createdAt = cursorCreatedAt AND id < cursorId)
         sentWhere.OR = [

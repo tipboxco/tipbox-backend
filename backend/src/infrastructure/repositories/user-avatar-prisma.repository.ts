@@ -1,3 +1,4 @@
+import type { UserAvatar as PrismaUserAvatarModel } from '@prisma/client';
 import { UserAvatar } from '../../domain/user/user-avatar.entity';
 import { getPrisma } from './prisma.client';
 
@@ -97,7 +98,7 @@ export class UserAvatarPrismaRepository {
     return avatars.map(avatar => this.toDomain(avatar));
   }
 
-  private toDomain(prismaAvatar: any): UserAvatar {
+  private toDomain(prismaAvatar: PrismaUserAvatarModel): UserAvatar {
     return new UserAvatar(
       prismaAvatar.id,
       prismaAvatar.userId,

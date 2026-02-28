@@ -7,6 +7,7 @@ import { NotificationCategory } from '../../domain/notification/notification-cat
 import QueueProvider from '../../infrastructure/queue/queue.provider';
 import logger from '../../infrastructure/logger/logger';
 import { Notification } from '../../domain/notification/notification.entity';
+import { UserSettings } from '../../domain/user/user-settings.entity';
 import { enrichNotificationData } from './notification-enricher';
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 
@@ -28,7 +29,7 @@ export class NotificationService {
   /**
    * Send notification to a user
    */
-  async sendNotification(userId: string, type: NotificationType, data: any): Promise<void> {
+  async sendNotification(userId: string, type: NotificationType, data: Record<string, unknown>): Promise<void> {
     try {
       // Check user notification preferences
       const settings = await this.settingsRepo.findByUserId(userId);
@@ -83,7 +84,7 @@ export class NotificationService {
   /**
    * Check if notification should be sent based on category preferences
    */
-  private shouldSendForCategory(settings: any, category: NotificationCategory): boolean {
+  private shouldSendForCategory(settings: UserSettings | null, category: NotificationCategory): boolean {
     if (!settings) return true;
 
     switch (category) {

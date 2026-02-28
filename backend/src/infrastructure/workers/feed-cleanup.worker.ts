@@ -62,7 +62,7 @@ export class FeedCleanupWorker {
     });
   }
 
-  private async processJob(job: Job<FeedCleanupJobData>): Promise<any> {
+  private async processJob(job: Job<FeedCleanupJobData>): Promise<unknown> {
     const { type, userId } = job.data;
 
     try {

@@ -1,3 +1,4 @@
+import type { ContentLike as PrismaContentLikeModel } from '@prisma/client';
 import { ContentLike } from '../../domain/interaction/content-like.entity';
 import { getPrisma } from './prisma.client';
 
@@ -71,7 +72,7 @@ export class ContentLikePrismaRepository {
 
   async update(id: string, data: Partial<ContentLike>): Promise<ContentLike | null> {
     try {
-      const updateData: any = {
+      const updateData: { updatedAt: Date; postId?: string | null; commentId?: string | null } = {
         updatedAt: new Date(),
       };
       if (data.postId !== undefined) updateData.postId = data.postId;
@@ -112,7 +113,7 @@ export class ContentLikePrismaRepository {
     });
   }
 
-  private toDomain(prismaLike: any): ContentLike {
+  private toDomain(prismaLike: PrismaContentLikeModel): ContentLike {
     return new ContentLike(
       prismaLike.id,
       prismaLike.userId,

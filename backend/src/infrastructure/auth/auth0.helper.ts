@@ -59,7 +59,7 @@ export function verifyAuth0Jwt(token: string): Promise<JwtPayload | null> {
     }
 
     // JWT payload'ı decode et (doğrulama yapmadan)
-    let decodedToken: any;
+    let decodedToken: jwt.Jwt | null;
     try {
       decodedToken = jwt.decode(token, { complete: true });
       if (!decodedToken || typeof decodedToken !== 'object') {
@@ -75,7 +75,12 @@ export function verifyAuth0Jwt(token: string): Promise<JwtPayload | null> {
     }
 
     // Issuer kontrolü
-    const issuer = decodedToken.payload?.iss;
+    const payload = typeof decodedToken.payload === 'object' ? decodedToken.payload : null;
+    if (!payload) {
+      logger.debug('Token payload is not an object (Auth0)');
+      return resolve(null);
+    }
+    const issuer = payload.iss;
     const expectedIssuer = `https://${AUTH0_DOMAIN}/`;
     if (issuer !== expectedIssuer) {
       logger.debug({
@@ -112,8 +117,8 @@ export function verifyAuth0Jwt(token: string): Promise<JwtPayload | null> {
             error: err.message,
             name: err.name,
             audience: AUTH0_AUDIENCE || 'not set',
-            tokenAudience: decodedToken.payload?.aud,
-            tokenIssuer: decodedToken.payload?.iss
+            tokenAudience: payload.aud,
+            tokenIssuer: payload.iss
           });
           return resolve(null);
         }

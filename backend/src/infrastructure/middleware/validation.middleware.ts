@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { z, ZodSchema, ZodError } from 'zod';
+import { z, ZodSchema, ZodError, ZodIssue } from 'zod';
 import { ErrorCode } from '../errors/error-codes.enum';
 import logger from '../logger/logger';
 
@@ -21,7 +21,7 @@ export const validateBody = (schema: ZodSchema) => {
     } catch (error) {
       if (error instanceof ZodError) {
         // Format validation errors
-        const errors = error.issues.map((err: any) => ({
+        const errors = error.issues.map((err: ZodIssue) => ({
           field: err.path.join('.'),
           message: err.message,
         }));
@@ -61,11 +61,11 @@ export const validateQuery = (schema: ZodSchema) => {
   return (req: Request, res: Response, next: NextFunction): void => {
     try {
       const validated = schema.parse(req.query);
-      req.query = validated as any;
+      req.query = validated as typeof req.query;
       next();
     } catch (error) {
       if (error instanceof ZodError) {
-        const errors = error.issues.map((err: any) => ({
+        const errors = error.issues.map((err: ZodIssue) => ({
           field: err.path.join('.'),
           message: err.message,
         }));
@@ -96,11 +96,11 @@ export const validateParams = (schema: ZodSchema) => {
   return (req: Request, res: Response, next: NextFunction): void => {
     try {
       const validated = schema.parse(req.params);
-      req.params = validated as any;
+      req.params = validated as typeof req.params;
       next();
     } catch (error) {
       if (error instanceof ZodError) {
-        const errors = error.issues.map((err: any) => ({
+        const errors = error.issues.map((err: ZodIssue) => ({
           field: err.path.join('.'),
           message: err.message,
         }));

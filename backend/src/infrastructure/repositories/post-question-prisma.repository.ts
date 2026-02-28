@@ -1,3 +1,4 @@
+import type { PostQuestion as PrismaPostQuestionModel } from '@prisma/client';
 import { PostQuestion } from '../../domain/content/post-question.entity';
 import { getPrisma } from './prisma.client';
 import { QuestionAnswerFormat } from '../../domain/content/question-answer-format.enum';
@@ -146,7 +147,7 @@ export class PostQuestionPrismaRepository {
     return questions.map(question => this.toDomain(question));
   }
 
-  private toDomain(prismaQuestion: any): PostQuestion {
+  private toDomain(prismaQuestion: PrismaPostQuestionModel): PostQuestion {
     return new PostQuestion(
       prismaQuestion.id,
       prismaQuestion.postId,

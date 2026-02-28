@@ -1,6 +1,7 @@
 import config from './index';
 import { getCorsOptions } from './cors.config';
-import type { Transport } from 'socket.io';
+
+type SocketTransport = 'websocket' | 'polling';
 
 export interface SocketConfig {
   cors: {
@@ -8,7 +9,7 @@ export interface SocketConfig {
     methods: string[];
     credentials: boolean;
   };
-  transports: Transport[];
+  transports: SocketTransport[];
   allowEIO3: boolean;
   path: string;
   connectTimeout: number;
@@ -18,14 +19,14 @@ export interface SocketConfig {
 
 export function getSocketConfig(): SocketConfig {
   const corsOptions = getCorsOptions();
-  
+
   return {
     cors: {
-      origin: corsOptions.origin as any,
+      origin: corsOptions.origin as SocketConfig['cors']['origin'],
       methods: config.corsMethods,
       credentials: true,
     },
-    transports: ['websocket', 'polling'] as Transport[],
+    transports: ['websocket', 'polling'],
     allowEIO3: false,
     path: '/socket.io/',
     connectTimeout: 20000,

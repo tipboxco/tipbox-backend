@@ -1,3 +1,4 @@
+import type { UserTheme as PrismaUserThemeModel } from '@prisma/client';
 import { UserTheme } from '../../domain/user/user-theme.entity';
 import { getPrisma } from './prisma.client';
 
@@ -67,7 +68,7 @@ export class UserThemePrismaRepository {
     return themes.map(theme => this.toDomain(theme));
   }
 
-  private toDomain(prismaTheme: any): UserTheme {
+  private toDomain(prismaTheme: PrismaUserThemeModel): UserTheme {
     return new UserTheme(
       prismaTheme.id,
       prismaTheme.name,

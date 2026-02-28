@@ -1,8 +1,15 @@
+import type { User as PrismaUserModel, Wallet as PrismaWalletModel, Profile as PrismaProfileModel } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { User } from '../../domain/user/user.entity';
 import { Wallet, WalletProvider } from '../../domain/wallet/wallet.entity';
 import { EmailAlreadyExistsError } from '../errors/custom-errors';
 import { DEFAULT_PROFILE_BANNER_URL } from '../../domain/user/profile.constants';
 import { getPrisma } from './prisma.client';
+
+type PrismaUserWithRelations = PrismaUserModel & {
+  profile: PrismaProfileModel | null;
+  wallets: PrismaWalletModel[];
+};
 
 export class UserPrismaRepository {
   private prisma = getPrisma();
@@ -38,8 +45,8 @@ export class UserPrismaRepository {
         }
       });
       return this.toDomain(user);
-    } catch (err: any) {
-      if (err.code === 'P2002' && err.meta?.target?.includes('email')) {
+    } catch (err: unknown) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002' && (err.meta?.target as string[] | undefined)?.includes('email')) {
         throw new EmailAlreadyExistsError();
       }
       throw err;
@@ -89,8 +96,8 @@ export class UserPrismaRepository {
         }
       });
       return this.toDomain(user);
-    } catch (err: any) {
-      if (err.code === 'P2002' && err.meta?.target?.includes('email')) {
+    } catch (err: unknown) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002' && (err.meta?.target as string[] | undefined)?.includes('email')) {
         throw new EmailAlreadyExistsError();
       }
       throw err;
@@ -125,13 +132,14 @@ export class UserPrismaRepository {
         }
       });
       return this.toDomain(user);
-    } catch (err: any) {
-      if (err.code === 'P2002') {
-        if (err.meta?.target?.includes('email')) {
+    } catch (err: unknown) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        const target = err.meta?.target as string[] | undefined;
+        if (target?.includes('email')) {
           throw new EmailAlreadyExistsError();
         }
         // Auth0Id zaten varsa, mevcut kullanıcıyı döndür
-        if (err.meta?.target?.includes('auth0_id')) {
+        if (target?.includes('auth0_id')) {
           const existingUser = await this.findByAuth0Id(auth0Id);
           if (existingUser) {
             return existingUser;
@@ -153,14 +161,16 @@ export class UserPrismaRepository {
         }
       });
       return user ? this.toDomain(user) : null;
-    } catch (err: any) {
-      // Prisma P2025: Record not found
-      if (err.code === 'P2025') {
-        return null;
-      }
-      // Email duplicate hatası
-      if (err.code === 'P2002' && err.meta?.target?.includes('email')) {
-        throw new EmailAlreadyExistsError();
+    } catch (err: unknown) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError) {
+        // Prisma P2025: Record not found
+        if (err.code === 'P2025') {
+          return null;
+        }
+        // Email duplicate hatası
+        if (err.code === 'P2002' && (err.meta?.target as string[] | undefined)?.includes('email')) {
+          throw new EmailAlreadyExistsError();
+        }
       }
       throw err;
     }
@@ -185,9 +195,9 @@ export class UserPrismaRepository {
     return users.map(user => this.toDomain(user));
   }
 
-  private toDomain(prismaUser: any): User {
+  private toDomain(prismaUser: PrismaUserWithRelations): User {
     // Wallet'ları domain entity'ye çevir
-    const wallets = prismaUser.wallets?.map((w: any) => new Wallet(
+    const wallets = prismaUser.wallets?.map((w: PrismaWalletModel) => new Wallet(
       w.id,
       w.userId,
       w.smartAccountAddress,

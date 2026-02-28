@@ -28,6 +28,7 @@ import {
 } from '../../infrastructure/repositories/prisma-types.helper';
 import { BadgeResponseMapper } from '../../infrastructure/utils/badge-response-mapper';
 import { NotFoundError, ValidationError } from '../../infrastructure/errors/custom-errors';
+import type { UserReportCategory } from '../../domain/user/user-report-category.enum';
 
 type CosmeticSummary = {
   id: string;
@@ -85,6 +86,106 @@ type UserProfileDetails = {
   titles: string[];
   stats: { posts: number; trust: number; truster: number };
   badges: ProfileBadgeSummary[];
+};
+
+/** Shared context data shape returned from buildContextDataFromPost */
+type ContextData = {
+  id: string;
+  name: string;
+  subName: string;
+  image: string | null;
+  isOwned?: boolean;
+} | null;
+
+/** Minimal post-like shape used by mapContextType & buildContextDataFromPost */
+type PostLike = {
+  id: string;
+  productId?: string | null;
+  productGroupId?: string | null;
+  subCategoryId?: string | null;
+  categoryId?: string | null;
+  body?: string | null;
+  product?: {
+    id: string;
+    name: string;
+    imageUrl?: string | null;
+    group?: {
+      id: string;
+      name: string;
+      imageUrl?: string | null;
+      subCategory?: {
+        id: string;
+        name: string;
+        imageUrl?: string | null;
+        mainCategory?: { id: string; name: string; imageUrl?: string | null } | null;
+      } | null;
+    } | null;
+  } | null;
+  productGroup?: {
+    id: string;
+    name: string;
+    imageUrl?: string | null;
+    subCategory?: {
+      id: string;
+      name: string;
+      imageUrl?: string | null;
+      mainCategory?: { id: string; name: string; imageUrl?: string | null } | null;
+    } | null;
+  } | null;
+  subCategory?: {
+    id: string;
+    name: string;
+    imageUrl?: string | null;
+    mainCategory?: { id: string; name: string; imageUrl?: string | null } | null;
+  } | null;
+  mainCategory?: { id: string; name: string; imageUrl?: string | null } | null;
+};
+
+/** Inventory shape used by buildContextDataFromInventory */
+type InventoryLike = {
+  id: string;
+  productId: string | null;
+  hasOwned?: boolean;
+  product?: {
+    id: string;
+    name: string;
+    imageUrl?: string | null;
+    brand?: string | null;
+    group?: {
+      id: string;
+      name: string;
+      imageUrl?: string | null;
+      subCategory?: {
+        id: string;
+        name: string;
+        imageUrl?: string | null;
+        mainCategory?: { id: string; name: string; imageUrl?: string | null } | null;
+      } | null;
+    } | null;
+  } | null;
+  experienceSummary?: string | null;
+  media?: Array<{ mediaUrl: string | null }>;
+};
+
+/** Generic feed item shape returned by getUserPosts, getUserReviews, etc. */
+type FeedItem = {
+  id: string;
+  type: string;
+  user: { id: string; name: string; title: string; avatar: string };
+  stats: BasicStats;
+  createdAt: string;
+  contextType: ContextType;
+  [key: string]: unknown;
+};
+
+/** Paginated result shape */
+type PaginatedResult<T> = {
+  items: T[];
+  pagination: {
+    cursor?: string;
+    hasMore: boolean;
+    limit: number;
+  };
 };
 
 const EXPERIENCE_SECTION_TITLES = {
@@ -751,7 +852,7 @@ export class UserService {
     };
 
     // Build orderBy based on sort parameter
-    let orderBy: any = {};
+    let orderBy: Record<string, string> = {};
     if (sort === 'name_asc') {
       orderBy = { displayName: 'asc' };
     } else if (sort === 'name_desc') {
@@ -908,7 +1009,7 @@ export class UserService {
     await userReportRepo.create({
       reportedUserId,
       reporterId,
-      category: normalizedCategory as any,
+      category: normalizedCategory as UserReportCategory,
       description: trimmedDescription || null,
     });
 
@@ -958,7 +1059,7 @@ export class UserService {
     const cursor =
       options?.cursor && /^[0-9a-fA-F-]{36}$/.test(options.cursor) ? options.cursor : undefined;
 
-    const where: any = {
+    const where: Prisma.UserBadgeWhereInput = {
       userId,
       badge: {
         achievementGoals: { some: {} },
@@ -969,11 +1070,8 @@ export class UserService {
           ],
         } : {}),
       },
+      ...(cursor ? { badgeId: { lt: cursor } } : {}),
     };
-
-    if (cursor) {
-      where.badgeId = { lt: cursor };
-    }
 
     const userBadges = await this.prisma.userBadge.findMany({
       where,
@@ -1079,10 +1177,19 @@ export class UserService {
       typeof value === 'string' && /^[0-9a-fA-F-]{36}$/.test(value);
     const initialCursor = isValidUuid(options?.cursor) ? options!.cursor : undefined;
 
-    const mapBadge = (badge: any) => {
+    const mapBadge = (badge: {
+      id: string;
+      name: string;
+      imageUrl?: string | null;
+      description?: string | null;
+      achievementGoals?: Array<{
+        pointsRequired: number;
+        userAchievements?: Array<{ progress: number }>;
+      }>;
+    }) => {
       const goals = badge.achievementGoals || [];
-      const total = goals.reduce((sum: number, g: any) => sum + (g.pointsRequired || 0), 0);
-      const current = goals.reduce((sum: number, g: any) => sum + (g.userAchievements?.[0]?.progress || 0), 0);
+      const total = goals.reduce((sum: number, g: { pointsRequired: number }) => sum + (g.pointsRequired || 0), 0);
+      const current = goals.reduce((sum: number, g: { userAchievements?: Array<{ progress: number }> }) => sum + (g.userAchievements?.[0]?.progress || 0), 0);
       const status = mapStatus(current, total || 1);
 
       return {
@@ -1429,7 +1536,7 @@ export class UserService {
     }
   }
 
-  private mapContextType(post: any): ContextType {
+  private mapContextType(post: PostLike): ContextType {
     if (post?.productId) {
       return this.normalizeContextType(ContextType.PRODUCT);
     }
@@ -1439,7 +1546,7 @@ export class UserService {
     return this.normalizeContextType(ContextType.SUB_CATEGORY);
   }
 
-  private async buildContextDataFromPost(post: any, ownedProductIds?: Set<string> | null): Promise<any> {
+  private async buildContextDataFromPost(post: PostLike, ownedProductIds?: Set<string> | null): Promise<ContextData> {
     const contextType = this.mapContextType(post);
 
     // PRODUCT context
@@ -1624,7 +1731,7 @@ export class UserService {
     return null;
   }
 
-  async getUserPosts(userId: string, options?: { limit?: number }): Promise<any[]> {
+  async getUserPosts(userId: string, options?: { limit?: number }): Promise<FeedItem[]> {
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 50;
     
     // ✅ Tüm post tiplerini getir (EXPERIENCE + UPDATE Experience tabında listelenir)
@@ -1755,8 +1862,8 @@ export class UserService {
         const images = postMediaMap.get(post.id) || [];
         const postType = post.type as string;
 
-      if (postType === 'UPDATE' && (post as any).updateContent?.experiencePost) {
-        const expPost = (post as any).updateContent.experiencePost;
+      if (postType === 'UPDATE' && post.updateContent?.experiencePost) {
+        const expPost = post.updateContent.experiencePost;
         const expProduct = expPost.product
           ? {
               id: expPost.product.id,
@@ -1773,7 +1880,7 @@ export class UserService {
                 .map((item) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`)
                 .join('\n\n')
             : expPost.body || '';
-        const updateContentText = (post as any).updateContent.content || post.body || '';
+        const updateContentText = post.updateContent.content || post.body || '';
         return {
           id: String(post.id),
           type: 'update' as const,
@@ -1786,7 +1893,7 @@ export class UserService {
             product: expProduct,
             content: expContentString,
             experienceContent: expContent,
-            tags: expPost.contentPostTags?.map((t: any) => t.tag) || [],
+            tags: expPost.contentPostTags?.map((t: { tag: string }) => t.tag) || [],
             images: [],
             status: expPost.productStatus ?? undefined,
             statusLabel: expPost.productStatus === 'own' ? 'I owned' : expPost.productStatus === 'tried' ? 'I tried' : undefined,
@@ -1817,7 +1924,7 @@ export class UserService {
           product,
           content: contentString,
           experienceContent,
-          tags: post.contentPostTags?.map((t: any) => t.tag) || [],
+          tags: post.contentPostTags?.map((t: { tag: string }) => t.tag) || [],
           images,
           status: post.productStatus === 'own' || post.productStatus === 'tried' ? post.productStatus : undefined,
           statusLabel: post.productStatus === 'own' ? 'I owned' : post.productStatus === 'tried' ? 'I tried' : undefined,
@@ -1826,7 +1933,7 @@ export class UserService {
 
       // COMPARE (benchmark) tipindeki postlar
       if (postType === 'COMPARE') {
-        const comp = (post as any).comparison;
+        const comp = post.comparison;
         if (comp) {
           const choiceProductId = this.selectComparisonWinner(comp);
           return {
@@ -1855,8 +1962,8 @@ export class UserService {
 
       // TIPS tipindeki postlar
       if (postType === 'TIPS') {
-        const tip = (post as any).tip;
-        const benefit = tip?.benefitCategory;
+        const tip = post.tip;
+        const benefit = tip?.tipCategory;
         const benefitMap: Record<string, { title: string; icon: string }> = {
           time_saving: { title: 'Zaman Kazandırır', icon: 'clock' },
           energy_efficiency: { title: 'Enerji Tasarrufu', icon: 'bolt' },
@@ -1931,11 +2038,11 @@ export class UserService {
   async getUserUpdates(
     userId: string,
     options?: { limit?: number }
-  ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+  ): Promise<PaginatedResult<FeedItem>> {
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 100;
 
     const posts = await this.prisma.contentPost.findMany({
-      where: { userId, type: 'UPDATE' } as any,
+      where: { userId, type: ContentPostType.UPDATE },
       include: {
         product: {
           include: {
@@ -2073,12 +2180,12 @@ export class UserService {
   async getUserReviews(
     userId: string,
     options?: { cursor?: string; limit?: number }
-  ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+  ): Promise<PaginatedResult<FeedItem>> {
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
     const cursor = options?.cursor;
 
     const userBase = await this.getUserBase(userId);
-    const results: any[] = [];
+    const results: FeedItem[] = [];
 
     // 1. Inventory'den experience'ları çek (eski sistem)
     const inventories = await this.prisma.inventory.findMany({
@@ -2105,14 +2212,15 @@ export class UserService {
 
     for (const inv of inventories) {
       // ProductExperience artık kullanılmıyor, boş array kullan
+      const invRecord = inv as unknown as InventoryLike;
       const experiences = this.buildExperienceSections(
         [],
-        (inv as any).experienceSummary ?? null,
+        invRecord.experienceSummary ?? null,
       );
 
       const tags = await this.collectProductTags(String(inv.productId));
-      const images = ((inv as any).media || [])
-        .map((m: any) => {
+      const images = (invRecord.media || [])
+        .map((m: { mediaUrl: string | null }) => {
           const mediaPath = m.mediaUrl;
           if (mediaPath) {
             return resolveMediaUrl(mediaPath);
@@ -2121,7 +2229,7 @@ export class UserService {
         })
         .filter((url: string | null) => url !== null);
 
-      const contextData = this.buildContextDataFromInventory(inv as any);
+      const contextData = this.buildContextDataFromInventory(invRecord);
 
       results.push({
         id: String(inv.id),
@@ -2243,7 +2351,7 @@ export class UserService {
 
       // Tags
       const tags = (post.contentPostTags || [])
-        .map((cpt: any) => cpt.tag)
+        .map((cpt: { tag: string }) => cpt.tag)
         .filter((tag: string | null | undefined) => tag);
 
       // Context data
@@ -2293,9 +2401,9 @@ export class UserService {
     for (const post of updatePosts) {
       const images = postMediaMap.get(post.id) || [];
       const tags = (post.contentPostTags || [])
-        .map((cpt: any) => cpt.tag)
+        .map((cpt: { tag: string }) => cpt.tag)
         .filter((tag: string | null | undefined) => tag);
-      const updateText = (post as any).updateContent?.content ?? post.body ?? '';
+      const updateText = post.updateContent?.content ?? post.body ?? '';
       const contextData = post.product
         ? {
             product: {
@@ -2331,7 +2439,7 @@ export class UserService {
       };
 
       // relatedPost = bağlı experience post özeti (UpdatePost yapısı, feed/catalog ile uyumlu)
-      const expPost = (post as any).updateContent?.experiencePost;
+      const expPost = post.updateContent?.experiencePost;
       let relatedPost: {
         id: string;
         product: { id: string; name: string; subName: string; image: string | null };
@@ -2361,7 +2469,7 @@ export class UserService {
           product: expProduct,
           content: expContentString,
           experienceContent: expContent,
-          tags: (expPost.contentPostTags || []).map((cpt: any) => cpt.tag).filter(Boolean),
+          tags: (expPost.contentPostTags || []).map((cpt: { tag: string }) => cpt.tag).filter(Boolean),
           images: [], // experience post görselleri ayrı sorgulanabilir; reviews’ta opsiyonel
         };
       }
@@ -2537,7 +2645,7 @@ export class UserService {
   async getUserBenchmarks(
     userId: string,
     options?: { cursor?: string; limit?: number }
-  ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+  ): Promise<PaginatedResult<FeedItem>> {
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
     const cursor = options?.cursor;
 
@@ -2660,14 +2768,15 @@ export class UserService {
   async getUserTips(
     userId: string,
     options?: { cursor?: string; limit?: number }
-  ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+  ): Promise<PaginatedResult<FeedItem>> {
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
     const cursor = options?.cursor;
 
-    const whereClause: any = { userId, type: 'TIPS' };
-    if (cursor) {
-      whereClause.id = { lt: cursor };
-    }
+    const whereClause: Prisma.ContentPostWhereInput = {
+      userId,
+      type: ContentPostType.TIPS,
+      ...(cursor ? { id: { lt: cursor } } : {}),
+    };
 
     const posts = await this.prisma.contentPost.findMany({
       where: whereClause,
@@ -2708,7 +2817,7 @@ export class UserService {
 
     const userBase = await this.getUserBase(userId);
     const ownedProducts = await this.prisma.inventory.findMany({
-      where: { userId } as any,
+      where: { userId },
       select: { productId: true },
     });
     const ownedProductIds = new Set(ownedProducts.map((inv) => String(inv.productId)));
@@ -2716,7 +2825,7 @@ export class UserService {
     // Batch fetch images from PostMedia
     const postIds = posts.map((p) => p.id);
     const postMediaMap = new Map<string, string[]>();
-    
+
     if (postIds.length > 0) {
       const allPostMedia = await this.prisma.postMedia.findMany({
         where: {
@@ -2751,8 +2860,8 @@ export class UserService {
         const contextType = this.mapContextType(post);
         const contextData = await this.buildContextDataFromPost(post, ownedProductIds);
         const images = postMediaMap.get(post.id) || [];
-        const tip = (post as any).tip;
-        const benefitCategory = tip?.benefitCategory;
+        const tip = post.tip;
+        const benefitCategory = tip?.tipCategory;
         
         return {
           id: String(post.id),
@@ -2788,7 +2897,7 @@ export class UserService {
   async getUserReplies(
     userId: string,
     options?: { cursor?: string; limit?: number }
-  ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+  ): Promise<PaginatedResult<FeedItem>> {
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
     const cursor = options?.cursor || undefined;
 
@@ -2843,7 +2952,7 @@ export class UserService {
 
     const userBase = await this.getUserBase(userId);
     const ownedProducts = await this.prisma.inventory.findMany({
-      where: { userId } as any,
+      where: { userId },
       select: { productId: true },
     });
     const ownedProductIds = new Set(ownedProducts.map((inv) => String(inv.productId)));
@@ -2851,7 +2960,7 @@ export class UserService {
     const results = await Promise.all(
       comments.map(async (comment) => {
         const stats = await this.getPostStats(String(comment.postId));
-        const commentPost = (comment as any).post;
+        const commentPost = comment.post;
         const contextType = this.mapContextType(commentPost);
         const contextData = this.buildContextDataFromPost(commentPost, ownedProductIds);
         return {
@@ -2886,7 +2995,7 @@ export class UserService {
   async getUserLadderBadges(
     userId: string,
     options?: { cursor?: string; limit?: number }
-  ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+  ): Promise<PaginatedResult<Record<string, unknown>>> {
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
     const cursor =
       options?.cursor && /^[0-9a-fA-F-]{36}$/.test(options.cursor) ? options.cursor : undefined;
@@ -2949,7 +3058,7 @@ export class UserService {
     const paginatedBadges = hasMore ? userBadges.slice(0, limit) : userBadges;
 
     const items = paginatedBadges.map((ub) => {
-      const badge = ub.badge as any;
+      const badge = ub.badge;
       const tasks = this.buildBadgeTasks(badge);
       const currentProgress = tasks.reduce(
         (sum, task) => sum + Math.min(task.current, task.total),
@@ -2994,7 +3103,7 @@ export class UserService {
   async getUserBookmarks(
     userId: string,
     options?: { cursor?: string; limit?: number }
-  ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+  ): Promise<PaginatedResult<FeedItem>> {
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : 20;
     // Cursor olarak öncelik: UUID favorite.id, değilse postId ile favorite id'yi çözmeye çalış
     let favoriteCursorId: string | undefined;
@@ -3044,7 +3153,7 @@ export class UserService {
               },
             },
             mainCategory: true,
-            comparison: { include: { product1: true, product2: true } } as any,
+            comparison: { include: { product1: true, product2: true } },
             tip: true,
             question: true,
             contentPostTags: true,
@@ -3060,15 +3169,15 @@ export class UserService {
     });
 
     // Post'lardaki unique userId'leri topla
-    const postUserIds = [...new Set(favorites.map((f) => String((f as any).post?.userId)).filter(Boolean))];
+    const postUserIds = [...new Set(favorites.map((f) => String(f.post?.userId)).filter(Boolean))];
 
     // User bilgilerini toplu çek
     const users = await Promise.all(
       postUserIds.map(async (uid) => {
         const [profile, avatar, title] = await Promise.all([
-          this.profileRepo.findByUserId(uid as unknown as string), // uid tek başına hata veriyor
-          this.prisma.userAvatar.findFirst({ where: { userId: uid, isActive: true } as any }),
-          this.prisma.userTitle.findFirst({ where: { userId: uid } as any, orderBy: { earnedAt: 'desc' } }),
+          this.profileRepo.findByUserId(uid),
+          this.prisma.userAvatar.findFirst({ where: { userId: uid, isActive: true } }),
+          this.prisma.userTitle.findFirst({ where: { userId: uid }, orderBy: { earnedAt: 'desc' } }),
         ]);
         return {
           userId: uid,
@@ -3086,7 +3195,7 @@ export class UserService {
 
     // User'ın sahip olduğu product'ları çek (benchmark için)
     const inventories = await this.prisma.inventory.findMany({
-      where: { userId } as any,
+      where: { userId },
       select: { productId: true },
     });
     const ownedSet = new Set(inventories.map((i) => String(i.productId)));
@@ -3094,10 +3203,10 @@ export class UserService {
     const hasMoreFavorites = favorites.length > limit;
     const paginatedFavorites = hasMoreFavorites ? favorites.slice(0, limit) : favorites;
 
-    const results: any[] = [];
+    const results: FeedItem[] = [];
 
     for (const fav of paginatedFavorites) {
-      const post = (fav as any).post;
+      const post = fav.post;
       if (!post) continue;
 
       const postUserId = String(post.userId);
@@ -3163,7 +3272,7 @@ export class UserService {
 
         case 'TIPS': {
           // TIPS -> "tipsAndTricks" tipi
-          const tags = await this.prisma.postTag.findMany({ where: { postId: String(post.id) } as any });
+          const tags = await this.prisma.postTag.findMany({ where: { postId: String(post.id) } });
           results.push({
             id: String(post.id),
             type: 'tipsAndTricks' as const,
@@ -3181,7 +3290,7 @@ export class UserService {
 
         case 'QUESTION': {
           // QUESTION -> "question" tipi
-          const question = (post as any).question;
+          const question = post.question;
           results.push({
             id: String(post.id),
             type: 'question' as const,
@@ -3210,7 +3319,7 @@ export class UserService {
                   .map((item) => `${item.title}: ${item.content}${item.rating ? ` (${item.rating}/5)` : ''}`)
                   .join('\n\n')
               : post.body || '';
-          const postTags = (post as any).contentPostTags?.map((t: any) => t.tag) || (post as any).tags?.map((t: any) => t.tag) || [];
+          const postTags = post.contentPostTags?.map((t: { tag: string }) => t.tag) || [];
           const status = post.productStatus === 'own' || post.productStatus === 'tried' ? post.productStatus : null;
           const statusLabel = post.productStatus === 'own' ? 'I owned' : post.productStatus === 'tried' ? 'I tried' : null;
           results.push({
@@ -3307,7 +3416,7 @@ export class UserService {
     return `badge://${badgeId || userBadgeId || ''}`;
   }
 
-  private buildContextDataFromInventory(inventory: any) {
+  private buildContextDataFromInventory(inventory: InventoryLike) {
     const product = inventory.product;
     if (!product) {
       return {
@@ -3338,7 +3447,7 @@ export class UserService {
 
   private async collectProductTags(productId: string): Promise<string[]> {
     const posts = await this.prisma.contentPost.findMany({
-      where: { productId } as any,
+      where: { productId },
       select: { id: true },
     });
     if (!posts.length) {
@@ -3346,7 +3455,7 @@ export class UserService {
     }
 
     const tags = await this.prisma.contentPostTag.findMany({
-      where: { postId: { in: posts.map((p) => String(p.id)) } } as any,
+      where: { postId: { in: posts.map((p) => String(p.id)) } },
     });
 
     return tags.map((t) => t.tag);
@@ -3374,7 +3483,7 @@ export class UserService {
       cursor?: string;
       types?: ProfileFeedCardType[];
     }
-  ): Promise<{ items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }> {
+  ): Promise<PaginatedResult<FeedItem>> {
     const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 100) : 20;
     const cursor = options?.cursor;
     const requestedTypes = options?.types?.length
@@ -3385,20 +3494,21 @@ export class UserService {
     const perSourceLimit = limit + 1;
 
     // Timeout koruması ile fetcher'ları oluştur
-    const createFetcherWithTimeout = (fetcher: Promise<any>, timeoutMs: number = 8000) => {
+    const createFetcherWithTimeout = (fetcher: Promise<PaginatedResult<FeedItem> | FeedItem[]>, timeoutMs: number = 8000) => {
       return Promise.race([
         fetcher,
-        new Promise((_, reject) => 
+        new Promise<{ items: FeedItem[] }>((_, reject) =>
           setTimeout(() => reject(new Error('Request timeout')), timeoutMs)
         )
-      ]).catch((error) => {
-        logger.warn(`Feed fetcher timeout or error: ${error.message}`);
-        return { items: [] }; // Timeout durumunda boş array döndür
+      ]).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.warn(`Feed fetcher timeout or error: ${message}`);
+        return { items: [] as FeedItem[] }; // Timeout durumunda boş array döndür
       });
     };
 
     const fetchers = requestedTypes.map((cardType) => {
-      let fetcher: Promise<any>;
+      let fetcher: Promise<PaginatedResult<FeedItem> | FeedItem[]>;
       switch (cardType) {
         case 'feed':
           fetcher = this.getUserReviews(userId, { limit: perSourceLimit });
@@ -3427,14 +3537,22 @@ export class UserService {
     });
 
     const chunks = await Promise.all(fetchers);
-    const merged = chunks.flatMap((chunk: any) => chunk?.items || chunk || []);
+    const merged = chunks.flatMap((chunk) => {
+      if (chunk && 'items' in chunk && Array.isArray(chunk.items)) {
+        return chunk.items as FeedItem[];
+      }
+      if (Array.isArray(chunk)) {
+        return chunk as FeedItem[];
+      }
+      return [] as FeedItem[];
+    });
 
-    const resolveTimestamp = (item: any): number => {
+    const resolveTimestamp = (item: FeedItem): number => {
       const value = item?.createdAt;
-      return value ? new Date(value).getTime() : 0;
+      return value ? new Date(value as string).getTime() : 0;
     };
 
-    const sortKey = (item: any) => ({
+    const sortKey = (item: FeedItem) => ({
       time: resolveTimestamp(item),
       id: String(item?.id ?? ''),
     });
@@ -3479,13 +3597,13 @@ export class UserService {
       limit?: number;
     }
   ): Promise<{
-    profileCard: any | null;
+    profileCard: Awaited<ReturnType<UserService['getUserProfileCard']>> | null;
     tabs: {
-      feed?: any[];
-      reviews?: any[];
-      benchmarks?: any[];
-      tips?: any[];
-      replies?: any[];
+      feed?: FeedItem[];
+      reviews?: FeedItem[];
+      benchmarks?: FeedItem[];
+      tips?: FeedItem[];
+      replies?: FeedItem[];
     };
     meta: {
       cached: boolean;
@@ -3501,7 +3619,11 @@ export class UserService {
     // Cache check
     const cacheKey = `user:${userId}:profile:${includeTabs.join(',')}`;
     try {
-      const cached = (await this.cacheService.get(cacheKey)) as any;
+      const cached = await this.cacheService.get<{
+        profileCard: Awaited<ReturnType<UserService['getUserProfileCard']>> | null;
+        tabs: { feed?: FeedItem[]; reviews?: FeedItem[]; benchmarks?: FeedItem[]; tips?: FeedItem[]; replies?: FeedItem[] };
+        meta: { cached: boolean; timestamp: string };
+      }>(cacheKey);
       if (cached && cached.profileCard !== undefined && cached.tabs !== undefined) {
         return {
           ...cached,
@@ -3513,13 +3635,14 @@ export class UserService {
     }
 
     // Parallel data fetching
-    const promises: Promise<any>[] = [];
+    const promises: Promise<unknown>[] = [];
 
     if (includeProfileCard) {
       promises.push(this.getUserProfileCard(userId));
     }
 
-    const tabPromises: Promise<any[] | { items: any[]; pagination: { cursor?: string; hasMore: boolean; limit: number } }>[] = [];
+    type TabResult = FeedItem[] | PaginatedResult<FeedItem>;
+    const tabPromises: Promise<TabResult>[] = [];
     if (includeTabs.includes('feed')) {
       tabPromises.push(this.getUserProfileFeed(userId, { limit }));
     }
@@ -3540,24 +3663,36 @@ export class UserService {
 
     const results = await Promise.all(promises);
 
+    const extractItems = (result: unknown): FeedItem[] => {
+      if (result && typeof result === 'object' && 'items' in result && Array.isArray((result as { items: unknown }).items)) {
+        return (result as { items: FeedItem[] }).items;
+      }
+      if (Array.isArray(result)) {
+        return result as FeedItem[];
+      }
+      return [];
+    };
+
     let tabIndex = includeProfileCard ? 1 : 0;
     const response = {
-      profileCard: includeProfileCard ? results[0] : null,
+      profileCard: includeProfileCard
+        ? (results[0] as Awaited<ReturnType<UserService['getUserProfileCard']>>)
+        : null,
       tabs: {
         feed: includeTabs.includes('feed')
-          ? ((results[tabIndex]?.items || results[tabIndex] || []) as any[]).slice(0, limit)
+          ? extractItems(results[tabIndex++]).slice(0, limit)
           : undefined,
         reviews: includeTabs.includes('reviews')
-          ? ((results[tabIndex++]?.items || results[tabIndex - 1] || []) as any[]).slice(0, limit)
+          ? extractItems(results[tabIndex++]).slice(0, limit)
           : undefined,
         benchmarks: includeTabs.includes('benchmarks')
-          ? ((results[tabIndex++]?.items || results[tabIndex - 1] || []) as any[]).slice(0, limit)
+          ? extractItems(results[tabIndex++]).slice(0, limit)
           : undefined,
         tips: includeTabs.includes('tips')
-          ? ((results[tabIndex++]?.items || results[tabIndex - 1] || []) as any[]).slice(0, limit)
+          ? extractItems(results[tabIndex++]).slice(0, limit)
           : undefined,
         replies: includeTabs.includes('replies')
-          ? ((results[tabIndex++]?.items || results[tabIndex - 1] || []) as any[]).slice(0, limit)
+          ? extractItems(results[tabIndex++]).slice(0, limit)
           : undefined,
       },
       meta: {
@@ -4338,7 +4473,9 @@ export class UserService {
       selectedValue: string;
     }>
   > {
-    const settings = await this.privacySettingRepo.findByUserId(userId);
+    const settingResult = await this.privacySettingRepo.findByUserId(userId);
+    // Wrap single result in array for iteration (repo returns single or null)
+    const settings = settingResult ? [settingResult] : [];
 
     // Default değerler
     const defaultValues: Record<PrivacyCode, string> = {
@@ -4353,7 +4490,7 @@ export class UserService {
     }> = [];
 
     for (const privacyCode of Object.values(PrivacyCode) as PrivacyCode[]) {
-      const setting = settings.find((s: any) => s.privacyCode === privacyCode);
+      const setting = settings.find((s) => s.privacyCode === privacyCode);
       result.push({
         privacyCode,
         selectedValue: setting?.selectedValue || defaultValues[privacyCode],
@@ -4595,30 +4732,21 @@ export class UserService {
     ];
 
     // Where clause oluştur
-    const whereClause: any = {
+    const whereClause: Prisma.ProfileWhereInput = {
       userId: {
         notIn: excludedUserIds,
+        ...(cursor ? { lt: cursor } : {}),
       },
       displayName: {
         not: null,
       },
+      ...(searchQuery ? {
+        OR: [
+          { displayName: { contains: searchQuery, mode: 'insensitive' as const } },
+          { userName: { contains: searchQuery, mode: 'insensitive' as const } },
+        ],
+      } : {}),
     };
-
-    // Cursor varsa ekle
-    if (cursor) {
-      whereClause.userId = {
-        ...whereClause.userId,
-        lt: cursor, // Cursor'dan sonraki kayıtlar
-      };
-    }
-
-    // Search query varsa ekle
-    if (searchQuery) {
-      whereClause.OR = [
-        { displayName: { contains: searchQuery, mode: 'insensitive' as const } },
-        { userName: { contains: searchQuery, mode: 'insensitive' as const } },
-      ];
-    }
 
     // Trust edilmemiş kullanıcıları getir (limit + 1 ile hasMore kontrolü)
     const profiles = await this.prisma.profile.findMany({

@@ -1,5 +1,11 @@
+import type { DMMessage as PrismaDMMessageModel, Prisma, DMMessageContext } from '@prisma/client';
 import { DMMessage } from '../../domain/messaging/dm-message.entity';
 import { getPrisma } from './prisma.client';
+
+interface CreateMessageData extends Partial<DMMessage> {
+  context?: DMMessageContext | string;
+  sharedPostId?: string | null;
+}
 
 export class DmMessagePrismaRepository {
   private prisma = getPrisma();
@@ -41,10 +47,10 @@ export class DmMessagePrismaRepository {
     return messages.map(message => this.toDomain(message));
   }
 
-  async create(data: Partial<DMMessage>): Promise<DMMessage> {
+  async create(data: CreateMessageData): Promise<DMMessage> {
     const threadIdStr = String(data.threadId!);
     const senderIdStr = String(data.senderId!);
-    const sharedPostId = (data as any).sharedPostId ?? undefined;
+    const sharedPostId = data.sharedPostId ?? undefined;
 
     // Get thread to determine which user's unread count to increment
     const thread = await this.prisma.dMThread.findUnique({
@@ -59,7 +65,7 @@ export class DmMessagePrismaRepository {
       isRead: data.isRead || false,
       sentAt: data.sentAt || new Date(),
       createdAt: data.createdAt || new Date(),
-      context: (data as any).context || 'DM',
+      context: (data.context || 'DM') as DMMessageContext,
       mediaUrl: data.mediaUrl,
       mediaType: data.mediaType,
       thumbnailUrl: data.thumbnailUrl,
@@ -127,7 +133,7 @@ export class DmMessagePrismaRepository {
             unreadCountUserTwo: {
               increment: 1
             }
-          } as any
+          }
         });
       } else if (thread.userTwoId === senderIdStr) {
         // Sender is userTwo, increment userOne's unread count
@@ -137,7 +143,7 @@ export class DmMessagePrismaRepository {
             unreadCountUserOne: {
               increment: 1
             }
-          } as any
+          }
         });
       }
     }
@@ -147,7 +153,7 @@ export class DmMessagePrismaRepository {
 
   async update(id: string, data: Partial<DMMessage>): Promise<DMMessage | null> {
     try {
-      const updateData: any = {
+      const updateData: Prisma.DMMessageUpdateInput = {
         updatedAt: new Date(),
       };
       if (data.message !== undefined) updateData.message = data.message;
@@ -267,7 +273,7 @@ export class DmMessagePrismaRepository {
           data: {
             unreadCountUserOne: 0,
             updatedAt: new Date(), // updatedAt'i güncelle ki thread listesinde en üste çıksın
-          } as any
+          }
         });
       } else if (thread.userTwoId === userIdStr) {
         // UserTwo marked as read, reset userTwo's unread count
@@ -276,7 +282,7 @@ export class DmMessagePrismaRepository {
           data: {
             unreadCountUserTwo: 0,
             updatedAt: new Date(), // updatedAt'i güncelle ki thread listesinde en üste çıksın
-          } as any
+          }
         });
       }
     }
@@ -347,7 +353,7 @@ export class DmMessagePrismaRepository {
     cursor?: Date,
     isDeleted: boolean = false
   ): Promise<{ messages: DMMessage[]; hasMore: boolean; nextCursor?: Date }> {
-    const whereClause: any = {
+    const whereClause: Prisma.DMMessageWhereInput = {
       threadId,
       isDeleted
     };
@@ -446,7 +452,7 @@ export class DmMessagePrismaRepository {
     });
   }
 
-  private toDomain(prismaMessage: any): DMMessage {
+  private toDomain(prismaMessage: PrismaDMMessageModel): DMMessage {
     return new DMMessage(
       prismaMessage.id,
       prismaMessage.threadId,

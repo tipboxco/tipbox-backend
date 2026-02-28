@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
 import { getGeminiConfig } from '../config/gemini.config';
 import logger from '../logger/logger';
 import { ExternalServiceError } from '../errors/custom-errors';
@@ -84,7 +84,7 @@ export interface BatchGeneratePostContentResponse {
 export class GeminiService {
   private static instance: GeminiService;
   private genAI: GoogleGenerativeAI;
-  private model: any;
+  private model: GenerativeModel;
   private config: ReturnType<typeof getGeminiConfig>;
   private cache: CacheService;
   private metrics: AIMetricsService;
@@ -639,7 +639,7 @@ Lütfen aşağıdaki JSON formatında yanıt ver:
   /**
    * Rating'i 1-5 arasına normalize et
    */
-  private normalizeRating(rating: any): number {
+  private normalizeRating(rating: unknown): number {
     const num = Number(rating);
     if (isNaN(num)) return 3;
     return Math.max(1, Math.min(5, Math.round(num)));
@@ -682,25 +682,27 @@ Lütfen aşağıdaki JSON formatında yanıt ver:
         
         // Response'u al
         let text = '';
-        let candidates: any[] = [];
-        
+        let candidates: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }> = [];
+
         try {
           text = response.text();
         } catch (error) {
           // Eğer text() metodu çalışmazsa, candidates'dan al
-          candidates = (response as any).candidates || [];
+          const responseRecord = response as unknown as Record<string, unknown>;
+          candidates = (Array.isArray(responseRecord.candidates) ? responseRecord.candidates : []) as typeof candidates;
           if (candidates.length > 0) {
             const candidate = candidates[0];
             const content = candidate.content;
             if (content && content.parts) {
-              text = content.parts.map((part: any) => part.text || '').join('\n');
+              text = content.parts.map((part) => part.text || '').join('\n');
             }
           }
         }
 
         // Finish reason kontrolü
         if (candidates.length === 0) {
-          candidates = (response as any).candidates || [];
+          const responseRecord = response as unknown as Record<string, unknown>;
+          candidates = (Array.isArray(responseRecord.candidates) ? responseRecord.candidates : []) as typeof candidates;
         }
         if (candidates.length > 0) {
           const finishReason = candidates[0].finishReason;
@@ -709,7 +711,7 @@ Lütfen aşağıdaki JSON formatında yanıt ver:
                 message: 'Gemini API MAX_TOKENS limitine ulaştı, response kesilmiş olabilir',
                 finishReason,
                 maxOutputTokens: 4000,
-                thoughtsTokenCount: (response as any).usageMetadata?.thoughtsTokenCount,
+                thoughtsTokenCount: (response as unknown as Record<string, Record<string, unknown>>).usageMetadata?.thoughtsTokenCount,
               });
             }
         }
@@ -964,17 +966,17 @@ BAŞLIK: [başlık buraya]
 
           const response = await result.response;
           let text = '';
-          let candidates: any[] = [];
-          
+          let candidates: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }> = [];
+
           try {
             text = response.text();
           } catch (error) {
-            candidates = (response as any).candidates || [];
+            candidates = (response as unknown as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }> }).candidates || [];
             if (candidates.length > 0) {
               const candidate = candidates[0];
               const content = candidate.content;
               if (content && content.parts) {
-                text = content.parts.map((part: any) => part.text || '').join('\n');
+                text = content.parts.map((part: { text?: string }) => part.text || '').join('\n');
               }
             }
           }

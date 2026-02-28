@@ -1,3 +1,4 @@
+import type { PostComparisonScore as PrismaPostComparisonScoreModel } from '@prisma/client';
 import { PostComparisonScore } from '../../domain/product/post-comparison-score.entity';
 import { getPrisma } from './prisma.client';
 
@@ -135,7 +136,7 @@ export class PostComparisonScorePrismaRepository {
     return scores.map(score => this.toDomain(score));
   }
 
-  private toDomain(prismaScore: any): PostComparisonScore {
+  private toDomain(prismaScore: PrismaPostComparisonScoreModel): PostComparisonScore {
     return new PostComparisonScore(
       prismaScore.id,
       prismaScore.comparisonId,

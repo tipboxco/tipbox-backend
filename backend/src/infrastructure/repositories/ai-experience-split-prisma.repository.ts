@@ -1,3 +1,4 @@
+import type { AiExperienceSplit as PrismaAiExperienceSplitModel } from '@prisma/client';
 import { AiExperienceSplit } from '../../domain/ai/ai-experience-split.entity';
 import { getPrisma } from './prisma.client';
 
@@ -181,7 +182,7 @@ export class AiExperienceSplitPrismaRepository {
     };
   }
 
-  private toDomain(prismaSplit: any): AiExperienceSplit {
+  private toDomain(prismaSplit: PrismaAiExperienceSplitModel): AiExperienceSplit {
     return new AiExperienceSplit(
       prismaSplit.id,
       prismaSplit.userId,

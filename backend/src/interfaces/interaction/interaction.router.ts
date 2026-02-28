@@ -639,8 +639,8 @@ router.post(
         threadId: result.threadId,
         messageId: result.messageId,
       });
-    } catch (err: any) {
-      const msg = err?.message ?? '';
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('trust list')) return res.status(400).json({ success: false, message: msg });
       if (msg.includes('not found') || msg.includes('Post not found')) return res.status(404).json({ success: false, message: msg });
       throw err;

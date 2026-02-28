@@ -1,3 +1,4 @@
+import type { ContentShare as PrismaContentShareModel } from '@prisma/client';
 import { ContentShare } from '../../domain/interaction/content-share.entity';
 import { ShareType } from '../../domain/interaction/share-type.enum';
 import { getPrisma } from './prisma.client';
@@ -33,7 +34,7 @@ export class ContentSharePrismaRepository {
     return (this.prisma as any).contentShare.count({ where: { postId } });
   }
 
-  private toDomain(prismaShare: any): ContentShare {
+  private toDomain(prismaShare: PrismaContentShareModel): ContentShare {
     return new ContentShare(
       prismaShare.id,
       prismaShare.userId,
