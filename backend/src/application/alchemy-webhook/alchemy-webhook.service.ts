@@ -346,7 +346,7 @@ export class AlchemyWebhookService {
       topics: [],
       data: null,
       timestamp: blockTimestamp,
-      rawPayload: { source: 'alchemy_webhook', transfer: transfer as unknown as Record<string, unknown>, blockNumber: block.number ?? null },
+      rawPayload: JSON.parse(JSON.stringify({ source: 'alchemy_webhook', transfer, blockNumber: block.number ?? null })),
       walletId: walletId ?? null,
       processed: true,
     });
