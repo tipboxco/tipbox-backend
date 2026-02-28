@@ -9,6 +9,7 @@ import {
   ThirdwebWalletAuthFailedError,
 } from '../../infrastructure/errors/custom-errors';
 import { getThirdwebSdkService } from './thirdweb-sdk/thirdweb-sdk.service';
+import { invalidateWalletCache } from '../../infrastructure/cache/cache-invalidation';
 
 export class WalletService {
   constructor(
@@ -194,6 +195,11 @@ export class WalletService {
       throw new Error('Failed to update wallet balance');
     }
 
+    // Cache invalidation
+    invalidateWalletCache(wallet.userId).catch((err) => {
+      logger.warn('Failed to invalidate wallet cache after balance update', { error: err instanceof Error ? err.message : String(err) });
+    });
+
     return updatedWallet;
   }
 
@@ -252,6 +258,11 @@ export class WalletService {
       throw new Error('Failed to update wallet locked balance');
     }
 
+    // Cache invalidation
+    invalidateWalletCache(wallet.userId).catch((err) => {
+      logger.warn('Failed to invalidate wallet cache after locked balance update', { error: err instanceof Error ? err.message : String(err) });
+    });
+
     return updatedWallet;
   }
 
@@ -278,6 +289,10 @@ export class WalletService {
       const balance = balanceResult.balanceFormatted ?? 0;
       const lockedBalance = pendingResult.pendingFormatted ?? 0;
       await this.walletRepo.setBalance(walletId, balance, lockedBalance);
+
+      // Cache invalidation
+      invalidateWalletCache(wallet.userId).catch(() => {});
+
       logger.info({
         walletId,
         address,
@@ -297,7 +312,12 @@ export class WalletService {
    * Contract'tan alınan balance/lockedBalance değerlerini DB'ye yazar (sync sonrası veya /balance'dan).
    */
   async setBalanceFromContract(walletId: string, balance: number, lockedBalance: number): Promise<Wallet | null> {
-    return this.walletRepo.setBalance(walletId, balance, lockedBalance);
+    const wallet = await this.walletRepo.findById(walletId);
+    const result = await this.walletRepo.setBalance(walletId, balance, lockedBalance);
+    if (wallet) {
+      invalidateWalletCache(wallet.userId).catch(() => {});
+    }
+    return result;
   }
 
   /**
@@ -315,6 +335,11 @@ export class WalletService {
     if (!updatedWallet) {
       throw new Error('Failed to set wallet balance');
     }
+
+    // Cache invalidation
+    invalidateWalletCache(updatedWallet.userId).catch((err) => {
+      logger.warn('Failed to invalidate wallet cache after setBalance', { error: err instanceof Error ? err.message : String(err) });
+    });
 
     return updatedWallet;
   }
@@ -351,6 +376,11 @@ export class WalletService {
       wallet = await this.walletRepo.create(userId, publicAddress, provider, true, smartAccountAddress);
     }
 
+    // Cache invalidation
+    invalidateWalletCache(userId).catch((err) => {
+      logger.warn('Failed to invalidate wallet cache after connect', { error: err instanceof Error ? err.message : String(err) });
+    });
+
     // Send notification asynchronously
     this.notificationService.sendNotification(
       userId,
@@ -376,6 +406,11 @@ export class WalletService {
     const disconnectedWallet = await this.walletRepo.updateConnectionStatus(walletId, false);
 
     if (disconnectedWallet) {
+      // Cache invalidation
+      invalidateWalletCache(wallet.userId).catch((err) => {
+        logger.warn('Failed to invalidate wallet cache after disconnect', { error: err instanceof Error ? err.message : String(err) });
+      });
+
       // Send notification asynchronously
       this.notificationService.sendNotification(
         wallet.userId,

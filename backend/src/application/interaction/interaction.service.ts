@@ -21,6 +21,7 @@ import { ActionLogService } from '../gamification/action-log.service';
 import { MainAction } from '../../domain/gamification/main-action.enum';
 import logger from '../../infrastructure/logger/logger';
 import { getErrorMessage } from '../../infrastructure/errors/error-helper';
+import { invalidatePostInteractionCache } from '../../infrastructure/cache/cache-invalidation';
 
 export class InteractionService {
   private contentLikeRepo = new ContentLikePrismaRepository();
@@ -144,6 +145,11 @@ export class InteractionService {
         }
       }
 
+      // Cache invalidation
+      invalidatePostInteractionCache(postId).catch((err) => {
+        logger.warn('Failed to invalidate post interaction cache after like', { error: getErrorMessage(err) });
+      });
+
       logger.info(`User ${userId} liked post ${postId}`);
       return like;
     } catch (error) {
@@ -186,6 +192,11 @@ export class InteractionService {
             });
           });
       }
+
+      // Cache invalidation
+      invalidatePostInteractionCache(postId).catch((err) => {
+        logger.warn('Failed to invalidate post interaction cache after unlike', { error: getErrorMessage(err) });
+      });
 
       logger.info(`User ${userId} unliked post ${postId}`);
     } catch (error) {
@@ -265,6 +276,11 @@ export class InteractionService {
           });
         });
 
+      // Cache invalidation
+      invalidatePostInteractionCache(postId).catch((err) => {
+        logger.warn('Failed to invalidate post interaction cache after favorite', { error: getErrorMessage(err) });
+      });
+
       logger.info(`User ${userId} favorited post ${postId}`);
       return favorite;
     } catch (error) {
@@ -288,6 +304,11 @@ export class InteractionService {
 
       // Favori sayısını güncelle
       await this.contentPostRepo.decrementFavoriteCount(postId);
+
+      // Cache invalidation
+      invalidatePostInteractionCache(postId).catch((err) => {
+        logger.warn('Failed to invalidate post interaction cache after unfavorite', { error: getErrorMessage(err) });
+      });
 
       logger.info(`User ${userId} unfavorited post ${postId}`);
     } catch (error) {
@@ -441,6 +462,11 @@ export class InteractionService {
           });
         });
 
+      // Cache invalidation
+      invalidatePostInteractionCache(postId).catch((err) => {
+        logger.warn('Failed to invalidate post interaction cache after comment', { error: getErrorMessage(err) });
+      });
+
       logger.info(`User ${userId} commented on post ${postId}`);
       return comment;
     } catch (error) {
@@ -477,18 +503,9 @@ export class InteractionService {
       });
 
       // Cache invalidation
-      try {
-        const { CacheService } = await import('../../infrastructure/cache/cache.service');
-        const cacheService = CacheService.getInstance();
-        await cacheService.delPattern(`post:${comment.postId}:*`).catch(() => {});
-        await cacheService.delPattern('feed:*').catch(() => {});
-      } catch (error) {
-        logger.warn({
-          message: 'Failed to invalidate cache',
-          commentId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
+      invalidatePostInteractionCache(comment.postId).catch((err) => {
+        logger.warn('Failed to invalidate post interaction cache after comment update', { error: getErrorMessage(err) });
+      });
 
       logger.info(`User ${userId} updated comment ${commentId}`);
     } catch (error) {
@@ -516,6 +533,11 @@ export class InteractionService {
 
       // Post'un comment count'unu azalt
       await this.contentPostRepo.decrementCommentCount(comment.postId);
+
+      // Cache invalidation
+      invalidatePostInteractionCache(comment.postId).catch((err) => {
+        logger.warn('Failed to invalidate post interaction cache after comment delete', { error: getErrorMessage(err) });
+      });
 
       logger.info(`User ${userId} deleted comment ${commentId}`);
     } catch (error) {
@@ -617,6 +639,11 @@ export class InteractionService {
         }
       }
 
+      // Cache invalidation (comment'in bağlı olduğu post'un cache'ini temizle)
+      invalidatePostInteractionCache(comment.postId).catch((err) => {
+        logger.warn('Failed to invalidate post interaction cache after comment like', { error: getErrorMessage(err) });
+      });
+
       logger.info(`User ${userId} liked comment ${commentId}`);
     } catch (error) {
       logger.error(`Failed to like comment ${commentId}:`, error);
@@ -629,6 +656,8 @@ export class InteractionService {
    */
   async unlikeComment(userId: string, commentId: string): Promise<void> {
     try {
+      const comment = await this.commentRepo.findById(commentId);
+
       await this.prisma.contentLike.delete({
         where: {
           userId_commentId: { userId, commentId },
@@ -636,6 +665,13 @@ export class InteractionService {
       });
 
       await this.commentRepo.decrementLikeCount(commentId);
+
+      // Cache invalidation
+      if (comment) {
+        invalidatePostInteractionCache(comment.postId).catch((err) => {
+          logger.warn('Failed to invalidate post interaction cache after comment unlike', { error: getErrorMessage(err) });
+        });
+      }
 
       logger.info(`User ${userId} unliked comment ${commentId}`);
     } catch (error) {
@@ -694,6 +730,11 @@ export class InteractionService {
           );
         }
       }
+
+      // Cache invalidation
+      invalidatePostInteractionCache(postId).catch((err) => {
+        logger.warn('Failed to invalidate post interaction cache after share', { error: getErrorMessage(err) });
+      });
 
       logger.info(`User ${userId} shared post ${postId} (${shareType})`);
       return share;

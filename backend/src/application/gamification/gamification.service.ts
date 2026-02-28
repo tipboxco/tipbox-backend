@@ -8,6 +8,7 @@ import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../../domain/notification/notification-type.enum';
 import { getPrisma } from '../../infrastructure/repositories/prisma.client';
 import logger from '../../infrastructure/logger/logger';
+import { invalidateBadgeCache } from '../../infrastructure/cache/cache-invalidation';
 
 export class GamificationService {
   private readonly notificationService: NotificationService;
@@ -74,6 +75,11 @@ export class GamificationService {
       });
 
       logger.info(`Badge ${badge.name} granted to user ${userId}`);
+
+      // Cache invalidation
+      invalidateBadgeCache(userId).catch((err) => {
+        logger.warn('Failed to invalidate badge cache after grant', { error: err instanceof Error ? err.message : String(err) });
+      });
 
       // Rozet bildirimini NotificationService ile gönder
       await this.notificationService.sendNotification(
@@ -411,6 +417,11 @@ export class GamificationService {
 
     logger.info('Badge claimed', { userId, badgeId, userBadgeId: updated.id });
 
+    // Cache invalidation
+    invalidateBadgeCache(userId).catch((err) => {
+      logger.warn('Failed to invalidate badge cache after claim', { error: err instanceof Error ? err.message : String(err) });
+    });
+
     return updated;
   }
 
@@ -437,6 +448,11 @@ export class GamificationService {
         visibility,
         isVisible: isVisible ?? (visibility !== 'PRIVATE'),
       },
+    });
+
+    // Cache invalidation
+    invalidateBadgeCache(userId).catch((err) => {
+      logger.warn('Failed to invalidate badge cache after visibility update', { error: err instanceof Error ? err.message : String(err) });
     });
 
     logger.info('Badge visibility updated', { userId, userBadgeId, visibility });
@@ -468,6 +484,11 @@ export class GamificationService {
         })
       )
     );
+
+    // Cache invalidation
+    invalidateBadgeCache(userId).catch((err) => {
+      logger.warn('Failed to invalidate badge cache after display order update', { error: err instanceof Error ? err.message : String(err) });
+    });
 
     logger.info('Badge display order updated', { userId, count: badgeOrders.length });
   }

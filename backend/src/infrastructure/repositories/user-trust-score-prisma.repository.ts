@@ -1,5 +1,6 @@
 import { UserTrustScore } from '../../domain/user/user-trust-score.entity';
 import { getPrisma } from './prisma.client';
+import { invalidateTrustScoreCache } from '../cache/cache-invalidation';
 
 export class UserTrustScorePrismaRepository {
   private prisma = getPrisma();
@@ -21,6 +22,7 @@ export class UserTrustScorePrismaRepository {
         score
       }
     });
+    invalidateTrustScoreCache(userId).catch(() => {});
     return this.toDomain(trustScore);
   }
 
@@ -29,6 +31,9 @@ export class UserTrustScorePrismaRepository {
       where: { id },
       data: { score }
     });
+    if (trustScore) {
+      invalidateTrustScoreCache(trustScore.userId).catch(() => {});
+    }
     return trustScore ? this.toDomain(trustScore) : null;
   }
 
@@ -36,11 +41,12 @@ export class UserTrustScorePrismaRepository {
     // Find first record by userId and then update by id
     const existing = await this.prisma.userTrustScore.findFirst({ where: { userId } });
     if (!existing) return null;
-    
+
     const trustScore = await this.prisma.userTrustScore.update({
       where: { id: existing.id },
       data: { score }
     });
+    invalidateTrustScoreCache(userId).catch(() => {});
     return trustScore ? this.toDomain(trustScore) : null;
   }
 
@@ -48,7 +54,7 @@ export class UserTrustScorePrismaRepository {
     // Find first record by userId and then update by id
     const existing = await this.prisma.userTrustScore.findFirst({ where: { userId } });
     if (!existing) return null;
-    
+
     const trustScore = await this.prisma.userTrustScore.update({
       where: { id: existing.id },
       data: {
@@ -57,6 +63,7 @@ export class UserTrustScorePrismaRepository {
         }
       }
     });
+    invalidateTrustScoreCache(userId).catch(() => {});
     return trustScore ? this.toDomain(trustScore) : null;
   }
 
