@@ -7,9 +7,11 @@ const userRoleRepo = new UserRolePrismaRepository();
 
 /**
  * User role'lerini cache'lemek için helper
+ * Max size sınırı ile memory leak önlenir
  */
 const roleCache = new Map<string, { roles: string[]; timestamp: number }>();
 const ROLE_CACHE_TTL = 5 * 60 * 1000; // 5 dakika
+const ROLE_CACHE_MAX_SIZE = 10000;
 
 /**
  * Kullanıcının role'lerini getir (cache ile)
@@ -20,18 +22,43 @@ async function getUserRoles(userId: string): Promise<string[]> {
   if (cached && Date.now() - cached.timestamp < ROLE_CACHE_TTL) {
     return cached.roles;
   }
-  
+
+  // Expired entry varsa sil
+  if (cached) {
+    roleCache.delete(userId);
+  }
+
   // Database'den çek
   try {
     const userRoles = await userRoleRepo.findByUserId(userId);
     const roles = userRoles.map(ur => ur.role);
-    
+
+    // Cache max size aşıldıysa en eski entry'leri temizle
+    if (roleCache.size >= ROLE_CACHE_MAX_SIZE) {
+      const now = Date.now();
+      for (const [key, value] of roleCache) {
+        if (now - value.timestamp >= ROLE_CACHE_TTL) {
+          roleCache.delete(key);
+        }
+      }
+      // Hala doluysa ilk %20'yi sil (FIFO - Map insertion order)
+      if (roleCache.size >= ROLE_CACHE_MAX_SIZE) {
+        const deleteCount = Math.floor(ROLE_CACHE_MAX_SIZE * 0.2);
+        let deleted = 0;
+        for (const key of roleCache.keys()) {
+          if (deleted >= deleteCount) break;
+          roleCache.delete(key);
+          deleted++;
+        }
+      }
+    }
+
     // Cache'e kaydet
     roleCache.set(userId, {
       roles,
       timestamp: Date.now(),
     });
-    
+
     return roles;
   } catch (error) {
     logger.error('Failed to get user roles', { error, userId });

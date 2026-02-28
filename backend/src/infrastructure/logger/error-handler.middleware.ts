@@ -56,5 +56,19 @@ export function errorHandler(err: any, req: Request, res: Response, next: NextFu
     },
   };
 
-  res.status(status).json(errorResponse);
+  // Response zaten gönderilmişse tekrar göndermeye çalışma
+  if (res.headersSent) {
+    return next(err);
+  }
+
+  try {
+    res.status(status).json(errorResponse);
+  } catch (jsonError) {
+    logger.error('Failed to send error response', {
+      originalError: message,
+      jsonError: jsonError instanceof Error ? jsonError.message : 'Unknown serialization error',
+      traceId,
+    });
+    res.status(500).end();
+  }
 } 
