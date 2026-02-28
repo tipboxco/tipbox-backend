@@ -143,7 +143,7 @@ export const POST = async (req: MedusaRequest, res: MedusaResponse) => {
         name: brandRow.name,
         handle: brandRow.handle || null,
         website_url: brandRow.website?.trim() || null,
-        logo_url: website?.length > 0 ? `https://img.logo.dev/name/${website}?token=pk_WgZMkY5cTXCH41Z0yJ_Txw` : null,
+        logo_url: website?.length > 0 ? `https://img.logo.dev/name/${website}?token=${process.env.LOGO_DEV_API_TOKEN}` : null,
         category_id: categoryId,
         rank: rank,
         ispopular: ispopular,

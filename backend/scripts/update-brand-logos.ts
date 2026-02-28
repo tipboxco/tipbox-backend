@@ -72,7 +72,7 @@ async function updateBrandLogosFromLogoDev(): Promise<void> {
       
       if (website) {
         // website varsa, img.logo.dev API'sinden logo çek
-        logoUrl = `https://img.logo.dev/name/${website}?token=pk_WgZMkY5cTXCH41Z0yJ_Txw`
+        logoUrl = `https://img.logo.dev/name/${website}?token=${process.env.LOGO_DEV_API_TOKEN}`
       }
       
       // Eğer logoUrl bulunduysa, güncelle

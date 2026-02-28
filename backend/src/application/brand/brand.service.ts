@@ -3454,7 +3454,7 @@ export class BrandService {
         if (brandImageUrl && brandImageUrl.length > 0 && brandImageUrl !== 'NULL') {
           resolvedImage = resolveMediaUrl(brandImageUrl);
         } else if (website) {
-          resolvedImage = `https://img.logo.dev/name/${website}?token=pk_WgZMkY5cTXCH41Z0yJ_Txw`;
+          resolvedImage = `https://img.logo.dev/name/${website}?token=${process.env.LOGO_DEV_API_TOKEN}`;
         }
 
         // Image URL validation: null, boş string veya geçersiz URL kontrolü
